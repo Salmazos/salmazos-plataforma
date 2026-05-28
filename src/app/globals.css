@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  input[type="checkbox"] {
+    accent-color: #FFB800;
+  }
+}
+
+@layer components {
+  .input-field {
+    @apply w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm text-gray-900
+           focus:outline-none focus:ring-2 focus:ring-[#FFB800]/30 focus:border-[#FFB800]
+           transition-colors placeholder:text-gray-400 disabled:bg-gray-50 disabled:text-gray-500;
+  }
+  .btn-primary {
+    @apply bg-black hover:bg-gray-900 text-[#FFB800] font-semibold px-6 py-2.5 rounded-lg
+           transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed
+           focus:outline-none focus:ring-2 focus:ring-[#FFB800]/30;
+  }
+  .btn-outline {
+    @apply border border-black text-black hover:bg-black hover:text-[#FFB800] font-medium px-4 py-2 rounded-lg
+           transition-colors duration-200 text-sm;
+  }
+  .label {
+    @apply block text-sm font-medium text-gray-700 mb-1;
+  }
+  .section-title {
+    @apply text-xs font-bold text-[#FFB800] uppercase tracking-widest mb-4;
+  }
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6;
+  }
+}

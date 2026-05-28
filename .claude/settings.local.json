@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npm --version)",
+      "Bash(NODE_OPTIONS=\"--use-system-ca\" npm install *)",
+      "Bash(NODE_OPTIONS=\"--use-system-ca\" npm show *)",
+      "Bash(NODE_OPTIONS=\"--use-system-ca\" npm audit *)",
+      "Bash(NODE_OPTIONS=\"--use-system-ca\" npx tsc *)",
+      "Bash(NODE_OPTIONS=\"--use-system-ca\" npx next *)",
+      "Bash(git init *)",
+      "Bash(git add *)"
+    ]
+  }
+}
