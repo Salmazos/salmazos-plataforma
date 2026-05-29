@@ -3,6 +3,13 @@
 import { useState } from "react";
 import ModalNovoCliente from "./ModalNovoCliente";
 import { TIPOS_SERVICO } from "@/lib/constants";
+
+const CORES_SERVICO: Record<string, { bg: string; color: string }> = {
+  recrutamento_selecao:  { bg: "#1D6FA4", color: "#ffffff" },
+  mao_obra_temporaria:   { bg: "#FFD700", color: "#000000" },
+  terceirizacao:         { bg: "#1D9E75", color: "#ffffff" },
+  avaliacao_psicologica: { bg: "#6B4FBB", color: "#ffffff" },
+};
 import type { Cliente } from "@/types";
 
 interface ClienteComCount extends Cliente {
@@ -216,14 +223,18 @@ function ClienteRow({
       {/* Badges de serviços */}
       {cliente.servicos?.length > 0 && (
         <div className="flex flex-wrap gap-1.5 shrink-0 max-w-[200px]">
-          {TIPOS_SERVICO.filter((t) => cliente.servicos.includes(t.id)).map((t) => (
-            <span
-              key={t.id}
-              className={`text-xs font-semibold px-2 py-0.5 rounded-full ${t.bg} ${t.text}`}
-            >
-              {t.abrev}
-            </span>
-          ))}
+          {TIPOS_SERVICO.filter((t) => cliente.servicos.includes(t.id)).map((t) => {
+            const cores = CORES_SERVICO[t.id];
+            return (
+              <span
+                key={t.id}
+                className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                style={{ backgroundColor: cores.bg, color: cores.color }}
+              >
+                {t.label}
+              </span>
+            );
+          })}
         </div>
       )}
 

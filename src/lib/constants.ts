@@ -79,7 +79,7 @@ export const TIPOS_SERVICO = [
   {
     id: "mao_obra_temporaria",
     label: "Mão de Obra Temporária",
-    abrev: "Temporária",
+    abrev: "Mão de Obra Temporária",
     bg: "bg-[#FFD700]",
     text: "text-black",
     border: "border-[#e6c200]",
