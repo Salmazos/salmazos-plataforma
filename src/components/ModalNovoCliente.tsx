@@ -168,18 +168,14 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
                     key={tipo.id}
                     type="button"
                     onClick={() => toggleServico(tipo.id)}
-                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border-2 text-left transition-all ${
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border-2 text-left transition-all text-sm ${
                       ativo
-                        ? `${tipo.bg} ${tipo.text} ${tipo.border} font-medium`
-                        : "border-gray-200 text-gray-500 hover:border-gray-300 bg-white"
+                        ? `${tipo.bg} ${tipo.text} ${tipo.border} font-semibold`
+                        : "border-gray-200 text-gray-700 bg-white hover:border-gray-300"
                     }`}
                   >
-                    {/* Checkbox visual */}
-                    <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
-                      ativo
-                        ? `${tipo.border} bg-current/20`
-                        : "border-gray-300"
-                    }`}>
+                    {/* Checkbox — border-current herda a cor do texto em qualquer estado */}
+                    <span className="w-4 h-4 rounded border-2 border-current flex items-center justify-center shrink-0">
                       {ativo && (
                         <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd"
@@ -188,7 +184,7 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
                         </svg>
                       )}
                     </span>
-                    <span className="text-sm leading-tight">{tipo.label}</span>
+                    <span className="leading-tight">{tipo.label}</span>
                   </button>
                 );
               })}
