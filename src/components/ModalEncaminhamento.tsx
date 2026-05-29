@@ -18,6 +18,13 @@ interface Props {
   }) => Promise<void>;
 }
 
+const CORES_SERVICO: Record<string, { bg: string; text: string; border: string }> = {
+  recrutamento_selecao:  { bg: "#1D6FA4", text: "#ffffff", border: "#1D6FA4" },
+  mao_obra_temporaria:   { bg: "#FFD700", text: "#000000", border: "#e6c200" },
+  terceirizacao:         { bg: "#1D9E75", text: "#ffffff", border: "#1D9E75" },
+  avaliacao_psicologica: { bg: "#6B4FBB", text: "#ffffff", border: "#6B4FBB" },
+};
+
 export default function ModalEncaminhamento({
   isOpen,
   candidatoId,
@@ -39,13 +46,11 @@ export default function ModalEncaminhamento({
   const clienteSelecionado = clientes.find((c) => c.id === clienteId);
   const duplicata = historico.find((e) => e.cliente_id === clienteId);
 
-  // Serviços disponíveis para o cliente selecionado
   const servicosDisponiveis =
     clienteSelecionado?.servicos?.length
       ? TIPOS_SERVICO.filter((t) => clienteSelecionado.servicos.includes(t.id))
       : TIPOS_SERVICO;
 
-  // Reseta tipo de serviço quando o cliente muda
   useEffect(() => {
     setTipoServico("");
   }, [clienteId]);
@@ -180,21 +185,29 @@ export default function ModalEncaminhamento({
                   <div className="grid grid-cols-2 gap-2">
                     {servicosDisponiveis.map((tipo) => {
                       const ativo = tipoServico === tipo.id;
+                      const cores = CORES_SERVICO[tipo.id];
                       return (
                         <button
                           key={tipo.id}
                           type="button"
                           onClick={() => setTipoServico(tipo.id)}
-                          className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left transition-all text-sm ${
+                          className="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left transition-all text-sm font-semibold"
+                          style={
                             ativo
-                              ? `${tipo.bg} ${tipo.text} ${tipo.border} font-semibold`
-                              : "border-gray-200 text-gray-500 hover:border-gray-300 bg-white"
-                          }`}
+                              ? { backgroundColor: cores.bg, color: cores.text, borderColor: cores.border }
+                              : { backgroundColor: "#ffffff", color: "#6b7280", borderColor: "#e5e7eb" }
+                          }
                         >
-                          <span className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${
-                            ativo ? `${tipo.border}` : "border-gray-300"
-                          }`}>
-                            {ativo && <span className="w-1.5 h-1.5 rounded-full bg-current" />}
+                          <span
+                            className="w-3.5 h-3.5 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors"
+                            style={{ borderColor: ativo ? cores.border : "#d1d5db" }}
+                          >
+                            {ativo && (
+                              <span
+                                className="w-1.5 h-1.5 rounded-full"
+                                style={{ backgroundColor: cores.text }}
+                              />
+                            )}
                           </span>
                           {tipo.label}
                         </button>
