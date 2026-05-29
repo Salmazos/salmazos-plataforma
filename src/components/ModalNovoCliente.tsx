@@ -163,28 +163,44 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
             <div className="grid grid-cols-2 gap-2">
               {TIPOS_SERVICO.map((tipo) => {
                 const ativo = servicos.includes(tipo.id);
+                const bgAtivo: Record<string, string> = {
+                  recrutamento_selecao:  "#1D6FA4",
+                  mao_obra_temporaria:   "#FFD700",
+                  terceirizacao:         "#1D9E75",
+                  avaliacao_psicologica: "#6B4FBB",
+                };
+                const colorAtivo: Record<string, string> = {
+                  recrutamento_selecao:  "#FFFFFF",
+                  mao_obra_temporaria:   "#000000",
+                  terceirizacao:         "#FFFFFF",
+                  avaliacao_psicologica: "#FFFFFF",
+                };
+                const btnStyle: React.CSSProperties = ativo
+                  ? { backgroundColor: bgAtivo[tipo.id], color: colorAtivo[tipo.id], border: `2px solid ${bgAtivo[tipo.id]}` }
+                  : { backgroundColor: "#FFFFFF", color: "#374151", border: "2px solid #D1D5DB" };
+                const checkColor = ativo ? colorAtivo[tipo.id] : "#9CA3AF";
+
                 return (
                   <button
                     key={tipo.id}
                     type="button"
                     onClick={() => toggleServico(tipo.id)}
-                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border-2 text-left transition-all text-sm ${
-                      ativo
-                        ? `${tipo.bg} ${tipo.text} ${tipo.border} font-semibold`
-                        : "border-gray-200 text-gray-700 bg-white hover:border-gray-300"
-                    }`}
+                    className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all"
+                    style={btnStyle}
                   >
-                    {/* Checkbox — border-current herda a cor do texto em qualquer estado */}
-                    <span className="w-4 h-4 rounded border-2 border-current flex items-center justify-center shrink-0">
+                    <span
+                      className="flex items-center justify-center shrink-0 rounded"
+                      style={{ width: 16, height: 16, border: `2px solid ${checkColor}`, color: checkColor }}
+                    >
                       {ativo && (
-                        <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                        <svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor">
                           <path fillRule="evenodd"
                             d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
                             clipRule="evenodd" />
                         </svg>
                       )}
                     </span>
-                    <span className="leading-tight">{tipo.label}</span>
+                    <span style={{ lineHeight: 1.3 }}>{tipo.label}</span>
                   </button>
                 );
               })}
