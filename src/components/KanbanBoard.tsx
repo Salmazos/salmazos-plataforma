@@ -8,9 +8,10 @@ import CandidatoCard from "./CandidatoCard";
 
 interface Props {
   candidatos: Candidato[];
+  filtroOrigem?: string | null;
 }
 
-export default function KanbanBoard({ candidatos }: Props) {
+export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
   const router = useRouter();
   const [filtroCargo, setFiltroCargo] = useState("");
   const [filtroCidade, setFiltroCidade] = useState("");
@@ -19,9 +20,13 @@ export default function KanbanBoard({ candidatos }: Props) {
   const filtrados = candidatos.filter((c) => {
     const cargo = c.cargo_pretendido.toLowerCase();
     const cidade = c.cidade.toLowerCase();
+    const matchOrigem =
+      !filtroOrigem ||
+      (c.origem ?? "Banco de talentos") === filtroOrigem;
     return (
       cargo.includes(filtroCargo.toLowerCase()) &&
-      cidade.includes(filtroCidade.toLowerCase())
+      cidade.includes(filtroCidade.toLowerCase()) &&
+      matchOrigem
     );
   });
 

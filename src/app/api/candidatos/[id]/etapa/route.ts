@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 
-const ETAPAS_VALIDAS = ["triagem", "entrevista", "avaliacao", "aprovado"];
+const ETAPAS_VALIDAS = ["triagem", "entrevista_salmazos", "entrevista_cliente", "aprovado_cliente"];
 
 interface Params {
   params: Promise<{ id: string }>;

@@ -1,4 +1,8 @@
-export type EtapaKanban = "triagem" | "entrevista" | "avaliacao" | "aprovado";
+export type EtapaKanban =
+  | "triagem"
+  | "entrevista_salmazos"
+  | "entrevista_cliente"
+  | "aprovado_cliente";
 
 export interface Candidato {
   id: string;
@@ -17,6 +21,7 @@ export interface Candidato {
   curriculo_url?: string;
   etapa_kanban: EtapaKanban;
   anotacoes?: string;
+  origem?: string;
   created_at: string;
   updated_at: string;
 }

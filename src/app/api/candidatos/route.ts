@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
         habilidades: body.habilidades || [],
         resumo_profissional: body.resumo_profissional || null,
         curriculo_url: body.curriculo_url || null,
+        origem: body.origem || "Banco de talentos",
         etapa_kanban: "triagem",
       })
       .select()

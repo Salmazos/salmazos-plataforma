@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS candidatos (
   resumo_profissional TEXT,
   curriculo_url       TEXT,
   etapa_kanban        TEXT    NOT NULL DEFAULT 'triagem'
-                        CHECK (etapa_kanban IN ('triagem','entrevista','avaliacao','aprovado')),
+                        CHECK (etapa_kanban IN ('triagem','entrevista_salmazos','entrevista_cliente','aprovado_cliente')),
+  origem              TEXT    NOT NULL DEFAULT 'Banco de talentos',
   anotacoes           TEXT,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()

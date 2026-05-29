@@ -71,6 +71,7 @@ export const ETAPAS_KANBAN = [
   {
     id: "triagem" as const,
     label: "Triagem",
+    descricao: "Análise inicial do currículo pela equipe Salmazos",
     headerBg: "bg-blue-500",
     columnBg: "bg-blue-50",
     badgeBg: "bg-blue-100",
@@ -78,8 +79,9 @@ export const ETAPAS_KANBAN = [
     border: "border-blue-200",
   },
   {
-    id: "entrevista" as const,
-    label: "Entrevista",
+    id: "entrevista_salmazos" as const,
+    label: "Entrevista Salmazos",
+    descricao: "Entrevista e avaliação feita pela Salmazos",
     headerBg: "bg-amber-500",
     columnBg: "bg-amber-50",
     badgeBg: "bg-amber-100",
@@ -87,8 +89,9 @@ export const ETAPAS_KANBAN = [
     border: "border-amber-200",
   },
   {
-    id: "avaliacao" as const,
-    label: "Avaliação",
+    id: "entrevista_cliente" as const,
+    label: "Entrevista Cliente",
+    descricao: "Candidato aprovado pela Salmazos e encaminhado ao cliente",
     headerBg: "bg-orange-500",
     columnBg: "bg-orange-50",
     badgeBg: "bg-orange-100",
@@ -96,8 +99,9 @@ export const ETAPAS_KANBAN = [
     border: "border-orange-200",
   },
   {
-    id: "aprovado" as const,
-    label: "Aprovado",
+    id: "aprovado_cliente" as const,
+    label: "Aprovado pelo Cliente",
+    descricao: "Cliente confirmou a aprovação do candidato",
     headerBg: "bg-green-500",
     columnBg: "bg-green-50",
     badgeBg: "bg-green-100",
