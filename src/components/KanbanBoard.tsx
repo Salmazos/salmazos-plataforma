@@ -6,6 +6,7 @@ import { ETAPAS_KANBAN } from "@/lib/constants";
 import type { Candidato } from "@/types";
 import CandidatoCard from "./CandidatoCard";
 import ModalEncaminhamento from "./ModalEncaminhamento";
+import ModalCadastroRapido from "./ModalCadastroRapido";
 
 interface Props {
   candidatos: Candidato[];
@@ -24,6 +25,7 @@ export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
   const [movendo, setMovendo] = useState<string | null>(null);
   const [pendingEncaminhamento, setPendingEncaminhamento] =
     useState<PendingEncaminhamento | null>(null);
+  const [modalCadastroAberto, setModalCadastroAberto] = useState(false);
 
   const filtrados = candidatos.filter((c) => {
     const cargo = c.cargo_pretendido.toLowerCase();
@@ -73,21 +75,19 @@ export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
     if (!pendingEncaminhamento) return;
     const { candidatoId } = pendingEncaminhamento;
 
-    // Salva o encaminhamento
     await fetch("/api/encaminhamentos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ candidato_id: candidatoId, ...dados }),
     });
 
-    // Move o candidato de etapa
     await executarMover(candidatoId, "entrevista_cliente");
     setPendingEncaminhamento(null);
   };
 
   return (
     <div>
-      {/* Filtros */}
+      {/* Topo: Filtros + Botão Cadastro Rápido */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px]">
           <svg
@@ -144,6 +144,17 @@ export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
         <span className="text-sm text-gray-500 whitespace-nowrap">
           {filtrados.length} candidato{filtrados.length !== 1 ? "s" : ""}
         </span>
+
+        {/* Botão Cadastro Rápido */}
+        <button
+          onClick={() => setModalCadastroAberto(true)}
+          className="flex items-center gap-2 bg-[#FFD700] hover:bg-[#e6c200] text-black font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors whitespace-nowrap"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Cadastro Rápido
+        </button>
       </div>
 
       {/* Colunas */}
@@ -155,7 +166,6 @@ export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
 
           return (
             <div key={etapa.id} className="flex-shrink-0 w-72">
-              {/* Header da coluna */}
               <div
                 className={`${etapa.headerBg} text-white rounded-t-xl px-4 py-3 flex items-center justify-between`}
               >
@@ -165,7 +175,6 @@ export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
                 </span>
               </div>
 
-              {/* Cards */}
               <div
                 className={`${etapa.columnBg} rounded-b-xl min-h-[400px] p-2 space-y-2`}
               >
@@ -196,6 +205,13 @@ export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
         candidatoNome={pendingEncaminhamento?.candidatoNome ?? ""}
         onClose={() => setPendingEncaminhamento(null)}
         onConfirmar={handleConfirmarEncaminhamento}
+      />
+
+      {/* Modal de cadastro rápido */}
+      <ModalCadastroRapido
+        isOpen={modalCadastroAberto}
+        onClose={() => setModalCadastroAberto(false)}
+        onCadastrado={() => router.refresh()}
       />
     </div>
   );

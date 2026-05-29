@@ -8,11 +8,7 @@ export async function POST(request: NextRequest) {
 
     const required = [
       "nome_completo",
-      "cpf",
       "telefone",
-      "email",
-      "cidade",
-      "estado",
       "cargo_pretendido",
       "tempo_experiencia",
       "turno_disponivel",
@@ -28,18 +24,20 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceClient();
 
-    // Verificar CPF duplicado
-    const { data: existente } = await supabase
-      .from("candidatos")
-      .select("id")
-      .eq("cpf", body.cpf)
-      .maybeSingle();
+    // Verificar CPF duplicado apenas quando informado
+    if (body.cpf) {
+      const { data: existente } = await supabase
+        .from("candidatos")
+        .select("id")
+        .eq("cpf", body.cpf)
+        .maybeSingle();
 
-    if (existente) {
-      return NextResponse.json(
-        { error: "Já existe um cadastro com este CPF." },
-        { status: 409 }
-      );
+      if (existente) {
+        return NextResponse.json(
+          { error: "Já existe um cadastro com este CPF." },
+          { status: 409 }
+        );
+      }
     }
 
     const { data, error } = await supabase
@@ -68,12 +66,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    // Enviar e-mail de confirmação (não bloqueia a resposta)
-    enviarEmailConfirmacao({
-      to: body.email,
-      nomeCandidato: body.nome_completo,
-      cargoPretendido: body.cargo_pretendido,
-    }).catch((err) => console.error("[Email]", err));
+    // Enviar e-mail de confirmação apenas quando e-mail foi informado
+    if (body.email) {
+      enviarEmailConfirmacao({
+        to: body.email,
+        nomeCandidato: body.nome_completo,
+        cargoPretendido: body.cargo_pretendido,
+      }).catch((err) => console.error("[Email]", err));
+    }
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {
