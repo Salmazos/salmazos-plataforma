@@ -5,6 +5,7 @@ import { formatarData } from "@/lib/utils";
 import { ETAPAS_KANBAN } from "@/lib/constants";
 import PerfilEtapaSelector from "@/components/PerfilEtapaSelector";
 import PerfilAnotacoes from "@/components/PerfilAnotacoes";
+import EncaminhamentosSection from "@/components/EncaminhamentosSection";
 import type { Candidato } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -153,6 +154,11 @@ export default async function CandidatoPerfilPage({ params }: Props) {
             />
           </div>
         </div>
+      </div>
+
+      {/* Encaminhamentos — seção full-width */}
+      <div className="mt-6">
+        <EncaminhamentosSection candidatoId={candidato.id} />
       </div>
     </div>
   );

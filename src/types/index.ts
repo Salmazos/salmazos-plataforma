@@ -4,6 +4,12 @@ export type EtapaKanban =
   | "entrevista_cliente"
   | "aprovado_cliente";
 
+export type StatusEncaminhamento =
+  | "aguardando"
+  | "aprovado"
+  | "reprovado"
+  | "desistiu";
+
 export interface Candidato {
   id: string;
   nome_completo: string;
@@ -24,4 +30,28 @@ export interface Candidato {
   origem?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface Cliente {
+  id: string;
+  nome: string;
+  contato_nome: string;
+  contato_telefone: string;
+  contato_email: string;
+  cidade: string;
+  segmento: string;
+  ativo: boolean;
+  created_at: string;
+}
+
+export interface Encaminhamento {
+  id: string;
+  candidato_id: string;
+  cliente_id: string;
+  data_entrevista: string;
+  status: StatusEncaminhamento;
+  observacoes?: string;
+  created_at: string;
+  updated_at: string;
+  cliente?: Pick<Cliente, "id" | "nome" | "cidade" | "segmento">;
 }

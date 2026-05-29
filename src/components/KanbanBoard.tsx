@@ -5,10 +5,16 @@ import { useRouter } from "next/navigation";
 import { ETAPAS_KANBAN } from "@/lib/constants";
 import type { Candidato } from "@/types";
 import CandidatoCard from "./CandidatoCard";
+import ModalEncaminhamento from "./ModalEncaminhamento";
 
 interface Props {
   candidatos: Candidato[];
   filtroOrigem?: string | null;
+}
+
+interface PendingEncaminhamento {
+  candidatoId: string;
+  candidatoNome: string;
 }
 
 export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
@@ -16,6 +22,8 @@ export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
   const [filtroCargo, setFiltroCargo] = useState("");
   const [filtroCidade, setFiltroCidade] = useState("");
   const [movendo, setMovendo] = useState<string | null>(null);
+  const [pendingEncaminhamento, setPendingEncaminhamento] =
+    useState<PendingEncaminhamento | null>(null);
 
   const filtrados = candidatos.filter((c) => {
     const cargo = c.cargo_pretendido.toLowerCase();
@@ -30,7 +38,7 @@ export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
     );
   });
 
-  const moverCandidato = async (id: string, novaEtapa: string) => {
+  const executarMover = async (id: string, novaEtapa: string) => {
     setMovendo(id);
     try {
       await fetch(`/api/candidatos/${id}/etapa`, {
@@ -42,6 +50,38 @@ export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
     } finally {
       setMovendo(null);
     }
+  };
+
+  const moverCandidato = async (id: string, novaEtapa: string) => {
+    if (novaEtapa === "entrevista_cliente") {
+      const candidato = candidatos.find((c) => c.id === id);
+      setPendingEncaminhamento({
+        candidatoId: id,
+        candidatoNome: candidato?.nome_completo ?? "",
+      });
+      return;
+    }
+    await executarMover(id, novaEtapa);
+  };
+
+  const handleConfirmarEncaminhamento = async (dados: {
+    cliente_id: string;
+    data_entrevista: string;
+    observacoes: string;
+  }) => {
+    if (!pendingEncaminhamento) return;
+    const { candidatoId } = pendingEncaminhamento;
+
+    // Salva o encaminhamento
+    await fetch("/api/encaminhamentos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ candidato_id: candidatoId, ...dados }),
+    });
+
+    // Move o candidato de etapa
+    await executarMover(candidatoId, "entrevista_cliente");
+    setPendingEncaminhamento(null);
   };
 
   return (
@@ -147,6 +187,15 @@ export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
           );
         })}
       </div>
+
+      {/* Modal de encaminhamento */}
+      <ModalEncaminhamento
+        isOpen={!!pendingEncaminhamento}
+        candidatoId={pendingEncaminhamento?.candidatoId ?? ""}
+        candidatoNome={pendingEncaminhamento?.candidatoNome ?? ""}
+        onClose={() => setPendingEncaminhamento(null)}
+        onConfirmar={handleConfirmarEncaminhamento}
+      />
     </div>
   );
 }

@@ -1,11 +1,28 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 interface Props {
   userEmail: string;
+}
+
+function NavLink({ href, label }: { href: string; label: string }) {
+  const pathname = usePathname();
+  const ativo = pathname === href || (href !== "/painel" && pathname.startsWith(href));
+  return (
+    <Link
+      href={href}
+      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+        ativo
+          ? "bg-[#FFD700] text-black"
+          : "text-[#FFB800]/70 hover:text-[#FFB800] hover:bg-white/10"
+      }`}
+    >
+      {label}
+    </Link>
+  );
 }
 
 export default function NavbarPainel({ userEmail }: Props) {
@@ -20,10 +37,17 @@ export default function NavbarPainel({ userEmail }: Props) {
   return (
     <header className="bg-black shadow-md">
       <div className="max-w-screen-xl mx-auto px-4 h-16 flex items-center justify-between">
-        <Link href="/painel" className="flex items-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/Salmazos_logo_Amarelo.png" alt="Salmazos RH & Serviços" className="h-[48px] w-auto object-contain" />
-        </Link>
+        <div className="flex items-center gap-6">
+          <Link href="/painel" className="flex items-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/Salmazos_logo_Amarelo.png" alt="Salmazos RH & Serviços" className="h-[48px] w-auto object-contain" />
+          </Link>
+
+          <nav className="hidden sm:flex items-center gap-1">
+            <NavLink href="/painel" label="Painel" />
+            <NavLink href="/painel/clientes" label="Clientes" />
+          </nav>
+        </div>
 
         <div className="flex items-center gap-4">
           <span className="text-[#FFB800]/60 text-sm hidden sm:block">{userEmail}</span>

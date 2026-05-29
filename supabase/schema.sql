@@ -83,3 +83,67 @@ CREATE POLICY "Upload público de currículos"
 CREATE POLICY "Leitura pública de currículos"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'curriculos');
+
+-- ──────────────────────────────────────────────────────────────
+-- MIGRATION: Clientes e Encaminhamentos
+-- Execute este bloco separadamente após criar o schema inicial
+-- ──────────────────────────────────────────────────────────────
+
+-- ── Tabela de clientes ────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS clientes (
+  id               UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  nome             TEXT NOT NULL,
+  contato_nome     TEXT NOT NULL,
+  contato_telefone TEXT NOT NULL,
+  contato_email    TEXT NOT NULL,
+  cidade           TEXT NOT NULL,
+  segmento         TEXT NOT NULL,
+  ativo            BOOLEAN NOT NULL DEFAULT true,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Leitura de clientes por autenticados"
+  ON clientes FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Inserção de clientes por autenticados"
+  ON clientes FOR INSERT
+  WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Atualização de clientes por autenticados"
+  ON clientes FOR UPDATE
+  USING (auth.role() = 'authenticated');
+
+-- ── Tabela de encaminhamentos ─────────────────────────────────
+CREATE TABLE IF NOT EXISTS encaminhamentos (
+  id               UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  candidato_id     UUID NOT NULL REFERENCES candidatos(id) ON DELETE CASCADE,
+  cliente_id       UUID NOT NULL REFERENCES clientes(id)   ON DELETE RESTRICT,
+  data_entrevista  DATE NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'aguardando'
+                     CHECK (status IN ('aguardando','aprovado','reprovado','desistiu')),
+  observacoes      TEXT,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Reaproveita a função set_updated_at já criada
+CREATE TRIGGER encaminhamentos_updated_at
+  BEFORE UPDATE ON encaminhamentos
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+ALTER TABLE encaminhamentos ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Leitura de encaminhamentos por autenticados"
+  ON encaminhamentos FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Inserção de encaminhamentos por autenticados"
+  ON encaminhamentos FOR INSERT
+  WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Atualização de encaminhamentos por autenticados"
+  ON encaminhamentos FOR UPDATE
+  USING (auth.role() = 'authenticated');

@@ -67,6 +67,26 @@ export const ESTADOS = [
   { uf: "TO", nome: "Tocantins" },
 ];
 
+export const SEGMENTOS_CLIENTE = [
+  "Indústria",
+  "Comércio",
+  "Serviços",
+  "Tecnologia",
+  "Saúde",
+  "Educação",
+  "Agronegócio",
+  "Construção civil",
+  "Transporte e Logística",
+  "Outros",
+];
+
+export const STATUS_ENCAMINHAMENTO: Record<string, { label: string; bg: string; text: string }> = {
+  aguardando: { label: "Aguardando", bg: "bg-yellow-100", text: "text-yellow-800" },
+  aprovado:   { label: "Aprovado",   bg: "bg-green-100",  text: "text-green-800"  },
+  reprovado:  { label: "Reprovado",  bg: "bg-red-100",    text: "text-red-800"    },
+  desistiu:   { label: "Desistiu",   bg: "bg-gray-100",   text: "text-gray-600"   },
+};
+
 export const ETAPAS_KANBAN = [
   {
     id: "triagem" as const,
