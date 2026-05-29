@@ -40,6 +40,7 @@ export interface Cliente {
   contato_email: string;
   cidade: string;
   segmento: string;
+  servicos: string[];
   ativo: boolean;
   created_at: string;
 }
@@ -50,8 +51,9 @@ export interface Encaminhamento {
   cliente_id: string;
   data_entrevista: string;
   status: StatusEncaminhamento;
+  tipo_servico?: string;
   observacoes?: string;
   created_at: string;
   updated_at: string;
-  cliente?: Pick<Cliente, "id" | "nome" | "cidade" | "segmento">;
+  cliente?: Pick<Cliente, "id" | "nome" | "cidade" | "segmento" | "servicos">;
 }

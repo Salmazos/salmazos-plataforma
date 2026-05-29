@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   const supabase = createServiceClient();
   let query = supabase
     .from("encaminhamentos")
-    .select("*, cliente:clientes(id, nome, cidade, segmento)")
+    .select("*, cliente:clientes(id, nome, cidade, segmento, servicos)")
     .order("created_at", { ascending: false });
 
   if (candidato_id) query = query.eq("candidato_id", candidato_id);
@@ -47,9 +47,10 @@ export async function POST(request: NextRequest) {
         cliente_id: body.cliente_id,
         data_entrevista: body.data_entrevista,
         status: "aguardando",
+        tipo_servico: body.tipo_servico || null,
         observacoes: body.observacoes || null,
       })
-      .select("*, cliente:clientes(id, nome, cidade, segmento)")
+      .select("*, cliente:clientes(id, nome, cidade, segmento, servicos)")
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

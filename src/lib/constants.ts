@@ -67,6 +67,43 @@ export const ESTADOS = [
   { uf: "TO", nome: "Tocantins" },
 ];
 
+export const TIPOS_SERVICO = [
+  {
+    id: "recrutamento_selecao",
+    label: "Recrutamento e Seleção",
+    abrev: "R&S",
+    bg: "bg-blue-100",
+    text: "text-blue-700",
+    border: "border-blue-200",
+  },
+  {
+    id: "mao_obra_temporaria",
+    label: "Mão de Obra Temporária",
+    abrev: "Temporária",
+    bg: "bg-[#FFD700]",
+    text: "text-black",
+    border: "border-[#e6c200]",
+  },
+  {
+    id: "terceirizacao",
+    label: "Terceirização de Serviços",
+    abrev: "Terceirização",
+    bg: "bg-green-100",
+    text: "text-green-700",
+    border: "border-green-200",
+  },
+  {
+    id: "avaliacao_psicologica",
+    label: "Avaliação Psicológica",
+    abrev: "Aval. Psic.",
+    bg: "bg-purple-100",
+    text: "text-purple-700",
+    border: "border-purple-200",
+  },
+] as const;
+
+export type TipoServicoId = (typeof TIPOS_SERVICO)[number]["id"];
+
 export const SEGMENTOS_CLIENTE = [
   "Indústria",
   "Comércio",

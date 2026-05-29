@@ -16,6 +16,7 @@ export async function PATCH(
     if (body.contato_email !== undefined) campos.contato_email = body.contato_email;
     if (body.cidade !== undefined) campos.cidade = body.cidade;
     if (body.segmento !== undefined) campos.segmento = body.segmento;
+    if (body.servicos !== undefined) campos.servicos = Array.isArray(body.servicos) ? body.servicos : [];
     if (body.ativo !== undefined) campos.ativo = body.ativo;
 
     const supabase = createServiceClient();

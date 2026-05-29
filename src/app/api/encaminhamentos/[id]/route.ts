@@ -24,7 +24,7 @@ export async function PATCH(
       .from("encaminhamentos")
       .update(campos)
       .eq("id", id)
-      .select("*, cliente:clientes(id, nome, cidade, segmento)")
+      .select("*, cliente:clientes(id, nome, cidade, segmento, servicos)")
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

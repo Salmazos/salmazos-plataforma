@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
         contato_email: body.contato_email,
         cidade: body.cidade,
         segmento: body.segmento,
+        servicos: Array.isArray(body.servicos) ? body.servicos : [],
         ativo: true,
       })
       .select()

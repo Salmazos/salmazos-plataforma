@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { formatarData } from "@/lib/utils";
-import { STATUS_ENCAMINHAMENTO } from "@/lib/constants";
+import { STATUS_ENCAMINHAMENTO, TIPOS_SERVICO } from "@/lib/constants";
 import type { Encaminhamento, StatusEncaminhamento } from "@/types";
 
 interface Props {
@@ -132,6 +132,14 @@ function EncaminhamentoItem({
             {enc.cliente?.segmento && <span>· {enc.cliente.segmento}</span>}
             <span>· Entrevista: {formatarData(enc.data_entrevista)}</span>
           </div>
+          {enc.tipo_servico && (() => {
+            const t = TIPOS_SERVICO.find((ts) => ts.id === enc.tipo_servico);
+            return t ? (
+              <span className={`inline-block mt-1 text-xs font-semibold px-2 py-0.5 rounded-full ${t.bg} ${t.text}`}>
+                {t.label}
+              </span>
+            ) : null;
+          })()}
           {enc.observacoes && (
             <p className="text-xs text-gray-500 mt-1 italic">"{enc.observacoes}"</p>
           )}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { formatarData } from "@/lib/utils";
-import { STATUS_ENCAMINHAMENTO } from "@/lib/constants";
+import { STATUS_ENCAMINHAMENTO, TIPOS_SERVICO } from "@/lib/constants";
 import type { Cliente, Encaminhamento } from "@/types";
 
 interface Props {
@@ -13,6 +13,7 @@ interface Props {
   onConfirmar: (dados: {
     cliente_id: string;
     data_entrevista: string;
+    tipo_servico: string;
     observacoes: string;
   }) => Promise<void>;
 }
@@ -32,14 +33,28 @@ export default function ModalEncaminhamento({
 
   const [clienteId, setClienteId] = useState("");
   const [dataEntrevista, setDataEntrevista] = useState("");
+  const [tipoServico, setTipoServico] = useState("");
   const [observacoes, setObservacoes] = useState("");
 
+  const clienteSelecionado = clientes.find((c) => c.id === clienteId);
   const duplicata = historico.find((e) => e.cliente_id === clienteId);
+
+  // Serviços disponíveis para o cliente selecionado
+  const servicosDisponiveis =
+    clienteSelecionado?.servicos?.length
+      ? TIPOS_SERVICO.filter((t) => clienteSelecionado.servicos.includes(t.id))
+      : TIPOS_SERVICO;
+
+  // Reseta tipo de serviço quando o cliente muda
+  useEffect(() => {
+    setTipoServico("");
+  }, [clienteId]);
 
   useEffect(() => {
     if (!isOpen) return;
     setClienteId("");
     setDataEntrevista("");
+    setTipoServico("");
     setObservacoes("");
     setErro("");
 
@@ -64,21 +79,19 @@ export default function ModalEncaminhamento({
   if (!isOpen) return null;
 
   const handleConfirmar = async () => {
-    if (!clienteId || !dataEntrevista) {
-      setErro("Selecione o cliente e a data da entrevista.");
+    if (!clienteId || !dataEntrevista || !tipoServico) {
+      setErro("Selecione o cliente, o tipo de serviço e a data da entrevista.");
       return;
     }
     setEnviando(true);
     setErro("");
     try {
-      await onConfirmar({ cliente_id: clienteId, data_entrevista: dataEntrevista, observacoes });
+      await onConfirmar({ cliente_id: clienteId, data_entrevista: dataEntrevista, tipo_servico: tipoServico, observacoes });
     } catch {
       setErro("Erro ao salvar encaminhamento.");
       setEnviando(false);
     }
   };
-
-  const clienteSelecionado = clientes.find((c) => c.id === clienteId);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -158,6 +171,39 @@ export default function ModalEncaminhamento({
                 </div>
               )}
 
+              {/* Tipo de serviço */}
+              {clienteId && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    Tipo de serviço *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {servicosDisponiveis.map((tipo) => {
+                      const ativo = tipoServico === tipo.id;
+                      return (
+                        <button
+                          key={tipo.id}
+                          type="button"
+                          onClick={() => setTipoServico(tipo.id)}
+                          className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left transition-all text-sm ${
+                            ativo
+                              ? `${tipo.bg} ${tipo.text} ${tipo.border} font-semibold`
+                              : "border-gray-200 text-gray-500 hover:border-gray-300 bg-white"
+                          }`}
+                        >
+                          <span className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 flex items-center justify-center transition-colors ${
+                            ativo ? `${tipo.border}` : "border-gray-300"
+                          }`}>
+                            {ativo && <span className="w-1.5 h-1.5 rounded-full bg-current" />}
+                          </span>
+                          {tipo.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Data */}
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
@@ -198,7 +244,7 @@ export default function ModalEncaminhamento({
                 </button>
                 <button
                   onClick={handleConfirmar}
-                  disabled={enviando || !clienteId || !dataEntrevista}
+                  disabled={enviando || !clienteId || !dataEntrevista || !tipoServico}
                   className="btn-primary flex-1 disabled:opacity-50"
                 >
                   {enviando ? "Salvando..." : "Confirmar encaminhamento"}

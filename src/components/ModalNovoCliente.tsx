@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { SEGMENTOS_CLIENTE } from "@/lib/constants";
+import { SEGMENTOS_CLIENTE, TIPOS_SERVICO } from "@/lib/constants";
 import type { Cliente } from "@/types";
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
   onSalvo: (cliente: Cliente) => void;
 }
 
-const VAZIO = {
+const FORM_VAZIO = {
   nome: "",
   contato_nome: "",
   contato_telefone: "",
@@ -21,7 +21,8 @@ const VAZIO = {
 };
 
 export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: Props) {
-  const [form, setForm] = useState(VAZIO);
+  const [form, setForm] = useState(FORM_VAZIO);
+  const [servicos, setServicos] = useState<string[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [confirmandoInativar, setConfirmandoInativar] = useState(false);
@@ -40,8 +41,9 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
               cidade: cliente.cidade,
               segmento: cliente.segmento,
             }
-          : VAZIO
+          : FORM_VAZIO
       );
+      setServicos(cliente?.servicos ?? []);
       setErro("");
       setConfirmandoInativar(false);
     }
@@ -52,6 +54,11 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
   const set = (field: string, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
 
+  const toggleServico = (id: string) =>
+    setServicos((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
+    );
+
   const handleSalvar = async () => {
     setSalvando(true);
     setErro("");
@@ -61,7 +68,7 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, servicos }),
       });
       const json = await res.json();
       if (!res.ok) { setErro(json.error ?? "Erro ao salvar."); return; }
@@ -106,7 +113,7 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
         </div>
 
         <div className="p-6 space-y-5">
-          {/* Dados da empresa */}
+          {/* Nome da empresa */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
               Nome da empresa *
@@ -145,6 +152,46 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          {/* Tipos de serviço */}
+          <div className="border-t pt-4">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+              Tipos de serviço
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {TIPOS_SERVICO.map((tipo) => {
+                const ativo = servicos.includes(tipo.id);
+                return (
+                  <button
+                    key={tipo.id}
+                    type="button"
+                    onClick={() => toggleServico(tipo.id)}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border-2 text-left transition-all ${
+                      ativo
+                        ? `${tipo.bg} ${tipo.text} ${tipo.border} font-medium`
+                        : "border-gray-200 text-gray-500 hover:border-gray-300 bg-white"
+                    }`}
+                  >
+                    {/* Checkbox visual */}
+                    <span className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                      ativo
+                        ? `${tipo.border} bg-current/20`
+                        : "border-gray-300"
+                    }`}>
+                      {ativo && (
+                        <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd"
+                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                            clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className="text-sm leading-tight">{tipo.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -215,11 +262,7 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
               </button>
             )}
             <div className="flex gap-3 ml-auto">
-              <button
-                onClick={onClose}
-                className="btn-outline"
-                disabled={salvando}
-              >
+              <button onClick={onClose} className="btn-outline" disabled={salvando}>
                 Cancelar
               </button>
               <button

@@ -67,6 +67,7 @@ export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
   const handleConfirmarEncaminhamento = async (dados: {
     cliente_id: string;
     data_entrevista: string;
+    tipo_servico: string;
     observacoes: string;
   }) => {
     if (!pendingEncaminhamento) return;

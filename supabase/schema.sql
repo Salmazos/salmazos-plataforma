@@ -147,3 +147,16 @@ CREATE POLICY "Inserção de encaminhamentos por autenticados"
 CREATE POLICY "Atualização de encaminhamentos por autenticados"
   ON encaminhamentos FOR UPDATE
   USING (auth.role() = 'authenticated');
+
+-- ──────────────────────────────────────────────────────────────
+-- MIGRATION: Tipos de serviço por cliente
+-- Execute este bloco após a migration anterior
+-- ──────────────────────────────────────────────────────────────
+
+-- Adiciona coluna de serviços na tabela clientes
+ALTER TABLE clientes
+  ADD COLUMN IF NOT EXISTS servicos TEXT[] NOT NULL DEFAULT '{}';
+
+-- Adiciona coluna de tipo de serviço em encaminhamentos
+ALTER TABLE encaminhamentos
+  ADD COLUMN IF NOT EXISTS tipo_servico TEXT;

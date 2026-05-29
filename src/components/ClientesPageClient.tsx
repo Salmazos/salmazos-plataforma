@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ModalNovoCliente from "./ModalNovoCliente";
+import { TIPOS_SERVICO } from "@/lib/constants";
 import type { Cliente } from "@/types";
 
 interface ClienteComCount extends Cliente {
@@ -211,6 +212,20 @@ function ClienteRow({
           </span>
         </div>
       </div>
+
+      {/* Badges de serviços */}
+      {cliente.servicos?.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 shrink-0 max-w-[200px]">
+          {TIPOS_SERVICO.filter((t) => cliente.servicos.includes(t.id)).map((t) => (
+            <span
+              key={t.id}
+              className={`text-xs font-semibold px-2 py-0.5 rounded-full ${t.bg} ${t.text}`}
+            >
+              {t.abrev}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Encaminhamentos count */}
       <div className="text-center shrink-0">
