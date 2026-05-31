@@ -28,6 +28,7 @@ export interface Candidato {
   etapa_kanban: EtapaKanban;
   anotacoes?: string;
   origem?: string;
+  responsavel?: string;
   created_at: string;
   updated_at: string;
 }

@@ -1,9 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ETAPAS_KANBAN } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
 import type { Candidato } from "@/types";
+
+const ANALISTAS = ["Giovanni", "Kaynara", "Rebecca", "Andreza", "Lucas", "Edivan", "Bete", "Olver"];
 
 interface Props {
   candidato: Candidato;
@@ -13,6 +16,26 @@ interface Props {
 
 export default function CandidatoCard({ candidato, onMover, movendo }: Props) {
   const router = useRouter();
+  const [responsavel, setResponsavel] = useState(candidato.responsavel ?? "");
+  const [salvando, setSalvando] = useState(false);
+
+  const handleResponsavelChange = async (novo: string) => {
+    const anterior = responsavel;
+    setResponsavel(novo);
+    setSalvando(true);
+    try {
+      const res = await fetch(`/api/candidatos/${candidato.id}/responsavel`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ responsavel: novo }),
+      });
+      if (!res.ok) setResponsavel(anterior);
+    } catch {
+      setResponsavel(anterior);
+    } finally {
+      setSalvando(false);
+    }
+  };
 
   return (
     <div
@@ -62,6 +85,34 @@ export default function CandidatoCard({ candidato, onMover, movendo }: Props) {
         </div>
       </div>
 
+      {/* Responsável */}
+      <div className="flex items-center gap-1.5 mb-2.5">
+        <svg
+          className="w-3.5 h-3.5 text-gray-400 shrink-0"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+          />
+        </svg>
+        <select
+          value={responsavel}
+          onChange={(e) => handleResponsavelChange(e.target.value)}
+          disabled={salvando}
+          className="text-xs py-0.5 px-1.5 border border-gray-200 rounded-md bg-gray-50 text-gray-600 cursor-pointer disabled:opacity-50 flex-1 min-w-0 truncate"
+        >
+          <option value="">Sem responsável</option>
+          {ANALISTAS.map((a) => (
+            <option key={a} value={a}>{a}</option>
+          ))}
+        </select>
+      </div>
+
       {/* Ações */}
       <div className="flex gap-1.5">
         <button
@@ -71,19 +122,33 @@ export default function CandidatoCard({ candidato, onMover, movendo }: Props) {
           Ver perfil
         </button>
 
-        <select
-          value={candidato.etapa_kanban}
-          onChange={(e) => onMover(candidato.id, e.target.value)}
-          disabled={movendo}
-          className="text-xs py-1.5 px-1.5 border border-gray-200 rounded-md text-gray-600 bg-white cursor-pointer hover:border-gray-300 transition-colors disabled:opacity-50"
-          title="Mover para etapa"
-        >
-          {ETAPAS_KANBAN.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.label}
-            </option>
-          ))}
-        </select>
+        {(() => {
+          const etapaAtual = ETAPAS_KANBAN.find((e) => e.id === candidato.etapa_kanban);
+          return (
+            <select
+              value={candidato.etapa_kanban}
+              onChange={(e) => onMover(candidato.id, e.target.value)}
+              disabled={movendo}
+              className="text-xs py-1.5 px-1.5 border rounded-md cursor-pointer transition-colors disabled:opacity-50 font-medium"
+              style={{
+                backgroundColor: etapaAtual?.bgHex ?? "#f3f4f6",
+                color: etapaAtual?.textHex ?? "#374151",
+                borderColor: etapaAtual?.bgHex ?? "#e5e7eb",
+              }}
+              title="Mover para etapa"
+            >
+              {ETAPAS_KANBAN.map((e) => (
+                <option
+                  key={e.id}
+                  value={e.id}
+                  style={{ backgroundColor: e.bgHex, color: e.textHex }}
+                >
+                  {e.label}
+                </option>
+              ))}
+            </select>
+          );
+        })()}
       </div>
     </div>
   );

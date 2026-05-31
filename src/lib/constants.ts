@@ -134,6 +134,8 @@ export const ETAPAS_KANBAN = [
     badgeBg: "bg-blue-100",
     badgeText: "text-blue-800",
     border: "border-blue-200",
+    bgHex: "#dbeafe",
+    textHex: "#1e40af",
   },
   {
     id: "entrevista_salmazos" as const,
@@ -144,6 +146,8 @@ export const ETAPAS_KANBAN = [
     badgeBg: "bg-amber-100",
     badgeText: "text-amber-800",
     border: "border-amber-200",
+    bgHex: "#fef3c7",
+    textHex: "#92400e",
   },
   {
     id: "entrevista_cliente" as const,
@@ -154,6 +158,8 @@ export const ETAPAS_KANBAN = [
     badgeBg: "bg-orange-100",
     badgeText: "text-orange-800",
     border: "border-orange-200",
+    bgHex: "#ffedd5",
+    textHex: "#9a3412",
   },
   {
     id: "aprovado_cliente" as const,
@@ -164,5 +170,7 @@ export const ETAPAS_KANBAN = [
     badgeBg: "bg-green-100",
     badgeText: "text-green-800",
     border: "border-green-200",
+    bgHex: "#dcfce7",
+    textHex: "#166534",
   },
 ] as const;

@@ -160,3 +160,11 @@ ALTER TABLE clientes
 -- Adiciona coluna de tipo de serviço em encaminhamentos
 ALTER TABLE encaminhamentos
   ADD COLUMN IF NOT EXISTS tipo_servico TEXT;
+
+-- ──────────────────────────────────────────────────────────────
+-- MIGRATION: Responsável pelo candidato
+-- Execute este bloco após a migration anterior
+-- ──────────────────────────────────────────────────────────────
+
+ALTER TABLE candidatos
+  ADD COLUMN IF NOT EXISTS responsavel TEXT;
