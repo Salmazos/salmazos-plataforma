@@ -23,6 +23,7 @@ interface Props {
   recentes: CandidatoRecente[];
   filtroOrigem: string | null;
   onFiltroOrigem: (v: string | null) => void;
+  horizontal?: boolean;
 }
 
 export default function PainelSidebar({
@@ -33,17 +34,19 @@ export default function PainelSidebar({
   recentes,
   filtroOrigem,
   onFiltroOrigem,
+  horizontal = false,
 }: Props) {
   return (
-    <aside className="w-72 shrink-0 space-y-4">
+    <aside className={horizontal ? "grid grid-cols-1 md:grid-cols-3 gap-4 w-full" : "w-72 shrink-0 space-y-4"}>
 
       {/* ── Métricas rápidas ── */}
       <div className="card">
         <p className="section-title">Métricas rápidas</p>
-        <div className="divide-y divide-gray-50">
+        <div className={`divide-y divide-gray-50 ${horizontal ? "" : ""}`}>
           <MetricaItem
             label="Candidatos ativos"
             valor={totalAtivos}
+            compact={horizontal}
             icone={
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -55,6 +58,7 @@ export default function PainelSidebar({
             label="Aprovados no mês"
             valor={aprovadosNoMes}
             destaque
+            compact={horizontal}
             icone={
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -65,6 +69,7 @@ export default function PainelSidebar({
           <MetricaItem
             label="Tempo médio de seleção"
             valor={`${tempoMedioDias} dias`}
+            compact={horizontal}
             icone={
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -84,12 +89,13 @@ export default function PainelSidebar({
             Nenhum candidato cadastrado
           </p>
         ) : (
-          <ul className="space-y-1">
+          <ul className={`space-y-0.5 ${horizontal ? "overflow-y-auto max-h-36" : "space-y-1"}`}>
             {/* Botão Todos */}
             <li>
               <button
                 onClick={() => onFiltroOrigem(null)}
-                className={`w-full text-left flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                className={`w-full text-left flex items-center justify-between px-3 rounded-lg text-sm font-medium transition-colors
+                  ${horizontal ? "py-1.5" : "py-2"}
                   ${filtroOrigem === null
                     ? "bg-black text-[#FFD700]"
                     : "text-gray-600 hover:bg-gray-50"
@@ -113,7 +119,8 @@ export default function PainelSidebar({
                 <li key={v.cargo}>
                   <button
                     onClick={() => onFiltroOrigem(ativo ? null : v.cargo)}
-                    className={`w-full text-left flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors
+                    className={`w-full text-left flex items-center justify-between px-3 rounded-lg text-sm transition-colors
+                      ${horizontal ? "py-1.5" : "py-2"}
                       ${ativo
                         ? "bg-black text-[#FFD700] font-medium"
                         : "text-gray-700 hover:bg-gray-50"
@@ -143,7 +150,7 @@ export default function PainelSidebar({
             Nenhum candidato ainda
           </p>
         ) : (
-          <ul className="space-y-3">
+          <ul className={`${horizontal ? "space-y-2 overflow-y-auto max-h-36" : "space-y-3"}`}>
             {recentes.map((c) => (
               <li key={c.id}>
                 <Link href={`/painel/candidato/${c.id}`} className="flex items-start gap-2.5 group">
@@ -175,19 +182,21 @@ function MetricaItem({
   valor,
   icone,
   destaque = false,
+  compact = false,
 }: {
   label: string;
   valor: string | number;
   icone: React.ReactNode;
   destaque?: boolean;
+  compact?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between py-2.5">
+    <div className={`flex items-center justify-between ${compact ? "py-1.5" : "py-2.5"}`}>
       <div className="flex items-center gap-2 text-gray-500">
         {icone}
         <span className="text-sm">{label}</span>
       </div>
-      <span className={`text-xl font-bold ${destaque ? "text-green-600" : "text-black"}`}>
+      <span className={`font-bold ${compact ? "text-lg" : "text-xl"} ${destaque ? "text-green-600" : "text-black"}`}>
         {valor}
       </span>
     </div>

@@ -9,6 +9,7 @@ export default async function PainelPage() {
   const { data, error } = await supabase
     .from("candidatos")
     .select("*")
+    .eq("status", "ativo")
     .order("created_at", { ascending: false });
 
   if (error) {

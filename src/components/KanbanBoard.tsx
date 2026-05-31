@@ -158,7 +158,7 @@ export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
       </div>
 
       {/* Colunas */}
-      <div className="flex gap-4 overflow-x-auto pb-6">
+      <div className="flex gap-2 overflow-x-auto pb-6">
         {ETAPAS_KANBAN.map((etapa) => {
           const cards = filtrados.filter(
             (c) => c.etapa_kanban === etapa.id
@@ -167,16 +167,23 @@ export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
           return (
             <div key={etapa.id} className="flex-shrink-0 w-72">
               <div
-                className={`${etapa.headerBg} text-white rounded-t-xl px-4 py-3 flex items-center justify-between`}
+                className={`border-t-4 ${etapa.topBorder} rounded-t-xl px-3 py-2.5 flex items-center justify-between`}
+                style={{ backgroundColor: etapa.bgHex }}
               >
-                <span className="font-semibold text-sm">{etapa.label}</span>
-                <span className="bg-white/25 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                <span
+                  className="font-bold text-sm tracking-wide"
+                  style={{ color: etapa.textHex }}
+                >
+                  {etapa.label}
+                </span>
+                <span className={`${etapa.badgeBg} ${etapa.badgeText} text-xs font-bold px-2 py-0.5 rounded-full`}>
                   {cards.length}
                 </span>
               </div>
 
               <div
-                className={`${etapa.columnBg} rounded-b-xl min-h-[400px] p-2 space-y-2`}
+                className="rounded-b-xl min-h-[400px] p-1.5 space-y-1.5"
+                style={{ backgroundColor: etapa.bgHex }}
               >
                 {cards.length === 0 ? (
                   <p className="text-center text-gray-400 text-xs pt-8">

@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { ETAPAS_KANBAN } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
 import type { Candidato } from "@/types";
+import ModalReprovacao from "./ModalReprovacao";
 
-const ANALISTAS = ["Giovanni", "Kaynara", "Rebecca", "Andreza", "Lucas", "Edivan", "Bete", "Olver"];
+const ANALISTAS = ["Giovanni", "Kaynara", "Rebeca", "Andreza", "Lucas", "Edivan", "Bete", "Olver"];
 
 interface Props {
   candidato: Candidato;
@@ -18,6 +19,7 @@ export default function CandidatoCard({ candidato, onMover, movendo }: Props) {
   const router = useRouter();
   const [responsavel, setResponsavel] = useState(candidato.responsavel ?? "");
   const [salvando, setSalvando] = useState(false);
+  const [modalReprovacaoAberto, setModalReprovacaoAberto] = useState(false);
 
   const handleResponsavelChange = async (novo: string) => {
     const anterior = responsavel;
@@ -39,13 +41,13 @@ export default function CandidatoCard({ candidato, onMover, movendo }: Props) {
 
   return (
     <div
-      className={`bg-white rounded-lg shadow-sm border border-white/80 p-3 transition-opacity ${
+      className={`bg-white rounded-lg shadow-sm border border-white/80 p-2 transition-opacity ${
         movendo ? "opacity-50" : ""
       }`}
     >
       {/* Avatar + nome */}
-      <div className="flex items-start gap-2.5 mb-2">
-        <div className="w-8 h-8 rounded-full bg-black text-[#FFB800] flex items-center justify-center text-sm font-bold shrink-0">
+      <div className="flex items-start gap-2 mb-1.5">
+        <div className="w-7 h-7 rounded-full bg-black text-[#FFB800] flex items-center justify-center text-xs font-bold shrink-0">
           {candidato.nome_completo.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0">
@@ -59,7 +61,7 @@ export default function CandidatoCard({ candidato, onMover, movendo }: Props) {
       </div>
 
       {/* Meta */}
-      <div className="text-xs text-gray-400 space-y-0.5 mb-3">
+      <div className="text-xs text-gray-400 space-y-0.5 mb-2">
         <div className="flex items-center gap-1">
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -86,7 +88,7 @@ export default function CandidatoCard({ candidato, onMover, movendo }: Props) {
       </div>
 
       {/* Responsável */}
-      <div className="flex items-center gap-1.5 mb-2.5">
+      <div className="flex items-center gap-1 mb-1.5">
         <svg
           className="w-3.5 h-3.5 text-gray-400 shrink-0"
           fill="none"
@@ -114,10 +116,10 @@ export default function CandidatoCard({ candidato, onMover, movendo }: Props) {
       </div>
 
       {/* Ações */}
-      <div className="flex gap-1.5">
+      <div className="flex gap-1">
         <button
           onClick={() => router.push(`/painel/candidato/${candidato.id}`)}
-          className="flex-1 text-xs py-1.5 px-2 bg-black text-[#FFB800] rounded-md hover:bg-gray-900 transition-colors font-medium"
+          className="flex-1 text-xs py-1 px-2 bg-black text-[#FFB800] rounded-md hover:bg-gray-900 transition-colors font-medium"
         >
           Ver perfil
         </button>
@@ -127,9 +129,15 @@ export default function CandidatoCard({ candidato, onMover, movendo }: Props) {
           return (
             <select
               value={candidato.etapa_kanban}
-              onChange={(e) => onMover(candidato.id, e.target.value)}
+              onChange={(e) => {
+                if (e.target.value === "reprovado") {
+                  setModalReprovacaoAberto(true);
+                } else {
+                  onMover(candidato.id, e.target.value);
+                }
+              }}
               disabled={movendo}
-              className="text-xs py-1.5 px-1.5 border rounded-md cursor-pointer transition-colors disabled:opacity-50 font-medium"
+              className="text-xs py-1 px-1 border rounded-md cursor-pointer transition-colors disabled:opacity-50 font-medium"
               style={{
                 backgroundColor: etapaAtual?.bgHex ?? "#f3f4f6",
                 color: etapaAtual?.textHex ?? "#374151",
@@ -146,10 +154,20 @@ export default function CandidatoCard({ candidato, onMover, movendo }: Props) {
                   {e.label}
                 </option>
               ))}
+              <option value="reprovado" style={{ backgroundColor: "#fce7f3", color: "#dc2626" }}>
+                Reprovado
+              </option>
             </select>
           );
         })()}
       </div>
+
+      <ModalReprovacao
+        isOpen={modalReprovacaoAberto}
+        candidato={candidato}
+        onClose={() => setModalReprovacaoAberto(false)}
+        onReprovado={() => router.refresh()}
+      />
     </div>
   );
 }

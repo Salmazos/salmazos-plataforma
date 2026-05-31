@@ -4,6 +4,8 @@ export type EtapaKanban =
   | "entrevista_cliente"
   | "aprovado_cliente";
 
+export type StatusCandidato = "ativo" | "reprovado" | "negativado";
+
 export type StatusEncaminhamento =
   | "aguardando"
   | "aprovado"
@@ -26,6 +28,9 @@ export interface Candidato {
   resumo_profissional?: string;
   curriculo_url?: string;
   etapa_kanban: EtapaKanban;
+  status: StatusCandidato;
+  motivo_reprovacao?: string;
+  etapa_reprovacao?: string;
   anotacoes?: string;
   origem?: string;
   responsavel?: string;

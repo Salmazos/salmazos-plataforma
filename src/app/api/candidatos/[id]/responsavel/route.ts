@@ -4,7 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 const ANALISTAS_VALIDOS = [
   "Giovanni",
   "Kaynara",
-  "Rebecca",
+  "Rebeca",
   "Andreza",
   "Lucas",
   "Edivan",
