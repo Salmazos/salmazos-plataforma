@@ -18,6 +18,7 @@ export async function PATCH(
     if (body.segmento !== undefined) campos.segmento = body.segmento;
     if (body.servicos !== undefined) campos.servicos = Array.isArray(body.servicos) ? body.servicos : [];
     if (body.ativo !== undefined) campos.ativo = body.ativo;
+    if (body.responsavel_comercial !== undefined) campos.responsavel_comercial = body.responsavel_comercial || null;
 
     const supabase = createServiceClient();
     const { data, error } = await supabase

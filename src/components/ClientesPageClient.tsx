@@ -217,6 +217,15 @@ function ClienteRow({
             </svg>
             {cliente.contato_email}
           </span>
+          {cliente.responsavel_comercial && (
+            <span className="flex items-center gap-1">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6a4 4 0 11-8 0 4 4 0 018 0zm-8 8a4 4 0 00-4 4h16a4 4 0 00-4-4H8z" />
+              </svg>
+              Resp.: {cliente.responsavel_comercial}
+            </span>
+          )}
         </div>
       </div>
 

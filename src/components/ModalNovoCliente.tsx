@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { SEGMENTOS_CLIENTE, TIPOS_SERVICO } from "@/lib/constants";
+import { SEGMENTOS_CLIENTE, TIPOS_SERVICO, ANALISTAS } from "@/lib/constants";
 import type { Cliente } from "@/types";
 
 interface Props {
@@ -18,6 +18,7 @@ const FORM_VAZIO = {
   contato_email: "",
   cidade: "",
   segmento: "",
+  responsavel_comercial: "",
 };
 
 export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: Props) {
@@ -40,6 +41,7 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
               contato_email: cliente.contato_email,
               cidade: cliente.cidade,
               segmento: cliente.segmento,
+              responsavel_comercial: cliente.responsavel_comercial ?? "",
             }
           : FORM_VAZIO
       );
@@ -153,6 +155,23 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Responsável Comercial */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Responsável Comercial
+            </label>
+            <select
+              value={form.responsavel_comercial}
+              onChange={(e) => set("responsavel_comercial", e.target.value)}
+              className="input-field"
+            >
+              <option value="">Sem responsável</option>
+              {ANALISTAS.map((a) => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
           </div>
 
           {/* Tipos de serviço */}

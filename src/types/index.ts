@@ -48,6 +48,7 @@ export interface Cliente {
   segmento: string;
   servicos: string[];
   ativo: boolean;
+  responsavel_comercial?: string;
   created_at: string;
 }
 
