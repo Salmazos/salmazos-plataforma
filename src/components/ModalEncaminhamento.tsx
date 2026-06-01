@@ -42,6 +42,9 @@ export default function ModalEncaminhamento({
   const [dataEntrevista, setDataEntrevista] = useState("");
   const [tipoServico, setTipoServico] = useState("");
   const [observacoes, setObservacoes] = useState("");
+  const [forcarEnvio, setForcarEnvio] = useState(false);
+  const [justificativa, setJustificativa] = useState("");
+  const [autorizadoPor, setAutorizadoPor] = useState("");
 
   const clienteSelecionado = clientes.find((c) => c.id === clienteId);
   const duplicata = historico.find((e) => e.cliente_id === clienteId);
@@ -62,6 +65,9 @@ export default function ModalEncaminhamento({
     setTipoServico("");
     setObservacoes("");
     setErro("");
+    setForcarEnvio(false);
+    setJustificativa("");
+    setAutorizadoPor("");
 
     const carregar = async () => {
       setCarregando(true);
@@ -88,10 +94,22 @@ export default function ModalEncaminhamento({
       setErro("Selecione o cliente, o tipo de serviço e a data da entrevista.");
       return;
     }
+    if (duplicata && !forcarEnvio) {
+      setErro("Resolva o aviso de duplicidade antes de confirmar.");
+      return;
+    }
+    if (duplicata && forcarEnvio && (!justificativa.trim() || !autorizadoPor.trim())) {
+      setErro("Preencha a justificativa e quem autorizou o reencaminhamento.");
+      return;
+    }
+    const obsCompleta =
+      duplicata && forcarEnvio
+        ? `[Reencaminhamento autorizado por: ${autorizadoPor}] ${justificativa}${observacoes ? ` | ${observacoes}` : ""}`
+        : observacoes;
     setEnviando(true);
     setErro("");
     try {
-      await onConfirmar({ cliente_id: clienteId, data_entrevista: dataEntrevista, tipo_servico: tipoServico, observacoes });
+      await onConfirmar({ cliente_id: clienteId, data_entrevista: dataEntrevista, tipo_servico: tipoServico, observacoes: obsCompleta });
     } catch {
       setErro("Erro ao salvar encaminhamento.");
       setEnviando(false);
@@ -154,25 +172,77 @@ export default function ModalEncaminhamento({
 
               {/* Alerta de duplicidade */}
               {duplicata && clienteSelecionado && (
-                <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 flex gap-2">
-                  <svg className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <div className="text-sm text-yellow-800">
-                    <p className="font-semibold">Atenção: encaminhamento anterior detectado</p>
-                    <p className="mt-0.5">
-                      Este candidato já foi encaminhado para{" "}
-                      <strong>{clienteSelecionado.nome}</strong> em{" "}
-                      {formatarData(duplicata.data_entrevista)} com resultado:{" "}
-                      <strong>
-                        {STATUS_ENCAMINHAMENTO[duplicata.status]?.label ?? duplicata.status}
-                      </strong>.
-                    </p>
-                    <p className="mt-1 text-xs text-yellow-700">
-                      Você ainda pode prosseguir com um novo encaminhamento.
-                    </p>
+                <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 space-y-3">
+                  <div className="flex gap-2">
+                    <svg className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div className="text-sm text-yellow-800">
+                      <p className="font-semibold">Atenção: encaminhamento anterior detectado</p>
+                      <a
+                        href={`/painel/encaminhamentos?id=${duplicata.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 block hover:underline"
+                        style={{ color: "#92400e" }}
+                      >
+                        <strong>{candidatoNome}</strong>{" → "}
+                        <strong>{clienteSelecionado.nome}</strong>
+                        {" em "}{formatarData(duplicata.data_entrevista)}
+                        {" · resultado: "}
+                        <strong>{STATUS_ENCAMINHAMENTO[duplicata.status]?.label ?? duplicata.status}</strong>
+                        {" ↗"}
+                      </a>
+                    </div>
                   </div>
+
+                  {!forcarEnvio ? (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex-1 text-sm font-semibold py-1.5 px-3 rounded-lg border border-yellow-400 text-yellow-800 hover:bg-yellow-100 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setForcarEnvio(true)}
+                        className="flex-1 text-sm font-semibold py-1.5 px-3 rounded-lg transition-colors"
+                        style={{ background: "#ca8a04", color: "#fff" }}
+                      >
+                        Enviar mesmo assim
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 pt-1 border-t border-yellow-200">
+                      <div>
+                        <label className="block text-xs font-semibold text-yellow-800 uppercase tracking-wide mb-1">
+                          Justificativa *
+                        </label>
+                        <input
+                          type="text"
+                          value={justificativa}
+                          onChange={(e) => setJustificativa(e.target.value)}
+                          placeholder="Descreva o motivo do reencaminhamento..."
+                          className="input-field"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-yellow-800 uppercase tracking-wide mb-1">
+                          Autorizado por *
+                        </label>
+                        <input
+                          type="text"
+                          value={autorizadoPor}
+                          onChange={(e) => setAutorizadoPor(e.target.value)}
+                          placeholder="Nome de quem autorizou ou cliente após contato..."
+                          className="input-field"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

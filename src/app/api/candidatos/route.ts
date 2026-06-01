@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       .from("candidatos")
       .insert({
         nome_completo: body.nome_completo,
-        cpf: body.cpf,
+        cpf: body.cpf || `TEMP-${Date.now()}`,
         telefone: body.telefone,
         email: body.email,
         cidade: body.cidade,
@@ -56,6 +56,8 @@ export async function POST(request: NextRequest) {
         habilidades: body.habilidades || [],
         resumo_profissional: body.resumo_profissional || null,
         curriculo_url: body.curriculo_url || null,
+        idade: body.idade || null,
+        formacao_academica: body.formacao_academica || null,
         origem: body.origem || "Banco de talentos",
         etapa_kanban: "triagem",
       })
@@ -63,7 +65,8 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error("[POST /api/candidatos] Supabase error:", JSON.stringify(error));
+      return NextResponse.json({ error: error.message, details: error }, { status: 400 });
     }
 
     // Enviar e-mail de confirmação apenas quando e-mail foi informado

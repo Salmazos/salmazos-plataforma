@@ -34,6 +34,8 @@ export interface Candidato {
   anotacoes?: string;
   origem?: string;
   responsavel?: string;
+  idade?: number | null;
+  formacao_academica?: string | null;
   created_at: string;
   updated_at: string;
 }

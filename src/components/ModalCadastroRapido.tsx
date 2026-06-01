@@ -42,6 +42,15 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
   const [area, setArea] = useState("");
+  const [email, setEmail] = useState("");
+  const [cpf, setCpf] = useState("");
+  const [cidade, setCidade] = useState("");
+  const [estado, setEstado] = useState("");
+  const [tempoExperiencia, setTempoExperiencia] = useState("");
+  const [resumo, setResumo] = useState("");
+  const [habilidades, setHabilidades] = useState<string[]>([]);
+  const [idade, setIdade] = useState<string>("");
+  const [formacao, setFormacao] = useState<string>("");
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [extraindo, setExtraindo] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -52,6 +61,15 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
     setNome("");
     setTelefone("");
     setArea("");
+    setEmail("");
+    setCpf("");
+    setCidade("");
+    setEstado("");
+    setTempoExperiencia("");
+    setResumo("");
+    setHabilidades([]);
+    setIdade("");
+    setFormacao("");
     setArquivo(null);
     setErro("");
     setExtraindo(false);
@@ -81,14 +99,29 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+      const mediaType =
+        ext === "jpg" || ext === "jpeg" ? "image/jpeg" :
+        ext === "png" ? "image/png" :
+        ext === "doc" || ext === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" :
+        "application/pdf";
       const response = await fetch("/api/extrair-curriculo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ base64, mediaType: "application/pdf" }),
+        body: JSON.stringify({ base64, mediaType }),
       });
       const extraido = await response.json();
       if (extraido.nome && !nome) setNome(extraido.nome);
       if (extraido.telefone && !telefone) setTelefone(formatarTelefone(extraido.telefone));
+      if (extraido.email && !email) setEmail(extraido.email);
+      if (extraido.cpf && !cpf) setCpf(extraido.cpf);
+      if (extraido.cidade) setCidade(extraido.cidade);
+      if (extraido.estado) setEstado(extraido.estado);
+      if (extraido.tempo_experiencia) setTempoExperiencia(extraido.tempo_experiencia);
+      if (extraido.resumo) setResumo(extraido.resumo);
+      if (extraido.habilidades?.length) setHabilidades(extraido.habilidades);
+      if (extraido.idade) setIdade(String(extraido.idade));
+      if (extraido.formacao) setFormacao(extraido.formacao);
       if (extraido.cargo && !area) {
         const cargo = extraido.cargo
           .toLowerCase()
@@ -100,7 +133,7 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
         setArea(areaEncontrada ?? "Outros");
       }
     } catch {
-      setErro("Nao foi possivel extrair os dados do PDF. Preencha manualmente.");
+      setErro("Não foi possível extrair os dados. Preencha manualmente.");
     } finally {
       setExtraindo(false);
     }
@@ -131,19 +164,27 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
           nome_completo: nome.trim(),
           telefone: telefone.trim(),
           cargo_pretendido: area,
-          email: "",
-          cpf: "",
-          cidade: "",
-          estado: "",
-          tempo_experiencia: "Sem experiencia",
-          turno_disponivel: "Flexivel",
-          habilidades: [],
+          email: email || "",
+          cpf: cpf || `TEMP-${Date.now()}`,
+          cidade: cidade || "",
+          estado: estado || "",
+          tempo_experiencia: tempoExperiencia || "Sem experiência",
+          turno_disponivel: "Flexível",
+          habilidades: habilidades,
+          resumo_profissional: resumo || null,
+          idade: idade ? parseInt(idade) : null,
+          formacao_academica: formacao || null,
           etapa_kanban: "triagem",
           origem: "Cadastro Rapido",
           curriculo_url,
         }),
       });
-      if (!res.ok) throw new Error("Erro ao cadastrar");
+      if (!res.ok) {
+        const resJson = await res.json();
+        setErro(resJson.error || "Erro ao cadastrar candidato.");
+        setEnviando(false);
+        return;
+      }
       handleFechar();
       onCadastrado();
     } catch {
@@ -172,7 +213,7 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
         <div className="p-6 space-y-5">
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-              Curriculo em PDF
+              Currículo
             </label>
             <div
               onClick={() => inputArquivo.current?.click()}
@@ -185,7 +226,7 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
               {extraindo ? (
                 <div className="flex flex-col items-center gap-2 text-gray-500">
                   <div className="w-6 h-6 border-2 border-[#FFD700] border-t-transparent rounded-full animate-spin" />
-                  <span className="text-sm">Extraindo dados do PDF...</span>
+                  <span className="text-sm">Extraindo dados do currículo...</span>
                 </div>
               ) : arquivo ? (
                 <div className="flex flex-col items-center gap-1">
@@ -200,15 +241,15 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
                   <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  <span className="text-sm">Clique para fazer upload do PDF</span>
-                  <span className="text-xs">A IA preenchera os campos automaticamente</span>
+                  <span className="text-sm">Clique para fazer upload do currículo</span>
+                  <span className="text-xs">PDF, Word ou imagem · A IA preencherá os campos automaticamente</span>
                 </div>
               )}
             </div>
             <input
               ref={inputArquivo}
               type="file"
-              accept=".pdf"
+              accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
               className="hidden"
               onChange={(e) => e.target.files?.[0] && handleArquivo(e.target.files[0])}
             />

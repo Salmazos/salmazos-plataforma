@@ -13,9 +13,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (arquivo.type !== "application/pdf") {
+    const TIPOS_ACEITOS: Record<string, string> = {
+      "application/pdf": "application/pdf",
+      "application/msword": "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "image/jpeg": "image/jpeg",
+      "image/png": "image/png",
+    };
+
+    const contentType = TIPOS_ACEITOS[arquivo.type];
+    if (!contentType) {
       return NextResponse.json(
-        { error: "Apenas arquivos PDF são aceitos." },
+        { error: "Formato não suportado. Use PDF, Word ou imagem (JPG, PNG)." },
         { status: 400 }
       );
     }
@@ -28,7 +38,7 @@ export async function POST(request: NextRequest) {
     const { error } = await supabase.storage
       .from("curriculos")
       .upload(nomeArquivo, buffer, {
-        contentType: "application/pdf",
+        contentType,
         upsert: false,
       });
 
