@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { ANALISTAS } from "@/lib/constants";
 import type { EtapaKanban, StatusEncaminhamento } from "@/types";
 
@@ -654,7 +655,15 @@ export default function RelatoriosPageClient({ candidatos, encaminhamentos, clie
                     <tbody>
                       {r.clientes.map((c) => (
                         <tr key={c.id} className="border-b border-gray-50 last:border-0">
-                          <td className="py-2 font-medium text-gray-900">{c.nome}</td>
+                          <td className="py-2">
+                            <Link
+                              href={`/painel/clientes?id=${c.id}`}
+                              style={{ color: "#ca8a04" }}
+                              className="font-bold hover:underline cursor-pointer"
+                            >
+                              {c.nome}
+                            </Link>
+                          </td>
                           <td className="py-2 text-center">
                             {c.ativo ? (
                               <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
