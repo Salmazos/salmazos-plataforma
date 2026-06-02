@@ -63,6 +63,13 @@ export default function FormularioCadastro({ vagaParam }: Props) {
         : [...f.habilidades, h],
     }));
 
+  const formatarMoeda = (value: string) => {
+    const nums = value.replace(/\D/g, "");
+    if (!nums) return "";
+    const number = parseInt(nums, 10) / 100;
+    return number.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  };
+
   const validar = (): boolean => {
     const e: Record<string, string> = {};
     if (!form.nome_completo.trim() || form.nome_completo.trim().length < 3)
@@ -297,8 +304,9 @@ export default function FormularioCadastro({ vagaParam }: Props) {
 
               <div className="sm:col-span-2">
                 <label className="label">Pretensão salarial</label>
-                <input type="text" className="input-field" placeholder="Ex.: R$ 2.500 ou A combinar"
-                  value={form.pretensao_salarial} onChange={(e) => set("pretensao_salarial", e.target.value)} />
+                <input type="text" inputMode="numeric" className="input-field" placeholder="R$ 0,00"
+                  value={form.pretensao_salarial}
+                  onChange={(e) => set("pretensao_salarial", formatarMoeda(e.target.value))} />
               </div>
             </div>
           </div>
