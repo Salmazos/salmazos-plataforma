@@ -31,9 +31,12 @@ interface Props {
 export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inicialCv }: Props) {
   const [vaga, setVaga] = useState<Vaga>(inicial);
   const [candidatosVaga, setCandidatosVaga] = useState<CandidatoVaga[]>(inicialCv);
-  const [modalEditar, setModalEditar] = useState(false);
+  const [modalEditar, setModalEditar]     = useState(false);
   const [modalAdicionar, setModalAdicionar] = useState(false);
-  const [encerrando, setEncerrando] = useState(false);
+  const [encerrando, setEncerrando]       = useState(false);
+  const [vinculando, setVinculando]       = useState(false);
+  const [vinculandoSalvando, setVinculandoSalvando] = useState(false);
+  const [clientesLista, setClientesLista] = useState<{ id: string; nome: string }[]>([]);
 
   const statusInfo = STATUS_VAGA[vaga.status] ?? STATUS_VAGA.aberta;
   const tipoInfo   = TIPOS_SERVICO.find((t) => t.id === vaga.tipo_servico);
@@ -52,6 +55,34 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
       setVaga(json.data);
     }
     setEncerrando(false);
+  };
+
+  const abrirVincular = async () => {
+    setVinculando(true);
+    if (clientesLista.length === 0) {
+      const res = await fetch("/api/clientes");
+      if (res.ok) {
+        const json = await res.json();
+        setClientesLista(
+          (json.data ?? []).filter((c: { ativo: boolean }) => c.ativo)
+        );
+      }
+    }
+  };
+
+  const handleVincularCliente = async (clienteId: string) => {
+    setVinculandoSalvando(true);
+    const res = await fetch(`/api/vagas/${vaga.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cliente_id: clienteId }),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      setVaga(json.data);
+    }
+    setVinculando(false);
+    setVinculandoSalvando(false);
   };
 
   const handleRemoverCandidato = async (cvId: string) => {
@@ -135,7 +166,54 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
             <p className="section-title mb-4">Detalhes da Vaga</p>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
               <DetalheItem label="Cliente">
-                {vaga.clientes?.nome ?? <span className="italic text-gray-400">Banco de Talentos</span>}
+                {vaga.clientes ? (
+                  vaga.clientes.nome
+                ) : (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={!vaga.cliente_nome_temp ? "italic text-gray-400" : ""}>
+                        {vaga.cliente_nome_temp || "Banco de Talentos"}
+                      </span>
+                      {vaga.cliente_nome_temp && (
+                        <span
+                          className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                          style={{ backgroundColor: "#FEF3C7", color: "#92400E" }}
+                        >
+                          Sem vínculo
+                        </span>
+                      )}
+                    </div>
+                    {vinculando ? (
+                      <div className="flex items-center gap-2">
+                        <select
+                          autoFocus
+                          onChange={(e) => e.target.value && handleVincularCliente(e.target.value)}
+                          disabled={vinculandoSalvando}
+                          className="input-field text-xs py-1 h-7 flex-1 max-w-[200px]"
+                        >
+                          <option value="">Selecionar cliente...</option>
+                          {clientesLista.map((c) => (
+                            <option key={c.id} value={c.id}>{c.nome}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => setVinculando(false)}
+                          className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={abrirVincular}
+                        className="text-xs font-medium transition-colors"
+                        style={{ color: "#1D6FA4" }}
+                      >
+                        Vincular cliente →
+                      </button>
+                    )}
+                  </div>
+                )}
               </DetalheItem>
               <DetalheItem label="Responsável">{vaga.responsavel || "—"}</DetalheItem>
               <DetalheItem label="Local">

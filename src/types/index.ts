@@ -74,6 +74,7 @@ export interface Vaga {
   responsavel: string;
   observacoes: string | null;
   created_at: string;
+  cliente_nome_temp?: string | null;
   clientes?: { id: string; nome: string } | null;
 }
 
