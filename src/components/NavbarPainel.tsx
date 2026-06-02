@@ -46,6 +46,7 @@ export default function NavbarPainel({ userEmail }: Props) {
           <nav className="hidden sm:flex items-center gap-1">
             <NavLink href="/painel" label="Painel" />
             <NavLink href="/painel/clientes" label="Clientes" />
+            <NavLink href="/painel/vagas" label="Vagas" />
             <NavLink href="/painel/relatorios" label="Relatórios" />
           </nav>
         </div>

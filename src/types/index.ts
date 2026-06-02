@@ -54,6 +54,29 @@ export interface Cliente {
   created_at: string;
 }
 
+export type StatusVaga = "aberta" | "em_andamento" | "fechada" | "cancelada";
+
+export interface Vaga {
+  id: string;
+  titulo: string;
+  cliente_id: string | null;
+  tipo_servico: string;
+  num_posicoes: number;
+  prazo: string | null;
+  status: StatusVaga;
+  cidade: string | null;
+  estado: string | null;
+  salario: string | null;
+  requisitos: string | null;
+  beneficios: string | null;
+  horario: string | null;
+  habilidades_desejadas: string[];
+  responsavel: string;
+  observacoes: string | null;
+  created_at: string;
+  clientes?: { id: string; nome: string } | null;
+}
+
 export interface Encaminhamento {
   id: string;
   candidato_id: string;
