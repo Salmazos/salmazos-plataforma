@@ -77,6 +77,14 @@ export interface Vaga {
   clientes?: { id: string; nome: string } | null;
 }
 
+export interface CandidatoVaga {
+  id: string;
+  vaga_id: string;
+  candidato_id: string;
+  created_at: string;
+  candidatos?: Pick<Candidato, "id" | "nome_completo" | "etapa_kanban" | "responsavel" | "cargo_pretendido"> | null;
+}
+
 export interface Encaminhamento {
   id: string;
   candidato_id: string;

@@ -1,0 +1,319 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import ModalNovaVaga from "./ModalNovaVaga";
+import ModalAdicionarCandidatoVaga from "./ModalAdicionarCandidatoVaga";
+import { TIPOS_SERVICO, ETAPAS_KANBAN } from "@/lib/constants";
+import { formatarData } from "@/lib/utils";
+import type { Vaga, CandidatoVaga } from "@/types";
+
+const CORES_TIPO: Record<string, { bg: string; color: string }> = {
+  recrutamento_selecao:  { bg: "#1D6FA4", color: "#ffffff" },
+  mao_obra_temporaria:   { bg: "#FFD700", color: "#000000" },
+  terceirizacao:         { bg: "#1D9E75", color: "#ffffff" },
+  avaliacao_psicologica: { bg: "#6B4FBB", color: "#ffffff" },
+};
+
+const STATUS_VAGA: Record<string, { label: string; bg: string; color: string }> = {
+  aberta:       { label: "Aberta",       bg: "#dcfce7", color: "#15803d" },
+  em_andamento: { label: "Em andamento", bg: "#fef9c3", color: "#a16207" },
+  fechada:      { label: "Fechada",      bg: "#f3f4f6", color: "#6b7280" },
+  encerrada:    { label: "Encerrada",    bg: "#f3f4f6", color: "#6b7280" },
+  cancelada:    { label: "Cancelada",    bg: "#fee2e2", color: "#dc2626" },
+};
+
+interface Props {
+  vaga: Vaga;
+  candidatosVaga: CandidatoVaga[];
+}
+
+export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inicialCv }: Props) {
+  const [vaga, setVaga] = useState<Vaga>(inicial);
+  const [candidatosVaga, setCandidatosVaga] = useState<CandidatoVaga[]>(inicialCv);
+  const [modalEditar, setModalEditar] = useState(false);
+  const [modalAdicionar, setModalAdicionar] = useState(false);
+  const [encerrando, setEncerrando] = useState(false);
+
+  const statusInfo = STATUS_VAGA[vaga.status] ?? STATUS_VAGA.aberta;
+  const tipoInfo   = TIPOS_SERVICO.find((t) => t.id === vaga.tipo_servico);
+  const coresTipo  = vaga.tipo_servico ? CORES_TIPO[vaga.tipo_servico] : null;
+
+  const handleEncerrar = async () => {
+    if (!confirm("Encerrar esta vaga?")) return;
+    setEncerrando(true);
+    const res = await fetch(`/api/vagas/${vaga.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "fechada" }),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      setVaga(json.data);
+    }
+    setEncerrando(false);
+  };
+
+  const handleRemoverCandidato = async (cvId: string) => {
+    if (!confirm("Remover candidato desta vaga?")) return;
+    const res = await fetch("/api/candidatos-vagas", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: cvId }),
+    });
+    if (res.ok) setCandidatosVaga((prev) => prev.filter((cv) => cv.id !== cvId));
+  };
+
+  return (
+    <div className="max-w-5xl mx-auto">
+      {/* Back */}
+      <Link
+        href="/painel/vagas"
+        className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-black transition-colors mb-5"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+        Voltar às vagas
+      </Link>
+
+      {/* Header card */}
+      <div className="card mb-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{vaga.titulo}</h1>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <span
+                className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                style={{ backgroundColor: statusInfo.bg, color: statusInfo.color }}
+              >
+                {statusInfo.label}
+              </span>
+              {coresTipo && tipoInfo && (
+                <span
+                  className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                  style={{ backgroundColor: coresTipo.bg, color: coresTipo.color }}
+                >
+                  {tipoInfo.label}
+                </span>
+              )}
+              {vaga.clientes && (
+                <span className="text-xs bg-black/5 text-gray-600 px-2.5 py-1 rounded-full font-medium">
+                  {vaga.clientes.nome}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setModalEditar(true)}
+              className="btn-outline text-sm"
+            >
+              Editar
+            </button>
+            {vaga.status !== "fechada" && vaga.status !== "cancelada" && (
+              <button
+                onClick={handleEncerrar}
+                disabled={encerrando}
+                className="text-sm px-3 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                {encerrando ? "Encerrando..." : "Encerrar vaga"}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Two-column body */}
+      <div className="grid grid-cols-3 gap-6 items-start">
+
+        {/* LEFT — 2/3 */}
+        <div className="col-span-2 space-y-4">
+
+          {/* Detalhes */}
+          <div className="card">
+            <p className="section-title mb-4">Detalhes da Vaga</p>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
+              <DetalheItem label="Cliente">
+                {vaga.clientes?.nome ?? <span className="italic text-gray-400">Banco de Talentos</span>}
+              </DetalheItem>
+              <DetalheItem label="Responsável">{vaga.responsavel || "—"}</DetalheItem>
+              <DetalheItem label="Local">
+                {[vaga.cidade, vaga.estado].filter(Boolean).join(" / ") || "—"}
+              </DetalheItem>
+              <DetalheItem label="Nº de posições">{String(vaga.num_posicoes)}</DetalheItem>
+              {vaga.prazo && (
+                <DetalheItem label="Prazo">{formatarData(vaga.prazo)}</DetalheItem>
+              )}
+              {vaga.salario && (
+                <DetalheItem label="Salário">{vaga.salario}</DetalheItem>
+              )}
+              {vaga.horario && (
+                <DetalheItem label="Horário" fullWidth>{vaga.horario}</DetalheItem>
+              )}
+            </dl>
+          </div>
+
+          {/* Requisitos */}
+          {vaga.requisitos && (
+            <div className="card">
+              <p className="section-title mb-3">Requisitos</p>
+              <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
+                {vaga.requisitos}
+              </p>
+            </div>
+          )}
+
+          {/* Benefícios */}
+          {vaga.beneficios && (
+            <div className="card">
+              <p className="section-title mb-3">Benefícios</p>
+              <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
+                {vaga.beneficios}
+              </p>
+            </div>
+          )}
+
+          {/* Observações */}
+          {vaga.observacoes && (
+            <div className="card">
+              <p className="section-title mb-3">Observações internas</p>
+              <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
+                {vaga.observacoes}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* RIGHT — 1/3 */}
+        <div className="space-y-4">
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="section-title">Candidatos</p>
+                <p className="text-2xl font-bold text-[#FFD700] mt-0.5">
+                  {candidatosVaga.length}
+                  <span className="text-xs font-normal text-gray-400 ml-1">
+                    / {vaga.num_posicoes} {vaga.num_posicoes === 1 ? "posição" : "posições"}
+                  </span>
+                </p>
+              </div>
+              <button
+                onClick={() => setModalAdicionar(true)}
+                className="btn-primary text-xs px-3 py-1.5"
+              >
+                + Adicionar
+              </button>
+            </div>
+
+            {candidatosVaga.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4">
+                Nenhum candidato vinculado
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {candidatosVaga.map((cv) => (
+                  <CandidatoVagaRow
+                    key={cv.id}
+                    cv={cv}
+                    onRemover={() => handleRemoverCandidato(cv.id)}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Modal editar */}
+      <ModalNovaVaga
+        isOpen={modalEditar}
+        vaga={vaga}
+        onClose={() => setModalEditar(false)}
+        onSalvo={(atualizada) => setVaga(atualizada)}
+      />
+
+      {/* Modal adicionar candidato */}
+      <ModalAdicionarCandidatoVaga
+        isOpen={modalAdicionar}
+        vagaId={vaga.id}
+        candidatosVinculadosIds={candidatosVaga.map((cv) => cv.candidato_id)}
+        onClose={() => setModalAdicionar(false)}
+        onAdicionado={(cv) => setCandidatosVaga((prev) => [cv, ...prev])}
+      />
+    </div>
+  );
+}
+
+function DetalheItem({
+  label,
+  children,
+  fullWidth = false,
+}: {
+  label: string;
+  children: React.ReactNode;
+  fullWidth?: boolean;
+}) {
+  return (
+    <div className={fullWidth ? "col-span-2" : ""}>
+      <dt className="text-xs text-gray-400 uppercase tracking-wide mb-0.5">{label}</dt>
+      <dd className="text-sm font-medium text-gray-800">{children}</dd>
+    </div>
+  );
+}
+
+function CandidatoVagaRow({
+  cv,
+  onRemover,
+}: {
+  cv: CandidatoVaga;
+  onRemover: () => void;
+}) {
+  const c = cv.candidatos;
+  const etapa = c ? ETAPAS_KANBAN.find((e) => e.id === c.etapa_kanban) : null;
+
+  return (
+    <li className="flex items-center gap-3">
+      <div className="w-8 h-8 rounded-full bg-black text-[#FFD700] flex items-center justify-center text-xs font-bold shrink-0">
+        {c ? c.nome_completo.charAt(0).toUpperCase() : "?"}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-900 truncate">
+          {c?.nome_completo ?? "Candidato removido"}
+        </p>
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+          {etapa && (
+            <span
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+              style={{ backgroundColor: etapa.bgHex, color: etapa.textHex }}
+            >
+              {etapa.label}
+            </span>
+          )}
+          {c?.responsavel && (
+            <span className="text-[10px] text-gray-400">{c.responsavel}</span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        {c && (
+          <Link
+            href={`/painel/candidato/${c.id}`}
+            className="text-xs text-[#1D6FA4] hover:underline"
+          >
+            Ver perfil
+          </Link>
+        )}
+        <button
+          onClick={onRemover}
+          className="text-gray-300 hover:text-red-400 transition-colors"
+          title="Remover"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </li>
+  );
+}

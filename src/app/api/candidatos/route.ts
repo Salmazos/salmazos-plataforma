@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { enviarEmailConfirmacao } from "@/lib/email";
 
+export async function GET(request: NextRequest) {
+  const busca  = request.nextUrl.searchParams.get("busca") ?? "";
+  const status = request.nextUrl.searchParams.get("status") ?? "ativo";
+
+  const supabase = createServiceClient();
+  let query = supabase
+    .from("candidatos")
+    .select("id, nome_completo, cargo_pretendido, cidade, estado, origem, etapa_kanban, responsavel, status")
+    .order("nome_completo")
+    .limit(30);
+
+  if (status) query = query.eq("status", status);
+  if (busca)  query = query.ilike("nome_completo", `%${busca}%`);
+
+  const { data, error } = await query;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ data });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
