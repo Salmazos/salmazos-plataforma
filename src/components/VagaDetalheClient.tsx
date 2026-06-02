@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import ModalNovaVaga from "./ModalNovaVaga";
+import ModalEditarVaga from "./ModalEditarVaga";
 import ModalAdicionarCandidatoVaga from "./ModalAdicionarCandidatoVaga";
 import ModalReprovacao from "./ModalReprovacao";
 import { TIPOS_SERVICO } from "@/lib/constants";
@@ -325,7 +325,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
       </div>
 
       {/* Modal editar */}
-      <ModalNovaVaga
+      <ModalEditarVaga
         isOpen={modalEditar}
         vaga={vaga}
         onClose={() => setModalEditar(false)}
