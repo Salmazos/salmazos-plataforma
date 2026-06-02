@@ -18,7 +18,10 @@ interface FormData {
   turno_disponivel: string;
   pretensao_salarial: string;
   habilidades: string[];
-  resumo_profissional: string;
+  resumo_candidato: string;
+  formacao_academica: string;
+  idade: string;
+  experiencias_profissionais: string;
 }
 
 interface Props {
@@ -39,7 +42,10 @@ export default function FormularioCadastro({ vagaParam }: Props) {
     turno_disponivel: "",
     pretensao_salarial: "",
     habilidades: [],
-    resumo_profissional: "",
+    resumo_candidato: "",
+    formacao_academica: "",
+    idade: "",
+    experiencias_profissionais: "",
   });
   const [curriculo, setCurriculo] = useState<File | null>(null);
   const [erros, setErros] = useState<Record<string, string>>({});
@@ -74,8 +80,12 @@ export default function FormularioCadastro({ vagaParam }: Props) {
     if (!form.turno_disponivel) e.turno_disponivel = "Selecione o turno.";
     if (curriculo && curriculo.size > 5 * 1024 * 1024)
       e.curriculo = "O arquivo deve ter no máximo 5 MB.";
-    if (curriculo && curriculo.type !== "application/pdf")
-      e.curriculo = "Envie apenas arquivos PDF.";
+    if (curriculo) {
+      const ext = curriculo.name.split(".").pop()?.toLowerCase() ?? "";
+      const allowed = ["pdf", "doc", "docx", "jpg", "jpeg", "png"];
+      if (!allowed.includes(ext))
+        e.curriculo = "Envie PDF, Word ou imagem (JPG, PNG).";
+    }
     setErros(e);
     return Object.keys(e).length === 0;
   };
@@ -90,10 +100,16 @@ export default function FormularioCadastro({ vagaParam }: Props) {
       let curriculo_url = "";
       if (curriculo) {
         const supabase = createClient();
-        const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`;
+        const ext = curriculo.name.split(".").pop()?.toLowerCase() ?? "pdf";
+        const contentType =
+          ext === "jpg" || ext === "jpeg" ? "image/jpeg" :
+          ext === "png" ? "image/png" :
+          ext === "doc" || ext === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" :
+          "application/pdf";
+        const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         const { error: uploadErr } = await supabase.storage
           .from("curriculos")
-          .upload(fileName, curriculo, { contentType: "application/pdf" });
+          .upload(fileName, curriculo, { contentType });
         if (uploadErr) throw new Error("Falha ao enviar o currículo. Tente novamente.");
         curriculo_url = supabase.storage.from("curriculos").getPublicUrl(fileName).data.publicUrl;
       }
@@ -103,7 +119,14 @@ export default function FormularioCadastro({ vagaParam }: Props) {
       const res = await fetch("/api/candidatos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, curriculo_url, origem }),
+        body: JSON.stringify({
+          ...form,
+          curriculo_url,
+          origem,
+          formacao_academica: form.formacao_academica || null,
+          idade: form.idade ? parseInt(form.idade) : null,
+          experiencias_profissionais: form.experiencias_profissionais || null,
+        }),
       });
 
       if (!res.ok) {
@@ -306,14 +329,14 @@ export default function FormularioCadastro({ vagaParam }: Props) {
               <label className="label">Resumo profissional</label>
               <textarea className="input-field resize-none" rows={5}
                 placeholder="Descreva brevemente sua trajetória, principais conquistas e objetivos profissionais..."
-                value={form.resumo_profissional} onChange={(e) => set("resumo_profissional", e.target.value)} />
+                value={form.resumo_candidato} onChange={(e) => set("resumo_candidato", e.target.value)} />
             </div>
 
             <div>
               <label className="label">Currículo (PDF)</label>
               <div className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-colors
                 ${curriculo ? "border-[#FFB800] bg-[#FFB800]/10" : "border-gray-300 hover:border-[#FFB800]"}`}>
-                <input type="file" accept="application/pdf"
+                <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                   onChange={(e) => setCurriculo(e.target.files?.[0] ?? null)} />
                 {curriculo ? (

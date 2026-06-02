@@ -29,6 +29,7 @@ function makeForm(c: Candidato) {
     idade: c.idade ? String(c.idade) : "",
     formacao_academica: c.formacao_academica || "",
     resumo_profissional: c.resumo_profissional || "",
+    resumo_candidato: c.resumo_candidato || "",
     experiencias_profissionais: c.experiencias_profissionais || "",
   };
 }
@@ -262,26 +263,48 @@ export default function PerfilEdicao({ candidato }: Props) {
             </div>
           )}
 
-          {/* Resumo profissional */}
+          {/* Resumo do candidato (escrito pelo próprio) */}
           {!editando ? (
-            candidato.resumo_profissional ? (
+            candidato.resumo_candidato ? (
               <div className="card">
-                <p className="section-title">Resumo Profissional</p>
+                <p className="section-title">Resumo do Candidato</p>
                 <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {candidato.resumo_profissional}
+                  {candidato.resumo_candidato}
                 </p>
               </div>
             ) : null
           ) : (
             <div className="card">
-              <p className="section-title">Resumo Profissional</p>
+              <p className="section-title">Resumo do Candidato</p>
               <textarea
                 value={form.resumo_profissional}
                 onChange={set("resumo_profissional")}
                 rows={4}
-                placeholder="Resumo profissional do candidato..."
+                placeholder="Resumo escrito pelo candidato..."
                 className="input-field resize-none w-full"
               />
+            </div>
+          )}
+
+          {/* Análise do currículo pela IA */}
+          {candidato.resumo_profissional && (
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <p className="section-title !mb-0">Análise do Currículo pela IA</p>
+                <span
+                  className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                  style={{ backgroundColor: "#f3f0ff", color: "#6b46c1" }}
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  Gerado por IA
+                </span>
+              </div>
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                {candidato.resumo_profissional}
+              </p>
             </div>
           )}
 

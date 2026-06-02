@@ -1,6 +1,84 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { enviarEmailConfirmacao } from "@/lib/email";
+import mammoth from "mammoth";
+
+async function extractAndUpdateCandidato(
+  candidatoId: string,
+  curriculoUrl: string,
+  resumoExistente: string
+) {
+  const fileRes = await fetch(curriculoUrl);
+  const buffer = await fileRes.arrayBuffer();
+  const base64 = Buffer.from(buffer).toString("base64");
+
+  const urlPath = curriculoUrl.split("?")[0];
+  const ext = urlPath.split(".").pop()?.toLowerCase() ?? "pdf";
+  const mediaType =
+    ext === "jpg" || ext === "jpeg" ? "image/jpeg" :
+    ext === "png" ? "image/png" :
+    ext === "doc" || ext === "docx"
+      ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      : "application/pdf";
+
+  const isWord = mediaType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  let wordText = "";
+  if (isWord) {
+    const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
+    wordText = result.value;
+  }
+
+  const resumoInstruction = resumoExistente
+    ? `combine o texto já escrito pelo candidato com as informações extraídas do currículo, criando um resumo profissional único, completo e persuasivo em 4-6 linhas. Preserve a voz e intenção do candidato mas enriqueça com os dados do currículo. Texto existente: "${resumoExistente}"`
+    : `resumo profissional completo em 4-6 linhas escrito como um recrutador apresentando o candidato: destaque o tempo de experiência, segmentos de atuação, principais competências, diferenciais e disponibilidade. Escreva de forma profissional e persuasiva, como se estivesse vendendo o candidato para um cliente`;
+
+  const prompt = `Você é um especialista em recrutamento e seleção. Analise este currículo e extraia as informações no formato JSON abaixo. Para o resumo e experiências, escreva como um recrutador apresentando o candidato para um cliente.\n\nResponda APENAS com JSON válido, sem texto adicional:\n{\n  "nome": "nome completo do candidato ou null",\n  "telefone": "telefone com DDD apenas números ou null",\n  "email": "email ou null",\n  "cpf": "CPF apenas números ou null",\n  "cidade": "cidade ou null",\n  "estado": "sigla do estado 2 letras maiúsculas ou null",\n  "cargo": "cargo pretendido ou área de atuação ou null",\n  "idade": "idade em número inteiro ou null",\n  "tempo_experiencia": "tempo total de experiência ex: 15 anos, 2 anos, Sem experiência ou null",\n  "formacao": "formação acadêmica mais recente ou null",\n  "resumo": "${resumoInstruction}",\n  "experiencias": "histórico completo de experiências profissionais — para cada empresa inclua: nome, cargo, setor, período, principais atividades. Separar cada experiência com | . Incluir cursos e certificações relevantes",\n  "habilidades": ["lista de habilidades extraídas — priorize: Atendimento ao cliente, Pacote Office, Excel avançado, Redes sociais, Liderança, Trabalho em equipe, Comunicação, Vendas, Negociação, Gestão de pessoas, Financeiro, Administrativo, Logística, Operacional, Informática, SAP/ERP, Gestão de projetos, Inglês, Espanhol — ou array vazio"]\n}`;
+
+  const isImage = mediaType === "image/jpeg" || mediaType === "image/png";
+  const content = isWord
+    ? [{ type: "text", text: `Extraia do currículo abaixo as informações em JSON:\n\n${wordText}\n\n${prompt}` }]
+    : isImage
+    ? [
+        { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+        { type: "text", text: prompt },
+      ]
+    : [
+        { type: "document", source: { type: "base64", media_type: mediaType ?? "application/pdf", data: base64 } },
+        { type: "text", text: prompt },
+      ];
+
+  const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 2000,
+      messages: [{ role: "user", content }],
+    }),
+  });
+
+  const aiData = await aiRes.json();
+  const texto = aiData.content?.map((i: { type: string; text?: string }) => i.text || "").join("") || "";
+  const limpo = texto.replace(/```json|```/g, "").trim();
+  const extraido = JSON.parse(limpo);
+
+  const supabase = createServiceClient();
+  await supabase
+    .from("candidatos")
+    .update({
+      resumo_profissional:        extraido.resumo        || null,
+      experiencias_profissionais: extraido.experiencias  || null,
+      formacao_academica:         extraido.formacao      || null,
+      tempo_experiencia:          extraido.tempo_experiencia || undefined,
+      idade:                      extraido.idade         || undefined,
+      habilidades:                extraido.habilidades?.length ? extraido.habilidades : undefined,
+    })
+    .eq("id", candidatoId);
+}
 
 export async function GET(request: NextRequest) {
   const busca  = request.nextUrl.searchParams.get("busca") ?? "";
@@ -74,6 +152,7 @@ export async function POST(request: NextRequest) {
         pretensao_salarial: body.pretensao_salarial || null,
         habilidades: body.habilidades || [],
         resumo_profissional: body.resumo_profissional || null,
+        resumo_candidato: body.resumo_candidato || null,
         experiencias_profissionais: body.experiencias_profissionais || null,
         curriculo_url: body.curriculo_url || null,
         idade: body.idade || null,
@@ -96,6 +175,13 @@ export async function POST(request: NextRequest) {
         nomeCandidato: body.nome_completo,
         cargoPretendido: body.cargo_pretendido,
       }).catch((err) => console.error("[Email]", err));
+    }
+
+    // Extrair dados do currículo assincronamente (não bloqueia a resposta)
+    if (body.curriculo_url) {
+      console.log("Triggering AI extraction for candidato:", data.id);
+      void extractAndUpdateCandidato(data.id, body.curriculo_url, body.resumo_candidato ?? "")
+        .catch(console.error);
     }
 
     return NextResponse.json({ data }, { status: 201 });
