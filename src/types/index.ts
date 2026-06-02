@@ -82,6 +82,7 @@ export interface CandidatoVaga {
   id: string;
   vaga_id: string;
   candidato_id: string;
+  etapa: string | null;
   created_at: string;
   candidatos?: Pick<Candidato, "id" | "nome_completo" | "etapa_kanban" | "responsavel" | "cargo_pretendido"> | null;
 }

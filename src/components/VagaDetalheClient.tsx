@@ -4,9 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import ModalNovaVaga from "./ModalNovaVaga";
 import ModalAdicionarCandidatoVaga from "./ModalAdicionarCandidatoVaga";
-import { TIPOS_SERVICO, ETAPAS_KANBAN } from "@/lib/constants";
+import ModalReprovacao from "./ModalReprovacao";
+import { TIPOS_SERVICO } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
-import type { Vaga, CandidatoVaga } from "@/types";
+import type { Vaga, CandidatoVaga, Candidato } from "@/types";
 
 const CORES_TIPO: Record<string, { bg: string; color: string }> = {
   recrutamento_selecao:  { bg: "#1D6FA4", color: "#ffffff" },
@@ -23,6 +24,14 @@ const STATUS_VAGA: Record<string, { label: string; bg: string; color: string }> 
   cancelada:    { label: "Cancelada",    bg: "#fee2e2", color: "#dc2626" },
 };
 
+const ETAPAS_VAGA = [
+  { id: "triagem",             label: "Triagem",             bg: "#1D6FA4", color: "#ffffff" },
+  { id: "entrevista_salmazos", label: "Entrevista Salmazos", bg: "#FFD700", color: "#000000" },
+  { id: "entrevista_cliente",  label: "Entrevista Cliente",  bg: "#F97316", color: "#ffffff" },
+  { id: "aprovado",            label: "Aprovado",            bg: "#1D9E75", color: "#ffffff" },
+  { id: "reprovado",           label: "Reprovado",           bg: "#EC4899", color: "#ffffff" },
+] as const;
+
 interface Props {
   vaga: Vaga;
   candidatosVaga: CandidatoVaga[];
@@ -37,6 +46,8 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
   const [vinculando, setVinculando]       = useState(false);
   const [vinculandoSalvando, setVinculandoSalvando] = useState(false);
   const [clientesLista, setClientesLista] = useState<{ id: string; nome: string }[]>([]);
+  const [reprovacaoModal, setReprovacaoModal] = useState<{ open: boolean; candidatoId: string }>({ open: false, candidatoId: "" });
+  const [reprovacaoCandidato, setReprovacaoCandidato] = useState<Candidato | null>(null);
 
   const statusInfo = STATUS_VAGA[vaga.status] ?? STATUS_VAGA.aberta;
   const tipoInfo   = TIPOS_SERVICO.find((t) => t.id === vaga.tipo_servico);
@@ -83,6 +94,15 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
     }
     setVinculando(false);
     setVinculandoSalvando(false);
+  };
+
+  const handleReprovacaoNeeded = async (candidatoId: string) => {
+    const res = await fetch(`/api/candidatos/${candidatoId}`);
+    if (res.ok) {
+      const json = await res.json();
+      setReprovacaoCandidato(json.data);
+      setReprovacaoModal({ open: true, candidatoId });
+    }
   };
 
   const handleRemoverCandidato = async (cvId: string) => {
@@ -295,6 +315,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
                     key={cv.id}
                     cv={cv}
                     onRemover={() => handleRemoverCandidato(cv.id)}
+                    onReprovacaoNeeded={handleReprovacaoNeeded}
                   />
                 ))}
               </ul>
@@ -310,6 +331,22 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
         onClose={() => setModalEditar(false)}
         onSalvo={(atualizada) => setVaga(atualizada)}
       />
+
+      {/* Modal reprovação */}
+      {reprovacaoCandidato && (
+        <ModalReprovacao
+          isOpen={reprovacaoModal.open}
+          candidato={reprovacaoCandidato}
+          onClose={() => {
+            setReprovacaoModal({ open: false, candidatoId: "" });
+            setReprovacaoCandidato(null);
+          }}
+          onReprovado={() => {
+            setReprovacaoModal({ open: false, candidatoId: "" });
+            setReprovacaoCandidato(null);
+          }}
+        />
+      )}
 
       {/* Modal adicionar candidato */}
       <ModalAdicionarCandidatoVaga
@@ -343,37 +380,69 @@ function DetalheItem({
 function CandidatoVagaRow({
   cv,
   onRemover,
+  onReprovacaoNeeded,
 }: {
   cv: CandidatoVaga;
   onRemover: () => void;
+  onReprovacaoNeeded: (candidatoId: string) => void;
 }) {
   const c = cv.candidatos;
-  const etapa = c ? ETAPAS_KANBAN.find((e) => e.id === c.etapa_kanban) : null;
+  const [etapa, setEtapa] = useState(cv.etapa ?? "triagem");
+  const [salvando, setSalvando] = useState(false);
+
+  const etapaInfo = ETAPAS_VAGA.find((e) => e.id === etapa) ?? ETAPAS_VAGA[0];
+
+  const handleEtapaChange = async (novaEtapa: string) => {
+    setSalvando(true);
+    const res = await fetch(`/api/candidatos-vagas/${cv.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ etapa: novaEtapa }),
+    });
+    if (res.ok) {
+      setEtapa(novaEtapa);
+      const json = await res.json();
+      if (json.showReprovacaoModal && json.candidatoId) {
+        onReprovacaoNeeded(json.candidatoId);
+      }
+    }
+    setSalvando(false);
+  };
 
   return (
-    <li className="flex items-center gap-3">
-      <div className="w-8 h-8 rounded-full bg-black text-[#FFD700] flex items-center justify-center text-xs font-bold shrink-0">
+    <li className="flex items-start gap-3 py-1">
+      <div className="w-8 h-8 rounded-full bg-black text-[#FFD700] flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
         {c ? c.nome_completo.charAt(0).toUpperCase() : "?"}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-900 truncate">
           {c?.nome_completo ?? "Candidato removido"}
         </p>
-        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          {etapa && (
-            <span
-              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-              style={{ backgroundColor: etapa.bgHex, color: etapa.textHex }}
-            >
-              {etapa.label}
-            </span>
-          )}
+        <div className="flex items-center gap-2 mt-1 flex-wrap">
+          <select
+            value={etapa}
+            onChange={(e) => handleEtapaChange(e.target.value)}
+            disabled={salvando}
+            className="text-[10px] font-semibold px-2 py-0.5 rounded-full border-0 cursor-pointer disabled:opacity-60"
+            style={{
+              backgroundColor: etapaInfo.bg,
+              color: etapaInfo.color,
+              appearance: "none",
+              WebkitAppearance: "none",
+            }}
+          >
+            {ETAPAS_VAGA.map((e) => (
+              <option key={e.id} value={e.id} style={{ backgroundColor: "#fff", color: "#111" }}>
+                {e.label}
+              </option>
+            ))}
+          </select>
           {c?.responsavel && (
             <span className="text-[10px] text-gray-400">{c.responsavel}</span>
           )}
         </div>
       </div>
-      <div className="flex items-center gap-1.5 shrink-0">
+      <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
         {c && (
           <Link
             href={`/painel/candidato/${c.id}`}
