@@ -26,6 +26,7 @@ export interface Candidato {
   pretensao_salarial?: string;
   habilidades: string[];
   resumo_profissional?: string;
+  experiencias_profissionais?: string | null;
   curriculo_url?: string;
   etapa_kanban: EtapaKanban;
   status: StatusCandidato;

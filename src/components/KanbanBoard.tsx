@@ -99,6 +99,7 @@ export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
           c.cargo_pretendido,
           c.resumo_profissional ?? "",
           c.formacao_academica ?? "",
+          c.experiencias_profissionais ?? "",
           (c.habilidades ?? []).join(" "),
         ].join(" ").toLowerCase();
         if (!haystack.includes(kw)) return false;

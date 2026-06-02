@@ -48,6 +48,7 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
   const [estado, setEstado] = useState("");
   const [tempoExperiencia, setTempoExperiencia] = useState("");
   const [resumo, setResumo] = useState("");
+  const [experiencias, setExperiencias] = useState("");
   const [habilidades, setHabilidades] = useState<string[]>([]);
   const [idade, setIdade] = useState<string>("");
   const [formacao, setFormacao] = useState<string>("");
@@ -67,6 +68,7 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
     setEstado("");
     setTempoExperiencia("");
     setResumo("");
+    setExperiencias("");
     setHabilidades([]);
     setIdade("");
     setFormacao("");
@@ -119,6 +121,7 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
       if (extraido.estado) setEstado(extraido.estado);
       if (extraido.tempo_experiencia) setTempoExperiencia(extraido.tempo_experiencia);
       if (extraido.resumo) setResumo(extraido.resumo);
+      if (extraido.experiencias) setExperiencias(extraido.experiencias);
       if (extraido.habilidades?.length) setHabilidades(extraido.habilidades);
       if (extraido.idade) setIdade(String(extraido.idade));
       if (extraido.formacao) setFormacao(extraido.formacao);
@@ -172,6 +175,7 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
           turno_disponivel: "Flexível",
           habilidades: habilidades,
           resumo_profissional: resumo || null,
+          experiencias_profissionais: experiencias || null,
           idade: idade ? parseInt(idade) : null,
           formacao_academica: formacao || null,
           etapa_kanban: "triagem",

@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
         pretensao_salarial: body.pretensao_salarial || null,
         habilidades: body.habilidades || [],
         resumo_profissional: body.resumo_profissional || null,
+        experiencias_profissionais: body.experiencias_profissionais || null,
         curriculo_url: body.curriculo_url || null,
         idade: body.idade || null,
         formacao_academica: body.formacao_academica || null,

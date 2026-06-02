@@ -29,6 +29,7 @@ function makeForm(c: Candidato) {
     idade: c.idade ? String(c.idade) : "",
     formacao_academica: c.formacao_academica || "",
     resumo_profissional: c.resumo_profissional || "",
+    experiencias_profissionais: c.experiencias_profissionais || "",
   };
 }
 
@@ -83,6 +84,7 @@ export default function PerfilEdicao({ candidato }: Props) {
           pretensao_salarial: form.pretensao_salarial || null,
           formacao_academica: form.formacao_academica || null,
           resumo_profissional: form.resumo_profissional || null,
+          experiencias_profissionais: form.experiencias_profissionais || null,
         }),
       });
       if (!res.ok) {
@@ -280,6 +282,39 @@ export default function PerfilEdicao({ candidato }: Props) {
                 placeholder="Resumo profissional do candidato..."
                 className="input-field resize-none w-full"
               />
+            </div>
+          )}
+
+          {/* Experiências profissionais */}
+          {!editando ? (
+            candidato.experiencias_profissionais ? (
+              <div className="card">
+                <p className="section-title">Experiências Profissionais</p>
+                <div className="space-y-3">
+                  {candidato.experiencias_profissionais.split("|").map((exp, i) => {
+                    const txt = exp.trim();
+                    if (!txt) return null;
+                    return (
+                      <div key={i} className="flex gap-3">
+                        <div className="w-1.5 h-1.5 rounded-full bg-[#FFD700] mt-1.5 shrink-0" />
+                        <p className="text-sm text-gray-700 leading-relaxed">{txt}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null
+          ) : (
+            <div className="card">
+              <p className="section-title">Experiências Profissionais</p>
+              <textarea
+                value={form.experiencias_profissionais}
+                onChange={set("experiencias_profissionais")}
+                rows={6}
+                placeholder="Ex: Empresa X — Auxiliar Administrativo — ... | Empresa Y — Atendente — ..."
+                className="input-field resize-none w-full"
+              />
+              <p className="text-xs text-gray-400 mt-1">Separe cada experiência com &quot;|&quot;</p>
             </div>
           )}
         </div>

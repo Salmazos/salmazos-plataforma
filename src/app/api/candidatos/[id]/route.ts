@@ -49,6 +49,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       idade: body.idade ?? null,
       formacao_academica: body.formacao_academica ?? null,
       resumo_profissional: body.resumo_profissional ?? null,
+      experiencias_profissionais: body.experiencias_profissionais ?? null,
     })
     .eq("id", id)
     .select()
