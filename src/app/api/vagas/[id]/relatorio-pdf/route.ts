@@ -15,9 +15,17 @@ const DARK   = rgb(0.12, 0.14, 0.16);
 const GRAY   = rgb(0.43, 0.46, 0.50);
 const LGRAY  = rgb(0.85, 0.85, 0.87);
 
-// Sanitize text: strip control chars (including \n \r \t) and non-Latin-1 chars
+// Sanitize text: preserve dashes, strip control chars and non-Latin-1 chars
 function safe(v: unknown): string {
-  return (v == null ? "" : String(v)).replace(/[^\x20-\xFF]/g, " ").trim();
+  return (v == null ? "" : String(v))
+    .replace(/[–—]/g, "-")
+    .replace(/[^\x20-\xFF]/g, " ")
+    .trim();
+}
+
+// Remove duplicate duration patterns e.g. "(8 meses), 9 meses" → "(8 meses)"
+function cleanDuration(text: string): string {
+  return text.replace(/\((\d+ (?:anos?|meses?))\),\s*\d+ (?:anos?|meses?)/g, "($1)");
 }
 
 // If end year is before start year, replace any duration parenthetical with a warning
@@ -201,17 +209,17 @@ export async function GET(_req: NextRequest, { params }: Params) {
       y -= 4;
     }
 
-    // Resumo do candidato — rendered as-is; durations already injected by calcularDuracaoResumo
+    // Resumo do candidato — clean duplicate durations before rendering
     if (c.resumo_candidato) {
       drawText("Resumo do Candidato", bold, 9, DARK);
-      drawWrapped(c.resumo_candidato, regular, 9, GRAY);
+      drawWrapped(cleanDuration(c.resumo_candidato), regular, 9, GRAY);
       y -= 4;
     }
 
-    // Analise IA — rendered as-is; no additional duration processing
+    // Analise IA — clean duplicate durations before rendering
     if (c.resumo_profissional) {
       drawText("Analise da IA", bold, 9, DARK);
-      drawWrapped(c.resumo_profissional, regular, 9, GRAY);
+      drawWrapped(cleanDuration(c.resumo_profissional), regular, 9, GRAY);
       y -= 4;
     }
 
