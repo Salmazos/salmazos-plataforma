@@ -1,9 +1,20 @@
 const CURRENT_YEAR = 2026;
 const CURRENT_MONTH = 6; // June 2026
 
+// Month name → number (lowercase keys; handles abbreviated and accented variants)
 const MESES: Record<string, number> = {
-  janeiro: 1, fevereiro: 2, março: 3, abril: 4, maio: 5, junho: 6,
-  julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
+  jan: 1,  janeiro: 1,
+  fev: 2,  fevereiro: 2,
+  mar: 3,  março: 3,   marco: 3,
+  abr: 4,  abril: 4,
+  mai: 5,  maio: 5,
+  jun: 6,  junho: 6,
+  jul: 7,  julho: 7,
+  ago: 8,  agosto: 8,
+  set: 9,  setembro: 9,
+  out: 10, outubro: 10,
+  nov: 11, novembro: 11,
+  dez: 12, dezembro: 12,
 };
 
 function formatarDuracao(totalMeses: number): string {
@@ -15,24 +26,39 @@ function formatarDuracao(totalMeses: number): string {
   return `(${anos} ano${anos !== 1 ? "s" : ""} e ${meses} mês${meses !== 1 ? "es" : ""})`;
 }
 
-// Returns true if the text immediately after this match already has a duration "(..."
+// True if the text immediately after this match already starts with "(" — duration already present
 function jaTemDuracao(match: string, offset: number, str: string): boolean {
   return /^\s*\(/.test(str.slice(offset + match.length));
 }
 
-const MES_PT = "(Janeiro|Fevereiro|Março|Abril|Maio|Junho|Julho|Agosto|Setembro|Outubro|Novembro|Dezembro)";
-const ATUAL  = "(?:atual|Atual|presente|Presente|atualmente|Atualmente)";
-// Separators: "à", "a", en-dash, em-dash, hyphen — with optional surrounding spaces
-const SEP    = "\\s*(?:à|a|[–—-])\\s*";
+// Separators between date parts:
+// explicit chars (à, á, a, –, —, -, /) with optional surrounding spaces
+// OR just whitespace followed by a 4-digit year (lookahead keeps it safe)
+const SEP = "\\s*(?:à|á|a|–|—|-|/)\\s*|\\s+(?=\\d{4})";
+
+// Portuguese month names: full and abbreviated, with/without accents (case-insensitive flag handles capitalisation)
+const MES_PT =
+  "(?:jan(?:eiro)?|fev(?:ereiro)?|mar(?:ço|co)?|abr(?:il)?|maio?|jun(?:ho)?|jul(?:ho)?|ago(?:sto)?|set(?:embro)?|out(?:ubro)?|nov(?:embro)?|dez(?:embro)?)";
+
+// Open-ended keywords (longer alternatives first so they are tried before shorter prefixes)
+const ATUAL =
+  "(?:nos dias atuais|até o momento|até hoje|atualmente|atual|presente)";
+
+// Separator between month name and year number: slash, space, or hyphen (one or more chars)
+const MES_ANO_SEP = "[/\\s-]+";
 
 export function calcularDuracaoResumo(text: string): string {
   if (!text) return text;
 
   let result = text;
 
-  // ── 1. Month/Year → Month/Year  (e.g. "Abril/2023 a Novembro/2023") ──────────
+  // ── 1. Month/Year → Month/Year ────────────────────────────────────────────────
+  // e.g. "Abril/2023 a Novembro/2023"  →  "(7 meses)"
   result = result.replace(
-    new RegExp(`${MES_PT}[/\\s](\\d{4})${SEP}${MES_PT}[/\\s](\\d{4})`, "gi"),
+    new RegExp(
+      `(${MES_PT})${MES_ANO_SEP}(\\d{4})(?:${SEP})(${MES_PT})${MES_ANO_SEP}(\\d{4})`,
+      "gi"
+    ),
     (match, m1, y1, m2, y2, offset, str) => {
       if (jaTemDuracao(match, offset, str)) return match;
       const sm = MESES[m1.toLowerCase()] ?? 1;
@@ -43,9 +69,13 @@ export function calcularDuracaoResumo(text: string): string {
     }
   );
 
-  // ── 2. Month/Year → atual/presente  (e.g. "Abril/2023 – Presente") ──────────
+  // ── 2. Month/Year → atual/presente ───────────────────────────────────────────
+  // e.g. "Abril/2023 – Presente"  →  "(~X anos/meses)"
   result = result.replace(
-    new RegExp(`${MES_PT}[/\\s](\\d{4})${SEP}${ATUAL}`, "gi"),
+    new RegExp(
+      `(${MES_PT})${MES_ANO_SEP}(\\d{4})(?:${SEP})${ATUAL}`,
+      "gi"
+    ),
     (match, m1, y1, offset, str) => {
       if (jaTemDuracao(match, offset, str)) return match;
       const sm = MESES[m1.toLowerCase()] ?? 1;
@@ -55,10 +85,11 @@ export function calcularDuracaoResumo(text: string): string {
     }
   );
 
-  // ── 3. YYYY → atual/presente  (e.g. "1997 à Atual", "2021 – Presente") ──────
-  // Lookbehind prevents matching "YYYY" inside "Month/YYYY" already processed
+  // ── 3. YYYY → atual/presente ──────────────────────────────────────────────────
+  // e.g. "1997 à Atual", "2021 – Presente", "2023 a Atual"
+  // Lookbehind prevents matching the YYYY inside already-processed "Mês/YYYY" strings
   result = result.replace(
-    new RegExp(`(?<![/\\d])(\\d{4})${SEP}${ATUAL}`, "gi"),
+    new RegExp(`(?<![/\\d])(\\d{4})(?:${SEP})${ATUAL}`, "gi"),
     (match, y1, offset, str) => {
       if (jaTemDuracao(match, offset, str)) return match;
       const totalMeses = (CURRENT_YEAR - parseInt(y1)) * 12;
@@ -67,9 +98,11 @@ export function calcularDuracaoResumo(text: string): string {
     }
   );
 
-  // ── 4. YYYY → YYYY  (e.g. "1990 a 1997", "2006 – 2015", "1990 à 1997") ─────
+  // ── 4. YYYY → YYYY ────────────────────────────────────────────────────────────
+  // e.g. "1990 a 1997", "2006 – 2015", "1997/2000", "1998 á 2000", "1997 - 2000"
+  // Lookbehind/lookahead prevent matching YYYY inside "Mês/YYYY" or longer numbers
   result = result.replace(
-    new RegExp(`(?<![/\\d])(\\d{4})${SEP}(\\d{4})(?![/\\d])`, "g"),
+    new RegExp(`(?<![/\\d])(\\d{4})(?:${SEP})(\\d{4})(?![/\\d])`, "g"),
     (match, y1, y2, offset, str) => {
       if (jaTemDuracao(match, offset, str)) return match;
       const totalMeses = (parseInt(y2) - parseInt(y1)) * 12;
@@ -78,7 +111,8 @@ export function calcularDuracaoResumo(text: string): string {
     }
   );
 
-  // ── 5. desde YYYY  (e.g. "CEO desde 2010") ──────────────────────────────────
+  // ── 5. desde YYYY ─────────────────────────────────────────────────────────────
+  // e.g. "CEO desde 2010"
   result = result.replace(
     /desde\s+(\d{4})/gi,
     (match, y1, offset, str) => {
