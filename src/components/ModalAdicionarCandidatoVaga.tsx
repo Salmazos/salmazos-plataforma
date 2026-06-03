@@ -86,6 +86,14 @@ export default function ModalAdicionarCandidatoVaga({
     }
     onAdicionado(json.data as CandidatoVaga);
     setSucesso(`${candidato.nome_completo} adicionado com sucesso.`);
+
+    // Fire-and-forget match calculation — non-blocking
+    fetch(`/api/vagas/${vagaId}/match`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ candidato_id: candidato.id }),
+    }).catch(() => {});
+
     setTimeout(onClose, 1200);
   };
 
