@@ -171,7 +171,7 @@ export default function PerfilEdicao({ candidato }: Props) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Coluna principal */}
+        {/* Coluna principal — dados */}
         <div className="lg:col-span-2 space-y-6">
 
           {/* Dados pessoais */}
@@ -246,7 +246,7 @@ export default function PerfilEdicao({ candidato }: Props) {
             )}
           </div>
 
-          {/* Habilidades */}
+          {/* Habilidades — sempre read-only */}
           {candidato.habilidades?.length > 0 && (
             <div className="card">
               <p className="section-title">Habilidades</p>
@@ -329,7 +329,7 @@ export default function PerfilEdicao({ candidato }: Props) {
                               )}
                             </div>
                             {p.cargo && (
-                              <p className="text-xs font-medium" style={{ color: "#FFD700" }}>{p.cargo}</p>
+                              <p className="text-xs font-medium" style={{ color: "#FFB800" }}>{p.cargo}</p>
                             )}
                             {p.setor && (
                               <p className="text-[10px] text-gray-400">{p.setor}</p>
@@ -340,9 +340,7 @@ export default function PerfilEdicao({ candidato }: Props) {
                           </div>
                         );
                       }
-                    } catch {
-                      // fall through to plain text
-                    }
+                    } catch { /* fallback below */ }
                     return (
                       <div key={i} className="flex gap-3">
                         <div className="w-1.5 h-1.5 rounded-full bg-[#FFD700] mt-1.5 shrink-0" />
@@ -360,7 +358,7 @@ export default function PerfilEdicao({ candidato }: Props) {
                 value={form.experiencias_profissionais}
                 onChange={set("experiencias_profissionais")}
                 rows={6}
-                placeholder="Ex: Empresa X — Auxiliar Administrativo | Empresa Y — Atendente"
+                placeholder="Ex: Empresa X — Auxiliar Administrativo — ... | Empresa Y — Atendente — ..."
                 className="input-field resize-none w-full"
               />
               <p className="text-xs text-gray-400 mt-1">Separe cada experiência com &quot;|&quot;</p>
