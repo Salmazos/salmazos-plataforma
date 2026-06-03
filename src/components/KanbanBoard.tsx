@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { ETAPAS_KANBAN, HABILIDADES } from "@/lib/constants";
 import type { Candidato } from "@/types";
 import CandidatoCard from "./CandidatoCard";
@@ -41,6 +42,7 @@ const CHIP_OFF: React.CSSProperties = { backgroundColor: "#fff", color: "#374151
 
 export default function KanbanBoard({ candidatos, filtroOrigem, matchData }: Props) {
   const router = useRouter();
+  useAutoRefresh(30000);
 
   // ── existing state ──────────────────────────────────────────────────────────
   const [filtroCargo, setFiltroCargo] = useState("");

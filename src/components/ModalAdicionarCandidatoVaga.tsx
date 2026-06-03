@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { ETAPAS_KANBAN } from "@/lib/constants";
 import type { CandidatoVaga } from "@/types";
 
@@ -30,6 +31,7 @@ export default function ModalAdicionarCandidatoVaga({
   onClose,
   onAdicionado,
 }: Props) {
+  const router = useRouter();
   const [busca, setBusca]             = useState("");
   const [resultados, setResultados]   = useState<CandidatoBusca[]>([]);
   const [carregando, setCarregando]   = useState(false);
@@ -85,6 +87,7 @@ export default function ModalAdicionarCandidatoVaga({
       return;
     }
     onAdicionado(json.data as CandidatoVaga);
+    router.refresh();
     setSucesso(`${candidato.nome_completo} adicionado com sucesso.`);
 
     // Fire-and-forget match calculation — non-blocking

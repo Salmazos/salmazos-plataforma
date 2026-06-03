@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { ANALISTAS, TIPOS_SERVICO, HABILIDADES, ESTADOS } from "@/lib/constants";
 import type { Vaga } from "@/types";
 
@@ -119,6 +120,7 @@ function maskHora(raw: string): string {
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props) {
+  const router = useRouter();
   const editando = !!vaga;
 
   const [form, setForm]           = useState(FORM_VAZIO);
@@ -273,6 +275,7 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props)
       const json = await res.json();
       if (!res.ok) { setErro(json.error ?? "Erro ao salvar."); return; }
       onSalvo(json.data);
+      router.refresh();
       onClose();
     } finally {
       setSalvando(false);

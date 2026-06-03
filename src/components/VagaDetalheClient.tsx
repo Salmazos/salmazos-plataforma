@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import ModalEditarVaga from "./ModalEditarVaga";
 import ModalAdicionarCandidatoVaga from "./ModalAdicionarCandidatoVaga";
 import ModalReprovacao from "./ModalReprovacao";
@@ -46,6 +47,7 @@ interface Props {
 }
 
 export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inicialCv }: Props) {
+  useAutoRefresh(30000);
   const [vaga, setVaga] = useState<Vaga>(inicial);
   const [candidatosVaga, setCandidatosVaga] = useState<CandidatoVaga[]>(inicialCv);
   const [modalEditar, setModalEditar]     = useState(false);
