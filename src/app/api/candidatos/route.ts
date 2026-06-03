@@ -145,6 +145,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    let resumo_candidato: string | null = body.resumo_candidato || null;
+    if (typeof resumo_candidato === "string" && resumo_candidato.trim()) {
+      resumo_candidato = calcularDuracaoResumo(resumo_candidato);
+    }
+
     const { data, error } = await supabase
       .from("candidatos")
       .insert({
@@ -160,7 +165,7 @@ export async function POST(request: NextRequest) {
         pretensao_salarial: body.pretensao_salarial || null,
         habilidades: body.habilidades || [],
         resumo_profissional: body.resumo_profissional || null,
-        resumo_candidato: body.resumo_candidato || null,
+        resumo_candidato,
         experiencias_profissionais: body.experiencias_profissionais || null,
         curriculo_url: body.curriculo_url || null,
         idade: body.idade || null,
