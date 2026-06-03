@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import ModalEditarVaga from "./ModalEditarVaga";
 import ModalAdicionarCandidatoVaga from "./ModalAdicionarCandidatoVaga";
 import ModalReprovacao from "./ModalReprovacao";
+import MatchScoreBadge from "./MatchScoreBadge";
 import { TIPOS_SERVICO } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
-import type { Vaga, CandidatoVaga, Candidato } from "@/types";
+import type { Vaga, CandidatoVaga, Candidato, MatchDetalhes } from "@/types";
 
 const CORES_TIPO: Record<string, { bg: string; color: string }> = {
   recrutamento_selecao:  { bg: "#1D6FA4", color: "#ffffff" },
@@ -48,6 +49,40 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
   const [clientesLista, setClientesLista] = useState<{ id: string; nome: string }[]>([]);
   const [reprovacaoModal, setReprovacaoModal] = useState<{ open: boolean; candidatoId: string }>({ open: false, candidatoId: "" });
   const [reprovacaoCandidato, setReprovacaoCandidato] = useState<Candidato | null>(null);
+  const [calculandoTodos, setCalculandoTodos] = useState(false);
+
+  const candidatosOrdenados = useMemo(() => {
+    return [...candidatosVaga].sort((a, b) => {
+      const sa = a.match_score ?? -1;
+      const sb = b.match_score ?? -1;
+      return sb - sa;
+    });
+  }, [candidatosVaga]);
+
+  const handleMatchCalculado = (cvId: string, score: number, detalhes: MatchDetalhes) => {
+    setCandidatosVaga((prev) =>
+      prev.map((cv) => (cv.id === cvId ? { ...cv, match_score: score, match_detalhes: detalhes } : cv))
+    );
+  };
+
+  const calcularMatchTodos = async () => {
+    setCalculandoTodos(true);
+    try {
+      const res = await fetch(`/api/vagas/${vaga.id}/match-all`, { method: "POST" });
+      if (res.ok) {
+        const { results } = await res.json();
+        setCandidatosVaga((prev) =>
+          prev.map((cv) => {
+            const r = results.find((x: { candidato_id: string }) => x.candidato_id === cv.candidato_id);
+            if (r) return { ...cv, match_score: r.score, match_detalhes: r.detalhes };
+            return cv;
+          })
+        );
+      }
+    } finally {
+      setCalculandoTodos(false);
+    }
+  };
 
   const statusInfo = STATUS_VAGA[vaga.status] ?? STATUS_VAGA.aberta;
   const tipoInfo   = TIPOS_SERVICO.find((t) => t.id === vaga.tipo_servico);
@@ -286,7 +321,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
         {/* RIGHT — 1/3 */}
         <div className="space-y-4">
           <div className="card">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="section-title">Candidatos</p>
                 <p className="text-2xl font-bold text-[#FFD700] mt-0.5">
@@ -304,18 +339,46 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
               </button>
             </div>
 
+            {candidatosVaga.length > 0 && (
+              <button
+                onClick={calcularMatchTodos}
+                disabled={calculandoTodos}
+                className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold py-2 rounded-xl mb-3 transition-all disabled:opacity-50"
+                style={{ backgroundColor: calculandoTodos ? "#e5e7eb" : "#000", color: calculandoTodos ? "#6b7280" : "#FFD700" }}
+              >
+                {calculandoTodos ? (
+                  <>
+                    <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Calculando match IA...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    Calcular Match IA para Todos
+                  </>
+                )}
+              </button>
+            )}
+
             {candidatosVaga.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4">
                 Nenhum candidato vinculado
               </p>
             ) : (
               <ul className="space-y-3">
-                {candidatosVaga.map((cv) => (
+                {candidatosOrdenados.map((cv) => (
                   <CandidatoVagaRow
                     key={cv.id}
                     cv={cv}
+                    vagaId={vaga.id}
                     onRemover={() => handleRemoverCandidato(cv.id)}
                     onReprovacaoNeeded={handleReprovacaoNeeded}
+                    onMatchCalculado={handleMatchCalculado}
                   />
                 ))}
               </ul>
@@ -379,16 +442,22 @@ function DetalheItem({
 
 function CandidatoVagaRow({
   cv,
+  vagaId,
   onRemover,
   onReprovacaoNeeded,
+  onMatchCalculado,
 }: {
   cv: CandidatoVaga;
+  vagaId: string;
   onRemover: () => void;
   onReprovacaoNeeded: (candidatoId: string) => void;
+  onMatchCalculado: (cvId: string, score: number, detalhes: MatchDetalhes) => void;
 }) {
   const c = cv.candidatos;
   const [etapa, setEtapa] = useState(cv.etapa ?? "triagem");
   const [salvando, setSalvando] = useState(false);
+  const [calculandoMatch, setCalculandoMatch] = useState(false);
+  const [tooltipVisivel, setTooltipVisivel] = useState(false);
 
   const etapaInfo = ETAPAS_VAGA.find((e) => e.id === etapa) ?? ETAPAS_VAGA[0];
 
@@ -407,6 +476,24 @@ function CandidatoVagaRow({
       }
     }
     setSalvando(false);
+  };
+
+  const handleCalcularMatch = async () => {
+    if (!cv.candidato_id) return;
+    setCalculandoMatch(true);
+    try {
+      const res = await fetch(`/api/vagas/${vagaId}/match`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidato_id: cv.candidato_id }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        onMatchCalculado(cv.id, json.score, json.detalhes);
+      }
+    } finally {
+      setCalculandoMatch(false);
+    }
   };
 
   return (
@@ -439,6 +526,70 @@ function CandidatoVagaRow({
           </select>
           {c?.responsavel && (
             <span className="text-[10px] text-gray-400">{c.responsavel}</span>
+          )}
+        </div>
+
+        {/* Match score row */}
+        <div className="mt-1.5">
+          {cv.match_score != null ? (
+            <div
+              className="relative inline-block"
+              onMouseEnter={() => setTooltipVisivel(true)}
+              onMouseLeave={() => setTooltipVisivel(false)}
+            >
+              <MatchScoreBadge score={cv.match_score} size="md" />
+              {tooltipVisivel && cv.match_detalhes && (
+                <div
+                  className="absolute bottom-full left-0 mb-1.5 z-20 rounded-xl shadow-xl border border-gray-100"
+                  style={{ backgroundColor: "#fff", width: "220px", padding: "10px 12px" }}
+                >
+                  <p className="text-[10px] text-gray-500 mb-2 leading-snug">
+                    {cv.match_detalhes.resumo}
+                  </p>
+                  <div className="space-y-1.5">
+                    {[
+                      { label: "Cargo", value: cv.match_detalhes.cargo_match },
+                      { label: "Habilidades", value: cv.match_detalhes.habilidades_match },
+                      { label: "Localização", value: cv.match_detalhes.localizacao_match },
+                      { label: "Experiência", value: cv.match_detalhes.experiencia_match },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-500 w-20 shrink-0">{label}</span>
+                        <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "#f3f4f6" }}>
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${value}%`,
+                              backgroundColor: value >= 80 ? "#22c55e" : value >= 60 ? "#FFD700" : value >= 40 ? "#f97316" : "#9ca3af",
+                            }}
+                          />
+                        </div>
+                        <span className="text-[10px] font-bold text-gray-700 w-8 text-right">{value}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={handleCalcularMatch}
+              disabled={calculandoMatch}
+              className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full transition-all disabled:opacity-50"
+              style={{ backgroundColor: "#f3f4f6", color: "#374151" }}
+            >
+              {calculandoMatch ? (
+                <>
+                  <svg className="animate-spin w-2.5 h-2.5" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Calculando...
+                </>
+              ) : (
+                <>⚡ Match IA</>
+              )}
+            </button>
           )}
         </div>
       </div>

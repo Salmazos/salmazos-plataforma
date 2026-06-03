@@ -23,6 +23,7 @@ export default async function VagaDetalhePage({ params }: Props) {
       .from("candidatos_vagas")
       .select("*, candidatos(id, nome_completo, etapa_kanban, responsavel, cargo_pretendido)")
       .eq("vaga_id", id)
+      .order("match_score", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false }),
   ]);
 

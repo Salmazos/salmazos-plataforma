@@ -6,6 +6,7 @@ import { ETAPAS_KANBAN } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
 import type { Candidato } from "@/types";
 import ModalReprovacao from "./ModalReprovacao";
+import MatchScoreBadge from "./MatchScoreBadge";
 
 const ANALISTAS = ["Giovanni", "Kaynara", "Rebeca", "Andreza", "Lucas", "Edivan", "Bete", "Olver"];
 
@@ -13,9 +14,10 @@ interface Props {
   candidato: Candidato;
   onMover: (id: string, etapa: string) => Promise<void>;
   movendo: boolean;
+  matchScore?: number;
 }
 
-export default function CandidatoCard({ candidato, onMover, movendo }: Props) {
+export default function CandidatoCard({ candidato, onMover, movendo, matchScore }: Props) {
   const router = useRouter();
   const [responsavel, setResponsavel] = useState(candidato.responsavel ?? "");
   const [salvando, setSalvando] = useState(false);
@@ -50,10 +52,13 @@ export default function CandidatoCard({ candidato, onMover, movendo }: Props) {
         <div className="w-7 h-7 rounded-full bg-black text-[#FFB800] flex items-center justify-center text-xs font-bold shrink-0">
           {candidato.nome_completo.charAt(0).toUpperCase()}
         </div>
-        <div className="min-w-0">
-          <p className="font-semibold text-gray-800 text-sm leading-tight truncate">
-            {candidato.nome_completo}
-          </p>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="font-semibold text-gray-800 text-sm leading-tight truncate">
+              {candidato.nome_completo}
+            </p>
+            {matchScore != null && <MatchScoreBadge score={matchScore} size="sm" />}
+          </div>
           <p className="text-[#FFB800] text-xs font-medium truncate">
             {candidato.cargo_pretendido}
           </p>

@@ -11,6 +11,7 @@ import ModalCadastroRapido from "./ModalCadastroRapido";
 interface Props {
   candidatos: Candidato[];
   filtroOrigem?: string | null;
+  matchData?: Record<string, number>;
 }
 
 interface PendingEncaminhamento {
@@ -38,7 +39,7 @@ const ORIGENS = ["Cadastro Rapido", "Banco de talentos", "Formulário público"]
 const CHIP_ON:  React.CSSProperties = { backgroundColor: "#000", color: "#fff", border: "1.5px solid #000" };
 const CHIP_OFF: React.CSSProperties = { backgroundColor: "#fff", color: "#374151", border: "1.5px solid #D1D5DB" };
 
-export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
+export default function KanbanBoard({ candidatos, filtroOrigem, matchData }: Props) {
   const router = useRouter();
 
   // ── existing state ──────────────────────────────────────────────────────────
@@ -402,6 +403,7 @@ export default function KanbanBoard({ candidatos, filtroOrigem }: Props) {
                       candidato={c}
                       onMover={moverCandidato}
                       movendo={movendo === c.id}
+                      matchScore={matchData?.[c.id]}
                     />
                   ))
                 )}

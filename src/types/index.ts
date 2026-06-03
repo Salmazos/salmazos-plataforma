@@ -80,12 +80,23 @@ export interface Vaga {
   clientes?: { id: string; nome: string } | null;
 }
 
+export interface MatchDetalhes {
+  cargo_match: number;
+  habilidades_match: number;
+  localizacao_match: number;
+  experiencia_match: number;
+  resumo: string;
+}
+
 export interface CandidatoVaga {
   id: string;
   vaga_id: string;
   candidato_id: string;
   etapa: string | null;
   created_at: string;
+  match_score?: number | null;
+  match_detalhes?: MatchDetalhes | null;
+  match_calculado_em?: string | null;
   candidatos?: Pick<Candidato, "id" | "nome_completo" | "etapa_kanban" | "responsavel" | "cargo_pretendido"> | null;
 }
 
