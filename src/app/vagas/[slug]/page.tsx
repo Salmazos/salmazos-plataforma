@@ -17,6 +17,13 @@ const TIPO_CORES: Record<string, { bg: string; color: string }> = {
   avaliacao_psicologica: { bg: "#6B4FBB", color: "#fff" },
 };
 
+function formatarSalario(valor: string | number | null | undefined): string {
+  if (!valor) return "A combinar";
+  const num = typeof valor === "string" ? parseFloat(valor.replace(",", ".")) : valor;
+  if (isNaN(num)) return "A combinar";
+  return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 function InfoItem({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -33,14 +40,14 @@ export default async function VagaPublicaPage({ params }: Props) {
   // Try by slug first, then fall back to id
   let { data: vaga } = await supabase
     .from("vagas")
-    .select("id, titulo, cidade, estado, salario, tipo_servico, requisitos, beneficios, horario, observacoes, status, clientes(nome)")
+    .select("id, titulo, cidade, estado, salario, tipo_servico, requisitos, beneficios, horario, observacoes, status")
     .eq("slug", slug)
     .maybeSingle();
 
   if (!vaga) {
     const { data: vagaById } = await supabase
       .from("vagas")
-      .select("id, titulo, cidade, estado, salario, tipo_servico, requisitos, beneficios, horario, observacoes, status, clientes(nome)")
+      .select("id, titulo, cidade, estado, salario, tipo_servico, requisitos, beneficios, horario, observacoes, status")
       .eq("id", slug)
       .maybeSingle();
     vaga = vagaById;
@@ -49,10 +56,7 @@ export default async function VagaPublicaPage({ params }: Props) {
   if (!vaga) notFound();
 
   const tipo = TIPOS_SERVICO.find((t) => t.id === vaga!.tipo_servico);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cor = vaga.tipo_servico ? TIPO_CORES[vaga.tipo_servico] : null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const clienteNome = (vaga.clientes as any)?.nome as string | null;
   const encerrada = vaga.status === "fechada" || vaga.status === "cancelada";
 
   return (
@@ -83,9 +87,6 @@ export default async function VagaPublicaPage({ params }: Props) {
                 </span>
               )}
               <h1 className="text-2xl font-bold text-gray-900 mt-1">{vaga.titulo}</h1>
-              {clienteNome && (
-                <p className="text-gray-500 text-sm mt-0.5">{clienteNome}</p>
-              )}
             </div>
             {encerrada && (
               <span className="text-xs font-semibold px-3 py-1 rounded-full bg-gray-100 text-gray-500">
@@ -98,7 +99,7 @@ export default async function VagaPublicaPage({ params }: Props) {
             {(vaga.cidade || vaga.estado) && (
               <InfoItem label="Local" value={[vaga.cidade, vaga.estado].filter(Boolean).join(" / ")} />
             )}
-            {vaga.salario && <InfoItem label="Salário" value={vaga.salario} />}
+            <InfoItem label="Salário" value={formatarSalario(vaga.salario)} />
             {vaga.horario && <InfoItem label="Horário" value={vaga.horario} />}
           </dl>
 

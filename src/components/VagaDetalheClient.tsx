@@ -10,6 +10,13 @@ import { TIPOS_SERVICO } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
 import type { Vaga, CandidatoVaga, Candidato, MatchDetalhes } from "@/types";
 
+function formatarSalario(valor: string | null | undefined): string {
+  if (!valor) return "A combinar";
+  const num = parseFloat(valor.replace(",", "."));
+  if (isNaN(num)) return valor;
+  return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 const CORES_TIPO: Record<string, { bg: string; color: string }> = {
   recrutamento_selecao:  { bg: "#1D6FA4", color: "#ffffff" },
   mao_obra_temporaria:   { bg: "#FFD700", color: "#000000" },
@@ -331,7 +338,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
                 <DetalheItem label="Prazo">{formatarData(vaga.prazo)}</DetalheItem>
               )}
               {vaga.salario && (
-                <DetalheItem label="Salário">{vaga.salario}</DetalheItem>
+                <DetalheItem label="Salário">{formatarSalario(vaga.salario)}</DetalheItem>
               )}
               {vaga.horario && (
                 <DetalheItem label="Horário" fullWidth>{vaga.horario}</DetalheItem>
