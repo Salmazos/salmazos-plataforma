@@ -51,6 +51,15 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
   const [reprovacaoCandidato, setReprovacaoCandidato] = useState<Candidato | null>(null);
   const [calculandoTodos, setCalculandoTodos] = useState(false);
   const [gerandoPDF, setGerandoPDF] = useState(false);
+  const [linkCopiado, setLinkCopiado] = useState(false);
+
+  const handleCompartilhar = () => {
+    const url = window.location.origin + "/vagas/" + vaga.id;
+    navigator.clipboard.writeText(url).then(() => {
+      setLinkCopiado(true);
+      setTimeout(() => setLinkCopiado(false), 2000);
+    });
+  };
 
   const handleGerarPDF = async () => {
     setGerandoPDF(true);
@@ -219,6 +228,13 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleCompartilhar}
+              className="text-sm px-3 py-2 rounded-lg font-semibold transition-colors"
+              style={{ backgroundColor: linkCopiado ? "#16a34a" : "#f3f4f6", color: linkCopiado ? "#fff" : "#374151" }}
+            >
+              {linkCopiado ? "✓ Link copiado!" : "🔗 Compartilhar"}
+            </button>
             <button
               onClick={handleGerarPDF}
               disabled={gerandoPDF}
