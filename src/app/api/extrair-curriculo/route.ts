@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import mammoth from "mammoth";
+import { calcularDuracaoResumo } from "@/lib/calcularDuracaoResumo";
 
 export async function POST(req: NextRequest) {
   try {
@@ -53,6 +54,10 @@ export async function POST(req: NextRequest) {
     const texto = data.content?.map((i: { type: string; text?: string }) => i.text || "").join("") || "";
     const limpo = texto.replace(/```json|```/g, "").trim();
     const extraido = JSON.parse(limpo);
+
+    if (typeof extraido.resumo === "string") {
+      extraido.resumo = calcularDuracaoResumo(extraido.resumo);
+    }
 
     // Serialize structured experiences array to pipe-separated JSON strings for DB storage
     const experienciasStr = Array.isArray(extraido.experiencias)
