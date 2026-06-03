@@ -3,6 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 
+const TIPO_CORES: Record<string, { bg: string; color: string }> = {
+  recrutamento_selecao:  { bg: "#1D6FA4", color: "#fff" },
+  mao_obra_temporaria:   { bg: "#FFD700", color: "#000" },
+  terceirizacao:         { bg: "#1D9E75", color: "#fff" },
+  avaliacao_psicologica: { bg: "#6B4FBB", color: "#fff" },
+};
+
 interface Props {
   id: string;
   slug: string;
@@ -10,32 +17,34 @@ interface Props {
   cidade: string | null;
   estado: string | null;
   salario: string | null;
+  tipoServico: string | null;
   tipoLabel: string | null;
   salarioFormatado: string;
 }
 
-export default function VagaCard({ slug, titulo, cidade, estado, tipoLabel, salarioFormatado }: Props) {
+export default function VagaCard({ slug, titulo, cidade, estado, tipoServico, tipoLabel, salarioFormatado }: Props) {
   const [hovered, setHovered] = useState(false);
+  const chipCor = tipoServico ? TIPO_CORES[tipoServico] : null;
 
   return (
     <Link
       href={`/vagas/${slug}`}
       className="flex flex-col gap-3 rounded-2xl p-5 transition-all"
       style={{
-        backgroundColor: "#1a1a1a",
-        border: `1px solid ${hovered ? "#FFD700" : "#2a2a2a"}`,
+        backgroundColor: "#fff",
+        border: "1px solid #e5e7eb",
         textDecoration: "none",
+        boxShadow: hovered ? "0 4px 16px rgba(0,0,0,0.12)" : "0 1px 3px rgba(0,0,0,0.06)",
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {tipoLabel && (
+      {tipoLabel && chipCor && (
         <span style={{
           display: "inline-block",
           alignSelf: "flex-start",
-          backgroundColor: "#111",
-          color: "#FFD700",
-          border: "1px solid #333",
+          backgroundColor: chipCor.bg,
+          color: chipCor.color,
           fontSize: "11px",
           fontWeight: 600,
           padding: "3px 10px",
@@ -45,11 +54,11 @@ export default function VagaCard({ slug, titulo, cidade, estado, tipoLabel, sala
         </span>
       )}
 
-      <h2 style={{ fontWeight: 700, fontSize: "15px", lineHeight: 1.35, color: "#fff" }}>
+      <h2 style={{ fontWeight: 700, fontSize: "15px", lineHeight: 1.35, color: "#111827" }}>
         {titulo}
       </h2>
 
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-auto" style={{ fontSize: "12px", color: "#9ca3af" }}>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-auto" style={{ fontSize: "12px", color: "#6b7280" }}>
         {(cidade || estado) && (
           <span className="flex items-center gap-1">
             <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

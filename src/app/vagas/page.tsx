@@ -58,6 +58,7 @@ export default async function VagasPublicaPage() {
                   cidade={v.cidade}
                   estado={v.estado}
                   salario={v.salario}
+                  tipoServico={v.tipo_servico ?? null}
                   tipoLabel={tipo?.label ?? null}
                   salarioFormatado={formatarSalario(v.salario)}
                 />
