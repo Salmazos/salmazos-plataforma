@@ -1,6 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import Link from "next/link";
 import { TIPOS_SERVICO } from "@/lib/constants";
+import VagaCard from "@/components/VagaCard";
 
 export const dynamic = "force-dynamic";
 
@@ -11,13 +11,6 @@ function formatarSalario(valor: string | number | null | undefined): string {
   return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-// All chips use black background with #FFD700 text for contrast on dark page
-const TIPO_CORES: Record<string, { bg: string; color: string }> = {
-  recrutamento_selecao:  { bg: "#1a1a1a", color: "#FFD700" },
-  mao_obra_temporaria:   { bg: "#1a1a1a", color: "#FFD700" },
-  terceirizacao:         { bg: "#1a1a1a", color: "#FFD700" },
-  avaliacao_psicologica: { bg: "#1a1a1a", color: "#FFD700" },
-};
 
 export default async function VagasPublicaPage() {
   const supabase = createServiceClient();
@@ -55,56 +48,19 @@ export default async function VagasPublicaPage() {
             {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
             {vagas.map((v: any) => {
               const tipo = TIPOS_SERVICO.find((t) => t.id === v.tipo_servico);
-              const cor = v.tipo_servico ? TIPO_CORES[v.tipo_servico] : null;
               const slug = v.slug ?? v.id;
               return (
-                <Link
+                <VagaCard
                   key={v.id}
-                  href={`/vagas/${slug}`}
-                  className="flex flex-col gap-3 rounded-2xl p-5 transition-all group"
-                  style={{ backgroundColor: "#1a1a1a", border: "1px solid #2a2a2a" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#FFD700")}
-                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#2a2a2a")}
-                >
-                  {cor && tipo && (
-                    <span
-                      className="text-xs font-semibold px-2.5 py-1 rounded-full self-start"
-                      style={{ backgroundColor: cor.bg, color: cor.color, border: "1px solid #333" }}
-                    >
-                      {tipo.label}
-                    </span>
-                  )}
-                  <h2
-                    className="font-bold text-base leading-snug transition-colors"
-                    style={{ color: "#fff" }}
-                  >
-                    {v.titulo}
-                  </h2>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs mt-auto" style={{ color: "#9ca3af" }}>
-                    {(v.cidade || v.estado) && (
-                      <span className="flex items-center gap-1">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        </svg>
-                        {[v.cidade, v.estado].filter(Boolean).join(" / ")}
-                      </span>
-                    )}
-                    <span className="flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      {formatarSalario(v.salario)}
-                    </span>
-                  </div>
-                  <span
-                    className="text-xs font-semibold self-start mt-1"
-                    style={{ color: "#FFD700" }}
-                  >
-                    Ver vaga →
-                  </span>
-                </Link>
+                  id={v.id}
+                  slug={slug}
+                  titulo={v.titulo}
+                  cidade={v.cidade}
+                  estado={v.estado}
+                  salario={v.salario}
+                  tipoLabel={tipo?.label ?? null}
+                  salarioFormatado={formatarSalario(v.salario)}
+                />
               );
             })}
           </div>
