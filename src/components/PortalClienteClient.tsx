@@ -20,6 +20,7 @@ export interface EncaminhamentoPortal {
   feedback_cliente?: string;
   avaliado_em?: string;
   match_score?: number;
+  vaga_titulo?: string;
   candidato: CandidatoResumo;
 }
 
@@ -146,6 +147,12 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos }: Pr
                   <p className="text-xs text-gray-500 mt-0.5">
                     {enc.candidato?.cargo_pretendido}
                     {enc.candidato?.cidade && ` · ${enc.candidato.cidade}/${enc.candidato.estado}`}
+                  </p>
+                  <p
+                    className="text-xs mt-1 truncate"
+                    style={{ color: "#6B7280" }}
+                  >
+                    📋 {enc.vaga_titulo ?? "Banco de Talentos"}
                   </p>
                 </div>
 

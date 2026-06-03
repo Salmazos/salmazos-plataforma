@@ -36,29 +36,38 @@ export default async function PortalPage() {
       )
       .eq("cliente_id", clienteId)
       .order("created_at", { ascending: false }),
-    service.from("vagas").select("id").eq("cliente_id", clienteId),
+    service.from("vagas").select("id, titulo").eq("cliente_id", clienteId),
   ]);
 
-  // Build match score map: candidato_id → best score across all client vagas
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const matchMap: Record<string, number> = {};
   const vagaIds = (vagasCliente ?? []).map((v: any) => v.id);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const candidatoIds = (encRows ?? []).map((e: any) => e.candidatos?.id).filter(Boolean);
 
-  if (vagaIds.length > 0 && candidatoIds.length > 0) {
-    const { data: matchRows } = await service
-      .from("candidatos_vagas")
-      .select("candidato_id, match_score")
-      .in("vaga_id", vagaIds)
-      .in("candidato_id", candidatoIds)
-      .not("match_score", "is", null);
+  // Build maps: candidato_id → best match score + vaga titulo
+  const matchMap: Record<string, number> = {};
+  const vagaTituloMap: Record<string, string> = {};
 
-    for (const row of (matchRows ?? [])) {
+  if (vagaIds.length > 0 && candidatoIds.length > 0) {
+    const { data: cvRows } = await service
+      .from("candidatos_vagas")
+      .select("candidato_id, match_score, vagas(titulo)")
+      .in("vaga_id", vagaIds)
+      .in("candidato_id", candidatoIds);
+
+    for (const row of (cvRows ?? [])) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const r = row as any;
-      if (matchMap[r.candidato_id] == null || r.match_score > matchMap[r.candidato_id]) {
+      const titulo: string | undefined = r.vagas?.titulo;
+      // Keep vaga titulo (first match wins; any linked vaga counts)
+      if (titulo && !vagaTituloMap[r.candidato_id]) {
+        vagaTituloMap[r.candidato_id] = titulo;
+      }
+      // Keep highest match score
+      if (r.match_score != null && (matchMap[r.candidato_id] == null || r.match_score > matchMap[r.candidato_id])) {
         matchMap[r.candidato_id] = r.match_score;
+        // Prefer titulo from the row with the best score
+        if (titulo) vagaTituloMap[r.candidato_id] = titulo;
       }
     }
   }
@@ -71,6 +80,7 @@ export default async function PortalPage() {
     feedback_cliente: e.feedback_cliente ?? undefined,
     avaliado_em: e.avaliado_em ?? undefined,
     match_score: matchMap[e.candidatos?.id],
+    vaga_titulo: vagaTituloMap[e.candidatos?.id],
     candidato: e.candidatos,
   }));
 
