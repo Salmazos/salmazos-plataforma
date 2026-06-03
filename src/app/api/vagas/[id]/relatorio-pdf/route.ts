@@ -15,14 +15,9 @@ const DARK   = rgb(0.12, 0.14, 0.16);
 const GRAY   = rgb(0.43, 0.46, 0.50);
 const LGRAY  = rgb(0.85, 0.85, 0.87);
 
-// Sanitize text: replace typographic chars above Latin-1 range
+// Sanitize text: strip control chars (including \n \r \t) and non-Latin-1 chars
 function safe(v: unknown): string {
-  if (v == null) return "";
-  return String(v)
-    .replace(/[–—]/g, "-")
-    .replace(/['']/g, "'")
-    .replace(/[""]/g, '"')
-    .replace(/[^\x00-\xFF]/g, "");
+  return (v == null ? "" : String(v)).replace(/[^\x20-\xFF]/g, " ").trim();
 }
 
 // If end year is before start year, replace any duration parenthetical with a warning
@@ -70,7 +65,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   type Color = typeof BLACK;
 
   function wrapText(text: string, font: Font, size: number, maxW: number): string[] {
-    const words = safe(text).split(" ");
+    const words = safe(text).replace(/[\n\r\t]/g, " ").split(" ");
     const lines: string[] = [];
     let cur = "";
     for (const w of words) {
