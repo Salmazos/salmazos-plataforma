@@ -61,6 +61,10 @@ export async function POST(req: NextRequest) {
       console.log("RESUMO DEPOIS:", extraido.resumo);
     }
 
+    if (typeof resumo_existente === "string" && resumo_existente.trim()) {
+      extraido.resumo_candidato = calcularDuracaoResumo(resumo_existente);
+    }
+
     // Serialize structured experiences array to pipe-separated JSON strings for DB storage
     const experienciasStr = Array.isArray(extraido.experiencias)
       ? extraido.experiencias.map((e: object) => JSON.stringify(e)).join("|")
