@@ -261,10 +261,34 @@ export default async function PortalCandidatoPage({ params }: Props) {
       {c.experiencias_profissionais && (
         <div className="bg-white rounded-2xl p-6 mb-6 shadow-sm">
           <p className="section-title">Experiências Profissionais</p>
-          <div className="space-y-3">
-            {(c.experiencias_profissionais as string).split("|").map((exp, i) => {
+          <div className="space-y-4">
+            {(c.experiencias_profissionais as string).split("|").map((exp: string, i: number) => {
               const txt = exp.trim();
               if (!txt) return null;
+              try {
+                const p = JSON.parse(txt);
+                if (p?.empresa) {
+                  return (
+                    <div key={i} style={{ borderLeft: "2px solid #FFD700", paddingLeft: "12px" }} className="space-y-0.5">
+                      <div className="flex flex-wrap items-start justify-between gap-1">
+                        <p className="font-semibold text-gray-800 text-sm">{p.empresa}</p>
+                        {p.periodo && (
+                          <span className="text-[10px] text-gray-400 shrink-0">{p.periodo}</span>
+                        )}
+                      </div>
+                      {p.cargo && (
+                        <p className="text-xs font-medium" style={{ color: "#E6A800" }}>{p.cargo}</p>
+                      )}
+                      {p.setor && (
+                        <p className="text-[10px] text-gray-400">{p.setor}</p>
+                      )}
+                      {p.descricao && (
+                        <p className="text-sm text-gray-600 mt-1 leading-relaxed">{p.descricao}</p>
+                      )}
+                    </div>
+                  );
+                }
+              } catch { /* fallback below */ }
               return (
                 <div key={i} className="flex gap-3">
                   <div className="w-1.5 h-1.5 rounded-full bg-[#FFD700] mt-1.5 shrink-0" />
