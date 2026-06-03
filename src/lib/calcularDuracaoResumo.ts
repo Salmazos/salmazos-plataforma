@@ -48,6 +48,7 @@ const ATUAL =
 const MES_ANO_SEP = "[/\\s-]+";
 
 export function calcularDuracaoResumo(text: string): string {
+  console.log("calcularDuracaoResumo chamado com:", text);
   if (!text) return text;
 
   let result = text;
