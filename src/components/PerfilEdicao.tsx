@@ -34,6 +34,13 @@ function makeForm(c: Candidato) {
   };
 }
 
+function formatarSalario(valor: string | number | null | undefined): string {
+  if (!valor) return "Não informado";
+  const num = typeof valor === "string" ? parseFloat(valor.replace(",", ".")) : valor;
+  if (isNaN(num)) return "Não informado";
+  return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 function InfoItem({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -220,7 +227,7 @@ export default function PerfilEdicao({ candidato }: Props) {
                 <InfoItem label="Cargo pretendido" value={candidato.cargo_pretendido} />
                 <InfoItem label="Experiência" value={candidato.tempo_experiencia} />
                 <InfoItem label="Turno disponível" value={candidato.turno_disponivel} />
-                <InfoItem label="Pretensão salarial" value={candidato.pretensao_salarial || "Não informado"} />
+                <InfoItem label="Pretensão salarial" value={formatarSalario(candidato.pretensao_salarial)} />
                 {candidato.formacao_academica && <InfoItem label="Formação" value={candidato.formacao_academica} />}
               </dl>
             ) : (
