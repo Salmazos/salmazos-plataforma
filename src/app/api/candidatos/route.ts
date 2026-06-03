@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { enviarEmailConfirmacao } from "@/lib/email";
 import mammoth from "mammoth";
+import { calcularDuracaoResumo } from "@/lib/calcularDuracaoResumo";
 
 async function extractAndUpdateCandidato(
   candidatoId: string,
@@ -66,6 +67,10 @@ async function extractAndUpdateCandidato(
   const texto = aiData.content?.map((i: { type: string; text?: string }) => i.text || "").join("") || "";
   const limpo = texto.replace(/```json|```/g, "").trim();
   const extraido = JSON.parse(limpo);
+
+  if (typeof extraido.resumo === "string") {
+    extraido.resumo = calcularDuracaoResumo(extraido.resumo);
+  }
 
   const supabase = createServiceClient();
   await supabase
