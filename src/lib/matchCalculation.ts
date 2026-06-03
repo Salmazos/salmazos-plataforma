@@ -33,7 +33,8 @@ export async function calcularMatch(
 
   if (!candidato || !vaga) return null;
 
-  const userPrompt = `Analise o match e retorne APENAS JSON (sem markdown, sem texto extra):
+  const userPrompt = `Analyze the match between this candidate and job vacancy. Be strict and critical — a high score should only be given when the candidate is genuinely aligned. Return ONLY a JSON object, no explanation, no markdown.
+
 {
   "score": number (0-100),
   "cargo_match": number (0-100),
@@ -43,11 +44,18 @@ export async function calcularMatch(
   "resumo": "máx 100 chars em português explicando o score"
 }
 
-CANDIDATO: cargo=${candidato.cargo_pretendido}, habilidades=${JSON.stringify(candidato.habilidades ?? [])}, cidade=${candidato.cidade}, estado=${candidato.estado}, experiencia=${candidato.tempo_experiencia}, formacao=${candidato.formacao_academica ?? "não informado"}
+CRITICAL EVALUATION RULES:
+1. cargo_match: Compare the candidate's ACTUAL career background (not just current pretended role) with the vacancy. If the candidate's entire career is in a DIFFERENT field (e.g. truck driver applying for production assistant, accountant applying for warehouse operator), score cargo_match LOW (0-30) even if they claim to want the role. Function deviation is a major hiring risk.
+2. habilidades_match: Only count skills that are DIRECTLY relevant to the vacancy requirements. Ignore unrelated skills.
+3. localizacao_match: 100 if same city, 70 if same state, 30 if different state.
+4. experiencia_match: Score based on experience RELEVANT to this vacancy only. Experience in unrelated fields counts little.
+5. score (weighted average): cargo 30% + habilidades 35% + localizacao 20% + experiencia 15%
 
-VAGA: titulo=${vaga.titulo}, requisitos=${vaga.requisitos ?? "não informado"}, cidade=${vaga.cidade ?? "qualquer"}, estado=${vaga.estado ?? "qualquer"}, habilidades_desejadas=${JSON.stringify(vaga.habilidades_desejadas ?? [])}
+FUNCTION DEVIATION PENALTY: If the candidate's professional history shows they work primarily in a DIFFERENT field than the vacancy, apply a strong penalty. A truck driver applying for production assistant, or an executive applying for operational roles, should score 20-40% maximum.
 
-Regras: cargo_match=compatibilidade cargo/título; habilidades_match=sobreposição habilidades; localizacao_match=100 mesma cidade/70 mesmo estado/30 diferente; experiencia_match=adequação experiência; score=média ponderada(cargo 30%, habilidades 35%, localização 20%, experiência 15%)`;
+CANDIDATE: cargo_pretendido=${candidato.cargo_pretendido}, habilidades=${JSON.stringify(candidato.habilidades ?? [])}, cidade=${candidato.cidade}, estado=${candidato.estado}, tempo_experiencia=${candidato.tempo_experiencia}, formacao=${candidato.formacao_academica ?? "não informado"}, historico_profissional=${candidato.experiencias_profissionais ?? "não informado"}
+
+VACANCY: titulo=${vaga.titulo}, requisitos=${vaga.requisitos ?? "não informado"}, cidade=${vaga.cidade ?? "qualquer"}, estado=${vaga.estado ?? "qualquer"}, habilidades_desejadas=${JSON.stringify(vaga.habilidades_desejadas ?? [])}`;
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -58,7 +66,7 @@ Regras: cargo_match=compatibilidade cargo/título; habilidades_match=sobreposiç
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 300,
+      max_tokens: 400,
       system:
         "You are a recruitment specialist. Analyze the match between a candidate and a job vacancy. Return ONLY a JSON object with no explanation, no markdown, no extra text.",
       messages: [{ role: "user", content: userPrompt }],
