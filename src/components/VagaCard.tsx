@@ -3,11 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 
-const TIPO_CORES: Record<string, { bg: string; color: string }> = {
-  recrutamento_selecao:  { bg: "#1D6FA4", color: "#fff" },
-  mao_obra_temporaria:   { bg: "#FFD700", color: "#000" },
-  terceirizacao:         { bg: "#1D9E75", color: "#fff" },
-  avaliacao_psicologica: { bg: "#6B4FBB", color: "#fff" },
+const TIPO_MAP: Record<string, { label: string; bg: string }> = {
+  recrutamento_selecao:  { label: "Recrutamento e Seleção",    bg: "#1D6FA4" },
+  mao_obra_temporaria:   { label: "Mão de Obra Temporária",    bg: "#F59E0B" },
+  terceirizacao:         { label: "Terceirização de Serviços", bg: "#10B981" },
+  avaliacao_psicologica: { label: "Avaliação Psicológica",     bg: "#8B5CF6" },
 };
 
 interface Props {
@@ -22,9 +22,11 @@ interface Props {
   salarioFormatado: string;
 }
 
-export default function VagaCard({ slug, titulo, cidade, estado, tipoServico, tipoLabel, salarioFormatado }: Props) {
+export default function VagaCard({ slug, titulo, cidade, estado, tipoServico, salarioFormatado }: Props) {
   const [hovered, setHovered] = useState(false);
-  const chipCor = tipoServico ? TIPO_CORES[tipoServico] : null;
+  const chip = tipoServico
+    ? (TIPO_MAP[tipoServico] ?? { label: tipoServico, bg: "#6b7280" })
+    : null;
 
   return (
     <Link
@@ -39,18 +41,18 @@ export default function VagaCard({ slug, titulo, cidade, estado, tipoServico, ti
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {tipoLabel && chipCor && (
+      {chip && (
         <span style={{
           display: "inline-block",
           alignSelf: "flex-start",
-          backgroundColor: chipCor.bg,
-          color: chipCor.color,
-          fontSize: "11px",
+          backgroundColor: chip.bg,
+          color: "#fff",
+          fontSize: "12px",
           fontWeight: 600,
-          padding: "3px 10px",
-          borderRadius: "9999px",
+          padding: "4px 10px",
+          borderRadius: "20px",
         }}>
-          {tipoLabel}
+          {chip.label}
         </span>
       )}
 
