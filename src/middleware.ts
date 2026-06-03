@@ -33,6 +33,7 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // Painel protection
   if (!user && pathname.startsWith("/painel")) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
@@ -45,9 +46,17 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Portal protection — /portal/login is public, everything else requires auth
+  const isPortalRoute = pathname === "/portal" || pathname.startsWith("/portal/");
+  if (!user && isPortalRoute && pathname !== "/portal/login") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/portal/login";
+    return NextResponse.redirect(url);
+  }
+
   return response;
 }
 
 export const config = {
-  matcher: ["/painel/:path*", "/login"],
+  matcher: ["/painel/:path*", "/login", "/portal", "/portal/:path*"],
 };
