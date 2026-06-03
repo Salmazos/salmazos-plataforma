@@ -50,6 +50,26 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
   const [reprovacaoModal, setReprovacaoModal] = useState<{ open: boolean; candidatoId: string }>({ open: false, candidatoId: "" });
   const [reprovacaoCandidato, setReprovacaoCandidato] = useState<Candidato | null>(null);
   const [calculandoTodos, setCalculandoTodos] = useState(false);
+  const [gerandoPDF, setGerandoPDF] = useState(false);
+
+  const handleGerarPDF = async () => {
+    setGerandoPDF(true);
+    try {
+      const res = await fetch(`/api/vagas/${vaga.id}/relatorio-pdf`);
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `relatorio-${vaga.titulo.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      setGerandoPDF(false);
+    }
+  };
 
   const candidatosOrdenados = useMemo(() => {
     return [...candidatosVaga].sort((a, b) => {
@@ -199,6 +219,14 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleGerarPDF}
+              disabled={gerandoPDF}
+              className="text-sm px-3 py-2 rounded-lg font-semibold transition-colors disabled:opacity-60"
+              style={{ backgroundColor: "#000", color: "#FFD700" }}
+            >
+              {gerandoPDF ? "Gerando..." : "📄 Gerar PDF"}
+            </button>
             <button
               onClick={() => setModalEditar(true)}
               className="btn-outline text-sm"
