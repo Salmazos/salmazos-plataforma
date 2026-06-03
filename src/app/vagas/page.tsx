@@ -24,7 +24,7 @@ export default async function VagasPublicaPage() {
     .from("vagas")
     .select("id, titulo, cidade, estado, salario, tipo_servico, slug")
     .eq("status", "aberta")
-    .order("created_at", { ascending: false });
+    .order("titulo", { ascending: true });
 
   return (
     <div className="min-h-screen bg-gray-50">

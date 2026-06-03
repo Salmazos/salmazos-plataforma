@@ -9,7 +9,7 @@ export default async function VagasPage() {
   const { data: vagas } = await supabase
     .from("vagas")
     .select("*, clientes(id, nome)")
-    .order("created_at", { ascending: false });
+    .order("titulo", { ascending: true });
 
   return <VagasPageClient vagas={(vagas ?? []) as Vaga[]} />;
 }
