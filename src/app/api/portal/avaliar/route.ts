@@ -32,7 +32,6 @@ export async function PATCH(request: NextRequest) {
     if (!STATUS_VALIDOS.includes(status))
       return NextResponse.json({ error: "Status inválido." }, { status: 400 });
 
-    // Verify the encaminhamento belongs to this client
     const { data: enc } = await service
       .from("encaminhamentos")
       .select("id, candidato_id, status")
@@ -59,12 +58,24 @@ export async function PATCH(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-    // If approved, advance candidatos_vagas etapa
+    // Sync Kanban principal
     if (status === "aprovado") {
+      await service
+        .from("candidatos")
+        .update({ etapa_kanban: "aprovado_cliente" })
+        .eq("id", enc.candidato_id);
+
       await service
         .from("candidatos_vagas")
         .update({ etapa: "aprovado_cliente" })
         .eq("candidato_id", enc.candidato_id);
+    }
+
+    if (status === "reprovado") {
+      await service
+        .from("candidatos")
+        .update({ etapa_kanban: "reprovado" })
+        .eq("id", enc.candidato_id);
     }
 
     return NextResponse.json({ data: updated });
