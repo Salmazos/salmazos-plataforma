@@ -23,7 +23,7 @@ export default async function PortalPage() {
 
   const clienteId = clienteUsuario.cliente_id;
 
-  const [{ data: cliente }, { data: encRows }] = await Promise.all([
+  const [{ data: cliente }, { data: encRows }, { data: vagasCliente }] = await Promise.all([
     service
       .from("clientes")
       .select("id, nome, contato_nome")
@@ -36,7 +36,32 @@ export default async function PortalPage() {
       )
       .eq("cliente_id", clienteId)
       .order("created_at", { ascending: false }),
+    service.from("vagas").select("id").eq("cliente_id", clienteId),
   ]);
+
+  // Build match score map: candidato_id → best score across all client vagas
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const matchMap: Record<string, number> = {};
+  const vagaIds = (vagasCliente ?? []).map((v: any) => v.id);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const candidatoIds = (encRows ?? []).map((e: any) => e.candidatos?.id).filter(Boolean);
+
+  if (vagaIds.length > 0 && candidatoIds.length > 0) {
+    const { data: matchRows } = await service
+      .from("candidatos_vagas")
+      .select("candidato_id, match_score")
+      .in("vaga_id", vagaIds)
+      .in("candidato_id", candidatoIds)
+      .not("match_score", "is", null);
+
+    for (const row of (matchRows ?? [])) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const r = row as any;
+      if (matchMap[r.candidato_id] == null || r.match_score > matchMap[r.candidato_id]) {
+        matchMap[r.candidato_id] = r.match_score;
+      }
+    }
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const encaminhamentos: EncaminhamentoPortal[] = (encRows ?? []).map((e: any) => ({
@@ -45,6 +70,7 @@ export default async function PortalPage() {
     data_entrevista: e.data_entrevista,
     feedback_cliente: e.feedback_cliente ?? undefined,
     avaliado_em: e.avaliado_em ?? undefined,
+    match_score: matchMap[e.candidatos?.id],
     candidato: e.candidatos,
   }));
 

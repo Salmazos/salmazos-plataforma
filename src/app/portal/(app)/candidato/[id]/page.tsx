@@ -2,6 +2,8 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import PortalAvaliacaoBtn from "@/components/PortalAvaliacaoBtn";
+import MatchScoreBadge from "@/components/MatchScoreBadge";
+import type { MatchDetalhes } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +60,35 @@ export default async function PortalCandidatoPage({ params }: Props) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const c = enc.candidatos as any;
 
+  // Fetch best match score for this candidate across this client's vagas
+  const { data: vagasCliente } = await service
+    .from("vagas")
+    .select("id")
+    .eq("cliente_id", clienteUsuario.cliente_id);
+
+  const vagaIds = (vagasCliente ?? []).map((v: any) => v.id); // eslint-disable-line @typescript-eslint/no-explicit-any
+  let matchScore: number | null = null;
+  let matchDetalhes: MatchDetalhes | null = null;
+
+  if (vagaIds.length > 0 && c?.id) {
+    const { data: matchRow } = await service
+      .from("candidatos_vagas")
+      .select("match_score, match_detalhes")
+      .eq("candidato_id", c.id)
+      .in("vaga_id", vagaIds)
+      .not("match_score", "is", null)
+      .order("match_score", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (matchRow) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      matchScore = (matchRow as any).match_score ?? null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      matchDetalhes = (matchRow as any).match_detalhes ?? null;
+    }
+  }
+
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center gap-2 mb-6 text-sm text-gray-500">
@@ -83,6 +114,11 @@ export default async function PortalCandidatoPage({ params }: Props) {
             <p className="text-xs text-gray-400 mt-0.5">
               {c.cidade} – {c.estado}
             </p>
+            {matchScore != null && (
+              <div className="mt-2">
+                <MatchScoreBadge score={matchScore} size="md" />
+              </div>
+            )}
           </div>
           {c.curriculo_url && (
             <a
@@ -104,6 +140,47 @@ export default async function PortalCandidatoPage({ params }: Props) {
           )}
         </div>
       </div>
+
+      {/* Aderência à Vaga */}
+      {matchScore != null && matchDetalhes && (
+        <div className="bg-white rounded-2xl p-6 mb-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <p className="section-title !mb-0">Aderência à Vaga</p>
+            <MatchScoreBadge score={matchScore} size="md" />
+          </div>
+          {matchDetalhes.resumo && (
+            <p className="text-sm text-gray-500 mb-4 leading-relaxed">{matchDetalhes.resumo}</p>
+          )}
+          <div className="space-y-3">
+            {[
+              { label: "Cargo",        value: matchDetalhes.cargo_match },
+              { label: "Habilidades",  value: matchDetalhes.habilidades_match },
+              { label: "Localização",  value: matchDetalhes.localizacao_match },
+              { label: "Experiência",  value: matchDetalhes.experiencia_match },
+            ].map(({ label, value }) => (
+              <div key={label} className="flex items-center gap-3">
+                <span className="text-sm text-gray-600 w-24 shrink-0">{label}</span>
+                <div
+                  className="flex-1 h-2 rounded-full overflow-hidden"
+                  style={{ backgroundColor: "#f3f4f6" }}
+                >
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${value}%`,
+                      backgroundColor:
+                        value >= 80 ? "#22c55e" :
+                        value >= 60 ? "#FFD700" :
+                        value >= 40 ? "#f97316" : "#9ca3af",
+                    }}
+                  />
+                </div>
+                <span className="text-sm font-bold text-gray-700 w-10 text-right">{value}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Dados profissionais */}
       <div className="bg-white rounded-2xl p-6 mb-6 shadow-sm">

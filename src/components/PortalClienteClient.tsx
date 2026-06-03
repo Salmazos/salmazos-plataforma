@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import MatchScoreBadge from "./MatchScoreBadge";
 
 interface CandidatoResumo {
   id: string;
@@ -18,6 +19,7 @@ export interface EncaminhamentoPortal {
   data_entrevista: string;
   feedback_cliente?: string;
   avaliado_em?: string;
+  match_score?: number;
   candidato: CandidatoResumo;
 }
 
@@ -147,7 +149,10 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos }: Pr
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                  {enc.match_score != null && (
+                    <MatchScoreBadge score={enc.match_score} size="sm" />
+                  )}
                   <span
                     className="text-xs font-semibold px-2.5 py-1 rounded-full"
                     style={{ backgroundColor: cfg.bg, color: cfg.color }}
