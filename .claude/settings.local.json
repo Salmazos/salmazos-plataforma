@@ -22,7 +22,8 @@
       "Bash(mkdir -p \"C:/Users/Olver/Desktop/salmazos-plataforma/src/app/api/encaminhamentos/[id]\")",
       "Bash(node -e \"require\\('xlsx'\\)\")",
       "Bash(mkdir -p \"C:\\\\Users\\\\Olver\\\\Desktop\\\\salmazos-plataforma\\\\src\\\\app\\\\api\\\\vagas\\\\[id]\")",
-      "Bash(mkdir -p \"C:\\\\Users\\\\Olver\\\\Desktop\\\\salmazos-plataforma\\\\src\\\\app\\\\painel\\\\vagas\\\\[id]\")"
+      "Bash(mkdir -p \"C:\\\\Users\\\\Olver\\\\Desktop\\\\salmazos-plataforma\\\\src\\\\app\\\\painel\\\\vagas\\\\[id]\")",
+      "Bash(node -e ' *)"
     ]
   }
 }
