@@ -65,6 +65,14 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
     );
   };
 
+  const refreshCandidatos = async () => {
+    const res = await fetch(`/api/vagas/${vaga.id}/candidatos`);
+    if (res.ok) {
+      const { data } = await res.json();
+      if (data) setCandidatosVaga(data as CandidatoVaga[]);
+    }
+  };
+
   const calcularMatchTodos = async () => {
     setCalculandoTodos(true);
     try {
@@ -417,7 +425,10 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
         vagaId={vaga.id}
         candidatosVinculadosIds={candidatosVaga.map((cv) => cv.candidato_id)}
         onClose={() => setModalAdicionar(false)}
-        onAdicionado={(cv) => setCandidatosVaga((prev) => [cv, ...prev])}
+        onAdicionado={(cv) => {
+          setCandidatosVaga((prev) => [cv, ...prev]);
+          setTimeout(refreshCandidatos, 4000);
+        }}
       />
     </div>
   );
