@@ -313,38 +313,58 @@ export default function PerfilEdicao({ candidato }: Props) {
             candidato.experiencias_profissionais ? (
               <div className="card">
                 <p className="section-title">Experiências Profissionais</p>
-                <div className="space-y-4">
-                  {candidato.experiencias_profissionais.split("|").map((exp, i) => {
+                <div>
+                  {/* Split only on | followed by { to avoid breaking JSON with | inside strings */}
+                  {candidato.experiencias_profissionais.split(/\|\s*(?=\{)/).map((exp, i) => {
                     const txt = exp.trim();
                     if (!txt) return null;
                     try {
                       const p = JSON.parse(txt);
                       if (p?.empresa) {
                         return (
-                          <div key={i} className="border-l-2 border-[#FFD700] pl-3 space-y-0.5">
-                            <div className="flex flex-wrap items-start justify-between gap-1">
-                              <p className="font-semibold text-gray-800 text-sm">{p.empresa}</p>
+                          <div
+                            key={i}
+                            style={{
+                              borderLeft: "3px solid #FFD700",
+                              padding: "12px 16px",
+                              marginBottom: "12px",
+                              background: "#fff",
+                              borderRadius: "8px",
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px", flexWrap: "wrap" }}>
+                              <span style={{ fontWeight: 600, color: "#1f2937", fontSize: "14px" }}>
+                                {p.empresa}
+                              </span>
                               {p.periodo && (
-                                <span className="text-[10px] text-gray-400 shrink-0">{p.periodo}</span>
+                                <span style={{ fontSize: "11px", color: "#6b7280", flexShrink: 0 }}>
+                                  {p.periodo}
+                                </span>
                               )}
                             </div>
                             {p.cargo && (
-                              <p className="text-xs font-medium" style={{ color: "#FFB800" }}>{p.cargo}</p>
+                              <div style={{ color: "#FFD700", fontWeight: 600, fontSize: "13px", marginTop: "2px" }}>
+                                {p.cargo}
+                              </div>
                             )}
                             {p.setor && (
-                              <p className="text-[10px] text-gray-400">{p.setor}</p>
+                              <div style={{ color: "#9ca3af", fontSize: "11px", marginTop: "2px" }}>
+                                {p.setor}
+                              </div>
                             )}
                             {p.descricao && (
-                              <p className="text-sm text-gray-600 mt-1 leading-relaxed">{p.descricao}</p>
+                              <div style={{ color: "#374151", fontSize: "13px", marginTop: "6px", lineHeight: 1.6 }}>
+                                {p.descricao}
+                              </div>
                             )}
                           </div>
                         );
                       }
-                    } catch { /* fallback below */ }
+                    } catch { /* fall through to plain text */ }
                     return (
-                      <div key={i} className="flex gap-3">
-                        <div className="w-1.5 h-1.5 rounded-full bg-[#FFD700] mt-1.5 shrink-0" />
-                        <p className="text-sm text-gray-700 leading-relaxed">{txt}</p>
+                      <div key={i} style={{ display: "flex", gap: "12px", marginBottom: "8px" }}>
+                        <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#FFD700", marginTop: "6px", flexShrink: 0 }} />
+                        <p style={{ fontSize: "14px", color: "#374151", lineHeight: 1.6 }}>{txt}</p>
                       </div>
                     );
                   })}
