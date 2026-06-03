@@ -150,7 +150,7 @@ export default function FormularioCadastro({ vagaParam }: Props) {
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen" style={{ backgroundColor: "#000" }}>
       {/* Cabeçalho */}
       <header className="bg-black shadow-lg">
         <div className="flex justify-center py-5">
@@ -192,10 +192,10 @@ export default function FormularioCadastro({ vagaParam }: Props) {
       {/* Formulário */}
       <main className="max-w-3xl mx-auto px-4 py-8 pb-16">
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">
+          <h2 className="text-2xl font-bold" style={{ color: "#fff" }}>
             {vagaParam ? "Formulário de Candidatura" : "Banco de Talentos"}
           </h2>
-          <p className="text-gray-500 text-sm mt-1">
+          <p className="text-sm mt-1" style={{ color: "#9ca3af" }}>
             {vagaParam
               ? `Preencha os campos abaixo para concluir sua candidatura à vaga de ${vagaParam}.`
               : "Preencha os campos abaixo para entrar em nosso banco de talentos e ser encontrado por oportunidades."}

@@ -20,10 +20,10 @@ function formatarSalario(valor: string | number | null | undefined): string {
 function InfoItem({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt style={{ fontSize: "10px", color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "2px" }}>
+      <dt style={{ fontSize: "10px", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "2px" }}>
         {label}
       </dt>
-      <dd style={{ fontSize: "14px", fontWeight: 600, color: "#fff" }}>{value}</dd>
+      <dd style={{ fontSize: "14px", fontWeight: 600, color: "#111827" }}>{value}</dd>
     </div>
   );
 }
@@ -69,7 +69,7 @@ export default async function VagaPublicaPage({ params }: Props) {
       <main className="max-w-3xl mx-auto px-4 py-8 pb-16">
 
         {/* Job info card */}
-        <div style={{ backgroundColor: "#111", border: "1px solid #2a2a2a", borderRadius: "16px", padding: "24px", marginBottom: "24px" }}>
+        <div style={{ backgroundColor: "#fff", border: "1px solid #e5e7eb", borderRadius: "16px", padding: "24px", marginBottom: "24px" }}>
           <div className="flex flex-wrap items-start justify-between gap-3" style={{ marginBottom: "16px" }}>
             <div className="flex-1">
               {tipo && (
@@ -92,14 +92,14 @@ export default async function VagaPublicaPage({ params }: Props) {
               </h1>
             </div>
             {encerrada && (
-              <span style={{ fontSize: "11px", fontWeight: 600, padding: "4px 12px", borderRadius: "9999px", backgroundColor: "#1a1a1a", color: "#9ca3af", border: "1px solid #2a2a2a" }}>
+              <span style={{ fontSize: "11px", fontWeight: 600, padding: "4px 12px", borderRadius: "9999px", backgroundColor: "#f3f4f6", color: "#6b7280", border: "1px solid #e5e7eb" }}>
                 Vaga encerrada
               </span>
             )}
           </div>
 
           {/* Info grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4" style={{ borderTop: "1px solid #2a2a2a", paddingTop: "16px" }}>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4" style={{ borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
             {(vaga.cidade || vaga.estado) && (
               <InfoItem label="Local" value={[vaga.cidade, vaga.estado].filter(Boolean).join(" / ")} />
             )}
@@ -108,22 +108,22 @@ export default async function VagaPublicaPage({ params }: Props) {
           </div>
 
           {vaga.requisitos && (
-            <div style={{ marginTop: "16px", borderTop: "1px solid #2a2a2a", paddingTop: "16px" }}>
-              <p style={{ fontSize: "10px", fontWeight: 700, color: "#FFD700", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
+            <div style={{ marginTop: "16px", borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
+              <p style={{ fontSize: "10px", fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
                 Requisitos
               </p>
-              <p style={{ fontSize: "14px", color: "#d1d5db", lineHeight: 1.7, whiteSpace: "pre-line" }}>
+              <p style={{ fontSize: "14px", color: "#374151", lineHeight: 1.7, whiteSpace: "pre-line" }}>
                 {vaga.requisitos}
               </p>
             </div>
           )}
 
           {vaga.beneficios && (
-            <div style={{ marginTop: "16px", borderTop: "1px solid #2a2a2a", paddingTop: "16px" }}>
-              <p style={{ fontSize: "10px", fontWeight: 700, color: "#FFD700", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
+            <div style={{ marginTop: "16px", borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
+              <p style={{ fontSize: "10px", fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
                 Benefícios
               </p>
-              <p style={{ fontSize: "14px", color: "#d1d5db", lineHeight: 1.7, whiteSpace: "pre-line" }}>
+              <p style={{ fontSize: "14px", color: "#374151", lineHeight: 1.7, whiteSpace: "pre-line" }}>
                 {vaga.beneficios}
               </p>
             </div>
@@ -131,8 +131,8 @@ export default async function VagaPublicaPage({ params }: Props) {
         </div>
 
         {encerrada ? (
-          <div style={{ backgroundColor: "#111", border: "1px solid #2a2a2a", borderRadius: "16px", padding: "32px", textAlign: "center" }}>
-            <p style={{ color: "#9ca3af", fontWeight: 500 }}>Esta vaga não está mais recebendo candidaturas.</p>
+          <div style={{ backgroundColor: "#fff", border: "1px solid #e5e7eb", borderRadius: "16px", padding: "32px", textAlign: "center" }}>
+            <p style={{ color: "#6b7280", fontWeight: 500 }}>Esta vaga não está mais recebendo candidaturas.</p>
             <Link href="/vagas" style={{ display: "inline-block", marginTop: "12px", fontSize: "14px", fontWeight: 600, color: "#FFD700" }}>
               Ver outras vagas →
             </Link>
