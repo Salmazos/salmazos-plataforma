@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { formatarCPF, formatarTelefone, validarCPF } from "@/lib/utils";
 import { ESTADOS, HABILIDADES, TEMPO_EXPERIENCIA, TURNOS } from "@/lib/constants";
@@ -87,6 +87,8 @@ export default function BancoTalentosPage() {
   const [enviando, setEnviando] = useState(false);
   const [erroGeral, setErroGeral] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState(false);
+  const [hovering, setHovering] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = (field: keyof FormData, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
@@ -375,18 +377,25 @@ export default function BancoTalentosPage() {
               </div>
               <div>
                 <label style={LABEL}>Currículo</label>
-                <div style={{
-                  position: "relative",
-                  border: `2px dashed ${curriculo ? "#FFD700" : "#d1d5db"}`,
-                  borderRadius: "10px",
-                  padding: "24px",
-                  textAlign: "center",
-                  backgroundColor: curriculo ? "rgba(255,215,0,0.05)" : "#f9fafb",
-                }}>
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onPointerEnter={() => setHovering(true)}
+                  onPointerLeave={() => setHovering(false)}
+                  style={{
+                    cursor: "pointer",
+                    border: `2px dashed ${curriculo ? "#FFD700" : hovering ? "#FFD700" : "#d1d5db"}`,
+                    borderRadius: "10px",
+                    padding: hovering && !curriculo ? "32px 24px" : "24px",
+                    minHeight: hovering && !curriculo ? "120px" : "auto",
+                    textAlign: "center",
+                    backgroundColor: curriculo ? "rgba(255,215,0,0.05)" : hovering ? "rgba(255,215,0,0.03)" : "#f9fafb",
+                    transition: "padding 0.2s ease, min-height 0.2s ease, border-color 0.2s ease, background-color 0.2s ease",
+                  }}>
                   <input
+                    ref={fileInputRef}
                     type="file"
                     accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                    style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
+                    style={{ display: "none", pointerEvents: "none" }}
                     onChange={(e) => setCurriculo(e.target.files?.[0] ?? null)}
                   />
                   {curriculo ? (

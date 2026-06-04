@@ -346,7 +346,7 @@ export default function FormularioCadastro({ vagaParam }: Props) {
               <label className="label">Currículo (PDF)</label>
               <div
                 className="relative text-center"
-                onPointerEnter={() => setHovering(true)}
+                onPointerEnter={() => { console.log('hover ON'); setHovering(true); }}
                 onPointerLeave={() => setHovering(false)}
                 onClick={() => fileInputRef.current?.click()}
                 style={{ cursor: "pointer",
