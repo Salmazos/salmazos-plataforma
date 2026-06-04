@@ -34,7 +34,7 @@ export async function PATCH(request: NextRequest) {
 
     const { data: enc } = await service
       .from("encaminhamentos")
-      .select("id, candidato_id, status")
+      .select("id, candidato_id, status, vaga_id")
       .eq("id", encaminhamento_id)
       .eq("cliente_id", clienteUsuario.cliente_id)
       .single();
@@ -65,10 +65,11 @@ export async function PATCH(request: NextRequest) {
         .update({ etapa_kanban: "aprovado_cliente" })
         .eq("id", enc.candidato_id);
 
-      await service
+      const cvQuery = service
         .from("candidatos_vagas")
         .update({ etapa: "aprovado_cliente" })
         .eq("candidato_id", enc.candidato_id);
+      await (enc.vaga_id ? cvQuery.eq("vaga_id", enc.vaga_id) : cvQuery);
     }
 
     if (status === "reprovado") {

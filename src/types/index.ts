@@ -125,6 +125,7 @@ export interface Encaminhamento {
   tipo_servico?: string;
   observacoes?: string;
   feedback_cliente?: string | null;
+  vaga_id?: string | null;
   created_at: string;
   updated_at: string;
   cliente?: Pick<Cliente, "id" | "nome" | "cidade" | "segmento" | "servicos">;

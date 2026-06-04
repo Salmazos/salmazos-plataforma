@@ -15,6 +15,7 @@ interface Props {
     data_entrevista: string;
     tipo_servico: string;
     observacoes: string;
+    vaga_id?: string;
   }) => Promise<void>;
 }
 
@@ -45,6 +46,8 @@ export default function ModalEncaminhamento({
   const [forcarEnvio, setForcarEnvio] = useState(false);
   const [justificativa, setJustificativa] = useState("");
   const [autorizadoPor, setAutorizadoPor] = useState("");
+  const [vagas, setVagas] = useState<{ id: string; titulo: string }[]>([]);
+  const [vagaId, setVagaId] = useState("");
 
   const clienteSelecionado = clientes.find((c) => c.id === clienteId);
   const duplicata = historico.find((e) => e.cliente_id === clienteId);
@@ -56,6 +59,12 @@ export default function ModalEncaminhamento({
 
   useEffect(() => {
     setTipoServico("");
+    setVagaId("");
+    setVagas([]);
+    if (!clienteId) return;
+    fetch(`/api/vagas?cliente_id=${clienteId}`)
+      .then((r) => r.json())
+      .then(({ data }) => setVagas(data ?? []));
   }, [clienteId]);
 
   useEffect(() => {
@@ -68,6 +77,8 @@ export default function ModalEncaminhamento({
     setForcarEnvio(false);
     setJustificativa("");
     setAutorizadoPor("");
+    setVagaId("");
+    setVagas([]);
 
     const carregar = async () => {
       setCarregando(true);
@@ -109,7 +120,7 @@ export default function ModalEncaminhamento({
     setEnviando(true);
     setErro("");
     try {
-      await onConfirmar({ cliente_id: clienteId, data_entrevista: dataEntrevista, tipo_servico: tipoServico, observacoes: obsCompleta });
+      await onConfirmar({ cliente_id: clienteId, data_entrevista: dataEntrevista, tipo_servico: tipoServico, observacoes: obsCompleta, vaga_id: vagaId || undefined });
     } catch {
       setErro("Erro ao salvar encaminhamento.");
       setEnviando(false);
@@ -169,6 +180,25 @@ export default function ModalEncaminhamento({
                   </select>
                 )}
               </div>
+
+              {/* Vaga */}
+              {clienteId && vagas.length > 0 && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    Vaga
+                  </label>
+                  <select
+                    value={vagaId}
+                    onChange={(e) => setVagaId(e.target.value)}
+                    className="input-field"
+                  >
+                    <option value="">Selecione a vaga (opcional)...</option>
+                    {vagas.map((v) => (
+                      <option key={v.id} value={v.id}>{v.titulo}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Alerta de duplicidade */}
               {duplicata && clienteSelecionado && (

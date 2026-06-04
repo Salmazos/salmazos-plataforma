@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
         status: "aguardando",
         tipo_servico: body.tipo_servico || null,
         observacoes: body.observacoes || null,
+        vaga_id: body.vaga_id || null,
       })
       .select("*, cliente:clientes(id, nome, cidade, segmento, servicos)")
       .single();

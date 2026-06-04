@@ -173,6 +173,7 @@ export default function KanbanBoard({ candidatos, filtroOrigem, matchData }: Pro
     data_entrevista: string;
     tipo_servico: string;
     observacoes: string;
+    vaga_id?: string;
   }) => {
     if (!pendingEncaminhamento) return;
     const { candidatoId } = pendingEncaminhamento;

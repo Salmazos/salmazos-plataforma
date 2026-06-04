@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const cliente_id = searchParams.get("cliente_id");
   const supabase = createServiceClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("vagas")
     .select("*, clientes(id, nome)")
     .order("created_at", { ascending: false });
+  if (cliente_id) query = query.eq("cliente_id", cliente_id);
+  const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data });
 }
