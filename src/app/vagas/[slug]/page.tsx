@@ -148,6 +148,12 @@ export default async function VagaPublicaPage({ params }: Props) {
               </p>
             </div>
             <FormCandidaturaVagaPublica vagaId={vaga.id} vagaTitulo={vaga.titulo} />
+            <p style={{ textAlign: "center", marginTop: "24px", fontSize: "13px", color: "#9ca3af" }}>
+              Prefere se cadastrar no banco de talentos?{" "}
+              <Link href="/candidatura" style={{ color: "#9ca3af", textDecoration: "underline" }}>
+                Clique aqui
+              </Link>
+            </p>
           </div>
         )}
       </main>

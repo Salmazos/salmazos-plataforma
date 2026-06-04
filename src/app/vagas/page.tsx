@@ -37,6 +37,26 @@ export default async function VagasPublicaPage() {
           <p className="mt-1 text-sm" style={{ color: "#9ca3af" }}>
             {vagas?.length ?? 0} {(vagas?.length ?? 0) === 1 ? "vaga disponível" : "vagas disponíveis"} no momento
           </p>
+
+          <a
+            href="/candidatura"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              marginTop: "16px",
+              padding: "10px 20px",
+              border: "1px solid #FFD700",
+              color: "#FFD700",
+              backgroundColor: "transparent",
+              borderRadius: "10px",
+              fontSize: "14px",
+              fontWeight: 500,
+              textDecoration: "none",
+            }}
+          >
+            Não encontrou uma vaga para você? Cadastre-se no nosso Banco de Talentos →
+          </a>
         </div>
 
         {(!vagas || vagas.length === 0) ? (
