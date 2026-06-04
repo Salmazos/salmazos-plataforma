@@ -42,6 +42,8 @@ export async function PATCH(request: NextRequest) {
     if (!enc)
       return NextResponse.json({ error: "Encaminhamento não encontrado." }, { status: 404 });
 
+    console.log("[avaliar] enc.candidato_id:", enc.candidato_id, "| enc.vaga_id:", enc.vaga_id);
+
     if (enc.status !== "aguardando")
       return NextResponse.json({ error: "Este encaminhamento já foi avaliado." }, { status: 409 });
 
@@ -69,7 +71,10 @@ export async function PATCH(request: NextRequest) {
         .from("candidatos_vagas")
         .update({ etapa: "aprovado_cliente" })
         .eq("candidato_id", enc.candidato_id);
-      await (enc.vaga_id ? cvQuery.eq("vaga_id", enc.vaga_id) : cvQuery);
+      const { data: cvData, error: cvError } = await (enc.vaga_id ? cvQuery.eq("vaga_id", enc.vaga_id) : cvQuery)
+        .select();
+      console.log("[avaliar] candidatos_vagas update — error:", cvError, "| rows:", cvData);
+      console.log("[avaliar] candidatos_vagas rows affected:", Array.isArray(cvData) ? cvData.length : 0);
     }
 
     if (status === "reprovado") {

@@ -36,8 +36,9 @@ const STATUS_VAGA: Record<string, { label: string; bg: string; color: string }> 
 const ETAPAS_VAGA = [
   { id: "triagem",             label: "Triagem",             bg: "#1D6FA4", color: "#ffffff" },
   { id: "entrevista_salmazos", label: "Entrevista Salmazos", bg: "#FFD700", color: "#000000" },
-  { id: "entrevista_cliente",  label: "Entrevista Cliente",  bg: "#F97316", color: "#ffffff" },
-  { id: "aprovado",            label: "Aprovado",            bg: "#1D9E75", color: "#ffffff" },
+  { id: "entrevista_cliente",  label: "Entrevista Cliente",   bg: "#F97316", color: "#ffffff" },
+  { id: "aprovado_cliente",    label: "Aprovado pelo Cliente", bg: "#16a34a", color: "#ffffff" },
+  { id: "aprovado",            label: "Aprovado",             bg: "#1D9E75", color: "#ffffff" },
   { id: "reprovado",           label: "Reprovado",           bg: "#EC4899", color: "#ffffff" },
 ] as const;
 
