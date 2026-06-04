@@ -55,6 +55,12 @@ export async function POST(req: NextRequest) {
     const limpo = texto.replace(/```json|```/g, "").trim();
     const extraido = JSON.parse(limpo);
 
+    // Normalize extracted phone: digits only, discard if fewer than 10 digits
+    if (extraido.telefone != null) {
+      const digits = String(extraido.telefone).replace(/\D/g, "");
+      extraido.telefone = digits.length >= 10 ? digits : null;
+    }
+
     if (typeof extraido.resumo === "string") {
       console.log("RESUMO ANTES:", extraido.resumo);
       extraido.resumo = calcularDuracaoResumo(extraido.resumo);

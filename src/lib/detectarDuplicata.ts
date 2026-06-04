@@ -68,10 +68,11 @@ export async function detectarDuplicata(
       console.log("FALLBACK RESULT:", JSON.stringify(resultado));
 
       if (resultado?.length) {
+        const key = telNormalizado.slice(-8);
         candidatoExistente =
           resultado.find((c) => {
-            const foneDb = (c.telefone ?? "").replace(/\D/g, "");
-            return foneDb.length >= 8 && foneDb === telNormalizado;
+            const foneDb = (c.telefone ?? "").replace(/\D/g, "").slice(-8);
+            return foneDb.length === 8 && foneDb === key;
           }) ?? null;
       }
     }

@@ -58,6 +58,7 @@ ${campos}`;
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 256,
+      temperature: 0,
       system:
         "You are an expert HR recruiter. Analyze candidate profiles and return ONLY a JSON object, no markdown, no explanation.",
       messages: [{ role: "user", content: userPrompt }],
