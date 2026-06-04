@@ -345,8 +345,8 @@ export default function FormularioCadastro({ vagaParam }: Props) {
               <label className="label">Currículo (PDF)</label>
               <div
                 className="relative text-center"
-                onMouseEnter={() => setHovering(true)}
-                onMouseLeave={() => setHovering(false)}
+                onPointerEnter={() => setHovering(true)}
+                onPointerLeave={() => setHovering(false)}
                 style={{
                   border: `2px dashed ${curriculo ? "#FFB800" : hovering ? "#FFD700" : "#d1d5db"}`,
                   borderRadius: "8px",
@@ -357,8 +357,6 @@ export default function FormularioCadastro({ vagaParam }: Props) {
                 }}>
                 <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  onMouseEnter={() => setHovering(true)}
-                  onMouseLeave={() => setHovering(false)}
                   onChange={(e) => setCurriculo(e.target.files?.[0] ?? null)} />
                 {curriculo ? (
                   <div className="text-black">
