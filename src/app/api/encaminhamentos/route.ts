@@ -55,6 +55,17 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    // Sync: if linked to a vaga, ensure candidatos_vagas record exists at triagem
+    if (data.vaga_id) {
+      await supabase
+        .from("candidatos_vagas")
+        .upsert(
+          { candidato_id: data.candidato_id, vaga_id: data.vaga_id, etapa: "triagem" },
+          { onConflict: "candidato_id,vaga_id", ignoreDuplicates: true }
+        );
+    }
+
     return NextResponse.json({ data, duplicata: existente ?? null }, { status: 201 });
   } catch (err) {
     console.error("[POST /api/encaminhamentos]", err);

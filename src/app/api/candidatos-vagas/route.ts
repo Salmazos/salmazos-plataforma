@@ -44,6 +44,24 @@ export async function POST(request: NextRequest) {
       .select("*, candidatos(id, nome_completo, etapa_kanban, responsavel, cargo_pretendido)")
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    // Sync: ensure an encaminhamento exists for this candidato+cliente if vaga has a cliente
+    const { data: vaga } = await supabase
+      .from("vagas")
+      .select("cliente_id")
+      .eq("id", vaga_id)
+      .maybeSingle();
+
+    if (vaga?.cliente_id) {
+      await supabase
+        .from("encaminhamentos")
+        .upsert(
+          { candidato_id, cliente_id: vaga.cliente_id, vaga_id, status: "aguardando" },
+          { onConflict: "candidato_id,cliente_id", ignoreDuplicates: true }
+        )
+        .catch(() => {});
+    }
+
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {
     console.error("[POST /api/candidatos-vagas]", err);
