@@ -38,24 +38,29 @@ export default async function VagasPublicaPage() {
             {vagas?.length ?? 0} {(vagas?.length ?? 0) === 1 ? "vaga disponível" : "vagas disponíveis"} no momento
           </p>
 
+          <style>{`
+            @keyframes pulseGlow {
+              0%, 100% { box-shadow: 0 0 0px rgba(255, 215, 0, 0); transform: scale(1); }
+              50% { box-shadow: 0 0 18px 4px rgba(255, 215, 0, 0.45); transform: scale(1.02); }
+            }
+          `}</style>
           <a
             href="/candidatura"
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-              marginTop: "16px",
-              padding: "10px 20px",
-              border: "1px solid #FFD700",
-              color: "#FFD700",
-              backgroundColor: "transparent",
-              borderRadius: "10px",
-              fontSize: "14px",
-              fontWeight: 500,
+              display: "block",
+              textAlign: "center",
+              marginTop: "20px",
+              padding: "16px 32px",
+              backgroundColor: "#FFD700",
+              color: "#111",
+              borderRadius: "12px",
+              fontSize: "15px",
+              fontWeight: "bold",
               textDecoration: "none",
+              animation: "pulseGlow 2.4s ease-in-out infinite",
             }}
           >
-            Não encontrou uma vaga para você? Cadastre-se no nosso Banco de Talentos →
+            Não encontrou uma vaga para você? Clique aqui e se cadastre em nosso Banco de Talentos! →
           </a>
         </div>
 
