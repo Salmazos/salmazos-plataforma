@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { sendEmail } from "@/lib/sendEmail";
+import { getEmailTemplate } from "@/lib/emailTemplates";
+import type { EmailTemplateName } from "@/lib/emailTemplates";
 
 const ETAPAS_VALIDAS = ["triagem", "entrevista_salmazos", "entrevista_cliente", "aprovado_cliente"];
+
+const ETAPA_TEMPLATE: Partial<Record<string, EmailTemplateName>> = {
+  entrevista_salmazos: "entrevista_salmazos",
+  entrevista_cliente: "entrevista_cliente",
+  aprovado_cliente: "aprovado_cliente",
+};
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -30,5 +39,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  const templateName = ETAPA_TEMPLATE[etapa_kanban];
+  if (templateName && data.email) {
+    const { subject, html } = getEmailTemplate(templateName, {
+      nome: data.nome_completo,
+      cargo: data.cargo_pretendido,
+    });
+    sendEmail({ to: data.email, subject, html });
+  }
+
   return NextResponse.json({ data });
 }

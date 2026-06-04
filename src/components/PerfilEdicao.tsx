@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatarData } from "@/lib/utils";
 import { ETAPAS_KANBAN } from "@/lib/constants";
+import { TEMPLATE_OPTIONS } from "@/lib/emailTemplates";
+import type { EmailTemplateName } from "@/lib/emailTemplates";
 import PerfilEtapaSelector from "@/components/PerfilEtapaSelector";
 import PerfilAnotacoes from "@/components/PerfilAnotacoes";
 import type { Candidato } from "@/types";
@@ -68,6 +70,11 @@ export default function PerfilEdicao({ candidato }: Props) {
   const [erro, setErro] = useState("");
   const [form, setForm] = useState(() => makeForm(candidato));
 
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailTemplate, setEmailTemplate] = useState<EmailTemplateName>("entrevista_salmazos");
+  const [emailEnviando, setEmailEnviando] = useState(false);
+  const [emailMensagem, setEmailMensagem] = useState<{ ok: boolean; texto: string } | null>(null);
+
   const set =
     (field: keyof ReturnType<typeof makeForm>) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -77,6 +84,29 @@ export default function PerfilEdicao({ candidato }: Props) {
     setForm(makeForm(candidato));
     setErro("");
     setEditando(false);
+  };
+
+  const handleEnviarEmail = async () => {
+    setEmailEnviando(true);
+    setEmailMensagem(null);
+    try {
+      const res = await fetch(`/api/candidatos/${candidato.id}/email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template: emailTemplate }),
+      });
+      if (!res.ok) {
+        const json = await res.json();
+        setEmailMensagem({ ok: false, texto: json.error || "Erro ao enviar e-mail." });
+      } else {
+        setEmailMensagem({ ok: true, texto: "E-mail enviado com sucesso!" });
+        setTimeout(() => setEmailModalOpen(false), 1500);
+      }
+    } catch {
+      setEmailMensagem({ ok: false, texto: "Erro ao enviar e-mail. Tente novamente." });
+    } finally {
+      setEmailEnviando(false);
+    }
   };
 
   const handleSalvar = async () => {
@@ -147,6 +177,19 @@ export default function PerfilEdicao({ candidato }: Props) {
                 </svg>
                 Baixar currículo
               </a>
+            )}
+
+            {!editando && candidato.email && (
+              <button
+                onClick={() => { setEmailMensagem(null); setEmailModalOpen(true); }}
+                className="btn-outline flex items-center gap-1.5"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                ✉️ Enviar Email
+              </button>
             )}
 
             {!editando ? (
@@ -252,6 +295,58 @@ export default function PerfilEdicao({ candidato }: Props) {
               </div>
             )}
           </div>
+
+          {/* Comunicação via WhatsApp */}
+          {!editando && candidato.telefone && (
+            <div className="card">
+              <p className="section-title">Comunicação</p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  {
+                    label: "📱 Convocar para Entrevista",
+                    msg: `Olá ${candidato.nome_completo}! Somos da Salmazos RH. Temos uma oportunidade de emprego que combina com seu perfil para a vaga de ${candidato.cargo_pretendido}. Gostaríamos de convidá-lo(a) para uma entrevista. Poderia nos informar sua disponibilidade? 😊`,
+                  },
+                  {
+                    label: "✅ Comunicar Aprovação",
+                    msg: `Olá ${candidato.nome_completo}! Temos uma ótima notícia! Você foi aprovado(a) no processo seletivo para a vaga de ${candidato.cargo_pretendido}. Entre em contato conosco para os próximos passos. Parabéns! 🎉`,
+                  },
+                  {
+                    label: "❌ Comunicar Reprovação",
+                    msg: `Olá ${candidato.nome_completo}! Agradecemos sua participação no processo seletivo da Salmazos RH. No momento, seguimos com outro perfil, mas manteremos seu currículo em nosso banco de talentos para futuras oportunidades. Obrigado! 😊`,
+                  },
+                  {
+                    label: "📋 Solicitar Documentos",
+                    msg: `Olá ${candidato.nome_completo}! Para darmos continuidade ao seu processo de contratação, precisamos dos seguintes documentos: RG, CPF, Carteira de Trabalho, Comprovante de Residência e foto 3x4. Pode nos enviar assim que possível? 😊`,
+                  },
+                ].map(({ label, msg }) => (
+                  <button
+                    key={label}
+                    onClick={() =>
+                      window.open(
+                        `https://wa.me/55${candidato.telefone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`,
+                        "_blank"
+                      )
+                    }
+                    style={{
+                      backgroundColor: "#25D366",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "8px",
+                      padding: "8px 14px",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Habilidades — sempre read-only */}
           {candidato.habilidades?.length > 0 && (
@@ -412,6 +507,91 @@ export default function PerfilEdicao({ candidato }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Modal de envio de e-mail */}
+      {emailModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setEmailModalOpen(false); }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-gray-900">✉️ Enviar E-mail</h2>
+              <button
+                onClick={() => setEmailModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-sm text-gray-500 mb-1">Destinatário</p>
+            <p className="text-sm font-medium text-gray-800 mb-4">{candidato.email}</p>
+
+            <label className="block text-sm text-gray-500 mb-1">Template</label>
+            <select
+              value={emailTemplate}
+              onChange={(e) => setEmailTemplate(e.target.value as EmailTemplateName)}
+              className="input-field w-full mb-4"
+            >
+              {TEMPLATE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+
+            <div
+              className="rounded-lg p-4 mb-5 text-sm text-gray-700 leading-relaxed"
+              style={{ background: "#fffbeb", border: "1px solid #fde68a" }}
+            >
+              <p className="font-semibold text-amber-800 mb-1 text-xs uppercase tracking-wide">Pré-visualização</p>
+              <p>
+                {TEMPLATE_OPTIONS.find((o) => o.value === emailTemplate)?.label} para{" "}
+                <strong>{candidato.nome_completo}</strong> ({candidato.cargo_pretendido})
+              </p>
+            </div>
+
+            {emailMensagem && (
+              <p
+                className={`text-sm rounded-lg px-3 py-2 mb-4 ${
+                  emailMensagem.ok
+                    ? "bg-green-50 text-green-700 border border-green-200"
+                    : "bg-red-50 text-red-600 border border-red-200"
+                }`}
+              >
+                {emailMensagem.texto}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setEmailModalOpen(false)}
+                className="btn-outline"
+                disabled={emailEnviando}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEnviarEmail}
+                disabled={emailEnviando}
+                style={{
+                  backgroundColor: "#000",
+                  color: "#FFD700",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "8px 20px",
+                  fontWeight: 700,
+                  fontSize: "14px",
+                  cursor: emailEnviando ? "not-allowed" : "pointer",
+                  opacity: emailEnviando ? 0.7 : 1,
+                }}
+              >
+                {emailEnviando ? "Enviando..." : "Enviar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
