@@ -53,34 +53,62 @@ export async function detectarDuplicata(
 
   // 2. Name + phone fallback
   if (!candidatoExistente) {
-    const tokens = novosDados.nome_completo.trim().split(/\s+/);
-    const primeiro = tokens[0];
-    const ultimo = tokens[tokens.length - 1];
-    const foneLimpo = novosDados.telefone.replace(/\D/g, "");
+    const nomeNormalizado = novosDados.nome_completo.trim();
+    const telNormalizado = (novosDados.telefone ?? "").replace(/\D/g, "");
 
-    if (primeiro && foneLimpo.length >= 8) {
-      const { data: candidatos } = await supabase
+    console.log("FALLBACK QUERY - nome:", nomeNormalizado, "telefone:", telNormalizado);
+
+    if (nomeNormalizado && telNormalizado.length >= 8) {
+      const { data: resultado } = await supabase
         .from("candidatos")
         .select("*")
-        .ilike("nome_completo", `%${primeiro}%`)
-        .ilike("nome_completo", `%${ultimo}%`)
+        .ilike("nome_completo", nomeNormalizado)
         .limit(10);
 
-      if (candidatos?.length) {
+      console.log("FALLBACK RESULT:", JSON.stringify(resultado));
+
+      if (resultado?.length) {
         candidatoExistente =
-          candidatos.find((c) => {
+          resultado.find((c) => {
             const foneDb = (c.telefone ?? "").replace(/\D/g, "");
-            return foneDb.length >= 8 && foneDb === foneLimpo;
+            return foneDb.length >= 8 && foneDb === telNormalizado;
           }) ?? null;
       }
     }
+  }
+
+  // 3. Phone-only fallback
+  if (!candidatoExistente) {
+    const telNormalizado = (novosDados.telefone ?? "").replace(/\D/g, "");
+    if (telNormalizado.length >= 8) {
+      const { data: resultado } = await supabase
+        .from("candidatos")
+        .select("*")
+        .eq("telefone", telNormalizado)
+        .limit(1);
+
+      console.log("PHONE FALLBACK RESULT:", JSON.stringify(resultado));
+      candidatoExistente = resultado?.[0] ?? null;
+    }
+  }
+
+  // 4. Email fallback
+  if (!candidatoExistente && novosDados.email) {
+    const { data: resultado } = await supabase
+      .from("candidatos")
+      .select("*")
+      .eq("email", novosDados.email)
+      .limit(1);
+
+    console.log("EMAIL FALLBACK RESULT:", JSON.stringify(resultado));
+    candidatoExistente = resultado?.[0] ?? null;
   }
 
   if (!candidatoExistente) {
     return { isDuplicata: false };
   }
 
-  // 3. Cooldown: if updated within the last 7 days, skip AI and treat as plain duplicate
+  // 5. Cooldown: if updated within the last 7 days, skip AI and treat as plain duplicate
   const ultimaAtualizacao = candidatoExistente.ultima_atualizacao_ia as string | null;
   if (ultimaAtualizacao) {
     const diasDesdeAtualizacao =
@@ -95,7 +123,7 @@ export async function detectarDuplicata(
     }
   }
 
-  // 4. AI comparison to determine if it's a meaningful update
+  // 6. AI comparison to determine if it's a meaningful update
   const perfilExistente = {
     cargo: candidatoExistente.cargo_pretendido,
     experiencia: candidatoExistente.tempo_experiencia,
