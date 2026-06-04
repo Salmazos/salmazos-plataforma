@@ -143,6 +143,11 @@ function EncaminhamentoItem({
           {enc.observacoes && (
             <p className="text-xs text-gray-500 mt-1 italic">"{enc.observacoes}"</p>
           )}
+          {enc.feedback_cliente && (
+            <p className="text-xs text-gray-700 mt-1">
+              <span className="font-semibold">Comentário do cliente:</span> {enc.feedback_cliente}
+            </p>
+          )}
         </div>
 
         {/* Status badge */}
