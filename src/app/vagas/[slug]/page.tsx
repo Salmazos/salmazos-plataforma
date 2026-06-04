@@ -87,7 +87,7 @@ export default async function VagaPublicaPage({ params }: Props) {
                   {tipo.label}
                 </span>
               )}
-              <h1 style={{ fontSize: "26px", fontWeight: 700, color: "#fff", marginTop: "4px" }}>
+              <h1 style={{ fontSize: "26px", fontWeight: 700, color: "#111111", marginTop: "4px" }}>
                 {vaga.titulo}
               </h1>
             </div>
