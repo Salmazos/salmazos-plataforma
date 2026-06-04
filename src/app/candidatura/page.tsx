@@ -23,9 +23,9 @@ interface FormData {
 }
 
 const CARD: React.CSSProperties = {
-  backgroundColor: "#111",
-  border: "1px solid #2a2a2a",
-  borderRadius: "16px",
+  backgroundColor: "#ffffff",
+  border: "1px solid #e5e7eb",
+  borderRadius: "12px",
   padding: "20px 24px",
   marginBottom: "16px",
 };
@@ -42,15 +42,15 @@ const SECTION_TITLE: React.CSSProperties = {
 const LABEL: React.CSSProperties = {
   display: "block",
   fontSize: "12px",
-  color: "#9ca3af",
+  color: "#374151",
   marginBottom: "4px",
 };
 
 const INPUT: React.CSSProperties = {
   width: "100%",
-  backgroundColor: "#1a1a1a",
-  color: "#fff",
-  border: "1px solid #2a2a2a",
+  backgroundColor: "#ffffff",
+  color: "#374151",
+  border: "1px solid #d1d5db",
   borderRadius: "8px",
   padding: "8px 12px",
   fontSize: "14px",
@@ -215,7 +215,7 @@ export default function BancoTalentosPage() {
           <h1 style={{ fontSize: "22px", fontWeight: 700, color: "#fff", marginBottom: "6px" }}>
             Banco de Talentos
           </h1>
-          <p style={{ fontSize: "14px", color: "#9ca3af", lineHeight: 1.6 }}>
+          <p style={{ fontSize: "14px", color: "#fff", lineHeight: 1.6 }}>
             Cadastre seu currículo e faça parte do nosso banco de talentos.<br />
             Quando surgir uma oportunidade compatível com seu perfil, entraremos em contato.
           </p>
@@ -344,11 +344,11 @@ export default function BancoTalentosPage() {
                       gap: "8px",
                       padding: "8px 10px",
                       borderRadius: "8px",
-                      border: `1px solid ${ativo ? "#FFD700" : "#2a2a2a"}`,
-                      backgroundColor: ativo ? "rgba(255,215,0,0.1)" : "#1a1a1a",
+                      border: `1px solid ${ativo ? "#FFD700" : "#d1d5db"}`,
+                      backgroundColor: ativo ? "rgba(255,215,0,0.12)" : "#f9fafb",
                       cursor: "pointer",
                       fontSize: "13px",
-                      color: ativo ? "#FFD700" : "#9ca3af",
+                      color: ativo ? "#92400e" : "#374151",
                       fontWeight: ativo ? 600 : 400,
                     }}>
                       <input type="checkbox" style={{ flexShrink: 0, accentColor: "#FFD700" }}
@@ -377,11 +377,11 @@ export default function BancoTalentosPage() {
                 <label style={LABEL}>Currículo</label>
                 <div style={{
                   position: "relative",
-                  border: `2px dashed ${curriculo ? "#FFD700" : "#2a2a2a"}`,
+                  border: `2px dashed ${curriculo ? "#FFD700" : "#d1d5db"}`,
                   borderRadius: "10px",
                   padding: "24px",
                   textAlign: "center",
-                  backgroundColor: curriculo ? "rgba(255,215,0,0.05)" : "#1a1a1a",
+                  backgroundColor: curriculo ? "rgba(255,215,0,0.05)" : "#f9fafb",
                 }}>
                   <input
                     type="file"
@@ -394,7 +394,7 @@ export default function BancoTalentosPage() {
                       <svg style={{ width: "32px", height: "32px", margin: "0 auto 8px", color: "#FFD700" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <p style={{ fontWeight: 500, fontSize: "14px", color: "#fff" }}>{curriculo.name}</p>
+                      <p style={{ fontWeight: 500, fontSize: "14px", color: "#374151" }}>{curriculo.name}</p>
                       <p style={{ fontSize: "12px", marginTop: "4px", color: "#FFD700" }}>{(curriculo.size / 1024 / 1024).toFixed(2)} MB</p>
                     </div>
                   ) : (
