@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatarCPF, formatarTelefone, validarCPF } from "@/lib/utils";
@@ -52,6 +52,7 @@ export default function FormularioCadastro({ vagaParam }: Props) {
   const [enviando, setEnviando] = useState(false);
   const [erroGeral, setErroGeral] = useState<string | null>(null);
   const [hovering, setHovering] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = (field: keyof FormData, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
@@ -347,7 +348,8 @@ export default function FormularioCadastro({ vagaParam }: Props) {
                 className="relative text-center"
                 onPointerEnter={() => setHovering(true)}
                 onPointerLeave={() => setHovering(false)}
-                style={{
+                onClick={() => fileInputRef.current?.click()}
+                style={{ cursor: "pointer",
                   border: `2px dashed ${curriculo ? "#FFB800" : hovering ? "#FFD700" : "#d1d5db"}`,
                   borderRadius: "8px",
                   padding: hovering && !curriculo ? "32px 24px" : "24px",
@@ -355,8 +357,11 @@ export default function FormularioCadastro({ vagaParam }: Props) {
                   backgroundColor: curriculo ? "rgba(255,184,0,0.1)" : hovering ? "rgba(255,215,0,0.03)" : "#f9fafb",
                   transition: "padding 0.2s ease, min-height 0.2s ease, border-color 0.2s ease, background-color 0.2s ease",
                 }}>
-                <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                  style={{ display: "none", pointerEvents: "none" }}
                   onChange={(e) => setCurriculo(e.target.files?.[0] ?? null)} />
                 {curriculo ? (
                   <div className="text-black">
