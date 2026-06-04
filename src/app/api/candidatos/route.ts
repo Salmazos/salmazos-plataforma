@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { enviarEmailConfirmacao } from "@/lib/email";
 import { calcularTriagem } from "@/lib/triagemAutomatica";
+import { detectarDuplicata } from "@/lib/detectarDuplicata";
 import mammoth from "mammoth";
 import { calcularDuracaoResumo } from "@/lib/calcularDuracaoResumo";
 
@@ -133,21 +134,89 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceClient();
 
-    // Verificar CPF duplicado apenas quando informado
-    if (body.cpf) {
-      const { data: existente } = await supabase
-        .from("candidatos")
-        .select("id")
-        .eq("cpf", body.cpf)
-        .maybeSingle();
+    // ── Duplicate detection ────────────────────────────────────────────────────
+    const origemTipo: "publico" | "rapido" =
+      body.origem === "Cadastro Rapido" ? "rapido" : "publico";
 
-      if (existente) {
+    const duplicata = await detectarDuplicata(body, origemTipo);
+
+    if (duplicata.isDuplicata) {
+      const existente = duplicata.candidatoExistente;
+
+      if (!duplicata.isAtualizacao) {
+        // Plain duplicate — silently succeed for public, warn for internal
+        if (origemTipo === "publico") {
+          return NextResponse.json(
+            { ok: true, duplicata: true, redirect: "/obrigado" },
+            { status: 200 }
+          );
+        }
         return NextResponse.json(
-          { error: "Já existe um cadastro com este CPF." },
+          {
+            ok: false,
+            duplicata: true,
+            jaExiste: true,
+            candidatoExistente: {
+              id: existente.id,
+              nome: existente.nome_completo,
+              etapa_kanban: existente.etapa_kanban,
+              created_at: existente.created_at,
+            },
+          },
           { status: 409 }
         );
       }
+
+      // Meaningful update — merge non-empty fields into existing record
+      const atualizar: Record<string, unknown> = {
+        ultima_atualizacao_ia: new Date().toISOString(),
+        atualizacao_resumo: duplicata.resumoAtualizacao,
+        updated_at: new Date().toISOString(),
+      };
+      if (body.telefone) atualizar.telefone = body.telefone;
+      if (body.email) atualizar.email = body.email;
+      if (body.cidade) atualizar.cidade = body.cidade;
+      if (body.estado) atualizar.estado = body.estado;
+      if (body.cargo_pretendido) atualizar.cargo_pretendido = body.cargo_pretendido;
+      if (body.tempo_experiencia) atualizar.tempo_experiencia = body.tempo_experiencia;
+      if (body.formacao_academica) atualizar.formacao_academica = body.formacao_academica;
+      if (body.habilidades?.length) atualizar.habilidades = body.habilidades;
+      if (body.resumo_candidato) atualizar.resumo_candidato = body.resumo_candidato;
+      if (body.resumo_profissional) atualizar.resumo_profissional = body.resumo_profissional;
+      if (body.experiencias_profissionais) atualizar.experiencias_profissionais = body.experiencias_profissionais;
+      if (body.curriculo_url) atualizar.curriculo_url = body.curriculo_url;
+      if (body.cpf && !body.cpf.startsWith("TEMP-")) atualizar.cpf = body.cpf;
+
+      await supabase.from("candidatos").update(atualizar).eq("id", existente.id);
+
+      await supabase.from("notificacoes_analista").insert({
+        tipo: "atualizacao_curriculo",
+        titulo: `Currículo atualizado: ${existente.nome_completo}`,
+        mensagem: duplicata.resumoAtualizacao,
+        candidato_id: existente.id,
+      });
+
+      // Re-run triagem with enriched data
+      calcularTriagem(existente.id).catch(() => {});
+
+      if (origemTipo === "publico") {
+        return NextResponse.json(
+          { ok: true, atualizado: true, redirect: "/obrigado" },
+          { status: 200 }
+        );
+      }
+      return NextResponse.json(
+        {
+          ok: true,
+          atualizado: true,
+          candidatoId: existente.id,
+          nome: existente.nome_completo,
+          resumoAtualizacao: duplicata.resumoAtualizacao,
+        },
+        { status: 200 }
+      );
     }
+    // ── End duplicate detection ────────────────────────────────────────────────
 
     let resumo_candidato: string | null = body.resumo_candidato || null;
     if (typeof resumo_candidato === "string" && resumo_candidato.trim()) {

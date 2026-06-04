@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { ETAPAS_KANBAN } from "@/lib/constants";
 
 interface Props {
   isOpen: boolean;
@@ -38,7 +40,15 @@ const MAPA_AREAS: Record<string, string> = {
   "tecnologia": "Tecnologia",
 };
 
+interface CandidatoExistente {
+  id: string;
+  nome: string;
+  etapa_kanban: string;
+  created_at: string;
+}
+
 export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: Props) {
+  const router = useRouter();
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
   const [area, setArea] = useState("");
@@ -56,7 +66,20 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
   const [extraindo, setExtraindo] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
+  const [candidatoJaExiste, setCandidatoJaExiste] = useState<CandidatoExistente | null>(null);
+  const [atualizadoInfo, setAtualizadoInfo] = useState<{ nome: string; resumo: string } | null>(null);
   const inputArquivo = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (atualizadoInfo) {
+      const t = setTimeout(() => {
+        handleFechar();
+        onCadastrado();
+      }, 2500);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [atualizadoInfo]);
 
   const resetar = () => {
     setNome("");
@@ -76,6 +99,8 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
     setErro("");
     setExtraindo(false);
     setEnviando(false);
+    setCandidatoJaExiste(null);
+    setAtualizadoInfo(null);
   };
 
   const handleFechar = () => {
@@ -183,12 +208,31 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
           curriculo_url,
         }),
       });
+      const resJson = await res.json();
+
+      // Duplicate — candidate already exists without meaningful changes
+      if (res.status === 409 && resJson.jaExiste) {
+        setCandidatoJaExiste(resJson.candidatoExistente);
+        setEnviando(false);
+        return;
+      }
+
       if (!res.ok) {
-        const resJson = await res.json();
         setErro(resJson.error || "Erro ao cadastrar candidato.");
         setEnviando(false);
         return;
       }
+
+      // Meaningful profile update applied
+      if (resJson.atualizado) {
+        setAtualizadoInfo({
+          nome: resJson.nome || nome,
+          resumo: resJson.resumoAtualizacao || "Perfil atualizado com novos dados.",
+        });
+        setEnviando(false);
+        return;
+      }
+
       handleFechar();
       onCadastrado();
     } catch {
@@ -214,6 +258,54 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
           </button>
         </div>
 
+        {/* ── Candidate already exists (no meaningful update) ── */}
+        {candidatoJaExiste ? (
+          <div className="p-6">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-center">
+              <p className="text-2xl mb-2">⚠️</p>
+              <p className="font-bold text-gray-900 text-base mb-1">Candidato já cadastrado</p>
+              <p className="text-sm text-gray-600 mb-1">
+                <strong>{candidatoJaExiste.nome}</strong> já está em nosso banco de dados desde{" "}
+                {new Date(candidatoJaExiste.created_at).toLocaleDateString("pt-BR")}.
+              </p>
+              <p className="text-sm text-gray-500 mb-5">
+                Etapa atual:{" "}
+                <strong>
+                  {ETAPAS_KANBAN.find((e) => e.id === candidatoJaExiste.etapa_kanban)?.label ??
+                    candidatoJaExiste.etapa_kanban}
+                </strong>
+              </p>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={() => {
+                    handleFechar();
+                    router.push(`/painel/candidato/${candidatoJaExiste.id}`);
+                  }}
+                  className="btn-primary"
+                >
+                  Ver perfil
+                </button>
+                <button onClick={handleFechar} className="btn-outline">
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : atualizadoInfo ? (
+          /* ── Profile updated ── */
+          <div className="p-6">
+            <div className="rounded-xl border border-green-200 bg-green-50 p-5 text-center">
+              <p className="text-2xl mb-2">✅</p>
+              <p className="font-bold text-green-800 text-base mb-1">Cadastro atualizado!</p>
+              <p className="text-sm text-green-700">
+                O perfil de <strong>{atualizadoInfo.nome}</strong> foi atualizado automaticamente.
+              </p>
+              {atualizadoInfo.resumo && (
+                <p className="text-xs text-green-600 mt-2">{atualizadoInfo.resumo}</p>
+              )}
+            </div>
+          </div>
+        ) : (
         <div className="p-6 space-y-5">
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
@@ -316,10 +408,11 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
               disabled={enviando || extraindo}
               className="btn-primary flex-1 disabled:opacity-50"
             >
-              {enviando ? "Cadastrando..." : "Cadastrar candidato"}
+              {enviando ? "Verificando..." : "Cadastrar candidato"}
             </button>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

@@ -3,6 +3,7 @@
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import NotificacoesBell from "@/components/NotificacoesBell";
 
 interface Props {
   userEmail: string;
@@ -51,7 +52,8 @@ export default function NavbarPainel({ userEmail }: Props) {
           </nav>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <NotificacoesBell />
           <span className="text-[#FFB800]/60 text-sm hidden sm:block">{userEmail}</span>
           <button
             onClick={handleLogout}

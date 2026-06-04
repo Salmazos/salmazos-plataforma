@@ -42,8 +42,20 @@ export interface Candidato {
   triagem_label?: string | null;
   triagem_resumo?: string | null;
   triagem_calculada_em?: string | null;
+  ultima_atualizacao_ia?: string | null;
+  atualizacao_resumo?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface Notificacao {
+  id: string;
+  tipo: string;
+  titulo: string;
+  mensagem: string;
+  candidato_id: string | null;
+  lida: boolean;
+  created_at: string;
 }
 
 export interface Cliente {
