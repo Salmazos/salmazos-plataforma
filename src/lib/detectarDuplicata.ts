@@ -80,7 +80,22 @@ export async function detectarDuplicata(
     return { isDuplicata: false };
   }
 
-  // 3. AI comparison to determine if it's a meaningful update
+  // 3. Cooldown: if updated within the last 7 days, skip AI and treat as plain duplicate
+  const ultimaAtualizacao = candidatoExistente.ultima_atualizacao_ia as string | null;
+  if (ultimaAtualizacao) {
+    const diasDesdeAtualizacao =
+      (Date.now() - new Date(ultimaAtualizacao).getTime()) / (1000 * 60 * 60 * 24);
+    if (diasDesdeAtualizacao < 7) {
+      return {
+        isDuplicata: true,
+        candidatoExistente,
+        isAtualizacao: false,
+        resumoAtualizacao: "Nenhuma alteração relevante detectada",
+      };
+    }
+  }
+
+  // 4. AI comparison to determine if it's a meaningful update
   const perfilExistente = {
     cargo: candidatoExistente.cargo_pretendido,
     experiencia: candidatoExistente.tempo_experiencia,
@@ -105,24 +120,32 @@ export async function detectarDuplicata(
     cidade: novosDados.cidade,
   };
 
-  const userPrompt = `Compare these profiles and return ONLY a valid JSON object:
+  const userPrompt = `Compare these candidate profiles. Be STRICT — only return isAtualizacao: true if there are CLEAR, SIGNIFICANT, VERIFIABLE changes.
+
+Return ONLY JSON:
 {
   "isAtualizacao": boolean,
   "resumoAtualizacao": string (max 200 chars in Portuguese describing what changed, or "Nenhuma alteração relevante detectada"),
   "mudancas": string[]
 }
 
-Consider as meaningful update (isAtualizacao: true) if:
-- New job experience added
-- New education/certification added
-- New skills added (3+ new skills)
-- Significant resume content change
-- Contact info updated (phone, email, city)
+STRICT RULES — isAtualizacao must be TRUE only if AT LEAST ONE of these:
+1. A NEW job experience was added (different empresa name not present in existing profile)
+2. A NEW formal education was added (new curso/graduação/pós not present before)
+3. 5 or more completely new skills were added
+4. Phone number changed to a different number
+5. City/state changed to a different location
 
-Consider as duplicate (isAtualizacao: false) if:
-- Same content with minor wording changes
-- No new experiences, education or skills
-- Only whitespace or punctuation differences
+isAtualizacao must be FALSE if:
+- Same experiences with different wording
+- Same skills reordered or rephrased
+- Resume text rewritten but same content
+- Less than 5 new skills
+- Minor additions like punctuation, formatting
+- Same submission sent again
+- Profile uploaded multiple times without clear new information
+
+Be very conservative. When in doubt, return isAtualizacao: false.
 
 PERFIL EXISTENTE: ${JSON.stringify(perfilExistente)}
 NOVO ENVIO: ${JSON.stringify(novosPerfil)}`;
