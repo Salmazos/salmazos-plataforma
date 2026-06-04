@@ -294,11 +294,11 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
                 gap: "8px",
                 padding: "8px 10px",
                 borderRadius: "8px",
-                border: `1px solid ${ativo ? "#FFD700" : "#2a2a2a"}`,
-                backgroundColor: ativo ? "rgba(255,215,0,0.1)" : "#1a1a1a",
+                border: `1px solid ${ativo ? "#FFD700" : "#d1d5db"}`,
+                backgroundColor: ativo ? "rgba(255,215,0,0.1)" : "#f3f4f6",
                 cursor: "pointer",
                 fontSize: "13px",
-                color: ativo ? "#FFD700" : "#9ca3af",
+                color: ativo ? "#92400e" : "#374151",
                 fontWeight: ativo ? 600 : 400,
               }}>
                 <input type="checkbox" style={{ flexShrink: 0, accentColor: "#FFD700" }}
@@ -323,11 +323,11 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
           <label style={LABEL}>Currículo</label>
           <div style={{
             position: "relative",
-            border: `2px dashed ${curriculo ? "#FFD700" : "#2a2a2a"}`,
+            border: `2px dashed ${curriculo ? "#FFD700" : "#d1d5db"}`,
             borderRadius: "10px",
             padding: "24px",
             textAlign: "center",
-            backgroundColor: curriculo ? "rgba(255,215,0,0.05)" : "#1a1a1a",
+            backgroundColor: curriculo ? "rgba(255,215,0,0.05)" : "#f9fafb",
           }}>
             <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
               style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
