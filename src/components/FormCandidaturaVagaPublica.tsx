@@ -83,6 +83,7 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
   const [enviando, setEnviando] = useState(false);
   const [erroGeral, setErroGeral] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState(false);
+  const [hovering, setHovering] = useState(false);
 
   const set = (field: keyof FormData, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
@@ -321,14 +322,19 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
         </div>
         <div>
           <label style={LABEL}>Currículo</label>
-          <div style={{
-            position: "relative",
-            border: `2px dashed ${curriculo ? "#FFD700" : "#d1d5db"}`,
-            borderRadius: "10px",
-            padding: "24px",
-            textAlign: "center",
-            backgroundColor: curriculo ? "rgba(255,215,0,0.05)" : "#f9fafb",
-          }}>
+          <div
+            onMouseEnter={() => setHovering(true)}
+            onMouseLeave={() => setHovering(false)}
+            style={{
+              position: "relative",
+              border: `2px dashed ${curriculo || hovering ? "#FFD700" : "#d1d5db"}`,
+              borderRadius: "10px",
+              padding: hovering && !curriculo ? "32px 24px" : "24px",
+              minHeight: hovering && !curriculo ? "120px" : "auto",
+              textAlign: "center",
+              backgroundColor: curriculo ? "rgba(255,215,0,0.05)" : hovering ? "rgba(255,215,0,0.03)" : "#f9fafb",
+              transition: "padding 0.2s ease, min-height 0.2s ease, border-color 0.2s ease, background-color 0.2s ease",
+            }}>
             <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
               style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
               onChange={(e) => setCurriculo(e.target.files?.[0] ?? null)} />
