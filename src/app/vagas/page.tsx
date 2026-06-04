@@ -64,7 +64,7 @@ export default async function VagasPublicaPage() {
               lineHeight: "1.6",
             }}
           >
-            Não encontrou uma vaga para você? Clique aqui e se cadastre em nosso Banco de Talentos! →
+            Não encontrou uma vaga para você?<br />Clique aqui e se cadastre em nosso Banco de Talentos! →
           </a>
         </div>
 
