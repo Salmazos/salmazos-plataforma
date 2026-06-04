@@ -28,8 +28,8 @@ interface FormData {
 
 // Shared inline style tokens
 const CARD: React.CSSProperties = {
-  backgroundColor: "#111",
-  border: "1px solid #2a2a2a",
+  backgroundColor: "#ffffff",
+  border: "1px solid #e5e7eb",
   borderRadius: "16px",
   padding: "20px 24px",
   marginBottom: "16px",
@@ -47,15 +47,15 @@ const SECTION_TITLE: React.CSSProperties = {
 const LABEL: React.CSSProperties = {
   display: "block",
   fontSize: "12px",
-  color: "#9ca3af",
+  color: "#374151",
   marginBottom: "4px",
 };
 
 const INPUT: React.CSSProperties = {
   width: "100%",
-  backgroundColor: "#1a1a1a",
-  color: "#fff",
-  border: "1px solid #2a2a2a",
+  backgroundColor: "#ffffff",
+  color: "#374151",
+  border: "1px solid #d1d5db",
   borderRadius: "8px",
   padding: "8px 12px",
   fontSize: "14px",
