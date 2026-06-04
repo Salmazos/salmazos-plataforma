@@ -8,6 +8,7 @@ import { TEMPLATE_OPTIONS } from "@/lib/emailTemplates";
 import type { EmailTemplateName } from "@/lib/emailTemplates";
 import PerfilEtapaSelector from "@/components/PerfilEtapaSelector";
 import PerfilAnotacoes from "@/components/PerfilAnotacoes";
+import TriagemBadge from "@/components/TriagemBadge";
 import type { Candidato } from "@/types";
 
 interface Props {
@@ -76,6 +77,7 @@ export default function PerfilEdicao({ candidato }: Props) {
   const [emailMensagem, setEmailMensagem] = useState<{ ok: boolean; texto: string } | null>(null);
 
   const [waDropdownOpen, setWaDropdownOpen] = useState(false);
+  const [recalculando, setRecalculando] = useState(false);
 
   const WA_OPCOES = [
     {
@@ -105,6 +107,16 @@ export default function PerfilEdicao({ candidato }: Props) {
     setForm(makeForm(candidato));
     setErro("");
     setEditando(false);
+  };
+
+  const handleRecalcularTriagem = async () => {
+    setRecalculando(true);
+    try {
+      await fetch(`/api/candidatos/${candidato.id}/triagem`, { method: "POST" });
+      router.refresh();
+    } finally {
+      setRecalculando(false);
+    }
   };
 
   const handleEnviarEmail = async () => {
@@ -178,6 +190,19 @@ export default function PerfilEdicao({ candidato }: Props) {
               <p className="text-[#FFB800] font-medium text-sm">
                 {editando ? form.cargo_pretendido : candidato.cargo_pretendido}
               </p>
+              {!editando && candidato.triagem_score != null && candidato.triagem_label && (
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <TriagemBadge
+                    score={candidato.triagem_score}
+                    label={candidato.triagem_label}
+                    resumo={candidato.triagem_resumo ?? undefined}
+                    size="md"
+                  />
+                  {candidato.triagem_resumo && (
+                    <span className="text-xs text-gray-400">{candidato.triagem_resumo}</span>
+                  )}
+                </div>
+              )}
               <p className="text-gray-400 text-xs mt-0.5">
                 Cadastrado em {formatarData(candidato.created_at)}
               </p>
@@ -198,6 +223,16 @@ export default function PerfilEdicao({ candidato }: Props) {
                 </svg>
                 Baixar currículo
               </a>
+            )}
+
+            {!editando && (
+              <button
+                onClick={handleRecalcularTriagem}
+                disabled={recalculando}
+                className="btn-outline flex items-center gap-1.5"
+              >
+                🔄 {recalculando ? "Calculando..." : "Recalcular Triagem"}
+              </button>
             )}
 
             {!editando && candidato.email && (

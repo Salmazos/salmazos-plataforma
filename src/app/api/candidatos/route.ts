@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { enviarEmailConfirmacao } from "@/lib/email";
+import { calcularTriagem } from "@/lib/triagemAutomatica";
 import mammoth from "mammoth";
 import { calcularDuracaoResumo } from "@/lib/calcularDuracaoResumo";
 
@@ -86,6 +87,9 @@ async function extractAndUpdateCandidato(
       habilidades:                extraido.habilidades?.length ? extraido.habilidades : undefined,
     })
     .eq("id", candidatoId);
+
+  // Run triagem after extraction so the score reflects the enriched profile
+  await calcularTriagem(candidatoId).catch(console.error);
 }
 
 export async function GET(request: NextRequest) {
@@ -200,10 +204,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Extrair dados do currículo assincronamente (não bloqueia a resposta)
+    // Triagem é disparada dentro de extractAndUpdateCandidato após o enriquecimento.
+    // Para candidatos sem currículo, dispara diretamente.
     if (body.curriculo_url) {
       console.log("Triggering AI extraction for candidato:", data.id);
       void extractAndUpdateCandidato(data.id, body.curriculo_url, body.resumo_candidato ?? "")
         .catch(console.error);
+    } else {
+      calcularTriagem(data.id).catch(() => {});
     }
 
     return NextResponse.json({ data }, { status: 201 });

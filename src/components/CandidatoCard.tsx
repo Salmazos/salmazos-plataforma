@@ -7,6 +7,7 @@ import { formatarData } from "@/lib/utils";
 import type { Candidato } from "@/types";
 import ModalReprovacao from "./ModalReprovacao";
 import MatchScoreBadge from "./MatchScoreBadge";
+import TriagemBadge from "./TriagemBadge";
 
 const ANALISTAS = ["Giovanni", "Kaynara", "Rebeca", "Andreza", "Lucas", "Edivan", "Bete", "Olver"];
 
@@ -62,6 +63,15 @@ export default function CandidatoCard({ candidato, onMover, movendo, matchScore 
           <p className="text-[#FFB800] text-xs font-medium truncate">
             {candidato.cargo_pretendido}
           </p>
+          {candidato.triagem_score != null && candidato.triagem_label && (
+            <div className="mt-0.5">
+              <TriagemBadge
+                score={candidato.triagem_score}
+                label={candidato.triagem_label}
+                size="sm"
+              />
+            </div>
+          )}
         </div>
       </div>
 

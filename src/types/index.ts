@@ -38,6 +38,10 @@ export interface Candidato {
   responsavel?: string;
   idade?: number | null;
   formacao_academica?: string | null;
+  triagem_score?: number | null;
+  triagem_label?: string | null;
+  triagem_resumo?: string | null;
+  triagem_calculada_em?: string | null;
   created_at: string;
   updated_at: string;
 }
