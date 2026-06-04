@@ -84,7 +84,7 @@ export async function detectarDuplicata(
       const { data: resultado } = await supabase
         .from("candidatos")
         .select("*")
-        .eq("telefone", telNormalizado)
+        .ilike("telefone", `%${telNormalizado.slice(-8)}%`)
         .limit(1);
 
       console.log("PHONE FALLBACK RESULT:", JSON.stringify(resultado));
@@ -108,19 +108,19 @@ export async function detectarDuplicata(
     return { isDuplicata: false };
   }
 
-  // 5. Cooldown: if updated within the last 7 days, skip AI and treat as plain duplicate
-  const ultimaAtualizacao = candidatoExistente.ultima_atualizacao_ia as string | null;
-  if (ultimaAtualizacao) {
-    const diasDesdeAtualizacao =
-      (Date.now() - new Date(ultimaAtualizacao).getTime()) / (1000 * 60 * 60 * 24);
-    if (diasDesdeAtualizacao < 7) {
-      return {
-        isDuplicata: true,
-        candidatoExistente,
-        isAtualizacao: false,
-        resumoAtualizacao: "Nenhuma alteração relevante detectada",
-      };
-    }
+  // 5. Cooldown: if created or last updated within 7 days, skip AI
+  const referenceDate =
+    (candidatoExistente.ultima_atualizacao_ia as string | null) ??
+    (candidatoExistente.created_at as string);
+  const daysSince =
+    (Date.now() - new Date(referenceDate).getTime()) / (1000 * 60 * 60 * 24);
+  if (daysSince < 7) {
+    return {
+      isDuplicata: true,
+      candidatoExistente,
+      isAtualizacao: false,
+      resumoAtualizacao: "Cadastro recente — aguarde 7 dias para atualizar.",
+    };
   }
 
   // 6. AI comparison to determine if it's a meaningful update
