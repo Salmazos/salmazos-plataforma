@@ -75,6 +75,27 @@ export default function PerfilEdicao({ candidato }: Props) {
   const [emailEnviando, setEmailEnviando] = useState(false);
   const [emailMensagem, setEmailMensagem] = useState<{ ok: boolean; texto: string } | null>(null);
 
+  const [waDropdownOpen, setWaDropdownOpen] = useState(false);
+
+  const WA_OPCOES = [
+    {
+      label: "Convocar para Entrevista",
+      msg: `Olá ${candidato.nome_completo}! Somos da Salmazos RH. Temos uma oportunidade de emprego que combina com seu perfil para a vaga de ${candidato.cargo_pretendido}. Gostaríamos de convidá-lo(a) para uma entrevista. Poderia nos informar sua disponibilidade? 😊`,
+    },
+    {
+      label: "Comunicar Aprovação",
+      msg: `Olá ${candidato.nome_completo}! Temos uma ótima notícia! Você foi aprovado(a) no processo seletivo para a vaga de ${candidato.cargo_pretendido}. Entre em contato conosco para os próximos passos. Parabéns! 🎉`,
+    },
+    {
+      label: "Comunicar Reprovação",
+      msg: `Olá ${candidato.nome_completo}! Agradecemos sua participação no processo seletivo da Salmazos RH. No momento, seguimos com outro perfil, mas manteremos seu currículo em nosso banco de talentos para futuras oportunidades. Obrigado! 😊`,
+    },
+    {
+      label: "Solicitar Documentos",
+      msg: `Olá ${candidato.nome_completo}! Para darmos continuidade ao seu processo de contratação, precisamos dos seguintes documentos: RG, CPF, Carteira de Trabalho, Comprovante de Residência e foto 3x4. Pode nos enviar assim que possível? 😊`,
+    },
+  ];
+
   const set =
     (field: keyof ReturnType<typeof makeForm>) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -192,6 +213,78 @@ export default function PerfilEdicao({ candidato }: Props) {
               </button>
             )}
 
+            {!editando && candidato.telefone && (
+              <div style={{ position: "relative" }}>
+                <button
+                  onClick={() => setWaDropdownOpen((o) => !o)}
+                  style={{
+                    backgroundColor: "#25D366",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "8px",
+                    padding: "7px 14px",
+                    fontWeight: 600,
+                    fontSize: "14px",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  📱 WhatsApp
+                </button>
+                {waDropdownOpen && (
+                  <>
+                    <div
+                      style={{ position: "fixed", inset: 0, zIndex: 10 }}
+                      onClick={() => setWaDropdownOpen(false)}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        right: 0,
+                        top: "calc(100% + 6px)",
+                        background: "#fff",
+                        borderRadius: "10px",
+                        boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+                        minWidth: "240px",
+                        zIndex: 20,
+                        overflow: "hidden",
+                        border: "1px solid #e5e7eb",
+                      }}
+                    >
+                      {WA_OPCOES.map(({ label, msg }, i) => (
+                        <button
+                          key={label}
+                          onClick={() => {
+                            window.open(
+                              `https://wa.me/55${candidato.telefone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`,
+                              "_blank"
+                            );
+                            setWaDropdownOpen(false);
+                          }}
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            textAlign: "left",
+                            padding: "11px 16px",
+                            background: "none",
+                            border: "none",
+                            borderBottom: i < WA_OPCOES.length - 1 ? "1px solid #f3f4f6" : "none",
+                            fontSize: "13px",
+                            color: "#111827",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             {!editando ? (
               <button onClick={() => setEditando(true)} className="btn-outline">
                 Editar
@@ -295,58 +388,6 @@ export default function PerfilEdicao({ candidato }: Props) {
               </div>
             )}
           </div>
-
-          {/* Comunicação via WhatsApp */}
-          {!editando && candidato.telefone && (
-            <div className="card">
-              <p className="section-title">Comunicação</p>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  {
-                    label: "📱 Convocar para Entrevista",
-                    msg: `Olá ${candidato.nome_completo}! Somos da Salmazos RH. Temos uma oportunidade de emprego que combina com seu perfil para a vaga de ${candidato.cargo_pretendido}. Gostaríamos de convidá-lo(a) para uma entrevista. Poderia nos informar sua disponibilidade? 😊`,
-                  },
-                  {
-                    label: "✅ Comunicar Aprovação",
-                    msg: `Olá ${candidato.nome_completo}! Temos uma ótima notícia! Você foi aprovado(a) no processo seletivo para a vaga de ${candidato.cargo_pretendido}. Entre em contato conosco para os próximos passos. Parabéns! 🎉`,
-                  },
-                  {
-                    label: "❌ Comunicar Reprovação",
-                    msg: `Olá ${candidato.nome_completo}! Agradecemos sua participação no processo seletivo da Salmazos RH. No momento, seguimos com outro perfil, mas manteremos seu currículo em nosso banco de talentos para futuras oportunidades. Obrigado! 😊`,
-                  },
-                  {
-                    label: "📋 Solicitar Documentos",
-                    msg: `Olá ${candidato.nome_completo}! Para darmos continuidade ao seu processo de contratação, precisamos dos seguintes documentos: RG, CPF, Carteira de Trabalho, Comprovante de Residência e foto 3x4. Pode nos enviar assim que possível? 😊`,
-                  },
-                ].map(({ label, msg }) => (
-                  <button
-                    key={label}
-                    onClick={() =>
-                      window.open(
-                        `https://wa.me/55${candidato.telefone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`,
-                        "_blank"
-                      )
-                    }
-                    style={{
-                      backgroundColor: "#25D366",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "8px",
-                      padding: "8px 14px",
-                      fontSize: "13px",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Habilidades — sempre read-only */}
           {candidato.habilidades?.length > 0 && (
