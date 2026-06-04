@@ -51,6 +51,7 @@ export default function FormularioCadastro({ vagaParam }: Props) {
   const [erros, setErros] = useState<Record<string, string>>({});
   const [enviando, setEnviando] = useState(false);
   const [erroGeral, setErroGeral] = useState<string | null>(null);
+  const [hovering, setHovering] = useState(false);
 
   const set = (field: keyof FormData, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
@@ -342,8 +343,18 @@ export default function FormularioCadastro({ vagaParam }: Props) {
 
             <div>
               <label className="label">Currículo (PDF)</label>
-              <div className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-colors
-                ${curriculo ? "border-[#FFB800] bg-[#FFB800]/10" : "border-gray-300 hover:border-[#FFB800]"}`}>
+              <div
+                className="relative text-center"
+                onMouseEnter={() => setHovering(true)}
+                onMouseLeave={() => setHovering(false)}
+                style={{
+                  border: `2px dashed ${curriculo ? "#FFB800" : hovering ? "#FFD700" : "#d1d5db"}`,
+                  borderRadius: "8px",
+                  padding: hovering && !curriculo ? "32px 24px" : "24px",
+                  minHeight: hovering && !curriculo ? "120px" : "auto",
+                  backgroundColor: curriculo ? "rgba(255,184,0,0.1)" : hovering ? "rgba(255,215,0,0.03)" : "#f9fafb",
+                  transition: "padding 0.2s ease, min-height 0.2s ease, border-color 0.2s ease, background-color 0.2s ease",
+                }}>
                 <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                   onChange={(e) => setCurriculo(e.target.files?.[0] ?? null)} />
