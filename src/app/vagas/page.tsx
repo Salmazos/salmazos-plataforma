@@ -58,6 +58,10 @@ export default async function VagasPublicaPage() {
               fontWeight: "bold",
               textDecoration: "none",
               animation: "pulseGlow 2.4s ease-in-out infinite",
+              maxWidth: "520px",
+              margin: "20px auto 0",
+              whiteSpace: "normal",
+              lineHeight: "1.6",
             }}
           >
             Não encontrou uma vaga para você? Clique aqui e se cadastre em nosso Banco de Talentos! →
