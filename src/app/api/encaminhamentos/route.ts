@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { registrarHistorico } from "@/lib/registrarHistorico";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -62,6 +63,19 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    const clienteNome = (data.cliente as { nome?: string } | null)?.nome ?? "cliente";
+    void registrarHistorico({
+      candidato_id: data.candidato_id,
+      tipo: "encaminhamento",
+      descricao: `Encaminhado para entrevista em ${clienteNome}`,
+      metadata: {
+        encaminhamento_id: data.id,
+        cliente_id: data.cliente_id,
+        data_entrevista: data.data_entrevista,
+        tipo_servico: data.tipo_servico ?? null,
+      },
+    });
 
     // Sync: if linked to a vaga, ensure candidatos_vagas record exists at triagem
     if (data.vaga_id) {

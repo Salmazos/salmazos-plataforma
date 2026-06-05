@@ -5,6 +5,7 @@ import { calcularTriagem } from "@/lib/triagemAutomatica";
 import { detectarDuplicata } from "@/lib/detectarDuplicata";
 import mammoth from "mammoth";
 import { calcularDuracaoResumo } from "@/lib/calcularDuracaoResumo";
+import { registrarHistorico } from "@/lib/registrarHistorico";
 
 async function extractAndUpdateCandidato(
   candidatoId: string,
@@ -253,6 +254,14 @@ export async function POST(request: NextRequest) {
       console.error("[POST /api/candidatos] Supabase error:", JSON.stringify(error));
       return NextResponse.json({ error: error.message, details: error }, { status: 400 });
     }
+
+    void registrarHistorico({
+      candidato_id: data.id,
+      tipo: "cadastro",
+      descricao: `Candidato cadastrado via ${body.origem || "Banco de talentos"}`,
+      metadata: { origem: body.origem || "Banco de talentos", cargo: body.cargo_pretendido },
+      criado_por: body.origem || null,
+    });
 
     // Vincular candidato à vaga se vaga_id fornecido
     if (body.vaga_id && data?.id) {

@@ -3,8 +3,16 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import type { EmailTemplateName } from "@/lib/emailTemplates";
+import { registrarHistorico } from "@/lib/registrarHistorico";
 
 const ETAPAS_VALIDAS = ["triagem", "entrevista_salmazos", "entrevista_cliente", "aprovado_cliente"];
+
+const ETAPA_LABEL: Record<string, string> = {
+  triagem: "Triagem",
+  entrevista_salmazos: "Entrevista Salmazos",
+  entrevista_cliente: "Entrevista Cliente",
+  aprovado_cliente: "Aprovado pelo Cliente",
+};
 
 const ETAPA_TEMPLATE: Partial<Record<string, EmailTemplateName>> = {
   entrevista_salmazos: "entrevista_salmazos",
@@ -48,6 +56,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     });
     sendEmail({ to: data.email, subject, html });
   }
+
+  void registrarHistorico({
+    candidato_id: id,
+    tipo: "etapa_alterada",
+    descricao: `Movido para ${ETAPA_LABEL[etapa_kanban] ?? etapa_kanban}`,
+    metadata: { etapa: etapa_kanban },
+    criado_por: user.email ?? null,
+  });
 
   return NextResponse.json({ data });
 }

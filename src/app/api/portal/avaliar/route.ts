@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { registrarHistorico } from "@/lib/registrarHistorico";
 
 const STATUS_VALIDOS = ["aprovado", "reprovado"] as const;
 
@@ -83,6 +84,20 @@ export async function PATCH(request: NextRequest) {
         .update({ etapa_kanban: "reprovado" })
         .eq("id", enc.candidato_id);
     }
+
+    void registrarHistorico({
+      candidato_id: enc.candidato_id,
+      tipo: status === "aprovado" ? "aprovacao_cliente" : "reprovacao_cliente",
+      descricao: status === "aprovado"
+        ? "Aprovado pelo cliente"
+        : "Reprovado pelo cliente",
+      metadata: {
+        encaminhamento_id,
+        cliente_id: clienteUsuario.cliente_id,
+        feedback: feedback_cliente,
+      },
+      criado_por: user.email ?? null,
+    });
 
     return NextResponse.json({ data: updated });
   } catch (err) {
