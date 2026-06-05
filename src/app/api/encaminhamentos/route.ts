@@ -6,10 +6,17 @@ export async function GET(request: NextRequest) {
   const candidato_id = searchParams.get("candidato_id");
 
   const supabase = createServiceClient();
+
+  // When fetching for a specific candidate keep the lightweight select used by the
+  // candidate profile; when fetching all records (agenda view) join extra tables.
+  const select = candidato_id
+    ? "*, cliente:clientes(id, nome, cidade, segmento, servicos)"
+    : "*, cliente:clientes(id, nome, cidade, segmento, servicos), candidato:candidatos(id, nome_completo, responsavel), vaga:vagas(id, titulo)";
+
   let query = supabase
     .from("encaminhamentos")
-    .select("*, cliente:clientes(id, nome, cidade, segmento, servicos)")
-    .order("created_at", { ascending: false });
+    .select(select)
+    .order("data_entrevista", { ascending: true });
 
   if (candidato_id) query = query.eq("candidato_id", candidato_id);
 
