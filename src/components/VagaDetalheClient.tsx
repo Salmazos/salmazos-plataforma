@@ -7,6 +7,7 @@ import ModalEditarVaga from "./ModalEditarVaga";
 import ModalAdicionarCandidatoVaga from "./ModalAdicionarCandidatoVaga";
 import ModalReprovacao from "./ModalReprovacao";
 import MatchScoreBadge from "./MatchScoreBadge";
+import RetencaoBadge from "./RetencaoBadge";
 import { TIPOS_SERVICO } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
 import type { Vaga, CandidatoVaga, Candidato, MatchDetalhes } from "@/types";
@@ -101,6 +102,14 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
   const handleMatchCalculado = (cvId: string, score: number, detalhes: MatchDetalhes) => {
     setCandidatosVaga((prev) =>
       prev.map((cv) => (cv.id === cvId ? { ...cv, match_score: score, match_detalhes: detalhes } : cv))
+    );
+  };
+
+  const handleRetencaoCalculada = (cvId: string, score: number, label: string, resumo: string) => {
+    setCandidatosVaga((prev) =>
+      prev.map((cv) =>
+        cv.id === cvId ? { ...cv, retencao_score: score, retencao_label: label, retencao_resumo: resumo } : cv
+      )
     );
   };
 
@@ -441,6 +450,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
                     onRemover={() => handleRemoverCandidato(cv.id)}
                     onReprovacaoNeeded={handleReprovacaoNeeded}
                     onMatchCalculado={handleMatchCalculado}
+                    onRetencaoCalculada={handleRetencaoCalculada}
                   />
                 ))}
               </ul>
@@ -511,18 +521,22 @@ function CandidatoVagaRow({
   onRemover,
   onReprovacaoNeeded,
   onMatchCalculado,
+  onRetencaoCalculada,
 }: {
   cv: CandidatoVaga;
   vagaId: string;
   onRemover: () => void;
   onReprovacaoNeeded: (candidatoId: string) => void;
   onMatchCalculado: (cvId: string, score: number, detalhes: MatchDetalhes) => void;
+  onRetencaoCalculada: (cvId: string, score: number, label: string, resumo: string) => void;
 }) {
   const c = cv.candidatos;
   const [etapa, setEtapa] = useState(cv.etapa ?? "triagem");
   const [salvando, setSalvando] = useState(false);
   const [calculandoMatch, setCalculandoMatch] = useState(false);
   const [tooltipVisivel, setTooltipVisivel] = useState(false);
+  const [calculandoRetencao, setCalculandoRetencao] = useState(false);
+  const [tooltipRetencaoVisivel, setTooltipRetencaoVisivel] = useState(false);
 
   const etapaInfo = ETAPAS_VAGA.find((e) => e.id === etapa) ?? ETAPAS_VAGA[0];
 
@@ -561,6 +575,19 @@ function CandidatoVagaRow({
     }
   };
 
+  const handleCalcularRetencao = async () => {
+    setCalculandoRetencao(true);
+    try {
+      const res = await fetch(`/api/candidatos-vagas/${cv.id}/retencao`, { method: "POST" });
+      if (res.ok) {
+        const json = await res.json();
+        onRetencaoCalculada(cv.id, json.score, json.label, json.resumo);
+      }
+    } finally {
+      setCalculandoRetencao(false);
+    }
+  };
+
   return (
     <li className="flex items-start gap-3 py-1">
       <div className="w-8 h-8 rounded-full bg-black text-[#FFD700] flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
@@ -594,8 +621,9 @@ function CandidatoVagaRow({
           )}
         </div>
 
-        {/* Match score row */}
-        <div className="mt-1.5">
+        {/* Scores row */}
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {/* Match score */}
           {cv.match_score != null ? (
             <div
               className="relative inline-block"
@@ -653,6 +681,47 @@ function CandidatoVagaRow({
                 </>
               ) : (
                 <>⚡ Match IA</>
+              )}
+            </button>
+          )}
+
+          {/* Retention score */}
+          {cv.retencao_score != null && cv.retencao_label ? (
+            <div
+              className="relative inline-block"
+              onMouseEnter={() => setTooltipRetencaoVisivel(true)}
+              onMouseLeave={() => setTooltipRetencaoVisivel(false)}
+            >
+              <RetencaoBadge score={cv.retencao_score} label={cv.retencao_label} size="md" />
+              {tooltipRetencaoVisivel && cv.retencao_resumo && (
+                <div
+                  className="absolute bottom-full left-0 mb-1.5 z-20 rounded-xl shadow-xl border border-gray-100"
+                  style={{ backgroundColor: "#fff", width: "200px", padding: "10px 12px" }}
+                >
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">
+                    Retenção IA
+                  </p>
+                  <p className="text-[10px] text-gray-600 leading-snug">{cv.retencao_resumo}</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={handleCalcularRetencao}
+              disabled={calculandoRetencao}
+              className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full transition-all disabled:opacity-50"
+              style={{ backgroundColor: "#f3f4f6", color: "#374151" }}
+            >
+              {calculandoRetencao ? (
+                <>
+                  <svg className="animate-spin w-2.5 h-2.5" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Calculando...
+                </>
+              ) : (
+                <>🔒 Retenção IA</>
               )}
             </button>
           )}

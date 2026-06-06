@@ -11,7 +11,8 @@ export type TipoHistorico =
   | "curriculo_atualizado"
   | "triagem_ia"
   | "match_ia"
-  | "comentario_interno";
+  | "comentario_interno"
+  | "retencao_ia";
 
 interface Params {
   candidato_id: string;

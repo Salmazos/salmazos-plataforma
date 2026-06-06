@@ -3,13 +3,29 @@ import { createServiceClient } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
   const vagaId = request.nextUrl.searchParams.get("vaga_id");
-  if (!vagaId) return NextResponse.json({ error: "vaga_id obrigatório" }, { status: 400 });
+  const candidatoId = request.nextUrl.searchParams.get("candidato_id");
+
+  if (!vagaId && !candidatoId) {
+    return NextResponse.json({ error: "vaga_id ou candidato_id obrigatório" }, { status: 400 });
+  }
 
   const supabase = createServiceClient();
+
+  if (candidatoId) {
+    const { data, error } = await supabase
+      .from("candidatos_vagas")
+      .select("*, vagas(id, titulo, cidade, estado)")
+      .eq("candidato_id", candidatoId)
+      .order("created_at", { ascending: false });
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ data });
+  }
+
   const { data, error } = await supabase
     .from("candidatos_vagas")
     .select("*, candidatos(id, nome_completo, etapa_kanban, responsavel, cargo_pretendido)")
-    .eq("vaga_id", vagaId)
+    .eq("vaga_id", vagaId!)
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -113,7 +113,12 @@ export interface CandidatoVaga {
   match_score?: number | null;
   match_detalhes?: MatchDetalhes | null;
   match_calculado_em?: string | null;
+  retencao_score?: number | null;
+  retencao_label?: string | null;
+  retencao_resumo?: string | null;
+  retencao_calculado_em?: string | null;
   candidatos?: Pick<Candidato, "id" | "nome_completo" | "etapa_kanban" | "responsavel" | "cargo_pretendido"> | null;
+  vagas?: Pick<Vaga, "id" | "titulo" | "cidade" | "estado"> | null;
 }
 
 export interface Encaminhamento {

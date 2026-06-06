@@ -27,7 +27,8 @@
       "Bash(node --input-type=module)",
       "Bash(node *)",
       "Bash(npm list *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(xargs grep -l \"vagas\\\\|candidatos_vagas\\\\|historico\")"
     ]
   }
 }
