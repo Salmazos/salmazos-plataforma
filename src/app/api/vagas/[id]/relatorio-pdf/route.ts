@@ -264,7 +264,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     .replace(/[^a-z0-9-]/g, "")
     .slice(0, 50);
 
-  return new NextResponse(bytes, {
+  return new NextResponse(Buffer.from(bytes), {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
