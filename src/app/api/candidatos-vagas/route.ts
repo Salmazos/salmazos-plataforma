@@ -69,13 +69,16 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (vaga?.cliente_id) {
-      await supabase
-        .from("encaminhamentos")
-        .upsert(
-          { candidato_id, cliente_id: vaga.cliente_id, vaga_id, status: "aguardando" },
-          { onConflict: "candidato_id,cliente_id", ignoreDuplicates: true }
-        )
-        .catch(() => {});
+      try {
+        await supabase
+          .from("encaminhamentos")
+          .upsert(
+            { candidato_id, cliente_id: vaga.cliente_id, vaga_id, status: "aguardando" },
+            { onConflict: "candidato_id,cliente_id", ignoreDuplicates: true }
+          );
+      } catch {
+        // best-effort sync, non-blocking
+      }
     }
 
     return NextResponse.json({ data }, { status: 201 });
