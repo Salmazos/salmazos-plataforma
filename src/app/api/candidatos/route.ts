@@ -265,11 +265,13 @@ export async function POST(request: NextRequest) {
 
     // Vincular candidato à vaga se vaga_id fornecido
     if (body.vaga_id && data?.id) {
-      await supabase
-        .from("candidatos_vagas")
-        .insert({ vaga_id: body.vaga_id, candidato_id: data.id, etapa: "triagem" })
-        .then(() => null)
-        .catch((err) => console.error("[candidatos_vagas insert]", err));
+      try {
+        await supabase
+          .from("candidatos_vagas")
+          .insert({ vaga_id: body.vaga_id, candidato_id: data.id, etapa: "triagem" });
+      } catch (err) {
+        console.error("[candidatos_vagas insert]", err);
+      }
     }
 
     // Enviar e-mail de confirmação apenas quando e-mail foi informado
