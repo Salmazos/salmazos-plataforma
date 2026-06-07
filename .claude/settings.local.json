@@ -28,7 +28,11 @@
       "Bash(node *)",
       "Bash(npm list *)",
       "Bash(npm run *)",
-      "Bash(xargs grep -l \"vagas\\\\|candidatos_vagas\\\\|historico\")"
+      "Bash(xargs grep -l \"vagas\\\\|candidatos_vagas\\\\|historico\")",
+      "Bash(NODE_OPTIONS=--use-system-ca npm install --save-dev husky)",
+      "Bash(NODE_OPTIONS=--use-system-ca npx husky init)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__apply_migration"
     ]
   }
 }

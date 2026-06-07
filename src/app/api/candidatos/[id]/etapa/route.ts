@@ -54,7 +54,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       nome: data.nome_completo,
       cargo: data.cargo_pretendido,
     });
-    sendEmail({ to: data.email, subject, html });
+    sendEmail({ to: data.email, subject, html, tipo: "notificacao_analista", candidato_id: id });
   }
 
   void registrarHistorico({

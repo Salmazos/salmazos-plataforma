@@ -51,6 +51,7 @@ export default function NavbarPainel({ userEmail }: Props) {
             <NavLink href="/painel/relatorios" label="Relatórios" />
             <NavLink href="/painel/dashboard" label="Dashboard" />
             <NavLink href="/painel/agenda" label="Agenda" />
+            <NavLink href="/painel/email-logs" label="Log de E-mails" />
           </nav>
         </div>
 

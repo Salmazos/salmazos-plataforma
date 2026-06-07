@@ -50,7 +50,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     cargo: candidato.cargo_pretendido,
   });
 
-  await sendEmail({ to: candidato.email, subject, html });
+  await sendEmail({ to: candidato.email, subject, html, tipo: "notificacao_analista", candidato_id: id });
 
   return NextResponse.json({ ok: true });
 }

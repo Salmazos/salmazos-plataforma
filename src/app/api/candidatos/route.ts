@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { enviarEmailConfirmacao } from "@/lib/email";
+import { registrarLogEmail } from "@/lib/emailLogger";
 import { calcularTriagem } from "@/lib/triagemAutomatica";
 import { detectarDuplicata } from "@/lib/detectarDuplicata";
 import mammoth from "mammoth";
@@ -284,9 +285,26 @@ export async function POST(request: NextRequest) {
           cargoPretendido: body.cargo_pretendido,
         });
         console.log("[Email] Enviado com sucesso para:", body.email);
+        await registrarLogEmail({
+          destinatario: body.email,
+          assunto: `✅ Candidatura recebida – ${body.cargo_pretendido} | Salmazos RH`,
+          tipo: "confirmacao_candidatura",
+          status: "enviado",
+          candidato_id: data.id,
+          vaga_id: body.vaga_id,
+        });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("[Email] ERRO ao enviar:", msg, err);
+        await registrarLogEmail({
+          destinatario: body.email,
+          assunto: `✅ Candidatura recebida – ${body.cargo_pretendido} | Salmazos RH`,
+          tipo: "confirmacao_candidatura",
+          status: "erro",
+          erro_mensagem: msg,
+          candidato_id: data.id,
+          vaga_id: body.vaga_id,
+        });
       }
     }
 
