@@ -276,11 +276,14 @@ export async function POST(request: NextRequest) {
 
     // Enviar e-mail de confirmação apenas quando e-mail foi informado
     if (body.email) {
+      console.log("[Email] Tentando enviar para:", body.email);
       enviarEmailConfirmacao({
         to: body.email,
         nomeCandidato: body.nome_completo,
         cargoPretendido: body.cargo_pretendido,
-      }).catch((err) => console.error("[Email]", err));
+      })
+        .then(() => console.log("[Email] Enviado com sucesso para:", body.email))
+        .catch((err) => console.error("[Email] ERRO ao enviar:", err.message, err));
     }
 
     // Extrair dados do currículo assincronamente (não bloqueia a resposta)
