@@ -277,13 +277,17 @@ export async function POST(request: NextRequest) {
     // Enviar e-mail de confirmação apenas quando e-mail foi informado
     if (body.email) {
       console.log("[Email] Tentando enviar para:", body.email);
-      enviarEmailConfirmacao({
-        to: body.email,
-        nomeCandidato: body.nome_completo,
-        cargoPretendido: body.cargo_pretendido,
-      })
-        .then(() => console.log("[Email] Enviado com sucesso para:", body.email))
-        .catch((err) => console.error("[Email] ERRO ao enviar:", err.message, err));
+      try {
+        await enviarEmailConfirmacao({
+          to: body.email,
+          nomeCandidato: body.nome_completo,
+          cargoPretendido: body.cargo_pretendido,
+        });
+        console.log("[Email] Enviado com sucesso para:", body.email);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[Email] ERRO ao enviar:", msg, err);
+      }
     }
 
     // Extrair dados do currículo assincronamente (não bloqueia a resposta)
