@@ -7,6 +7,7 @@ import NotificacoesBell from "@/components/NotificacoesBell";
 
 interface Props {
   userEmail: string;
+  isSuperuser?: boolean;
 }
 
 function NavLink({ href, label }: { href: string; label: string }) {
@@ -26,7 +27,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-export default function NavbarPainel({ userEmail }: Props) {
+export default function NavbarPainel({ userEmail, isSuperuser = false }: Props) {
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -52,6 +53,9 @@ export default function NavbarPainel({ userEmail }: Props) {
             <NavLink href="/painel/dashboard" label="Dashboard" />
             <NavLink href="/painel/agenda" label="Agenda" />
             <NavLink href="/painel/email-logs" label="Log de E-mails" />
+            {isSuperuser && (
+              <NavLink href="/painel/sla-config" label="Config. SLA" />
+            )}
           </nav>
         </div>
 
