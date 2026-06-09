@@ -1,10 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createServiceClient } from "@/lib/supabase/server";
-import PerfilEdicao from "@/components/PerfilEdicao";
-import EncaminhamentosSection from "@/components/EncaminhamentosSection";
-import RetencaoSection from "@/components/RetencaoSection";
-import HistoricoCandidato from "@/components/HistoricoCandidato";
+import CandidatoPerfilTabs from "@/components/CandidatoPerfilTabs";
 import type { Candidato } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -34,19 +31,7 @@ export default async function CandidatoPerfilPage({ params }: Props) {
         </Link>
       </div>
 
-      <PerfilEdicao candidato={candidato} />
-
-      <div className="mt-6">
-        <EncaminhamentosSection candidatoId={candidato.id} />
-      </div>
-
-      <div className="mt-6">
-        <RetencaoSection candidatoId={candidato.id} />
-      </div>
-
-      <div className="mt-6">
-        <HistoricoCandidato candidatoId={candidato.id} />
-      </div>
+      <CandidatoPerfilTabs candidato={candidato} />
     </div>
   );
 }
