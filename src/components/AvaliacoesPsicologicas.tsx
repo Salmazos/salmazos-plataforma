@@ -3,6 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 
+interface DadosQuantitativos {
+  acertos: number | null;
+  erros: number | null;
+  omissoes: number | null;
+  pontos: number | null;
+  percentil: number | null;
+}
+
 interface Avaliacao {
   id: string;
   tipo_teste: "palografico" | "ac" | "disc";
@@ -12,6 +20,7 @@ interface Avaliacao {
   parecer_ia: string | null;
   comentarios_psicologo: string | null;
   pdf_url: string | null;
+  dados_quantitativos: DadosQuantitativos | null;
   created_at: string;
 }
 
@@ -43,6 +52,37 @@ function AvaliacaoCard({ av, onDelete, onUpdate }: CardProps) {
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const [abaAcAberta, setAbaAcAberta] = useState(false);
+  const [dadosAc, setDadosAc] = useState({
+    acertos: av.dados_quantitativos?.acertos?.toString() ?? "",
+    erros: av.dados_quantitativos?.erros?.toString() ?? "",
+    omissoes: av.dados_quantitativos?.omissoes?.toString() ?? "",
+    pontos: av.dados_quantitativos?.pontos?.toString() ?? "",
+    percentil: av.dados_quantitativos?.percentil?.toString() ?? "",
+  });
+  const [salvandoDados, setSalvandoDados] = useState(false);
+  const [dadosSalvos, setDadosSalvos] = useState(false);
+
+  async function salvarDadosAc() {
+    setSalvandoDados(true);
+    const payload: DadosQuantitativos = {
+      acertos: dadosAc.acertos !== "" ? Number(dadosAc.acertos) : null,
+      erros: dadosAc.erros !== "" ? Number(dadosAc.erros) : null,
+      omissoes: dadosAc.omissoes !== "" ? Number(dadosAc.omissoes) : null,
+      pontos: dadosAc.pontos !== "" ? Number(dadosAc.pontos) : null,
+      percentil: dadosAc.percentil !== "" ? Number(dadosAc.percentil) : null,
+    };
+    await fetch(`/api/avaliacoes/${av.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dados_quantitativos: payload }),
+    });
+    setSalvandoDados(false);
+    setDadosSalvos(true);
+    onUpdate({ ...av, dados_quantitativos: payload });
+    setTimeout(() => setDadosSalvos(false), 3000);
+  }
 
   const tipoConf = TIPO_CONFIG[av.tipo_teste];
   const statusConf = STATUS_CONFIG[av.status];
@@ -269,6 +309,110 @@ function AvaliacaoCard({ av, onDelete, onUpdate }: CardProps) {
           >
             {av.parecer_ia}
           </ReactMarkdown>
+        </div>
+      )}
+
+      {/* Dados do Teste AC */}
+      {av.tipo_teste === "ac" && (
+        <div style={{ marginBottom: "12px" }}>
+          <button
+            onClick={() => setAbaAcAberta((v) => !v)}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              fontSize: "13px",
+              fontWeight: 600,
+              color: "#92400e",
+              padding: "4px 0",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            <span
+              style={{
+                display: "inline-block",
+                transition: "transform 0.15s",
+                transform: abaAcAberta ? "rotate(90deg)" : "rotate(0deg)",
+              }}
+            >
+              ▶
+            </span>
+            Dados do Teste AC
+          </button>
+
+          {abaAcAberta && (
+            <div
+              style={{
+                marginTop: "10px",
+                padding: "14px",
+                background: "#fffbeb",
+                border: "1px solid #fde68a",
+                borderRadius: "8px",
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(5, 1fr)",
+                  gap: "10px",
+                  marginBottom: "12px",
+                }}
+              >
+                {(
+                  [
+                    ["acertos", "Acertos"],
+                    ["erros", "Erros"],
+                    ["omissoes", "Omissões"],
+                    ["pontos", "Pontos"],
+                    ["percentil", "Percentil"],
+                  ] as const
+                ).map(([field, label]) => (
+                  <div key={field}>
+                    <label
+                      style={{
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        color: "#6b7280",
+                        display: "block",
+                        marginBottom: "3px",
+                      }}
+                    >
+                      {label}
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      className="input-field"
+                      style={{ fontSize: "13px" }}
+                      value={dadosAc[field]}
+                      onChange={(e) =>
+                        setDadosAc((d) => ({ ...d, [field]: e.target.value }))
+                      }
+                      placeholder="—"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <button
+                  className="btn-outline"
+                  style={{ fontSize: "13px" }}
+                  onClick={salvarDadosAc}
+                  disabled={salvandoDados}
+                >
+                  {salvandoDados ? "Salvando..." : "Salvar dados"}
+                </button>
+                {dadosSalvos && (
+                  <span style={{ fontSize: "13px", color: "#065f46" }}>
+                    Dados salvos!
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

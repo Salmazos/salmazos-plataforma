@@ -25,6 +25,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (body.status !== undefined) updates.status = body.status;
   if (body.data_aplicacao !== undefined)
     updates.data_aplicacao = body.data_aplicacao;
+  if (body.dados_quantitativos !== undefined)
+    updates.dados_quantitativos = body.dados_quantitativos;
 
   const svc = createServiceClient();
   const { data, error } = await svc
