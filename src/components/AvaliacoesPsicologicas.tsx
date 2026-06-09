@@ -314,6 +314,8 @@ export default function AvaliacoesPsicologicas({ candidatoId }: Props) {
   const [modalAberto, setModalAberto] = useState(false);
   const [criando, setCriando] = useState(false);
   const [erroModal, setErroModal] = useState("");
+  const [laudoConsolidado, setLaudoConsolidado] = useState<string | null>(null);
+  const [gerandoLaudo, setGerandoLaudo] = useState(false);
   const [form, setForm] = useState({
     tipo_teste: "palografico" as Avaliacao["tipo_teste"],
     data_aplicacao: hoje(),
@@ -364,6 +366,19 @@ export default function AvaliacoesPsicologicas({ candidatoId }: Props) {
 
   function handleUpdate(updated: Avaliacao) {
     setAvaliacoes((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+  }
+
+  async function gerarLaudoConsolidado() {
+    setGerandoLaudo(true);
+    setLaudoConsolidado(null);
+    const res = await fetch("/api/avaliacoes/laudo-consolidado", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ candidato_id: candidatoId }),
+    });
+    const json = await res.json();
+    setGerandoLaudo(false);
+    if (res.ok) setLaudoConsolidado(json.laudo ?? null);
   }
 
   return (
@@ -421,6 +436,101 @@ export default function AvaliacoesPsicologicas({ candidatoId }: Props) {
               onUpdate={handleUpdate}
             />
           ))
+        )}
+
+        {/* Laudo Consolidado */}
+        {avaliacoes.filter((a) => a.parecer_ia).length >= 1 && (
+          <div style={{ marginTop: "24px" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "14px",
+              }}
+            >
+              <h3
+                style={{ fontWeight: 700, fontSize: "15px", color: "#374151" }}
+              >
+                Laudo Consolidado
+              </h3>
+              <button
+                className="btn-outline"
+                onClick={gerarLaudoConsolidado}
+                disabled={gerandoLaudo}
+              >
+                {gerandoLaudo ? "Gerando..." : "📋 Gerar Laudo Consolidado"}
+              </button>
+            </div>
+
+            {gerandoLaudo && (
+              <div
+                style={{
+                  padding: "14px 16px",
+                  background: "#fffbeb",
+                  border: "1px solid #fde68a",
+                  borderRadius: "8px",
+                  color: "#92400e",
+                  fontSize: "14px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: "14px",
+                    height: "14px",
+                    border: "2px solid #92400e",
+                    borderTopColor: "transparent",
+                    borderRadius: "50%",
+                    animation: "spin 0.8s linear infinite",
+                  }}
+                />
+                Gerando laudo consolidado...
+              </div>
+            )}
+
+            {laudoConsolidado && !gerandoLaudo && (
+              <div
+                style={{
+                  background: "#fffbeb",
+                  borderLeft: "4px solid #FFB800",
+                  borderRadius: "8px",
+                  padding: "16px 18px",
+                  border: "1px solid #fde68a",
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: "#92400e",
+                    marginBottom: "12px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.08em",
+                  }}
+                >
+                  Laudo Psicológico Consolidado
+                </p>
+                <ReactMarkdown
+                  components={{
+                    h1: ({children}) => <h1 style={{fontSize:"18px",fontWeight:700,marginBottom:"8px",marginTop:"12px",color:"#111827"}}>{children}</h1>,
+                    h2: ({children}) => <h2 style={{fontSize:"16px",fontWeight:700,marginBottom:"6px",marginTop:"12px",color:"#111827"}}>{children}</h2>,
+                    h3: ({children}) => <h3 style={{fontSize:"14px",fontWeight:700,marginBottom:"4px",marginTop:"8px",color:"#374151"}}>{children}</h3>,
+                    strong: ({children}) => <strong style={{fontWeight:700,color:"#111827"}}>{children}</strong>,
+                    p: ({children}) => <p style={{marginBottom:"8px",lineHeight:"1.6",color:"#374151"}}>{children}</p>,
+                    li: ({children}) => <li style={{marginBottom:"4px",lineHeight:"1.6",color:"#374151"}}>{children}</li>,
+                    ul: ({children}) => <ul style={{paddingLeft:"20px",marginBottom:"8px"}}>{children}</ul>,
+                    hr: () => <hr style={{border:"none",borderTop:"1px solid #e5e7eb",margin:"12px 0"}} />,
+                  }}
+                >
+                  {laudoConsolidado}
+                </ReactMarkdown>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
