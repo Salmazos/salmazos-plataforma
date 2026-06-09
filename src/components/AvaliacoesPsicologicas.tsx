@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 
 interface Avaliacao {
   id: string;
@@ -254,18 +255,20 @@ function AvaliacaoCard({ av, onDelete, onUpdate }: CardProps) {
           >
             Parecer IA
           </p>
-          <pre
-            style={{
-              fontSize: "13px",
-              color: "#1f2937",
-              whiteSpace: "pre-wrap",
-              fontFamily: "inherit",
-              margin: 0,
-              lineHeight: "1.6",
+          <ReactMarkdown
+            components={{
+              h1: ({children}) => <h1 style={{fontSize:"18px",fontWeight:700,marginBottom:"8px",marginTop:"12px",color:"#111827"}}>{children}</h1>,
+              h2: ({children}) => <h2 style={{fontSize:"16px",fontWeight:700,marginBottom:"6px",marginTop:"12px",color:"#111827"}}>{children}</h2>,
+              h3: ({children}) => <h3 style={{fontSize:"14px",fontWeight:700,marginBottom:"4px",marginTop:"8px",color:"#374151"}}>{children}</h3>,
+              strong: ({children}) => <strong style={{fontWeight:700,color:"#111827"}}>{children}</strong>,
+              p: ({children}) => <p style={{marginBottom:"8px",lineHeight:"1.6",color:"#374151"}}>{children}</p>,
+              li: ({children}) => <li style={{marginBottom:"4px",lineHeight:"1.6",color:"#374151"}}>{children}</li>,
+              ul: ({children}) => <ul style={{paddingLeft:"20px",marginBottom:"8px"}}>{children}</ul>,
+              hr: () => <hr style={{border:"none",borderTop:"1px solid #e5e7eb",margin:"12px 0"}} />,
             }}
           >
             {av.parecer_ia}
-          </pre>
+          </ReactMarkdown>
         </div>
       )}
 
