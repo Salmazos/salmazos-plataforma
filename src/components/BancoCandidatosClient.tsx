@@ -12,6 +12,8 @@ export type CandidatoRow = {
   cargo_pretendido: string | null;
   cidade: string | null;
   triagem_score: number | null;
+  triagem_label: string | null;
+  triagem_resumo: string | null;
   created_at: string;
 };
 
@@ -44,23 +46,68 @@ function colorForScore(score: number): { bg: string; fg: string } {
   return { bg: "#FEE2E2", fg: "#991B1B" };
 }
 
-function ScoreBadge({ score }: { score: number | null }) {
+function labelColor(label: string | null): string {
+  switch (label) {
+    case "Excelente": return "#22c55e";
+    case "Bom":       return "#3b82f6";
+    case "Regular":   return "#f97316";
+    case "Baixo":     return "#ef4444";
+    default:          return "#9CA3AF";
+  }
+}
+
+function ScoreBadge({ score, label, resumo }: { score: number | null; label: string | null; resumo: string | null }) {
+  const [showTooltip, setShowTooltip] = useState(false);
+
   if (score === null) return <span style={{ color: "#9CA3AF" }}>—</span>;
-  const { bg, fg } = colorForScore(score);
+
+  const bg = labelColor(label);
+
   return (
-    <span
-      style={{
-        background: bg,
-        color: fg,
-        padding: "3px 10px",
-        borderRadius: 12,
-        fontSize: 13,
-        fontWeight: 700,
-        whiteSpace: "nowrap",
-      }}
+    <div
+      style={{ position: "relative", display: "inline-block" }}
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
     >
-      {score}/100
-    </span>
+      <span
+        style={{
+          display: "inline-block",
+          background: bg,
+          color: "#fff",
+          padding: "3px 10px",
+          borderRadius: 12,
+          fontSize: 13,
+          fontWeight: 700,
+          whiteSpace: "nowrap",
+          cursor: "default",
+        }}
+      >
+        {score}% {label ?? ""}
+      </span>
+
+      {showTooltip && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 6px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#1F2937",
+            color: "#F9FAFB",
+            fontSize: 12,
+            lineHeight: 1.4,
+            borderRadius: 6,
+            padding: "6px 10px",
+            zIndex: 50,
+            maxWidth: 240,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+            pointerEvents: "none",
+          }}
+        >
+          {resumo ?? "Resumo não disponível"}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -541,7 +588,7 @@ export default function BancoCandidatosClient({
                       {c.cidade ?? "—"}
                     </td>
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
-                      <ScoreBadge score={c.triagem_score} />
+                      <ScoreBadge score={c.triagem_score} label={c.triagem_label} resumo={c.triagem_resumo} />
                     </td>
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
                       <MatchCell

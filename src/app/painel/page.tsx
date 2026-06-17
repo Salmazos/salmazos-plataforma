@@ -10,6 +10,7 @@ export default async function PainelPage() {
     .from("candidatos")
     .select("*")
     .eq("status", "ativo")
+    .neq("origem", "Cadastro Rapido")
     .order("created_at", { ascending: false });
 
   if (error) {

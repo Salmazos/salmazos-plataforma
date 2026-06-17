@@ -265,7 +265,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Vincular candidato à vaga se vaga_id fornecido
-    if (body.vaga_id && data?.id) {
+    if (body.vaga_id && data?.id && body.origem !== "Cadastro Rapido") {
       try {
         await supabase
           .from("candidatos_vagas")
