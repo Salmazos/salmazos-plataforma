@@ -7,7 +7,6 @@ import { ETAPAS_KANBAN, HABILIDADES } from "@/lib/constants";
 import type { Candidato } from "@/types";
 import CandidatoCard from "./CandidatoCard";
 import ModalEncaminhamento from "./ModalEncaminhamento";
-import ModalCadastroRapido from "./ModalCadastroRapido";
 
 interface Props {
   candidatos: Candidato[];
@@ -49,8 +48,6 @@ export default function KanbanBoard({ candidatos, filtroOrigem, matchData }: Pro
   const [movendo, setMovendo] = useState<string | null>(null);
   const [pendingEncaminhamento, setPendingEncaminhamento] =
     useState<PendingEncaminhamento | null>(null);
-  const [modalCadastroAberto, setModalCadastroAberto] = useState(false);
-
   // ── advanced filter state ───────────────────────────────────────────────────
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [filtroKeyword, setFiltroKeyword]       = useState("");
@@ -210,15 +207,6 @@ export default function KanbanBoard({ candidatos, filtroOrigem, matchData }: Pro
           {filtrados.length} candidato{filtrados.length !== 1 ? "s" : ""}
         </span>
 
-        <button
-          onClick={() => setModalCadastroAberto(true)}
-          className="flex items-center gap-2 bg-[#FFD700] hover:bg-[#e6c200] text-black font-semibold text-sm px-4 py-2.5 rounded-xl transition-colors whitespace-nowrap"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Cadastro Rápido
-        </button>
       </div>
 
       {/* Advanced filters toggle row */}
@@ -424,11 +412,7 @@ export default function KanbanBoard({ candidatos, filtroOrigem, matchData }: Pro
         onConfirmar={handleConfirmarEncaminhamento}
       />
 
-      <ModalCadastroRapido
-        isOpen={modalCadastroAberto}
-        onClose={() => setModalCadastroAberto(false)}
-        onCadastrado={() => router.refresh()}
-      />
+
     </div>
   );
 }

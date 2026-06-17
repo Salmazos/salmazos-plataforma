@@ -2,6 +2,8 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import ModalCadastroRapido from "./ModalCadastroRapido";
 
 export type CandidatoRow = {
   id: string;
@@ -234,6 +236,8 @@ export default function BancoCandidatosClient({
   const [encaminhadoIds, setEncaminhadoIds] = useState<Set<string>>(new Set());
   const [modal, setModal] = useState<ModalState | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [modalCadastroAberto, setModalCadastroAberto] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (candidatos.length === 0) return;
@@ -354,13 +358,38 @@ export default function BancoCandidatosClient({
       )}
 
       {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>
-          Banco de Candidatos
-        </h1>
-        <p style={{ fontSize: 13, color: "#9CA3AF", marginTop: 4, marginBottom: 0 }}>
-          Todos os currículos cadastrados na plataforma
-        </p>
+      <div style={{ marginBottom: 24, display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>
+            Banco de Candidatos
+          </h1>
+          <p style={{ fontSize: 13, color: "#9CA3AF", marginTop: 4, marginBottom: 0 }}>
+            Todos os currículos cadastrados na plataforma
+          </p>
+        </div>
+        <button
+          onClick={() => setModalCadastroAberto(true)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            background: "#FFD700",
+            color: "#000",
+            border: "none",
+            borderRadius: 10,
+            padding: "8px 16px",
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+            flexShrink: 0,
+          }}
+        >
+          <svg style={{ width: 14, height: 14 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Cadastro Rápido
+        </button>
       </div>
 
       {/* Summary card */}
@@ -714,6 +743,12 @@ export default function BancoCandidatosClient({
           </div>
         </div>
       )}
+
+      <ModalCadastroRapido
+        isOpen={modalCadastroAberto}
+        onClose={() => setModalCadastroAberto(false)}
+        onCadastrado={() => router.refresh()}
+      />
     </div>
   );
 }
