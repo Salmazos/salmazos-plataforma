@@ -49,6 +49,7 @@ export default function NavbarPainel({ userEmail, isSuperuser = false }: Props) 
             <NavLink href="/painel" label="Painel" />
             <NavLink href="/painel/clientes" label="Clientes" />
             <NavLink href="/painel/vagas" label="Vagas" />
+            <NavLink href="/painel/banco-candidatos" label="Banco de Candidatos" />
             <NavLink href="/painel/relatorios" label="Relatórios" />
             <NavLink href="/painel/dashboard" label="Dashboard" />
             <NavLink href="/painel/agenda" label="Agenda" />
