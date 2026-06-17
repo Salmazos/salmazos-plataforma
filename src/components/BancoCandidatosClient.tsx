@@ -475,8 +475,8 @@ export default function BancoCandidatosClient({
                 <th style={thStyle}>Cidade</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Nota IA</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Match com Vagas</th>
-                <th style={{ ...thStyle, textAlign: "center" }}>Encaminhar</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Perfil</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Encaminhar</th>
               </tr>
             </thead>
             <tbody>
@@ -522,6 +522,25 @@ export default function BancoCandidatosClient({
                       />
                     </td>
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                      <Link
+                        href={`/painel/candidato/${c.id}`}
+                        style={{
+                          display: "inline-block",
+                          padding: "5px 14px",
+                          background: "#FFF8DC",
+                          color: "#92400E",
+                          border: "1px solid #FFD700",
+                          borderRadius: 8,
+                          fontSize: 13,
+                          fontWeight: 600,
+                          textDecoration: "none",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Ver perfil
+                      </Link>
+                    </td>
+                    <td style={{ padding: "10px 12px", textAlign: "center" }}>
                       {encaminhadoIds.has(c.id) ? (
                         <span
                           style={{
@@ -557,25 +576,6 @@ export default function BancoCandidatosClient({
                           → Triagem
                         </button>
                       )}
-                    </td>
-                    <td style={{ padding: "10px 12px", textAlign: "center" }}>
-                      <Link
-                        href={`/painel/candidato/${c.id}`}
-                        style={{
-                          display: "inline-block",
-                          padding: "5px 14px",
-                          background: "#FFF8DC",
-                          color: "#92400E",
-                          border: "1px solid #FFD700",
-                          borderRadius: 8,
-                          fontSize: 13,
-                          fontWeight: 600,
-                          textDecoration: "none",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        Ver perfil
-                      </Link>
                     </td>
                   </tr>
                 ))
