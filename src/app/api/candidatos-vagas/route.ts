@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { vaga_id, candidato_id } = await request.json();
+    const { vaga_id, candidato_id, etapa = null } = await request.json();
     if (!vaga_id || !candidato_id) {
       return NextResponse.json({ error: "vaga_id e candidato_id são obrigatórios." }, { status: 400 });
     }
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabase
       .from("candidatos_vagas")
-      .insert({ vaga_id, candidato_id })
+      .insert({ vaga_id, candidato_id, etapa })
       .select("*, candidatos(id, nome_completo, etapa_kanban, responsavel, cargo_pretendido)")
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

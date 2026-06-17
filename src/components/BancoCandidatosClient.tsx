@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 
 export type CandidatoRow = {
@@ -14,6 +14,15 @@ export type CandidatoRow = {
 };
 
 type MatchEntry = { vaga_id: string; titulo: string; score: number };
+type VagaAberta = { id: string; titulo: string; cliente_id: string | null };
+
+type ModalState = {
+  candidatoId: string;
+  candidatoNome: string;
+  selectedVagaId: string;
+  loading: boolean;
+  error: string | null;
+};
 
 const thStyle: React.CSSProperties = {
   padding: "8px 12px",
@@ -221,6 +230,11 @@ export default function BancoCandidatosClient({
   const [matchMap, setMatchMap] = useState<Record<string, MatchEntry[]>>({});
   const [loadingMatches, setLoadingMatches] = useState(false);
 
+  const [vagasAbertas, setVagasAbertas] = useState<VagaAberta[]>([]);
+  const [encaminhadoIds, setEncaminhadoIds] = useState<Set<string>>(new Set());
+  const [modal, setModal] = useState<ModalState | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
   useEffect(() => {
     if (candidatos.length === 0) return;
     setLoadingMatches(true);
@@ -246,6 +260,62 @@ export default function BancoCandidatosClient({
     });
   }, [candidatos]);
 
+  useEffect(() => {
+    fetch("/api/banco-candidatos/vagas-abertas")
+      .then((r) => r.json())
+      .then((json) => setVagasAbertas(json.vagas ?? []))
+      .catch(() => {});
+  }, []);
+
+  function openModal(c: CandidatoRow) {
+    const bestVagaId = matchMap[c.id]?.[0]?.vaga_id ?? vagasAbertas[0]?.id ?? "";
+    setModal({
+      candidatoId: c.id,
+      candidatoNome: c.nome_completo,
+      selectedVagaId: bestVagaId,
+      loading: false,
+      error: null,
+    });
+  }
+
+  const handleEncaminhar = useCallback(async () => {
+    if (!modal) return;
+    const { candidatoId, selectedVagaId } = modal;
+
+    if (!selectedVagaId) {
+      setModal((m) => m ? { ...m, error: "Selecione uma vaga." } : m);
+      return;
+    }
+
+    setModal((m) => m ? { ...m, loading: true, error: null } : m);
+
+    try {
+      const res = await fetch("/api/candidatos-vagas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidato_id: candidatoId, vaga_id: selectedVagaId, etapa: "triagem" }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        setModal((m) => m ? { ...m, loading: false, error: json.error ?? "Erro ao encaminhar." } : m);
+        return;
+      }
+
+      setEncaminhadoIds((prev) => {
+        const next = new Set(prev);
+        next.add(candidatoId);
+        return next;
+      });
+      setModal(null);
+      setSuccessMsg("Candidato encaminhado com sucesso!");
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch {
+      setModal((m) => m ? { ...m, loading: false, error: "Erro de conexão." } : m);
+    }
+  }, [modal]);
+
   const filtered = useMemo(() => {
     const nomeQ = nome.trim().toLowerCase();
     const cargoQ = cargo.trim().toLowerCase();
@@ -265,6 +335,24 @@ export default function BancoCandidatosClient({
 
   return (
     <div>
+      {/* Success banner */}
+      {successMsg && (
+        <div
+          style={{
+            background: "#D1FAE5",
+            color: "#065F46",
+            border: "1px solid #6EE7B7",
+            borderRadius: 8,
+            padding: "10px 16px",
+            fontSize: 13,
+            fontWeight: 600,
+            marginBottom: 16,
+          }}
+        >
+          {successMsg}
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>
@@ -280,14 +368,7 @@ export default function BancoCandidatosClient({
         className="card"
         style={{ marginBottom: 20, display: "inline-flex", alignItems: "center", gap: 10 }}
       >
-        <span
-          style={{
-            fontSize: 36,
-            fontWeight: 800,
-            color: "#111827",
-            lineHeight: 1,
-          }}
-        >
+        <span style={{ fontSize: 36, fontWeight: 800, color: "#111827", lineHeight: 1 }}>
           {candidatos.length}
         </span>
         <span style={{ fontSize: 14, color: "#6B7280" }}>
@@ -373,22 +454,8 @@ export default function BancoCandidatosClient({
             {candidatos.length} candidatos
             {" · "}
             <button
-              onClick={() => {
-                setNome("");
-                setCargo("");
-                setCidade("");
-                setIdadeMin("");
-                setIdadeMax("");
-              }}
-              style={{
-                background: "none",
-                border: "none",
-                color: "#FFB800",
-                cursor: "pointer",
-                fontSize: 13,
-                fontWeight: 600,
-                padding: 0,
-              }}
+              onClick={() => { setNome(""); setCargo(""); setCidade(""); setIdadeMin(""); setIdadeMax(""); }}
+              style={{ background: "none", border: "none", color: "#FFB800", cursor: "pointer", fontSize: 13, fontWeight: 600, padding: 0 }}
             >
               Limpar filtros
             </button>
@@ -408,6 +475,7 @@ export default function BancoCandidatosClient({
                 <th style={thStyle}>Cidade</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Nota IA</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Match com Vagas</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Encaminhar</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Perfil</th>
               </tr>
             </thead>
@@ -415,13 +483,8 @@ export default function BancoCandidatosClient({
               {filtered.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
-                    style={{
-                      padding: "48px 24px",
-                      textAlign: "center",
-                      color: "#9CA3AF",
-                      fontSize: 14,
-                    }}
+                    colSpan={8}
+                    style={{ padding: "48px 24px", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}
                   >
                     {candidatos.length === 0
                       ? "Nenhum candidato cadastrado ainda."
@@ -433,32 +496,13 @@ export default function BancoCandidatosClient({
                   <tr
                     key={c.id}
                     style={{ borderBottom: "1px solid #F3F4F6", transition: "background 0.1s" }}
-                    onMouseEnter={(e) =>
-                      ((e.currentTarget as HTMLTableRowElement).style.background = "#FAFAFA")
-                    }
-                    onMouseLeave={(e) =>
-                      ((e.currentTarget as HTMLTableRowElement).style.background = "")
-                    }
+                    onMouseEnter={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = "#FAFAFA")}
+                    onMouseLeave={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = "")}
                   >
-                    <td
-                      style={{
-                        padding: "10px 12px",
-                        fontSize: 14,
-                        color: "#111827",
-                        fontWeight: 600,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+                    <td style={{ padding: "10px 12px", fontSize: 14, color: "#111827", fontWeight: 600, whiteSpace: "nowrap" }}>
                       {c.nome_completo}
                     </td>
-                    <td
-                      style={{
-                        padding: "10px 12px",
-                        fontSize: 14,
-                        color: "#374151",
-                        textAlign: "center",
-                      }}
-                    >
+                    <td style={{ padding: "10px 12px", fontSize: 14, color: "#374151", textAlign: "center" }}>
                       {c.idade !== null ? c.idade : "—"}
                     </td>
                     <td style={{ padding: "10px 12px", fontSize: 14, color: "#374151" }}>
@@ -478,6 +522,43 @@ export default function BancoCandidatosClient({
                       />
                     </td>
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                      {encaminhadoIds.has(c.id) ? (
+                        <span
+                          style={{
+                            display: "inline-block",
+                            padding: "5px 14px",
+                            background: "#D1FAE5",
+                            color: "#065F46",
+                            border: "1px solid #6EE7B7",
+                            borderRadius: 8,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Encaminhado ✓
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => openModal(c)}
+                          style={{
+                            display: "inline-block",
+                            padding: "5px 14px",
+                            background: "#FFFBEB",
+                            color: "#92400E",
+                            border: "1px solid #FCD34D",
+                            borderRadius: 8,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            whiteSpace: "nowrap",
+                            cursor: "pointer",
+                          }}
+                        >
+                          → Triagem
+                        </button>
+                      )}
+                    </td>
+                    <td style={{ padding: "10px 12px", textAlign: "center" }}>
                       <Link
                         href={`/painel/candidato/${c.id}`}
                         style={{
@@ -491,7 +572,6 @@ export default function BancoCandidatosClient({
                           fontWeight: 600,
                           textDecoration: "none",
                           whiteSpace: "nowrap",
-                          transition: "background 0.15s",
                         }}
                       >
                         Ver perfil
@@ -504,6 +584,136 @@ export default function BancoCandidatosClient({
           </table>
         </div>
       </div>
+
+      {/* Modal */}
+      {modal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget && !modal.loading) setModal(null); }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: "24px 28px",
+              width: 460,
+              maxWidth: "90vw",
+              boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
+            }}
+          >
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>
+              Encaminhar para Triagem
+            </h2>
+            <p style={{ fontSize: 13, color: "#6B7280", margin: "0 0 20px" }}>
+              {modal.candidatoNome}
+            </p>
+
+            <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
+              Vaga
+            </label>
+            <select
+              value={modal.selectedVagaId}
+              onChange={(e) => setModal((m) => m ? { ...m, selectedVagaId: e.target.value, error: null } : m)}
+              disabled={modal.loading}
+              style={{
+                width: "100%",
+                border: "1px solid #E5E7EB",
+                borderRadius: 8,
+                padding: "8px 12px",
+                fontSize: 13,
+                color: modal.selectedVagaId ? "#111827" : "#9CA3AF",
+                outline: "none",
+                marginBottom: 16,
+                boxSizing: "border-box",
+                background: "#fff",
+                cursor: modal.loading ? "not-allowed" : "default",
+              }}
+            >
+              {vagasAbertas.length === 0 ? (
+                <option value="">Nenhuma vaga aberta disponível</option>
+              ) : (
+                <>
+                  <option value="">Selecione uma vaga...</option>
+                  {vagasAbertas.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.titulo}
+                    </option>
+                  ))}
+                </>
+              )}
+            </select>
+
+            {modal.error && (
+              <div
+                style={{
+                  background: "#FEE2E2",
+                  color: "#991B1B",
+                  border: "1px solid #FCA5A5",
+                  borderRadius: 6,
+                  padding: "8px 12px",
+                  fontSize: 13,
+                  marginBottom: 16,
+                }}
+              >
+                {modal.error}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setModal(null)}
+                disabled={modal.loading}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: 8,
+                  border: "1px solid #E5E7EB",
+                  background: "#fff",
+                  color: "#374151",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: modal.loading ? "not-allowed" : "pointer",
+                  opacity: modal.loading ? 0.5 : 1,
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEncaminhar}
+                disabled={modal.loading || !modal.selectedVagaId || vagasAbertas.length === 0}
+                style={{
+                  padding: "8px 20px",
+                  borderRadius: 8,
+                  border: "none",
+                  background:
+                    modal.loading || !modal.selectedVagaId || vagasAbertas.length === 0
+                      ? "#E5E7EB"
+                      : "#FFB800",
+                  color:
+                    modal.loading || !modal.selectedVagaId || vagasAbertas.length === 0
+                      ? "#9CA3AF"
+                      : "#000",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor:
+                    modal.loading || !modal.selectedVagaId || vagasAbertas.length === 0
+                      ? "not-allowed"
+                      : "pointer",
+                }}
+              >
+                {modal.loading ? "Encaminhando..." : "Encaminhar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
