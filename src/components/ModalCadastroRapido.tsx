@@ -233,6 +233,12 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
         return;
       }
 
+      // Fire-and-forget triagem in a separate serverless invocation
+      const novoId = resJson.data?.id as string | undefined;
+      if (novoId) {
+        fetch(`/api/candidatos/${novoId}/triagem`, { method: "POST" }).catch(() => {});
+      }
+
       handleFechar();
       onCadastrado();
     } catch {
