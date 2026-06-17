@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 
 export type CandidatoRow = {
@@ -12,6 +12,8 @@ export type CandidatoRow = {
   triagem_score: number | null;
   created_at: string;
 };
+
+type MatchEntry = { vaga_id: string; titulo: string; score: number };
 
 const thStyle: React.CSSProperties = {
   padding: "8px 12px",
@@ -25,10 +27,15 @@ const thStyle: React.CSSProperties = {
   textAlign: "left",
 };
 
+function colorForScore(score: number): { bg: string; fg: string } {
+  if (score >= 70) return { bg: "#D1FAE5", fg: "#065F46" };
+  if (score >= 40) return { bg: "#FEF3C7", fg: "#92400E" };
+  return { bg: "#FEE2E2", fg: "#991B1B" };
+}
+
 function ScoreBadge({ score }: { score: number | null }) {
   if (score === null) return <span style={{ color: "#9CA3AF" }}>—</span>;
-  const bg = score >= 70 ? "#D1FAE5" : score >= 40 ? "#FEF3C7" : "#FEE2E2";
-  const fg = score >= 70 ? "#065F46" : score >= 40 ? "#92400E" : "#991B1B";
+  const { bg, fg } = colorForScore(score);
   return (
     <span
       style={{
@@ -43,6 +50,146 @@ function ScoreBadge({ score }: { score: number | null }) {
     >
       {score}/100
     </span>
+  );
+}
+
+function MatchCell({
+  candidatoId,
+  loading,
+  matchMap,
+}: {
+  candidatoId: string;
+  loading: boolean;
+  matchMap: Record<string, MatchEntry[]>;
+}) {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const matches = matchMap[candidatoId];
+
+  if (loading && !matches) {
+    return (
+      <span style={{ color: "#9CA3AF", fontSize: 12, fontStyle: "italic" }}>
+        Calculando...
+      </span>
+    );
+  }
+
+  if (!matches || matches.length === 0) {
+    return <span style={{ color: "#9CA3AF", fontSize: 13 }}>Sem vagas</span>;
+  }
+
+  const best = matches[0];
+  const { bg, fg } = colorForScore(best.score);
+
+  return (
+    <div
+      style={{ position: "relative", display: "inline-block" }}
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+    >
+      <div style={{ cursor: "default", textAlign: "center" }}>
+        <span
+          style={{
+            display: "inline-block",
+            background: bg,
+            color: fg,
+            padding: "3px 10px",
+            borderRadius: 12,
+            fontSize: 13,
+            fontWeight: 700,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {best.score}%
+        </span>
+        <div
+          style={{
+            fontSize: 11,
+            color: "#6B7280",
+            marginTop: 2,
+            maxWidth: 140,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {best.titulo}
+        </div>
+      </div>
+
+      {showTooltip && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: "50%",
+            transform: "translateX(-50%)",
+            marginTop: 6,
+            background: "#fff",
+            border: "1px solid #E5E7EB",
+            borderRadius: 10,
+            boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
+            padding: "12px 14px",
+            zIndex: 50,
+            minWidth: 230,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: "#9CA3AF",
+              textTransform: "uppercase",
+              letterSpacing: "0.07em",
+              marginBottom: 8,
+            }}
+          >
+            Top vagas compatíveis
+          </div>
+          {matches.map((m, i) => {
+            const { bg: mbg, fg: mfg } = colorForScore(m.score);
+            return (
+              <div
+                key={m.vaga_id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  marginBottom: i < matches.length - 1 ? 6 : 0,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 13,
+                    color: "#374151",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    maxWidth: 155,
+                  }}
+                >
+                  {m.titulo}
+                </span>
+                <span
+                  style={{
+                    background: mbg,
+                    color: mfg,
+                    padding: "2px 8px",
+                    borderRadius: 10,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                  }}
+                >
+                  {m.score}%
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -70,6 +217,34 @@ export default function BancoCandidatosClient({
   const [cidade, setCidade] = useState("");
   const [idadeMin, setIdadeMin] = useState("");
   const [idadeMax, setIdadeMax] = useState("");
+
+  const [matchMap, setMatchMap] = useState<Record<string, MatchEntry[]>>({});
+  const [loadingMatches, setLoadingMatches] = useState(false);
+
+  useEffect(() => {
+    if (candidatos.length === 0) return;
+    setLoadingMatches(true);
+
+    Promise.all(
+      candidatos.map(async (c) => {
+        try {
+          const res = await fetch(`/api/banco-candidatos/match?candidato_id=${c.id}`);
+          if (!res.ok) return { id: c.id, matches: [] as MatchEntry[] };
+          const json = await res.json();
+          return { id: c.id, matches: (json.matches ?? []) as MatchEntry[] };
+        } catch {
+          return { id: c.id, matches: [] as MatchEntry[] };
+        }
+      })
+    ).then((results) => {
+      const map: Record<string, MatchEntry[]> = {};
+      results.forEach(({ id, matches }) => {
+        map[id] = matches;
+      });
+      setMatchMap(map);
+      setLoadingMatches(false);
+    });
+  }, [candidatos]);
 
   const filtered = useMemo(() => {
     const nomeQ = nome.trim().toLowerCase();
@@ -295,16 +470,12 @@ export default function BancoCandidatosClient({
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
                       <ScoreBadge score={c.triagem_score} />
                     </td>
-                    <td
-                      style={{
-                        padding: "10px 12px",
-                        textAlign: "center",
-                        fontSize: 13,
-                        color: "#9CA3AF",
-                        fontStyle: "italic",
-                      }}
-                    >
-                      Calculando...
+                    <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                      <MatchCell
+                        candidatoId={c.id}
+                        loading={loadingMatches}
+                        matchMap={matchMap}
+                      />
                     </td>
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
                       <Link
