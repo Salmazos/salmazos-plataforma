@@ -198,17 +198,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const seen = new Map<string, typeof padronizadas[0]>();
+    for (const vaga of padronizadas) {
+      const key = `${vaga.titulo}||${vaga.cliente_nome}`;
+      seen.set(key, vaga);
+    }
+    const deduplicadas = Array.from(seen.values());
+
     const supabase = createServiceClient();
     const { data, error } = await supabase
       .from("vagas")
-      .upsert(padronizadas, { onConflict: "titulo,cliente_nome" })
+      .upsert(deduplicadas, { onConflict: "titulo,cliente_nome" })
       .select("id");
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json({ importadas: data?.length ?? padronizadas.length, erros: [] });
+    return NextResponse.json({ importadas: data?.length ?? deduplicadas.length, erros: [] });
   } catch (err) {
     console.error("[POST /api/vagas/importar]", err);
     return NextResponse.json({ error: "Erro ao processar o arquivo." }, { status: 500 });
