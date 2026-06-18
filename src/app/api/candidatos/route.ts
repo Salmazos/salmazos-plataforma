@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { createServiceClient } from "@/lib/supabase/server";
 import { enviarEmailConfirmacao } from "@/lib/email";
 import { registrarLogEmail } from "@/lib/emailLogger";
@@ -314,31 +315,34 @@ export async function POST(request: NextRequest) {
     // Para candidatos sem currículo, dispara diretamente.
     if (body.curriculo_url) {
       console.log("Triggering AI extraction for candidato:", data.id);
-      void extractAndUpdateCandidato(data.id, body.curriculo_url, body.resumo_candidato ?? "")
-        .catch(console.error);
+      waitUntil(
+        extractAndUpdateCandidato(data.id, body.curriculo_url, body.resumo_candidato ?? "")
+          .catch(console.error)
+      );
     } else {
-      calcularTriagem(data.id).catch(() => {});
+      waitUntil(calcularTriagem(data.id).catch(console.error));
     }
 
-    // Consulta jurídica fire-and-forget
-    void (async () => {
-      try {
-        const svc = createServiceClient();
-        const resultado = await consultarProcessos(
-          body.nome_completo,
-          body.cidade ?? undefined
-        );
-        const updatePayload: Record<string, unknown> = {
-          juridico_consultado_em: new Date().toISOString(),
-          juridico_tem_trabalhista: resultado.temTrabalhista,
-          juridico_total_processos: resultado.totalProcessos,
-          juridico_resumo: resultado.resumo,
-        };
-        await svc.from("candidatos").update(updatePayload).eq("id", data.id);
-      } catch (err) {
-        console.error("[consulta-juridica fire-and-forget]", err);
-      }
-    })();
+    waitUntil(
+      (async () => {
+        try {
+          const svc = createServiceClient();
+          const resultado = await consultarProcessos(
+            body.nome_completo,
+            body.cidade ?? undefined
+          );
+          const updatePayload: Record<string, unknown> = {
+            juridico_consultado_em: new Date().toISOString(),
+            juridico_tem_trabalhista: resultado.temTrabalhista,
+            juridico_total_processos: resultado.totalProcessos,
+            juridico_resumo: resultado.resumo,
+          };
+          await svc.from("candidatos").update(updatePayload).eq("id", data.id);
+        } catch (err) {
+          console.error("[consulta-juridica fire-and-forget]", err);
+        }
+      })()
+    );
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {
