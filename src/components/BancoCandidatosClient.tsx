@@ -394,6 +394,13 @@ export default function BancoCandidatosClient({
       setModal(null);
       setSuccessMsg("Candidato encaminhado com sucesso!");
       setTimeout(() => setSuccessMsg(null), 4000);
+      setTimeout(() => {
+        setEncaminhadoIds((prev) => {
+          const next = new Set(prev);
+          next.delete(candidatoId);
+          return next;
+        });
+      }, 3000);
     } catch {
       setModal((m) => m ? { ...m, loading: false, error: "Erro de conexão." } : m);
     }
