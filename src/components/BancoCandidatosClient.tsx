@@ -582,7 +582,7 @@ export default function BancoCandidatosClient({
           </div>
           <div>
             <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
-              Nota IA mínima
+              Score mínimo
             </label>
             <select
               style={inputStyle({ background: "#fff", cursor: "pointer" })}
@@ -640,7 +640,7 @@ export default function BancoCandidatosClient({
                 <th style={{ ...thStyle, textAlign: "center" }}>Idade</th>
                 <th style={thStyle}>Cargo Pretendido</th>
                 <th style={thStyle}>Cidade</th>
-                <th style={{ ...thStyle, textAlign: "center" }}>Nota IA</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Score</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Processos</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Match com Vagas</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Perfil</th>

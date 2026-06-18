@@ -44,6 +44,12 @@ export interface Candidato {
   triagem_calculada_em?: string | null;
   ultima_atualizacao_ia?: string | null;
   atualizacao_resumo?: string | null;
+  juridico_consultado_em?: string | null;
+  juridico_tem_trabalhista?: boolean | null;
+  juridico_total_processos?: number | null;
+  juridico_resumo?: unknown[] | null;
+  melhor_match_score?: number | null;
+  melhor_match_vaga_titulo?: string | null;
   created_at: string;
   updated_at: string;
 }

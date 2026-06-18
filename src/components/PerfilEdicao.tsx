@@ -348,6 +348,66 @@ export default function PerfilEdicao({ candidato }: Props) {
         )}
       </div>
 
+      {/* Info panel — Score / Processos / Melhor Match */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
+        {/* Score */}
+        <div className="card" style={{ textAlign: "center", padding: "16px 12px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>
+            Score
+          </div>
+          {candidato.triagem_score != null && candidato.triagem_label ? (
+            <TriagemBadge score={candidato.triagem_score} label={candidato.triagem_label} resumo={candidato.triagem_resumo ?? undefined} size="md" />
+          ) : (
+            <span style={{ color: "#9CA3AF", fontSize: 13, fontStyle: "italic" }}>Aguardando</span>
+          )}
+        </div>
+
+        {/* Processos */}
+        <div className="card" style={{ textAlign: "center", padding: "16px 12px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>
+            Processos
+          </div>
+          {candidato.juridico_consultado_em == null ? (
+            <span style={{ color: "#9CA3AF", fontSize: 13, fontStyle: "italic" }}>Consultando...</span>
+          ) : candidato.juridico_tem_trabalhista ? (
+            <span style={{ display: "inline-block", background: "#FEE2E2", color: "#991B1B", padding: "3px 10px", borderRadius: 12, fontSize: 13, fontWeight: 700 }}>
+              {"⚠"} Trabalhista ({candidato.juridico_total_processos ?? 0})
+            </span>
+          ) : (
+            <span style={{ display: "inline-block", background: "#D1FAE5", color: "#065F46", padding: "3px 10px", borderRadius: 12, fontSize: 13, fontWeight: 700 }}>
+              {"✓"} Limpo
+            </span>
+          )}
+        </div>
+
+        {/* Melhor Match */}
+        <div className="card" style={{ textAlign: "center", padding: "16px 12px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>
+            Melhor Match
+          </div>
+          {candidato.melhor_match_score != null ? (
+            <div>
+              <span style={{
+                display: "inline-block",
+                background: candidato.melhor_match_score >= 70 ? "#D1FAE5" : candidato.melhor_match_score >= 40 ? "#FEF3C7" : "#FEE2E2",
+                color: candidato.melhor_match_score >= 70 ? "#065F46" : candidato.melhor_match_score >= 40 ? "#92400E" : "#991B1B",
+                padding: "3px 10px",
+                borderRadius: 12,
+                fontSize: 13,
+                fontWeight: 700,
+              }}>
+                {candidato.melhor_match_score}%
+              </span>
+              {candidato.melhor_match_vaga_titulo && (
+                <div style={{ fontSize: 11, color: "#6B7280", marginTop: 4 }}>{candidato.melhor_match_vaga_titulo}</div>
+              )}
+            </div>
+          ) : (
+            <span style={{ color: "#9CA3AF", fontSize: 13, fontStyle: "italic" }}>Calculando...</span>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Coluna principal — dados */}
         <div className="lg:col-span-2 space-y-6">
