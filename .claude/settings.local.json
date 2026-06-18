@@ -39,7 +39,8 @@
       "mcp__claude_ai_Vercel__list_projects",
       "mcp__claude_ai_Vercel__get_runtime_logs",
       "Bash(NODE_OPTIONS=--use-system-ca npm install @vercel/functions)",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(python3 *)"
     ]
   }
 }

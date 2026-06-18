@@ -155,6 +155,7 @@ export async function POST(request: NextRequest) {
       const status = mapStatus(cell(r, "Status"));
       const responsavel = cell(r, "Responsável") || cell(r, "Responsavel") || "Giovanni";
       const salarioRaw = cellRaw(r, "Salário") ?? cellRaw(r, "Salario");
+      console.log(`[IMPORT] Vaga: ${titulo}, salarioRaw:`, JSON.stringify(salarioRaw), typeof salarioRaw);
 
       vagas.push({
         titulo,
