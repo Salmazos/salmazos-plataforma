@@ -738,16 +738,14 @@ export default function BancoCandidatosClient({
                           )}
                         </div>
                         {c.cpf && !c.cpf.startsWith("TEMP-") && (
-                          <div>
-                            <a
-                              href={`https://www.escavador.com/busca?q=${encodeURIComponent('"' + c.cpf + '"')}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ fontSize: 11, color: "#6B7280", textDecoration: "underline" }}
-                            >
-                              {"🔍"} Escavador
-                            </a>
-                          </div>
+                          <a
+                            href={`https://www.escavador.com/busca?q=${encodeURIComponent('"' + c.cpf + '"')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ fontSize: 11, color: "#6b7280", textDecoration: "underline", cursor: "pointer", display: "block", marginTop: 2 }}
+                          >
+                            {"🔍"} Escavador
+                          </a>
                         )}
                       </div>
                     </td>
