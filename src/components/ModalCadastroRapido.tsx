@@ -115,6 +115,14 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
     return `(${nums.slice(0, 2)}) ${nums.slice(2, 7)}-${nums.slice(7)}`;
   };
 
+  const formatarCpf = (v: string) => {
+    const nums = v.replace(/\D/g, "").slice(0, 11);
+    if (nums.length <= 3) return nums;
+    if (nums.length <= 6) return `${nums.slice(0, 3)}.${nums.slice(3)}`;
+    if (nums.length <= 9) return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6)}`;
+    return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6, 9)}-${nums.slice(9)}`;
+  };
+
   const handleArquivo = async (file: File) => {
     setArquivo(file);
     setExtraindo(true);
@@ -141,7 +149,7 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
       if (extraido.nome && !nome) setNome(extraido.nome);
       if (extraido.telefone && !telefone) setTelefone(formatarTelefone(extraido.telefone));
       if (extraido.email && !email) setEmail(extraido.email);
-      if (extraido.cpf && !cpf) setCpf(extraido.cpf);
+      if (extraido.cpf && !cpf) setCpf(formatarCpf(extraido.cpf));
       if (extraido.cidade) setCidade(extraido.cidade);
       if (extraido.estado) setEstado(extraido.estado);
       if (extraido.tempo_experiencia) setTempoExperiencia(extraido.tempo_experiencia);
@@ -379,6 +387,19 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
               value={telefone}
               onChange={(e) => setTelefone(formatarTelefone(e.target.value))}
               placeholder="(00) 00000-0000"
+              className="input-field"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              CPF
+            </label>
+            <input
+              type="text"
+              value={cpf}
+              onChange={(e) => setCpf(formatarCpf(e.target.value))}
+              placeholder="000.000.000-00"
               className="input-field"
             />
           </div>

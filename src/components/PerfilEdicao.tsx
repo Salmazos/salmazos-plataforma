@@ -62,6 +62,14 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function formatarCpf(v: string): string {
+  const nums = v.replace(/\D/g, "").slice(0, 11);
+  if (nums.length <= 3) return nums;
+  if (nums.length <= 6) return `${nums.slice(0, 3)}.${nums.slice(3)}`;
+  if (nums.length <= 9) return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6)}`;
+  return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6, 9)}-${nums.slice(9)}`;
+}
+
 export default function PerfilEdicao({ candidato }: Props) {
   const router = useRouter();
   const etapa = ETAPAS_KANBAN.find((e) => e.id === candidato.etapa_kanban);
@@ -429,7 +437,7 @@ export default function PerfilEdicao({ candidato }: Props) {
                   <input type="text" value={form.nome_completo} onChange={set("nome_completo")} className="input-field" />
                 </Campo>
                 <Campo label="CPF">
-                  <input type="text" value={form.cpf} onChange={set("cpf")} className="input-field" />
+                  <input type="text" value={form.cpf} onChange={(e) => setForm((prev) => ({ ...prev, cpf: formatarCpf(e.target.value) }))} placeholder="000.000.000-00" className="input-field" />
                 </Campo>
                 <Campo label="Telefone">
                   <input type="text" value={form.telefone} onChange={set("telefone")} className="input-field" />

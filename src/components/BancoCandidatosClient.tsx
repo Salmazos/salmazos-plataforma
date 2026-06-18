@@ -8,6 +8,7 @@ import ModalCadastroRapido from "./ModalCadastroRapido";
 export type CandidatoRow = {
   id: string;
   nome_completo: string;
+  cpf: string | null;
   idade: number | null;
   cargo_pretendido: string | null;
   cidade: string | null;
@@ -657,41 +658,55 @@ export default function BancoCandidatosClient({
                       <ScoreBadge score={c.triagem_score} label={c.triagem_label} resumo={c.triagem_resumo} />
                     </td>
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
-                      {c.juridico_consultado_em === null ? (
-                        <span style={{ color: "#9CA3AF", fontSize: 12, fontStyle: "italic" }}>
-                          Consultando...
-                        </span>
-                      ) : c.juridico_tem_trabalhista ? (
-                        <span
-                          style={{
-                            display: "inline-block",
-                            background: "#FEE2E2",
-                            color: "#991B1B",
-                            padding: "3px 10px",
-                            borderRadius: 12,
-                            fontSize: 13,
-                            fontWeight: 700,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {"⚠"} Trabalhista ({c.juridico_total_processos})
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            display: "inline-block",
-                            background: "#D1FAE5",
-                            color: "#065F46",
-                            padding: "3px 10px",
-                            borderRadius: 12,
-                            fontSize: 13,
-                            fontWeight: 700,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {"✓"} Limpo
-                        </span>
-                      )}
+                      <div>
+                        {c.juridico_consultado_em === null ? (
+                          <span style={{ color: "#9CA3AF", fontSize: 12, fontStyle: "italic" }}>
+                            Consultando...
+                          </span>
+                        ) : c.juridico_tem_trabalhista ? (
+                          <span
+                            style={{
+                              display: "inline-block",
+                              background: "#FEE2E2",
+                              color: "#991B1B",
+                              padding: "3px 10px",
+                              borderRadius: 12,
+                              fontSize: 13,
+                              fontWeight: 700,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {"⚠"} Trabalhista ({c.juridico_total_processos})
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              display: "inline-block",
+                              background: "#D1FAE5",
+                              color: "#065F46",
+                              padding: "3px 10px",
+                              borderRadius: 12,
+                              fontSize: 13,
+                              fontWeight: 700,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {"✓"} Limpo
+                          </span>
+                        )}
+                        {c.cpf && !c.cpf.startsWith("TEMP-") && (
+                          <div style={{ marginTop: 4 }}>
+                            <a
+                              href={`https://www.escavador.com/sobre/cpf/${c.cpf.replace(/\D/g, "")}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ fontSize: 11, color: "#6B7280", textDecoration: "underline" }}
+                            >
+                              {"🔍"} Escavador
+                            </a>
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
                       <MatchCell
