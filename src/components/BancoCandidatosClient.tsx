@@ -48,14 +48,11 @@ function colorForScore(score: number): { bg: string; fg: string } {
   return { bg: "#FEE2E2", fg: "#991B1B" };
 }
 
-function labelColor(label: string | null): string {
-  switch (label) {
-    case "Excelente": return "#16a34a";
-    case "Bom":       return "#ca8a04";
-    case "Regular":   return "#ea580c";
-    case "Baixo":     return "#dc2626";
-    default:          return "#9CA3AF";
-  }
+function triagemStyle(score: number): { bg: string; fg: string } {
+  if (score >= 80) return { bg: "#22c55e", fg: "#fff" };
+  if (score >= 60) return { bg: "#FFD700", fg: "#000" };
+  if (score >= 40) return { bg: "#f97316", fg: "#fff" };
+  return { bg: "#9ca3af", fg: "#fff" };
 }
 
 function ScoreBadge({ score, label, resumo }: { score: number | null; label: string | null; resumo: string | null }) {
@@ -63,7 +60,7 @@ function ScoreBadge({ score, label, resumo }: { score: number | null; label: str
 
   if (score === null) return <span style={{ color: "#9CA3AF" }}>—</span>;
 
-  const bg = labelColor(label);
+  const { bg, fg } = triagemStyle(score);
 
   return (
     <div
@@ -75,7 +72,7 @@ function ScoreBadge({ score, label, resumo }: { score: number | null; label: str
         style={{
           display: "inline-block",
           background: bg,
-          color: "#fff",
+          color: fg,
           padding: "3px 10px",
           borderRadius: 12,
           fontSize: 13,
