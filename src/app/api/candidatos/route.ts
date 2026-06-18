@@ -4,6 +4,7 @@ import { enviarEmailConfirmacao } from "@/lib/email";
 import { registrarLogEmail } from "@/lib/emailLogger";
 import { calcularTriagem } from "@/lib/triagemAutomatica";
 import { detectarDuplicata } from "@/lib/detectarDuplicata";
+import { consultarProcessos } from "@/lib/consultaJuridica";
 import mammoth from "mammoth";
 import { calcularDuracaoResumo } from "@/lib/calcularDuracaoResumo";
 import { registrarHistorico } from "@/lib/registrarHistorico";
@@ -318,6 +319,26 @@ export async function POST(request: NextRequest) {
     } else {
       calcularTriagem(data.id).catch(() => {});
     }
+
+    // Consulta jurídica fire-and-forget
+    void (async () => {
+      try {
+        const svc = createServiceClient();
+        const resultado = await consultarProcessos(
+          body.nome_completo,
+          body.cidade ?? undefined
+        );
+        const updatePayload: Record<string, unknown> = {
+          juridico_consultado_em: new Date().toISOString(),
+          juridico_tem_trabalhista: resultado.temTrabalhista,
+          juridico_total_processos: resultado.totalProcessos,
+          juridico_resumo: resultado.resumo,
+        };
+        await svc.from("candidatos").update(updatePayload).eq("id", data.id);
+      } catch (err) {
+        console.error("[consulta-juridica fire-and-forget]", err);
+      }
+    })();
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {

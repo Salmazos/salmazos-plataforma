@@ -16,6 +16,9 @@ export type CandidatoRow = {
   triagem_resumo: string | null;
   melhor_match_score: number | null;
   melhor_match_vaga_titulo: string | null;
+  juridico_tem_trabalhista: boolean | null;
+  juridico_total_processos: number | null;
+  juridico_consultado_em: string | null;
   created_at: string;
 };
 
@@ -628,6 +631,7 @@ export default function BancoCandidatosClient({
                 <th style={thStyle}>Cargo Pretendido</th>
                 <th style={thStyle}>Cidade</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Nota IA</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Processos</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Match com Vagas</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Perfil</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Encaminhar</th>
@@ -637,7 +641,7 @@ export default function BancoCandidatosClient({
               {filtered.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     style={{ padding: "48px 24px", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}
                   >
                     {candidatos.length === 0
@@ -667,6 +671,43 @@ export default function BancoCandidatosClient({
                     </td>
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
                       <ScoreBadge score={c.triagem_score} label={c.triagem_label} resumo={c.triagem_resumo} />
+                    </td>
+                    <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                      {c.juridico_consultado_em === null ? (
+                        <span style={{ color: "#9CA3AF", fontSize: 12, fontStyle: "italic" }}>
+                          Consultando...
+                        </span>
+                      ) : c.juridico_tem_trabalhista ? (
+                        <span
+                          style={{
+                            display: "inline-block",
+                            background: "#FEE2E2",
+                            color: "#991B1B",
+                            padding: "3px 10px",
+                            borderRadius: 12,
+                            fontSize: 13,
+                            fontWeight: 700,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {"⚠"} Trabalhista ({c.juridico_total_processos})
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            display: "inline-block",
+                            background: "#D1FAE5",
+                            color: "#065F46",
+                            padding: "3px 10px",
+                            borderRadius: 12,
+                            fontSize: 13,
+                            fontWeight: 700,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {"✓"} Limpo
+                        </span>
+                      )}
                     </td>
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
                       <MatchCell
