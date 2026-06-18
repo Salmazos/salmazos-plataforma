@@ -302,6 +302,9 @@ export default function BancoCandidatosClient({
   const [modal, setModal] = useState<ModalState | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [modalCadastroAberto, setModalCadastroAberto] = useState(false);
+  const [escavadorMap, setEscavadorMap] = useState<Record<string, string | null>>({});
+  const [escavadorSaving, setEscavadorSaving] = useState<Record<string, boolean>>({});
+  const [scoreOverrides, setScoreOverrides] = useState<Record<string, { score: number; label: string }>>({});
   const router = useRouter();
 
   useEffect(() => {
@@ -394,6 +397,32 @@ export default function BancoCandidatosClient({
       setModal((m) => m ? { ...m, loading: false, error: "Erro de conexão." } : m);
     }
   }, [modal]);
+
+  const handleEscavadorChange = useCallback(async (candidatoId: string, value: string) => {
+    if (value === "") return;
+    setEscavadorSaving((prev) => ({ ...prev, [candidatoId]: true }));
+    try {
+      const res = await fetch(`/api/candidatos/${candidatoId}/escavador-status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ escavador_status: value }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setEscavadorMap((prev) => ({ ...prev, [candidatoId]: value }));
+        if (json.triagem_score != null) {
+          setScoreOverrides((prev) => ({
+            ...prev,
+            [candidatoId]: { score: json.triagem_score, label: json.triagem_label },
+          }));
+        }
+      }
+    } catch {
+      // silent
+    } finally {
+      setEscavadorSaving((prev) => ({ ...prev, [candidatoId]: false }));
+    }
+  }, []);
 
   const filtered = useMemo(() => {
     const nomeQ = nome.trim().toLowerCase();
@@ -656,7 +685,11 @@ export default function BancoCandidatosClient({
                       {c.cidade ?? "—"}
                     </td>
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
-                      <ScoreBadge score={c.triagem_score} label={c.triagem_label} resumo={c.triagem_resumo} />
+                      <ScoreBadge
+                        score={scoreOverrides[c.id]?.score ?? c.triagem_score}
+                        label={scoreOverrides[c.id]?.label ?? c.triagem_label}
+                        resumo={c.triagem_resumo}
+                      />
                     </td>
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
                       <div style={{ display: "inline-flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
@@ -676,16 +709,32 @@ export default function BancoCandidatosClient({
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 600, minWidth: 58, textAlign: "left" }}>Escavador:</span>
-                          {c.escavador_status === "limpo" ? (
-                            <span style={{ display: "inline-block", background: "#D1FAE5", color: "#065F46", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
-                              {"✓"} Limpo
-                            </span>
-                          ) : c.escavador_status === "consta" ? (
-                            <span style={{ display: "inline-block", background: "#FEE2E2", color: "#991B1B", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
-                              {"⚠"} Consta
-                            </span>
+                          {escavadorSaving[c.id] ? (
+                            <span style={{ color: "#9CA3AF", fontSize: 11, fontStyle: "italic" }}>Salvando...</span>
                           ) : (
-                            <span style={{ color: "#9CA3AF", fontSize: 11 }}>—</span>
+                            <select
+                              value={escavadorMap[c.id] ?? c.escavador_status ?? ""}
+                              onChange={(e) => handleEscavadorChange(c.id, e.target.value)}
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                padding: "2px 6px",
+                                borderRadius: 10,
+                                border: "1px solid #E5E7EB",
+                                outline: "none",
+                                cursor: "pointer",
+                                background: (escavadorMap[c.id] ?? c.escavador_status) === "limpo" ? "#dcfce7"
+                                  : (escavadorMap[c.id] ?? c.escavador_status) === "consta" ? "#fee2e2"
+                                  : "#F9FAFB",
+                                color: (escavadorMap[c.id] ?? c.escavador_status) === "limpo" ? "#16a34a"
+                                  : (escavadorMap[c.id] ?? c.escavador_status) === "consta" ? "#dc2626"
+                                  : "#9CA3AF",
+                              }}
+                            >
+                              <option value="">— Não consultado</option>
+                              <option value="limpo">{"✓"} Limpo</option>
+                              <option value="consta">{"⚠"} Consta</option>
+                            </select>
                           )}
                         </div>
                         {c.cpf && !c.cpf.startsWith("TEMP-") && (
