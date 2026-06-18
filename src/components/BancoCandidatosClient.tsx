@@ -329,6 +329,16 @@ export default function BancoCandidatosClient({
   const router = useRouter();
 
   useEffect(() => {
+    const pending = candidatos.some(
+      (c) => c.triagem_score === null || c.juridico_consultado_em === null
+    );
+    if (!pending || candidatos.length === 0) return;
+
+    const interval = setInterval(() => router.refresh(), 5000);
+    return () => clearInterval(interval);
+  }, [candidatos, router]);
+
+  useEffect(() => {
     if (candidatos.length === 0) return;
     setLoadingMatches(true);
 
