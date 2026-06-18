@@ -80,7 +80,7 @@ export default function VagasPageClient({ vagas: inicial }: Props) {
     abertas:       vagas.filter((v) => v.status === "aberta").length,
     em_andamento:  vagas.filter((v) => v.status === "em_andamento").length,
     encerradas:    vagas.filter((v) => v.status === "fechada").length,
-    total_posicoes: vagas.reduce((s, v) => s + (v.num_posicoes ?? 0), 0),
+    total_posicoes: vagas.filter((v) => v.status === "aberta").reduce((s, v) => s + (v.num_posicoes ?? 0), 0),
   };
 
   const FILTROS: { value: FiltroStatus; label: string }[] = [
