@@ -6,9 +6,15 @@ export const dynamic = "force-dynamic";
 
 function formatarSalario(valor: string | number | null | undefined): string {
   if (!valor) return "A combinar";
-  const num = typeof valor === "string" ? parseFloat(valor.replace(",", ".")) : valor;
-  if (isNaN(num)) return "A combinar";
-  return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  if (typeof valor === "string") {
+    const trimmed = valor.trim();
+    if (trimmed.startsWith("R$")) return trimmed;
+    if (trimmed.toLowerCase() === "a combinar") return "A combinar";
+    const num = parseFloat(trimmed.replace(",", "."));
+    if (isNaN(num)) return trimmed;
+    return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 

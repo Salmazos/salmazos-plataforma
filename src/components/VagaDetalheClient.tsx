@@ -14,8 +14,11 @@ import type { Vaga, CandidatoVaga, Candidato, MatchDetalhes } from "@/types";
 
 function formatarSalario(valor: string | null | undefined): string {
   if (!valor) return "A combinar";
-  const num = parseFloat(valor.replace(",", "."));
-  if (isNaN(num)) return valor;
+  const trimmed = valor.trim();
+  if (trimmed.startsWith("R$")) return trimmed;
+  if (trimmed.toLowerCase() === "a combinar") return "A combinar";
+  const num = parseFloat(trimmed.replace(",", "."));
+  if (isNaN(num)) return trimmed;
   return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
