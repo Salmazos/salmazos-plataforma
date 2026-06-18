@@ -20,6 +20,7 @@ export type CandidatoRow = {
   juridico_tem_trabalhista: boolean | null;
   juridico_total_processos: number | null;
   juridico_consultado_em: string | null;
+  escavador_status: string | null;
   created_at: string;
 };
 
@@ -658,44 +659,37 @@ export default function BancoCandidatosClient({
                       <ScoreBadge score={c.triagem_score} label={c.triagem_label} resumo={c.triagem_resumo} />
                     </td>
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
-                      <div>
-                        {c.juridico_consultado_em === null ? (
-                          <span style={{ color: "#9CA3AF", fontSize: 12, fontStyle: "italic" }}>
-                            Consultando...
-                          </span>
-                        ) : c.juridico_tem_trabalhista ? (
-                          <span
-                            style={{
-                              display: "inline-block",
-                              background: "#FEE2E2",
-                              color: "#991B1B",
-                              padding: "3px 10px",
-                              borderRadius: 12,
-                              fontSize: 13,
-                              fontWeight: 700,
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {"⚠"} Trabalhista ({c.juridico_total_processos})
-                          </span>
-                        ) : (
-                          <span
-                            style={{
-                              display: "inline-block",
-                              background: "#D1FAE5",
-                              color: "#065F46",
-                              padding: "3px 10px",
-                              borderRadius: 12,
-                              fontSize: 13,
-                              fontWeight: 700,
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {"✓"} Limpo
-                          </span>
-                        )}
+                      <div style={{ display: "inline-flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 600, minWidth: 58, textAlign: "left" }}>Datajud:</span>
+                          {c.juridico_consultado_em === null ? (
+                            <span style={{ color: "#9CA3AF", fontSize: 11, fontStyle: "italic" }}>Consultando...</span>
+                          ) : c.juridico_tem_trabalhista ? (
+                            <span style={{ display: "inline-block", background: "#FEE2E2", color: "#991B1B", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+                              {"⚠"} Trabalhista ({c.juridico_total_processos})
+                            </span>
+                          ) : (
+                            <span style={{ display: "inline-block", background: "#D1FAE5", color: "#065F46", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+                              {"✓"} Limpo
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 600, minWidth: 58, textAlign: "left" }}>Escavador:</span>
+                          {c.escavador_status === "limpo" ? (
+                            <span style={{ display: "inline-block", background: "#D1FAE5", color: "#065F46", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+                              {"✓"} Limpo
+                            </span>
+                          ) : c.escavador_status === "consta" ? (
+                            <span style={{ display: "inline-block", background: "#FEE2E2", color: "#991B1B", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+                              {"⚠"} Consta
+                            </span>
+                          ) : (
+                            <span style={{ color: "#9CA3AF", fontSize: 11 }}>—</span>
+                          )}
+                        </div>
                         {c.cpf && !c.cpf.startsWith("TEMP-") && (
-                          <div style={{ marginTop: 4 }}>
+                          <div>
                             <a
                               href={`https://www.escavador.com/busca?q=${encodeURIComponent('"' + c.cpf + '"')}`}
                               target="_blank"
