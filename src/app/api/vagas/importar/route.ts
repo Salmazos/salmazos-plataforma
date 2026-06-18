@@ -28,6 +28,20 @@ function parseLocal(local: string): { cidade: string | null; estado: string | nu
   return { cidade: parts[0] || null, estado: null };
 }
 
+function formatSalario(val: unknown): string {
+  if (val === null || val === undefined || val === "") return "A combinar";
+  if (typeof val === "number") {
+    return `R$ ${val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  const str = String(val).trim();
+  if (!str) return "A combinar";
+  const num = parseFloat(str.replace(",", "."));
+  if (!isNaN(num) && /^[\d.,]+$/.test(str)) {
+    return `R$ ${num.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  return str;
+}
+
 async function padronizarVaga(vaga: VagaRow): Promise<VagaRow> {
   try {
     const userMsg = `Padronize este anúncio de vaga:
@@ -88,8 +102,8 @@ export async function POST(request: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const workbook = XLSX.read(buffer, { type: "buffer" });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
+    const lastSheetName = workbook.SheetNames[workbook.SheetNames.length - 1];
+    const sheet = workbook.Sheets[lastSheetName];
     const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
 
     const headerRowIndex = rawRows.findIndex((row) =>
@@ -104,49 +118,60 @@ export async function POST(request: NextRequest) {
     }
 
     const headers = rawRows[headerRowIndex] as unknown[];
-    const rows = rawRows.slice(headerRowIndex + 1).map((row) => {
-      const obj: Record<string, unknown> = {};
-      headers.forEach((h, i) => {
-        if (h) obj[String(h).trim()] = (row as unknown[])[i] ?? "";
-      });
-      return obj;
+    const colIndex: Record<string, number> = {};
+    headers.forEach((h, i) => {
+      if (h) colIndex[String(h).trim()] = i;
     });
 
+    const dataRows = rawRows.slice(headerRowIndex + 1);
+
+    console.log("Sheet:", lastSheetName);
     console.log("Header row index:", headerRowIndex);
     console.log("Headers encontrados:", JSON.stringify(headers));
-    console.log("Primeira linha:", JSON.stringify(rows[0]));
-    console.log("Segunda linha:", JSON.stringify(rows[1]));
+    console.log("Column index map:", JSON.stringify(colIndex));
+
+    const cell = (row: unknown[], col: string): string => {
+      const idx = colIndex[col];
+      if (idx === undefined) return "";
+      return String(row[idx] ?? "").trim();
+    };
+
+    const cellRaw = (row: unknown[], col: string): unknown => {
+      const idx = colIndex[col];
+      if (idx === undefined) return null;
+      return row[idx] ?? null;
+    };
 
     const vagas: VagaRow[] = [];
 
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const titulo = String(row["Vaga"] ?? "").trim();
+    for (const row of dataRows) {
+      const r = row as unknown[];
+      const titulo = cell(r, "Vaga");
       if (!titulo) continue;
 
-      const localRaw = String(row["Local"] ?? "").trim();
+      const empresa = cell(r, "Empresa") || null;
+      const localRaw = cell(r, "Local");
       const { cidade, estado } = parseLocal(localRaw);
-
-      const status = mapStatus(String(row["Status"] ?? ""));
-
-      const responsavel =
-        String(row["Responsável"] ?? row["Responsavel"] ?? "").trim() || "Giovanni";
+      const status = mapStatus(cell(r, "Status"));
+      const responsavel = cell(r, "Responsável") || cell(r, "Responsavel") || "Giovanni";
+      const salarioRaw = cellRaw(r, "Salário") ?? cellRaw(r, "Salario");
 
       vagas.push({
         titulo,
+        cliente_nome: empresa,
         cliente_id: null,
         tipo_servico: "recrutamento_selecao",
         num_posicoes: 1,
         status,
         cidade,
         estado,
-        requisitos:  String(row["Requisitos"]  ?? "").trim() || null,
-        beneficios:  String(row["Benefícios"]  ?? row["Beneficios"] ?? "").trim() || null,
-        horario:     String(row["Horário"]     ?? row["Horario"]    ?? "").trim() || null,
-        salario:     String(row["Salário"]     ?? row["Salario"]    ?? "").trim() || null,
-        responsavel: responsavel || null,
+        requisitos: cell(r, "Requisitos") || null,
+        beneficios: cell(r, "Benefícios") || cell(r, "Beneficios") || null,
+        horario: cell(r, "Horário") || cell(r, "Horario") || null,
+        salario: formatSalario(salarioRaw),
+        responsavel,
         habilidades_desejadas: [],
-        observacoes: null,
+        observacoes: cell(r, "Observação") || cell(r, "Observacao") || null,
         prazo: null,
         salario_min: null,
         salario_max: null,
@@ -156,7 +181,7 @@ export async function POST(request: NextRequest) {
     if (vagas.length === 0) {
       return NextResponse.json(
         { error: "Nenhuma vaga encontrada no arquivo. Verifique se a coluna 'Vaga' existe." },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -176,7 +201,7 @@ export async function POST(request: NextRequest) {
     const supabase = createServiceClient();
     const { data, error } = await supabase
       .from("vagas")
-      .upsert(padronizadas, { onConflict: "titulo" })
+      .upsert(padronizadas, { onConflict: "titulo,cliente_nome" })
       .select("id");
 
     if (error) {
