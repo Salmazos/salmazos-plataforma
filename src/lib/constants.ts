@@ -182,7 +182,7 @@ export const ETAPAS_KANBAN = [
   },
   {
     id: "aprovado_cliente" as const,
-    label: "Aprovado pelo Cliente",
+    label: "Retorno Cliente",
     descricao: "Cliente confirmou a aprovação do candidato",
     headerBg: "bg-green-500",
     headerText: "text-green-700",

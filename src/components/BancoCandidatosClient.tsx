@@ -21,6 +21,7 @@ export type CandidatoRow = {
   juridico_total_processos: number | null;
   juridico_consultado_em: string | null;
   escavador_status: string | null;
+  bloqueado: boolean | null;
   created_at: string;
 };
 
@@ -668,12 +669,21 @@ export default function BancoCandidatosClient({
                 filtered.map((c) => (
                   <tr
                     key={c.id}
-                    style={{ borderBottom: "1px solid #F3F4F6", transition: "background 0.1s" }}
-                    onMouseEnter={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = "#FAFAFA")}
-                    onMouseLeave={(e) => ((e.currentTarget as HTMLTableRowElement).style.background = "")}
+                    style={{
+                      borderBottom: "1px solid #F3F4F6",
+                      transition: "background 0.1s",
+                      ...(c.bloqueado ? { background: "#1F2937", opacity: 0.7 } : {}),
+                    }}
+                    onMouseEnter={(e) => { if (!c.bloqueado) (e.currentTarget as HTMLTableRowElement).style.background = "#FAFAFA"; }}
+                    onMouseLeave={(e) => { if (!c.bloqueado) (e.currentTarget as HTMLTableRowElement).style.background = ""; }}
                   >
-                    <td style={{ padding: "10px 12px", fontSize: 14, color: "#111827", fontWeight: 600, whiteSpace: "nowrap" }}>
+                    <td style={{ padding: "10px 12px", fontSize: 14, color: c.bloqueado ? "#fff" : "#111827", fontWeight: 600, whiteSpace: "nowrap" }}>
                       {c.nome_completo}
+                      {c.bloqueado && (
+                        <span style={{ display: "inline-block", background: "#dc2626", color: "#fff", padding: "1px 6px", borderRadius: 6, fontSize: 10, fontWeight: 700, marginLeft: 6, verticalAlign: "middle" }}>
+                          BLOQUEADO
+                        </span>
+                      )}
                     </td>
                     <td style={{ padding: "10px 12px", fontSize: 14, color: "#374151", textAlign: "center" }}>
                       {c.idade !== null ? c.idade : "—"}

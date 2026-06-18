@@ -51,6 +51,7 @@ export interface Candidato {
   melhor_match_score?: number | null;
   melhor_match_vaga_titulo?: string | null;
   escavador_status?: "limpo" | "consta" | null;
+  bloqueado?: boolean | null;
   created_at: string;
   updated_at: string;
 }

@@ -139,13 +139,13 @@ export default function KanbanBoard({ candidatos, filtroOrigem, matchData }: Pro
   ]);
 
   // ── kanban handlers ─────────────────────────────────────────────────────────
-  const executarMover = async (id: string, novaEtapa: string) => {
+  const executarMover = async (id: string, novaEtapa: string, comentario?: string) => {
     setMovendo(id);
     try {
       await fetch(`/api/candidatos/${id}/etapa`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ etapa_kanban: novaEtapa }),
+        body: JSON.stringify({ etapa_kanban: novaEtapa, comentario: comentario || null }),
       });
       router.refresh();
     } finally {
@@ -153,7 +153,7 @@ export default function KanbanBoard({ candidatos, filtroOrigem, matchData }: Pro
     }
   };
 
-  const moverCandidato = async (id: string, novaEtapa: string) => {
+  const moverCandidato = async (id: string, novaEtapa: string, comentario?: string) => {
     if (novaEtapa === "entrevista_cliente") {
       const candidato = candidatos.find((c) => c.id === id);
       setPendingEncaminhamento({
@@ -162,7 +162,7 @@ export default function KanbanBoard({ candidatos, filtroOrigem, matchData }: Pro
       });
       return;
     }
-    await executarMover(id, novaEtapa);
+    await executarMover(id, novaEtapa, comentario);
   };
 
   const handleConfirmarEncaminhamento = async (dados: {

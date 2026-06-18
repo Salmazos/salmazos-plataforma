@@ -83,6 +83,12 @@ export async function PATCH(request: NextRequest) {
         .from("candidatos")
         .update({ etapa_kanban: "reprovado" })
         .eq("id", enc.candidato_id);
+
+      const cvQuery = service
+        .from("candidatos_vagas")
+        .update({ etapa: "reprovado" })
+        .eq("candidato_id", enc.candidato_id);
+      await (enc.vaga_id ? cvQuery.eq("vaga_id", enc.vaga_id) : cvQuery);
     }
 
     void registrarHistorico({
