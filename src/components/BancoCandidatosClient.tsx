@@ -14,6 +14,8 @@ export type CandidatoRow = {
   triagem_score: number | null;
   triagem_label: string | null;
   triagem_resumo: string | null;
+  melhor_match_score: number | null;
+  melhor_match_vaga_titulo: string | null;
   created_at: string;
 };
 
@@ -48,10 +50,10 @@ function colorForScore(score: number): { bg: string; fg: string } {
 
 function labelColor(label: string | null): string {
   switch (label) {
-    case "Excelente": return "#22c55e";
-    case "Bom":       return "#3b82f6";
-    case "Regular":   return "#f97316";
-    case "Baixo":     return "#ef4444";
+    case "Excelente": return "#16a34a";
+    case "Bom":       return "#ca8a04";
+    case "Regular":   return "#ea580c";
+    case "Baixo":     return "#dc2626";
     default:          return "#9CA3AF";
   }
 }
@@ -115,15 +117,53 @@ function MatchCell({
   candidatoId,
   loading,
   matchMap,
+  savedScore,
+  savedTitulo,
 }: {
   candidatoId: string;
   loading: boolean;
   matchMap: Record<string, MatchEntry[]>;
+  savedScore: number | null;
+  savedTitulo: string | null;
 }) {
   const [showTooltip, setShowTooltip] = useState(false);
   const matches = matchMap[candidatoId];
 
   if (loading && !matches) {
+    if (savedScore !== null && savedTitulo) {
+      const { bg, fg } = colorForScore(savedScore);
+      return (
+        <div style={{ cursor: "default", textAlign: "center" }}>
+          <span
+            style={{
+              display: "inline-block",
+              background: bg,
+              color: fg,
+              padding: "3px 10px",
+              borderRadius: 12,
+              fontSize: 13,
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {savedScore}%
+          </span>
+          <div
+            style={{
+              fontSize: 11,
+              color: "#6B7280",
+              marginTop: 2,
+              maxWidth: 140,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {savedTitulo}
+          </div>
+        </div>
+      );
+    }
     return (
       <span style={{ color: "#9CA3AF", fontSize: 12, fontStyle: "italic" }}>
         Calculando...
@@ -275,6 +315,8 @@ export default function BancoCandidatosClient({
   const [cidade, setCidade] = useState("");
   const [idadeMin, setIdadeMin] = useState("");
   const [idadeMax, setIdadeMax] = useState("");
+  const [notaIaMin, setNotaIaMin] = useState("");
+  const [matchMin, setMatchMin] = useState("");
 
   const [matchMap, setMatchMap] = useState<Record<string, MatchEntry[]>>({});
   const [loadingMatches, setLoadingMatches] = useState(false);
@@ -373,6 +415,8 @@ export default function BancoCandidatosClient({
     const cidadeQ = cidade.trim().toLowerCase();
     const minAge = idadeMin !== "" ? parseInt(idadeMin, 10) : null;
     const maxAge = idadeMax !== "" ? parseInt(idadeMax, 10) : null;
+    const notaIaThreshold = notaIaMin !== "" ? parseInt(notaIaMin, 10) : null;
+    const matchThreshold = matchMin !== "" ? parseInt(matchMin, 10) : null;
 
     return candidatos.filter((c) => {
       if (nomeQ && !c.nome_completo.toLowerCase().includes(nomeQ)) return false;
@@ -380,9 +424,14 @@ export default function BancoCandidatosClient({
       if (cidadeQ && !(c.cidade ?? "").toLowerCase().includes(cidadeQ)) return false;
       if (minAge !== null && (c.idade === null || c.idade < minAge)) return false;
       if (maxAge !== null && (c.idade === null || c.idade > maxAge)) return false;
+      if (notaIaThreshold !== null && (c.triagem_score === null || c.triagem_score < notaIaThreshold)) return false;
+      if (matchThreshold !== null) {
+        const bestMatch = matchMap[c.id]?.[0]?.score ?? c.melhor_match_score;
+        if (bestMatch === null || bestMatch === undefined || bestMatch < matchThreshold) return false;
+      }
       return true;
     });
-  }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax]);
+  }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, matchMap]);
 
   return (
     <div>
@@ -457,7 +506,7 @@ export default function BancoCandidatosClient({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr",
+            gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 1fr",
             gap: 12,
             alignItems: "end",
           }}
@@ -521,16 +570,48 @@ export default function BancoCandidatosClient({
               onChange={(e) => setIdadeMax(e.target.value)}
             />
           </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
+              Nota IA mínima
+            </label>
+            <select
+              style={inputStyle({ background: "#fff", cursor: "pointer" })}
+              value={notaIaMin}
+              onChange={(e) => setNotaIaMin(e.target.value)}
+            >
+              <option value="">Todas</option>
+              <option value="50">{"≥"}50%</option>
+              <option value="60">{"≥"}60%</option>
+              <option value="70">{"≥"}70%</option>
+              <option value="80">{"≥"}80%</option>
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
+              Match mínimo
+            </label>
+            <select
+              style={inputStyle({ background: "#fff", cursor: "pointer" })}
+              value={matchMin}
+              onChange={(e) => setMatchMin(e.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="50">{"≥"}50%</option>
+              <option value="60">{"≥"}60%</option>
+              <option value="70">{"≥"}70%</option>
+              <option value="80">{"≥"}80%</option>
+            </select>
+          </div>
         </div>
 
-        {(nome || cargo || cidade || idadeMin || idadeMax) && (
+        {(nome || cargo || cidade || idadeMin || idadeMax || notaIaMin || matchMin) && (
           <div style={{ marginTop: 10, fontSize: 13, color: "#6B7280" }}>
             Exibindo{" "}
             <strong style={{ color: "#111827" }}>{filtered.length}</strong> de{" "}
             {candidatos.length} candidatos
             {" · "}
             <button
-              onClick={() => { setNome(""); setCargo(""); setCidade(""); setIdadeMin(""); setIdadeMax(""); }}
+              onClick={() => { setNome(""); setCargo(""); setCidade(""); setIdadeMin(""); setIdadeMax(""); setNotaIaMin(""); setMatchMin(""); }}
               style={{ background: "none", border: "none", color: "#FFB800", cursor: "pointer", fontSize: 13, fontWeight: 600, padding: 0 }}
             >
               Limpar filtros
@@ -595,6 +676,8 @@ export default function BancoCandidatosClient({
                         candidatoId={c.id}
                         loading={loadingMatches}
                         matchMap={matchMap}
+                        savedScore={c.melhor_match_score}
+                        savedTitulo={c.melhor_match_vaga_titulo}
                       />
                     </td>
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>

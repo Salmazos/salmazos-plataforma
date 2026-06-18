@@ -74,5 +74,16 @@ export async function GET(req: NextRequest) {
 
   const top3 = results.sort((a, b) => b.score - a.score).slice(0, 3);
 
+  if (top3.length > 0) {
+    const best = top3[0];
+    await supabase
+      .from("candidatos")
+      .update({
+        melhor_match_score: best.score,
+        melhor_match_vaga_titulo: best.titulo,
+      })
+      .eq("id", candidatoId);
+  }
+
   return NextResponse.json({ matches: top3 });
 }
