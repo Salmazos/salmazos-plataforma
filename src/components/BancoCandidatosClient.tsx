@@ -192,10 +192,10 @@ function MatchCell({
         <div
           style={{
             position: "absolute",
-            top: "100%",
+            bottom: "100%",
             left: "50%",
             transform: "translateX(-50%)",
-            marginTop: 6,
+            marginBottom: 6,
             background: "#fff",
             border: "1px solid #E5E7EB",
             borderRadius: 10,
