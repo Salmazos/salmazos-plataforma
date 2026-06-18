@@ -129,54 +129,22 @@ function MatchCell({
   const [showTooltip, setShowTooltip] = useState(false);
   const matches = matchMap[candidatoId];
 
-  if (loading && !matches) {
-    if (savedScore !== null && savedTitulo) {
-      const { bg, fg } = colorForScore(savedScore);
+  const displayScore = matches?.[0]?.score ?? savedScore;
+  const displayTitulo = matches?.[0]?.titulo ?? savedTitulo;
+
+  if (displayScore === null || displayScore === undefined) {
+    if (loading) {
       return (
-        <div style={{ cursor: "default", textAlign: "center" }}>
-          <span
-            style={{
-              display: "inline-block",
-              background: bg,
-              color: fg,
-              padding: "3px 10px",
-              borderRadius: 12,
-              fontSize: 13,
-              fontWeight: 700,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {savedScore}%
-          </span>
-          <div
-            style={{
-              fontSize: 11,
-              color: "#6B7280",
-              marginTop: 2,
-              maxWidth: 140,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {savedTitulo}
-          </div>
-        </div>
+        <span style={{ color: "#9CA3AF", fontSize: 12, fontStyle: "italic" }}>
+          Calculando...
+        </span>
       );
     }
-    return (
-      <span style={{ color: "#9CA3AF", fontSize: 12, fontStyle: "italic" }}>
-        Calculando...
-      </span>
-    );
-  }
-
-  if (!matches || matches.length === 0) {
     return <span style={{ color: "#9CA3AF", fontSize: 13 }}>Sem vagas</span>;
   }
 
-  const best = matches[0];
-  const { bg, fg } = colorForScore(best.score);
+  const best = matches?.[0];
+  const { bg, fg } = colorForScore(displayScore);
 
   return (
     <div
@@ -197,7 +165,7 @@ function MatchCell({
             whiteSpace: "nowrap",
           }}
         >
-          {best.score}%
+          {displayScore}%
         </span>
         <div
           style={{
@@ -210,11 +178,11 @@ function MatchCell({
             whiteSpace: "nowrap",
           }}
         >
-          {best.titulo}
+          {displayTitulo}
         </div>
       </div>
 
-      {showTooltip && (
+      {showTooltip && matches && matches.length > 0 && (
         <div
           style={{
             position: "absolute",
