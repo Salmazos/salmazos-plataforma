@@ -59,7 +59,7 @@ function triagemStyle(score: number): { bg: string; fg: string } {
 }
 
 function ScoreBadge({ score, label, resumo }: { score: number | null; label: string | null; resumo: string | null }) {
-  const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
 
   if (score === null) return <span style={{ color: "#9CA3AF" }}>—</span>;
 
@@ -67,9 +67,12 @@ function ScoreBadge({ score, label, resumo }: { score: number | null; label: str
 
   return (
     <div
-      style={{ position: "relative", display: "inline-block" }}
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
+      style={{ display: "inline-block" }}
+      onMouseEnter={(e) => {
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top });
+      }}
+      onMouseLeave={() => setTooltipPos(null)}
     >
       <span
         style={{
@@ -87,22 +90,25 @@ function ScoreBadge({ score, label, resumo }: { score: number | null; label: str
         {score}% {label ?? ""}
       </span>
 
-      {showTooltip && (
+      {tooltipPos && (
         <div
           style={{
-            position: "absolute",
-            bottom: "calc(100% + 6px)",
-            left: "50%",
-            transform: "translateX(-50%)",
+            position: "fixed",
+            top: tooltipPos.y - 8,
+            left: tooltipPos.x,
+            transform: "translate(-50%, -100%)",
             background: "#1F2937",
             color: "#F9FAFB",
             fontSize: 12,
-            lineHeight: 1.4,
-            borderRadius: 6,
-            padding: "6px 10px",
-            zIndex: 50,
-            maxWidth: 240,
-            boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+            lineHeight: 1.5,
+            borderRadius: 8,
+            padding: "8px 12px",
+            zIndex: 9999,
+            maxWidth: 320,
+            width: "max-content",
+            wordWrap: "break-word",
+            whiteSpace: "normal",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.3)",
             pointerEvents: "none",
           }}
         >
