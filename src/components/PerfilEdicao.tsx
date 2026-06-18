@@ -236,7 +236,20 @@ export default function PerfilEdicao({ candidato }: Props) {
                     size="md"
                   />
                   {candidato.triagem_resumo && (
-                    <span className="text-xs text-gray-400">{candidato.triagem_resumo}</span>
+                    <span className="text-xs">
+                      {candidato.triagem_resumo.split(" | ").map((part, i) => (
+                        <span
+                          key={i}
+                          style={{
+                            color: part.includes("Score penalizado") ? "#dc2626" : "#9CA3AF",
+                            fontWeight: part.includes("Score penalizado") ? 700 : 400,
+                          }}
+                        >
+                          {i > 0 && " | "}
+                          {part}
+                        </span>
+                      ))}
+                    </span>
                   )}
                 </div>
               )}
