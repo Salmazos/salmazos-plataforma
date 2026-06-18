@@ -86,6 +86,9 @@ export default function PerfilEdicao({ candidato }: Props) {
 
   const [waDropdownOpen, setWaDropdownOpen] = useState(false);
   const [recalculando, setRecalculando] = useState(false);
+  const [escavadorStatus, setEscavadorStatus] = useState<string | null>(candidato.escavador_status ?? null);
+  const [escavadorSaving, setEscavadorSaving] = useState(false);
+  const [escavadorMsg, setEscavadorMsg] = useState<string | null>(null);
 
   const WA_OPCOES = [
     {
@@ -115,6 +118,32 @@ export default function PerfilEdicao({ candidato }: Props) {
     setForm(makeForm(candidato));
     setErro("");
     setEditando(false);
+  };
+
+  const handleEscavadorChange = async (newStatus: string) => {
+    if (newStatus === "" || newStatus === escavadorStatus) return;
+    setEscavadorSaving(true);
+    setEscavadorMsg(null);
+    try {
+      const res = await fetch(`/api/candidatos/${candidato.id}/escavador-status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ escavador_status: newStatus }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setEscavadorStatus(newStatus);
+        if (newStatus === "consta" && json.triagem_score !== candidato.triagem_score) {
+          setEscavadorMsg("Score penalizado por consulta jurídica");
+          setTimeout(() => setEscavadorMsg(null), 4000);
+        }
+        router.refresh();
+      }
+    } catch {
+      // silent
+    } finally {
+      setEscavadorSaving(false);
+    }
   };
 
   const handleRecalcularTriagem = async () => {
@@ -371,21 +400,58 @@ export default function PerfilEdicao({ candidato }: Props) {
         </div>
 
         {/* Processos */}
-        <div className="card" style={{ textAlign: "center", padding: "16px 12px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>
+        <div className="card" style={{ padding: "16px 12px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10, textAlign: "center" }}>
             Processos
           </div>
-          {candidato.juridico_consultado_em == null ? (
-            <span style={{ color: "#9CA3AF", fontSize: 13, fontStyle: "italic" }}>Consultando...</span>
-          ) : candidato.juridico_tem_trabalhista ? (
-            <span style={{ display: "inline-block", background: "#FEE2E2", color: "#991B1B", padding: "3px 10px", borderRadius: 12, fontSize: 13, fontWeight: 700 }}>
-              {"⚠"} Trabalhista ({candidato.juridico_total_processos ?? 0})
-            </span>
-          ) : (
-            <span style={{ display: "inline-block", background: "#D1FAE5", color: "#065F46", padding: "3px 10px", borderRadius: 12, fontSize: 13, fontWeight: 700 }}>
-              {"✓"} Limpo
-            </span>
+
+          {escavadorMsg && (
+            <div style={{ background: "#FEE2E2", color: "#991B1B", border: "1px solid #FCA5A5", borderRadius: 6, padding: "6px 10px", fontSize: 12, fontWeight: 600, marginBottom: 10, textAlign: "center" }}>
+              {"⚠"} {escavadorMsg}
+            </div>
           )}
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 600, minWidth: 60 }}>Datajud:</span>
+            {candidato.juridico_consultado_em == null ? (
+              <span style={{ color: "#9CA3AF", fontSize: 12, fontStyle: "italic" }}>Consultando...</span>
+            ) : candidato.juridico_tem_trabalhista ? (
+              <span style={{ display: "inline-block", background: "#FEE2E2", color: "#991B1B", padding: "2px 8px", borderRadius: 10, fontSize: 12, fontWeight: 700 }}>
+                {"⚠"} Trabalhista ({candidato.juridico_total_processos ?? 0})
+              </span>
+            ) : (
+              <span style={{ display: "inline-block", background: "#D1FAE5", color: "#065F46", padding: "2px 8px", borderRadius: 10, fontSize: 12, fontWeight: 700 }}>
+                {"✓"} Limpo
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 12, color: "#6B7280", fontWeight: 600, minWidth: 60 }}>Escavador:</span>
+            {escavadorSaving ? (
+              <span style={{ color: "#9CA3AF", fontSize: 12, fontStyle: "italic" }}>Salvando...</span>
+            ) : (
+              <select
+                value={escavadorStatus ?? ""}
+                onChange={(e) => handleEscavadorChange(e.target.value)}
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  padding: "2px 8px",
+                  borderRadius: 10,
+                  border: "1px solid #E5E7EB",
+                  outline: "none",
+                  cursor: "pointer",
+                  background: escavadorStatus === "limpo" ? "#D1FAE5" : escavadorStatus === "consta" ? "#FEE2E2" : "#F9FAFB",
+                  color: escavadorStatus === "limpo" ? "#065F46" : escavadorStatus === "consta" ? "#991B1B" : "#9CA3AF",
+                }}
+              >
+                <option value="">— Não consultado</option>
+                <option value="limpo">{"✓"} Limpo</option>
+                <option value="consta">{"⚠"} Consta</option>
+              </select>
+            )}
+          </div>
         </div>
 
         {/* Melhor Match */}

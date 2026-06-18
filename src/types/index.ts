@@ -50,6 +50,7 @@ export interface Candidato {
   juridico_resumo?: unknown[] | null;
   melhor_match_score?: number | null;
   melhor_match_vaga_titulo?: string | null;
+  escavador_status?: "limpo" | "consta" | null;
   created_at: string;
   updated_at: string;
 }
