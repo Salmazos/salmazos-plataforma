@@ -40,7 +40,8 @@
       "mcp__claude_ai_Vercel__get_runtime_logs",
       "Bash(NODE_OPTIONS=--use-system-ca npm install @vercel/functions)",
       "Bash(curl *)",
-      "Bash(python3 *)"
+      "Bash(python3 *)",
+      "Bash(git -C /c/Users/Olver/Desktop/salmazos-plataforma log --oneline --all -- \"supabase/*.sql\")"
     ]
   }
 }

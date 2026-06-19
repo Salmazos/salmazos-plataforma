@@ -452,10 +452,16 @@ export default function AgendaPage() {
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 3, alignItems: "center" }}>
                     {visibleDots.map((item, j) => {
                       const cfg = STATUS_CFG[item.status] ?? STATUS_CFG.aguardando;
+                      const tooltipParts = [
+                        item.candidato?.nome_completo ?? "?",
+                        item.cliente?.nome ? `→ ${item.cliente.nome}` : "",
+                        item.vaga?.titulo ? `(${item.vaga.titulo})` : "",
+                        `— ${cfg.label}`,
+                      ].filter(Boolean);
                       return (
                         <span
                           key={j}
-                          title={`${item.candidato?.nome_completo ?? "?"} — ${cfg.label}`}
+                          title={tooltipParts.join(" ")}
                           style={{
                             width: 8, height: 8,
                             borderRadius: "50%",
@@ -652,17 +658,24 @@ export default function AgendaPage() {
                       <td
                         style={{
                           padding: "10px 12px", fontSize: 13, color: "#6B7280",
-                          maxWidth: 180,
+                          maxWidth: 200,
                         }}
                       >
-                        <span
-                          style={{
-                            display: "block",
-                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                          }}
-                        >
-                          {item.vaga?.titulo ?? "—"}
-                        </span>
+                        {item.vaga?.titulo ? (
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 4,
+                              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                            }}
+                          >
+                            <span style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", flexShrink: 0 }}>Vaga:</span>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{item.vaga.titulo}</span>
+                          </span>
+                        ) : (
+                          <span style={{ color: "#D1D5DB" }}>—</span>
+                        )}
                       </td>
 
                       {/* Data */}

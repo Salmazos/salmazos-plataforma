@@ -9,6 +9,8 @@ interface Props {
   isOpen: boolean;
   candidatoId: string;
   candidatoNome: string;
+  vagaId?: string;
+  vagaTitulo?: string;
   onClose: () => void;
   onConfirmar: (dados: {
     cliente_id: string;
@@ -30,6 +32,8 @@ export default function ModalEncaminhamento({
   isOpen,
   candidatoId,
   candidatoNome,
+  vagaId: vagaIdProp,
+  vagaTitulo: vagaTituloProp,
   onClose,
   onConfirmar,
 }: Props) {
@@ -48,6 +52,7 @@ export default function ModalEncaminhamento({
   const [autorizadoPor, setAutorizadoPor] = useState("");
   const [vagas, setVagas] = useState<{ id: string; titulo: string }[]>([]);
   const [vagaId, setVagaId] = useState("");
+  const [tentouEnviar, setTentouEnviar] = useState(false);
 
   const clienteSelecionado = clientes.find((c) => c.id === clienteId);
   const duplicata = historico.find((e) => e.cliente_id === clienteId);
@@ -77,8 +82,9 @@ export default function ModalEncaminhamento({
     setForcarEnvio(false);
     setJustificativa("");
     setAutorizadoPor("");
-    setVagaId("");
+    setVagaId(vagaIdProp ?? "");
     setVagas([]);
+    setTentouEnviar(false);
 
     const carregar = async () => {
       setCarregando(true);
@@ -100,7 +106,10 @@ export default function ModalEncaminhamento({
 
   if (!isOpen) return null;
 
+  const vagaIdFinal = vagaIdProp ?? vagaId;
+
   const handleConfirmar = async () => {
+    setTentouEnviar(true);
     if (!clienteId || !dataEntrevista || !tipoServico) {
       setErro("Selecione o cliente, o tipo de serviço e a data da entrevista.");
       return;
@@ -120,7 +129,7 @@ export default function ModalEncaminhamento({
     setEnviando(true);
     setErro("");
     try {
-      await onConfirmar({ cliente_id: clienteId, data_entrevista: dataEntrevista, tipo_servico: tipoServico, observacoes: obsCompleta, vaga_id: vagaId || undefined });
+      await onConfirmar({ cliente_id: clienteId, data_entrevista: dataEntrevista, tipo_servico: tipoServico, observacoes: obsCompleta, vaga_id: vagaIdFinal || undefined });
     } catch {
       setErro("Erro ao salvar encaminhamento.");
       setEnviando(false);
@@ -134,8 +143,13 @@ export default function ModalEncaminhamento({
         <div className="bg-black text-white px-6 py-4 rounded-t-2xl">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="font-bold text-lg">Encaminhar para cliente</h2>
+              <h2 className="font-bold text-lg flex items-center gap-2">
+                <span>📅</span> Agendar Entrevista com Cliente
+              </h2>
               <p className="text-[#FFD700] text-sm mt-0.5">{candidatoNome}</p>
+              {vagaTituloProp && (
+                <p className="text-gray-400 text-xs mt-0.5">Vaga: {vagaTituloProp}</p>
+              )}
             </div>
             <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -181,8 +195,17 @@ export default function ModalEncaminhamento({
                 )}
               </div>
 
-              {/* Vaga */}
-              {clienteId && vagas.length > 0 && (
+              {/* Vaga — read-only when pre-filled from Kanban */}
+              {vagaIdProp && vagaTituloProp ? (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    Vaga
+                  </label>
+                  <div className="input-field bg-gray-50 text-gray-700 cursor-default">
+                    {vagaTituloProp}
+                  </div>
+                </div>
+              ) : clienteId && vagas.length > 0 ? (
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                     Vaga
@@ -198,7 +221,7 @@ export default function ModalEncaminhamento({
                     ))}
                   </select>
                 </div>
-              )}
+              ) : null}
 
               {/* Alerta de duplicidade */}
               {duplicata && clienteSelecionado && (
@@ -327,7 +350,11 @@ export default function ModalEncaminhamento({
                   value={dataEntrevista}
                   onChange={(e) => setDataEntrevista(e.target.value)}
                   className="input-field"
+                  style={tentouEnviar && !dataEntrevista ? { borderColor: "#EF4444", boxShadow: "0 0 0 1px #EF4444" } : undefined}
                 />
+                {tentouEnviar && !dataEntrevista && (
+                  <p className="text-red-500 text-xs mt-1">Informe a data da entrevista.</p>
+                )}
               </div>
 
               {/* Observações */}
@@ -343,6 +370,22 @@ export default function ModalEncaminhamento({
                   className="input-field resize-none"
                 />
               </div>
+
+              {/* Resumo */}
+              {clienteId && dataEntrevista && tipoServico && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Resumo</p>
+                  <p className="text-sm text-gray-700">
+                    <strong>{candidatoNome}</strong> será agendado para entrevista com{" "}
+                    <strong>{clienteSelecionado?.nome ?? "—"}</strong>{" "}
+                    em <strong>{dataEntrevista.split("-").reverse().join("/")}</strong>
+                    {(vagaTituloProp || vagas.find((v) => v.id === vagaId)?.titulo) && (
+                      <> para a vaga <strong>{vagaTituloProp || vagas.find((v) => v.id === vagaId)?.titulo}</strong></>
+                    )}
+                    .
+                  </p>
+                </div>
+              )}
 
               {erro && (
                 <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">

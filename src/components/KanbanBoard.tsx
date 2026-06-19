@@ -17,6 +17,8 @@ interface PendingEncaminhamento {
   cvId: string;
   candidatoId: string;
   candidatoNome: string;
+  vagaId: string;
+  vagaTitulo: string;
 }
 
 const FORMACOES = [
@@ -52,6 +54,7 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
   const [movendo, setMovendo] = useState<string | null>(null);
   const [pendingEncaminhamento, setPendingEncaminhamento] =
     useState<PendingEncaminhamento | null>(null);
+  const [toast, setToast] = useState("");
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [filtroKeyword, setFiltroKeyword]       = useState("");
   const [filtroCidade, setFiltroCidade]         = useState("");
@@ -109,6 +112,8 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
         cvId,
         candidatoId: card?.candidato_id ?? "",
         candidatoNome: card?.nome_completo ?? "",
+        vagaId: card?.vaga_id ?? "",
+        vagaTitulo: card?.vaga_titulo ?? "",
       });
       return;
     }
@@ -160,6 +165,8 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
         body: JSON.stringify({ etapa: "entrevista_cliente" }),
       });
       router.refresh();
+      setToast("Entrevista agendada e candidato enviado para o painel do cliente");
+      setTimeout(() => setToast(""), 4000);
     } finally {
       setMovendo(null);
     }
@@ -319,9 +326,36 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
         isOpen={!!pendingEncaminhamento}
         candidatoId={pendingEncaminhamento?.candidatoId ?? ""}
         candidatoNome={pendingEncaminhamento?.candidatoNome ?? ""}
+        vagaId={pendingEncaminhamento?.vagaId}
+        vagaTitulo={pendingEncaminhamento?.vagaTitulo}
         onClose={() => setPendingEncaminhamento(null)}
         onConfirmar={handleConfirmarEncaminhamento}
       />
+
+      {/* Toast */}
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            background: "#065F46",
+            color: "#fff",
+            padding: "12px 24px",
+            borderRadius: 12,
+            fontSize: 14,
+            fontWeight: 600,
+            zIndex: 60,
+            boxShadow: "0 4px 24px rgba(0,0,0,0.18)",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <span>✅</span> {toast}
+        </div>
+      )}
     </div>
   );
 }
