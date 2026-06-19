@@ -25,6 +25,8 @@ const OPCOES_POR_ETAPA: Record<string, EtapaOption[]> = {
     { value: "bloqueado", label: "Bloqueado" },
   ],
   entrevista_cliente: [
+    { value: "aprovado_cliente", label: "Aprovado pelo Cliente" },
+    { value: "reprovado_cliente", label: "Reprovado pelo Cliente" },
     { value: "nao_tem_interesse", label: "Não tem Interesse" },
     { value: "nao_compareceu", label: "Não Compareceu" },
     { value: "bloqueado", label: "Bloqueado" },

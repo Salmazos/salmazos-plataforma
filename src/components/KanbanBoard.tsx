@@ -53,6 +53,7 @@ const CHIP_OFF: React.CSSProperties = { backgroundColor: "#fff", color: "#374151
 // Map entrevista_salmazos to same column for display
 const ETAPA_COLUMN_MAP: Record<string, string> = {
   entrevista_rh: "entrevista_salmazos",
+  reprovado_cliente: "aprovado_cliente",
 };
 
 export default function KanbanBoard({ cards, filtroOrigem }: Props) {
