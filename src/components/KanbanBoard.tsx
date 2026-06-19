@@ -371,6 +371,12 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
               "#065F46",
               "🎉",
             );
+          } else if (res.vaga_reaberta) {
+            showToast(
+              "Processo encerrado. Candidato retornou ao Banco. Vaga reaberta automaticamente.",
+              "#92400E",
+              "📋",
+            );
           } else {
             showToast(
               "Processo encerrado. Candidato retornou ao Banco de Candidatos.",

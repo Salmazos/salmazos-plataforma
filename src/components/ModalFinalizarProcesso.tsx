@@ -15,15 +15,49 @@ interface Props {
 export interface FinalizarResult {
   resultado: "contratado" | "reprovado_final";
   vaga_encerrada?: boolean;
+  vaga_reaberta?: boolean;
 }
 
-const MOTIVOS_REPROVACAO = [
-  "Perfil técnico inadequado",
-  "Pretensão salarial",
-  "Comportamental",
+const MOTIVOS_ENCERRAMENTO = [
   "Candidato desistiu",
+  "Cliente cancelou a vaga",
+  "Reprovado na entrevista final pelo cliente",
+  "Proposta recusada pelo candidato",
+  "Impedimento documental ou médico",
   "Outro",
 ];
+
+const RESPONSAVEIS = [
+  "Cliente",
+  "Candidato",
+  "Ambos",
+  "Externo (vaga cancelada, corte de budget, etc.)",
+];
+
+function InfoBox({ motivo }: { motivo: string }) {
+  if (!motivo) return null;
+
+  let bg: string, border: string, color: string, text: string;
+
+  if (motivo === "Cliente cancelou a vaga") {
+    bg = "#FFFBEB"; border = "#FCD34D"; color = "#92400E";
+    text = "A vaga será reaberta automaticamente e o candidato retornará ao Banco de Candidatos.";
+  } else if (motivo === "Candidato desistiu" || motivo === "Proposta recusada pelo candidato") {
+    bg = "#EFF6FF"; border = "#93C5FD"; color = "#1E40AF";
+    text = "O candidato retornará ao Banco de Candidatos disponível para outras vagas.";
+  } else {
+    bg = "#F9FAFB"; border = "#E5E7EB"; color = "#374151";
+    text = "O candidato retornará ao Banco de Candidatos.";
+  }
+
+  return (
+    <div style={{ background: bg, border: `1px solid ${border}`, borderRadius: 8, padding: "10px 14px" }}>
+      <p style={{ fontSize: 13, color, margin: 0 }}>
+        <strong style={{ marginRight: 4 }}>ℹ️</strong> {text}
+      </p>
+    </div>
+  );
+}
 
 export default function ModalFinalizarProcesso({
   isOpen,
@@ -36,6 +70,7 @@ export default function ModalFinalizarProcesso({
 }: Props) {
   const [dataInicio, setDataInicio] = useState("");
   const [motivoReprovacao, setMotivoReprovacao] = useState("");
+  const [responsavelEncerramento, setResponsavelEncerramento] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
@@ -52,7 +87,11 @@ export default function ModalFinalizarProcesso({
       return;
     }
     if (!isContratado && !motivoReprovacao) {
-      setErro("Selecione o motivo.");
+      setErro("Selecione o motivo do encerramento.");
+      return;
+    }
+    if (!isContratado && !responsavelEncerramento) {
+      setErro("Selecione o responsável pelo encerramento.");
       return;
     }
 
@@ -64,7 +103,9 @@ export default function ModalFinalizarProcesso({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           resultado,
-          ...(isContratado ? { data_inicio: dataInicio } : { motivo_reprovacao: motivoReprovacao }),
+          ...(isContratado
+            ? { data_inicio: dataInicio }
+            : { motivo_reprovacao: motivoReprovacao, responsavel_encerramento: responsavelEncerramento }),
           observacoes: observacoes || null,
         }),
       });
@@ -74,12 +115,18 @@ export default function ModalFinalizarProcesso({
         setEnviando(false);
         return;
       }
-      onConfirmar({ resultado, vaga_encerrada: json.vaga_encerrada });
+      onConfirmar({
+        resultado,
+        vaga_encerrada: json.vaga_encerrada,
+        vaga_reaberta: json.vaga_reaberta,
+      });
     } catch {
       setErro("Erro de conexão.");
       setEnviando(false);
     }
   };
+
+  const invalidStyle = { borderColor: "#EF4444", boxShadow: "0 0 0 1px #EF4444" };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -118,38 +165,65 @@ export default function ModalFinalizarProcesso({
                 value={dataInicio}
                 onChange={(e) => setDataInicio(e.target.value)}
                 className="input-field"
-                style={tentouEnviar && !dataInicio ? { borderColor: "#EF4444", boxShadow: "0 0 0 1px #EF4444" } : undefined}
+                style={tentouEnviar && !dataInicio ? invalidStyle : undefined}
               />
               {tentouEnviar && !dataInicio && (
                 <p className="text-red-500 text-xs mt-1">Informe a data de início.</p>
               )}
             </div>
           ) : (
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                Motivo *
-              </label>
-              <select
-                value={motivoReprovacao}
-                onChange={(e) => setMotivoReprovacao(e.target.value)}
-                className="input-field"
-                style={tentouEnviar && !motivoReprovacao ? { borderColor: "#EF4444", boxShadow: "0 0 0 1px #EF4444" } : undefined}
-              >
-                <option value="">Selecione o motivo...</option>
-                {MOTIVOS_REPROVACAO.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-              {tentouEnviar && !motivoReprovacao && (
-                <p className="text-red-500 text-xs mt-1">Selecione o motivo.</p>
-              )}
-            </div>
+            <>
+              {/* Motivo */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                  Motivo do Encerramento *
+                </label>
+                <select
+                  value={motivoReprovacao}
+                  onChange={(e) => setMotivoReprovacao(e.target.value)}
+                  className="input-field"
+                  style={tentouEnviar && !motivoReprovacao ? invalidStyle : undefined}
+                >
+                  <option value="">Selecione o motivo...</option>
+                  {MOTIVOS_ENCERRAMENTO.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                {tentouEnviar && !motivoReprovacao && (
+                  <p className="text-red-500 text-xs mt-1">Selecione o motivo do encerramento.</p>
+                )}
+              </div>
+
+              {/* Responsável */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                  Responsável pelo encerramento *
+                </label>
+                <select
+                  value={responsavelEncerramento}
+                  onChange={(e) => setResponsavelEncerramento(e.target.value)}
+                  className="input-field"
+                  style={tentouEnviar && !responsavelEncerramento ? invalidStyle : undefined}
+                >
+                  <option value="">Selecione...</option>
+                  {RESPONSAVEIS.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+                {tentouEnviar && !responsavelEncerramento && (
+                  <p className="text-red-500 text-xs mt-1">Selecione o responsável.</p>
+                )}
+              </div>
+
+              {/* Info box contextual */}
+              <InfoBox motivo={motivoReprovacao} />
+            </>
           )}
 
-          {/* Observações */}
+          {/* Comentário */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-              Observações
+              {isContratado ? "Observações" : "Comentário"}
             </label>
             <textarea
               value={observacoes}
