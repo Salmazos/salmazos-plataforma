@@ -80,14 +80,14 @@ function generateICS(item: AgendaItem): string {
     ? `Entrevista — ${candidatoNome} / ${vagaTitulo}`
     : `Entrevista — ${candidatoNome}`;
 
-  const descParts = [
-    `Candidato: ${candidatoNome}`,
-    vagaTitulo ? `Vaga: ${vagaTitulo}` : "",
-    clienteNome ? `Cliente: ${clienteNome}` : "",
-    item.observacoes ? `Observações: ${item.observacoes}` : "",
-  ].filter(Boolean);
-
   const escapeICS = (s: string) => s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+
+  const descParts = [
+    `Candidato: ${escapeICS(candidatoNome)}`,
+    vagaTitulo ? `Vaga: ${escapeICS(vagaTitulo)}` : "",
+    clienteNome ? `Cliente: ${escapeICS(clienteNome)}` : "",
+    item.observacoes ? `Observações: ${escapeICS(item.observacoes)}` : "",
+  ].filter(Boolean);
 
   return [
     "BEGIN:VCALENDAR",
@@ -102,7 +102,7 @@ function generateICS(item: AgendaItem): string {
     `DTEND;VALUE=DATE:${dtEnd}`,
     `SUMMARY:${escapeICS(summary)}`,
     clienteNome ? `LOCATION:${escapeICS(clienteNome)}` : "",
-    `DESCRIPTION:${escapeICS(descParts.join("\\n"))}`,
+    `DESCRIPTION:${descParts.join("\\n")}`,
     "ORGANIZER;CN=Salmazos RH & Serviços:MAILTO:noreply@salmazos.com.br",
     "END:VEVENT",
     "END:VCALENDAR",
