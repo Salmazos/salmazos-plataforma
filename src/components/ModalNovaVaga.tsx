@@ -76,6 +76,7 @@ const FORM_VAZIO = {
   titulo: "", cliente_id: "", tipo_servico: "", num_posicoes: "",
   prazo: "", cidade: "", estado: "",
   salario: "", observacoes: "", responsavel: "",
+  fee_rs_percentual: "", fee_rs_prazo_cobranca: "",
 };
 
 function parseBeneficios(raw: string): { chips: string[]; custom: string[] } {
@@ -162,6 +163,8 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props)
         salario:      vaga.salario ?? "",
         observacoes:  vaga.observacoes ?? "",
         responsavel:  vaga.responsavel,
+        fee_rs_percentual: vaga.fee_rs_percentual != null ? String(vaga.fee_rs_percentual) : "",
+        fee_rs_prazo_cobranca: vaga.fee_rs_prazo_cobranca ?? "",
       });
       setHabilidades(vaga.habilidades_desejadas ?? []);
 
@@ -270,6 +273,8 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props)
           beneficios:            assembleBeneficios(),
           horario:               assembleHorario(),
           requisitos:            assembleRequisitos(),
+          fee_rs_percentual:     form.fee_rs_percentual,
+          fee_rs_prazo_cobranca: form.fee_rs_prazo_cobranca,
         }),
       });
       const json = await res.json();
@@ -396,6 +401,42 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props)
               className="input-field"
             />
           </div>
+
+          {/* Fee R&S (only for recrutamento_selecao) */}
+          {form.tipo_servico === "recrutamento_selecao" && (
+            <div className="border-t pt-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Fee Salmazos (R&S)</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    Fee Salmazos (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.fee_rs_percentual}
+                    onChange={(e) => set("fee_rs_percentual", e.target.value)}
+                    placeholder="Ex: 100"
+                    className="input-field"
+                  />
+                  <p className="text-gray-400 text-xs mt-1">Percentual sobre o primeiro salário do candidato</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    Prazo de Cobrança
+                  </label>
+                  <input
+                    value={form.fee_rs_prazo_cobranca}
+                    onChange={(e) => set("fee_rs_prazo_cobranca", e.target.value)}
+                    placeholder="Ex: 30 dias após início do candidato"
+                    className="input-field"
+                  />
+                  <p className="text-gray-400 text-xs mt-1">Prazo acordado com o cliente para pagamento do fee</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ── HORÁRIO ─────────────────────────────────────────────────────── */}
           <div className="border-t pt-4">

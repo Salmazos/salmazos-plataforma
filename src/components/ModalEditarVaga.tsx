@@ -125,6 +125,8 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
     salario: "",
     observacoes: "",
     responsavel: "",
+    fee_rs_percentual: "",
+    fee_rs_prazo_cobranca: "",
   });
   const [habilidades, setHabilidades] = useState<string[]>([]);
   const [clientes, setClientes]       = useState<ClienteOpcao[]>([]);
@@ -164,6 +166,8 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
       salario:      vaga.salario ?? "",
       observacoes:  vaga.observacoes ?? "",
       responsavel:  vaga.responsavel,
+      fee_rs_percentual: vaga.fee_rs_percentual != null ? String(vaga.fee_rs_percentual) : "",
+      fee_rs_prazo_cobranca: vaga.fee_rs_prazo_cobranca ?? "",
     });
     setHabilidades(vaga.habilidades_desejadas ?? []);
 
@@ -261,6 +265,8 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
           beneficios:            assembleBeneficios(),
           horario:               assembleHorario(),
           requisitos:            assembleRequisitos(),
+          fee_rs_percentual:     form.fee_rs_percentual,
+          fee_rs_prazo_cobranca: form.fee_rs_prazo_cobranca,
         }),
       });
       const json = await res.json();
@@ -389,6 +395,42 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
             <input value={form.salario} onChange={(e) => set("salario", e.target.value)}
               placeholder="Ex: R$ 2.500,00 ou À combinar ou Enviar Pretensão Salarial" className="input-field" />
           </div>
+
+          {/* Fee R&S (only for recrutamento_selecao) */}
+          {form.tipo_servico === "recrutamento_selecao" && (
+            <div className="border-t pt-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Fee Salmazos (R&S)</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    Fee Salmazos (%)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.fee_rs_percentual}
+                    onChange={(e) => set("fee_rs_percentual", e.target.value)}
+                    placeholder="Ex: 100"
+                    className="input-field"
+                  />
+                  <p className="text-gray-400 text-xs mt-1">Percentual sobre o primeiro salário do candidato</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    Prazo de Cobrança
+                  </label>
+                  <input
+                    value={form.fee_rs_prazo_cobranca}
+                    onChange={(e) => set("fee_rs_prazo_cobranca", e.target.value)}
+                    placeholder="Ex: 30 dias após início do candidato"
+                    className="input-field"
+                  />
+                  <p className="text-gray-400 text-xs mt-1">Prazo acordado com o cliente para pagamento do fee</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ── HORÁRIO ─────────────────────────────────────────────────────── */}
           <div className="border-t pt-4">

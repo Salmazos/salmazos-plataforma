@@ -45,6 +45,8 @@ export async function POST(request: NextRequest) {
           : [],
         responsavel: body.responsavel,
         observacoes: body.observacoes || null,
+        fee_rs_percentual: body.fee_rs_percentual ? Number(body.fee_rs_percentual) : null,
+        fee_rs_prazo_cobranca: body.fee_rs_prazo_cobranca || null,
       })
       .select("*, clientes(id, nome)")
       .single();

@@ -38,6 +38,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (body.habilidades_desejadas !== undefined) campos.habilidades_desejadas = body.habilidades_desejadas;
     if (body.responsavel !== undefined)         campos.responsavel = body.responsavel;
     if (body.observacoes !== undefined)         campos.observacoes = body.observacoes || null;
+    if (body.fee_rs_percentual !== undefined)  campos.fee_rs_percentual = body.fee_rs_percentual !== "" ? Number(body.fee_rs_percentual) : null;
+    if (body.fee_rs_prazo_cobranca !== undefined) campos.fee_rs_prazo_cobranca = body.fee_rs_prazo_cobranca || null;
 
     const supabase = createServiceClient();
     const { data, error } = await supabase

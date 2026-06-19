@@ -127,6 +127,8 @@ export interface Vaga {
   habilidades_desejadas: string[];
   responsavel: string;
   observacoes: string | null;
+  fee_rs_percentual?: number | null;
+  fee_rs_prazo_cobranca?: string | null;
   created_at: string;
   cliente_nome_temp?: string | null;
   clientes?: { id: string; nome: string } | null;
