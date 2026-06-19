@@ -27,6 +27,7 @@ interface PendingFinalizar {
   cvId: string;
   candidatoNome: string;
   vagaTitulo: string;
+  tipoServico: string | null;
   resultado: "contratado" | "reprovado_final";
 }
 
@@ -145,6 +146,7 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
         cvId,
         candidatoNome: card?.nome_completo ?? "",
         vagaTitulo: card?.vaga_titulo ?? "",
+        tipoServico: card?.vaga_tipo_servico ?? null,
         resultado: novaEtapa as "contratado" | "reprovado_final",
       });
       return;
@@ -358,6 +360,7 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
         resultado={pendingFinalizar?.resultado ?? "contratado"}
         candidatoNome={pendingFinalizar?.candidatoNome ?? ""}
         vagaTitulo={pendingFinalizar?.vagaTitulo ?? ""}
+        tipoServico={pendingFinalizar?.tipoServico ?? null}
         cvId={pendingFinalizar?.cvId ?? ""}
         onClose={() => setPendingFinalizar(null)}
         onConfirmar={(res: FinalizarResult) => {

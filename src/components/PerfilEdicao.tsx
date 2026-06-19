@@ -501,6 +501,72 @@ export default function PerfilEdicao({ candidato }: Props) {
         </div>
       </div>
 
+      {/* Alocação Atual */}
+      {(() => {
+        const sa = candidato.status_alocacao;
+        const isAlocado = sa && sa !== "disponivel";
+        const badgeCfg: Record<string, { bg: string; color: string; border: string; label: string }> = {
+          alocado_mot: { bg: "#FFF7ED", color: "#C2410C", border: "#FDBA74", label: "MOT — Mão de Obra Temporária" },
+          alocado_rs: { bg: "#EFF6FF", color: "#1D4ED8", border: "#93C5FD", label: "R&S — Recrutamento e Seleção" },
+          alocado_terceirizacao: { bg: "#F0FDF4", color: "#15803D", border: "#86EFAC", label: "Terceirização" },
+        };
+        const badge = sa ? badgeCfg[sa] : null;
+        return (
+          <div className="card" style={{ marginBottom: 24, padding: "16px 20px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: isAlocado ? 12 : 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                Alocação Atual
+              </div>
+              {!isAlocado && (
+                <span style={{ fontSize: 13, color: "#9CA3AF", fontWeight: 500 }}>Disponível</span>
+              )}
+            </div>
+            {isAlocado && badge && (
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{ display: "inline-block", background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`, padding: "2px 10px", borderRadius: 8, fontSize: 12, fontWeight: 700 }}>
+                    🏢 {badge.label}
+                  </span>
+                </div>
+                <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.6 }}>
+                  <div><strong>Cliente:</strong> {candidato.alocacao_cliente_nome ?? "—"}</div>
+                  <div><strong>Vaga:</strong> {candidato.alocacao_vaga_titulo ?? "—"}</div>
+                  <div>
+                    <strong>Início:</strong> {candidato.alocacao_data_inicio ? candidato.alocacao_data_inicio.split("T")[0].split("-").reverse().join("/") : "—"}
+                    {candidato.alocacao_data_fim && (
+                      <> · <strong>Término:</strong> {candidato.alocacao_data_fim.split("T")[0].split("-").reverse().join("/")}</>
+                    )}
+                    {candidato.alocacao_renovavel && (
+                      <span style={{ color: "#16A34A", fontWeight: 600, marginLeft: 6, fontSize: 12 }}>Renovável</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!confirm("Encerrar a alocação deste candidato? Ele voltará ao status Disponível.")) return;
+                    const res = await fetch(`/api/candidatos/${candidato.id}/encerrar-alocacao`, { method: "PATCH" });
+                    if (res.ok) router.refresh();
+                  }}
+                  style={{
+                    marginTop: 12,
+                    padding: "6px 14px",
+                    borderRadius: 8,
+                    border: "1px solid #E5E7EB",
+                    background: "#fff",
+                    color: "#6B7280",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Encerrar Alocação
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Coluna principal — dados */}
         <div className="lg:col-span-2 space-y-6">

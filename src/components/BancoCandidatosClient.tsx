@@ -23,6 +23,12 @@ export type CandidatoRow = {
   escavador_status: string | null;
   bloqueado: boolean | null;
   created_at: string;
+  status_alocacao: string | null;
+  alocacao_cliente_nome: string | null;
+  alocacao_vaga_titulo: string | null;
+  alocacao_data_inicio: string | null;
+  alocacao_data_fim: string | null;
+  alocacao_tipo_servico: string | null;
 };
 
 type MatchEntry = { vaga_id: string; titulo: string; score: number };
@@ -372,6 +378,7 @@ export default function BancoCandidatosClient({
 }: {
   candidatos: CandidatoRow[];
 }) {
+  const [filtroAlocacao, setFiltroAlocacao] = useState("disponivel");
   const [nome, setNome] = useState("");
   const [cargo, setCargo] = useState("");
   const [cidade, setCidade] = useState("");
@@ -527,6 +534,11 @@ export default function BancoCandidatosClient({
     const matchThreshold = matchMin !== "" ? parseInt(matchMin, 10) : null;
 
     return candidatos.filter((c) => {
+      const sa = c.status_alocacao ?? "disponivel";
+      if (filtroAlocacao === "disponivel" && sa !== "disponivel") return false;
+      if (filtroAlocacao === "alocado_mot" && sa !== "alocado_mot") return false;
+      if (filtroAlocacao === "alocado_rs" && sa !== "alocado_rs") return false;
+      if (filtroAlocacao === "alocado_terceirizacao" && sa !== "alocado_terceirizacao") return false;
       if (nomeQ && !c.nome_completo.toLowerCase().includes(nomeQ)) return false;
       if (cargoQ && !(c.cargo_pretendido ?? "").toLowerCase().includes(cargoQ)) return false;
       if (cidadeQ && !(c.cidade ?? "").toLowerCase().includes(cidadeQ)) return false;
@@ -539,7 +551,7 @@ export default function BancoCandidatosClient({
       }
       return true;
     });
-  }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, matchMap]);
+  }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, matchMap, filtroAlocacao]);
 
   return (
     <div>
@@ -607,6 +619,55 @@ export default function BancoCandidatosClient({
         <span style={{ fontSize: 14, color: "#6B7280" }}>
           {candidatos.length === 1 ? "currículo cadastrado" : "currículos cadastrados"}
         </span>
+      </div>
+
+      {/* Alocação filter tabs */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+        {([
+          { id: "todos", label: "Todos", count: candidatos.length },
+          { id: "disponivel", label: "Disponíveis", count: candidatos.filter((c) => (c.status_alocacao ?? "disponivel") === "disponivel").length },
+          { id: "alocado_mot", label: "🏢 MOT", count: candidatos.filter((c) => c.status_alocacao === "alocado_mot").length },
+          { id: "alocado_rs", label: "🏢 R&S", count: candidatos.filter((c) => c.status_alocacao === "alocado_rs").length },
+          { id: "alocado_terceirizacao", label: "🏢 Terc.", count: candidatos.filter((c) => c.status_alocacao === "alocado_terceirizacao").length },
+        ] as const).map((tab) => {
+          const active = filtroAlocacao === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setFiltroAlocacao(tab.id)}
+              style={{
+                padding: "7px 16px",
+                borderRadius: 20,
+                border: `1.5px solid ${active ? "#111827" : "#E5E7EB"}`,
+                background: active ? "#111827" : "#fff",
+                color: active ? "#FFD700" : "#6B7280",
+                fontSize: 13,
+                fontWeight: active ? 700 : 400,
+                cursor: "pointer",
+                transition: "all 0.15s",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              {tab.label}
+              {tab.count > 0 && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: "1px 7px",
+                    borderRadius: 10,
+                    background: active ? "#FFD700" : "#F3F4F6",
+                    color: active ? "#000" : "#6B7280",
+                  }}
+                >
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Filter bar */}
@@ -777,7 +838,48 @@ export default function BancoCandidatosClient({
                             BLOQUEADO
                           </span>
                         )}
+                        {c.status_alocacao === "alocado_mot" && (
+                          <span style={{ display: "inline-block", background: "#FFF7ED", color: "#C2410C", border: "1px solid #FDBA74", padding: "1px 6px", borderRadius: 6, fontSize: 10, fontWeight: 700, marginLeft: 6, verticalAlign: "middle" }}>
+                            🏢 MOT
+                          </span>
+                        )}
+                        {c.status_alocacao === "alocado_rs" && (
+                          <span style={{ display: "inline-block", background: "#EFF6FF", color: "#1D4ED8", border: "1px solid #93C5FD", padding: "1px 6px", borderRadius: 6, fontSize: 10, fontWeight: 700, marginLeft: 6, verticalAlign: "middle" }}>
+                            🏢 R&S
+                          </span>
+                        )}
+                        {c.status_alocacao === "alocado_terceirizacao" && (
+                          <span style={{ display: "inline-block", background: "#F0FDF4", color: "#15803D", border: "1px solid #86EFAC", padding: "1px 6px", borderRadius: 6, fontSize: 10, fontWeight: 700, marginLeft: 6, verticalAlign: "middle" }}>
+                            🏢 Terc.
+                          </span>
+                        )}
                       </div>
+                      {c.status_alocacao && c.status_alocacao !== "disponivel" && (
+                        <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>
+                          Alocado em: {c.alocacao_cliente_nome ?? "—"} — {c.alocacao_vaga_titulo ?? "—"}
+                          {c.alocacao_data_inicio && ` desde ${c.alocacao_data_inicio.split("T")[0].split("-").reverse().join("/")}`}
+                          {c.alocacao_data_fim && (() => {
+                            const fimDate = new Date(c.alocacao_data_fim + "T00:00:00");
+                            const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+                            const diffDays = Math.ceil((fimDate.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+                            return (
+                              <>
+                                {" até "}{c.alocacao_data_fim.split("T")[0].split("-").reverse().join("/")}
+                                {diffDays <= 30 && diffDays >= 0 && (
+                                  <span style={{ color: "#DC2626", fontWeight: 700, marginLeft: 4 }}>
+                                    ⚠️ Vence em {diffDays} dia{diffDays !== 1 ? "s" : ""}
+                                  </span>
+                                )}
+                                {diffDays < 0 && (
+                                  <span style={{ color: "#DC2626", fontWeight: 700, marginLeft: 4 }}>
+                                    ⚠️ Vencido
+                                  </span>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
                       <HistoricoProcessos candidatoId={c.id} />
                     </td>
                     <td style={{ padding: "10px 12px", fontSize: 14, color: "#374151", textAlign: "center" }}>

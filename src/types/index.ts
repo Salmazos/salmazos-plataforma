@@ -52,6 +52,13 @@ export interface Candidato {
   melhor_match_vaga_titulo?: string | null;
   escavador_status?: "limpo" | "consta" | null;
   bloqueado?: boolean | null;
+  status_alocacao?: string | null;
+  alocacao_cliente_nome?: string | null;
+  alocacao_vaga_titulo?: string | null;
+  alocacao_data_inicio?: string | null;
+  alocacao_data_fim?: string | null;
+  alocacao_tipo_servico?: string | null;
+  alocacao_renovavel?: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -61,6 +68,7 @@ export interface KanbanCard {
   etapa: string;
   vaga_id: string;
   vaga_titulo: string;
+  vaga_tipo_servico: string | null;
   observacoes: string | null;
   candidato_id: string;
   nome_completo: string;
