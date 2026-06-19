@@ -10,9 +10,11 @@ import PerfilEtapaSelector from "@/components/PerfilEtapaSelector";
 import PerfilAnotacoes from "@/components/PerfilAnotacoes";
 import TriagemBadge from "@/components/TriagemBadge";
 import type { Candidato } from "@/types";
+import type { GarantiaInfo } from "@/components/CandidatoPerfilTabs";
 
 interface Props {
   candidato: Candidato;
+  garantiaInfo?: GarantiaInfo | null;
 }
 
 const TURNOS = ["Integral", "Manhã", "Tarde", "Noite", "Flexível"];
@@ -76,7 +78,7 @@ function formatarCpf(v: string): string {
   return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6, 9)}-${nums.slice(9)}`;
 }
 
-export default function PerfilEdicao({ candidato }: Props) {
+export default function PerfilEdicao({ candidato, garantiaInfo }: Props) {
   const router = useRouter();
   const etapa = ETAPAS_KANBAN.find((e) => e.id === candidato.etapa_kanban);
 
@@ -95,6 +97,9 @@ export default function PerfilEdicao({ candidato }: Props) {
   const [escavadorStatus, setEscavadorStatus] = useState<string | null>(candidato.escavador_status ?? null);
   const [escavadorSaving, setEscavadorSaving] = useState(false);
   const [escavadorMsg, setEscavadorMsg] = useState<string | null>(null);
+  const [garantiaModalOpen, setGarantiaModalOpen] = useState(false);
+  const [garantiaSaving, setGarantiaSaving] = useState(false);
+  const [garantiaToast, setGarantiaToast] = useState("");
 
   const WA_OPCOES = [
     {
@@ -566,6 +571,128 @@ export default function PerfilEdicao({ candidato }: Props) {
           </div>
         );
       })()}
+
+      {/* Garantia R&S */}
+      {garantiaInfo && (() => {
+        const garantiaDate = new Date(garantiaInfo.garantia_data_fim + "T00:00:00");
+        const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+        const diasRestantes = Math.ceil((garantiaDate.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+        const garantiaFmt = garantiaInfo.garantia_data_fim.split("-").reverse().join("/");
+
+        if (garantiaInfo.garantia_acionada) {
+          const acionadaFmt = garantiaInfo.garantia_acionada_em
+            ? new Date(garantiaInfo.garantia_acionada_em).toLocaleDateString("pt-BR")
+            : "—";
+          return (
+            <div className="card" style={{ marginBottom: 24, padding: "14px 20px", background: "#EFF6FF", border: "1px solid #93C5FD" }}>
+              <p style={{ margin: 0, fontSize: 13, color: "#1E40AF" }}>
+                🔄 <strong>Reposição acionada em {acionadaFmt}.</strong> Garantia encerrada.
+              </p>
+            </div>
+          );
+        }
+
+        if (diasRestantes < 0) {
+          return (
+            <div className="card" style={{ marginBottom: 24, padding: "14px 20px", background: "#F9FAFB", border: "1px solid #E5E7EB" }}>
+              <p style={{ margin: 0, fontSize: 13, color: "#6B7280" }}>
+                Garantia R&S encerrada em {garantiaFmt}. Processo concluído.
+              </p>
+            </div>
+          );
+        }
+
+        return (
+          <div className="card" style={{ marginBottom: 24, padding: "16px 20px", background: "#FFFBEB", border: "1px solid #FCD34D" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 700, color: "#92400E" }}>
+                  ⚠️ Garantia R&S ativa — vence em {diasRestantes} dia{diasRestantes !== 1 ? "s" : ""} ({garantiaFmt})
+                </p>
+                <p style={{ margin: 0, fontSize: 13, color: "#92400E" }}>
+                  O cliente tem direito a 1 reposição gratuita até esta data.
+                </p>
+              </div>
+              <button
+                onClick={() => setGarantiaModalOpen(true)}
+                style={{
+                  padding: "8px 16px", borderRadius: 8, border: "none",
+                  background: "#EA580C", color: "#fff", fontSize: 13, fontWeight: 700,
+                  cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                }}
+              >
+                🔄 Acionar Reposição Gratuita
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Garantia modal */}
+      {garantiaModalOpen && garantiaInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: "0 0 12px" }}>
+              Confirmar reposição gratuita?
+            </h3>
+            <div style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.7, marginBottom: 20 }}>
+              <p style={{ margin: "0 0 8px" }}>Ao acionar a garantia:</p>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                <li>O processo atual será encerrado</li>
+                <li>Uma nova vaga será aberta automaticamente</li>
+                <li>O cliente terá um novo candidato sem custo adicional</li>
+              </ul>
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setGarantiaModalOpen(false)}
+                disabled={garantiaSaving}
+                className="btn-outline"
+                style={{ padding: "8px 18px" }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  setGarantiaSaving(true);
+                  try {
+                    const res = await fetch(`/api/candidatos-vagas/${garantiaInfo.cv_id}/acionar-garantia`, { method: "PATCH" });
+                    if (res.ok) {
+                      setGarantiaModalOpen(false);
+                      setGarantiaToast("Reposição acionada! Nova vaga aberta automaticamente.");
+                      setTimeout(() => setGarantiaToast(""), 5000);
+                      router.refresh();
+                    }
+                  } finally {
+                    setGarantiaSaving(false);
+                  }
+                }}
+                disabled={garantiaSaving}
+                style={{
+                  padding: "8px 20px", borderRadius: 8, border: "none",
+                  background: "#EA580C", color: "#fff", fontSize: 13, fontWeight: 700,
+                  cursor: garantiaSaving ? "not-allowed" : "pointer",
+                  opacity: garantiaSaving ? 0.5 : 1,
+                }}
+              >
+                {garantiaSaving ? "Processando..." : "Confirmar Reposição"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Garantia toast */}
+      {garantiaToast && (
+        <div style={{
+          position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
+          background: "#065F46", color: "#fff", padding: "12px 24px", borderRadius: 12,
+          fontSize: 14, fontWeight: 600, zIndex: 60,
+          boxShadow: "0 4px 24px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", gap: 8,
+        }}>
+          <span>✅</span> {garantiaToast}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Coluna principal — dados */}

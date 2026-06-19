@@ -15,11 +15,22 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "avaliacoes", label: "Avaliações Psicológicas" },
 ];
 
-interface Props {
-  candidato: Candidato;
+export interface GarantiaInfo {
+  cv_id: string;
+  vaga_id: string;
+  etapa: string;
+  garantia_data_fim: string;
+  garantia_acionada: boolean;
+  garantia_acionada_em: string | null;
+  vaga_titulo: string | null;
 }
 
-export default function CandidatoPerfilTabs({ candidato }: Props) {
+interface Props {
+  candidato: Candidato;
+  garantiaInfo?: GarantiaInfo | null;
+}
+
+export default function CandidatoPerfilTabs({ candidato, garantiaInfo }: Props) {
   const [tab, setTab] = useState<Tab>("perfil");
 
   return (
@@ -63,7 +74,7 @@ export default function CandidatoPerfilTabs({ candidato }: Props) {
 
       {tab === "perfil" && (
         <>
-          <PerfilEdicao candidato={candidato} />
+          <PerfilEdicao candidato={candidato} garantiaInfo={garantiaInfo} />
           <div className="mt-6">
             <EncaminhamentosSection candidatoId={candidato.id} />
           </div>
