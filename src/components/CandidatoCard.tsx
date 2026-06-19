@@ -13,7 +13,7 @@ type EtapaOption = { value: string; label: string };
 
 const OPCOES_POR_ETAPA: Record<string, EtapaOption[]> = {
   triagem: [
-    { value: "entrevista_rh", label: "Entrevista Salmazos" },
+    { value: "entrevista_salmazos", label: "Entrevista Salmazos" },
     { value: "nao_tem_interesse", label: "Não tem Interesse" },
     { value: "reprovado", label: "Reprovado" },
     { value: "bloqueado", label: "Bloqueado" },
