@@ -14,6 +14,7 @@ const ETAPA_LABEL: Record<string, string> = {
   aprovado_cliente: "Retorno Cliente",
   contratado: "Contratado",
   reprovado: "Reprovado",
+  reprovado_final: "Processo Encerrado",
   nao_tem_interesse: "Não tem Interesse",
   nao_compareceu: "Não Compareceu",
   bloqueado: "Bloqueado",

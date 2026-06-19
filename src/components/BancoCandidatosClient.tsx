@@ -268,6 +268,91 @@ function MatchCell({
   );
 }
 
+type HistoricoEntry = { tipo: string; descricao: string; created_at: string };
+
+function HistoricoProcessos({ candidatoId }: { candidatoId: string }) {
+  const [aberto, setAberto] = useState(false);
+  const [items, setItems] = useState<HistoricoEntry[] | null>(null);
+  const [carregando, setCarregando] = useState(false);
+
+  const handleToggle = async () => {
+    if (aberto) { setAberto(false); return; }
+    setAberto(true);
+    if (items !== null) return;
+    setCarregando(true);
+    try {
+      const res = await fetch(`/api/candidatos/${candidatoId}/historico?tipos=contratado,reprovado_final`);
+      if (res.ok) {
+        const json = await res.json();
+        setItems(json.data ?? []);
+      } else {
+        setItems([]);
+      }
+    } catch {
+      setItems([]);
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  return (
+    <div>
+      <button
+        onClick={handleToggle}
+        style={{
+          fontSize: 11,
+          color: "#6B7280",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: 0,
+          textDecoration: "underline",
+          textUnderlineOffset: 2,
+          marginTop: 2,
+          display: "block",
+        }}
+      >
+        📋 {aberto ? "Fechar histórico" : "Ver histórico de processos"}
+      </button>
+      {aberto && (
+        <div style={{ marginTop: 6, paddingLeft: 4 }}>
+          {carregando ? (
+            <span style={{ fontSize: 11, color: "#9CA3AF", fontStyle: "italic" }}>Carregando...</span>
+          ) : !items || items.length === 0 ? (
+            <span style={{ fontSize: 11, color: "#9CA3AF" }}>Nenhum processo finalizado.</span>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {items.map((h, i) => (
+                <div
+                  key={i}
+                  style={{
+                    fontSize: 11,
+                    lineHeight: 1.4,
+                    padding: "4px 8px",
+                    borderRadius: 6,
+                    background: h.tipo === "contratado" ? "#F0FDF4" : "#F9FAFB",
+                    border: `1px solid ${h.tipo === "contratado" ? "#BBF7D0" : "#E5E7EB"}`,
+                    color: "#374151",
+                  }}
+                >
+                  <span style={{ fontWeight: 700, color: h.tipo === "contratado" ? "#16A34A" : "#6B7280" }}>
+                    {h.tipo === "contratado" ? "✓ Contratado" : "✗ Encerrado"}
+                  </span>
+                  {" — "}
+                  {h.descricao}
+                  <span style={{ color: "#9CA3AF", marginLeft: 6 }}>
+                    {new Date(h.created_at).toLocaleDateString("pt-BR")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function inputStyle(extra?: React.CSSProperties): React.CSSProperties {
   return {
     border: "1px solid #E5E7EB",
@@ -684,13 +769,16 @@ export default function BancoCandidatosClient({
                     onMouseEnter={(e) => { if (!c.bloqueado) (e.currentTarget as HTMLTableRowElement).style.background = "#FAFAFA"; }}
                     onMouseLeave={(e) => { if (!c.bloqueado) (e.currentTarget as HTMLTableRowElement).style.background = ""; }}
                   >
-                    <td style={{ padding: "10px 12px", fontSize: 14, color: c.bloqueado ? "#fff" : "#111827", fontWeight: 600, whiteSpace: "nowrap" }}>
-                      {c.nome_completo}
-                      {c.bloqueado && (
-                        <span style={{ display: "inline-block", background: "#dc2626", color: "#fff", padding: "1px 6px", borderRadius: 6, fontSize: 10, fontWeight: 700, marginLeft: 6, verticalAlign: "middle" }}>
-                          BLOQUEADO
-                        </span>
-                      )}
+                    <td style={{ padding: "10px 12px", fontSize: 14, color: c.bloqueado ? "#fff" : "#111827", fontWeight: 600 }}>
+                      <div style={{ whiteSpace: "nowrap" }}>
+                        {c.nome_completo}
+                        {c.bloqueado && (
+                          <span style={{ display: "inline-block", background: "#dc2626", color: "#fff", padding: "1px 6px", borderRadius: 6, fontSize: 10, fontWeight: 700, marginLeft: 6, verticalAlign: "middle" }}>
+                            BLOQUEADO
+                          </span>
+                        )}
+                      </div>
+                      <HistoricoProcessos candidatoId={c.id} />
                     </td>
                     <td style={{ padding: "10px 12px", fontSize: 14, color: "#374151", textAlign: "center" }}>
                       {c.idade !== null ? c.idade : "—"}

@@ -7,6 +7,8 @@ import { ETAPAS_KANBAN, HABILIDADES } from "@/lib/constants";
 import type { KanbanCard } from "@/types";
 import CandidatoCard from "./CandidatoCard";
 import ModalEncaminhamento from "./ModalEncaminhamento";
+import ModalFinalizarProcesso from "./ModalFinalizarProcesso";
+import type { FinalizarResult } from "./ModalFinalizarProcesso";
 
 interface Props {
   cards: KanbanCard[];
@@ -19,6 +21,13 @@ interface PendingEncaminhamento {
   candidatoNome: string;
   vagaId: string;
   vagaTitulo: string;
+}
+
+interface PendingFinalizar {
+  cvId: string;
+  candidatoNome: string;
+  vagaTitulo: string;
+  resultado: "contratado" | "reprovado_final";
 }
 
 const FORMACOES = [
@@ -54,7 +63,11 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
   const [movendo, setMovendo] = useState<string | null>(null);
   const [pendingEncaminhamento, setPendingEncaminhamento] =
     useState<PendingEncaminhamento | null>(null);
+  const [pendingFinalizar, setPendingFinalizar] =
+    useState<PendingFinalizar | null>(null);
   const [toast, setToast] = useState("");
+  const [toastBg, setToastBg] = useState("#065F46");
+  const [toastIcon, setToastIcon] = useState("✅");
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [filtroKeyword, setFiltroKeyword]       = useState("");
   const [filtroCidade, setFiltroCidade]         = useState("");
@@ -105,6 +118,13 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
     filtroHabilidades,
   ]);
 
+  const showToast = (msg: string, bg = "#065F46", icon = "✅") => {
+    setToast(msg);
+    setToastBg(bg);
+    setToastIcon(icon);
+    setTimeout(() => setToast(""), 5000);
+  };
+
   const moverCard = async (cvId: string, novaEtapa: string, comentario?: string) => {
     if (novaEtapa === "entrevista_cliente") {
       const card = cards.find((c) => c.cv_id === cvId);
@@ -114,6 +134,17 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
         candidatoNome: card?.nome_completo ?? "",
         vagaId: card?.vaga_id ?? "",
         vagaTitulo: card?.vaga_titulo ?? "",
+      });
+      return;
+    }
+
+    if (novaEtapa === "contratado" || novaEtapa === "reprovado_final") {
+      const card = cards.find((c) => c.cv_id === cvId);
+      setPendingFinalizar({
+        cvId,
+        candidatoNome: card?.nome_completo ?? "",
+        vagaTitulo: card?.vaga_titulo ?? "",
+        resultado: novaEtapa as "contratado" | "reprovado_final",
       });
       return;
     }
@@ -165,8 +196,7 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
         body: JSON.stringify({ etapa: "entrevista_cliente" }),
       });
       router.refresh();
-      setToast("Entrevista agendada e candidato enviado para o painel do cliente");
-      setTimeout(() => setToast(""), 4000);
+      showToast("Entrevista agendada e candidato enviado para o painel do cliente");
     } finally {
       setMovendo(null);
     }
@@ -322,6 +352,34 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
         })}
       </div>
 
+      <ModalFinalizarProcesso
+        isOpen={!!pendingFinalizar}
+        resultado={pendingFinalizar?.resultado ?? "contratado"}
+        candidatoNome={pendingFinalizar?.candidatoNome ?? ""}
+        vagaTitulo={pendingFinalizar?.vagaTitulo ?? ""}
+        cvId={pendingFinalizar?.cvId ?? ""}
+        onClose={() => setPendingFinalizar(null)}
+        onConfirmar={(res: FinalizarResult) => {
+          setPendingFinalizar(null);
+          router.refresh();
+          if (res.resultado === "contratado") {
+            showToast(
+              res.vaga_encerrada
+                ? "Candidato contratado! Vaga encerrada — todas as posições preenchidas!"
+                : "Candidato contratado! Vaga atualizada.",
+              "#065F46",
+              "🎉",
+            );
+          } else {
+            showToast(
+              "Processo encerrado. Candidato retornou ao Banco de Candidatos.",
+              "#374151",
+              "📋",
+            );
+          }
+        }}
+      />
+
       <ModalEncaminhamento
         isOpen={!!pendingEncaminhamento}
         candidatoId={pendingEncaminhamento?.candidatoId ?? ""}
@@ -340,7 +398,7 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
             bottom: 24,
             left: "50%",
             transform: "translateX(-50%)",
-            background: "#065F46",
+            background: toastBg,
             color: "#fff",
             padding: "12px 24px",
             borderRadius: 12,
@@ -353,7 +411,7 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
             gap: 8,
           }}
         >
-          <span>✅</span> {toast}
+          <span>{toastIcon}</span> {toast}
         </div>
       )}
     </div>

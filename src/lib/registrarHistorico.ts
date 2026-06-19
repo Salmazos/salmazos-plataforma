@@ -12,7 +12,9 @@ export type TipoHistorico =
   | "triagem_ia"
   | "match_ia"
   | "comentario_interno"
-  | "retencao_ia";
+  | "retencao_ia"
+  | "contratado"
+  | "reprovado_final";
 
 interface Params {
   candidato_id: string;

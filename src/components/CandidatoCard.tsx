@@ -30,8 +30,8 @@ const OPCOES_POR_ETAPA: Record<string, EtapaOption[]> = {
     { value: "bloqueado", label: "Bloqueado" },
   ],
   aprovado_cliente: [
-    { value: "contratado", label: "Aprovado" },
-    { value: "reprovado", label: "Reprovado" },
+    { value: "contratado", label: "Contratado" },
+    { value: "reprovado_final", label: "Reprovado" },
   ],
 };
 
