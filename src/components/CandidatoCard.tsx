@@ -70,6 +70,10 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
 
   const handleSelectChange = (value: string) => {
     if (value === "" || value === card.etapa) return;
+    if (value === "contratado" || value === "reprovado_final") {
+      onMover(card.cv_id, value);
+      return;
+    }
     const opcoes = OPCOES_POR_ETAPA[card.etapa] ?? [];
     const opcao = opcoes.find((o) => o.value === value);
     if (opcao) {
