@@ -3,7 +3,7 @@
 import { useState } from "react";
 import KanbanBoard from "./KanbanBoard";
 import PainelSidebar from "./PainelSidebar";
-import type { Candidato } from "@/types";
+import type { KanbanCard } from "@/types";
 
 interface Vaga {
   cargo: string;
@@ -18,7 +18,7 @@ interface CandidatoRecente {
 }
 
 interface Props {
-  candidatos: Candidato[];
+  cards: KanbanCard[];
   totalAtivos: number;
   aprovadosNoMes: number;
   tempoMedioDias: number;
@@ -27,7 +27,7 @@ interface Props {
 }
 
 export default function PainelLayout({
-  candidatos,
+  cards,
   totalAtivos,
   aprovadosNoMes,
   tempoMedioDias,
@@ -88,7 +88,7 @@ export default function PainelLayout({
       </div>
 
       {/* Kanban abaixo */}
-      <KanbanBoard candidatos={candidatos} filtroOrigem={filtroOrigem} />
+      <KanbanBoard cards={cards} filtroOrigem={filtroOrigem} />
     </div>
   );
 }

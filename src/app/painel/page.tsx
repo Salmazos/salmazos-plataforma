@@ -1,56 +1,86 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import PainelLayout from "@/components/PainelLayout";
-import type { Candidato } from "@/types";
+import type { KanbanCard } from "@/types";
 
 export const dynamic = "force-dynamic";
 
+const ETAPAS_KANBAN_VISIVEIS = ["triagem", "entrevista_salmazos", "entrevista_cliente", "aprovado_cliente"];
+
 export default async function PainelPage() {
   const supabase = createServiceClient();
-  const { data, error } = await supabase
-    .from("candidatos")
-    .select("*")
-    .eq("status", "ativo")
+
+  const { data: cvData, error: cvError } = await supabase
+    .from("candidatos_vagas")
+    .select(`
+      id, etapa, vaga_id, observacoes, created_at,
+      candidatos!inner(id, nome_completo, cargo_pretendido, cidade, estado, triagem_score, triagem_label, origem, bloqueado, responsavel, created_at, updated_at),
+      vagas!inner(id, titulo)
+    `)
+    .in("etapa", ETAPAS_KANBAN_VISIVEIS)
     .order("created_at", { ascending: false });
 
-  if (error) {
+  if (cvError) {
     return (
       <div className="text-red-600 text-sm p-4 bg-red-50 rounded-lg">
-        Erro ao carregar candidatos: {error.message}
+        Erro ao carregar candidatos: {cvError.message}
       </div>
     );
   }
 
-  const candidatos = (data as Candidato[]) ?? [];
+  const cards: KanbanCard[] = ((cvData ?? []) as unknown as {
+    id: string;
+    etapa: string;
+    vaga_id: string;
+    observacoes: string | null;
+    created_at: string;
+    candidatos: {
+      id: string;
+      nome_completo: string;
+      cargo_pretendido: string;
+      cidade: string;
+      estado: string;
+      triagem_score: number | null;
+      triagem_label: string | null;
+      origem: string | null;
+      bloqueado: boolean | null;
+      responsavel: string | null;
+      created_at: string;
+      updated_at: string;
+    };
+    vagas: { id: string; titulo: string };
+  }[]).map((cv) => ({
+    cv_id: cv.id,
+    etapa: cv.etapa,
+    vaga_id: cv.vaga_id,
+    vaga_titulo: cv.vagas.titulo,
+    observacoes: cv.observacoes,
+    candidato_id: cv.candidatos.id,
+    nome_completo: cv.candidatos.nome_completo,
+    cargo_pretendido: cv.candidatos.cargo_pretendido,
+    cidade: cv.candidatos.cidade,
+    estado: cv.candidatos.estado,
+    triagem_score: cv.candidatos.triagem_score,
+    triagem_label: cv.candidatos.triagem_label,
+    origem: cv.candidatos.origem,
+    bloqueado: cv.candidatos.bloqueado,
+    responsavel: cv.candidatos.responsavel,
+    created_at: cv.created_at,
+    candidato_created_at: cv.candidatos.created_at,
+  }));
 
   // ── Métricas ──────────────────────────────────────────────────
-  const totalAtivos = candidatos.length;
+  const totalAtivos = cards.length;
 
   const inicioMes = new Date();
   inicioMes.setDate(1);
   inicioMes.setHours(0, 0, 0, 0);
 
-  const aprovadosNoMes = candidatos.filter(
-    (c) =>
-      c.etapa_kanban === "aprovado_cliente" &&
-      new Date(c.updated_at) >= inicioMes
+  const aprovadosNoMes = cards.filter(
+    (c) => c.etapa === "aprovado_cliente" && new Date(c.created_at) >= inicioMes
   ).length;
 
-  const aprovados = candidatos.filter((c) => c.etapa_kanban === "aprovado_cliente");
-  const tempoMedioDias =
-    aprovados.length > 0
-      ? Math.round(
-          aprovados.reduce((soma, c) => {
-            const diff =
-              new Date(c.updated_at).getTime() -
-              new Date(c.created_at).getTime();
-            return soma + diff / (1000 * 60 * 60 * 24);
-          }, 0) / aprovados.length
-        )
-      : 0;
-
-  // ── Candidaturas agrupadas por origem ─────────────────────────
   const origensMap = new Map<string, number>();
-  candidatos.forEach((c) => {
+  cards.forEach((c) => {
     const key = c.origem ?? "Banco de talentos";
     origensMap.set(key, (origensMap.get(key) ?? 0) + 1);
   });
@@ -58,20 +88,19 @@ export default async function PainelPage() {
     .map(([cargo, count]) => ({ cargo, count }))
     .sort((a, b) => b.count - a.count);
 
-  // ── Últimos 5 candidatos ───────────────────────────────────────
-  const recentes = candidatos.slice(0, 5).map((c) => ({
-    id: c.id,
+  const recentes = cards.slice(0, 5).map((c) => ({
+    id: c.candidato_id,
     nome_completo: c.nome_completo,
     cargo_pretendido: c.cargo_pretendido,
-    created_at: c.created_at,
+    created_at: c.candidato_created_at,
   }));
 
   return (
     <PainelLayout
-      candidatos={candidatos}
+      cards={cards}
       totalAtivos={totalAtivos}
       aprovadosNoMes={aprovadosNoMes}
-      tempoMedioDias={tempoMedioDias}
+      tempoMedioDias={0}
       vagas={vagas}
       recentes={recentes}
     />

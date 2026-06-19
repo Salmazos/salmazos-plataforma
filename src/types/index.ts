@@ -56,6 +56,26 @@ export interface Candidato {
   updated_at: string;
 }
 
+export interface KanbanCard {
+  cv_id: string;
+  etapa: string;
+  vaga_id: string;
+  vaga_titulo: string;
+  observacoes: string | null;
+  candidato_id: string;
+  nome_completo: string;
+  cargo_pretendido: string;
+  cidade: string;
+  estado: string;
+  triagem_score: number | null;
+  triagem_label: string | null;
+  origem: string | null;
+  bloqueado: boolean | null;
+  responsavel: string | null;
+  created_at: string;
+  candidato_created_at: string;
+}
+
 export interface Notificacao {
   id: string;
   tipo: string;
