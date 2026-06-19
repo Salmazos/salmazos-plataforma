@@ -56,6 +56,74 @@ function todayNorm(): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
+function slugify(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
+
+function generateICS(item: AgendaItem): string {
+  const [y, m, d] = item.data_entrevista.split("T")[0].split("-");
+  const dtDate = `${y}${m}${d}`;
+  const nextDay = new Date(Number(y), Number(m) - 1, Number(d) + 1);
+  const dtEnd = `${nextDay.getFullYear()}${String(nextDay.getMonth() + 1).padStart(2, "0")}${String(nextDay.getDate()).padStart(2, "0")}`;
+
+  const candidatoNome = item.candidato?.nome_completo ?? "Candidato";
+  const clienteNome = item.cliente?.nome ?? "";
+  const vagaTitulo = item.vaga?.titulo ?? "";
+  const uid = `${Date.now()}-${item.candidato_id}@salmazos`;
+
+  const summary = vagaTitulo
+    ? `Entrevista — ${candidatoNome} / ${vagaTitulo}`
+    : `Entrevista — ${candidatoNome}`;
+
+  const descParts = [
+    `Candidato: ${candidatoNome}`,
+    vagaTitulo ? `Vaga: ${vagaTitulo}` : "",
+    clienteNome ? `Cliente: ${clienteNome}` : "",
+    item.observacoes ? `Observações: ${item.observacoes}` : "",
+  ].filter(Boolean);
+
+  const escapeICS = (s: string) => s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Salmazos RH//Agenda//PT",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${uid}`,
+    `DTSTAMP:${dtDate}T090000`,
+    `DTSTART;VALUE=DATE:${dtDate}`,
+    `DTEND;VALUE=DATE:${dtEnd}`,
+    `SUMMARY:${escapeICS(summary)}`,
+    clienteNome ? `LOCATION:${escapeICS(clienteNome)}` : "",
+    `DESCRIPTION:${escapeICS(descParts.join("\\n"))}`,
+    "ORGANIZER;CN=Salmazos RH & Serviços:MAILTO:noreply@salmazos.com.br",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].filter(Boolean).join("\r\n");
+}
+
+function downloadICS(item: AgendaItem): void {
+  const ics = generateICS(item);
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const nome = slugify(item.candidato?.nome_completo ?? "candidato");
+  const data = item.data_entrevista.split("T")[0];
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `entrevista-${nome}-${data}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AgendaPage() {
@@ -605,6 +673,7 @@ export default function AgendaPage() {
                   <th style={{ ...thStyle, textAlign: "center" }}>Data</th>
                   <th style={{ ...thStyle, textAlign: "center" }}>Analista</th>
                   <th style={{ ...thStyle, textAlign: "center" }}>Status</th>
+                  <th style={{ ...thStyle, textAlign: "center" }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -709,6 +778,25 @@ export default function AgendaPage() {
                         >
                           {cfg.label}
                         </span>
+                      </td>
+
+                      {/* Exportar */}
+                      <td style={{ padding: "10px 8px", textAlign: "center" }}>
+                        <button
+                          onClick={() => downloadICS(item)}
+                          style={{
+                            fontSize: 12,
+                            color: "#6B7280",
+                            padding: "4px 10px",
+                            border: "1px solid #E5E7EB",
+                            borderRadius: 6,
+                            background: "#fff",
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          📅 Exportar
+                        </button>
                       </td>
                     </tr>
                   );
