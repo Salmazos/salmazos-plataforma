@@ -23,6 +23,10 @@ export interface GarantiaInfo {
   garantia_acionada: boolean;
   garantia_acionada_em: string | null;
   vaga_titulo: string | null;
+  admissao_fee_percentual: number | null;
+  admissao_fee_valor: number | null;
+  admissao_fee_prazo: string | null;
+  fee_status: string | null;
 }
 
 interface Props {

@@ -23,26 +23,37 @@ export default async function CandidatoPerfilPage({ params }: Props) {
 
   const candidato = data as Candidato;
 
-  const { data: garantiaRow } = await supabase
+  // Fetch candidatos_vagas with guarantee OR fee data
+  const { data: cvRows } = await supabase
     .from("candidatos_vagas")
     .select("id, vaga_id, etapa, garantia_data_fim, garantia_acionada, garantia_acionada_em, admissao_fee_percentual, admissao_fee_valor, admissao_fee_prazo, fee_status, vagas(titulo)")
     .eq("candidato_id", id)
-    .not("garantia_data_fim", "is", null)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("created_at", { ascending: false });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const garantiaInfo = garantiaRow ? {
-    cv_id: garantiaRow.id as string,
-    vaga_id: garantiaRow.vaga_id as string,
-    etapa: garantiaRow.etapa as string,
-    garantia_data_fim: garantiaRow.garantia_data_fim as string,
-    garantia_acionada: (garantiaRow.garantia_acionada ?? false) as boolean,
-    garantia_acionada_em: (garantiaRow.garantia_acionada_em ?? null) as string | null,
+  const garantiaRow = (cvRows ?? []).find((r: any) => r.garantia_data_fim != null)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vaga_titulo: ((garantiaRow as any).vagas?.titulo ?? null) as string | null,
-  } : null;
+    ?? (cvRows ?? []).find((r: any) => r.admissao_fee_percentual != null)
+    ?? null;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const garantiaInfo = garantiaRow ? (() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = garantiaRow as any;
+    return {
+      cv_id: r.id as string,
+      vaga_id: r.vaga_id as string,
+      etapa: r.etapa as string,
+      garantia_data_fim: (r.garantia_data_fim ?? "") as string,
+      garantia_acionada: (r.garantia_acionada ?? false) as boolean,
+      garantia_acionada_em: (r.garantia_acionada_em ?? null) as string | null,
+      vaga_titulo: (r.vagas?.titulo ?? null) as string | null,
+      admissao_fee_percentual: (r.admissao_fee_percentual ?? null) as number | null,
+      admissao_fee_valor: (r.admissao_fee_valor ?? null) as number | null,
+      admissao_fee_prazo: (r.admissao_fee_prazo ?? null) as string | null,
+      fee_status: (r.fee_status ?? null) as string | null,
+    };
+  })() : null;
 
   return (
     <div className="max-w-5xl mx-auto">

@@ -100,6 +100,9 @@ export default function PerfilEdicao({ candidato, garantiaInfo }: Props) {
   const [garantiaModalOpen, setGarantiaModalOpen] = useState(false);
   const [garantiaSaving, setGarantiaSaving] = useState(false);
   const [garantiaToast, setGarantiaToast] = useState("");
+  const [feeStatus, setFeeStatus] = useState(garantiaInfo?.fee_status ?? "pendente");
+  const [feeSaving, setFeeSaving] = useState(false);
+  const [feeToast, setFeeToast] = useState("");
 
   const WA_OPCOES = [
     {
@@ -691,6 +694,89 @@ export default function PerfilEdicao({ candidato, garantiaInfo }: Props) {
           boxShadow: "0 4px 24px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", gap: 8,
         }}>
           <span>✅</span> {garantiaToast}
+        </div>
+      )}
+
+      {/* Fee toast */}
+      {feeToast && (
+        <div style={{
+          position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
+          background: "#065F46", color: "#fff", padding: "12px 24px", borderRadius: 12,
+          fontSize: 14, fontWeight: 600, zIndex: 60,
+          boxShadow: "0 4px 24px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", gap: 8,
+        }}>
+          <span>✅</span> {feeToast}
+        </div>
+      )}
+
+      {/* Financeiro R&S */}
+      {garantiaInfo && garantiaInfo.admissao_fee_percentual != null && (
+        <div className="card" style={{ marginBottom: 24, padding: "16px 20px" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#FFB800", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 12 }}>
+            Financeiro R&S
+          </div>
+          <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.7, marginBottom: 14 }}>
+            <div>
+              <strong>Fee acordado:</strong> {garantiaInfo.admissao_fee_percentual}%
+              {garantiaInfo.admissao_fee_valor != null && (
+                <> = <strong>R$ {garantiaInfo.admissao_fee_valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong></>
+              )}
+            </div>
+            {garantiaInfo.admissao_fee_prazo && (
+              <div><strong>Prazo de cobrança:</strong> {garantiaInfo.admissao_fee_prazo}</div>
+            )}
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>
+              Status do Fee {feeSaving && <span style={{ fontWeight: 400, fontStyle: "italic", textTransform: "none" }}>— Salvando...</span>}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {([
+                { id: "pendente", label: "🟡 Pendente", bg: "#FEF3C7", color: "#92400E", border: "#FCD34D" },
+                { id: "cobrado", label: "🔵 Cobrado", bg: "#DBEAFE", color: "#1E40AF", border: "#93C5FD" },
+                { id: "recebido", label: "🟢 Recebido", bg: "#D1FAE5", color: "#065F46", border: "#6EE7B7" },
+              ] as const).map((opt) => {
+                const active = feeStatus === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    onClick={async () => {
+                      if (active || feeSaving) return;
+                      setFeeSaving(true);
+                      setFeeStatus(opt.id);
+                      try {
+                        const res = await fetch(`/api/candidatos-vagas/${garantiaInfo.cv_id}/fee-status`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ fee_status: opt.id }),
+                        });
+                        if (res.ok) {
+                          setFeeToast("Status do fee atualizado!");
+                          setTimeout(() => setFeeToast(""), 3000);
+                        }
+                      } finally {
+                        setFeeSaving(false);
+                      }
+                    }}
+                    disabled={feeSaving}
+                    style={{
+                      padding: "6px 16px",
+                      borderRadius: 20,
+                      border: `1.5px solid ${active ? opt.border : "#E5E7EB"}`,
+                      background: active ? opt.bg : "#fff",
+                      color: active ? opt.color : "#9CA3AF",
+                      fontSize: 13,
+                      fontWeight: active ? 700 : 500,
+                      cursor: feeSaving ? "not-allowed" : "pointer",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
