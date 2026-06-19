@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import PortalClienteClient, { type EncaminhamentoPortal } from "@/components/PortalClienteClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function PortalPage() {
-  const supabase = await createClient();
+  const supabase = await createPortalClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { createPortalBrowserClient } from "@/lib/supabase/client";
 
 export default function PortalLoginPage() {
   const router = useRouter();
@@ -16,7 +16,7 @@ export default function PortalLoginPage() {
     setCarregando(true);
     setErro(null);
 
-    const supabase = createClient();
+    const supabase = createPortalBrowserClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
 
     if (error) {

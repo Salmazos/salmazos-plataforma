@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { sendEmail } from "@/lib/sendEmail";
 
@@ -7,7 +7,7 @@ const STATUS_VALIDOS = ["aprovado", "reprovado"] as const;
 
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const supabase = await createPortalClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();

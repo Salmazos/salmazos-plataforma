@@ -1,37 +1,47 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+function makeCookieHandlers(request: NextRequest, response: { value: NextResponse }, cookieOptions?: { name: string }) {
+  return {
+    ...(cookieOptions ? { cookieOptions } : {}),
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(
+        cookiesToSet: Array<{ name: string; value: string; options?: object }>
+      ) {
+        cookiesToSet.forEach(({ name, value }) =>
+          request.cookies.set(name, value)
+        );
+        response.value = NextResponse.next({ request });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.value.cookies.set(name, value, options as Parameters<typeof response.value.cookies.set>[2])
+        );
+      },
+    },
+  };
+}
+
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const responseRef = { value: NextResponse.next({ request }) };
+  const { pathname } = request.nextUrl;
+
+  const isPortalRoute = pathname === "/portal" || pathname.startsWith("/portal/");
+
+  const supabaseConfig = isPortalRoute
+    ? makeCookieHandlers(request, responseRef, { name: "sb-portal-auth-token" })
+    : makeCookieHandlers(request, responseRef);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(
-          cookiesToSet: Array<{ name: string; value: string; options?: object }>
-        ) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          response = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options as Parameters<typeof response.cookies.set>[2])
-          );
-        },
-      },
-    }
+    supabaseConfig,
   );
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const { pathname } = request.nextUrl;
 
   // Painel protection
   if (!user && pathname.startsWith("/painel")) {
@@ -46,15 +56,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Portal protection — /portal/login is public, everything else requires auth
-  const isPortalRoute = pathname === "/portal" || pathname.startsWith("/portal/");
+  // Portal protection
   if (!user && isPortalRoute && pathname !== "/portal/login") {
     const url = request.nextUrl.clone();
     url.pathname = "/portal/login";
     return NextResponse.redirect(url);
   }
 
-  return response;
+  return responseRef.value;
 }
 
 export const config = {

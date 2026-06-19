@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import NavbarPortal from "@/components/NavbarPortal";
 
 export default async function PortalAppLayout({
@@ -7,7 +7,7 @@ export default async function PortalAppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
+  const supabase = await createPortalClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();

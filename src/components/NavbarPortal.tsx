@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { createPortalBrowserClient } from "@/lib/supabase/client";
 
 interface Props {
   userEmail: string;
@@ -11,7 +11,7 @@ export default function NavbarPortal({ userEmail }: Props) {
   const router = useRouter();
 
   const handleLogout = async () => {
-    const supabase = createClient();
+    const supabase = createPortalBrowserClient();
     await supabase.auth.signOut();
     router.push("/portal/login");
   };

@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import PortalAvaliacaoBtn from "@/components/PortalAvaliacaoBtn";
 import MatchScoreBadge from "@/components/MatchScoreBadge";
 import type { MatchDetalhes } from "@/types";
@@ -23,7 +23,7 @@ function InfoItem({ label, value }: { label: string; value: string }) {
 export default async function PortalCandidatoPage({ params }: Props) {
   const { id } = await params;
 
-  const supabase = await createClient();
+  const supabase = await createPortalClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
