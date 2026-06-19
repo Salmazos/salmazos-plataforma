@@ -43,7 +43,7 @@ export default async function PortalCandidatoPage({ params }: Props) {
   const { data: enc } = await service
     .from("encaminhamentos")
     .select(
-      `id, status, data_entrevista, feedback_cliente, avaliado_em,
+      `id, status, data_entrevista, feedback_cliente, avaliado_em, vaga_id,
        candidatos(
          id, nome_completo, cargo_pretendido, cidade, estado,
          habilidades, resumo_profissional, resumo_candidato,
@@ -86,6 +86,43 @@ export default async function PortalCandidatoPage({ params }: Props) {
       matchScore = (matchRow as any).match_score ?? null;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       matchDetalhes = (matchRow as any).match_detalhes ?? null;
+    }
+  }
+
+  // Fetch vaga details for admission form
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const encVagaId = (enc as any).vaga_id as string | null;
+  let vagaTipoServico: string | null = null;
+  let vagaFeePercentual: number | null = null;
+  let vagaFeePrazo: string | null = null;
+  let vagaIdFinal: string | null = null;
+  let cvId: string | null = null;
+
+  if (encVagaId) {
+    const { data: vagaRow } = await service
+      .from("vagas")
+      .select("id, titulo, tipo_servico, fee_rs_percentual, fee_rs_prazo_cobranca")
+      .eq("id", encVagaId)
+      .single();
+
+    if (vagaRow) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const v = vagaRow as any;
+      vagaTipoServico = v.tipo_servico ?? null;
+      vagaFeePercentual = v.fee_rs_percentual ?? null;
+      vagaFeePrazo = v.fee_rs_prazo_cobranca ?? null;
+      vagaIdFinal = v.id;
+    }
+
+    if (c?.id) {
+      const { data: cvRow } = await service
+        .from("candidatos_vagas")
+        .select("id")
+        .eq("candidato_id", c.id)
+        .eq("vaga_id", encVagaId)
+        .limit(1)
+        .maybeSingle();
+      cvId = cvRow?.id ?? null;
     }
   }
 
@@ -305,6 +342,11 @@ export default async function PortalCandidatoPage({ params }: Props) {
         encaminhamentoId={enc.id}
         statusAtual={enc.status}
         feedbackAtual={(enc as any).feedback_cliente ?? ""}
+        tipoServico={vagaTipoServico}
+        feePercentual={vagaFeePercentual}
+        feePrazo={vagaFeePrazo}
+        vagaId={vagaIdFinal}
+        cvId={cvId}
       />
     </div>
   );

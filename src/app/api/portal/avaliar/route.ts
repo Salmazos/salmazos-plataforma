@@ -43,8 +43,6 @@ export async function PATCH(request: NextRequest) {
     if (!enc)
       return NextResponse.json({ error: "Encaminhamento não encontrado." }, { status: 404 });
 
-    console.log("[avaliar] enc.candidato_id:", enc.candidato_id, "| enc.vaga_id:", enc.vaga_id);
-
     if (enc.status !== "aguardando")
       return NextResponse.json({ error: "Este encaminhamento já foi avaliado." }, { status: 409 });
 
@@ -72,10 +70,56 @@ export async function PATCH(request: NextRequest) {
         .from("candidatos_vagas")
         .update({ etapa: "aprovado_cliente" })
         .eq("candidato_id", enc.candidato_id);
-      const { data: cvData, error: cvError } = await (enc.vaga_id ? cvQuery.eq("vaga_id", enc.vaga_id) : cvQuery)
-        .select();
-      console.log("[avaliar] candidatos_vagas update — error:", cvError, "| rows:", cvData);
-      console.log("[avaliar] candidatos_vagas rows affected:", Array.isArray(cvData) ? cvData.length : 0);
+      await (enc.vaga_id ? cvQuery.eq("vaga_id", enc.vaga_id) : cvQuery);
+
+      // Save admission data if provided
+      const cvId = body.cv_id as string | undefined;
+      if (cvId) {
+        const admFields: Record<string, unknown> = {};
+        const admKeys = [
+          "admissao_data_inicio", "admissao_cargo", "admissao_salario",
+          "admissao_setor", "admissao_centro_custo", "admissao_horario",
+          "admissao_gestor", "admissao_periodo_experiencia", "admissao_observacoes",
+          "admissao_funcao", "admissao_salario_hora", "admissao_turno",
+          "admissao_tempo_contrato", "admissao_vt", "admissao_exame_responsavel",
+          "admissao_local_integracao", "admissao_telefone_candidato",
+        ];
+        for (const key of admKeys) {
+          if (body[key] !== undefined) admFields[key] = body[key];
+        }
+
+        // Fee calculation for R&S
+        if (body.tipo_servico === "recrutamento_selecao" && body.admissao_salario && enc.vaga_id) {
+          const { data: vagaRow } = await service
+            .from("vagas")
+            .select("fee_rs_percentual, fee_rs_prazo_cobranca")
+            .eq("id", enc.vaga_id)
+            .single();
+
+          if (vagaRow) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const v = vagaRow as any;
+            const pct = v.fee_rs_percentual as number | null;
+            if (pct != null) {
+              admFields.admissao_fee_percentual = pct;
+              admFields.admissao_fee_valor = Number(body.admissao_salario) * pct / 100;
+              admFields.admissao_fee_prazo = v.fee_rs_prazo_cobranca ?? null;
+            }
+            if (body.admissao_data_inicio) {
+              const inicio = new Date(body.admissao_data_inicio + "T00:00:00");
+              inicio.setDate(inicio.getDate() + 30);
+              admFields.garantia_data_fim = inicio.toISOString().split("T")[0];
+            }
+          }
+        }
+
+        if (Object.keys(admFields).length > 0) {
+          await service
+            .from("candidatos_vagas")
+            .update(admFields)
+            .eq("id", cvId);
+        }
+      }
     }
 
     if (status === "reprovado") {
