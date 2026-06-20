@@ -11,6 +11,30 @@ export default function LoginPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [modoReset, setModoReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetMsg, setResetMsg] = useState<string | null>(null);
+  const [resetErro, setResetErro] = useState<string | null>(null);
+  const [enviandoReset, setEnviandoReset] = useState(false);
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEnviandoReset(true);
+    setResetMsg(null);
+    setResetErro(null);
+
+    const supabase = createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+      redirectTo: "https://salmazos-plataforma.vercel.app/painel/redefinir-senha",
+    });
+
+    if (error) {
+      setResetErro("Não foi possível enviar o e-mail. Verifique o endereço informado.");
+    } else {
+      setResetMsg("Email de redefinição enviado! Verifique sua caixa de entrada.");
+    }
+    setEnviandoReset(false);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,7 +115,47 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={() => { setModoReset(true); setResetEmail(email); setResetMsg(null); setResetErro(null); }}
+                style={{ background: "none", border: "none", color: "#3B82F6", fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 6, padding: 0 }}
+              >
+                Esqueci minha senha
+              </button>
             </div>
+
+            {modoReset && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-gray-700 font-medium mb-3">Informe seu e-mail para redefinir a senha:</p>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    className="input-field flex-1"
+                    placeholder="seu@email.com"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleResetPassword}
+                    disabled={enviandoReset || !resetEmail}
+                    className="btn-primary px-4 py-2 text-sm whitespace-nowrap"
+                    style={{ opacity: enviandoReset ? 0.6 : 1 }}
+                  >
+                    {enviandoReset ? "Enviando..." : "Enviar"}
+                  </button>
+                </div>
+                {resetMsg && <p className="text-green-700 text-sm mt-2 font-medium">{resetMsg}</p>}
+                {resetErro && <p className="text-red-600 text-sm mt-2 font-medium">{resetErro}</p>}
+                <button
+                  type="button"
+                  onClick={() => setModoReset(false)}
+                  style={{ background: "none", border: "none", color: "#6B7280", fontSize: 12, cursor: "pointer", marginTop: 8, padding: 0 }}
+                >
+                  Voltar ao login
+                </button>
+              </div>
+            )}
 
             {erro && (
               <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2.5 text-sm">
