@@ -36,6 +36,24 @@ export default async function CandidatoPerfilPage({ params }: Props) {
     ?? (cvRows ?? []).find((r: any) => r.admissao_fee_percentual != null)
     ?? null;
 
+  // Best retention score from candidatos_vagas
+  const { data: retencaoRow } = await supabase
+    .from("candidatos_vagas")
+    .select("retencao_score, retencao_label, retencao_resumo")
+    .eq("candidato_id", id)
+    .not("retencao_score", "is", null)
+    .order("retencao_score", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const melhorRetencao = retencaoRow
+    ? {
+        score: retencaoRow.retencao_score as number,
+        label: retencaoRow.retencao_label as string,
+        resumo: (retencaoRow.retencao_resumo ?? null) as string | null,
+      }
+    : null;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const garantiaInfo = garantiaRow ? (() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -63,7 +81,7 @@ export default async function CandidatoPerfilPage({ params }: Props) {
         </Link>
       </div>
 
-      <CandidatoPerfilTabs candidato={candidato} garantiaInfo={garantiaInfo} />
+      <CandidatoPerfilTabs candidato={candidato} garantiaInfo={garantiaInfo} melhorRetencao={melhorRetencao} />
     </div>
   );
 }

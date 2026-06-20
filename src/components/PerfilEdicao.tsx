@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatarData } from "@/lib/utils";
 import { ETAPAS_KANBAN } from "@/lib/constants";
@@ -9,12 +9,13 @@ import type { EmailTemplateName } from "@/lib/emailTemplates";
 import PerfilEtapaSelector from "@/components/PerfilEtapaSelector";
 import PerfilAnotacoes from "@/components/PerfilAnotacoes";
 import TriagemBadge from "@/components/TriagemBadge";
-import type { Candidato, CandidatoVaga } from "@/types";
-import type { GarantiaInfo } from "@/components/CandidatoPerfilTabs";
+import type { Candidato } from "@/types";
+import type { GarantiaInfo, MelhorRetencao } from "@/components/CandidatoPerfilTabs";
 
 interface Props {
   candidato: Candidato;
   garantiaInfo?: GarantiaInfo | null;
+  melhorRetencao?: MelhorRetencao | null;
 }
 
 const TURNOS = ["Integral", "Manhã", "Tarde", "Noite", "Flexível"];
@@ -78,7 +79,7 @@ function formatarCpf(v: string): string {
   return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6, 9)}-${nums.slice(9)}`;
 }
 
-export default function PerfilEdicao({ candidato, garantiaInfo }: Props) {
+export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao }: Props) {
   const router = useRouter();
   const etapa = ETAPAS_KANBAN.find((e) => e.id === candidato.etapa_kanban);
 
@@ -103,29 +104,6 @@ export default function PerfilEdicao({ candidato, garantiaInfo }: Props) {
   const [feeStatus, setFeeStatus] = useState(garantiaInfo?.fee_status ?? "pendente");
   const [feeSaving, setFeeSaving] = useState(false);
   const [feeToast, setFeeToast] = useState("");
-
-  const [bestRetencao, setBestRetencao] = useState<{ score: number; label: string } | null>(null);
-  const [retencaoLoading, setRetencaoLoading] = useState(true);
-
-  const carregarRetencao = useCallback(async () => {
-    setRetencaoLoading(true);
-    try {
-      const res = await fetch(`/api/candidatos-vagas?candidato_id=${candidato.id}`);
-      const { data } = await res.json();
-      const entradas = (data ?? []) as CandidatoVaga[];
-      const comScore = entradas.filter((e) => e.retencao_score != null && e.retencao_label);
-      if (comScore.length > 0) {
-        const melhor = comScore.reduce((a, b) => (a.retencao_score! > b.retencao_score! ? a : b));
-        setBestRetencao({ score: melhor.retencao_score!, label: melhor.retencao_label! });
-      }
-    } catch {
-      // ignore
-    } finally {
-      setRetencaoLoading(false);
-    }
-  }, [candidato.id]);
-
-  useEffect(() => { carregarRetencao(); }, [carregarRetencao]);
 
   const WA_OPCOES = [
     {
@@ -536,21 +514,39 @@ export default function PerfilEdicao({ candidato, garantiaInfo }: Props) {
           <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>
             Retenção
           </div>
-          {retencaoLoading ? (
-            <span style={{ color: "#9CA3AF", fontSize: 13, fontStyle: "italic" }}>Carregando...</span>
-          ) : bestRetencao ? (
-            <div>
+          {melhorRetencao ? (
+            <div style={{ position: "relative" }} className="group">
               <span style={{
                 display: "inline-block",
-                background: bestRetencao.score >= 80 ? "#D1FAE5" : bestRetencao.score >= 60 ? "#FEF3C7" : "#FEE2E2",
-                color: bestRetencao.score >= 80 ? "#065F46" : bestRetencao.score >= 60 ? "#92400E" : "#991B1B",
+                background: melhorRetencao.score >= 80 ? "#D1FAE5" : melhorRetencao.score >= 60 ? "#FEF3C7" : "#FEE2E2",
+                color: melhorRetencao.score >= 80 ? "#065F46" : melhorRetencao.score >= 60 ? "#92400E" : "#991B1B",
                 padding: "3px 10px",
                 borderRadius: 12,
                 fontSize: 13,
                 fontWeight: 700,
+                cursor: "default",
               }}>
-                🔒 {bestRetencao.score} · {bestRetencao.label}
+                🔒 {melhorRetencao.score} · {melhorRetencao.label}
               </span>
+              <div className="hidden group-hover:block" style={{
+                position: "absolute",
+                bottom: "calc(100% + 8px)",
+                left: "50%",
+                transform: "translateX(-50%)",
+                background: "#1F2937",
+                color: "#F9FAFB",
+                padding: "8px 12px",
+                borderRadius: 8,
+                fontSize: 12,
+                lineHeight: 1.4,
+                maxWidth: 260,
+                whiteSpace: "normal",
+                textAlign: "left",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.25)",
+                zIndex: 50,
+              }}>
+                {melhorRetencao.resumo ?? "Resumo não disponível"}
+              </div>
             </div>
           ) : (
             <span style={{ color: "#9CA3AF", fontSize: 13, fontStyle: "italic" }}>Aguardando</span>

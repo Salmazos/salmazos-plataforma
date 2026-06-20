@@ -29,12 +29,19 @@ export interface GarantiaInfo {
   fee_status: string | null;
 }
 
+export interface MelhorRetencao {
+  score: number;
+  label: string;
+  resumo: string | null;
+}
+
 interface Props {
   candidato: Candidato;
   garantiaInfo?: GarantiaInfo | null;
+  melhorRetencao?: MelhorRetencao | null;
 }
 
-export default function CandidatoPerfilTabs({ candidato, garantiaInfo }: Props) {
+export default function CandidatoPerfilTabs({ candidato, garantiaInfo, melhorRetencao }: Props) {
   const [tab, setTab] = useState<Tab>("perfil");
 
   return (
@@ -78,7 +85,7 @@ export default function CandidatoPerfilTabs({ candidato, garantiaInfo }: Props) 
 
       {tab === "perfil" && (
         <>
-          <PerfilEdicao candidato={candidato} garantiaInfo={garantiaInfo} />
+          <PerfilEdicao candidato={candidato} garantiaInfo={garantiaInfo} melhorRetencao={melhorRetencao} />
           <div className="mt-6">
             <EncaminhamentosSection candidatoId={candidato.id} />
           </div>
