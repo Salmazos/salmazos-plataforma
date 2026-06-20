@@ -80,6 +80,8 @@ export interface KanbanCard {
   origem: string | null;
   bloqueado: boolean | null;
   responsavel: string | null;
+  habilidades: string[] | null;
+  resumo_profissional: string | null;
   created_at: string;
   candidato_created_at: string;
 }

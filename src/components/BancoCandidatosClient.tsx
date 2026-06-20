@@ -29,6 +29,11 @@ export type CandidatoRow = {
   alocacao_data_inicio: string | null;
   alocacao_data_fim: string | null;
   alocacao_tipo_servico: string | null;
+  resumo_profissional: string | null;
+  resumo_candidato: string | null;
+  experiencias_profissionais: string | null;
+  habilidades: string[] | null;
+  formacao_academica: string | null;
 };
 
 type MatchEntry = { vaga_id: string; titulo: string; score: number };
@@ -397,6 +402,7 @@ export default function BancoCandidatosClient({
   const [idadeMax, setIdadeMax] = useState("");
   const [notaIaMin, setNotaIaMin] = useState("");
   const [matchMin, setMatchMin] = useState("");
+  const [keyword, setKeyword] = useState("");
 
   const [matchMap, setMatchMap] = useState<Record<string, MatchEntry[]>>({});
   const [loadingMatches, setLoadingMatches] = useState(false);
@@ -561,6 +567,7 @@ export default function BancoCandidatosClient({
     const nomeQ = nome.trim().toLowerCase();
     const cargoQ = cargo.trim().toLowerCase();
     const cidadeQ = cidade.trim().toLowerCase();
+    const kwQ = keyword.trim().toLowerCase();
     const minAge = idadeMin !== "" ? parseInt(idadeMin, 10) : null;
     const maxAge = idadeMax !== "" ? parseInt(idadeMax, 10) : null;
     const notaIaThreshold = notaIaMin !== "" ? parseInt(notaIaMin, 10) : null;
@@ -582,9 +589,21 @@ export default function BancoCandidatosClient({
         const bestMatch = matchMap[c.id]?.[0]?.score ?? c.melhor_match_score;
         if (bestMatch === null || bestMatch === undefined || bestMatch < matchThreshold) return false;
       }
+      if (kwQ) {
+        const haystack = [
+          c.nome_completo,
+          c.cargo_pretendido,
+          c.resumo_profissional,
+          c.resumo_candidato,
+          c.experiencias_profissionais,
+          c.formacao_academica,
+          Array.isArray(c.habilidades) ? c.habilidades.join(" ") : c.habilidades,
+        ].filter(Boolean).join(" ").toLowerCase();
+        if (!haystack.includes(kwQ)) return false;
+      }
       return true;
     });
-  }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, matchMap, filtroAlocacao]);
+  }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, matchMap, filtroAlocacao, keyword]);
 
   return (
     <div>
@@ -806,14 +825,26 @@ export default function BancoCandidatosClient({
           </div>
         </div>
 
-        {(nome || cargo || cidade || idadeMin || idadeMax || notaIaMin || matchMin) && (
+        <div style={{ marginTop: 12 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
+            {"🔍"} Palavra-chave
+          </label>
+          <input
+            style={inputStyle()}
+            placeholder="Ex: NR-12, solda, CNH E, costura..."
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+          />
+        </div>
+
+        {(nome || cargo || cidade || idadeMin || idadeMax || notaIaMin || matchMin || keyword) && (
           <div style={{ marginTop: 10, fontSize: 13, color: "#6B7280" }}>
             Exibindo{" "}
             <strong style={{ color: "#111827" }}>{filtered.length}</strong> de{" "}
             {candidatos.length} candidatos
             {" · "}
             <button
-              onClick={() => { setNome(""); setCargo(""); setCidade(""); setIdadeMin(""); setIdadeMax(""); setNotaIaMin(""); setMatchMin(""); }}
+              onClick={() => { setNome(""); setCargo(""); setCidade(""); setIdadeMin(""); setIdadeMax(""); setNotaIaMin(""); setMatchMin(""); setKeyword(""); }}
               style={{ background: "none", border: "none", color: "#FFB800", cursor: "pointer", fontSize: 13, fontWeight: 600, padding: 0 }}
             >
               Limpar filtros

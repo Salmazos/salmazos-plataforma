@@ -14,7 +14,7 @@ export default async function PainelPage() {
     .from("candidatos_vagas")
     .select(`
       id, etapa, vaga_id, observacoes, created_at,
-      candidatos!inner(id, nome_completo, cargo_pretendido, cidade, estado, triagem_score, triagem_label, origem, bloqueado, responsavel, created_at, updated_at),
+      candidatos!inner(id, nome_completo, cargo_pretendido, cidade, estado, triagem_score, triagem_label, origem, bloqueado, responsavel, habilidades, resumo_profissional, created_at, updated_at),
       vagas!inner(id, titulo, tipo_servico)
     `)
     .in("etapa", ETAPAS_KANBAN_VISIVEIS)
@@ -45,6 +45,8 @@ export default async function PainelPage() {
       origem: string | null;
       bloqueado: boolean | null;
       responsavel: string | null;
+      habilidades: string[] | null;
+      resumo_profissional: string | null;
       created_at: string;
       updated_at: string;
     };
@@ -66,6 +68,8 @@ export default async function PainelPage() {
     origem: cv.candidatos.origem,
     bloqueado: cv.candidatos.bloqueado,
     responsavel: cv.candidatos.responsavel,
+    habilidades: cv.candidatos.habilidades,
+    resumo_profissional: cv.candidatos.resumo_profissional,
     created_at: cv.created_at,
     candidato_created_at: cv.candidatos.created_at,
   }));

@@ -114,7 +114,15 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado }: Pro
       if (filtroOrigem && (c.origem ?? "Banco de talentos") !== filtroOrigem) return false;
       if (filtroKeyword) {
         const kw = filtroKeyword.toLowerCase();
-        const haystack = [c.nome_completo, c.cargo_pretendido, c.vaga_titulo].join(" ").toLowerCase();
+        const haystack = [
+          c.nome_completo,
+          c.cargo_pretendido,
+          c.vaga_titulo,
+          c.cidade,
+          c.origem,
+          c.resumo_profissional,
+          Array.isArray(c.habilidades) ? c.habilidades.join(" ") : null,
+        ].filter(Boolean).join(" ").toLowerCase();
         if (!haystack.includes(kw)) return false;
       }
       if (filtroCidade && !c.cidade.toLowerCase().includes(filtroCidade.toLowerCase())) return false;
@@ -318,8 +326,8 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado }: Pro
           <div className="card space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Palavra-chave</label>
-                <input type="text" placeholder="Nome, cargo, vaga..." value={filtroKeyword} onChange={(e) => setFiltroKeyword(e.target.value)} className="input-field" />
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{"🔍"} Palavra-chave</label>
+                <input type="text" placeholder="Ex: NR-12, solda, CNH E..." value={filtroKeyword} onChange={(e) => setFiltroKeyword(e.target.value)} className="input-field" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cidade</label>
