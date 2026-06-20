@@ -18,6 +18,7 @@ export default async function PainelLayout({
 
   const role = user.app_metadata?.role ?? "analista";
   const isFullAccess = ["superuser", "diretoria"].includes(role);
+  const isSupervisorOrAbove = ["superuser", "diretoria", "supervisor"].includes(role);
 
   const { data: perfil } = await supabase
     .from("analistas_perfil")
@@ -34,6 +35,7 @@ export default async function PainelLayout({
         userAvatar={perfil?.avatar_url ?? null}
         role={role}
         isFullAccess={isFullAccess}
+        isSupervisorOrAbove={isSupervisorOrAbove}
       />
       <main className="max-w-screen-2xl mx-auto px-6 py-6">{children}</main>
     </div>

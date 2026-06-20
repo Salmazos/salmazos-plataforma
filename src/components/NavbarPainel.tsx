@@ -13,6 +13,7 @@ interface Props {
   userAvatar: string | null;
   role: string;
   isFullAccess: boolean;
+  isSupervisorOrAbove: boolean;
 }
 
 function UserAvatar({ name, avatarUrl }: { name: string; avatarUrl: string | null }) {
@@ -191,6 +192,7 @@ export default function NavbarPainel({
   userAvatar,
   role,
   isFullAccess,
+  isSupervisorOrAbove,
 }: Props) {
   const router = useRouter();
 
@@ -217,7 +219,7 @@ export default function NavbarPainel({
             <NavLink href="/painel/vagas" label="Vagas" />
             <NavLink href="/painel/clientes" label="Clientes" />
             <NavLink href="/painel/agenda" label="Agenda" />
-            <NavLink href="/painel/relatorios" label="Relatórios" />
+            {isSupervisorOrAbove && <NavLink href="/painel/relatorios" label="Relatórios" />}
             {isFullAccess && <NavLink href="/painel/dashboard" label="Dashboard" />}
             {isFullAccess && <ConfigDropdown />}
           </nav>

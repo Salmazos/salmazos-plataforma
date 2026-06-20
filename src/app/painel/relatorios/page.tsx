@@ -1,9 +1,15 @@
-import { createServiceClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import RelatoriosPageClient from "@/components/RelatoriosPageClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function RelatoriosPage() {
+  const authClient = await createClient();
+  const { data: { user } } = await authClient.auth.getUser();
+  const role = user?.app_metadata?.role ?? "analista";
+  if (role === "analista") redirect("/painel");
+
   const supabase = createServiceClient();
 
   const [{ data: candidatos }, { data: encaminhamentos }, { data: clientes }] =
