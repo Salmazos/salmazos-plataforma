@@ -16,15 +16,18 @@ export default async function BancoCandidatosPage() {
     authClient.auth.getUser(),
   ]);
 
-  let analistaNome = "";
-  if (user) {
-    const { data: perfil } = await supabase
-      .from("analistas_perfil")
-      .select("nome_completo")
-      .eq("user_id", user.id)
-      .single();
-    analistaNome = perfil?.nome_completo ?? "";
-  }
+  const [analistaPerfil, ativosResult] = await Promise.all([
+    user
+      ? supabase.from("analistas_perfil").select("nome_completo").eq("user_id", user.id).single()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("candidatos_vagas")
+      .select("candidato_id")
+      .in("etapa", ["triagem", "entrevista_salmazos", "entrevista_cliente", "aprovado_cliente"]),
+  ]);
 
-  return <BancoCandidatosClient candidatos={(data ?? []) as CandidatoRow[]} analista={analistaNome} />;
+  const analistaNome = analistaPerfil.data?.nome_completo ?? "";
+  const idsEmProcesso = [...new Set((ativosResult.data ?? []).map((r: { candidato_id: string }) => r.candidato_id))];
+
+  return <BancoCandidatosClient candidatos={(data ?? []) as CandidatoRow[]} analista={analistaNome} idsEmProcesso={idsEmProcesso} />;
 }

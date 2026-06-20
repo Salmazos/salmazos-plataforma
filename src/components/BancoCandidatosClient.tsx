@@ -383,9 +383,11 @@ function inputStyle(extra?: React.CSSProperties): React.CSSProperties {
 export default function BancoCandidatosClient({
   candidatos,
   analista,
+  idsEmProcesso,
 }: {
   candidatos: CandidatoRow[];
   analista: string;
+  idsEmProcesso: string[];
 }) {
   const [filtroAlocacao, setFiltroAlocacao] = useState("disponivel");
   const [nome, setNome] = useState("");
@@ -400,6 +402,7 @@ export default function BancoCandidatosClient({
   const [loadingMatches, setLoadingMatches] = useState(false);
 
   const [vagasAbertas, setVagasAbertas] = useState<VagaAberta[]>([]);
+  const emProcessoSet = useMemo(() => new Set(idsEmProcesso), [idsEmProcesso]);
   const [encaminhadoIds, setEncaminhadoIds] = useState<Set<string>>(new Set());
   const [modal, setModal] = useState<ModalState | null>(null);
   const [alertaProcesso, setAlertaProcesso] = useState<AlertaProcessoState | null>(null);
@@ -1031,6 +1034,26 @@ export default function BancoCandidatosClient({
                         >
                           Encaminhado ✓
                         </span>
+                      ) : emProcessoSet.has(c.id) ? (
+                        <button
+                          onClick={() => openModal(c)}
+                          disabled={checkingProcessos}
+                          style={{
+                            display: "inline-block",
+                            padding: "5px 14px",
+                            background: "#16a34a",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: 8,
+                            fontSize: 13,
+                            fontWeight: 600,
+                            whiteSpace: "nowrap",
+                            cursor: checkingProcessos ? "wait" : "pointer",
+                            opacity: checkingProcessos ? 0.8 : 1,
+                          }}
+                        >
+                          {"✓"} Em Processo
+                        </button>
                       ) : (
                         <button
                           onClick={() => openModal(c)}
