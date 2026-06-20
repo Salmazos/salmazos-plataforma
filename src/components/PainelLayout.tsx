@@ -24,6 +24,7 @@ interface Props {
   tempoMedioDias: number;
   vagas: Vaga[];
   recentes: CandidatoRecente[];
+  analistaLogado: string;
 }
 
 export default function PainelLayout({
@@ -33,6 +34,7 @@ export default function PainelLayout({
   tempoMedioDias,
   vagas,
   recentes,
+  analistaLogado,
 }: Props) {
   const [filtroOrigem, setFiltroOrigem] = useState<string | null>(null);
   const [metricasVisiveis, setMetricasVisiveis] = useState(false);
@@ -88,7 +90,7 @@ export default function PainelLayout({
       </div>
 
       {/* Kanban abaixo */}
-      <KanbanBoard cards={cards} filtroOrigem={filtroOrigem} />
+      <KanbanBoard cards={cards} filtroOrigem={filtroOrigem} analistaLogado={analistaLogado} />
     </div>
   );
 }

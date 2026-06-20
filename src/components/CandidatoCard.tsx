@@ -81,7 +81,11 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ responsavel: novo }),
       });
-      if (!res.ok) setResponsavel(anterior);
+      if (!res.ok) {
+        setResponsavel(anterior);
+      } else {
+        router.refresh();
+      }
     } catch {
       setResponsavel(anterior);
     } finally {

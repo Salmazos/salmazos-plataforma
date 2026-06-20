@@ -13,6 +13,7 @@ import type { FinalizarResult } from "./ModalFinalizarProcesso";
 interface Props {
   cards: KanbanCard[];
   filtroOrigem?: string | null;
+  analistaLogado: string;
 }
 
 interface PendingEncaminhamento {
@@ -57,11 +58,12 @@ const ETAPA_COLUMN_MAP: Record<string, string> = {
   reprovado_cliente: "aprovado_cliente",
 };
 
-export default function KanbanBoard({ cards, filtroOrigem }: Props) {
+export default function KanbanBoard({ cards, filtroOrigem, analistaLogado }: Props) {
   const router = useRouter();
   useAutoRefresh(30000);
 
   const [filtroCargo, setFiltroCargo] = useState("");
+  const [filtroMeus, setFiltroMeus] = useState(false);
   const [movendo, setMovendo] = useState<string | null>(null);
   const [pendingEncaminhamento, setPendingEncaminhamento] =
     useState<PendingEncaminhamento | null>(null);
@@ -100,8 +102,14 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
     filtroOrigemFonte,
   ].filter(Boolean).length + filtroHabilidades.length;
 
+  const meusCount = useMemo(
+    () => analistaLogado ? cards.filter((c) => c.responsavel === analistaLogado).length : 0,
+    [cards, analistaLogado],
+  );
+
   const filtrados = useMemo(() => {
     return cards.filter((c) => {
+      if (filtroMeus && c.responsavel !== analistaLogado) return false;
       if (filtroCargo && !c.cargo_pretendido.toLowerCase().includes(filtroCargo.toLowerCase())) return false;
       if (filtroOrigem && (c.origem ?? "Banco de talentos") !== filtroOrigem) return false;
       if (filtroKeyword) {
@@ -114,7 +122,7 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
       return true;
     });
   }, [
-    cards, filtroCargo, filtroOrigem,
+    cards, filtroCargo, filtroOrigem, filtroMeus, analistaLogado,
     filtroKeyword, filtroCidade, filtroFormacao,
     filtroExperiencia, filtroOrigemFonte,
     filtroHabilidades,
@@ -224,6 +232,52 @@ export default function KanbanBoard({ cards, filtroOrigem }: Props) {
             className="input-field pl-9"
           />
         </div>
+
+        {analistaLogado && (
+          <div className="flex gap-1.5">
+            <button
+              onClick={() => setFiltroMeus(false)}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all"
+              style={{
+                background: !filtroMeus ? "#111827" : "#fff",
+                color: !filtroMeus ? "#FFD700" : "#6B7280",
+                border: `1.5px solid ${!filtroMeus ? "#111827" : "#E5E7EB"}`,
+              }}
+            >
+              Todos
+              <span
+                className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                style={{
+                  background: !filtroMeus ? "#FFD700" : "#F3F4F6",
+                  color: !filtroMeus ? "#000" : "#6B7280",
+                }}
+              >
+                {cards.length}
+              </span>
+            </button>
+            <button
+              onClick={() => setFiltroMeus(true)}
+              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all"
+              style={{
+                background: filtroMeus ? "#111827" : "#fff",
+                color: filtroMeus ? "#FFD700" : "#6B7280",
+                border: `1.5px solid ${filtroMeus ? "#111827" : "#E5E7EB"}`,
+              }}
+            >
+              {"👤"} Meus candidatos
+              <span
+                className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                style={{
+                  background: filtroMeus ? "#FFD700" : "#F3F4F6",
+                  color: filtroMeus ? "#000" : "#6B7280",
+                }}
+              >
+                {meusCount}
+              </span>
+            </button>
+          </div>
+        )}
+
         <span className="text-sm text-gray-500 whitespace-nowrap">
           {filtrados.length} candidato{filtrados.length !== 1 ? "s" : ""}
         </span>

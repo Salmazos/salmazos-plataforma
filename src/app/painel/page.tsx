@@ -1,4 +1,4 @@
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import PainelLayout from "@/components/PainelLayout";
 import type { KanbanCard } from "@/types";
 
@@ -8,6 +8,7 @@ const ETAPAS_KANBAN_VISIVEIS = ["triagem", "entrevista_salmazos", "entrevista_cl
 
 export default async function PainelPage() {
   const supabase = createServiceClient();
+  const authClient = await createClient();
 
   const { data: cvData, error: cvError } = await supabase
     .from("candidatos_vagas")
@@ -96,6 +97,17 @@ export default async function PainelPage() {
     created_at: c.candidato_created_at,
   }));
 
+  let analistaLogado = "";
+  const { data: { user } } = await authClient.auth.getUser();
+  if (user) {
+    const { data: perfil } = await supabase
+      .from("analistas_perfil")
+      .select("nome_completo")
+      .eq("user_id", user.id)
+      .single();
+    analistaLogado = perfil?.nome_completo ?? "";
+  }
+
   return (
     <PainelLayout
       cards={cards}
@@ -104,6 +116,7 @@ export default async function PainelPage() {
       tempoMedioDias={0}
       vagas={vagas}
       recentes={recentes}
+      analistaLogado={analistaLogado}
     />
   );
 }
