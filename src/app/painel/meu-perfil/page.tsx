@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import MeuPerfilClient from "@/components/MeuPerfilClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function MeuPerfilPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

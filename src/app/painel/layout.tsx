@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import NavbarPainel from "@/components/NavbarPainel";
 
+export const dynamic = "force-dynamic";
+
 export default async function PainelLayout({
   children,
 }: {
