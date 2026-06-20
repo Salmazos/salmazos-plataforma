@@ -14,11 +14,25 @@ export default async function PainelLayout({
 
   if (!user) redirect("/login");
 
-  const isSuperuser = user.app_metadata?.role === "superuser";
+  const role = user.app_metadata?.role ?? "analista";
+  const isFullAccess = ["superuser", "diretoria"].includes(role);
+
+  const { data: perfil } = await supabase
+    .from("analistas_perfil")
+    .select("id, nome_completo, cargo, avatar_url, nivel_acesso")
+    .eq("user_id", user.id)
+    .single();
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <NavbarPainel userEmail={user.email ?? ""} isSuperuser={isSuperuser} />
+      <NavbarPainel
+        userEmail={user.email ?? ""}
+        userName={perfil?.nome_completo ?? null}
+        userCargo={perfil?.cargo ?? null}
+        userAvatar={perfil?.avatar_url ?? null}
+        role={role}
+        isFullAccess={isFullAccess}
+      />
       <main className="max-w-screen-2xl mx-auto px-6 py-6">{children}</main>
     </div>
   );

@@ -8,7 +8,56 @@ import NotificacoesBell from "@/components/NotificacoesBell";
 
 interface Props {
   userEmail: string;
-  isSuperuser?: boolean;
+  userName: string | null;
+  userCargo: string | null;
+  userAvatar: string | null;
+  role: string;
+  isFullAccess: boolean;
+}
+
+function UserAvatar({ name, avatarUrl }: { name: string; avatarUrl: string | null }) {
+  if (avatarUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={avatarUrl}
+        alt={name}
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: "50%",
+          objectFit: "cover",
+          border: "2px solid #FFD700",
+        }}
+      />
+    );
+  }
+  const initials = name
+    .split(" ")
+    .map((n) => n[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+  return (
+    <div
+      style={{
+        width: 34,
+        height: 34,
+        borderRadius: "50%",
+        background: "#FFD700",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 13,
+        fontWeight: 700,
+        color: "#000",
+        flexShrink: 0,
+      }}
+    >
+      {initials}
+    </div>
+  );
 }
 
 function NavLink({ href, label }: { href: string; label: string }) {
@@ -28,7 +77,7 @@ function NavLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-function ConfigDropdown({ isSuperuser }: { isSuperuser: boolean }) {
+function ConfigDropdown() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -112,32 +161,37 @@ function ConfigDropdown({ isSuperuser }: { isSuperuser: boolean }) {
           >
             Log de E-mails
           </Link>
-          {isSuperuser && (
-            <Link
-              href="/painel/sla-config"
-              onClick={() => setOpen(false)}
-              style={{
-                display: "block",
-                padding: "10px 16px",
-                fontSize: 13,
-                fontWeight: pathname.startsWith("/painel/sla-config") ? 700 : 500,
-                color: pathname.startsWith("/painel/sla-config") ? "#FFD700" : "rgba(255,184,0,0.7)",
-                textDecoration: "none",
-                transition: "background 0.1s",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "")}
-            >
-              Config. SLA
-            </Link>
-          )}
+          <Link
+            href="/painel/sla-config"
+            onClick={() => setOpen(false)}
+            style={{
+              display: "block",
+              padding: "10px 16px",
+              fontSize: 13,
+              fontWeight: pathname.startsWith("/painel/sla-config") ? 700 : 500,
+              color: pathname.startsWith("/painel/sla-config") ? "#FFD700" : "rgba(255,184,0,0.7)",
+              textDecoration: "none",
+              transition: "background 0.1s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+          >
+            Config. SLA
+          </Link>
         </div>
       )}
     </div>
   );
 }
 
-export default function NavbarPainel({ userEmail, isSuperuser = false }: Props) {
+export default function NavbarPainel({
+  userEmail,
+  userName,
+  userCargo,
+  userAvatar,
+  role,
+  isFullAccess,
+}: Props) {
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -145,6 +199,8 @@ export default function NavbarPainel({ userEmail, isSuperuser = false }: Props) 
     await supabase.auth.signOut();
     router.push("/login");
   };
+
+  const displayName = userName ?? userEmail;
 
   return (
     <header className="bg-black shadow-md">
@@ -162,14 +218,35 @@ export default function NavbarPainel({ userEmail, isSuperuser = false }: Props) 
             <NavLink href="/painel/clientes" label="Clientes" />
             <NavLink href="/painel/agenda" label="Agenda" />
             <NavLink href="/painel/relatorios" label="Relatórios" />
-            <NavLink href="/painel/dashboard" label="Dashboard" />
-            <ConfigDropdown isSuperuser={isSuperuser} />
+            {isFullAccess && <NavLink href="/painel/dashboard" label="Dashboard" />}
+            {isFullAccess && <ConfigDropdown />}
           </nav>
         </div>
 
         <div className="flex items-center gap-3">
           <NotificacoesBell />
-          <span className="text-[#FFB800]/60 text-sm hidden sm:block">{userEmail}</span>
+
+          <div className="hidden sm:flex items-center gap-2">
+            <UserAvatar name={displayName} avatarUrl={userAvatar} />
+            <div style={{ lineHeight: 1.2 }}>
+              <span className="text-[#FFB800]/80 text-sm block" style={{ fontWeight: 600 }}>
+                {displayName}
+              </span>
+              {userCargo && (
+                <span className="text-[#FFB800]/40 block" style={{ fontSize: 11 }}>
+                  {userCargo}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <Link
+            href="/painel/meu-perfil"
+            className="text-[#FFB800]/80 hover:text-[#FFB800] text-sm border border-[#FFB800]/20 hover:border-[#FFB800]/50 rounded-lg px-3 py-1.5 transition-colors"
+          >
+            Meu Perfil
+          </Link>
+
           <button
             onClick={handleLogout}
             className="text-[#FFB800]/80 hover:text-[#FFB800] text-sm border border-[#FFB800]/20 hover:border-[#FFB800]/50 rounded-lg px-3 py-1.5 transition-colors"

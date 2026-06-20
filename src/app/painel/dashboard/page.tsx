@@ -1,4 +1,5 @@
-import { createServiceClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +107,11 @@ function TaxaBadge({ taxa }: { taxa: number }) {
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage() {
+  const supabaseAuth = await createClient();
+  const { data: { user: authUser } } = await supabaseAuth.auth.getUser();
+  const role = authUser?.app_metadata?.role ?? "analista";
+  if (!["superuser", "diretoria"].includes(role)) redirect("/painel");
+
   const supabase = createServiceClient();
 
   const [
