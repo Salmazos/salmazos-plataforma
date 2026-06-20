@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -42,6 +42,44 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (body.fee_rs_prazo_cobranca !== undefined) campos.fee_rs_prazo_cobranca = body.fee_rs_prazo_cobranca || null;
 
     const supabase = createServiceClient();
+
+    if (body.tipo_servico !== undefined) {
+      const { data: current } = await supabase
+        .from("vagas")
+        .select("tipo_servico, tipo_servico_original")
+        .eq("id", id)
+        .single();
+
+      if (current && current.tipo_servico !== body.tipo_servico) {
+        let alteradoPor = "";
+        const authClient = await createClient();
+        const { data: { user } } = await authClient.auth.getUser();
+        if (user) {
+          const { data: perfil } = await supabase
+            .from("analistas_perfil")
+            .select("nome_completo")
+            .eq("user_id", user.id)
+            .single();
+          alteradoPor = perfil?.nome_completo ?? user.email ?? "";
+        }
+
+        if (!current.tipo_servico_original) {
+          campos.tipo_servico_original = current.tipo_servico;
+        }
+        campos.tipo_servico_alterado_em = new Date().toISOString();
+        campos.tipo_servico_alterado_por = alteradoPor;
+        campos.tipo_servico_motivo = body.motivo_alteracao || null;
+
+        await supabase.from("vagas_historico_modalidade").insert({
+          vaga_id: id,
+          tipo_anterior: current.tipo_servico,
+          tipo_novo: body.tipo_servico,
+          alterado_por: alteradoPor,
+          motivo: body.motivo_alteracao || null,
+        });
+      }
+    }
+
     const { data, error } = await supabase
       .from("vagas")
       .update(campos)

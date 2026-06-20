@@ -171,3 +171,18 @@ ALTER TABLE candidatos
 
 ALTER TABLE candidatos_vagas
   ADD COLUMN IF NOT EXISTS responsavel TEXT;
+
+ALTER TABLE vagas ADD COLUMN IF NOT EXISTS tipo_servico_original TEXT;
+ALTER TABLE vagas ADD COLUMN IF NOT EXISTS tipo_servico_alterado_em TIMESTAMPTZ;
+ALTER TABLE vagas ADD COLUMN IF NOT EXISTS tipo_servico_alterado_por TEXT;
+ALTER TABLE vagas ADD COLUMN IF NOT EXISTS tipo_servico_motivo TEXT;
+
+CREATE TABLE IF NOT EXISTS vagas_historico_modalidade (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  vaga_id UUID REFERENCES vagas(id) ON DELETE CASCADE,
+  tipo_anterior TEXT,
+  tipo_novo TEXT,
+  alterado_por TEXT,
+  motivo TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);

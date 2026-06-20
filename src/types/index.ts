@@ -131,6 +131,10 @@ export interface Vaga {
   observacoes: string | null;
   fee_rs_percentual?: number | null;
   fee_rs_prazo_cobranca?: string | null;
+  tipo_servico_original?: string | null;
+  tipo_servico_alterado_em?: string | null;
+  tipo_servico_alterado_por?: string | null;
+  tipo_servico_motivo?: string | null;
   created_at: string;
   cliente_nome_temp?: string | null;
   clientes?: { id: string; nome: string } | null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import ModalEditarVaga from "./ModalEditarVaga";
@@ -11,6 +11,15 @@ import RetencaoBadge from "./RetencaoBadge";
 import { TIPOS_SERVICO } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
 import type { Vaga, CandidatoVaga, Candidato, MatchDetalhes } from "@/types";
+
+type HistoricoModalidade = {
+  id: string;
+  tipo_anterior: string;
+  tipo_novo: string;
+  alterado_por: string | null;
+  motivo: string | null;
+  created_at: string;
+};
 
 function formatarSalario(valor: string | null | undefined): string {
   if (!valor) return "A combinar";
@@ -66,6 +75,18 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
   const [calculandoTodos, setCalculandoTodos] = useState(false);
   const [gerandoPDF, setGerandoPDF] = useState(false);
   const [linkCopiado, setLinkCopiado] = useState(false);
+  const [historicoModalidade, setHistoricoModalidade] = useState<HistoricoModalidade[]>([]);
+  const [historicoAberto, setHistoricoAberto] = useState(false);
+
+  const tipoLabel = useCallback((id: string) => TIPOS_SERVICO.find((t) => t.id === id)?.label ?? id, []);
+
+  useEffect(() => {
+    if (!vaga.tipo_servico_original || vaga.tipo_servico_original === vaga.tipo_servico) return;
+    fetch(`/api/vagas/${vaga.id}/historico-modalidade`)
+      .then((r) => r.ok ? r.json() : { data: [] })
+      .then((j) => setHistoricoModalidade(j.data ?? []))
+      .catch(() => {});
+  }, [vaga.id, vaga.tipo_servico_original, vaga.tipo_servico]);
 
   const handleCompartilhar = () => {
     const url = window.location.origin + "/vagas/" + vaga.id;
@@ -283,6 +304,54 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
           </div>
         </div>
       </div>
+
+      {/* Modalidade change banner */}
+      {vaga.tipo_servico_original && vaga.tipo_servico_original !== vaga.tipo_servico && (
+        <div className="mb-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+            <p className="text-sm text-amber-800">
+              {"🔄"} Modalidade alterada de{" "}
+              <strong>{tipoLabel(vaga.tipo_servico_original)}</strong> para{" "}
+              <strong>{tipoLabel(vaga.tipo_servico)}</strong>
+              {vaga.tipo_servico_alterado_em && (
+                <> em {new Date(vaga.tipo_servico_alterado_em).toLocaleDateString("pt-BR")}</>
+              )}
+              {vaga.tipo_servico_alterado_por && (
+                <> por {vaga.tipo_servico_alterado_por}</>
+              )}
+              {vaga.tipo_servico_motivo && (
+                <>. Motivo: {vaga.tipo_servico_motivo}</>
+              )}
+            </p>
+            {historicoModalidade.length > 1 && (
+              <div className="mt-2">
+                <button
+                  onClick={() => setHistoricoAberto((v) => !v)}
+                  className="text-xs text-amber-700 underline underline-offset-2 cursor-pointer"
+                >
+                  {historicoAberto ? "Ocultar histórico" : `Ver histórico de modalidade (${historicoModalidade.length})`}
+                </button>
+                {historicoAberto && (
+                  <div className="mt-2 space-y-1.5">
+                    {historicoModalidade.map((h) => (
+                      <div key={h.id} className="text-xs text-amber-700 bg-amber-100/50 rounded-lg px-3 py-2">
+                        <span className="font-semibold">{tipoLabel(h.tipo_anterior)}</span>
+                        {" → "}
+                        <span className="font-semibold">{tipoLabel(h.tipo_novo)}</span>
+                        {h.alterado_por && <> — {h.alterado_por}</>}
+                        <span className="text-amber-500 ml-2">
+                          {new Date(h.created_at).toLocaleDateString("pt-BR")}
+                        </span>
+                        {h.motivo && <div className="mt-0.5 text-amber-600">Motivo: {h.motivo}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Two-column body */}
       <div className="grid grid-cols-3 gap-6 items-start">

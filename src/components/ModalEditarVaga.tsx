@@ -1,8 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ANALISTAS, TIPOS_SERVICO, HABILIDADES, ESTADOS } from "@/lib/constants";
 import type { Vaga } from "@/types";
+
+const IMPACTO_TIPO: Record<string, string> = {
+  recrutamento_selecao: "Fee será aplicado conforme contrato. Garantia de 30 dias.",
+  mao_obra_temporaria: "Candidato será registrado pela Salmazos. Contrato temporário.",
+  terceirizacao: "Candidato será alocado via Salmazos.",
+  avaliacao_psicologica: "Serviço de avaliação psicológica será aplicado.",
+};
 
 interface ClienteOpcao {
   id: string;
@@ -150,9 +157,16 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
   const [reqCustom, setReqCustom] = useState<string[]>([]);
   const [reqInput, setReqInput]   = useState("");
 
+  const [confirmModalidade, setConfirmModalidade] = useState(false);
+  const [motivoAlteracao, setMotivoAlteracao] = useState("");
+  const tipoServicoOriginal = useRef("");
+
   useEffect(() => {
     if (!isOpen) return;
     setErro("");
+    setConfirmModalidade(false);
+    setMotivoAlteracao("");
+    tipoServicoOriginal.current = vaga.tipo_servico;
 
     setForm({
       titulo:       vaga.titulo,
@@ -251,23 +265,33 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
   };
 
   const handleSalvar = async () => {
+    const tipoMudou = form.tipo_servico !== tipoServicoOriginal.current;
+    if (tipoMudou && !confirmModalidade) {
+      setConfirmModalidade(true);
+      return;
+    }
+
     setSalvando(true);
     setErro("");
     try {
+      const payload: Record<string, unknown> = {
+        ...form,
+        cliente_id:            form.cliente_id || null,
+        num_posicoes:          Number(form.num_posicoes),
+        habilidades_desejadas: habilidades,
+        beneficios:            assembleBeneficios(),
+        horario:               assembleHorario(),
+        requisitos:            assembleRequisitos(),
+        fee_rs_percentual:     form.fee_rs_percentual,
+        fee_rs_prazo_cobranca: form.fee_rs_prazo_cobranca,
+      };
+      if (tipoMudou) {
+        payload.motivo_alteracao = motivoAlteracao.trim();
+      }
       const res = await fetch(`/api/vagas/${vaga.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          cliente_id:            form.cliente_id || null,
-          num_posicoes:          Number(form.num_posicoes),
-          habilidades_desejadas: habilidades,
-          beneficios:            assembleBeneficios(),
-          horario:               assembleHorario(),
-          requisitos:            assembleRequisitos(),
-          fee_rs_percentual:     form.fee_rs_percentual,
-          fee_rs_prazo_cobranca: form.fee_rs_prazo_cobranca,
-        }),
+        body: JSON.stringify(payload),
       });
       const json = await res.json();
       if (!res.ok) { setErro(json.error ?? "Erro ao salvar."); return; }
@@ -275,6 +299,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
       onClose();
     } finally {
       setSalvando(false);
+      setConfirmModalidade(false);
     }
   };
 
@@ -597,6 +622,71 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
 
         </div>
       </div>
+
+      {/* Confirmation modal for tipo_servico change */}
+      {confirmModalidade && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{"⚠️"}</span>
+                <h3 className="text-lg font-bold text-gray-900">Alterar Modalidade de Contratação</h3>
+              </div>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <p className="text-sm text-gray-600">
+                  <span className="font-semibold">De:</span>{" "}
+                  {TIPOS_SERVICO.find((t) => t.id === tipoServicoOriginal.current)?.label ?? tipoServicoOriginal.current}
+                </p>
+                <p className="text-sm text-gray-600 mt-1">
+                  <span className="font-semibold">Para:</span>{" "}
+                  {TIPOS_SERVICO.find((t) => t.id === form.tipo_servico)?.label ?? form.tipo_servico}
+                </p>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-sm font-semibold text-amber-800 mb-1">Impacto:</p>
+                <p className="text-sm text-amber-700">
+                  {IMPACTO_TIPO[form.tipo_servico] ?? "Tipo de serviço será atualizado."}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                  Motivo da alteração *
+                </label>
+                <textarea
+                  value={motivoAlteracao}
+                  onChange={(e) => setMotivoAlteracao(e.target.value)}
+                  placeholder="Descreva o motivo da mudança de modalidade..."
+                  rows={3}
+                  className="input-field resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setConfirmModalidade(false);
+                    setMotivoAlteracao("");
+                    set("tipo_servico", tipoServicoOriginal.current);
+                  }}
+                  className="btn-outline"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSalvar}
+                  disabled={!motivoAlteracao.trim() || salvando}
+                  className="btn-primary disabled:opacity-50"
+                >
+                  {salvando ? "Salvando..." : "Confirmar Alteração"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
