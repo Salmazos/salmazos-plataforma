@@ -74,35 +74,12 @@ export default async function PainelPage() {
     candidato_created_at: cv.candidatos.created_at,
   }));
 
-  // ── Métricas ──────────────────────────────────────────────────
-  const totalAtivos = cards.length;
-
-  const inicioMes = new Date();
-  inicioMes.setDate(1);
-  inicioMes.setHours(0, 0, 0, 0);
-
-  const aprovadosNoMes = cards.filter(
-    (c) => c.etapa === "aprovado_cliente" && new Date(c.created_at) >= inicioMes
-  ).length;
-
-  const origensMap = new Map<string, number>();
-  cards.forEach((c) => {
-    const key = c.origem ?? "Banco de talentos";
-    origensMap.set(key, (origensMap.get(key) ?? 0) + 1);
-  });
-  const vagas = Array.from(origensMap.entries())
-    .map(([cargo, count]) => ({ cargo, count }))
-    .sort((a, b) => b.count - a.count);
-
-  const recentes = cards.slice(0, 5).map((c) => ({
-    id: c.candidato_id,
-    nome_completo: c.nome_completo,
-    cargo_pretendido: c.cargo_pretendido,
-    created_at: c.candidato_created_at,
-  }));
-
+  // ── Auth + role ───────────────────────────────────────────────
   let analistaLogado = "";
   const { data: { user } } = await authClient.auth.getUser();
+  const role = user?.app_metadata?.role ?? "analista";
+  const isFullAccess = ["superuser", "diretoria"].includes(role);
+
   if (user) {
     const { data: perfil } = await supabase
       .from("analistas_perfil")
@@ -111,6 +88,37 @@ export default async function PainelPage() {
       .single();
     analistaLogado = perfil?.nome_completo ?? "";
   }
+
+  // ── Métricas ──────────────────────────────────────────────────
+  const metricsCards = isFullAccess
+    ? cards
+    : cards.filter((c) => c.responsavel === analistaLogado);
+
+  const totalAtivos = metricsCards.length;
+
+  const inicioMes = new Date();
+  inicioMes.setDate(1);
+  inicioMes.setHours(0, 0, 0, 0);
+
+  const aprovadosNoMes = metricsCards.filter(
+    (c) => c.etapa === "aprovado_cliente" && new Date(c.created_at) >= inicioMes
+  ).length;
+
+  const origensMap = new Map<string, number>();
+  metricsCards.forEach((c) => {
+    const key = c.origem ?? "Banco de talentos";
+    origensMap.set(key, (origensMap.get(key) ?? 0) + 1);
+  });
+  const vagas = Array.from(origensMap.entries())
+    .map(([cargo, count]) => ({ cargo, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const recentes = metricsCards.slice(0, 5).map((c) => ({
+    id: c.candidato_id,
+    nome_completo: c.nome_completo,
+    cargo_pretendido: c.cargo_pretendido,
+    created_at: c.candidato_created_at,
+  }));
 
   return (
     <PainelLayout
@@ -121,6 +129,7 @@ export default async function PainelPage() {
       vagas={vagas}
       recentes={recentes}
       analistaLogado={analistaLogado}
+      isFullAccess={isFullAccess}
     />
   );
 }

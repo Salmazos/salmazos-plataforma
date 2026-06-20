@@ -24,6 +24,7 @@ interface Props {
   filtroOrigem: string | null;
   onFiltroOrigem: (v: string | null) => void;
   horizontal?: boolean;
+  isFullAccess?: boolean;
 }
 
 export default function PainelSidebar({
@@ -35,13 +36,19 @@ export default function PainelSidebar({
   filtroOrigem,
   onFiltroOrigem,
   horizontal = false,
+  isFullAccess = false,
 }: Props) {
   return (
     <aside className={horizontal ? "grid grid-cols-1 md:grid-cols-3 gap-4 w-full" : "w-72 shrink-0 space-y-4"}>
 
       {/* ── Métricas rápidas ── */}
       <div className="card">
-        <p className="section-title">Métricas rápidas</p>
+        <p className="section-title">
+          {isFullAccess ? "Métricas Gerais — Toda a Equipe" : "Minhas Métricas"}
+        </p>
+        {!isFullAccess && (
+          <p className="text-xs text-gray-400 -mt-1 mb-2">Apenas seus candidatos</p>
+        )}
         <div className={`divide-y divide-gray-50 ${horizontal ? "" : ""}`}>
           <MetricaItem
             label="Candidatos ativos"

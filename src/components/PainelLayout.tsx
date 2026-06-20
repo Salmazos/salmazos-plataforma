@@ -25,6 +25,7 @@ interface Props {
   vagas: Vaga[];
   recentes: CandidatoRecente[];
   analistaLogado: string;
+  isFullAccess: boolean;
 }
 
 export default function PainelLayout({
@@ -35,6 +36,7 @@ export default function PainelLayout({
   vagas,
   recentes,
   analistaLogado,
+  isFullAccess,
 }: Props) {
   const [filtroOrigem, setFiltroOrigem] = useState<string | null>(null);
   const [metricasVisiveis, setMetricasVisiveis] = useState(false);
@@ -54,6 +56,7 @@ export default function PainelLayout({
               filtroOrigem={filtroOrigem}
               onFiltroOrigem={setFiltroOrigem}
               horizontal
+              isFullAccess={isFullAccess}
             />
             <button
               onClick={() => setMetricasVisiveis(false)}
