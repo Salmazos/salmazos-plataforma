@@ -8,27 +8,52 @@ export async function GET() {
   );
 
   const users = [
-    "consultoria@salmazos.com.br",
-    "rh@salmazos.com.br",
-    "comercial@salmazos.com.br",
-    "gestao@salmazos.com.br",
-    "curriculos@salmazos.com.br",
+    { email: "consultoria@salmazos.com.br", nome: "Elizabete Salmazos Santos", role: "diretoria" },
+    { email: "rh@salmazos.com.br", nome: "Andreza Thaisla Salmazo Santos", role: "diretoria" },
+    { email: "comercial@salmazos.com.br", nome: "Lucas Miguel", role: "diretoria" },
+    { email: "gestao@salmazos.com.br", nome: "Edivan", role: "supervisor" },
+    { email: "curriculos@salmazos.com.br", nome: "Rebecca Zambonini", role: "analista" },
   ];
 
-  const { data: { users: allUsers } } = await supabase.auth.admin.listUsers();
-
   const results = [];
-  for (const email of users) {
-    const user = allUsers?.find(u => u.email === email);
-    if (!user) {
-      results.push({ email, ok: false, error: "User not found" });
-      continue;
-    }
-    const { error } = await supabase.auth.admin.updateUserById(user.id, {
+  for (const u of users) {
+    const { data, error } = await supabase.auth.admin.createUser({
+      email: u.email,
       password: "Salmazos@2026",
       email_confirm: true,
+      app_metadata: { role: u.role },
+      user_metadata: { nome_completo: u.nome },
     });
-    results.push({ email, ok: !error, id: user.id, error: error?.message });
+
+    // If user already exists, try to update instead
+    if (error?.message?.includes("already been registered")) {
+      const { data: { users: allUsers } } = await supabase.auth.admin.listUsers();
+      const existing = allUsers?.find(au => au.email === u.email);
+      if (existing) {
+        const { error: updateError } = await supabase.auth.admin.updateUserById(
+          existing.id,
+          { password: "Salmazos@2026", app_metadata: { role: u.role } }
+        );
+        results.push({ email: u.email, action: "updated", ok: !updateError, error: updateError?.message });
+        continue;
+      }
+    }
+
+    // Update analistas_perfil with new user_id if created
+    if (data?.user) {
+      await supabase
+        .from("analistas_perfil")
+        .update({ user_id: data.user.id })
+        .eq("email", u.email);
+    }
+
+    results.push({
+      email: u.email,
+      action: "created",
+      ok: !error,
+      id: data?.user?.id,
+      error: error?.message,
+    });
   }
 
   return NextResponse.json(results);
