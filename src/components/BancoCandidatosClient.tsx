@@ -42,6 +42,13 @@ type ModalState = {
   error: string | null;
 };
 
+type ProcessoAtivo = { vaga_titulo: string; responsavel: string | null; etapa: string };
+
+type AlertaProcessoState = {
+  candidato: CandidatoRow;
+  processos: ProcessoAtivo[];
+};
+
 const thStyle: React.CSSProperties = {
   padding: "8px 12px",
   fontSize: 11,
@@ -375,8 +382,10 @@ function inputStyle(extra?: React.CSSProperties): React.CSSProperties {
 
 export default function BancoCandidatosClient({
   candidatos,
+  analista,
 }: {
   candidatos: CandidatoRow[];
+  analista: string;
 }) {
   const [filtroAlocacao, setFiltroAlocacao] = useState("disponivel");
   const [nome, setNome] = useState("");
@@ -393,6 +402,8 @@ export default function BancoCandidatosClient({
   const [vagasAbertas, setVagasAbertas] = useState<VagaAberta[]>([]);
   const [encaminhadoIds, setEncaminhadoIds] = useState<Set<string>>(new Set());
   const [modal, setModal] = useState<ModalState | null>(null);
+  const [alertaProcesso, setAlertaProcesso] = useState<AlertaProcessoState | null>(null);
+  const [checkingProcessos, setCheckingProcessos] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [modalCadastroAberto, setModalCadastroAberto] = useState(false);
   const [escavadorMap, setEscavadorMap] = useState<Record<string, string | null>>({});
@@ -442,7 +453,7 @@ export default function BancoCandidatosClient({
       .catch(() => {});
   }, []);
 
-  function openModal(c: CandidatoRow) {
+  function abrirModalEncaminhamento(c: CandidatoRow) {
     const bestVagaId = matchMap[c.id]?.[0]?.vaga_id ?? vagasAbertas[0]?.id ?? "";
     setModal({
       candidatoId: c.id,
@@ -451,6 +462,25 @@ export default function BancoCandidatosClient({
       loading: false,
       error: null,
     });
+  }
+
+  async function openModal(c: CandidatoRow) {
+    setCheckingProcessos(true);
+    try {
+      const res = await fetch(`/api/candidatos/${c.id}/processos-ativos`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.ativo && json.processos.length > 0) {
+          setAlertaProcesso({ candidato: c, processos: json.processos });
+          return;
+        }
+      }
+    } catch {
+      // proceed normally if check fails
+    } finally {
+      setCheckingProcessos(false);
+    }
+    abrirModalEncaminhamento(c);
   }
 
   const handleEncaminhar = useCallback(async () => {
@@ -468,7 +498,7 @@ export default function BancoCandidatosClient({
       const res = await fetch("/api/candidatos-vagas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ candidato_id: candidatoId, vaga_id: selectedVagaId, etapa: "triagem" }),
+        body: JSON.stringify({ candidato_id: candidatoId, vaga_id: selectedVagaId, etapa: "triagem", responsavel: analista || undefined }),
       });
 
       const json = await res.json();
@@ -496,7 +526,7 @@ export default function BancoCandidatosClient({
     } catch {
       setModal((m) => m ? { ...m, loading: false, error: "Erro de conexão." } : m);
     }
-  }, [modal]);
+  }, [modal, analista]);
 
   const handleEscavadorChange = useCallback(async (candidatoId: string, value: string) => {
     if (value === "") return;
@@ -1004,6 +1034,7 @@ export default function BancoCandidatosClient({
                       ) : (
                         <button
                           onClick={() => openModal(c)}
+                          disabled={checkingProcessos}
                           style={{
                             display: "inline-block",
                             padding: "5px 14px",
@@ -1014,7 +1045,8 @@ export default function BancoCandidatosClient({
                             fontSize: 13,
                             fontWeight: 600,
                             whiteSpace: "nowrap",
-                            cursor: "pointer",
+                            cursor: checkingProcessos ? "wait" : "pointer",
+                            opacity: checkingProcessos ? 0.6 : 1,
                           }}
                         >
                           → Triagem
@@ -1153,6 +1185,101 @@ export default function BancoCandidatosClient({
                 }}
               >
                 {modal.loading ? "Encaminhando..." : "Encaminhar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Alerta de processo ativo */}
+      {alertaProcesso && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 110,
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setAlertaProcesso(null); }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: "24px 28px",
+              width: 480,
+              maxWidth: "90vw",
+              boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 22 }}>{"⚠️"}</span>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: "#92400E", margin: 0 }}>
+                Atenção!
+              </h2>
+            </div>
+            <p style={{ fontSize: 13, color: "#374151", margin: "0 0 12px", lineHeight: 1.5 }}>
+              Este candidato já está participando de {alertaProcesso.processos.length === 1 ? "um processo" : `${alertaProcesso.processos.length} processos`} ativo{alertaProcesso.processos.length !== 1 ? "s" : ""}:
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+              {alertaProcesso.processos.map((p, i) => (
+                <div
+                  key={i}
+                  style={{
+                    background: "#FEF3C7",
+                    border: "1px solid #FCD34D",
+                    borderRadius: 8,
+                    padding: "8px 12px",
+                    fontSize: 13,
+                    color: "#92400E",
+                  }}
+                >
+                  <strong>{p.vaga_titulo}</strong>
+                  {p.responsavel && <> — Responsável: {p.responsavel}</>}
+                  <span style={{ fontSize: 11, color: "#B45309", marginLeft: 6 }}>({p.etapa.replace(/_/g, " ")})</span>
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: 13, color: "#6B7280", margin: "0 0 16px" }}>
+              Deseja encaminhar para um novo processo mesmo assim?
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setAlertaProcesso(null)}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: 8,
+                  border: "1px solid #E5E7EB",
+                  background: "#fff",
+                  color: "#374151",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  const c = alertaProcesso.candidato;
+                  setAlertaProcesso(null);
+                  abrirModalEncaminhamento(c);
+                }}
+                style={{
+                  padding: "8px 20px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: "#FFB800",
+                  color: "#000",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Sim, encaminhar mesmo assim
               </button>
             </div>
           </div>

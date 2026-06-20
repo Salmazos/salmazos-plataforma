@@ -1,13 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ETAPAS_KANBAN } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
 import type { KanbanCard } from "@/types";
 import TriagemBadge from "./TriagemBadge";
 
-const ANALISTAS = ["Giovanni", "Kaynara", "Rebeca", "Andreza", "Lucas", "Edivan", "Bete", "Olver"];
+type Analista = { id: string; nome_completo: string; email: string };
+
+let cachedAnalistas: Analista[] | null = null;
+let fetchPromise: Promise<Analista[]> | null = null;
+
+function fetchAnalistas(): Promise<Analista[]> {
+  if (cachedAnalistas) return Promise.resolve(cachedAnalistas);
+  if (fetchPromise) return fetchPromise;
+  fetchPromise = fetch("/api/analistas")
+    .then((r) => r.json())
+    .then((json) => {
+      cachedAnalistas = json.analistas ?? [];
+      return cachedAnalistas!;
+    })
+    .catch(() => []);
+  return fetchPromise;
+}
 
 type EtapaOption = { value: string; label: string };
 
@@ -49,6 +65,11 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
   const [salvando, setSalvando] = useState(false);
   const [modalEtapa, setModalEtapa] = useState<EtapaOption | null>(null);
   const [comentario, setComentario] = useState("");
+  const [analistas, setAnalistas] = useState<Analista[]>([]);
+
+  useEffect(() => {
+    fetchAnalistas().then(setAnalistas);
+  }, []);
 
   const handleResponsavelChange = async (novo: string) => {
     const anterior = responsavel;
@@ -153,6 +174,15 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
               {card.origem ?? "Banco de talentos"}
             </span>
           </div>
+          <div className="flex items-center gap-1">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            <span className={`font-medium ${responsavel ? "text-gray-500" : "text-orange-500"}`}>
+              {responsavel || "Sem responsável"}
+            </span>
+          </div>
         </div>
 
         {/* Responsável */}
@@ -168,7 +198,7 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
             className="text-xs py-0.5 px-1.5 border border-gray-200 rounded-md bg-gray-50 text-gray-600 cursor-pointer disabled:opacity-50 flex-1 min-w-0 truncate"
           >
             <option value="">Sem responsável</option>
-            {ANALISTAS.map((a) => <option key={a} value={a}>{a}</option>)}
+            {analistas.map((a) => <option key={a.id} value={a.nome_completo}>{a.nome_completo}</option>)}
           </select>
         </div>
 

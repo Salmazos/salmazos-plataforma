@@ -168,3 +168,6 @@ ALTER TABLE encaminhamentos
 
 ALTER TABLE candidatos
   ADD COLUMN IF NOT EXISTS responsavel TEXT;
+
+ALTER TABLE candidatos_vagas
+  ADD COLUMN IF NOT EXISTS responsavel TEXT;

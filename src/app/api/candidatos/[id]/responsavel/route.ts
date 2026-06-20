@@ -1,17 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 
-const ANALISTAS_VALIDOS = [
-  "Giovanni",
-  "Kaynara",
-  "Rebeca",
-  "Andreza",
-  "Lucas",
-  "Edivan",
-  "Bete",
-  "Olver",
-];
-
 interface Params {
   params: Promise<{ id: string }>;
 }
@@ -26,11 +15,21 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const body = await request.json();
   const { responsavel } = body;
 
-  if (responsavel !== "" && !ANALISTAS_VALIDOS.includes(responsavel)) {
-    return NextResponse.json({ error: "Responsável inválido." }, { status: 400 });
+  const svc = createServiceClient();
+
+  if (responsavel !== "") {
+    const { data: analista } = await svc
+      .from("analistas_perfil")
+      .select("id")
+      .eq("nome_completo", responsavel)
+      .eq("ativo", true)
+      .maybeSingle();
+
+    if (!analista) {
+      return NextResponse.json({ error: "Responsável inválido." }, { status: 400 });
+    }
   }
 
-  const svc = createServiceClient();
   const { data, error } = await svc
     .from("candidatos")
     .update({ responsavel: responsavel || null, updated_at: new Date().toISOString() })
