@@ -44,14 +44,15 @@ export default async function PortalPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const candidatoIds = (encRows ?? []).map((e: any) => e.candidatos?.id).filter(Boolean);
 
-  // Build maps: candidato_id → best match score + vaga titulo
+  // Build maps: candidato_id → best match score + vaga titulo + etapa
   const matchMap: Record<string, number> = {};
   const vagaTituloMap: Record<string, string> = {};
+  const etapaMap: Record<string, { etapa: string; responsavel: string | null; updated_at: string }> = {};
 
   if (vagaIds.length > 0 && candidatoIds.length > 0) {
     const { data: cvRows } = await service
       .from("candidatos_vagas")
-      .select("candidato_id, match_score, vagas(titulo)")
+      .select("candidato_id, match_score, etapa, responsavel, updated_at, vagas(titulo)")
       .in("vaga_id", vagaIds)
       .in("candidato_id", candidatoIds);
 
@@ -69,20 +70,35 @@ export default async function PortalPage() {
         // Prefer titulo from the row with the best score
         if (titulo) vagaTituloMap[r.candidato_id] = titulo;
       }
+      // Keep latest etapa (overwrite if newer)
+      if (r.etapa && (!etapaMap[r.candidato_id] || r.updated_at > etapaMap[r.candidato_id].updated_at)) {
+        etapaMap[r.candidato_id] = {
+          etapa: r.etapa,
+          responsavel: r.responsavel ?? null,
+          updated_at: r.updated_at,
+        };
+      }
     }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const encaminhamentos: EncaminhamentoPortal[] = (encRows ?? []).map((e: any) => ({
-    id: e.id,
-    status: e.status,
-    data_entrevista: e.data_entrevista,
-    feedback_cliente: e.feedback_cliente ?? undefined,
-    avaliado_em: e.avaliado_em ?? undefined,
-    match_score: matchMap[e.candidatos?.id],
-    vaga_titulo: vagaTituloMap[e.candidatos?.id],
-    candidato: e.candidatos,
-  }));
+  const encaminhamentos: EncaminhamentoPortal[] = (encRows ?? []).map((e: any) => {
+    const cid = e.candidatos?.id;
+    const cv = cid ? etapaMap[cid] : undefined;
+    return {
+      id: e.id,
+      status: e.status,
+      data_entrevista: e.data_entrevista,
+      feedback_cliente: e.feedback_cliente ?? undefined,
+      avaliado_em: e.avaliado_em ?? undefined,
+      match_score: matchMap[cid],
+      vaga_titulo: vagaTituloMap[cid],
+      etapa_kanban: cv?.etapa ?? null,
+      responsavel_analista: cv?.responsavel ?? null,
+      etapa_updated_at: cv?.updated_at ?? null,
+      candidato: e.candidatos,
+    };
+  });
 
   const nomeCliente = cliente?.contato_nome || cliente?.nome || "Cliente";
 

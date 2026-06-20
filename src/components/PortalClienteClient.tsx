@@ -21,8 +21,21 @@ export interface EncaminhamentoPortal {
   avaliado_em?: string;
   match_score?: number;
   vaga_titulo?: string;
+  etapa_kanban?: string | null;
+  responsavel_analista?: string | null;
+  etapa_updated_at?: string | null;
   candidato: CandidatoResumo;
 }
+
+const ETAPAS_PIPELINE = [
+  { id: "triagem", label: "Triagem" },
+  { id: "entrevista_salmazos", label: "Entrevista Salmazos" },
+  { id: "entrevista_cliente", label: "Entrevista Cliente" },
+  { id: "aprovado_cliente", label: "Retorno" },
+] as const;
+
+const ETAPA_INDEX: Record<string, number> = {};
+ETAPAS_PIPELINE.forEach((e, i) => { ETAPA_INDEX[e.id] = i; });
 
 interface Props {
   nomeCliente: string;
@@ -46,6 +59,11 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos }: Pr
   const reprovados = encaminhamentos.filter((e) => e.status === "reprovado").length;
   const aguardando = encaminhamentos.filter((e) => e.status === "aguardando").length;
 
+  const emProcesso = encaminhamentos.filter(
+    (e) => e.etapa_kanban && ETAPA_INDEX[e.etapa_kanban] !== undefined
+  );
+  const emProcessoCount = emProcesso.length;
+
   const filtrados =
     filtro === "todos" ? encaminhamentos : encaminhamentos.filter((e) => e.status === filtro);
 
@@ -67,12 +85,13 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos }: Pr
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8">
         {[
-          { label: "Total",      value: total,      bg: "#000",     color: "#FFD700" },
-          { label: "Aguardando", value: aguardando,  bg: "#FEF9C3",  color: "#854D0E" },
-          { label: "Aprovados",  value: aprovados,   bg: "#DCFCE7",  color: "#166534" },
-          { label: "Reprovados", value: reprovados,  bg: "#FEE2E2",  color: "#991B1B" },
+          { label: "Total",       value: total,          bg: "#000",     color: "#FFD700" },
+          { label: "Em Processo", value: emProcessoCount, bg: "#DBEAFE",  color: "#1D4ED8" },
+          { label: "Aguardando",  value: aguardando,      bg: "#FEF9C3",  color: "#854D0E" },
+          { label: "Aprovados",   value: aprovados,       bg: "#DCFCE7",  color: "#166534" },
+          { label: "Reprovados",  value: reprovados,      bg: "#FEE2E2",  color: "#991B1B" },
         ].map((card) => (
           <div
             key={card.label}
@@ -116,6 +135,90 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos }: Pr
           </button>
         ))}
       </div>
+
+      {/* Processos em Andamento */}
+      {emProcesso.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-3">
+            Processos em Andamento
+          </h2>
+          <div className="space-y-3">
+            {emProcesso.map((enc) => {
+              const currentIdx = ETAPA_INDEX[enc.etapa_kanban!] ?? 0;
+              const inicial = enc.candidato?.nome_completo?.charAt(0)?.toUpperCase() ?? "?";
+
+              return (
+                <div
+                  key={`pipeline-${enc.id}`}
+                  className="bg-white rounded-2xl p-5 shadow-sm"
+                >
+                  <div className="flex items-center gap-4 mb-4">
+                    <div
+                      className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
+                      style={{ backgroundColor: "#000", color: "#FFD700" }}
+                    >
+                      {inicial}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 text-sm truncate">
+                        {enc.candidato?.nome_completo ?? "–"}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {enc.vaga_titulo ?? "Banco de Talentos"}
+                        {enc.responsavel_analista && (
+                          <span className="ml-2 text-gray-400">
+                            {"·"} Responsável: {enc.responsavel_analista}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      {enc.etapa_kanban === "entrevista_cliente" && enc.data_entrevista && (
+                        <p className="text-xs font-semibold text-blue-600">
+                          {"📅"} Entrevista: {new Date(enc.data_entrevista + "T12:00:00").toLocaleDateString("pt-BR")}
+                        </p>
+                      )}
+                      {enc.etapa_updated_at && (
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          Atualizado em {new Date(enc.etapa_updated_at).toLocaleDateString("pt-BR")}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Pipeline steps */}
+                  <div className="flex items-center gap-1">
+                    {ETAPAS_PIPELINE.map((etapa, idx) => {
+                      const isCompleted = idx < currentIdx;
+                      const isCurrent = idx === currentIdx;
+                      let bg = "#F3F4F6";
+                      let fg = "#9CA3AF";
+                      if (isCompleted) { bg = "#DCFCE7"; fg = "#166534"; }
+                      if (isCurrent) { bg = "#FFD700"; fg = "#000"; }
+
+                      return (
+                        <div key={etapa.id} className="flex items-center flex-1 min-w-0">
+                          <div
+                            className="flex-1 rounded-lg px-2 py-1.5 text-center text-[11px] font-semibold truncate"
+                            style={{ backgroundColor: bg, color: fg }}
+                          >
+                            {isCompleted && "✓ "}{etapa.label}
+                          </div>
+                          {idx < ETAPAS_PIPELINE.length - 1 && (
+                            <svg className="w-3 h-3 text-gray-300 shrink-0 mx-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Candidate list */}
       {filtrados.length === 0 ? (
