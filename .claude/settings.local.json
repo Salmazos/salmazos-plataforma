@@ -41,7 +41,8 @@
       "Bash(NODE_OPTIONS=--use-system-ca npm install @vercel/functions)",
       "Bash(curl *)",
       "Bash(python3 *)",
-      "Bash(git -C /c/Users/Olver/Desktop/salmazos-plataforma log --oneline --all -- \"supabase/*.sql\")"
+      "Bash(git -C /c/Users/Olver/Desktop/salmazos-plataforma log --oneline --all -- \"supabase/*.sql\")",
+      "mcp__claude_ai_Supabase__get_project_url"
     ]
   }
 }
