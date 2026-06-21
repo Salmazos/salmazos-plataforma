@@ -6,10 +6,17 @@ export const dynamic = "force-dynamic";
 
 export default async function VagasPage() {
   const supabase = createServiceClient();
-  const { data: vagas } = await supabase
-    .from("vagas")
-    .select("*, clientes(id, nome)")
-    .order("titulo", { ascending: true });
 
-  return <VagasPageClient vagas={(vagas ?? []) as Vaga[]} />;
+  const [{ data: vagas }, { count: pendingCount }] = await Promise.all([
+    supabase
+      .from("vagas")
+      .select("*, clientes(id, nome)")
+      .order("titulo", { ascending: true }),
+    supabase
+      .from("solicitacoes_vagas")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "pendente"),
+  ]);
+
+  return <VagasPageClient vagas={(vagas ?? []) as Vaga[]} pendingCount={pendingCount ?? 0} />;
 }

@@ -2,7 +2,9 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import ModalNovaVaga from "./ModalNovaVaga";
+import ModalSolicitacoesVagas from "./ModalSolicitacoesVagas";
 import { TIPOS_SERVICO } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
 import type { Vaga } from "@/types";
@@ -25,11 +27,14 @@ type FiltroStatus = "todas" | "aberta" | "em_andamento" | "fechada" | "cancelada
 
 interface Props {
   vagas: Vaga[];
+  pendingCount: number;
 }
 
-export default function VagasPageClient({ vagas: inicial }: Props) {
+export default function VagasPageClient({ vagas: inicial, pendingCount }: Props) {
+  const router = useRouter();
   const [vagas, setVagas] = useState<Vaga[]>(inicial);
   const [modalAberto, setModalAberto] = useState(false);
+  const [modalSolicitacoes, setModalSolicitacoes] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>("todas");
   const [busca, setBusca] = useState("");
   const [importando, setImportando] = useState(false);
@@ -102,6 +107,35 @@ export default function VagasPageClient({ vagas: inicial }: Props) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setModalSolicitacoes(true)}
+            className="btn-outline flex items-center gap-2"
+            style={{ position: "relative" }}
+          >
+            {"📬"} Solicitações
+            {pendingCount > 0 && (
+              <span
+                style={{
+                  position: "absolute",
+                  top: -6,
+                  right: -6,
+                  backgroundColor: "#dc2626",
+                  color: "#fff",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  width: 20,
+                  height: 20,
+                  borderRadius: "50%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  lineHeight: 1,
+                }}
+              >
+                {pendingCount}
+              </span>
+            )}
+          </button>
           <input
             ref={fileInputRef}
             type="file"
@@ -250,6 +284,11 @@ export default function VagasPageClient({ vagas: inicial }: Props) {
         isOpen={modalAberto}
         onClose={() => setModalAberto(false)}
         onSalvo={handleSalvo}
+      />
+      <ModalSolicitacoesVagas
+        isOpen={modalSolicitacoes}
+        onClose={() => setModalSolicitacoes(false)}
+        onVagaCriada={() => router.refresh()}
       />
     </div>
   );

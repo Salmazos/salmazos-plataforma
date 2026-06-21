@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
 
 interface Props {
@@ -34,8 +35,27 @@ export default function NavbarPortal({ userEmail }: Props) {
           </span>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <span className="text-white/50 text-sm hidden sm:block">{userEmail}</span>
+          <Link
+            href="/portal/solicitar-vaga"
+            style={{
+              backgroundColor: "#FFD700",
+              color: "#000",
+              fontWeight: 700,
+              padding: "8px 16px",
+              borderRadius: 8,
+              border: "none",
+              fontSize: 13,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            + Solicitar Vaga
+          </Link>
           <button
             onClick={handleLogout}
             className="text-white/80 hover:text-white text-sm border border-white/20 hover:border-white/50 rounded-lg px-3 py-1.5 transition-colors"
