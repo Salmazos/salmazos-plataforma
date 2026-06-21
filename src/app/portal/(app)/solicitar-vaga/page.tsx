@@ -106,6 +106,7 @@ export default function SolicitarVagaPage() {
 
   const [reqChips, setReqChips] = useState<Record<string, boolean>>({});
   const [reqCursos, setReqCursos] = useState<Record<string, string>>({});
+  const [reqCondicoes, setReqCondicoes] = useState<Record<string, string>>({});
   const [reqCustom, setReqCustom] = useState<string[]>([]);
   const [reqInput, setReqInput] = useState("");
 
@@ -156,16 +157,33 @@ export default function SolicitarVagaPage() {
     if (tpl.beneficios_chips) setBenChips(tpl.beneficios_chips);
     if (tpl.requisitos_chips) {
       const rc: Record<string, boolean> = {};
+      const cursos: Record<string, string> = {};
+      const conds: Record<string, string> = {};
       for (const chip of tpl.requisitos_chips) {
-        const emMatch = chip.match(/^(.+?) em (.+)$/);
-        if (emMatch) {
-          rc[emMatch[1]] = true;
-          setReqCursos((p) => ({ ...p, [emMatch[1]]: emMatch[2] }));
+        const fullMatch = chip.match(/^(.+?) em (.+?) — (.+)$/);
+        if (fullMatch) {
+          rc[fullMatch[1]] = true;
+          cursos[fullMatch[1]] = fullMatch[2];
+          conds[fullMatch[1]] = fullMatch[3];
         } else {
-          rc[chip] = true;
+          const condMatch = chip.match(/^(.+?) — (.+)$/);
+          if (condMatch) {
+            rc[condMatch[1]] = true;
+            conds[condMatch[1]] = condMatch[2];
+          } else {
+            const emMatch = chip.match(/^(.+?) em (.+)$/);
+            if (emMatch) {
+              rc[emMatch[1]] = true;
+              cursos[emMatch[1]] = emMatch[2];
+            } else {
+              rc[chip] = true;
+            }
+          }
         }
       }
       setReqChips(rc);
+      setReqCursos((p) => ({ ...p, ...cursos }));
+      setReqCondicoes((p) => ({ ...p, ...conds }));
     }
     setUsarHorarioPadrao(true);
     setUsandoTemplate(tpl);
@@ -240,7 +258,11 @@ export default function SolicitarVagaPage() {
     for (const chip of [...REQ_ESCOLARIDADE, ...REQ_EXPERIENCIA, ...REQ_CNH, ...REQ_NR, ...REQ_CONHECIMENTOS]) {
       if (reqChips[chip]) {
         const curso = reqCursos[chip]?.trim();
-        items.push(curso ? `${chip} em ${curso}` : chip);
+        const condicao = reqCondicoes[chip]?.trim();
+        let text = chip;
+        if (curso) text += ` em ${curso}`;
+        if (condicao) text += ` — ${condicao}`;
+        items.push(text);
       }
     }
     items.push(...reqCustom);
@@ -266,7 +288,7 @@ export default function SolicitarVagaPage() {
   };
 
   const horarioTexto = useMemo(gerarHorarioTexto, [horarioTipo, horEntrada, horSaida, horIntervalo, hor1236, horTurnoNome, horCustom]);
-  const requisitosTexto = useMemo(gerarRequisitosTexto, [reqChips, reqCursos, reqCustom]);
+  const requisitosTexto = useMemo(gerarRequisitosTexto, [reqChips, reqCursos, reqCondicoes, reqCustom]);
   const beneficiosTexto = useMemo(gerarBeneficiosTexto, [benChips, benCustom]);
 
   const handleSubmit = async () => {
@@ -282,7 +304,11 @@ export default function SolicitarVagaPage() {
       for (const chip of [...REQ_ESCOLARIDADE, ...REQ_EXPERIENCIA, ...REQ_CNH, ...REQ_NR, ...REQ_CONHECIMENTOS]) {
         if (reqChips[chip]) {
           const curso = reqCursos[chip]?.trim();
-          reqChipsList.push(curso ? `${chip} em ${curso}` : chip);
+          const condicao = reqCondicoes[chip]?.trim();
+          let text = chip;
+          if (curso) text += ` em ${curso}`;
+          if (condicao) text += ` — ${condicao}`;
+          reqChipsList.push(text);
         }
       }
       reqChipsList.push(...reqCustom);
@@ -642,7 +668,7 @@ export default function SolicitarVagaPage() {
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Requisitos</p>
           <p className="text-xs text-gray-400">Clique para adicionar requisitos</p>
 
-          <ChipGroup label="Escolaridade" chips={REQ_ESCOLARIDADE} selected={reqChips} onToggle={toggleReq} cursos={reqCursos} onCursoChange={(k, v) => setReqCursos((p) => ({ ...p, [k]: v }))} comCurso={REQ_COM_CURSO} />
+          <ChipGroup label="Escolaridade" chips={REQ_ESCOLARIDADE} selected={reqChips} onToggle={toggleReq} cursos={reqCursos} onCursoChange={(k, v) => setReqCursos((p) => ({ ...p, [k]: v }))} condicoes={reqCondicoes} onCondicaoChange={(k, v) => setReqCondicoes((p) => ({ ...p, [k]: v }))} comCurso={REQ_COM_CURSO} />
           <ChipGroup label="Experiência" chips={REQ_EXPERIENCIA} selected={reqChips} onToggle={toggleReq} />
           <ChipGroup label="Habilitação" chips={REQ_CNH} selected={reqChips} onToggle={toggleReq} />
           <ChipGroup label="Normas Regulamentadoras" chips={REQ_NR} selected={reqChips} onToggle={toggleReq} />
@@ -757,6 +783,9 @@ export default function SolicitarVagaPage() {
   );
 }
 
+const CONDICOES_TECNICO = ["Completo", "Cursando", "Completo ou Cursando"];
+const CONDICOES_SUPERIOR = ["Completo", "Cursando", "Completo ou Cursando", "A partir do 6º semestre", "A partir do 3º semestre"];
+
 function ChipGroup({
   label,
   chips,
@@ -764,6 +793,8 @@ function ChipGroup({
   onToggle,
   cursos,
   onCursoChange,
+  condicoes,
+  onCondicaoChange,
   comCurso,
 }: {
   label: string;
@@ -772,6 +803,8 @@ function ChipGroup({
   onToggle: (chip: string) => void;
   cursos?: Record<string, string>;
   onCursoChange?: (chip: string, value: string) => void;
+  condicoes?: Record<string, string>;
+  onCondicaoChange?: (chip: string, value: string) => void;
   comCurso?: Set<string>;
 }) {
   return (
@@ -780,6 +813,8 @@ function ChipGroup({
       <div className="flex flex-wrap gap-2">
         {chips.map((chip) => {
           const ativo = !!selected[chip];
+          const showExtras = ativo && comCurso?.has(chip);
+          const condicaoOpts = chip === "Ensino Superior" ? CONDICOES_SUPERIOR : CONDICOES_TECNICO;
           return (
             <div key={chip} className="flex items-center gap-1.5 flex-wrap">
               <button type="button" onClick={() => onToggle(chip)}
@@ -787,16 +822,26 @@ function ChipGroup({
                 style={ativo ? CHIP_ON : CHIP_OFF}>
                 {chip}
               </button>
-              {ativo && comCurso?.has(chip) && onCursoChange && (
+              {showExtras && onCursoChange && (
                 <div className="flex items-center gap-1">
                   <span className="text-xs text-gray-400">em</span>
                   <input
                     value={cursos?.[chip] ?? ""}
                     onChange={(e) => onCursoChange(chip, e.target.value)}
                     placeholder="ex: Administração"
-                    style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 8px", fontSize: 12, width: 140, outline: "none" }}
+                    style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 8px", fontSize: 12, width: 130, outline: "none" }}
                   />
                 </div>
+              )}
+              {showExtras && onCondicaoChange && (
+                <select
+                  value={condicoes?.[chip] ?? ""}
+                  onChange={(e) => onCondicaoChange(chip, e.target.value)}
+                  style={{ border: "1px solid #E5E7EB", borderRadius: 6, padding: "3px 6px", fontSize: 12, outline: "none", color: condicoes?.[chip] ? "#111827" : "#9CA3AF", background: "#fff", cursor: "pointer" }}
+                >
+                  <option value="">Condição...</option>
+                  {condicaoOpts.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
               )}
             </div>
           );
