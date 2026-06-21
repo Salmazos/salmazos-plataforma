@@ -93,10 +93,13 @@ export async function POST(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-    if (body.beneficios_chips) {
+    const clienteUpdate: Record<string, unknown> = {};
+    if (body.beneficios_chips) clienteUpdate.beneficios_padrao = body.beneficios_chips;
+    if (body.horario_padrao) clienteUpdate.horario_padrao = body.horario_padrao;
+    if (Object.keys(clienteUpdate).length > 0) {
       await service
         .from("clientes")
-        .update({ beneficios_padrao: body.beneficios_chips })
+        .update(clienteUpdate)
         .eq("id", cu.cliente_id);
     }
 

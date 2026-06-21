@@ -67,10 +67,9 @@ export default function SolicitarVagaPage() {
   const [horSaida, setHorSaida] = useState("");
   const [horIntervalo, setHorIntervalo] = useState("");
   const [hor1236, setHor1236] = useState<"diurno" | "noturno">("diurno");
-  const [horTurno, setHorTurno] = useState<"a" | "b" | "c" | "custom">("a");
-  const [horTurnoEntrada, setHorTurnoEntrada] = useState("");
-  const [horTurnoSaida, setHorTurnoSaida] = useState("");
+  const [horTurnoNome, setHorTurnoNome] = useState("");
   const [horCustom, setHorCustom] = useState("");
+  const [horPadraoLoaded, setHorPadraoLoaded] = useState(false);
 
   const [reqChips, setReqChips] = useState<Record<string, boolean>>({});
   const [reqCursos, setReqCursos] = useState<Record<string, string>>({});
@@ -93,6 +92,16 @@ export default function SolicitarVagaPage() {
         if (json.beneficios_padrao && typeof json.beneficios_padrao === "object") {
           setBenChips(json.beneficios_padrao);
           setBenPadraoLoaded(true);
+        }
+        if (json.horario_padrao && typeof json.horario_padrao === "object") {
+          const hp = json.horario_padrao;
+          if (hp.modelo) setHorarioTipo(hp.modelo);
+          if (hp.entrada) setHorEntrada(hp.entrada);
+          if (hp.saida) setHorSaida(hp.saida);
+          if (hp.intervalo) setHorIntervalo(hp.intervalo);
+          if (hp.diurno_noturno) setHor1236(hp.diurno_noturno);
+          if (hp.turno) setHorTurnoNome(hp.turno);
+          setHorPadraoLoaded(true);
         }
       })
       .catch(() => {});
@@ -118,21 +127,29 @@ export default function SolicitarVagaPage() {
     setBenInput("");
   };
 
+  const fmtTime = (t: string) => {
+    if (!t) return "—";
+    const [h, m] = t.split(":");
+    return `${h}h${m}`;
+  };
+
   const gerarHorarioTexto = (): string => {
     if (!horarioTipo) return "";
     if (horarioTipo === "a_combinar") return "A combinar";
     if (horarioTipo === "personalizado") return horCustom.trim();
+    const times = `${fmtTime(horEntrada)} às ${fmtTime(horSaida)}`;
     if (horarioTipo === "seg_sex") {
-      const base = `Segunda a Sexta, ${horEntrada || "—"} às ${horSaida || "—"}`;
+      const base = `Segunda a Sexta, ${times}`;
       return horIntervalo ? `${base} (intervalo: ${horIntervalo})` : base;
     }
-    if (horarioTipo === "6x1") return `Escala 6x1, ${horEntrada || "—"} às ${horSaida || "—"}`;
-    if (horarioTipo === "12x36") return hor1236 === "diurno" ? "Escala 12x36, 06h às 18h (Diurno)" : "Escala 12x36, 18h às 06h (Noturno)";
+    if (horarioTipo === "6x1") return `Escala 6x1, ${times}`;
+    if (horarioTipo === "12x36") {
+      const label = hor1236 === "diurno" ? "Diurno" : "Noturno";
+      return horEntrada || horSaida ? `Escala 12x36, ${times} (${label})` : `Escala 12x36 (${label})`;
+    }
     if (horarioTipo === "turno_fixo") {
-      if (horTurno === "a") return "Turno A — 06h às 14h";
-      if (horTurno === "b") return "Turno B — 14h às 22h";
-      if (horTurno === "c") return "Turno C — 22h às 06h";
-      return `Turno Fixo, ${horTurnoEntrada || "—"} às ${horTurnoSaida || "—"}`;
+      const nome = horTurnoNome.trim() || "Turno Fixo";
+      return `${nome}, ${times}`;
     }
     return "";
   };
@@ -167,7 +184,7 @@ export default function SolicitarVagaPage() {
     return result;
   };
 
-  const horarioTexto = useMemo(gerarHorarioTexto, [horarioTipo, horEntrada, horSaida, horIntervalo, hor1236, horTurno, horTurnoEntrada, horTurnoSaida, horCustom]);
+  const horarioTexto = useMemo(gerarHorarioTexto, [horarioTipo, horEntrada, horSaida, horIntervalo, hor1236, horTurnoNome, horCustom]);
   const requisitosTexto = useMemo(gerarRequisitosTexto, [reqChips, reqCursos, reqCustom]);
   const beneficiosTexto = useMemo(gerarBeneficiosTexto, [benChips, benCustom]);
 
@@ -207,6 +224,15 @@ export default function SolicitarVagaPage() {
           beneficios: beneficiosTexto || null,
           beneficios_chips: gerarBeneficiosChips(),
           observacoes: observacoes.trim() || null,
+          horario_padrao: horarioTipo ? {
+            modelo: horarioTipo,
+            entrada: horEntrada || null,
+            saida: horSaida || null,
+            intervalo: horIntervalo || null,
+            diurno_noturno: horarioTipo === "12x36" ? hor1236 : null,
+            turno: horarioTipo === "turno_fixo" ? horTurnoNome || null : null,
+            texto: horarioTexto,
+          } : null,
         }),
       });
       const json = await res.json();
@@ -319,6 +345,12 @@ export default function SolicitarVagaPage() {
         <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Horário de Trabalho</p>
 
+          {horPadraoLoaded && (
+            <p className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+              Horário baseado no seu cadastro. Ajuste se necessário.
+            </p>
+          )}
+
           <div className="flex flex-wrap gap-2">
             {HORARIO_TIPOS.map((h) => (
               <button key={h.id} type="button" onClick={() => setHorarioTipo(horarioTipo === h.id ? "" : h.id)}
@@ -331,16 +363,19 @@ export default function SolicitarVagaPage() {
 
           {horarioTipo === "seg_sex" && (
             <div className="flex items-center gap-3 flex-wrap">
-              <div><label style={labelStyle}>Entrada</label><input type="time" value={horEntrada} onChange={(e) => setHorEntrada(e.target.value)} style={{ ...inputStyle, width: 120 }} /></div>
-              <div><label style={labelStyle}>Saída</label><input type="time" value={horSaida} onChange={(e) => setHorSaida(e.target.value)} style={{ ...inputStyle, width: 120 }} /></div>
+              <div><label style={labelStyle}>Entrada</label><input type="time" value={horEntrada} onChange={(e) => setHorEntrada(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
+              <div><label style={labelStyle}>Saída</label><input type="time" value={horSaida} onChange={(e) => setHorSaida(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
               <div>
                 <label style={labelStyle}>Intervalo</label>
-                <select value={horIntervalo} onChange={(e) => setHorIntervalo(e.target.value)} style={{ ...inputStyle, width: 150, background: "#fff", cursor: "pointer" }}>
+                <select value={horIntervalo} onChange={(e) => setHorIntervalo(e.target.value)} style={{ ...inputStyle, width: 160, background: "#fff", cursor: "pointer" }}>
                   <option value="">Selecione...</option>
-                  <option value="1h">1 hora</option>
-                  <option value="45min">45 minutos</option>
-                  <option value="30min">30 minutos</option>
                   <option value="sem intervalo">Sem intervalo</option>
+                  <option value="15min">15 minutos</option>
+                  <option value="30min">30 minutos</option>
+                  <option value="45min">45 minutos</option>
+                  <option value="1h">1 hora</option>
+                  <option value="1h15">1h15</option>
+                  <option value="1h30">1h30</option>
                 </select>
               </div>
             </div>
@@ -348,45 +383,39 @@ export default function SolicitarVagaPage() {
 
           {horarioTipo === "6x1" && (
             <div className="flex items-center gap-3">
-              <div><label style={labelStyle}>Entrada</label><input type="time" value={horEntrada} onChange={(e) => setHorEntrada(e.target.value)} style={{ ...inputStyle, width: 120 }} /></div>
-              <div><label style={labelStyle}>Saída</label><input type="time" value={horSaida} onChange={(e) => setHorSaida(e.target.value)} style={{ ...inputStyle, width: 120 }} /></div>
+              <div><label style={labelStyle}>Entrada</label><input type="time" value={horEntrada} onChange={(e) => setHorEntrada(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
+              <div><label style={labelStyle}>Saída</label><input type="time" value={horSaida} onChange={(e) => setHorSaida(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
             </div>
           )}
 
           {horarioTipo === "12x36" && (
-            <div className="flex gap-3">
-              {(["diurno", "noturno"] as const).map((o) => (
-                <button key={o} type="button" onClick={() => setHor1236(o)}
-                  className="text-sm px-4 py-2 rounded-lg font-medium transition-all"
-                  style={hor1236 === o ? { background: "#000", color: "#FFD700", border: "2px solid #000" } : { background: "#fff", color: "#374151", border: "2px solid #E5E7EB" }}>
-                  {o === "diurno" ? "☀️ Diurno (06h às 18h)" : "🌙 Noturno (18h às 06h)"}
-                </button>
-              ))}
+            <div className="space-y-3">
+              <div className="flex gap-3">
+                {(["diurno", "noturno"] as const).map((o) => (
+                  <button key={o} type="button" onClick={() => setHor1236(o)}
+                    className="text-sm px-4 py-2 rounded-lg font-medium transition-all"
+                    style={hor1236 === o ? { background: "#000", color: "#FFD700", border: "2px solid #000" } : { background: "#fff", color: "#374151", border: "2px solid #E5E7EB" }}>
+                    {o === "diurno" ? "☀️ Diurno" : "🌙 Noturno"}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-3">
+                <div><label style={labelStyle}>Entrada</label><input type="time" value={horEntrada} onChange={(e) => setHorEntrada(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
+                <div><label style={labelStyle}>Saída</label><input type="time" value={horSaida} onChange={(e) => setHorSaida(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
+              </div>
             </div>
           )}
 
           {horarioTipo === "turno_fixo" && (
-            <div className="space-y-3">
-              <div className="flex gap-2 flex-wrap">
-                {([["a", "Turno A — 06h às 14h"], ["b", "Turno B — 14h às 22h"], ["c", "Turno C — 22h às 06h"], ["custom", "Personalizado"]] as const).map(([id, label]) => (
-                  <button key={id} type="button" onClick={() => setHorTurno(id)}
-                    className="text-xs px-3 py-1.5 rounded-full font-medium transition-all"
-                    style={horTurno === id ? { backgroundColor: "#000", color: "#fff", border: "2px solid #000" } : CHIP_OFF}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {horTurno === "custom" && (
-                <div className="flex items-center gap-3">
-                  <div><label style={labelStyle}>Entrada</label><input type="time" value={horTurnoEntrada} onChange={(e) => setHorTurnoEntrada(e.target.value)} style={{ ...inputStyle, width: 120 }} /></div>
-                  <div><label style={labelStyle}>Saída</label><input type="time" value={horTurnoSaida} onChange={(e) => setHorTurnoSaida(e.target.value)} style={{ ...inputStyle, width: 120 }} /></div>
-                </div>
-              )}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div><label style={labelStyle}>Nome do Turno</label><input value={horTurnoNome} onChange={(e) => setHorTurnoNome(e.target.value)} placeholder="Ex: Turno A, Turno B..." style={{ ...inputStyle, width: 160 }} /></div>
+              <div><label style={labelStyle}>Entrada</label><input type="time" value={horEntrada} onChange={(e) => setHorEntrada(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
+              <div><label style={labelStyle}>Saída</label><input type="time" value={horSaida} onChange={(e) => setHorSaida(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
             </div>
           )}
 
           {horarioTipo === "personalizado" && (
-            <textarea value={horCustom} onChange={(e) => setHorCustom(e.target.value)} placeholder="Descreva o horário..." rows={2} style={{ ...inputStyle, resize: "vertical" }} />
+            <textarea value={horCustom} onChange={(e) => setHorCustom(e.target.value)} placeholder="Descreva o horário livremente..." rows={2} style={{ ...inputStyle, resize: "vertical" }} />
           )}
 
           {horarioTexto && (
