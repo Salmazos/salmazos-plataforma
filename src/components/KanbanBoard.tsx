@@ -143,7 +143,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado }: Pro
     setTimeout(() => setToast(""), 5000);
   };
 
-  const moverCard = async (cvId: string, novaEtapa: string, comentario?: string) => {
+  const moverCard = async (cvId: string, novaEtapa: string, comentario?: string, extras?: { cliente_id?: string; data_entrevista_salmazos?: string }) => {
     if (novaEtapa === "entrevista_cliente") {
       const card = cards.find((c) => c.cv_id === cvId);
       setPendingEncaminhamento({
@@ -173,7 +173,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado }: Pro
       await fetch(`/api/candidatos-vagas/${cvId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ etapa: novaEtapa, observacoes: comentario || null }),
+        body: JSON.stringify({ etapa: novaEtapa, observacoes: comentario || null, ...extras }),
       });
 
       if (novaEtapa === "bloqueado") {

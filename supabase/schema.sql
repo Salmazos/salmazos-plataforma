@@ -172,6 +172,9 @@ ALTER TABLE candidatos
 ALTER TABLE candidatos_vagas
   ADD COLUMN IF NOT EXISTS responsavel TEXT;
 
+ALTER TABLE candidatos_vagas ADD COLUMN IF NOT EXISTS cliente_id UUID REFERENCES clientes(id);
+ALTER TABLE candidatos_vagas ADD COLUMN IF NOT EXISTS data_entrevista_salmazos DATE;
+
 ALTER TABLE vagas ADD COLUMN IF NOT EXISTS tipo_servico_original TEXT;
 ALTER TABLE vagas ADD COLUMN IF NOT EXISTS tipo_servico_alterado_em TIMESTAMPTZ;
 ALTER TABLE vagas ADD COLUMN IF NOT EXISTS tipo_servico_alterado_por TEXT;

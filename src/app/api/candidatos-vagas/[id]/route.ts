@@ -28,6 +28,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const campos: Record<string, unknown> = {};
     if (body.etapa !== undefined) campos.etapa = body.etapa;
     if (body.observacoes !== undefined) campos.observacoes = body.observacoes;
+    if (body.cliente_id !== undefined) campos.cliente_id = body.cliente_id || null;
+    if (body.data_entrevista_salmazos !== undefined) campos.data_entrevista_salmazos = body.data_entrevista_salmazos || null;
 
     const supabase = createServiceClient();
     const { data, error } = await supabase

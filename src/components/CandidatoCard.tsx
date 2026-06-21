@@ -6,6 +6,7 @@ import { ETAPAS_KANBAN } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
 import type { KanbanCard } from "@/types";
 import TriagemBadge from "./TriagemBadge";
+import ModalEntrevistaSalmazos from "./ModalEntrevistaSalmazos";
 
 type Analista = { id: string; nome_completo: string; email: string };
 
@@ -55,7 +56,7 @@ const OPCOES_POR_ETAPA: Record<string, EtapaOption[]> = {
 
 interface Props {
   card: KanbanCard;
-  onMover: (cvId: string, etapa: string, comentario?: string) => Promise<void>;
+  onMover: (cvId: string, etapa: string, comentario?: string, extras?: { cliente_id?: string; data_entrevista_salmazos?: string }) => Promise<void>;
   movendo: boolean;
 }
 
@@ -66,6 +67,7 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
   const [modalEtapa, setModalEtapa] = useState<EtapaOption | null>(null);
   const [comentario, setComentario] = useState("");
   const [analistas, setAnalistas] = useState<Analista[]>([]);
+  const [modalEntrevistaSalmazos, setModalEntrevistaSalmazos] = useState(false);
 
   useEffect(() => {
     fetchAnalistas().then(setAnalistas);
@@ -97,6 +99,10 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
     if (value === "" || value === card.etapa) return;
     if (value === "contratado" || value === "reprovado_final") {
       onMover(card.cv_id, value);
+      return;
+    }
+    if (value === "entrevista_salmazos" && card.etapa === "triagem") {
+      setModalEntrevistaSalmazos(true);
       return;
     }
     const opcoes = OPCOES_POR_ETAPA[card.etapa] ?? [];
@@ -234,6 +240,24 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
           </select>
         </div>
       </div>
+
+      <ModalEntrevistaSalmazos
+        isOpen={modalEntrevistaSalmazos}
+        card={card}
+        onClose={() => setModalEntrevistaSalmazos(false)}
+        onConfirmar={(dados) => {
+          setModalEntrevistaSalmazos(false);
+          onMover(
+            card.cv_id,
+            "entrevista_salmazos",
+            dados.comentario || undefined,
+            {
+              cliente_id: dados.cliente_id || undefined,
+              data_entrevista_salmazos: dados.data_entrevista_salmazos || undefined,
+            },
+          );
+        }}
+      />
 
       {/* Comment Modal */}
       {modalEtapa && (
