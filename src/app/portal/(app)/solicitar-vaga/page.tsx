@@ -37,6 +37,32 @@ const BEN_QUALIDADE = ["Gympass / Totalpass", "Day Off", "PLR", "Bonificação A
 
 type HorarioTipo = typeof HORARIO_TIPOS[number]["id"];
 
+const TIPO_BADGE: Record<string, { label: string; bg: string; color: string }> = {
+  recrutamento_selecao: { label: "R&S", bg: "#1D6FA4", color: "#fff" },
+  mao_obra_temporaria: { label: "MOT", bg: "#FFD700", color: "#000" },
+  terceirizacao: { label: "Terceirização", bg: "#1D9E75", color: "#fff" },
+};
+
+interface VagaTemplate {
+  id: string;
+  nome: string;
+  cargo: string;
+  tipo_servico: string;
+  cidade: string | null;
+  estado: string | null;
+  salario: string | null;
+  horario_tipo: string | null;
+  horario_texto: string | null;
+  horario_padrao: { modelo?: string; entrada?: string; saida?: string; intervalo?: string; diurno_noturno?: string; turno?: string } | null;
+  requisitos: string | null;
+  requisitos_chips: string[] | null;
+  beneficios: string | null;
+  beneficios_chips: Record<string, boolean> | null;
+  observacoes: string | null;
+  total_usos: number;
+  ultimo_uso_em: string | null;
+}
+
 const CHIP_ON: React.CSSProperties = { backgroundColor: "#16a34a", color: "#fff", border: "2px solid #16a34a" };
 const CHIP_OFF: React.CSSProperties = { backgroundColor: "#fff", color: "#374151", border: "2px solid #D1D5DB" };
 
@@ -53,6 +79,13 @@ const inputStyle: React.CSSProperties = {
 };
 
 export default function SolicitarVagaPage() {
+  const [view, setView] = useState<"loading" | "templates" | "form">("loading");
+  const [templates, setTemplates] = useState<VagaTemplate[]>([]);
+  const [usandoTemplate, setUsandoTemplate] = useState<VagaTemplate | null>(null);
+  const [usarHorarioPadrao, setUsarHorarioPadrao] = useState(true);
+  const [salvarComoTemplate, setSalvarComoTemplate] = useState(false);
+  const [nomeTemplate, setNomeTemplate] = useState("");
+
   const [cargo, setCargo] = useState("");
   const [tipoServico, setTipoServico] = useState("");
   const [numPosicoes, setNumPosicoes] = useState("1");
@@ -85,26 +118,74 @@ export default function SolicitarVagaPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
+  const applyDefaults = (json: { beneficios_padrao?: Record<string, boolean>; horario_padrao?: Record<string, string> }) => {
+    if (json.beneficios_padrao && typeof json.beneficios_padrao === "object") {
+      setBenChips(json.beneficios_padrao);
+      setBenPadraoLoaded(true);
+    }
+    if (json.horario_padrao && typeof json.horario_padrao === "object") {
+      const hp = json.horario_padrao;
+      if (hp.modelo) setHorarioTipo(hp.modelo as HorarioTipo);
+      if (hp.entrada) setHorEntrada(hp.entrada);
+      if (hp.saida) setHorSaida(hp.saida);
+      if (hp.intervalo) setHorIntervalo(hp.intervalo);
+      if (hp.diurno_noturno) setHor1236(hp.diurno_noturno as "diurno" | "noturno");
+      if (hp.turno) setHorTurnoNome(hp.turno);
+      setHorPadraoLoaded(true);
+    }
+  };
+
+  const applyTemplate = (tpl: VagaTemplate) => {
+    setCargo(tpl.cargo);
+    setTipoServico(tpl.tipo_servico);
+    setCidade(tpl.cidade ?? "");
+    setEstado(tpl.estado ?? "");
+    setSalario(tpl.salario ?? "");
+    setObservacoes(tpl.observacoes ?? "");
+    if (tpl.horario_padrao) {
+      const hp = tpl.horario_padrao;
+      if (hp.modelo) setHorarioTipo(hp.modelo as HorarioTipo);
+      if (hp.entrada) setHorEntrada(hp.entrada);
+      if (hp.saida) setHorSaida(hp.saida);
+      if (hp.intervalo) setHorIntervalo(hp.intervalo);
+      if (hp.diurno_noturno) setHor1236(hp.diurno_noturno as "diurno" | "noturno");
+      if (hp.turno) setHorTurnoNome(hp.turno);
+    } else if (tpl.horario_tipo) {
+      setHorarioTipo(tpl.horario_tipo as HorarioTipo);
+    }
+    if (tpl.beneficios_chips) setBenChips(tpl.beneficios_chips);
+    if (tpl.requisitos_chips) {
+      const rc: Record<string, boolean> = {};
+      for (const chip of tpl.requisitos_chips) {
+        const emMatch = chip.match(/^(.+?) em (.+)$/);
+        if (emMatch) {
+          rc[emMatch[1]] = true;
+          setReqCursos((p) => ({ ...p, [emMatch[1]]: emMatch[2] }));
+        } else {
+          rc[chip] = true;
+        }
+      }
+      setReqChips(rc);
+    }
+    setUsarHorarioPadrao(true);
+    setUsandoTemplate(tpl);
+    setNumPosicoes("1");
+    setPrevisaoInicio("");
+    setView("form");
+    void fetch(`/api/portal/templates/${tpl.id}/usar`, { method: "POST" });
+  };
+
   useEffect(() => {
-    fetch("/api/portal/solicitar-vaga")
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.beneficios_padrao && typeof json.beneficios_padrao === "object") {
-          setBenChips(json.beneficios_padrao);
-          setBenPadraoLoaded(true);
-        }
-        if (json.horario_padrao && typeof json.horario_padrao === "object") {
-          const hp = json.horario_padrao;
-          if (hp.modelo) setHorarioTipo(hp.modelo);
-          if (hp.entrada) setHorEntrada(hp.entrada);
-          if (hp.saida) setHorSaida(hp.saida);
-          if (hp.intervalo) setHorIntervalo(hp.intervalo);
-          if (hp.diurno_noturno) setHor1236(hp.diurno_noturno);
-          if (hp.turno) setHorTurnoNome(hp.turno);
-          setHorPadraoLoaded(true);
-        }
-      })
-      .catch(() => {});
+    Promise.all([
+      fetch("/api/portal/solicitar-vaga").then((r) => r.json()),
+      fetch("/api/portal/templates").then((r) => r.json()),
+    ]).then(([defaults, tplJson]) => {
+      applyDefaults(defaults);
+      const tpls = tplJson.data ?? [];
+      setTemplates(tpls);
+      setView(tpls.length > 0 ? "templates" : "form");
+    }).catch(() => setView("form"));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggleReq = (chip: string) =>
@@ -237,6 +318,39 @@ export default function SolicitarVagaPage() {
       });
       const json = await res.json();
       if (!res.ok) { setError(json.error ?? "Erro ao enviar."); return; }
+
+      if (salvarComoTemplate && nomeTemplate.trim()) {
+        const horPadrao = horarioTipo ? {
+          modelo: horarioTipo,
+          entrada: horEntrada || null,
+          saida: horSaida || null,
+          intervalo: horIntervalo || null,
+          diurno_noturno: horarioTipo === "12x36" ? hor1236 : null,
+          turno: horarioTipo === "turno_fixo" ? horTurnoNome || null : null,
+          texto: horarioTexto,
+        } : null;
+        void fetch("/api/portal/templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nome: nomeTemplate.trim(),
+            cargo: cargo.trim(),
+            tipo_servico: tipoServico,
+            cidade: cidade.trim() || null,
+            estado: estado || null,
+            salario: salario.trim() || null,
+            horario_tipo: horarioTipo || null,
+            horario_texto: horarioTexto || null,
+            horario_padrao: horPadrao,
+            requisitos: requisitosTexto || null,
+            requisitos_chips: reqChipsList.length > 0 ? reqChipsList : null,
+            beneficios: beneficiosTexto || null,
+            beneficios_chips: gerarBeneficiosChips(),
+            observacoes: observacoes.trim() || null,
+          }),
+        });
+      }
+
       setSuccess(true);
     } catch {
       setError("Erro de conexão.");
@@ -266,18 +380,115 @@ export default function SolicitarVagaPage() {
     );
   }
 
+  if (view === "loading") {
+    return (
+      <div className="max-w-2xl mx-auto mt-12 text-center">
+        <p className="text-gray-400 text-sm">Carregando...</p>
+      </div>
+    );
+  }
+
+  if (view === "templates") {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <Link href="/portal" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-black mb-4 transition-colors">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          Voltar
+        </Link>
+
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Solicitar Nova Vaga</h1>
+        <p className="text-xs text-gray-400 mb-6">Templates salvam tempo — use para vagas recorrentes</p>
+
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Seus templates salvos</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          {templates.map((tpl) => {
+            const badge = TIPO_BADGE[tpl.tipo_servico] ?? { label: tpl.tipo_servico, bg: "#6B7280", color: "#fff" };
+            return (
+              <div key={tpl.id} className="bg-white rounded-2xl shadow-sm p-5 flex flex-col">
+                <p className="font-bold text-gray-900 text-base">{tpl.nome}</p>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className="text-sm text-gray-600">{tpl.cargo}</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: badge.bg, color: badge.color }}>{badge.label}</span>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  {[tpl.cidade, tpl.estado].filter(Boolean).join("/") || "—"}
+                  {tpl.salario && ` · ${tpl.salario}`}
+                </p>
+                <p className="text-[10px] text-gray-300 mt-2">
+                  Usado {tpl.total_usos}x
+                  {tpl.ultimo_uso_em && ` · Último: ${new Date(tpl.ultimo_uso_em).toLocaleDateString("pt-BR")}`}
+                </p>
+                <button
+                  onClick={() => applyTemplate(tpl)}
+                  className="mt-3 w-full py-2 rounded-lg text-sm font-bold"
+                  style={{ backgroundColor: "#000", color: "#FFD700" }}
+                >
+                  Usar template
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        <button
+          onClick={() => setView("form")}
+          className="w-full py-3 rounded-xl text-sm font-semibold transition-colors"
+          style={{ border: "2px solid #E5E7EB", backgroundColor: "#fff", color: "#374151" }}
+        >
+          + Criar nova solicitação do zero
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto">
-      <Link href="/portal" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-black mb-4 transition-colors">
+      <Link href={templates.length > 0 ? "#" : "/portal"} onClick={(e) => { if (templates.length > 0) { e.preventDefault(); setView("templates"); setUsandoTemplate(null); } }} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-black mb-4 transition-colors">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
-        Voltar
+        {templates.length > 0 ? "Voltar aos templates" : "Voltar"}
       </Link>
 
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Solicitar Nova Vaga</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-1">Solicitar Nova Vaga</h1>
+      {usandoTemplate && (
+        <p className="text-xs text-blue-600 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-4">
+          {"📋"} Usando template: <strong>{usandoTemplate.nome}</strong> — ajuste o necessário abaixo.
+        </p>
+      )}
 
       <div className="space-y-6">
+
+        {/* Quick-fill for template */}
+        {usandoTemplate && (
+          <div className="rounded-2xl p-5 space-y-4" style={{ backgroundColor: "#FFFBEB", border: "2px solid #FCD34D" }}>
+            <p className="text-sm font-bold text-amber-800">{"✏️"} Ajuste o necessário para esta solicitação:</p>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label style={labelStyle}>Nº de Posições *</label>
+                <input type="number" min="1" value={numPosicoes} onChange={(e) => setNumPosicoes(e.target.value)} placeholder="1" style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Previsão de Início</label>
+                <input type="date" value={previsaoInicio} onChange={(e) => setPrevisaoInicio(e.target.value)} style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Salário</label>
+                <input value={salario} onChange={(e) => setSalario(e.target.value)} placeholder="Ex: R$ 2.000,00" style={inputStyle} />
+              </div>
+            </div>
+            {usandoTemplate.horario_texto && (
+              <div>
+                <label className="flex items-center gap-2 text-sm text-amber-800 cursor-pointer">
+                  <input type="checkbox" checked={usarHorarioPadrao} onChange={(e) => setUsarHorarioPadrao(e.target.checked)} className="rounded" />
+                  Usar horário padrão: <strong>{usandoTemplate.horario_texto}</strong>
+                </label>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── SECTION 1: Dados da Vaga ── */}
         <div className="bg-white rounded-2xl shadow-sm p-6 space-y-5">
@@ -342,7 +553,7 @@ export default function SolicitarVagaPage() {
         </div>
 
         {/* ── SECTION 2: Horário ── */}
-        <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
+        {!(usandoTemplate && usarHorarioPadrao) && <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Horário de Trabalho</p>
 
           {horPadraoLoaded && (
@@ -424,7 +635,7 @@ export default function SolicitarVagaPage() {
               <p className="text-sm text-gray-700 font-medium">{horarioTexto}</p>
             </div>
           )}
-        </div>
+        </div>}
 
         {/* ── SECTION 3: Requisitos ── */}
         <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
@@ -516,10 +727,26 @@ export default function SolicitarVagaPage() {
           </div>
         )}
 
+        {/* ── Save as template ── */}
+        {!usandoTemplate && (
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <label className="flex items-center gap-2.5 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={salvarComoTemplate} onChange={(e) => setSalvarComoTemplate(e.target.checked)} className="rounded" />
+              Salvar como template para uso futuro
+            </label>
+            {salvarComoTemplate && (
+              <div className="mt-3">
+                <label style={labelStyle}>Nome do template *</label>
+                <input value={nomeTemplate} onChange={(e) => setNomeTemplate(e.target.value)} placeholder="Ex: Operador de Produção — Unidade SP" style={inputStyle} />
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Submit ── */}
         <button
           onClick={handleSubmit}
-          disabled={submitting}
+          disabled={submitting || (salvarComoTemplate && !nomeTemplate.trim())}
           className="w-full py-3.5 rounded-xl font-bold text-base transition-all disabled:opacity-60"
           style={{ backgroundColor: "#000", color: "#FFD700" }}
         >
