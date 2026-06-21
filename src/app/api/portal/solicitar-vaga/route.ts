@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
 
     const { data: analistas } = await service
       .from("analistas_perfil")
-      .select("user_id")
+      .select("user_id, email, nome_completo")
       .in("nivel_acesso", ["superuser", "diretoria"])
       .eq("ativo", true);
 
@@ -128,48 +128,75 @@ export async function POST(request: NextRequest) {
     const tipoLbl = TIPO_LABEL[body.tipo_servico] ?? body.tipo_servico;
 
     const detailRow = (label: string, value: string | null | undefined) =>
-      value ? `<tr><td style="padding:6px 12px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">${label}</td><td style="padding:6px 12px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${value}</td></tr>` : "";
+      value ? `<tr><td style="padding:8px 14px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap;vertical-align:top">${label}</td><td style="padding:8px 14px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${value}</td></tr>` : "";
+
+    const requisitosHtml = body.requisitos
+      ? `<div style="margin:20px 0">
+          <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Requisitos</p>
+          <div style="background:#f9fafb;border-radius:8px;padding:12px 16px;font-size:13px;color:#374151;line-height:1.7;white-space:pre-wrap">${body.requisitos}</div>
+        </div>`
+      : "";
+
+    const beneficiosHtml = body.beneficios
+      ? `<div style="margin:20px 0">
+          <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Benefícios</p>
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;font-size:13px;color:#166534;line-height:1.7;white-space:pre-wrap">${body.beneficios}</div>
+        </div>`
+      : "";
+
+    const observacoesHtml = body.observacoes
+      ? `<div style="margin:20px 0">
+          <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Observações</p>
+          <div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;font-size:13px;color:#92400E;line-height:1.6">${body.observacoes}</div>
+        </div>`
+      : "";
+
+    const previsaoFormatted = body.previsao_inicio
+      ? body.previsao_inicio.split("-").reverse().join("/")
+      : null;
 
     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
 <div style="max-width:600px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
   <div style="background:#000;padding:28px 32px;text-align:center">
+    <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.15em">SALMAZOS RH &amp; SERVIÇOS</p>
     <h1 style="color:#FFD700;margin:0;font-size:20px">🔔 Nova Solicitação de Vaga</h1>
   </div>
   <div style="padding:28px 32px">
-    <div style="margin-bottom:20px;padding:12px 16px;background:#DBEAFE;border-radius:8px;border:1px solid #93C5FD">
-      <p style="margin:0;font-size:14px;font-weight:700;color:#1D4ED8">${clienteNome}</p>
-      <p style="margin:4px 0 0;font-size:13px;color:#1E40AF">${numPos}x ${body.cargo} — ${tipoLbl}</p>
+    <p style="margin:0 0 16px;font-size:14px;color:#374151">Nova solicitação recebida de <strong style="color:#111827">${clienteNome}</strong>:</p>
+    <div style="margin-bottom:20px;padding:14px 16px;background:#DBEAFE;border-radius:10px;border:1px solid #93C5FD">
+      <p style="margin:0;font-size:16px;font-weight:700;color:#1D4ED8">${body.cargo}</p>
+      <p style="margin:4px 0 0;font-size:13px;color:#1E40AF">${numPos} posição${numPos !== 1 ? "ões" : ""} · ${tipoLbl}</p>
     </div>
     <table style="width:100%;border-collapse:collapse">
       ${detailRow("Cargo", body.cargo)}
       ${detailRow("Tipo de Serviço", tipoLbl)}
       ${detailRow("Nº de Posições", String(numPos))}
-      ${detailRow("Cidade", body.cidade)}
-      ${detailRow("Estado", body.estado)}
+      ${detailRow("Cidade/Estado", [body.cidade, body.estado].filter(Boolean).join(" / "))}
+      ${detailRow("Previsão de Início", previsaoFormatted)}
       ${detailRow("Salário", body.salario)}
       ${detailRow("Horário", body.horario_texto || body.horario_tipo)}
-      ${detailRow("Previsão de Início", body.previsao_inicio ? body.previsao_inicio.split("-").reverse().join("/") : null)}
-      ${detailRow("Requisitos", body.requisitos)}
-      ${detailRow("Benefícios", body.beneficios)}
-      ${detailRow("Observações", body.observacoes)}
     </table>
-    <div style="text-align:center;padding-top:20px;border-top:1px solid #f3f4f6;margin-top:16px">
-      <a href="https://salmazos-plataforma.vercel.app/painel/solicitacoes" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver no Painel</a>
+    ${requisitosHtml}
+    ${beneficiosHtml}
+    ${observacoesHtml}
+    <div style="text-align:center;padding-top:24px;border-top:1px solid #f3f4f6;margin-top:20px">
+      <a href="https://salmazos-plataforma.vercel.app/painel/vagas" style="display:inline-block;padding:12px 28px;background:#000;color:#FFD700;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700">Ver Solicitação</a>
     </div>
   </div>
   <div style="background:#f9fafb;padding:16px 32px;text-align:center">
-    <p style="margin:0;font-size:11px;color:#9CA3AF">Salmazos RH &amp; Serviços — Notificação automática</p>
+    <p style="margin:0;font-size:11px;color:#9CA3AF">© 2026 Salmazos RH &amp; Serviços — Notificação automática</p>
   </div>
 </div>
 </body></html>`;
 
-    void sendEmail({
-      to: "olver@salmazos.com.br",
-      subject: `🔔 Nova Solicitação de Vaga — ${clienteNome}`,
-      html,
-      tipo: "solicitacao_vaga",
-    });
+    const emailSubject = `🔔 Nova Solicitação de Vaga — ${clienteNome}`;
+    const recipients = (analistas ?? []).map((a) => a.email).filter(Boolean);
+    if (recipients.length === 0) recipients.push("olver@salmazos.com.br");
+
+    for (const to of recipients) {
+      void sendEmail({ to, subject: emailSubject, html, tipo: "solicitacao_vaga" });
+    }
 
     return NextResponse.json({ success: true, id: solicitacao.id }, { status: 201 });
   } catch (err) {
