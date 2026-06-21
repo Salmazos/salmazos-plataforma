@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
-import PortalClienteClient, { type EncaminhamentoPortal } from "@/components/PortalClienteClient";
+import PortalClienteClient, { type EncaminhamentoPortal, type CandidatoEmAvaliacao } from "@/components/PortalClienteClient";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +81,23 @@ export default async function PortalPage() {
     }
   }
 
+  // Candidates in entrevista_salmazos linked to this client via candidatos_vagas.cliente_id
+  const { data: cvEmAvaliacao } = await service
+    .from("candidatos_vagas")
+    .select("id, etapa, candidato_id, vaga_id, data_entrevista_salmazos, responsavel, updated_at, candidatos(id, nome_completo, cargo_pretendido, cidade, estado), vagas(titulo)")
+    .eq("cliente_id", clienteId)
+    .eq("etapa", "entrevista_salmazos");
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const emAvaliacao: CandidatoEmAvaliacao[] = (cvEmAvaliacao ?? []).map((cv: any) => ({
+    cv_id: cv.id,
+    vaga_titulo: cv.vagas?.titulo ?? "—",
+    responsavel: cv.responsavel ?? null,
+    data_entrevista_salmazos: cv.data_entrevista_salmazos ?? null,
+    updated_at: cv.updated_at,
+    cargo_pretendido: cv.candidatos?.cargo_pretendido ?? null,
+  }));
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const encaminhamentos: EncaminhamentoPortal[] = (encRows ?? []).map((e: any) => {
     const cid = e.candidatos?.id;
@@ -106,6 +123,7 @@ export default async function PortalPage() {
     <PortalClienteClient
       nomeCliente={nomeCliente}
       encaminhamentos={encaminhamentos}
+      emAvaliacao={emAvaliacao}
     />
   );
 }
