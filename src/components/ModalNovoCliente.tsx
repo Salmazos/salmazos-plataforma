@@ -27,6 +27,10 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [confirmandoInativar, setConfirmandoInativar] = useState(false);
+  const [senhaPortal, setSenhaPortal] = useState("");
+  const [criandoAcesso, setCriandoAcesso] = useState(false);
+  const [acessoCriado, setAcessoCriado] = useState(false);
+  const [erroAcesso, setErroAcesso] = useState("");
 
   const editando = !!cliente;
 
@@ -48,6 +52,10 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
       setServicos(cliente?.servicos ?? []);
       setErro("");
       setConfirmandoInativar(false);
+      setSenhaPortal("");
+      setCriandoAcesso(false);
+      setAcessoCriado(false);
+      setErroAcesso("");
     }
   }, [isOpen, cliente]);
 
@@ -78,6 +86,29 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
       onClose();
     } finally {
       setSalvando(false);
+    }
+  };
+
+  const handleCriarAcesso = async () => {
+    setCriandoAcesso(true);
+    setErroAcesso("");
+    try {
+      const res = await fetch("/api/clientes/portal-acesso", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cliente_id: cliente!.id,
+          email: form.contato_email,
+          senha: senhaPortal,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setErroAcesso(json.error ?? "Erro ao criar acesso."); return; }
+      setAcessoCriado(true);
+    } catch {
+      setErroAcesso("Erro de conexão.");
+    } finally {
+      setCriandoAcesso(false);
     }
   };
 
@@ -264,6 +295,54 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
               </div>
             </div>
           </div>
+
+          {/* Acesso ao Portal */}
+          {editando && (
+            <div className="border-t pt-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                Acesso ao Portal do Cliente
+              </p>
+              {acessoCriado ? (
+                <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                  Acesso criado com sucesso!
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">E-mail</label>
+                    <input
+                      value={form.contato_email}
+                      readOnly
+                      className="input-field bg-gray-50 text-gray-500 cursor-not-allowed"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Senha do portal</label>
+                    <input
+                      type="password"
+                      value={senhaPortal}
+                      onChange={(e) => setSenhaPortal(e.target.value)}
+                      placeholder="Digite a senha de acesso"
+                      className="input-field"
+                    />
+                  </div>
+                  {erroAcesso && (
+                    <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                      {erroAcesso}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleCriarAcesso}
+                    disabled={criandoAcesso || !senhaPortal}
+                    className="text-sm px-4 py-2 rounded-lg bg-black text-[#FFD700] font-medium transition-colors hover:bg-gray-800 disabled:opacity-50"
+                  >
+                    {criandoAcesso ? "Criando..." : "Criar acesso ao portal"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {erro && (
             <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">
