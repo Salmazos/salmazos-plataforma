@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import NavbarPainel from "@/components/NavbarPainel";
+import SidebarMenu from "@/components/SidebarMenu";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +27,8 @@ export default async function PainelLayout({
     .single();
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <NavbarPainel
+    <div className="min-h-screen bg-gray-100 flex">
+      <SidebarMenu
         userEmail={user.email ?? ""}
         userName={perfil?.nome_completo ?? null}
         userCargo={perfil?.cargo ?? null}
@@ -37,7 +37,7 @@ export default async function PainelLayout({
         isFullAccess={isFullAccess}
         isSupervisorOrAbove={isSupervisorOrAbove}
       />
-      <main className="max-w-screen-2xl mx-auto px-6 py-6">{children}</main>
+      <main className="flex-1 min-w-0 px-6 py-6">{children}</main>
     </div>
   );
 }

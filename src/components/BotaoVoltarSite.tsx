@@ -9,10 +9,9 @@ export default function BotaoVoltarSite() {
         right: 0,
         top: "50%",
         transform: "translateY(-50%)",
-        writingMode: "vertical-rl",
-        backgroundColor: "#000000",
-        color: "#FFD700",
-        padding: "16px 10px",
+        backgroundColor: "#FFD700",
+        color: "#000000",
+        padding: "12px 16px",
         borderRadius: "12px 0 0 12px",
         fontSize: "13px",
         fontWeight: 700,
@@ -20,10 +19,9 @@ export default function BotaoVoltarSite() {
         textDecoration: "none",
         zIndex: 50,
         boxShadow: "-2px 0 8px rgba(0,0,0,0.3)",
-        transition: "background-color 0.2s",
       }}
     >
-      Voltar ao site
+      ← Voltar ao site
     </a>
   );
 }
