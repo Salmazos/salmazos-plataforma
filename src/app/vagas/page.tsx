@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { TIPOS_SERVICO } from "@/lib/constants";
 import VagaCard from "@/components/VagaCard";
+import BotaoVoltarSite from "@/components/BotaoVoltarSite";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ export default async function VagasPublicaPage() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#000" }}>
+      <BotaoVoltarSite />
       {/* Header */}
       <header style={{ backgroundColor: "#000", borderBottom: "3px solid #FFD700" }}>
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">

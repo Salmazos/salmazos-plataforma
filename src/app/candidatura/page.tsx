@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import Link from "next/link";
 import { formatarCPF, formatarTelefone, validarCPF } from "@/lib/utils";
 import { ESTADOS, HABILIDADES, TEMPO_EXPERIENCIA, TURNOS } from "@/lib/constants";
+import BotaoVoltarSite from "@/components/BotaoVoltarSite";
 
 interface FormData {
   nome_completo: string;
@@ -186,6 +187,7 @@ export default function BancoTalentosPage() {
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#000" }}>
+      <BotaoVoltarSite />
       {/* Header */}
       <header style={{ backgroundColor: "#000", borderBottom: "3px solid #FFD700" }}>
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
