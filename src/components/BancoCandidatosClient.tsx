@@ -447,6 +447,7 @@ export default function BancoCandidatosClient({
   const [checkingProcessos, setCheckingProcessos] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [modalCadastroAberto, setModalCadastroAberto] = useState(false);
+  const [interesseModal, setInteresseModal] = useState<{ candidato: CandidatoRow; loading: string | null } | null>(null);
   const [escavadorMap, setEscavadorMap] = useState<Record<string, string | null>>({});
   const [escavadorSaving, setEscavadorSaving] = useState<Record<string, boolean>>({});
   const [scoreOverrides, setScoreOverrides] = useState<Record<string, { score: number; label: string }>>({});
@@ -521,8 +522,39 @@ export default function BancoCandidatosClient({
     } finally {
       setCheckingProcessos(false);
     }
-    abrirModalEncaminhamento(c);
+    if (c.vagas_interesse && c.vagas_interesse.length > 0) {
+      setInteresseModal({ candidato: c, loading: null });
+    } else {
+      abrirModalEncaminhamento(c);
+    }
   }
+
+  const handleInteresseEncaminhar = useCallback(async (vagaId: string) => {
+    if (!interesseModal) return;
+    const { candidato } = interesseModal;
+    setInteresseModal((m) => m ? { ...m, loading: vagaId } : m);
+
+    try {
+      const res = await fetch("/api/candidatos-vagas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidato_id: candidato.id, vaga_id: vagaId, etapa: "triagem", responsavel: analista || undefined }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        console.error("[interesse encaminhar]", json.error);
+        setInteresseModal((m) => m ? { ...m, loading: null } : m);
+        return;
+      }
+      setEncaminhadoIds((prev) => { const next = new Set(prev); next.add(candidato.id); return next; });
+      setInteresseModal(null);
+      setSuccessMsg("Candidato encaminhado com sucesso!");
+      setTimeout(() => setSuccessMsg(null), 4000);
+      setTimeout(() => { setEncaminhadoIds((prev) => { const next = new Set(prev); next.delete(candidato.id); return next; }); }, 3000);
+    } catch {
+      setInteresseModal((m) => m ? { ...m, loading: null } : m);
+    }
+  }, [interesseModal, analista]);
 
   const handleEncaminhar = useCallback(async () => {
     if (!modal) return;
@@ -1394,7 +1426,11 @@ export default function BancoCandidatosClient({
                 onClick={() => {
                   const c = alertaProcesso.candidato;
                   setAlertaProcesso(null);
-                  abrirModalEncaminhamento(c);
+                  if (c.vagas_interesse && c.vagas_interesse.length > 0) {
+                    setInteresseModal({ candidato: c, loading: null });
+                  } else {
+                    abrirModalEncaminhamento(c);
+                  }
                 }}
                 style={{
                   padding: "8px 20px",
@@ -1408,6 +1444,113 @@ export default function BancoCandidatosClient({
                 }}
               >
                 Sim, encaminhar mesmo assim
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {interesseModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget && !interesseModal.loading) setInteresseModal(null); }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: "24px 28px",
+              width: 460,
+              maxWidth: "90vw",
+              boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
+            }}
+          >
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>
+              Encaminhar para Triagem
+            </h2>
+            <p style={{ fontSize: 13, color: "#6B7280", margin: "0 0 6px" }}>
+              {interesseModal.candidato.nome_completo}
+            </p>
+            <p style={{ fontSize: 12, color: "#9CA3AF", margin: "0 0 16px" }}>
+              Selecione a vaga de interesse do candidato:
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+              {interesseModal.candidato.vagas_interesse!.map((vid) => {
+                const vaga = vagasAbertas.find((v) => v.id === vid);
+                const isLoading = interesseModal.loading === vid;
+                return (
+                  <button
+                    key={vid}
+                    onClick={() => handleInteresseEncaminhar(vid)}
+                    disabled={!!interesseModal.loading}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "10px 14px",
+                      borderRadius: 8,
+                      border: "1px solid #FCD34D",
+                      background: isLoading ? "#FEF3C7" : "#FFFBEB",
+                      cursor: interesseModal.loading ? "not-allowed" : "pointer",
+                      opacity: interesseModal.loading && !isLoading ? 0.5 : 1,
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#92400E" }}>
+                      {vaga ? vaga.titulo : vid.slice(0, 8) + "…"}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "#92400E" }}>
+                      {isLoading ? "Encaminhando..." : "→ Triagem"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <button
+                onClick={() => {
+                  setInteresseModal(null);
+                  abrirModalEncaminhamento(interesseModal.candidato);
+                }}
+                disabled={!!interesseModal.loading}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#6B7280",
+                  fontSize: 12,
+                  cursor: interesseModal.loading ? "not-allowed" : "pointer",
+                  textDecoration: "underline",
+                  padding: 0,
+                }}
+              >
+                Escolher outra vaga...
+              </button>
+              <button
+                onClick={() => setInteresseModal(null)}
+                disabled={!!interesseModal.loading}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: 8,
+                  border: "1px solid #E5E7EB",
+                  background: "#fff",
+                  color: "#374151",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: interesseModal.loading ? "not-allowed" : "pointer",
+                  opacity: interesseModal.loading ? 0.5 : 1,
+                }}
+              >
+                Cancelar
               </button>
             </div>
           </div>
