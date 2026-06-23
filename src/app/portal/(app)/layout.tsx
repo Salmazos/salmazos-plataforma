@@ -23,6 +23,14 @@ export default async function PortalAppLayout({
 
   if (!clienteUsuario) redirect("/portal/login");
 
+  const { data: cliente } = await service
+    .from("clientes")
+    .select("ativo")
+    .eq("id", clienteUsuario.cliente_id)
+    .single();
+
+  if (!cliente?.ativo) redirect("/portal/login?suspenso=1");
+
   return (
     <div className="min-h-screen bg-gray-50">
       <NavbarPortal userEmail={user.email ?? ""} />

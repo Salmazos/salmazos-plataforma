@@ -1,15 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
 
 export default function PortalLoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("suspenso") === "1") {
+      setErro("Acesso suspenso. Entre em contato com a Salmazos.");
+    }
+  }, [searchParams]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,8 +35,9 @@ export default function PortalLoginPage() {
     // Verify this account has client portal access
     const res = await fetch("/api/portal/me");
     if (!res.ok) {
+      const json = await res.json().catch(() => null);
       await supabase.auth.signOut();
-      setErro("Acesso não autorizado. Esta conta não tem acesso ao portal de clientes.");
+      setErro(json?.error ?? "Acesso não autorizado. Esta conta não tem acesso ao portal de clientes.");
       setCarregando(false);
       return;
     }

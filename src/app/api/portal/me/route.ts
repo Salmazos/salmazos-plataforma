@@ -23,12 +23,18 @@ export async function GET() {
 
     const { data: cliente } = await service
       .from("clientes")
-      .select("id, nome, contato_nome, cidade, segmento")
+      .select("id, nome, contato_nome, cidade, segmento, ativo")
       .eq("id", clienteUsuario.cliente_id)
       .single();
 
     if (!cliente)
       return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
+
+    if (!cliente.ativo)
+      return NextResponse.json(
+        { error: "Acesso suspenso. Entre em contato com a Salmazos." },
+        { status: 403 }
+      );
 
     return NextResponse.json({ data: cliente });
   } catch (err) {

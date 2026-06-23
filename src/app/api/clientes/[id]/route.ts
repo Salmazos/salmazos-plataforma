@@ -29,6 +29,25 @@ export async function PATCH(
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    if (body.ativo !== undefined) {
+      const { data: usuarios } = await supabase
+        .from("cliente_usuarios")
+        .select("user_id")
+        .eq("cliente_id", id);
+
+      if (usuarios && usuarios.length > 0) {
+        const banDuration = body.ativo ? "none" : "876600h";
+        await Promise.all(
+          usuarios.map((u) =>
+            supabase.auth.admin.updateUserById(u.user_id, {
+              ban_duration: banDuration,
+            })
+          )
+        );
+      }
+    }
+
     return NextResponse.json({ data });
   } catch (err) {
     console.error("[PATCH /api/clientes/[id]]", err);
