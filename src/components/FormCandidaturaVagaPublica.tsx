@@ -308,6 +308,15 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
         </div>
       )}
 
+      <div style={{ marginBottom: "24px" }}>
+        <h2 style={{ fontSize: "20px", fontWeight: 700, color: "#fff" }}>Formulário de Candidatura</h2>
+        <p style={{ fontSize: "14px", color: "#9ca3af", marginTop: "4px" }}>
+          Preencha os campos abaixo para concluir sua candidatura à vaga de{" "}
+          <strong style={{ color: "#FFD700" }}>{vagaTitulo}</strong>.{" "}
+          Os campos marcados com <span style={{ color: "#ef4444" }}>*</span> são obrigatórios.
+        </p>
+      </div>
+
     <form onSubmit={handleSubmit} noValidate>
 
       {/* Dados Pessoais */}

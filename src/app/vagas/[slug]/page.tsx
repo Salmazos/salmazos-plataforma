@@ -145,14 +145,6 @@ export default async function VagaPublicaPage({ params }: Props) {
           </div>
         ) : (
           <div>
-            <div style={{ marginBottom: "24px" }}>
-              <h2 style={{ fontSize: "20px", fontWeight: 700, color: "#fff" }}>Formulário de Candidatura</h2>
-              <p style={{ fontSize: "14px", color: "#9ca3af", marginTop: "4px" }}>
-                Preencha os campos abaixo para concluir sua candidatura à vaga de{" "}
-                <strong style={{ color: "#FFD700" }}>{vaga.titulo}</strong>.{" "}
-                Os campos marcados com <span style={{ color: "#ef4444" }}>*</span> são obrigatórios.
-              </p>
-            </div>
             <FormCandidaturaVagaPublica vagaId={vaga.id} vagaTitulo={vaga.titulo} />
             <p style={{ textAlign: "center", marginTop: "24px", fontSize: "13px", color: "#9ca3af" }}>
               Prefere se cadastrar no banco de talentos?{" "}
