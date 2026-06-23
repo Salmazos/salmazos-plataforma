@@ -6,12 +6,6 @@ import { useRouter } from "next/navigation";
 import { ORIGEM_LABELS } from "@/lib/constants";
 import ModalCadastroRapido from "./ModalCadastroRapido";
 
-export type CandidatoVagaEntry = {
-  vaga_id: string;
-  etapa: string;
-  vagas: { titulo: string } | null;
-};
-
 export type CandidatoRow = {
   id: string;
   nome_completo: string;
@@ -42,10 +36,8 @@ export type CandidatoRow = {
   experiencias_profissionais: string | null;
   habilidades: string[] | null;
   formacao_academica: string | null;
-  candidatos_vagas: CandidatoVagaEntry[] | null;
+  vagas_interesse: string[] | null;
 };
-
-type FlatRow = CandidatoRow & { _vagaTitulo?: string; _cvEtapa?: string; _rowKey: string };
 
 type MatchEntry = { vaga_id: string; titulo: string; score: number };
 type VagaAberta = { id: string; titulo: string; cliente_id: string | null };
@@ -646,26 +638,6 @@ export default function BancoCandidatosClient({
     });
   }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, matchMap, filtroAlocacao, keyword, filtroOrigem]);
 
-  const flatRows = useMemo<FlatRow[]>(() => {
-    const rows: FlatRow[] = [];
-    for (const c of filtered) {
-      const cvEntries = c.candidatos_vagas?.filter((cv) => cv.vagas?.titulo) ?? [];
-      if (cvEntries.length === 0) {
-        rows.push({ ...c, _rowKey: c.id });
-      } else {
-        for (const cv of cvEntries) {
-          rows.push({
-            ...c,
-            _vagaTitulo: cv.vagas?.titulo ?? undefined,
-            _cvEtapa: cv.etapa,
-            _rowKey: `${c.id}_${cv.vaga_id}`,
-          });
-        }
-      }
-    }
-    return rows;
-  }, [filtered]);
-
   return (
     <div>
       {/* Success banner */}
@@ -938,7 +910,6 @@ export default function BancoCandidatosClient({
                 <th style={thStyle}>Nome</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Idade</th>
                 <th style={thStyle}>Cargo Pretendido</th>
-                <th style={thStyle}>Vaga</th>
                 <th style={thStyle}>Cidade</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Score</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Processos</th>
@@ -948,10 +919,10 @@ export default function BancoCandidatosClient({
               </tr>
             </thead>
             <tbody>
-              {flatRows.length === 0 ? (
+              {filtered.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={9}
                     style={{ padding: "48px 24px", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}
                   >
                     {candidatos.length === 0
@@ -960,9 +931,9 @@ export default function BancoCandidatosClient({
                   </td>
                 </tr>
               ) : (
-                flatRows.map((c) => (
+                filtered.map((c) => (
                   <tr
-                    key={c._rowKey}
+                    key={c.id}
                     style={{
                       borderBottom: "1px solid #F3F4F6",
                       transition: "background 0.1s",
@@ -996,6 +967,31 @@ export default function BancoCandidatosClient({
                         )}
                       </div>
                       <OrigemBadge origem={c.origem} />
+                      {c.vagas_interesse && c.vagas_interesse.length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                          {c.vagas_interesse.map((vid) => {
+                            const vaga = vagasAbertas.find((v) => v.id === vid);
+                            return (
+                              <span
+                                key={vid}
+                                style={{
+                                  display: "inline-block",
+                                  background: "#FFFBEB",
+                                  color: "#92400E",
+                                  border: "1px solid #FCD34D",
+                                  padding: "1px 7px",
+                                  borderRadius: 6,
+                                  fontSize: 10,
+                                  fontWeight: 600,
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {vaga ? vaga.titulo : vid.slice(0, 8) + "…"}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                       {c.status_alocacao && c.status_alocacao !== "disponivel" && (
                         <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>
                           Alocado em: {c.alocacao_cliente_nome ?? "—"} — {c.alocacao_vaga_titulo ?? "—"}
@@ -1029,30 +1025,6 @@ export default function BancoCandidatosClient({
                     </td>
                     <td style={{ padding: "10px 12px", fontSize: 14, color: "#374151" }}>
                       {c.cargo_pretendido?.trim() || "Generalista"}
-                    </td>
-                    <td style={{ padding: "10px 12px", fontSize: 14, color: "#374151" }}>
-                      {c._vagaTitulo ? (
-                        <div>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{c._vagaTitulo}</span>
-                          {c._cvEtapa && (
-                            <span style={{
-                              display: "inline-block",
-                              marginLeft: 6,
-                              fontSize: 10,
-                              fontWeight: 700,
-                              padding: "1px 6px",
-                              borderRadius: 6,
-                              background: "#DBEAFE",
-                              color: "#1E40AF",
-                              verticalAlign: "middle",
-                            }}>
-                              {c._cvEtapa.replace(/_/g, " ")}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span style={{ color: "#9CA3AF", fontSize: 12 }}>—</span>
-                      )}
                     </td>
                     <td style={{ padding: "10px 12px", fontSize: 14, color: "#374151" }}>
                       {c.cidade ?? "—"}

@@ -199,18 +199,6 @@ export async function POST(request: NextRequest) {
             .update({ vagas_interesse: allVagaIds })
             .eq("id", existente.id);
         }
-        for (const vid of allVagaIds) {
-          try {
-            await supabase
-              .from("candidatos_vagas")
-              .upsert(
-                { vaga_id: vid, candidato_id: existente.id, etapa: "triagem" },
-                { onConflict: "vaga_id,candidato_id" }
-              );
-          } catch (err) {
-            console.error("[candidatos_vagas upsert]", err);
-          }
-        }
 
         if (origemTipo === "publico") {
           waitUntil(
@@ -269,18 +257,6 @@ export async function POST(request: NextRequest) {
           .from("candidatos")
           .update({ vagas_interesse: updateVagaIds })
           .eq("id", existente.id);
-      }
-      for (const vid of updateVagaIds) {
-        try {
-          await supabase
-            .from("candidatos_vagas")
-            .upsert(
-              { vaga_id: vid, candidato_id: existente.id, etapa: "triagem" },
-              { onConflict: "vaga_id,candidato_id" }
-            );
-        } catch (err) {
-          console.error("[candidatos_vagas upsert]", err);
-        }
       }
 
       await supabase.from("notificacoes_analista").insert({
@@ -371,18 +347,6 @@ export async function POST(request: NextRequest) {
           .from("candidatos")
           .update({ vagas_interesse: newVagaIds })
           .eq("id", data.id);
-      }
-      for (const vid of newVagaIds) {
-        try {
-          await supabase
-            .from("candidatos_vagas")
-            .upsert(
-              { vaga_id: vid, candidato_id: data.id, etapa: "triagem" },
-              { onConflict: "vaga_id,candidato_id" }
-            );
-        } catch (err) {
-          console.error("[candidatos_vagas insert]", err);
-        }
       }
     }
 
