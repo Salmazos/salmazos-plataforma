@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -199,6 +200,7 @@ function TabBtn({
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function MeuPerfilClient({ perfil, userEmail, userId }: Props) {
+  const router = useRouter();
   const [tab, setTab] = useState(0);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [avatarUrl, setAvatarUrl] = useState(perfil?.avatar_url ?? null);
@@ -266,6 +268,7 @@ export default function MeuPerfilClient({ perfil, userEmail, userId }: Props) {
       if (!res.ok) throw new Error(json.error);
       setAvatarUrl(json.avatar_url);
       setToast({ message: "Foto atualizada!", type: "success" });
+      router.refresh();
     } catch (err) {
       setToast({ message: (err as Error).message, type: "error" });
     } finally {

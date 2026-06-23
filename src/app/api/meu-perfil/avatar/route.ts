@@ -11,12 +11,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
   }
 
-  const allowedTypes: Record<string, string> = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-  };
-  const ext = allowedTypes[contentType];
-  if (!ext) {
+  const allowedTypes = ["image/jpeg", "image/png"];
+  if (!allowedTypes.includes(contentType)) {
     return NextResponse.json({ error: "Formato não suportado. Use JPG ou PNG." }, { status: 400 });
   }
 
@@ -26,7 +22,7 @@ export async function POST(request: NextRequest) {
   }
 
   const svc = createServiceClient();
-  const filePath = `${user.id}/avatar.${ext}`;
+  const filePath = `${user.id}/avatar.jpg`;
 
   const { error: uploadError } = await svc.storage
     .from("avatares")
