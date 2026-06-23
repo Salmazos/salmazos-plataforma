@@ -44,8 +44,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "km_final deve ser maior ou igual a km_inicial." }, { status: 400 });
   }
 
-  const km_total = Number(km_final) - Number(km_inicial);
-  const valor_total = valor_por_km ? km_total * Number(valor_por_km) : null;
+  const kmRodados = Number(km_final) - Number(km_inicial);
+  const valor_total = valor_por_km ? kmRodados * Number(valor_por_km) : null;
 
   const svc = createServiceClient();
   const { data: registro, error } = await svc
@@ -55,7 +55,6 @@ export async function POST(request: NextRequest) {
       data: dataRegistro,
       km_inicial: Number(km_inicial),
       km_final: Number(km_final),
-      km_total,
       destino: destino || null,
       cliente_visitado: cliente_visitado || null,
       motivo: motivo || null,
