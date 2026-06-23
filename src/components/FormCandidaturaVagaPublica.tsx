@@ -159,7 +159,7 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
           ...form,
           cargo_pretendido: vagaTitulo,
           curriculo_url: curriculo_url || null,
-          origem: "formulario_vaga",
+          origem: "vaga_especifica",
           vaga_id: vagaId,
           formacao_academica: form.formacao_academica || null,
           idade: form.idade ? parseInt(form.idade) : null,

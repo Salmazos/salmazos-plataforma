@@ -195,3 +195,9 @@ export const ETAPAS_KANBAN = [
     textHex: "#16a34a",
   },
 ] as const;
+
+export const ORIGEM_LABELS: Record<string, string> = {
+  cadastro_rapido: "Cadastro Rápido",
+  vaga_especifica: "Vaga Específica",
+  banco_talentos: "Banco de Talentos",
+};

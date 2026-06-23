@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatarData } from "@/lib/utils";
-import { ETAPAS_KANBAN } from "@/lib/constants";
+import { ETAPAS_KANBAN, ORIGEM_LABELS } from "@/lib/constants";
 import { TEMPLATE_OPTIONS } from "@/lib/emailTemplates";
 import type { EmailTemplateName } from "@/lib/emailTemplates";
 import PerfilEtapaSelector from "@/components/PerfilEtapaSelector";
@@ -839,6 +839,27 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao }
                 <InfoItem label="E-mail" value={candidato.email} />
                 <InfoItem label="Localização" value={`${candidato.cidade} – ${candidato.estado}`} />
                 {candidato.idade && <InfoItem label="Idade" value={`${candidato.idade} anos`} />}
+                {candidato.origem && (
+                  <div>
+                    <dt style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Origem</dt>
+                    <dd>
+                      <span style={{
+                        display: "inline-block",
+                        padding: "3px 10px",
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        ...(candidato.origem === "vaga_especifica"
+                          ? { background: "#DBEAFE", color: "#1E40AF" }
+                          : candidato.origem === "banco_talentos"
+                            ? { background: "#D1FAE5", color: "#065F46" }
+                            : { background: "#374151", color: "#F9FAFB" }),
+                      }}>
+                        {ORIGEM_LABELS[candidato.origem] ?? candidato.origem}
+                      </span>
+                    </dd>
+                  </div>
+                )}
               </dl>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

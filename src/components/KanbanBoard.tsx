@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
-import { ETAPAS_KANBAN, HABILIDADES } from "@/lib/constants";
+import { ETAPAS_KANBAN, HABILIDADES, ORIGEM_LABELS } from "@/lib/constants";
 import type { KanbanCard } from "@/types";
 import CandidatoCard from "./CandidatoCard";
 import ModalEncaminhamento from "./ModalEncaminhamento";
@@ -47,7 +47,7 @@ const EXPERIENCIAS = [
   { label: "Mais de 3 anos",  valores: ["3 a 5 anos", "Mais de 5 anos"] },
 ];
 
-const ORIGENS = ["Cadastro Rapido", "Banco de talentos", "Formulário público"];
+const ORIGENS = Object.entries(ORIGEM_LABELS).map(([value, label]) => ({ value, label }));
 
 const CHIP_ON:  React.CSSProperties = { backgroundColor: "#000", color: "#fff", border: "1.5px solid #000" };
 const CHIP_OFF: React.CSSProperties = { backgroundColor: "#fff", color: "#374151", border: "1.5px solid #D1D5DB" };
@@ -111,7 +111,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado }: Pro
     return cards.filter((c) => {
       if (filtroMeus && c.responsavel !== analistaLogado) return false;
       if (filtroCargo && !c.cargo_pretendido.toLowerCase().includes(filtroCargo.toLowerCase())) return false;
-      if (filtroOrigem && (c.origem ?? "Banco de talentos") !== filtroOrigem) return false;
+      if (filtroOrigem && (c.origem ?? "cadastro_rapido") !== filtroOrigem) return false;
       if (filtroKeyword) {
         const kw = filtroKeyword.toLowerCase();
         const haystack = [
@@ -126,7 +126,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado }: Pro
         if (!haystack.includes(kw)) return false;
       }
       if (filtroCidade && !c.cidade.toLowerCase().includes(filtroCidade.toLowerCase())) return false;
-      if (filtroOrigemFonte && (c.origem ?? "Banco de talentos") !== filtroOrigemFonte) return false;
+      if (filtroOrigemFonte && (c.origem ?? "cadastro_rapido") !== filtroOrigemFonte) return false;
       return true;
     });
   }, [
@@ -353,7 +353,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado }: Pro
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Origem</label>
                 <select value={filtroOrigemFonte} onChange={(e) => setFiltroOrigemFonte(e.target.value)} className="input-field">
                   <option value="">Todos</option>
-                  {ORIGENS.map((o) => <option key={o} value={o}>{o}</option>)}
+                  {ORIGENS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
               <div />

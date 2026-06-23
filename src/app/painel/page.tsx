@@ -106,7 +106,7 @@ export default async function PainelPage() {
 
   const origensMap = new Map<string, number>();
   metricsCards.forEach((c) => {
-    const key = c.origem ?? "Banco de talentos";
+    const key = c.origem ?? "cadastro_rapido";
     origensMap.set(key, (origensMap.get(key) ?? 0) + 1);
   });
   const vagas = Array.from(origensMap.entries())

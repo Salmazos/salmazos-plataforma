@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { formatarData } from "@/lib/utils";
+import { ORIGEM_LABELS } from "@/lib/constants";
 
 interface Vaga {
   cargo: string;
@@ -133,7 +134,7 @@ export default function PainelSidebar({
                         : "text-gray-700 hover:bg-gray-50"
                       }`}
                   >
-                    <span className="truncate">{v.cargo}</span>
+                    <span className="truncate">{ORIGEM_LABELS[v.cargo] ?? v.cargo}</span>
                     <span className={`shrink-0 text-xs font-bold px-2 py-0.5 rounded-full ml-2
                       ${ativo
                         ? "bg-[#FFD700] text-black"

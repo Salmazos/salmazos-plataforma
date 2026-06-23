@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ETAPAS_KANBAN } from "@/lib/constants";
+import { ETAPAS_KANBAN, ORIGEM_LABELS } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
 import type { KanbanCard } from "@/types";
 import TriagemBadge from "./TriagemBadge";
@@ -180,8 +180,8 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
-            <span className={card.origem && card.origem !== "Banco de talentos" ? "text-[#FFB800] font-medium" : ""}>
-              {card.origem ?? "Banco de talentos"}
+            <span className={card.origem && card.origem !== "banco_talentos" ? "text-[#FFB800] font-medium" : ""}>
+              {ORIGEM_LABELS[card.origem ?? "banco_talentos"] ?? card.origem}
             </span>
           </div>
           <div className="flex items-center gap-1">

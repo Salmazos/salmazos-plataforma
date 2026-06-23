@@ -123,7 +123,7 @@ export default function FormularioCadastro({ vagaParam }: Props) {
         curriculo_url = supabase.storage.from("curriculos").getPublicUrl(fileName).data.publicUrl;
       }
 
-      const origem = vagaParam ?? "Banco de talentos";
+      const origem = vagaParam ? "vaga_especifica" : "banco_talentos";
 
       const res = await fetch("/api/candidatos", {
         method: "POST",

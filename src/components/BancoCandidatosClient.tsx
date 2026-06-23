@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ORIGEM_LABELS } from "@/lib/constants";
 import ModalCadastroRapido from "./ModalCadastroRapido";
 
 export type CandidatoRow = {
@@ -12,6 +13,7 @@ export type CandidatoRow = {
   idade: number | null;
   cargo_pretendido: string | null;
   cidade: string | null;
+  origem: string | null;
   triagem_score: number | null;
   triagem_label: string | null;
   triagem_resumo: string | null;
@@ -371,6 +373,34 @@ function HistoricoProcessos({ candidatoId }: { candidatoId: string }) {
   );
 }
 
+const ORIGEM_BADGE_STYLES: Record<string, { bg: string; fg: string }> = {
+  cadastro_rapido: { bg: "#374151", fg: "#F9FAFB" },
+  vaga_especifica: { bg: "#DBEAFE", fg: "#1E40AF" },
+  banco_talentos: { bg: "#D1FAE5", fg: "#065F46" },
+};
+
+function OrigemBadge({ origem }: { origem: string | null }) {
+  const key = origem ?? "cadastro_rapido";
+  const style = ORIGEM_BADGE_STYLES[key] ?? ORIGEM_BADGE_STYLES.cadastro_rapido;
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        background: style.bg,
+        color: style.fg,
+        padding: "2px 8px",
+        borderRadius: 6,
+        fontSize: 10,
+        fontWeight: 700,
+        whiteSpace: "nowrap",
+        marginTop: 2,
+      }}
+    >
+      {ORIGEM_LABELS[key] ?? key}
+    </span>
+  );
+}
+
 function inputStyle(extra?: React.CSSProperties): React.CSSProperties {
   return {
     border: "1px solid #E5E7EB",
@@ -403,6 +433,7 @@ export default function BancoCandidatosClient({
   const [notaIaMin, setNotaIaMin] = useState("");
   const [matchMin, setMatchMin] = useState("");
   const [keyword, setKeyword] = useState("");
+  const [filtroOrigem, setFiltroOrigem] = useState("");
 
   const [matchMap, setMatchMap] = useState<Record<string, MatchEntry[]>>({});
   const [loadingMatches, setLoadingMatches] = useState(false);
@@ -589,6 +620,7 @@ export default function BancoCandidatosClient({
         const bestMatch = matchMap[c.id]?.[0]?.score ?? c.melhor_match_score;
         if (bestMatch === null || bestMatch === undefined || bestMatch < matchThreshold) return false;
       }
+      if (filtroOrigem && (c.origem ?? "cadastro_rapido") !== filtroOrigem) return false;
       if (kwQ) {
         const haystack = [
           c.nome_completo,
@@ -603,7 +635,7 @@ export default function BancoCandidatosClient({
       }
       return true;
     });
-  }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, matchMap, filtroAlocacao, keyword]);
+  }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, matchMap, filtroAlocacao, keyword, filtroOrigem]);
 
   return (
     <div>
@@ -727,7 +759,7 @@ export default function BancoCandidatosClient({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 1fr",
+            gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr",
             gap: 12,
             alignItems: "end",
           }}
@@ -823,6 +855,21 @@ export default function BancoCandidatosClient({
               <option value="80">{"≥"}80%</option>
             </select>
           </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
+              Origem
+            </label>
+            <select
+              style={inputStyle({ background: "#fff", cursor: "pointer" })}
+              value={filtroOrigem}
+              onChange={(e) => setFiltroOrigem(e.target.value)}
+            >
+              <option value="">Todos</option>
+              {Object.entries(ORIGEM_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div style={{ marginTop: 12 }}>
@@ -837,14 +884,14 @@ export default function BancoCandidatosClient({
           />
         </div>
 
-        {(nome || cargo || cidade || idadeMin || idadeMax || notaIaMin || matchMin || keyword) && (
+        {(nome || cargo || cidade || idadeMin || idadeMax || notaIaMin || matchMin || keyword || filtroOrigem) && (
           <div style={{ marginTop: 10, fontSize: 13, color: "#6B7280" }}>
             Exibindo{" "}
             <strong style={{ color: "#111827" }}>{filtered.length}</strong> de{" "}
             {candidatos.length} candidatos
             {" · "}
             <button
-              onClick={() => { setNome(""); setCargo(""); setCidade(""); setIdadeMin(""); setIdadeMax(""); setNotaIaMin(""); setMatchMin(""); setKeyword(""); }}
+              onClick={() => { setNome(""); setCargo(""); setCidade(""); setIdadeMin(""); setIdadeMax(""); setNotaIaMin(""); setMatchMin(""); setKeyword(""); setFiltroOrigem(""); }}
               style={{ background: "none", border: "none", color: "#FFB800", cursor: "pointer", fontSize: 13, fontWeight: 600, padding: 0 }}
             >
               Limpar filtros
@@ -918,6 +965,7 @@ export default function BancoCandidatosClient({
                           </span>
                         )}
                       </div>
+                      <OrigemBadge origem={c.origem} />
                       {c.status_alocacao && c.status_alocacao !== "disponivel" && (
                         <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>
                           Alocado em: {c.alocacao_cliente_nome ?? "—"} — {c.alocacao_vaga_titulo ?? "—"}

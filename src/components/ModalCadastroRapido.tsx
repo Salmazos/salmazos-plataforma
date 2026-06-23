@@ -212,7 +212,7 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
           idade: idade ? parseInt(idade) : null,
           formacao_academica: formacao || null,
           etapa_kanban: "triagem",
-          origem: "Cadastro Rapido",
+          origem: "cadastro_rapido",
           curriculo_url,
         }),
       });

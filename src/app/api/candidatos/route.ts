@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
 
     // ── Duplicate detection ────────────────────────────────────────────────────
     const origemTipo: "publico" | "rapido" =
-      body.origem === "Cadastro Rapido" ? "rapido" : "publico";
+      body.origem === "cadastro_rapido" ? "rapido" : "publico";
 
     const duplicata = await detectarDuplicata(body, origemTipo);
 
@@ -247,7 +247,7 @@ export async function POST(request: NextRequest) {
         curriculo_url: body.curriculo_url || null,
         idade: body.idade || null,
         formacao_academica: body.formacao_academica || null,
-        origem: body.origem || "Banco de talentos",
+        origem: body.origem || "cadastro_rapido",
         etapa_kanban: "triagem",
       })
       .select()
@@ -261,13 +261,13 @@ export async function POST(request: NextRequest) {
     void registrarHistorico({
       candidato_id: data.id,
       tipo: "cadastro",
-      descricao: `Candidato cadastrado via ${body.origem || "Banco de talentos"}`,
-      metadata: { origem: body.origem || "Banco de talentos", cargo: body.cargo_pretendido },
+      descricao: `Candidato cadastrado via ${body.origem || "cadastro_rapido"}`,
+      metadata: { origem: body.origem || "cadastro_rapido", cargo: body.cargo_pretendido },
       criado_por: body.origem || null,
     });
 
     // Vincular candidato à vaga se vaga_id fornecido
-    if (body.vaga_id && data?.id && body.origem !== "Cadastro Rapido") {
+    if (body.vaga_id && data?.id && body.origem !== "cadastro_rapido") {
       try {
         await supabase
           .from("candidatos_vagas")

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { ORIGEM_LABELS } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -123,7 +124,7 @@ export default async function DashboardPage() {
   ] = await Promise.all([
     supabase
       .from("candidatos")
-      .select("id, etapa_kanban, status, responsavel, created_at, updated_at"),
+      .select("id, etapa_kanban, status, responsavel, origem, created_at, updated_at"),
     supabase.from("vagas").select("id, status, created_at"),
     supabase.from("encaminhamentos").select("id, cliente_id, status, created_at"),
     supabase.from("candidatos_vagas").select("vaga_id, candidato_id, etapa, created_at"),
@@ -263,6 +264,13 @@ export default async function DashboardPage() {
 
   const totalAtivos = ativos.length;
 
+  // ── 7. Candidatos por origem ────────────────────────────────────────────
+  const origemCount: Record<string, number> = { cadastro_rapido: 0, vaga_especifica: 0, banco_talentos: 0 };
+  for (const cand of c) {
+    const key = (cand.origem as string) ?? "cadastro_rapido";
+    origemCount[key] = (origemCount[key] ?? 0) + 1;
+  }
+
   const thStyle: React.CSSProperties = {
     padding: "8px 12px",
     fontSize: 11,
@@ -353,6 +361,104 @@ export default async function DashboardPage() {
             <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>
               candidaturas recebidas
             </p>
+          </div>
+        ))}
+      </div>
+
+      {/* Candidatos por Origem */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 16,
+          marginBottom: 20,
+        }}
+      >
+        {([
+          {
+            key: "cadastro_rapido",
+            icon: (
+              <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+            ),
+            bg: "#374151",
+            fg: "#F9FAFB",
+            accent: "#6B7280",
+          },
+          {
+            key: "vaga_especifica",
+            icon: (
+              <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            ),
+            bg: "#DBEAFE",
+            fg: "#1E40AF",
+            accent: "#3B82F6",
+          },
+          {
+            key: "banco_talentos",
+            icon: (
+              <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            ),
+            bg: "#D1FAE5",
+            fg: "#065F46",
+            accent: "#10B981",
+          },
+        ] as const).map(({ key, icon, bg, fg, accent }) => (
+          <div
+            key={key}
+            className="card"
+            style={{ position: "relative", overflow: "hidden" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 10,
+                  background: bg,
+                  color: fg,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                {icon}
+              </div>
+              <p className="section-title" style={{ margin: 0 }}>
+                {ORIGEM_LABELS[key]}
+              </p>
+            </div>
+            <p
+              style={{
+                fontSize: 38,
+                fontWeight: 800,
+                color: "#111827",
+                lineHeight: 1,
+                margin: 0,
+              }}
+            >
+              {origemCount[key] ?? 0}
+            </p>
+            <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 6 }}>
+              candidatos
+            </p>
+            <div
+              style={{
+                position: "absolute",
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 3,
+                background: accent,
+                borderRadius: "0 0 12px 12px",
+              }}
+            />
           </div>
         ))}
       </div>
