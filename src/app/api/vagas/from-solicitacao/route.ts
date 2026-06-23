@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { sendEmail } from "@/lib/sendEmail";
+import { getEmailTemplate } from "@/lib/emailTemplates";
 
 export async function POST(request: NextRequest) {
   try {
@@ -72,6 +74,31 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", solicitacao_id);
+
+    if (sol.cliente_id) {
+      const { data: cliente } = await service
+        .from("clientes")
+        .select("contato_email")
+        .eq("id", sol.cliente_id)
+        .single();
+
+      if (cliente?.contato_email) {
+        const { subject, html } = getEmailTemplate("vaga_aprovada_cliente", {
+          nome: sol.cliente_nome ?? "",
+          cargo: sol.cargo,
+          nomeCliente: sol.cliente_nome ?? "",
+          numPosicoes: sol.num_posicoes ?? 1,
+          cidade: sol.cidade ?? undefined,
+        });
+        sendEmail({
+          to: cliente.contato_email,
+          subject,
+          html,
+          tipo: "vaga_aprovada_cliente",
+          vaga_id: vaga.id,
+        });
+      }
+    }
 
     return NextResponse.json({ success: true, vaga_id: vaga.id }, { status: 201 });
   } catch (err) {

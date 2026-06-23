@@ -104,6 +104,33 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     sendEmail({ to: data.email, subject, html, tipo: "notificacao_analista", candidato_id: id });
   }
 
+  if (dbEtapa === "entrevista_cliente") {
+    const { data: cv } = await svc
+      .from("candidatos_vagas")
+      .select("vaga_id, vagas(cliente_id, clientes(nome, contato_email))")
+      .eq("candidato_id", id)
+      .limit(1)
+      .single();
+
+    const cliente = (cv?.vagas as any)?.clientes;
+    if (cliente?.contato_email) {
+      const { subject, html } = getEmailTemplate("candidato_entrevista_cliente", {
+        nome: "",
+        cargo: data.cargo_pretendido,
+        nomeCliente: cliente.nome ?? "",
+        nomeCandidato: data.nome_completo,
+        empresa: cliente.nome ?? "",
+      });
+      sendEmail({
+        to: cliente.contato_email,
+        subject,
+        html,
+        tipo: "candidato_entrevista_cliente",
+        candidato_id: id,
+      });
+    }
+  }
+
   void registrarHistorico({
     candidato_id: id,
     tipo: "etapa_alterada",

@@ -3,11 +3,18 @@ export type EmailTemplateName =
   | "entrevista_cliente"
   | "aprovado_cliente"
   | "reprovado"
-  | "solicitar_documentos";
+  | "solicitar_documentos"
+  | "vaga_aprovada_cliente"
+  | "candidato_entrevista_cliente";
 
 interface TemplateData {
   nome: string;
   cargo: string;
+  nomeCliente?: string;
+  nomeCandidato?: string;
+  numPosicoes?: number;
+  cidade?: string;
+  empresa?: string;
 }
 
 export interface EmailTemplate {
@@ -22,6 +29,8 @@ export const TEMPLATE_OPTIONS: { value: EmailTemplateName; label: string }[] = [
   { value: "aprovado_cliente", label: "Aprovação no Processo Seletivo" },
   { value: "reprovado", label: "Reprovação no Processo Seletivo" },
   { value: "solicitar_documentos", label: "Solicitar Documentos" },
+  { value: "vaga_aprovada_cliente", label: "Vaga Aprovada (para Cliente)" },
+  { value: "candidato_entrevista_cliente", label: "Candidato Agendado para Entrevista (para Cliente)" },
 ];
 
 function layout(subtitle: string, body: string): string {
@@ -52,7 +61,7 @@ function layout(subtitle: string, body: string): string {
 
 export function getEmailTemplate(
   name: EmailTemplateName,
-  { nome, cargo }: TemplateData
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa }: TemplateData
 ): EmailTemplate {
   switch (name) {
     case "entrevista_salmazos":
@@ -200,6 +209,65 @@ export function getEmailTemplate(
           </p>
           <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
             Em caso de dúvidas, não hesite em nos contatar. Estamos à disposição! 😊
+          </p>`
+        ),
+      };
+
+    case "vaga_aprovada_cliente":
+      return {
+        subject: "Salmazos RH - Sua vaga foi aceita!",
+        descricao: `Confirmação de aprovação da vaga de ${cargo} para o cliente.`,
+        html: layout(
+          "Sua Solicitação de Vaga foi Aprovada!",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Prezado(a), <strong>${nomeCliente}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Temos o prazer de informar que sua solicitação de vaga foi <strong>aprovada</strong>
+            pela equipe Salmazos RH e já está em andamento!
+          </p>
+          <div style="background:#f0fdf4;border-left:4px solid #16a34a;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#166534;font-weight:700;font-size:14px;">Detalhes da vaga:</p>
+            <ul style="margin:0;padding-left:18px;color:#15803d;line-height:2;font-size:14px;">
+              <li><strong>Cargo:</strong> ${cargo}</li>
+              <li><strong>Nº de posições:</strong> ${numPosicoes ?? 1}</li>
+              <li><strong>Localidade:</strong> ${cidade ?? "A definir"}</li>
+            </ul>
+          </div>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Nossa equipe de recrutamento já iniciou a busca por candidatos qualificados
+            para atender ao perfil solicitado. Manteremos você informado(a) sobre o andamento
+            do processo seletivo e enviaremos os perfis mais aderentes para sua avaliação.
+          </p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+            Em caso de dúvidas ou necessidade de ajustes, estamos à disposição. Conte com a Salmazos RH! 😊
+          </p>`
+        ),
+      };
+
+    case "candidato_entrevista_cliente":
+      return {
+        subject: "Salmazos RH - Candidato agendado para entrevista",
+        descricao: `Informativo de candidato agendado para entrevista na empresa para a vaga de ${cargo}.`,
+        html: layout(
+          "Candidato Agendado para Entrevista",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Prezado(a), <strong>${nomeCliente}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Gostaríamos de informar que temos um candidato aprovado em nosso processo de triagem
+            e pronto para a próxima etapa: a <strong>entrevista com a ${empresa ?? "sua empresa"}</strong>.
+          </p>
+          <div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#1e40af;font-weight:700;font-size:14px;">Dados do candidato:</p>
+            <ul style="margin:0;padding-left:18px;color:#1d4ed8;line-height:2;font-size:14px;">
+              <li><strong>Nome:</strong> ${nomeCandidato}</li>
+              <li><strong>Vaga:</strong> ${cargo}</li>
+            </ul>
+          </div>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Este candidato foi avaliado e aprovado pela equipe Salmazos RH, demonstrando
+            perfil compatível com os requisitos da posição. Solicitamos que nos informe
+            a melhor data e horário para agendarmos a entrevista.
+          </p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+            Estamos à disposição para quaisquer esclarecimentos. Agradecemos a parceria! 🤝
           </p>`
         ),
       };
