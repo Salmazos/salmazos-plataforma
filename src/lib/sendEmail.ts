@@ -17,7 +17,7 @@ export async function sendEmail({
   tipo = "outro",
   candidato_id,
   vaga_id,
-}: SendEmailOpts) {
+}: SendEmailOpts): Promise<{ success: boolean; error?: string }> {
   try {
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -40,9 +40,11 @@ export async function sendEmail({
     });
 
     await registrarLogEmail({ destinatario: to, assunto: subject, tipo, status: "enviado", candidato_id, vaga_id });
+    return { success: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[sendEmail] Falha ao enviar e-mail:", err);
     await registrarLogEmail({ destinatario: to, assunto: subject, tipo, status: "erro", erro_mensagem: msg, candidato_id, vaga_id });
+    return { success: false, error: msg };
   }
 }
