@@ -29,5 +29,5 @@ export default async function BancoCandidatosPage() {
   const analistaNome = analistaPerfil.data?.nome_completo ?? "";
   const idsEmProcesso = [...new Set((ativosResult.data ?? []).map((r: { candidato_id: string }) => r.candidato_id))];
 
-  return <BancoCandidatosClient candidatos={(data ?? []) as CandidatoRow[]} analista={analistaNome} idsEmProcesso={idsEmProcesso} />;
+  return <BancoCandidatosClient candidatos={(data ?? []) as unknown as CandidatoRow[]} analista={analistaNome} idsEmProcesso={idsEmProcesso} />;
 }
