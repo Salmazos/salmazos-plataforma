@@ -97,6 +97,50 @@ async function extractAndUpdateCandidato(
   await calcularTriagem(candidatoId).catch(console.error);
 }
 
+async function enviarEmailsVaga({
+  body,
+  candidatoId,
+  cargoPretendido,
+}: {
+  body: Record<string, unknown>;
+  candidatoId: string;
+  cargoPretendido: string;
+}) {
+  const email = body.email as string | undefined;
+  const vagaId = body.vaga_id as string | undefined;
+  const assunto = `✅ Candidatura recebida – ${cargoPretendido} | Salmazos RH`;
+
+  if (email) {
+    try {
+      await enviarEmailConfirmacao({
+        to: email,
+        nomeCandidato: body.nome_completo as string,
+        cargoPretendido,
+      });
+      await registrarLogEmail({
+        destinatario: email,
+        assunto,
+        tipo: "confirmacao_candidatura",
+        status: "enviado",
+        candidato_id: candidatoId,
+        vaga_id: vagaId,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[Email] ERRO confirmação:", msg);
+      await registrarLogEmail({
+        destinatario: email,
+        assunto,
+        tipo: "confirmacao_candidatura",
+        status: "erro",
+        erro_mensagem: msg,
+        candidato_id: candidatoId,
+        vaga_id: vagaId,
+      });
+    }
+  }
+}
+
 export async function GET(request: NextRequest) {
   const busca  = request.nextUrl.searchParams.get("busca") ?? "";
   const status = request.nextUrl.searchParams.get("status") ?? "ativo";
@@ -148,8 +192,28 @@ export async function POST(request: NextRequest) {
       const existente = duplicata.candidatoExistente;
 
       if (!duplicata.isAtualizacao) {
-        // Plain duplicate — silently succeed for public, warn for internal
+        // Plain duplicate — link to vaga and send emails even for duplicates
+        if (body.vaga_id) {
+          try {
+            await supabase
+              .from("candidatos_vagas")
+              .upsert(
+                { vaga_id: body.vaga_id, candidato_id: existente.id, etapa: "triagem" },
+                { onConflict: "vaga_id,candidato_id" }
+              );
+          } catch (err) {
+            console.error("[candidatos_vagas upsert]", err);
+          }
+        }
+
         if (origemTipo === "publico") {
+          waitUntil(
+            enviarEmailsVaga({
+              body,
+              candidatoId: existente.id,
+              cargoPretendido: body.cargo_pretendido,
+            })
+          );
           return NextResponse.json(
             { ok: true, duplicata: true, redirect: "/obrigado" },
             { status: 200 }
@@ -193,6 +257,19 @@ export async function POST(request: NextRequest) {
 
       await supabase.from("candidatos").update(atualizar).eq("id", existente.id);
 
+      if (body.vaga_id) {
+        try {
+          await supabase
+            .from("candidatos_vagas")
+            .upsert(
+              { vaga_id: body.vaga_id, candidato_id: existente.id, etapa: "triagem" },
+              { onConflict: "vaga_id,candidato_id" }
+            );
+        } catch (err) {
+          console.error("[candidatos_vagas upsert]", err);
+        }
+      }
+
       await supabase.from("notificacoes_analista").insert({
         tipo: "atualizacao_curriculo",
         titulo: `Currículo atualizado: ${existente.nome_completo}`,
@@ -204,6 +281,13 @@ export async function POST(request: NextRequest) {
       calcularTriagem(existente.id).catch(() => {});
 
       if (origemTipo === "publico") {
+        waitUntil(
+          enviarEmailsVaga({
+            body,
+            candidatoId: existente.id,
+            cargoPretendido: body.cargo_pretendido,
+          })
+        );
         return NextResponse.json(
           { ok: true, atualizado: true, redirect: "/obrigado" },
           { status: 200 }
@@ -277,38 +361,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Enviar e-mail de confirmação apenas quando e-mail foi informado
-    if (body.email) {
-      console.log("[Email] Tentando enviar para:", body.email);
-      try {
-        await enviarEmailConfirmacao({
-          to: body.email,
-          nomeCandidato: body.nome_completo,
-          cargoPretendido: body.cargo_pretendido,
-        });
-        console.log("[Email] Enviado com sucesso para:", body.email);
-        await registrarLogEmail({
-          destinatario: body.email,
-          assunto: `✅ Candidatura recebida – ${body.cargo_pretendido} | Salmazos RH`,
-          tipo: "confirmacao_candidatura",
-          status: "enviado",
-          candidato_id: data.id,
-          vaga_id: body.vaga_id,
-        });
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error("[Email] ERRO ao enviar:", msg, err);
-        await registrarLogEmail({
-          destinatario: body.email,
-          assunto: `✅ Candidatura recebida – ${body.cargo_pretendido} | Salmazos RH`,
-          tipo: "confirmacao_candidatura",
-          status: "erro",
-          erro_mensagem: msg,
-          candidato_id: data.id,
-          vaga_id: body.vaga_id,
-        });
-      }
-    }
+    // Enviar e-mails (confirmação ao candidato + notificação à equipe)
+    waitUntil(
+      enviarEmailsVaga({
+        body,
+        candidatoId: data.id,
+        cargoPretendido: body.cargo_pretendido,
+      })
+    );
 
     // Extrair dados do currículo assincronamente (não bloqueia a resposta)
     // Triagem é disparada dentro de extractAndUpdateCandidato após o enriquecimento.
