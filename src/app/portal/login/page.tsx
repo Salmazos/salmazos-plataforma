@@ -1,10 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
 
 export default function PortalLoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <p className="text-gray-400 text-sm">Carregando...</p>
+        </div>
+      }
+    >
+      <PortalLoginContent />
+    </Suspense>
+  );
+}
+
+function PortalLoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
