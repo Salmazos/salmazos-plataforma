@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
-import { sendEmail } from "@/lib/sendEmail";
+import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
 
 const TIPO_LABEL: Record<string, string> = {
   recrutamento_selecao: "Recrutamento e Seleção",
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
 
     const { data: analistas } = await service
       .from("analistas_perfil")
-      .select("user_id, email, nome_completo")
+      .select("user_id")
       .in("nivel_acesso", ["superuser", "diretoria"])
       .eq("ativo", true);
 
@@ -190,13 +190,11 @@ export async function POST(request: NextRequest) {
 </div>
 </body></html>`;
 
-    const emailSubject = `🔔 Nova Solicitação de Vaga — ${clienteNome}`;
-    const recipients = (analistas ?? []).map((a) => a.email).filter(Boolean);
-    if (recipients.length === 0) recipients.push("olver@salmazos.com.br");
-
-    for (const to of recipients) {
-      void sendEmail({ to, subject: emailSubject, html, tipo: "solicitacao_vaga" });
-    }
+    void notifyAllAnalysts({
+      subject: `🔔 Nova Solicitação de Vaga — ${clienteNome}`,
+      html,
+      tipo: "solicitacao_vaga",
+    });
 
     return NextResponse.json({ success: true, id: solicitacao.id }, { status: 201 });
   } catch (err) {

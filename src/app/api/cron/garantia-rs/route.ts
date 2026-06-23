@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { sendEmail } from "@/lib/sendEmail";
+import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
 
 export const dynamic = "force-dynamic";
 
@@ -80,8 +80,7 @@ export async function GET() {
 </div>
 </body></html>`;
 
-      void sendEmail({
-        to: "olver@salmazos.com.br",
+      void notifyAllAnalysts({
         subject: `⚠️ Garantia R&S vence em ${diasRestantes} dia${diasRestantes !== 1 ? "s" : ""} — ${candidatoNome} — ${clienteNome}`,
         html,
         tipo: "alerta_garantia_rs",

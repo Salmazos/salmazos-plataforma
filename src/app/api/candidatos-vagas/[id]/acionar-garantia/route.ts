@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
-import { sendEmail } from "@/lib/sendEmail";
+import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -98,11 +98,8 @@ export async function PATCH(_request: NextRequest, { params }: Params) {
       metadata: { cv_id: id, vaga_id: cv.vaga_id, nova_vaga_id: novaVagaId },
     });
 
-    // Send notification email
-    void (async () => {
-      try {
-        const vagaTitulo = vo?.titulo ?? "Vaga";
-        const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
+    const vagaTitulo = vo?.titulo ?? "Vaga";
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
 <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
   <div style="background:#000;padding:24px 28px;text-align:center">
@@ -127,18 +124,13 @@ export async function PATCH(_request: NextRequest, { params }: Params) {
 </div>
 </body></html>`;
 
-        await sendEmail({
-          to: "olver@salmazos.com.br",
-          subject: `🔄 Garantia R&S Acionada — ${candidatoNome} — ${clienteNome}`,
-          html,
-          tipo: "garantia_acionada",
-          candidato_id: cv.candidato_id,
-          vaga_id: cv.vaga_id,
-        });
-      } catch (emailErr) {
-        console.error("[acionar-garantia] Email error:", emailErr);
-      }
-    })();
+    void notifyAllAnalysts({
+      subject: `🔄 Garantia R&S Acionada — ${candidatoNome} — ${clienteNome}`,
+      html,
+      tipo: "garantia_acionada",
+      candidato_id: cv.candidato_id,
+      vaga_id: cv.vaga_id,
+    });
 
     // Create bell notification
     void supabase.from("notificacoes_analista").insert({

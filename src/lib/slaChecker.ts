@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
+import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -137,6 +138,46 @@ export async function verificarSLA(): Promise<void> {
     if (notifErr) {
       console.error("[verificarSLA] Erro ao inserir notificação:", notifErr.message);
     }
+
+    const diasExcedidos = dias - prazo;
+    const urgencyColor = diasExcedidos >= 3 ? "#DC2626" : "#D97706";
+    const urgencyBg = diasExcedidos >= 3 ? "#FEE2E2" : "#FFFBEB";
+
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
+<div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+  <div style="background:#000;padding:24px 28px;text-align:center">
+    <h1 style="color:#FFD700;margin:0;font-size:18px">⚠️ Alerta de SLA Excedido</h1>
+  </div>
+  <div style="padding:24px 28px">
+    <div style="background:${urgencyBg};border:1px solid ${urgencyColor}40;border-radius:8px;padding:14px 16px;margin-bottom:20px">
+      <p style="margin:0;color:${urgencyColor};font-size:14px;font-weight:700">${diasExcedidos >= 3 ? "🚨 SLA crítico — ação imediata necessária" : "⏰ SLA excedido — atenção necessária"}</p>
+      <p style="margin:4px 0 0;color:${urgencyColor};font-size:13px">Prazo de <strong>${prazo} dia(s) útil(eis)</strong> excedido em <strong>${diasExcedidos} dia(s)</strong></p>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Candidato</td><td style="padding:6px 0;color:#111827">${nomeCandidato}</td></tr>
+      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Vaga</td><td style="padding:6px 0;color:#111827">${tituloVaga}</td></tr>
+      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Etapa atual</td><td style="padding:6px 0;color:#111827">${cv.etapa}</td></tr>
+      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Dias na etapa</td><td style="padding:6px 0;color:#111827">${dias} dia(s) útil(eis)</td></tr>
+      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Prazo limite</td><td style="padding:6px 0;color:#111827">${prazo} dia(s) útil(eis)</td></tr>
+    </table>
+    <div style="text-align:center;margin-top:20px">
+      <a href="https://salmazos-plataforma.vercel.app/painel/candidato/${cv.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver candidato</a>
+    </div>
+  </div>
+  <div style="background:#f9fafb;padding:12px 28px;text-align:center">
+    <p style="margin:0;font-size:11px;color:#9CA3AF">Salmazos RH — Alerta automático de SLA</p>
+  </div>
+</div>
+</body></html>`;
+
+    void notifyAllAnalysts({
+      subject: `⚠️ Salmazos RH - Alerta de SLA — ${nomeCandidato} — ${tituloVaga}`,
+      html,
+      tipo: "alerta_sla",
+      candidato_id: cv.candidato_id,
+      vaga_id: cv.vagas?.id,
+    });
 
     // Mark as sent in local set to avoid double-insert within the same run
     alertasSet.add(key);
