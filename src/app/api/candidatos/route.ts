@@ -192,19 +192,12 @@ export async function POST(request: NextRequest) {
       const existente = duplicata.candidatoExistente;
 
       if (!duplicata.isAtualizacao) {
-        // Plain duplicate — link to all vagas and send emails even for duplicates
         const allVagaIds: string[] = Array.isArray(body.vaga_ids) ? body.vaga_ids : body.vaga_id ? [body.vaga_id] : [];
-        for (const vid of allVagaIds) {
-          try {
-            await supabase
-              .from("candidatos_vagas")
-              .upsert(
-                { vaga_id: vid, candidato_id: existente.id, etapa: "triagem" },
-                { onConflict: "vaga_id,candidato_id" }
-              );
-          } catch (err) {
-            console.error("[candidatos_vagas upsert]", err);
-          }
+        if (allVagaIds.length > 0) {
+          await supabase
+            .from("candidatos")
+            .update({ vagas_interesse: allVagaIds })
+            .eq("id", existente.id);
         }
 
         if (origemTipo === "publico") {
@@ -259,17 +252,11 @@ export async function POST(request: NextRequest) {
       await supabase.from("candidatos").update(atualizar).eq("id", existente.id);
 
       const updateVagaIds: string[] = Array.isArray(body.vaga_ids) ? body.vaga_ids : body.vaga_id ? [body.vaga_id] : [];
-      for (const vid of updateVagaIds) {
-        try {
-          await supabase
-            .from("candidatos_vagas")
-            .upsert(
-              { vaga_id: vid, candidato_id: existente.id, etapa: "triagem" },
-              { onConflict: "vaga_id,candidato_id" }
-            );
-        } catch (err) {
-          console.error("[candidatos_vagas upsert]", err);
-        }
+      if (updateVagaIds.length > 0) {
+        await supabase
+          .from("candidatos")
+          .update({ vagas_interesse: updateVagaIds })
+          .eq("id", existente.id);
       }
 
       await supabase.from("notificacoes_analista").insert({
@@ -352,20 +339,14 @@ export async function POST(request: NextRequest) {
       criado_por: body.origem || null,
     });
 
-    // Vincular candidato à vaga(s) se fornecido
+    // Salvar vagas de interesse no candidato
     if (data?.id && body.origem !== "cadastro_rapido") {
       const newVagaIds: string[] = Array.isArray(body.vaga_ids) ? body.vaga_ids : body.vaga_id ? [body.vaga_id] : [];
-      for (const vid of newVagaIds) {
-        try {
-          await supabase
-            .from("candidatos_vagas")
-            .upsert(
-              { vaga_id: vid, candidato_id: data.id, etapa: "triagem" },
-              { onConflict: "vaga_id,candidato_id" }
-            );
-        } catch (err) {
-          console.error("[candidatos_vagas insert]", err);
-        }
+      if (newVagaIds.length > 0) {
+        await supabase
+          .from("candidatos")
+          .update({ vagas_interesse: newVagaIds })
+          .eq("id", data.id);
       }
     }
 
