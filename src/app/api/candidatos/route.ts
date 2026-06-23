@@ -192,13 +192,14 @@ export async function POST(request: NextRequest) {
       const existente = duplicata.candidatoExistente;
 
       if (!duplicata.isAtualizacao) {
-        // Plain duplicate — link to vaga and send emails even for duplicates
-        if (body.vaga_id) {
+        // Plain duplicate — link to all vagas and send emails even for duplicates
+        const allVagaIds: string[] = Array.isArray(body.vaga_ids) ? body.vaga_ids : body.vaga_id ? [body.vaga_id] : [];
+        for (const vid of allVagaIds) {
           try {
             await supabase
               .from("candidatos_vagas")
               .upsert(
-                { vaga_id: body.vaga_id, candidato_id: existente.id, etapa: "triagem" },
+                { vaga_id: vid, candidato_id: existente.id, etapa: "triagem" },
                 { onConflict: "vaga_id,candidato_id" }
               );
           } catch (err) {
@@ -257,12 +258,13 @@ export async function POST(request: NextRequest) {
 
       await supabase.from("candidatos").update(atualizar).eq("id", existente.id);
 
-      if (body.vaga_id) {
+      const updateVagaIds: string[] = Array.isArray(body.vaga_ids) ? body.vaga_ids : body.vaga_id ? [body.vaga_id] : [];
+      for (const vid of updateVagaIds) {
         try {
           await supabase
             .from("candidatos_vagas")
             .upsert(
-              { vaga_id: body.vaga_id, candidato_id: existente.id, etapa: "triagem" },
+              { vaga_id: vid, candidato_id: existente.id, etapa: "triagem" },
               { onConflict: "vaga_id,candidato_id" }
             );
         } catch (err) {
@@ -350,14 +352,20 @@ export async function POST(request: NextRequest) {
       criado_por: body.origem || null,
     });
 
-    // Vincular candidato à vaga se vaga_id fornecido
-    if (body.vaga_id && data?.id && body.origem !== "cadastro_rapido") {
-      try {
-        await supabase
-          .from("candidatos_vagas")
-          .insert({ vaga_id: body.vaga_id, candidato_id: data.id, etapa: "triagem" });
-      } catch (err) {
-        console.error("[candidatos_vagas insert]", err);
+    // Vincular candidato à vaga(s) se fornecido
+    if (data?.id && body.origem !== "cadastro_rapido") {
+      const newVagaIds: string[] = Array.isArray(body.vaga_ids) ? body.vaga_ids : body.vaga_id ? [body.vaga_id] : [];
+      for (const vid of newVagaIds) {
+        try {
+          await supabase
+            .from("candidatos_vagas")
+            .upsert(
+              { vaga_id: vid, candidato_id: data.id, etapa: "triagem" },
+              { onConflict: "vaga_id,candidato_id" }
+            );
+        } catch (err) {
+          console.error("[candidatos_vagas insert]", err);
+        }
       }
     }
 

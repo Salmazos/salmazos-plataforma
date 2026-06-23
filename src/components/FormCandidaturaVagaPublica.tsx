@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatarCPF, formatarTelefone, validarCPF } from "@/lib/utils";
 import { ESTADOS, HABILIDADES, TEMPO_EXPERIENCIA, TURNOS } from "@/lib/constants";
@@ -85,6 +85,20 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
   const [sucesso, setSucesso] = useState(false);
   const [hovering, setHovering] = useState(false);
 
+  const [vagasDisponiveis, setVagasDisponiveis] = useState<{ id: string; titulo: string; cidade: string | null }[]>([]);
+  const [additionalVagaIds, setAdditionalVagaIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/vagas?status=aberta")
+      .then((r) => r.json())
+      .then((res) => {
+        const abertas = (res.data ?? [])
+          .filter((v: { id: string }) => v.id !== vagaId);
+        setVagasDisponiveis(abertas);
+      })
+      .catch(() => {});
+  }, [vagaId]);
+
   const set = (field: keyof FormData, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
 
@@ -152,6 +166,8 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
         curriculo_url = supabase.storage.from("curriculos").getPublicUrl(fileName).data.publicUrl;
       }
 
+      const vaga_ids = [vagaId, ...additionalVagaIds.filter(Boolean)];
+
       const res = await fetch("/api/candidatos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -161,6 +177,7 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
           curriculo_url: curriculo_url || null,
           origem: "vaga_especifica",
           vaga_id: vagaId,
+          vaga_ids,
           formacao_academica: form.formacao_academica || null,
           idade: form.idade ? parseInt(form.idade) : null,
         }),
@@ -194,7 +211,103 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
     );
   }
 
+  const selectedIds = new Set([vagaId, ...additionalVagaIds]);
+  const availableForSelect = vagasDisponiveis.filter((v) => !selectedIds.has(v.id));
+
   return (
+    <>
+      {vagasDisponiveis.length > 0 && (
+        <div style={{
+          backgroundColor: "#111",
+          border: "1px solid #333",
+          borderRadius: "16px",
+          padding: "20px 24px",
+          marginBottom: "24px",
+        }}>
+          <p style={{ fontSize: "15px", fontWeight: 700, color: "#FFD700", marginBottom: "4px" }}>
+            Também tenho interesse em outras vagas?
+          </p>
+          <p style={{ fontSize: "13px", color: "#9ca3af", marginBottom: "16px" }}>
+            Você pode se candidatar a até 3 vagas com este mesmo cadastro.
+          </p>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {additionalVagaIds.map((vid, idx) => (
+              <div key={idx} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                <select
+                  style={{
+                    ...INPUT,
+                    flex: 1,
+                    backgroundColor: "#1a1a1a",
+                    color: "#fff",
+                    border: "1px solid #444",
+                  }}
+                  value={vid}
+                  onChange={(e) => {
+                    const updated = [...additionalVagaIds];
+                    updated[idx] = e.target.value;
+                    setAdditionalVagaIds(updated);
+                  }}
+                >
+                  <option value="">Selecione uma vaga</option>
+                  {vagasDisponiveis
+                    .filter((v) => v.id === vid || !selectedIds.has(v.id))
+                    .map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.titulo}{v.cidade ? ` - ${v.cidade}` : ""}
+                      </option>
+                    ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setAdditionalVagaIds(additionalVagaIds.filter((_, i) => i !== idx))}
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "8px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#ef4444",
+                    fontSize: "16px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+
+            {additionalVagaIds.length < 2 && availableForSelect.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setAdditionalVagaIds([...additionalVagaIds, ""])}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "8px 16px",
+                  backgroundColor: "transparent",
+                  border: "1px dashed #FFD700",
+                  borderRadius: "8px",
+                  color: "#FFD700",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  alignSelf: "flex-start",
+                }}
+              >
+                + Adicionar outra vaga
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
     <form onSubmit={handleSubmit} noValidate>
 
       {/* Dados Pessoais */}
@@ -394,5 +507,6 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
         ) : "Enviar Candidatura"}
       </button>
     </form>
+    </>
   );
 }
