@@ -49,7 +49,9 @@
       "Bash(npm ls *)",
       "Bash(NODE_EXTRA_CA_CERTS=\"\" NODE_TLS_REJECT_UNAUTHORIZED=0 npm install lucide-react)",
       "Bash(npm config *)",
-      "Bash(npx next *)"
+      "Bash(npx next *)",
+      "Bash(npx vercel *)",
+      "Bash(NODE_OPTIONS=\"--use-system-ca\" npx vercel *)"
     ]
   }
 }
