@@ -15,7 +15,7 @@ interface KmRegistro {
   data: string;
   km_inicial: number;
   km_final: number;
-  km_total: number;
+  km_rodados: number;
   destino: string | null;
   cliente_visitado: string | null;
   motivo: string | null;
@@ -234,7 +234,7 @@ export default function KmTab({ analistaId, isGestor }: Props) {
     } catch { /* ignore */ }
   };
 
-  const totalKm = registros.reduce((sum, r) => sum + r.km_total, 0);
+  const totalKm = registros.reduce((sum, r) => sum + r.km_rodados, 0);
   const totalReembolso = registros.reduce((sum, r) => sum + (r.valor_total ?? 0), 0);
 
   if (loading) return <p style={{ color: "#9CA3AF", fontSize: 14 }}>Carregando dados de quilometragem...</p>;
@@ -415,7 +415,7 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                   </td>
                   <td style={{ padding: "10px 12px", fontSize: 13, color: "#374151", textAlign: "right" }}>{r.km_inicial.toLocaleString("pt-BR")}</td>
                   <td style={{ padding: "10px 12px", fontSize: 13, color: "#374151", textAlign: "right" }}>{r.km_final.toLocaleString("pt-BR")}</td>
-                  <td style={{ padding: "10px 12px", fontSize: 13, color: "#111827", fontWeight: 700, textAlign: "right" }}>{r.km_total.toLocaleString("pt-BR")}</td>
+                  <td style={{ padding: "10px 12px", fontSize: 13, color: "#111827", fontWeight: 700, textAlign: "right" }}>{r.km_rodados.toLocaleString("pt-BR")}</td>
                   <td style={{ padding: "10px 12px", fontSize: 13, color: "#374151", textAlign: "right" }}>{r.valor_por_km != null ? formatCurrency(r.valor_por_km) : "—"}</td>
                   <td style={{ padding: "10px 12px", fontSize: 13, color: "#111827", fontWeight: 700, textAlign: "right" }}>{r.valor_total != null ? formatCurrency(r.valor_total) : "—"}</td>
                   <td style={{ padding: "10px 12px", textAlign: "center" }}>

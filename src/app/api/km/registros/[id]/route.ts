@@ -25,16 +25,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (body.valor_por_km !== undefined) updatePayload.valor_por_km = body.valor_por_km ? Number(body.valor_por_km) : null;
 
   if (updatePayload.km_inicial !== undefined || updatePayload.km_final !== undefined) {
-    const svc = createServiceClient();
-    const { data: existing } = await svc.from("km_registros").select("km_inicial, km_final").eq("id", id).single();
+    const svcCheck = createServiceClient();
+    const { data: existing } = await svcCheck.from("km_registros").select("km_inicial, km_final").eq("id", id).single();
     const kmInicial = (updatePayload.km_inicial as number) ?? existing?.km_inicial ?? 0;
     const kmFinal = (updatePayload.km_final as number) ?? existing?.km_final ?? 0;
     if (kmFinal < kmInicial) {
       return NextResponse.json({ error: "km_final deve ser maior ou igual a km_inicial." }, { status: 400 });
-    }
-    updatePayload.km_total = kmFinal - kmInicial;
-    if (updatePayload.valor_por_km !== undefined) {
-      updatePayload.valor_total = updatePayload.valor_por_km ? (updatePayload.km_total as number) * (updatePayload.valor_por_km as number) : null;
     }
   }
 
