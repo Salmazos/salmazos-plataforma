@@ -150,7 +150,7 @@ export default function KmTab({ analistaId, isGestor }: Props) {
     setLoading(true);
     try {
       const [cfgRes, regRes] = await Promise.all([
-        fetch(`/api/km/config?analista_id=${analistaId}`),
+        fetch("/api/km/config?global=true"),
         fetch(`/api/km/registros?analista_id=${analistaId}${from ? `&from=${from}` : ""}${to ? `&to=${to}` : ""}`),
       ]);
       const cfgJson = await cfgRes.json();
@@ -179,7 +179,7 @@ export default function KmTab({ analistaId, isGestor }: Props) {
       const res = await fetch("/api/km/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ analista_id: analistaId, tipo_servico: tipo, valor_por_km: parseFloat(valor) }),
+        body: JSON.stringify({ analista_id: analistaId, tipo_servico: tipo, valor_por_km: parseFloat(valor), is_global: true }),
       });
       if (res.ok) { setToast("Configuração salva!"); loadData(); }
     } catch { /* ignore */ } finally { setSavingConfig(false); }
@@ -372,9 +372,12 @@ export default function KmTab({ analistaId, isGestor }: Props) {
 
       {/* ── Config Section ── */}
       <div style={{ marginBottom: 28 }}>
-        <p style={{ fontSize: 13, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
           Valor por KM
         </p>
+        {!isGestor && (
+          <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 12px" }}>Valores definidos pela diretoria</p>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, maxWidth: 600 }}>
           {TIPOS_DESLOCAMENTO.map((tipo) => (
             <div key={tipo.id}>
