@@ -39,10 +39,10 @@ const CORES_TIPO: Record<string, { bg: string; color: string }> = {
 };
 
 const STATUS_VAGA: Record<string, { label: string; bg: string; color: string }> = {
-  aberta:    { label: "Aberta",    bg: "#dcfce7", color: "#15803d" },
+  aberta:    { label: "Aberta",    bg: "#dcfce7", color: "#22c55e" },
   fechada:   { label: "Fechada",   bg: "#f3f4f6", color: "#6b7280" },
-  pausada:   { label: "Pausada",   bg: "#fef9c3", color: "#a16207" },
-  cancelada: { label: "Cancelada", bg: "#fee2e2", color: "#dc2626" },
+  pausada:   { label: "Pausada",   bg: "#fef9c3", color: "#f59e0b" },
+  cancelada: { label: "Cancelada", bg: "#fee2e2", color: "#ef4444" },
 };
 
 const ETAPAS_VAGA = [
@@ -65,6 +65,8 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
   const [candidatosVaga, setCandidatosVaga] = useState<CandidatoVaga[]>(inicialCv);
   const [modalEditar, setModalEditar]     = useState(false);
   const [modalAdicionar, setModalAdicionar] = useState(false);
+  const [modalEncerrar, setModalEncerrar] = useState(false);
+  const [modalAtivar, setModalAtivar]     = useState(false);
   const [encerrando, setEncerrando]       = useState(false);
   const [vinculando, setVinculando]       = useState(false);
   const [vinculandoSalvando, setVinculandoSalvando] = useState(false);
@@ -167,19 +169,34 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
   const tipoInfo   = TIPOS_SERVICO.find((t) => t.id === vaga.tipo_servico);
   const coresTipo  = vaga.tipo_servico ? CORES_TIPO[vaga.tipo_servico] : null;
 
-  const handleEncerrar = async () => {
-    if (!confirm("Encerrar esta vaga?")) return;
+  const handleEncerrarConfirm = async (status: "fechada" | "cancelada") => {
     setEncerrando(true);
     const res = await fetch(`/api/vagas/${vaga.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "fechada" }),
+      body: JSON.stringify({ status }),
     });
     if (res.ok) {
       const json = await res.json();
       setVaga(json.data);
     }
     setEncerrando(false);
+    setModalEncerrar(false);
+  };
+
+  const handleAtivarConfirm = async () => {
+    setEncerrando(true);
+    const res = await fetch(`/api/vagas/${vaga.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "aberta" }),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      setVaga(json.data);
+    }
+    setEncerrando(false);
+    setModalAtivar(false);
   };
 
   const abrirVincular = async () => {
@@ -291,13 +308,20 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
             >
               Editar
             </button>
-            {vaga.status !== "fechada" && vaga.status !== "cancelada" && (
+            {vaga.status !== "fechada" && vaga.status !== "cancelada" ? (
               <button
-                onClick={handleEncerrar}
-                disabled={encerrando}
-                className="text-sm px-3 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                onClick={() => setModalEncerrar(true)}
+                className="text-sm px-3 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
               >
-                {encerrando ? "Encerrando..." : "Encerrar vaga"}
+                Encerrar vaga
+              </button>
+            ) : (
+              <button
+                onClick={() => setModalAtivar(true)}
+                className="text-sm px-3 py-2 rounded-lg font-semibold transition-colors"
+                style={{ backgroundColor: "#dcfce7", color: "#15803d" }}
+              >
+                Ativar vaga
               </button>
             )}
           </div>
@@ -565,6 +589,145 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
           setTimeout(refreshCandidatos, 4000);
         }}
       />
+
+      {/* Modal encerrar vaga */}
+      {modalEncerrar && (
+        <div
+          style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: "16px" }}
+          onClick={() => !encerrando && setModalEncerrar(false)}
+        >
+          <div
+            style={{ backgroundColor: "#fff", borderRadius: "16px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", width: "100%", maxWidth: "480px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ padding: "24px" }}>
+              <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", marginBottom: "20px" }}>
+                <div>
+                  <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#111827" }}>Encerrar vaga</h2>
+                  <p style={{ fontSize: "14px", color: "#6b7280", marginTop: "4px" }}>Selecione o motivo do encerramento:</p>
+                </div>
+                <button
+                  onClick={() => setModalEncerrar(false)}
+                  disabled={encerrando}
+                  style={{ color: "#9ca3af", cursor: "pointer", background: "none", border: "none", padding: "4px" }}
+                >
+                  <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                {/* Cancelada */}
+                <button
+                  onClick={() => handleEncerrarConfirm("cancelada")}
+                  disabled={encerrando}
+                  style={{
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: "8px",
+                    padding: "20px 16px", borderRadius: "12px", border: "1px solid #fecaca",
+                    backgroundColor: "#fef2f2", cursor: encerrando ? "not-allowed" : "pointer",
+                    opacity: encerrando ? 0.6 : 1, transition: "all 0.15s",
+                  }}
+                >
+                  <svg width="28" height="28" fill="none" stroke="#ef4444" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                  </svg>
+                  <span style={{ fontSize: "14px", fontWeight: 700, color: "#dc2626" }}>Cancelada</span>
+                  <span style={{ fontSize: "12px", color: "#9ca3af", lineHeight: "1.4" }}>
+                    Cliente cancelou a vaga
+                  </span>
+                </button>
+
+                {/* Fechada */}
+                <button
+                  onClick={() => handleEncerrarConfirm("fechada")}
+                  disabled={encerrando}
+                  style={{
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: "8px",
+                    padding: "20px 16px", borderRadius: "12px", border: "1px solid #e5e7eb",
+                    backgroundColor: "#f9fafb", cursor: encerrando ? "not-allowed" : "pointer",
+                    opacity: encerrando ? 0.6 : 1, transition: "all 0.15s",
+                  }}
+                >
+                  <svg width="28" height="28" fill="none" stroke="#6b7280" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span style={{ fontSize: "14px", fontWeight: 700, color: "#374151" }}>Fechada</span>
+                  <span style={{ fontSize: "12px", color: "#9ca3af", lineHeight: "1.4" }}>
+                    Vaga encerrada com sucesso pela Salmazos
+                  </span>
+                </button>
+              </div>
+
+              <div style={{ textAlign: "center", marginTop: "16px" }}>
+                <button
+                  onClick={() => setModalEncerrar(false)}
+                  disabled={encerrando}
+                  style={{ fontSize: "13px", color: "#6b7280", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: "2px" }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal ativar vaga */}
+      {modalAtivar && (
+        <div
+          style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: "16px" }}
+          onClick={() => !encerrando && setModalAtivar(false)}
+        >
+          <div
+            style={{ backgroundColor: "#fff", borderRadius: "16px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", width: "100%", maxWidth: "400px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ padding: "24px" }}>
+              <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", marginBottom: "16px" }}>
+                <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#111827" }}>Reativar vaga</h2>
+                <button
+                  onClick={() => setModalAtivar(false)}
+                  disabled={encerrando}
+                  style={{ color: "#9ca3af", cursor: "pointer", background: "none", border: "none", padding: "4px" }}
+                >
+                  <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <p style={{ fontSize: "14px", color: "#6b7280", marginBottom: "20px", lineHeight: "1.5" }}>
+                Reativar esta vaga? Ela voltará para o status Aberta.
+              </p>
+              <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                <button
+                  onClick={() => setModalAtivar(false)}
+                  disabled={encerrando}
+                  style={{
+                    fontSize: "14px", padding: "8px 16px", borderRadius: "8px",
+                    border: "1px solid #e5e7eb", backgroundColor: "#fff", color: "#374151",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleAtivarConfirm}
+                  disabled={encerrando}
+                  style={{
+                    fontSize: "14px", fontWeight: 600, padding: "8px 16px", borderRadius: "8px",
+                    border: "none", backgroundColor: "#22c55e", color: "#fff",
+                    cursor: encerrando ? "not-allowed" : "pointer",
+                    opacity: encerrando ? 0.6 : 1,
+                  }}
+                >
+                  {encerrando ? "Ativando..." : "Ativar vaga"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
