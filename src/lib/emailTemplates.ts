@@ -5,7 +5,8 @@ export type EmailTemplateName =
   | "reprovado"
   | "solicitar_documentos"
   | "vaga_aprovada_cliente"
-  | "candidato_entrevista_cliente";
+  | "candidato_entrevista_cliente"
+  | "nova_vaga_criada";
 
 interface TemplateData {
   nome: string;
@@ -15,6 +16,15 @@ interface TemplateData {
   numPosicoes?: number;
   cidade?: string;
   empresa?: string;
+  tipoServicoLabel?: string;
+  estado?: string;
+  responsavel?: string;
+  salario?: string;
+  horario?: string;
+  requisitos?: string;
+  beneficios?: string;
+  observacoes?: string;
+  vagaUrl?: string;
 }
 
 export interface EmailTemplate {
@@ -31,6 +41,7 @@ export const TEMPLATE_OPTIONS: { value: EmailTemplateName; label: string }[] = [
   { value: "solicitar_documentos", label: "Solicitar Documentos" },
   { value: "vaga_aprovada_cliente", label: "Vaga Aprovada (para Cliente)" },
   { value: "candidato_entrevista_cliente", label: "Candidato Agendado para Entrevista (para Cliente)" },
+  { value: "nova_vaga_criada", label: "Nova Vaga Cadastrada (notificação equipe)" },
 ];
 
 function layout(subtitle: string, body: string): string {
@@ -61,7 +72,7 @@ function layout(subtitle: string, body: string): string {
 
 export function getEmailTemplate(
   name: EmailTemplateName,
-  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa }: TemplateData
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl }: TemplateData
 ): EmailTemplate {
   switch (name) {
     case "entrevista_salmazos":
@@ -271,5 +282,56 @@ export function getEmailTemplate(
           </p>`
         ),
       };
+
+    case "nova_vaga_criada": {
+      const local = [cidade, estado].filter(Boolean).join(" / ") || "Não informado";
+      const reqItems = requisitos
+        ? requisitos.split(" * ").map((r) => `<li>${r.trim()}</li>`).join("")
+        : "";
+      const benItems = beneficios
+        ? beneficios.split(" * ").map((b) => `<li>${b.trim()}</li>`).join("")
+        : "";
+
+      return {
+        subject: `🆕 Nova Vaga Cadastrada: ${cargo}`,
+        descricao: `Notificação de nova vaga cadastrada: ${cargo}.`,
+        html: layout(
+          "Nova Vaga Disponível",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Uma nova vaga foi cadastrada na plataforma!</p>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Detalhes da vaga:</p>
+            <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              <li><strong>Cargo:</strong> ${cargo}</li>
+              <li><strong>Tipo:</strong> ${tipoServicoLabel ?? "—"}</li>
+              <li><strong>Local:</strong> ${local}</li>
+              <li><strong>Posições:</strong> ${numPosicoes ?? 1}</li>
+              <li><strong>Salário:</strong> ${salario ?? "Não informado"}</li>
+              <li><strong>Responsável:</strong> ${responsavel ?? "—"}</li>
+            </ul>
+          </div>
+          ${horario ? `<div style="margin:0 0 16px;">
+            <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 6px;">Horário:</p>
+            <p style="font-size:14px;color:#374151;margin:0;">${horario}</p>
+          </div>` : ""}
+          ${reqItems ? `<div style="margin:0 0 16px;">
+            <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 6px;">Requisitos:</p>
+            <ul style="margin:0;padding-left:18px;color:#374151;line-height:2;font-size:14px;">${reqItems}</ul>
+          </div>` : ""}
+          ${benItems ? `<div style="margin:0 0 16px;">
+            <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 6px;">Benefícios:</p>
+            <ul style="margin:0;padding-left:18px;color:#374151;line-height:2;font-size:14px;">${benItems}</ul>
+          </div>` : ""}
+          ${observacoes ? `<div style="background:#f9fafb;border-left:4px solid #d1d5db;border-radius:4px;padding:14px 18px;margin:0 0 20px;">
+            <p style="font-size:13px;font-weight:700;color:#6b7280;margin:0 0 4px;">Observações internas:</p>
+            <p style="font-size:14px;color:#374151;margin:0;">${observacoes}</p>
+          </div>` : ""}
+          <div style="text-align:center;margin-top:24px;">
+            <a href="${vagaUrl ?? "#"}" style="display:inline-block;background:#000000;color:#FFD700;font-weight:700;font-size:15px;padding:14px 32px;border-radius:8px;text-decoration:none;">
+              Ver Vaga no Painel
+            </a>
+          </div>`
+        ),
+      };
+    }
   }
 }
