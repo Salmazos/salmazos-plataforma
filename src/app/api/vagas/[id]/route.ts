@@ -43,6 +43,22 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const supabase = createServiceClient();
 
+    if (body.status !== undefined) {
+      const { data: current } = await supabase
+        .from("vagas")
+        .select("status")
+        .eq("id", id)
+        .single();
+      if (current && current.status !== body.status) {
+        if (body.status === "aberta") {
+          campos.data_abertura = new Date().toISOString();
+          campos.data_fechamento = null;
+        } else if (body.status === "fechada" || body.status === "cancelada") {
+          campos.data_fechamento = new Date().toISOString();
+        }
+      }
+    }
+
     if (body.tipo_servico !== undefined) {
       const { data: current } = await supabase
         .from("vagas")

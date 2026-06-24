@@ -51,10 +51,21 @@ interface MetricasCliente {
   inativo: boolean;
 }
 
+interface VagaData {
+  id: string;
+  titulo: string;
+  status: string;
+  data_abertura: string | null;
+  data_fechamento: string | null;
+  cliente_id: string | null;
+  clientes: { nome: string } | { nome: string }[] | null;
+}
+
 interface Props {
   candidatos: CandidatoData[];
   encaminhamentos: EncaminhamentoData[];
   clientes: ClienteData[];
+  vagas: VagaData[];
 }
 
 function calcularMetricasAnalista(
@@ -195,7 +206,7 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-export default function RelatoriosPageClient({ candidatos, encaminhamentos, clientes }: Props) {
+export default function RelatoriosPageClient({ candidatos, encaminhamentos, clientes, vagas }: Props) {
   const hoje = new Date();
   const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
     .toISOString()
@@ -209,6 +220,7 @@ export default function RelatoriosPageClient({ candidatos, encaminhamentos, clie
   const [showMetricas, setShowMetricas] = useState(false);
   const [showClientes, setShowClientes] = useState(false);
   const [showCarteira, setShowCarteira] = useState(false);
+  const [showTempoVagas, setShowTempoVagas] = useState(false);
   const [selectedResponsavel, setSelectedResponsavel] = useState<string | null>(null);
 
   const candidatoMap = useMemo(() => {
@@ -315,6 +327,33 @@ export default function RelatoriosPageClient({ candidatos, encaminhamentos, clie
       }))
       .sort((a, b) => b.clientes.length - a.clientes.length);
   }, [clientes, encaminhamentos]);
+
+  const vagasMetricas = useMemo(() => {
+    const fechadas = vagas.filter(
+      (v) => v.status === "fechada" && v.data_abertura && v.data_fechamento
+    );
+    const comDias = fechadas.map((v) => ({
+      ...v,
+      dias: Math.round(
+        (new Date(v.data_fechamento!).getTime() - new Date(v.data_abertura!).getTime()) / 86400000
+      ),
+    }));
+
+    const now = new Date();
+    const mesAtual = comDias.filter((v) => {
+      const d = new Date(v.data_fechamento!);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+
+    const tempoMedio =
+      comDias.length > 0
+        ? Math.round(comDias.reduce((s, v) => s + v.dias, 0) / comDias.length)
+        : null;
+    const maisRapida = comDias.length > 0 ? comDias.reduce((a, b) => (a.dias < b.dias ? a : b)) : null;
+    const maisLenta = comDias.length > 0 ? comDias.reduce((a, b) => (a.dias > b.dias ? a : b)) : null;
+
+    return { fechadas: comDias, mesAtual, tempoMedio, maisRapida, maisLenta };
+  }, [vagas]);
 
   return (
     <div className="space-y-6">
@@ -690,6 +729,90 @@ export default function RelatoriosPageClient({ candidatos, encaminhamentos, clie
                   </table>
                 </div>
               ))}
+          </div>
+        )}
+      </div>
+
+      {/* Tempo de Preenchimento de Vagas — colapsável */}
+      <div className="card !p-0 overflow-hidden">
+        <button
+          onClick={() => setShowTempoVagas((v) => !v)}
+          className={`w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left ${showTempoVagas ? "border-b border-gray-100" : ""}`}
+        >
+          <span className="section-title !mb-0">{"📊"} Tempo de Preenchimento de Vagas</span>
+          <Chevron open={showTempoVagas} />
+        </button>
+        {showTempoVagas && (
+          <div className="p-4 space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="card text-center">
+                <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Tempo médio geral</p>
+                <p className="text-3xl font-bold text-gray-900">
+                  {vagasMetricas.tempoMedio !== null ? `${vagasMetricas.tempoMedio}d` : "—"}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">{vagasMetricas.fechadas.length} vagas fechadas</p>
+              </div>
+              <div className="card text-center">
+                <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Fechadas no mês</p>
+                <p className="text-3xl font-bold text-[#22c55e]">{vagasMetricas.mesAtual.length}</p>
+                <p className="text-xs text-gray-400 mt-1">mês atual</p>
+              </div>
+              <div className="card text-center">
+                <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Mais rápida</p>
+                <p className="text-xl font-bold text-gray-900">
+                  {vagasMetricas.maisRapida ? `${vagasMetricas.maisRapida.dias}d` : "—"}
+                </p>
+                <p className="text-xs text-gray-400 mt-1 truncate">
+                  {vagasMetricas.maisRapida?.titulo ?? "—"}
+                </p>
+              </div>
+              <div className="card text-center">
+                <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-1">Mais lenta</p>
+                <p className="text-xl font-bold text-gray-900">
+                  {vagasMetricas.maisLenta ? `${vagasMetricas.maisLenta.dias}d` : "—"}
+                </p>
+                <p className="text-xs text-gray-400 mt-1 truncate">
+                  {vagasMetricas.maisLenta?.titulo ?? "—"}
+                </p>
+              </div>
+            </div>
+
+            {vagasMetricas.fechadas.length === 0 ? (
+              <p className="text-center text-gray-400 text-sm py-4">Nenhuma vaga fechada com datas registradas.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="text-left px-4 py-2 font-semibold text-gray-600">Título</th>
+                      <th className="text-left px-4 py-2 font-semibold text-gray-600">Cliente</th>
+                      <th className="text-center px-4 py-2 font-semibold text-gray-600">Abertura</th>
+                      <th className="text-center px-4 py-2 font-semibold text-gray-600">Fechamento</th>
+                      <th className="text-center px-4 py-2 font-semibold text-gray-600">Dias</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {vagasMetricas.fechadas.map((v) => (
+                      <tr key={v.id} className="hover:bg-gray-50/60 transition-colors">
+                        <td className="px-4 py-2 font-medium text-gray-900">{v.titulo}</td>
+                        <td className="px-4 py-2 text-gray-500">
+                          {v.clientes
+                            ? Array.isArray(v.clientes) ? v.clientes[0]?.nome ?? "—" : v.clientes.nome
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-2 text-center text-gray-500">
+                          {new Date(v.data_abertura!).toLocaleDateString("pt-BR")}
+                        </td>
+                        <td className="px-4 py-2 text-center text-gray-500">
+                          {new Date(v.data_fechamento!).toLocaleDateString("pt-BR")}
+                        </td>
+                        <td className="px-4 py-2 text-center font-bold text-gray-900">{v.dias}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>

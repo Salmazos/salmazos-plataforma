@@ -17,13 +17,12 @@ const CORES_TIPO: Record<string, { bg: string; color: string }> = {
 };
 
 const STATUS_VAGA: Record<string, { label: string; bg: string; color: string }> = {
-  aberta:    { label: "Aberta",    bg: "#dcfce7", color: "#15803d" },
+  aberta:    { label: "Aberta",    bg: "#dcfce7", color: "#22c55e" },
   fechada:   { label: "Fechada",   bg: "#f3f4f6", color: "#6b7280" },
-  pausada:   { label: "Pausada",   bg: "#fef9c3", color: "#a16207" },
-  cancelada: { label: "Cancelada", bg: "#fee2e2", color: "#dc2626" },
+  cancelada: { label: "Cancelada", bg: "#fee2e2", color: "#ef4444" },
 };
 
-type FiltroStatus = "todas" | "aberta" | "fechada" | "pausada" | "cancelada";
+type FiltroStatus = "todas" | "aberta" | "fechada" | "cancelada";
 
 interface Props {
   vagas: Vaga[];
@@ -83,17 +82,16 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
 
   const totais = {
     abertas:       vagas.filter((v) => v.status === "aberta").length,
-    pausadas:      vagas.filter((v) => v.status === "pausada").length,
     fechadas:      vagas.filter((v) => v.status === "fechada").length,
+    canceladas:    vagas.filter((v) => v.status === "cancelada").length,
     total_posicoes: vagas.filter((v) => v.status === "aberta").reduce((s, v) => s + (v.num_posicoes ?? 0), 0),
   };
 
   const FILTROS: { value: FiltroStatus; label: string }[] = [
-    { value: "todas",        label: "Todas" },
-    { value: "aberta",       label: "Abertas" },
-    { value: "pausada",      label: "Pausadas" },
-    { value: "fechada",      label: "Fechadas" },
-    { value: "cancelada",    label: "Canceladas" },
+    { value: "todas",     label: "Todas" },
+    { value: "aberta",    label: "Abertas" },
+    { value: "fechada",   label: "Fechadas" },
+    { value: "cancelada", label: "Canceladas" },
   ];
 
   return (
@@ -198,16 +196,16 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
       {/* Métricas */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="card text-center py-4">
-          <p className="text-3xl font-bold text-[#15803d]">{totais.abertas}</p>
+          <p className="text-3xl font-bold text-[#22c55e]">{totais.abertas}</p>
           <p className="text-xs text-gray-500 mt-1">Total abertas</p>
-        </div>
-        <div className="card text-center py-4">
-          <p className="text-3xl font-bold text-[#a16207]">{totais.pausadas}</p>
-          <p className="text-xs text-gray-500 mt-1">Pausadas</p>
         </div>
         <div className="card text-center py-4">
           <p className="text-3xl font-bold text-gray-400">{totais.fechadas}</p>
           <p className="text-xs text-gray-500 mt-1">Fechadas</p>
+        </div>
+        <div className="card text-center py-4">
+          <p className="text-3xl font-bold text-[#ef4444]">{totais.canceladas}</p>
+          <p className="text-xs text-gray-500 mt-1">Canceladas</p>
         </div>
         <div className="card text-center py-4">
           <p className="text-3xl font-bold text-[#FFD700]">{totais.total_posicoes}</p>
@@ -294,12 +292,26 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
   );
 }
 
+function formatDateBR(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+function diffDias(a: string, b: string): number {
+  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
+}
+
 function VagaCard({ vaga }: { vaga: Vaga }) {
   const tipoInfo = TIPOS_SERVICO.find((t) => t.id === vaga.tipo_servico);
   const coresTipo = vaga.tipo_servico ? CORES_TIPO[vaga.tipo_servico] : null;
   const statusInfo = STATUS_VAGA[vaga.status] ?? STATUS_VAGA.aberta;
   const nomeCliente = vaga.clientes?.nome ?? "Banco de Talentos";
   const isBancoTalentos = !vaga.clientes;
+
+  const statusLabel = vaga.status === "cancelada" ? "Cancelada" : "Fechada";
+  const dias = vaga.data_abertura && vaga.data_fechamento
+    ? diffDias(vaga.data_abertura, vaga.data_fechamento)
+    : null;
 
   return (
     <div className="card flex flex-wrap items-center gap-4">
@@ -368,6 +380,15 @@ function VagaCard({ vaga }: { vaga: Vaga }) {
             </span>
           )}
         </div>
+        {vaga.data_abertura && (
+          <div className="text-xs text-gray-400 mt-1">
+            {vaga.status === "aberta" ? (
+              <>{"📅"} Aberta em: {formatDateBR(vaga.data_abertura)}</>
+            ) : (
+              <>{"📅"} Aberta em: {formatDateBR(vaga.data_abertura)} → {statusLabel} em: {formatDateBR(vaga.data_fechamento)}{dias !== null && ` (${dias} dias)`}</>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Posições */}

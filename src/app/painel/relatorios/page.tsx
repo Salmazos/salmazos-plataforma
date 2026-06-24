@@ -12,7 +12,7 @@ export default async function RelatoriosPage() {
 
   const supabase = createServiceClient();
 
-  const [{ data: candidatos }, { data: encaminhamentos }, { data: clientes }] =
+  const [{ data: candidatos }, { data: encaminhamentos }, { data: clientes }, { data: vagas }] =
     await Promise.all([
       supabase
         .from("candidatos")
@@ -24,6 +24,10 @@ export default async function RelatoriosPage() {
         .from("clientes")
         .select("id, nome, responsavel_comercial, ativo")
         .order("nome"),
+      supabase
+        .from("vagas")
+        .select("id, titulo, status, data_abertura, data_fechamento, cliente_id, clientes(nome)")
+        .order("data_fechamento", { ascending: false, nullsFirst: false }),
     ]);
 
   return (
@@ -31,6 +35,7 @@ export default async function RelatoriosPage() {
       candidatos={candidatos ?? []}
       encaminhamentos={encaminhamentos ?? []}
       clientes={clientes ?? []}
+      vagas={vagas ?? []}
     />
   );
 }

@@ -41,7 +41,6 @@ const CORES_TIPO: Record<string, { bg: string; color: string }> = {
 const STATUS_VAGA: Record<string, { label: string; bg: string; color: string }> = {
   aberta:    { label: "Aberta",    bg: "#dcfce7", color: "#22c55e" },
   fechada:   { label: "Fechada",   bg: "#f3f4f6", color: "#6b7280" },
-  pausada:   { label: "Pausada",   bg: "#fef9c3", color: "#f59e0b" },
   cancelada: { label: "Cancelada", bg: "#fee2e2", color: "#ef4444" },
 };
 
@@ -449,6 +448,23 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
               )}
               {vaga.horario && (
                 <DetalheItem label="Horário" fullWidth>{vaga.horario}</DetalheItem>
+              )}
+              {vaga.data_abertura && (
+                <DetalheItem label="Data de Abertura">
+                  {new Date(vaga.data_abertura).toLocaleDateString("pt-BR")}
+                </DetalheItem>
+              )}
+              {(vaga.status === "fechada" || vaga.status === "cancelada") && vaga.data_fechamento && (
+                <>
+                  <DetalheItem label="Data de Fechamento">
+                    {new Date(vaga.data_fechamento).toLocaleDateString("pt-BR")}
+                  </DetalheItem>
+                  {vaga.data_abertura && (
+                    <DetalheItem label="Tempo aberta">
+                      {Math.round((new Date(vaga.data_fechamento).getTime() - new Date(vaga.data_abertura).getTime()) / 86400000)} dias
+                    </DetalheItem>
+                  )}
+                </>
               )}
             </dl>
           </div>

@@ -125,7 +125,7 @@ export default async function DashboardPage() {
     supabase
       .from("candidatos")
       .select("id, etapa_kanban, status, responsavel, origem, created_at, updated_at"),
-    supabase.from("vagas").select("id, status, created_at"),
+    supabase.from("vagas").select("id, status, titulo, data_abertura, data_fechamento, created_at"),
     supabase.from("encaminhamentos").select("id, cliente_id, status, created_at"),
     supabase.from("candidatos_vagas").select("vaga_id, candidato_id, etapa, created_at"),
     supabase.from("clientes").select("id, nome"),
@@ -165,7 +165,6 @@ export default async function DashboardPage() {
   // ── 2. Vagas por status ──────────────────────────────────────────────────
   const vagaStatusRows = [
     { label: "Abertas", key: "aberta", color: "#10B981" },
-    { label: "Pausadas", key: "pausada", color: "#3B82F6" },
     { label: "Fechadas", key: "fechada", color: "#6B7280" },
     { label: "Canceladas", key: "cancelada", color: "#EF4444" },
   ];
@@ -175,7 +174,23 @@ export default async function DashboardPage() {
     value: v.filter((x) => x.status === row.key).length,
   }));
   const maxVaga = Math.max(1, ...vagaData.map((x) => x.value));
-  const vagasAbertas = v.filter((x) => x.status === "aberta" || x.status === "pausada").length;
+  const vagasAbertas = v.filter((x) => x.status === "aberta").length;
+
+  // ── 2b. Tempo médio de fechamento (date-based) ─────────────────────────
+  const vagasFechadas = v.filter(
+    (x) => x.status === "fechada" && x.data_abertura && x.data_fechamento
+  );
+  const temposFechamento = vagasFechadas.map((x) =>
+    Math.round(
+      (new Date(x.data_fechamento as string).getTime() -
+        new Date(x.data_abertura as string).getTime()) /
+        86400000
+    )
+  );
+  const tempoMedioFechamento =
+    temposFechamento.length > 0
+      ? Math.round(temposFechamento.reduce((a, b) => a + b, 0) / temposFechamento.length)
+      : null;
 
   // ── 3. Taxa de aprovação por cliente ────────────────────────────────────
   const clienteStatsMap = new Map<string, { aprovados: number; total: number }>();
@@ -326,6 +341,12 @@ export default async function DashboardPage() {
           value={tempoMedio !== null ? `${tempoMedio}d` : "—"}
           sub={`${vagaFirstApproval.size} vagas com histórico`}
           accent="#8B5CF6"
+        />
+        <KpiCard
+          title="Tempo Médio Fechamento"
+          value={tempoMedioFechamento !== null ? `${tempoMedioFechamento}d` : "—"}
+          sub={`Baseado em ${vagasFechadas.length} vagas fechadas`}
+          accent="#F59E0B"
         />
       </div>
 

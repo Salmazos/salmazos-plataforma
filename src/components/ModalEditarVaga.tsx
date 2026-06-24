@@ -392,7 +392,6 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
               <select value={form.status} onChange={(e) => set("status", e.target.value)} className="input-field">
                 <option value="aberta">Aberta</option>
                 <option value="fechada">Fechada</option>
-                <option value="pausada">Pausada</option>
                 <option value="cancelada">Cancelada</option>
               </select>
             </div>

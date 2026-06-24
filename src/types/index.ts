@@ -110,7 +110,7 @@ export interface Cliente {
   created_at: string;
 }
 
-export type StatusVaga = "aberta" | "fechada" | "pausada" | "cancelada";
+export type StatusVaga = "aberta" | "fechada" | "cancelada";
 
 export interface Vaga {
   id: string;
@@ -135,6 +135,8 @@ export interface Vaga {
   tipo_servico_alterado_em?: string | null;
   tipo_servico_alterado_por?: string | null;
   tipo_servico_motivo?: string | null;
+  data_abertura?: string | null;
+  data_fechamento?: string | null;
   created_at: string;
   cliente_nome_temp?: string | null;
   clientes?: { id: string; nome: string } | null;
