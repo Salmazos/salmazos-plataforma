@@ -125,7 +125,7 @@ export default async function DashboardPage() {
     supabase
       .from("candidatos")
       .select("id, etapa_kanban, status, responsavel, origem, created_at, updated_at"),
-    supabase.from("vagas").select("id, status, titulo, data_abertura, data_fechamento, created_at"),
+    supabase.from("vagas").select("id, status, titulo, data_abertura, data_fechamento, created_at, tipo_servico, responsavel"),
     supabase.from("encaminhamentos").select("id, cliente_id, status, created_at"),
     supabase.from("candidatos_vagas").select("vaga_id, candidato_id, etapa, created_at"),
     supabase.from("clientes").select("id, nome"),
@@ -191,6 +191,32 @@ export default async function DashboardPage() {
     temposFechamento.length > 0
       ? Math.round(temposFechamento.reduce((a, b) => a + b, 0) / temposFechamento.length)
       : null;
+
+  // ── 2c. Vagas Críticas (aging) ───────────────────────────────────────────
+  const today = Date.now();
+  const vagasAging = v
+    .filter((x) => x.status === "aberta" && x.data_abertura)
+    .map((x) => {
+      const diasAberta = Math.round(
+        (today - new Date(x.data_abertura as string).getTime()) / 86400000
+      );
+      const tipo = x.tipo_servico as string;
+      let level: "critica" | "atencao" | null = null;
+      if (tipo !== "avaliacao_psicologica") {
+        const [atencao, critica] =
+          tipo === "recrutamento_selecao" ? [15, 30] : [7, 15];
+        if (diasAberta >= critica) level = "critica";
+        else if (diasAberta >= atencao) level = "atencao";
+      }
+      return { id: x.id as string, titulo: x.titulo as string, diasAberta, level, responsavel: (x.responsavel as string) || "—" };
+    })
+    .filter((x) => x.level !== null)
+    .sort((a, b) => b.diasAberta - a.diasAberta);
+
+  const countCriticas = vagasAging.filter((x) => x.level === "critica").length;
+  const countAtencao = vagasAging.filter((x) => x.level === "atencao").length;
+  const hasAging = vagasAging.length > 0;
+  const hasCritica = countCriticas > 0;
 
   // ── 3. Taxa de aprovação por cliente ────────────────────────────────────
   const clienteStatsMap = new Map<string, { aprovados: number; total: number }>();
@@ -308,6 +334,75 @@ export default async function DashboardPage() {
           Indicadores em tempo real da operação
         </p>
       </div>
+
+      {/* Vagas Críticas alert */}
+      {hasAging && (
+        <>
+          <style>{`@keyframes pulse-border{0%,100%{border-color:#ef4444}50%{border-color:#fca5a5}}`}</style>
+          <div
+            className="card"
+            style={{
+              marginBottom: 20,
+              border: hasCritica ? "2px solid #ef4444" : "2px solid #f59e0b",
+              animation: hasCritica ? "pulse-border 2s infinite" : undefined,
+            }}
+          >
+            <p style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: "0 0 12px" }}>
+              {"⚠️"} Vagas que precisam de atenção
+            </p>
+            <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
+              {countCriticas > 0 && (
+                <span style={{ background: "#ef4444", color: "#fff", padding: "4px 12px", borderRadius: 8, fontSize: 14, fontWeight: 700 }}>
+                  {"🚨"} {countCriticas} Crítica{countCriticas !== 1 ? "s" : ""}
+                </span>
+              )}
+              {countAtencao > 0 && (
+                <span style={{ background: "#f59e0b", color: "#000", padding: "4px 12px", borderRadius: 8, fontSize: 14, fontWeight: 700 }}>
+                  {"⚠️"} {countAtencao} Em atenção
+                </span>
+              )}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {vagasAging.slice(0, 5).map((vaga) => (
+                <div
+                  key={vaga.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    background: vaga.level === "critica" ? "#fef2f2" : "#fffbeb",
+                  }}
+                >
+                  <div>
+                    <span style={{ fontWeight: 600, fontSize: 14, color: "#111827" }}>
+                      {vaga.titulo}
+                    </span>
+                    <span style={{ fontSize: 12, color: "#6b7280", marginLeft: 8 }}>
+                      {vaga.diasAberta}d aberta · {vaga.responsavel}
+                    </span>
+                  </div>
+                  <a
+                    href={`/painel/vagas/${vaga.id}`}
+                    style={{ fontSize: 13, fontWeight: 600, color: vaga.level === "critica" ? "#ef4444" : "#f59e0b", textDecoration: "none" }}
+                  >
+                    Ver vaga →
+                  </a>
+                </div>
+              ))}
+            </div>
+            {vagasAging.length > 5 && (
+              <a
+                href="/painel/vagas"
+                style={{ display: "inline-block", marginTop: 12, fontSize: 13, fontWeight: 600, color: "#ef4444", textDecoration: "none" }}
+              >
+                Ver todas →
+              </a>
+            )}
+          </div>
+        </>
+      )}
 
       {/* KPI row */}
       <div

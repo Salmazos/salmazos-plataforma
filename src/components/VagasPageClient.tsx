@@ -301,6 +301,15 @@ function diffDias(a: string, b: string): number {
   return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
 }
 
+function getAgingLevel(tipoServico: string, diasAberta: number): "critica" | "atencao" | null {
+  if (tipoServico === "avaliacao_psicologica") return null;
+  const [atencao, critica] =
+    tipoServico === "recrutamento_selecao" ? [15, 30] : [7, 15];
+  if (diasAberta >= critica) return "critica";
+  if (diasAberta >= atencao) return "atencao";
+  return null;
+}
+
 function VagaCard({ vaga }: { vaga: Vaga }) {
   const tipoInfo = TIPOS_SERVICO.find((t) => t.id === vaga.tipo_servico);
   const coresTipo = vaga.tipo_servico ? CORES_TIPO[vaga.tipo_servico] : null;
@@ -389,6 +398,25 @@ function VagaCard({ vaga }: { vaga: Vaga }) {
             )}
           </div>
         )}
+        {vaga.status === "aberta" && vaga.data_abertura && (() => {
+          const diasAberta = Math.round((Date.now() - new Date(vaga.data_abertura!).getTime()) / 86400000);
+          const aging = getAgingLevel(vaga.tipo_servico, diasAberta);
+          if (!aging) return null;
+          return (
+            <span style={{
+              display: "inline-block",
+              marginTop: 4,
+              padding: "2px 10px",
+              borderRadius: 6,
+              fontSize: 11,
+              fontWeight: 700,
+              backgroundColor: aging === "critica" ? "#ef4444" : "#f59e0b",
+              color: aging === "critica" ? "#ffffff" : "#000000",
+            }}>
+              {aging === "critica" ? "🚨 Crítica" : "⚠️ Atenção"} — {diasAberta}d aberta
+            </span>
+          );
+        })()}
       </div>
 
       {/* Posições */}
