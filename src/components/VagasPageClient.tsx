@@ -36,6 +36,7 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
   const [modalSolicitacoes, setModalSolicitacoes] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>("todas");
   const [busca, setBusca] = useState("");
+  const [ordenacao, setOrdenacao] = useState("recentes");
   const [importando, setImportando] = useState(false);
   const [msgImport, setMsgImport] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -68,17 +69,32 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
     }
   };
 
-  const filtradas = vagas.filter((v) => {
-    const matchStatus =
-      filtroStatus === "todas" || v.status === filtroStatus;
-    const buscaLower = busca.toLowerCase();
-    const matchBusca =
-      !busca ||
-      v.titulo.toLowerCase().includes(buscaLower) ||
-      (v.clientes?.nome ?? "Banco de Talentos").toLowerCase().includes(buscaLower) ||
-      (v.cidade ?? "").toLowerCase().includes(buscaLower);
-    return matchStatus && matchBusca;
-  });
+  const filtradas = vagas
+    .filter((v) => {
+      const matchStatus =
+        filtroStatus === "todas" || v.status === filtroStatus;
+      const buscaLower = busca.toLowerCase();
+      const matchBusca =
+        !busca ||
+        v.titulo.toLowerCase().includes(buscaLower) ||
+        (v.clientes?.nome ?? "Banco de Talentos").toLowerCase().includes(buscaLower) ||
+        (v.cidade ?? "").toLowerCase().includes(buscaLower);
+      return matchStatus && matchBusca;
+    })
+    .sort((a, b) => {
+      switch (ordenacao) {
+        case "antigas":
+          return (a.data_abertura ?? "").localeCompare(b.data_abertura ?? "");
+        case "az":
+          return a.titulo.localeCompare(b.titulo, "pt-BR");
+        case "za":
+          return b.titulo.localeCompare(a.titulo, "pt-BR");
+        case "posicoes":
+          return (b.num_posicoes ?? 0) - (a.num_posicoes ?? 0);
+        default:
+          return (b.data_abertura ?? "").localeCompare(a.data_abertura ?? "");
+      }
+    });
 
   const totais = {
     abertas:       vagas.filter((v) => v.status === "aberta").length,
@@ -248,6 +264,21 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
               {f.label}
             </button>
           ))}
+        </div>
+
+        <div className="flex items-center gap-2 ml-auto">
+          <span className="text-sm text-gray-400">Ordenar:</span>
+          <select
+            value={ordenacao}
+            onChange={(e) => setOrdenacao(e.target.value)}
+            style={{ padding: "8px 12px", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 14, background: "#fff", color: "#374151", cursor: "pointer", outline: "none" }}
+          >
+            <option value="recentes">Mais recentes</option>
+            <option value="antigas">Mais antigas</option>
+            <option value="az">A–Z</option>
+            <option value="za">Z–A</option>
+            <option value="posicoes">Mais posições</option>
+          </select>
         </div>
       </div>
 
