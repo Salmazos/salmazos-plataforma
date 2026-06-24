@@ -193,6 +193,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
     if (res.ok) {
       const json = await res.json();
       setVaga(json.data);
+      fetch(`/api/vagas/${vaga.id}/notificar-ativacao`, { method: "POST" }).catch(() => {});
     }
     setEncerrando(false);
     setModalAtivar(false);
