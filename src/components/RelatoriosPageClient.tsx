@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ANALISTAS } from "@/lib/constants";
+import { ANALISTAS, TIPOS_SERVICO } from "@/lib/constants";
 import type { EtapaKanban, StatusEncaminhamento } from "@/types";
 
 interface CandidatoData {
@@ -58,6 +58,8 @@ interface VagaData {
   data_abertura: string | null;
   data_fechamento: string | null;
   cliente_id: string | null;
+  tipo_servico: string | null;
+  responsavel: string | null;
   clientes: { nome: string } | { nome: string }[] | null;
 }
 
@@ -221,6 +223,7 @@ export default function RelatoriosPageClient({ candidatos, encaminhamentos, clie
   const [showClientes, setShowClientes] = useState(false);
   const [showCarteira, setShowCarteira] = useState(false);
   const [showTempoVagas, setShowTempoVagas] = useState(false);
+  const [showAgingVagas, setShowAgingVagas] = useState(false);
   const [selectedResponsavel, setSelectedResponsavel] = useState<string | null>(null);
 
   const candidatoMap = useMemo(() => {
@@ -353,6 +356,36 @@ export default function RelatoriosPageClient({ candidatos, encaminhamentos, clie
     const maisLenta = comDias.length > 0 ? comDias.reduce((a, b) => (a.dias > b.dias ? a : b)) : null;
 
     return { fechadas: comDias, mesAtual, tempoMedio, maisRapida, maisLenta };
+  }, [vagas]);
+
+  const vagasAging = useMemo(() => {
+    const now = Date.now();
+    return vagas
+      .filter((v) => v.status === "aberta" && v.data_abertura)
+      .map((v) => {
+        const diasAberta = Math.round(
+          (now - new Date(v.data_abertura!).getTime()) / 86400000
+        );
+        const tipo = v.tipo_servico ?? "";
+        let level: "critica" | "atencao" | "normal";
+        if (tipo === "avaliacao_psicologica") {
+          level = "normal";
+        } else {
+          const [atencao, critica] =
+            tipo === "recrutamento_selecao" ? [15, 30] : [7, 15];
+          level =
+            diasAberta >= critica ? "critica" : diasAberta >= atencao ? "atencao" : "normal";
+        }
+        const clienteNome = v.clientes
+          ? Array.isArray(v.clientes)
+            ? v.clientes[0]?.nome ?? "—"
+            : v.clientes.nome
+          : "—";
+        const tipoLabel =
+          TIPOS_SERVICO.find((t) => t.id === tipo)?.abrev ?? tipo;
+        return { ...v, diasAberta, level, clienteNome, tipoLabel };
+      })
+      .sort((a, b) => b.diasAberta - a.diasAberta);
   }, [vagas]);
 
   return (
@@ -730,6 +763,74 @@ export default function RelatoriosPageClient({ candidatos, encaminhamentos, clie
                 </div>
               ))}
           </div>
+        )}
+      </div>
+
+      {/* Aging de Vagas Abertas — colapsável */}
+      <div className="card !p-0 overflow-hidden">
+        <button
+          onClick={() => setShowAgingVagas((v) => !v)}
+          className={`w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left ${showAgingVagas ? "border-b border-gray-100" : ""}`}
+        >
+          <div>
+            <span className="section-title !mb-0">{"⏳"} Aging de Vagas Abertas</span>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {vagasAging.length} vaga{vagasAging.length !== 1 ? "s" : ""} aberta{vagasAging.length !== 1 ? "s" : ""}
+              {" · "}
+              {vagasAging.filter((v) => v.level === "critica").length} crítica{vagasAging.filter((v) => v.level === "critica").length !== 1 ? "s" : ""}
+              {" · "}
+              {vagasAging.filter((v) => v.level === "atencao").length} em atenção
+            </p>
+          </div>
+          <Chevron open={showAgingVagas} />
+        </button>
+        {showAgingVagas && (
+          <>
+            {vagasAging.length === 0 ? (
+              <div className="text-center py-10 text-gray-400 text-sm">
+                Nenhuma vaga aberta no momento.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="text-left px-4 py-2 font-semibold text-gray-600">Título</th>
+                      <th className="text-left px-4 py-2 font-semibold text-gray-600">Tipo</th>
+                      <th className="text-left px-4 py-2 font-semibold text-gray-600">Cliente</th>
+                      <th className="text-left px-4 py-2 font-semibold text-gray-600">Analista</th>
+                      <th className="text-center px-4 py-2 font-semibold text-gray-600">Dias aberta</th>
+                      <th className="text-center px-4 py-2 font-semibold text-gray-600">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {vagasAging.map((v) => (
+                      <tr key={v.id} className="hover:bg-gray-50/60 transition-colors">
+                        <td className="px-4 py-2 font-medium text-gray-900">{v.titulo}</td>
+                        <td className="px-4 py-2 text-gray-500">{v.tipoLabel}</td>
+                        <td className="px-4 py-2 text-gray-500">{v.clienteNome}</td>
+                        <td className="px-4 py-2 text-gray-500">{v.responsavel ?? "—"}</td>
+                        <td className="px-4 py-2 text-center font-bold text-gray-900">{v.diasAberta}d</td>
+                        <td className="px-4 py-2 text-center">
+                          <span style={{
+                            display: "inline-block",
+                            padding: "2px 10px",
+                            borderRadius: 6,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            backgroundColor: v.level === "critica" ? "#ef4444" : v.level === "atencao" ? "#f59e0b" : "#22c55e",
+                            color: v.level === "atencao" ? "#000000" : "#ffffff",
+                          }}>
+                            {v.level === "critica" ? "Crítica" : v.level === "atencao" ? "Atenção" : "Normal"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </div>
 

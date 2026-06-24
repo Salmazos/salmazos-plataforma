@@ -26,7 +26,7 @@ export default async function RelatoriosPage() {
         .order("nome"),
       supabase
         .from("vagas")
-        .select("id, titulo, status, data_abertura, data_fechamento, cliente_id, clientes(nome)")
+        .select("id, titulo, status, data_abertura, data_fechamento, cliente_id, tipo_servico, responsavel, clientes(nome)")
         .order("data_fechamento", { ascending: false, nullsFirst: false }),
     ]);
 
