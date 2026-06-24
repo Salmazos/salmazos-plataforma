@@ -6,24 +6,23 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const params = request.nextUrl.searchParams;
-  const globalOnly = params.get("global") === "true";
-  const analistaId = params.get("analista_id");
-
   const svc = createServiceClient();
+  const analistaId = request.nextUrl.searchParams.get("analista_id");
 
-  // Try global config first
-  const { data: globalCfg } = await svc
+  // Always return global rows first
+  const { data: globalCfg, error: globalErr } = await svc
     .from("km_config")
     .select("*")
     .eq("is_global", true);
+
+  if (globalErr) return NextResponse.json({ error: globalErr.message }, { status: 500 });
 
   if (globalCfg && globalCfg.length > 0) {
     return NextResponse.json({ data: globalCfg });
   }
 
-  // Fallback to per-analyst config (legacy)
-  if (!globalOnly && analistaId) {
+  // Fallback: per-analyst rows (legacy data only)
+  if (analistaId) {
     const { data, error } = await svc
       .from("km_config")
       .select("*")
@@ -50,37 +49,18 @@ export async function POST(request: NextRequest) {
   const svc = createServiceClient();
 
   if (is_global) {
-    // Find existing global row for this tipo_servico
-    const { data: existing } = await svc
-      .from("km_config")
-      .select("id")
-      .eq("is_global", true)
-      .eq("tipo_servico", tipo_servico)
-      .maybeSingle();
-
-    if (existing) {
-      const { data, error } = await svc
-        .from("km_config")
-        .update({ valor_por_km: Number(valor_por_km), updated_at: new Date().toISOString() })
-        .eq("id", existing.id)
-        .select()
-        .single();
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      return NextResponse.json({ data });
-    }
-
-    // Insert new global row
+    // Always UPDATE the existing global row — never insert a duplicate
     const { data, error } = await svc
       .from("km_config")
-      .insert({
-        analista_id: analista_id,
-        tipo_servico,
-        valor_por_km: Number(valor_por_km),
-        is_global: true,
-      })
+      .update({ valor_por_km: Number(valor_por_km), updated_at: new Date().toISOString() })
+      .eq("is_global", true)
+      .eq("tipo_servico", tipo_servico)
       .select()
       .single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ data });
   }
 
