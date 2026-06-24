@@ -100,6 +100,7 @@ export default function ReembolsosPageClient({ analistas }: Props) {
 
   const [registros, setRegistros] = useState<KmRegistro[]>([]);
   const [loading, setLoading] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [rowVisitas, setRowVisitas] = useState<Record<string, KmVisita[]>>({});
@@ -157,6 +158,37 @@ export default function ReembolsosPageClient({ analistas }: Props) {
   // ── Analyst name lookup ──
   const analistaMap = new Map(analistas.map((a) => [a.id, a]));
 
+  const handleGerarPdf = async () => {
+    setGeneratingPdf(true);
+    try {
+      const selectedAnalista = selectedId ? analistaMap.get(selectedId) : null;
+      const res = await fetch("/api/km/relatorio-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          analista_id: selectedId ?? undefined,
+          analista_nome: selectedAnalista?.nome_completo ?? undefined,
+          from: from || undefined,
+          to: to || undefined,
+        }),
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const slug = (selectedAnalista?.nome_completo ?? "consolidado").toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 40);
+      const periodo = [from || "inicio", to || "hoje"].join("_");
+      a.download = `reembolsos_${slug}_${periodo}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch { /* ignore */ } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto">
       {/* Header */}
@@ -180,6 +212,20 @@ export default function ReembolsosPageClient({ analistas }: Props) {
             Limpar filtro
           </button>
         )}
+        <div style={{ marginLeft: "auto" }}>
+          <button
+            onClick={handleGerarPdf}
+            disabled={generatingPdf}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "10px 18px", background: generatingPdf ? "#a38600" : "#FFD700", color: "#000",
+              border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
+              cursor: generatingPdf ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+            }}
+          >
+            {generatingPdf ? "Gerando PDF..." : "Gerar PDF"}
+          </button>
+        </div>
       </div>
 
       {/* Analyst selector */}
