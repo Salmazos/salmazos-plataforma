@@ -165,7 +165,7 @@ export default async function DashboardPage() {
   // ── 2. Vagas por status ──────────────────────────────────────────────────
   const vagaStatusRows = [
     { label: "Abertas", key: "aberta", color: "#10B981" },
-    { label: "Em Andamento", key: "em_andamento", color: "#3B82F6" },
+    { label: "Pausadas", key: "pausada", color: "#3B82F6" },
     { label: "Fechadas", key: "fechada", color: "#6B7280" },
     { label: "Canceladas", key: "cancelada", color: "#EF4444" },
   ];
@@ -175,7 +175,7 @@ export default async function DashboardPage() {
     value: v.filter((x) => x.status === row.key).length,
   }));
   const maxVaga = Math.max(1, ...vagaData.map((x) => x.value));
-  const vagasAbertas = v.filter((x) => x.status === "aberta" || x.status === "em_andamento").length;
+  const vagasAbertas = v.filter((x) => x.status === "aberta" || x.status === "pausada").length;
 
   // ── 3. Taxa de aprovação por cliente ────────────────────────────────────
   const clienteStatsMap = new Map<string, { aprovados: number; total: number }>();

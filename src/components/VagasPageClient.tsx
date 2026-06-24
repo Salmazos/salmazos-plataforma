@@ -17,13 +17,13 @@ const CORES_TIPO: Record<string, { bg: string; color: string }> = {
 };
 
 const STATUS_VAGA: Record<string, { label: string; bg: string; color: string }> = {
-  aberta:       { label: "Aberta",       bg: "#dcfce7", color: "#15803d" },
-  em_andamento: { label: "Em andamento", bg: "#fef9c3", color: "#a16207" },
-  fechada:      { label: "Fechada",      bg: "#f3f4f6", color: "#6b7280" },
-  cancelada:    { label: "Cancelada",    bg: "#fee2e2", color: "#dc2626" },
+  aberta:    { label: "Aberta",    bg: "#dcfce7", color: "#15803d" },
+  fechada:   { label: "Fechada",   bg: "#f3f4f6", color: "#6b7280" },
+  pausada:   { label: "Pausada",   bg: "#fef9c3", color: "#a16207" },
+  cancelada: { label: "Cancelada", bg: "#fee2e2", color: "#dc2626" },
 };
 
-type FiltroStatus = "todas" | "aberta" | "em_andamento" | "fechada" | "cancelada";
+type FiltroStatus = "todas" | "aberta" | "fechada" | "pausada" | "cancelada";
 
 interface Props {
   vagas: Vaga[];
@@ -83,15 +83,15 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
 
   const totais = {
     abertas:       vagas.filter((v) => v.status === "aberta").length,
-    em_andamento:  vagas.filter((v) => v.status === "em_andamento").length,
-    encerradas:    vagas.filter((v) => v.status === "fechada").length,
+    pausadas:      vagas.filter((v) => v.status === "pausada").length,
+    fechadas:      vagas.filter((v) => v.status === "fechada").length,
     total_posicoes: vagas.filter((v) => v.status === "aberta").reduce((s, v) => s + (v.num_posicoes ?? 0), 0),
   };
 
   const FILTROS: { value: FiltroStatus; label: string }[] = [
     { value: "todas",        label: "Todas" },
     { value: "aberta",       label: "Abertas" },
-    { value: "em_andamento", label: "Em andamento" },
+    { value: "pausada",      label: "Pausadas" },
     { value: "fechada",      label: "Fechadas" },
     { value: "cancelada",    label: "Canceladas" },
   ];
@@ -202,12 +202,12 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
           <p className="text-xs text-gray-500 mt-1">Total abertas</p>
         </div>
         <div className="card text-center py-4">
-          <p className="text-3xl font-bold text-[#a16207]">{totais.em_andamento}</p>
-          <p className="text-xs text-gray-500 mt-1">Em andamento</p>
+          <p className="text-3xl font-bold text-[#a16207]">{totais.pausadas}</p>
+          <p className="text-xs text-gray-500 mt-1">Pausadas</p>
         </div>
         <div className="card text-center py-4">
-          <p className="text-3xl font-bold text-gray-400">{totais.encerradas}</p>
-          <p className="text-xs text-gray-500 mt-1">Encerradas</p>
+          <p className="text-3xl font-bold text-gray-400">{totais.fechadas}</p>
+          <p className="text-xs text-gray-500 mt-1">Fechadas</p>
         </div>
         <div className="card text-center py-4">
           <p className="text-3xl font-bold text-[#FFD700]">{totais.total_posicoes}</p>

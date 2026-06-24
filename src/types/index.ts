@@ -110,7 +110,7 @@ export interface Cliente {
   created_at: string;
 }
 
-export type StatusVaga = "aberta" | "em_andamento" | "fechada" | "cancelada";
+export type StatusVaga = "aberta" | "fechada" | "pausada" | "cancelada";
 
 export interface Vaga {
   id: string;

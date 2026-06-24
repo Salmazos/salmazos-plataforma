@@ -13,9 +13,9 @@ type VagaRow = Record<string, unknown>;
 function mapStatus(s: string): string {
   const v = String(s || "").toLowerCase().trim();
   if (v === "aberto" || v === "aberta") return "aberta";
-  if (v === "fechado" || v === "fechada" || v === "encerrado" || v === "encerrada") return "encerrada";
+  if (v === "fechado" || v === "fechada" || v === "encerrado" || v === "encerrada") return "fechada";
   if (v === "cancelado" || v === "cancelada") return "cancelada";
-  if (v === "em andamento") return "em_andamento";
+  if (v === "pausado" || v === "pausada" || v === "em andamento") return "pausada";
   return "aberta";
 }
 

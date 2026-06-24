@@ -39,11 +39,10 @@ const CORES_TIPO: Record<string, { bg: string; color: string }> = {
 };
 
 const STATUS_VAGA: Record<string, { label: string; bg: string; color: string }> = {
-  aberta:       { label: "Aberta",       bg: "#dcfce7", color: "#15803d" },
-  em_andamento: { label: "Em andamento", bg: "#fef9c3", color: "#a16207" },
-  fechada:      { label: "Fechada",      bg: "#f3f4f6", color: "#6b7280" },
-  encerrada:    { label: "Encerrada",    bg: "#f3f4f6", color: "#6b7280" },
-  cancelada:    { label: "Cancelada",    bg: "#fee2e2", color: "#dc2626" },
+  aberta:    { label: "Aberta",    bg: "#dcfce7", color: "#15803d" },
+  fechada:   { label: "Fechada",   bg: "#f3f4f6", color: "#6b7280" },
+  pausada:   { label: "Pausada",   bg: "#fef9c3", color: "#a16207" },
+  cancelada: { label: "Cancelada", bg: "#fee2e2", color: "#dc2626" },
 };
 
 const ETAPAS_VAGA = [
