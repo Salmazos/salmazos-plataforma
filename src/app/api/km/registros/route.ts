@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await request.json();
-  const { analista_id, data: dataRegistro, km_inicial, km_final, destino, cliente_visitado, motivo, resultado, tipo_servico, valor_por_km } = body;
+  const { analista_id, data: dataRegistro, km_inicial, km_final, destino, cliente_visitado, motivo, resultado, tipo_servico, valor_por_km, outros_custos } = body;
 
   if (!analista_id || !dataRegistro || km_inicial === undefined || km_final === undefined) {
     return NextResponse.json({ error: "Campos obrigatórios: analista_id, data, km_inicial, km_final" }, { status: 400 });
@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
       resultado: resultado || null,
       tipo_servico: tipo_servico || null,
       valor_por_km: valor_por_km ? Number(valor_por_km) : null,
+      outros_custos: outros_custos ?? null,
     })
     .select()
     .single();

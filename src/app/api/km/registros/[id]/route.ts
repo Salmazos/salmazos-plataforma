@@ -23,6 +23,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (body.resultado !== undefined) updatePayload.resultado = body.resultado || null;
   if (body.tipo_servico !== undefined) updatePayload.tipo_servico = body.tipo_servico || null;
   if (body.valor_por_km !== undefined) updatePayload.valor_por_km = body.valor_por_km ? Number(body.valor_por_km) : null;
+  if (body.outros_custos !== undefined) updatePayload.outros_custos = body.outros_custos;
 
   if (updatePayload.km_inicial !== undefined || updatePayload.km_final !== undefined) {
     const svcCheck = createServiceClient();
