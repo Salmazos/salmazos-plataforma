@@ -178,6 +178,11 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
     if (res.ok) {
       const json = await res.json();
       setVaga(json.data);
+      fetch(`/api/vagas/${vaga.id}/notificar-encerramento`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      }).catch(() => {});
     }
     setEncerrando(false);
     setModalEncerrar(false);

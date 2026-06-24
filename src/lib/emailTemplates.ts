@@ -6,7 +6,8 @@ export type EmailTemplateName =
   | "solicitar_documentos"
   | "vaga_aprovada_cliente"
   | "candidato_entrevista_cliente"
-  | "nova_vaga_criada";
+  | "nova_vaga_criada"
+  | "vaga_encerrada";
 
 interface TemplateData {
   nome: string;
@@ -25,6 +26,7 @@ interface TemplateData {
   beneficios?: string;
   observacoes?: string;
   vagaUrl?: string;
+  statusEncerramento?: string;
 }
 
 export interface EmailTemplate {
@@ -42,6 +44,7 @@ export const TEMPLATE_OPTIONS: { value: EmailTemplateName; label: string }[] = [
   { value: "vaga_aprovada_cliente", label: "Vaga Aprovada (para Cliente)" },
   { value: "candidato_entrevista_cliente", label: "Candidato Agendado para Entrevista (para Cliente)" },
   { value: "nova_vaga_criada", label: "Nova Vaga Cadastrada (notificação equipe)" },
+  { value: "vaga_encerrada", label: "Vaga Encerrada (notificação equipe)" },
 ];
 
 function layout(subtitle: string, body: string): string {
@@ -72,7 +75,7 @@ function layout(subtitle: string, body: string): string {
 
 export function getEmailTemplate(
   name: EmailTemplateName,
-  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl }: TemplateData
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento }: TemplateData
 ): EmailTemplate {
   switch (name) {
     case "entrevista_salmazos":
@@ -325,6 +328,45 @@ export function getEmailTemplate(
             <p style="font-size:13px;font-weight:700;color:#6b7280;margin:0 0 4px;">Observações internas:</p>
             <p style="font-size:14px;color:#374151;margin:0;">${observacoes}</p>
           </div>` : ""}
+          <div style="text-align:center;margin-top:24px;">
+            <a href="${vagaUrl ?? "#"}" style="display:inline-block;background:#000000;color:#FFD700;font-weight:700;font-size:15px;padding:14px 32px;border-radius:8px;text-decoration:none;">
+              Ver Vaga no Painel
+            </a>
+          </div>`
+        ),
+      };
+    }
+
+    case "vaga_encerrada": {
+      const isCancelada = statusEncerramento === "cancelada";
+      const subjectText = isCancelada ? `❌ Vaga Cancelada: ${cargo}` : `🔴 Vaga Fechada: ${cargo}`;
+      const headerText = isCancelada ? "Vaga Cancelada pelo Cliente" : "Vaga Encerrada com Sucesso";
+      const badgeBg = isCancelada ? "#ef4444" : "#6b7280";
+      const badgeLabel = isCancelada ? "Cancelada" : "Fechada";
+      const localEnc = [cidade, estado].filter(Boolean).join(" / ") || "Não informado";
+
+      return {
+        subject: subjectText,
+        descricao: `Notificação de vaga ${badgeLabel.toLowerCase()}: ${cargo}.`,
+        html: layout(
+          headerText,
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">
+            A seguinte vaga foi encerrada na plataforma:
+          </p>
+          <div style="text-align:center;margin:0 0 20px;">
+            <span style="display:inline-block;background:${badgeBg};color:#ffffff;font-weight:700;font-size:14px;padding:6px 18px;border-radius:20px;">
+              ${badgeLabel}
+            </span>
+          </div>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Detalhes da vaga:</p>
+            <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              <li><strong>Cargo:</strong> ${cargo}</li>
+              <li><strong>Tipo:</strong> ${tipoServicoLabel ?? "—"}</li>
+              <li><strong>Local:</strong> ${localEnc}</li>
+              <li><strong>Responsável:</strong> ${responsavel ?? "—"}</li>
+            </ul>
+          </div>
           <div style="text-align:center;margin-top:24px;">
             <a href="${vagaUrl ?? "#"}" style="display:inline-block;background:#000000;color:#FFD700;font-weight:700;font-size:15px;padding:14px 32px;border-radius:8px;text-decoration:none;">
               Ver Vaga no Painel
