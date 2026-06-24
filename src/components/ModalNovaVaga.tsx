@@ -118,6 +118,16 @@ function maskHora(raw: string): string {
   return `${digits.slice(0, 2)}h${digits.slice(2)}`;
 }
 
+function formatSalarioBR(value: string): string {
+  if (!value.trim()) return value;
+  const cleaned = value.replace(/\s/g, "").replace(/^R\$/, "").trim();
+  if (/[a-zA-ZÀ-ú]/.test(cleaned)) return value;
+  const digits = cleaned.replace(/\./g, "").replace(",", ".");
+  const num = parseFloat(digits);
+  if (isNaN(num)) return value;
+  return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props) {
@@ -160,7 +170,7 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props)
 
         cidade:       vaga.cidade ?? "",
         estado:       vaga.estado ?? "",
-        salario:      vaga.salario ?? "",
+        salario:      formatSalarioBR(vaga.salario ?? ""),
         observacoes:  vaga.observacoes ?? "",
         responsavel:  vaga.responsavel,
         fee_rs_percentual: vaga.fee_rs_percentual != null ? String(vaga.fee_rs_percentual) : "",
@@ -397,6 +407,7 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props)
             <input
               value={form.salario}
               onChange={(e) => set("salario", e.target.value)}
+              onBlur={() => set("salario", formatSalarioBR(form.salario))}
               placeholder="Ex: R$ 2.500,00 ou À combinar ou Enviar Pretensão Salarial"
               className="input-field"
             />
