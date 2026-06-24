@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
@@ -22,43 +22,42 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Status inválido" }, { status: 400 });
   }
 
-  const supabase = createServiceClient();
+  after(async () => {
+    console.log(`[notificar-encerramento] Enviando emails para vaga ${id}, status=${status}`);
+    const supabase = createServiceClient();
 
-  const { data: vaga, error } = await supabase
-    .from("vagas")
-    .select("id, titulo, tipo_servico, cidade, estado, responsavel")
-    .eq("id", id)
-    .single();
+    const { data: vaga } = await supabase
+      .from("vagas")
+      .select("id, titulo, tipo_servico, cidade, estado, responsavel")
+      .eq("id", id)
+      .single();
 
-  if (error || !vaga) {
-    return NextResponse.json({ error: "Vaga não encontrada" }, { status: 404 });
-  }
+    if (!vaga) { console.error("[notificar-encerramento] Vaga não encontrada:", id); return; }
 
-  const { data: analistas } = await supabase
-    .from("analistas_perfil")
-    .select("id, email, nome_completo")
-    .eq("ativo", true);
+    const { data: analistas } = await supabase
+      .from("analistas_perfil")
+      .select("email, nome_completo")
+      .eq("ativo", true);
 
-  if (!analistas?.length) {
-    return NextResponse.json({ ok: true, sent: 0 });
-  }
+    if (!analistas?.length) { console.log("[notificar-encerramento] Nenhum analista ativo"); return; }
 
-  const vagaUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas/${id}`;
-  const template = getEmailTemplate("vaga_encerrada", {
-    nome: "",
-    cargo: vaga.titulo,
-    tipoServicoLabel: TIPO_LABELS[vaga.tipo_servico] ?? vaga.tipo_servico,
-    cidade: vaga.cidade ?? undefined,
-    estado: vaga.estado ?? undefined,
-    responsavel: vaga.responsavel,
-    statusEncerramento: status,
-    vagaUrl,
-  });
+    const vagaUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas/${id}`;
+    const template = getEmailTemplate("vaga_encerrada", {
+      nome: "",
+      cargo: vaga.titulo,
+      tipoServicoLabel: TIPO_LABELS[vaga.tipo_servico] ?? vaga.tipo_servico,
+      cidade: vaga.cidade ?? undefined,
+      estado: vaga.estado ?? undefined,
+      responsavel: vaga.responsavel,
+      statusEncerramento: status,
+      vagaUrl,
+    });
 
-  Promise.all(
-    analistas
-      .filter((a) => a.email)
-      .map((a) =>
+    const destinatarios = analistas.filter((a) => a.email);
+    console.log(`[notificar-encerramento] Enviando para ${destinatarios.length} analistas`);
+
+    await Promise.all(
+      destinatarios.map((a) =>
         sendEmail({
           to: a.email,
           subject: template.subject,
@@ -67,7 +66,8 @@ export async function POST(request: NextRequest, { params }: Params) {
           vaga_id: id,
         })
       )
-  ).catch((err) => console.error("[notificar-encerramento] Erro ao enviar emails:", err));
+    ).catch((err) => console.error("[notificar-encerramento] Erro:", err));
+  });
 
-  return NextResponse.json({ ok: true, sent: analistas.filter((a) => a.email).length });
+  return NextResponse.json({ ok: true });
 }

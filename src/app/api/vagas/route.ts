@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
@@ -57,50 +57,66 @@ export async function POST(request: NextRequest) {
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-    // Fire-and-forget: notify all active analysts
-    const TIPO_LABELS: Record<string, string> = {
-      recrutamento_selecao: "Recrutamento e Seleção",
-      mao_obra_temporaria: "Mão de Obra Temporária",
-      terceirizacao: "Terceirização de Serviços",
-      avaliacao_psicologica: "Avaliação Psicológica",
-    };
-    const vagaUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas/${data.id}`;
-    const template = getEmailTemplate("nova_vaga_criada", {
-      nome: "",
-      cargo: data.titulo,
-      tipoServicoLabel: TIPO_LABELS[data.tipo_servico] ?? data.tipo_servico,
-      cidade: data.cidade ?? undefined,
-      estado: data.estado ?? undefined,
-      numPosicoes: data.num_posicoes,
-      responsavel: data.responsavel,
-      salario: data.salario ?? undefined,
-      horario: data.horario ?? undefined,
-      requisitos: data.requisitos ?? undefined,
-      beneficios: data.beneficios ?? undefined,
-      observacoes: data.observacoes ?? undefined,
-      vagaUrl,
-    });
+    const vagaId = data.id;
+    const vagaTitulo = data.titulo;
+    const vagaTipo = data.tipo_servico;
+    const vagaCidade = data.cidade;
+    const vagaEstado = data.estado;
+    const vagaNumPosicoes = data.num_posicoes;
+    const vagaResponsavel = data.responsavel;
+    const vagaSalario = data.salario;
+    const vagaHorario = data.horario;
+    const vagaRequisitos = data.requisitos;
+    const vagaBeneficios = data.beneficios;
+    const vagaObservacoes = data.observacoes;
 
-    supabase
-      .from("analistas_perfil")
-      .select("email, nome_completo")
-      .eq("ativo", true)
-      .then(({ data: analistas }) => {
-        if (!analistas?.length) return;
-        Promise.all(
-          analistas
-            .filter((a) => a.email)
-            .map((a) =>
-              sendEmail({
-                to: a.email,
-                subject: template.subject,
-                html: template.html,
-                tipo: "nova_vaga_criada",
-                vaga_id: data.id,
-              })
-            )
-        ).catch((err) => console.error("[POST /api/vagas] Erro ao notificar analistas:", err));
+    after(async () => {
+      console.log(`[POST /api/vagas] Notificando analistas sobre nova vaga ${vagaId}`);
+      const TIPO_LABELS: Record<string, string> = {
+        recrutamento_selecao: "Recrutamento e Seleção",
+        mao_obra_temporaria: "Mão de Obra Temporária",
+        terceirizacao: "Terceirização de Serviços",
+        avaliacao_psicologica: "Avaliação Psicológica",
+      };
+      const svcAfter = createServiceClient();
+      const { data: analistas } = await svcAfter
+        .from("analistas_perfil")
+        .select("email, nome_completo")
+        .eq("ativo", true);
+
+      if (!analistas?.length) return;
+
+      const vagaUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas/${vagaId}`;
+      const template = getEmailTemplate("nova_vaga_criada", {
+        nome: "",
+        cargo: vagaTitulo,
+        tipoServicoLabel: TIPO_LABELS[vagaTipo] ?? vagaTipo,
+        cidade: vagaCidade ?? undefined,
+        estado: vagaEstado ?? undefined,
+        numPosicoes: vagaNumPosicoes,
+        responsavel: vagaResponsavel,
+        salario: vagaSalario ?? undefined,
+        horario: vagaHorario ?? undefined,
+        requisitos: vagaRequisitos ?? undefined,
+        beneficios: vagaBeneficios ?? undefined,
+        observacoes: vagaObservacoes ?? undefined,
+        vagaUrl,
       });
+
+      const destinatarios = analistas.filter((a) => a.email);
+      console.log(`[POST /api/vagas] Enviando para ${destinatarios.length} analistas`);
+      await Promise.all(
+        destinatarios.map((a) =>
+          sendEmail({
+            to: a.email,
+            subject: template.subject,
+            html: template.html,
+            tipo: "nova_vaga_criada",
+            vaga_id: vagaId,
+          })
+        )
+      ).catch((err) => console.error("[POST /api/vagas] Erro ao notificar analistas:", err));
+    });
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {
