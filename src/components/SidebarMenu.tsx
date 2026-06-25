@@ -50,9 +50,10 @@ interface MenuItemDef {
   href: string;
   icon: React.ElementType;
   requireFullAccess?: boolean;
+  requireSuperuser?: boolean;
   requireSupervisor?: boolean;
   separator?: boolean;
-  submenu?: { label: string; href: string; icon: React.ElementType }[];
+  submenu?: { label: string; href: string; icon: React.ElementType; requireSuperuser?: boolean }[];
 }
 
 const menuItems: MenuItemDef[] = [
@@ -75,6 +76,7 @@ const menuItems: MenuItemDef[] = [
     submenu: [
       { label: "Config. SLA", href: "/painel/sla-config", icon: Clock },
       { label: "Log de E-mails", href: "/painel/email-logs", icon: Mail },
+      { label: "Usuários", href: "/painel/usuarios", icon: Users, requireSuperuser: true },
     ],
   },
 ];
@@ -83,6 +85,7 @@ export default function SidebarMenu({
   userName,
   userCargo,
   userAvatar,
+  role,
   isFullAccess,
   isSupervisorOrAbove,
   userEmail,
@@ -128,10 +131,18 @@ export default function SidebarMenu({
     return pathname.startsWith(href);
   }
 
+  const isSuperuser = role === "superuser";
+
   const filteredItems = menuItems.filter((item) => {
     if (item.requireFullAccess && !isFullAccess) return false;
+    if (item.requireSuperuser && !isSuperuser) return false;
     if (item.requireSupervisor && !isSupervisorOrAbove) return false;
     return true;
+  }).map((item) => {
+    if (item.submenu) {
+      return { ...item, submenu: item.submenu.filter((sub) => !sub.requireSuperuser || isSuperuser) };
+    }
+    return item;
   });
 
   const sidebarWidth = collapsed ? 64 : 240;
