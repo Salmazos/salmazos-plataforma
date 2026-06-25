@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
+import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, vagaCreateSchema } from "@/lib/schemas";
 
 export async function GET(request: NextRequest) {
@@ -55,6 +56,13 @@ export async function POST(request: NextRequest) {
       .select("*, clientes(id, nome)")
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    registrarAuditoria({
+      acao: "vaga_criada",
+      entidade: "vagas",
+      entidade_id: data.id,
+      detalhes: { titulo: data.titulo, tipo_servico: data.tipo_servico, status: data.status },
+    });
 
     const vagaId = data.id;
     const vagaTitulo = data.titulo;

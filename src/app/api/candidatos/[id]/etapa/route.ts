@@ -4,6 +4,7 @@ import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import type { EmailTemplateName } from "@/lib/emailTemplates";
 import { registrarHistorico } from "@/lib/registrarHistorico";
+import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, candidatoEtapaSchema } from "@/lib/schemas";
 
 const ETAPA_LABEL: Record<string, string> = {
@@ -50,6 +51,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const isRemoval = ETAPAS_REMOVER.includes(etapa_kanban);
   const isBloqueado = etapa_kanban === "bloqueado";
+
+  const { data: candidatoAnterior } = await svc
+    .from("candidatos")
+    .select("etapa_kanban")
+    .eq("id", id)
+    .single();
+  const etapaAnterior = candidatoAnterior?.etapa_kanban ?? null;
 
   // Update candidato
   const updatePayload: Record<string, unknown> = {
@@ -130,6 +138,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     descricao: `Movido para ${ETAPA_LABEL[etapa_kanban] ?? etapa_kanban}${comentario ? ` — ${comentario}` : ""}`,
     metadata: { etapa: etapa_kanban, comentario: comentario || null },
     criado_por: user.email ?? null,
+  });
+
+  registrarAuditoria({
+    usuario_id: user.id,
+    usuario_nome: user.email ?? null,
+    acao: "candidato_etapa_alterada",
+    entidade: "candidatos",
+    entidade_id: id,
+    detalhes: { etapa_anterior: etapaAnterior, etapa_nova: dbEtapa },
   });
 
   return NextResponse.json({ data });

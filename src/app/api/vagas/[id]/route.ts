@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, vagaUpdateSchema } from "@/lib/schemas";
 
 interface Params {
@@ -49,6 +50,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const supabase = createServiceClient();
 
+    let statusAlterado = false;
+    let statusAnterior: string | null = null;
+
     if (body.status !== undefined) {
       const { data: current } = await supabase
         .from("vagas")
@@ -56,6 +60,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         .eq("id", id)
         .single();
       if (current && current.status !== body.status) {
+        statusAlterado = true;
+        statusAnterior = current.status as string;
         if (body.status === "aberta") {
           campos.data_abertura = new Date().toISOString();
           campos.data_fechamento = null;
@@ -110,6 +116,16 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+    if (statusAlterado) {
+      registrarAuditoria({
+        acao: "vaga_atualizada",
+        entidade: "vagas",
+        entidade_id: id,
+        detalhes: { status_anterior: statusAnterior, status_novo: body.status as string },
+      });
+    }
+
     return NextResponse.json({ data });
   } catch (err) {
     console.error("[PATCH /api/vagas/[id]]", err);

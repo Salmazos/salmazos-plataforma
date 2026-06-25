@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
+import { registrarAuditoria } from "@/lib/audit";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -100,6 +101,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         metadata: { cv_id: id, vaga_id: cv.vaga_id, data_inicio, data_fim, tipo_servico: tipoServicoFinal, observacoes },
       });
 
+      registrarAuditoria({
+        acao: "candidato_finalizado",
+        entidade: "candidatos_vagas",
+        entidade_id: id,
+        detalhes: { resultado: "contratado", candidato_id: cv.candidato_id, vaga_id: cv.vaga_id, data_inicio },
+      });
+
       return NextResponse.json({ resultado: "contratado", vaga_encerrada: vagaEncerrada });
     }
 
@@ -144,6 +152,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       tipo: "reprovado_final",
       descricao: `Processo encerrado para ${vagaTitulo}. Motivo: ${motivo_reprovacao}. Responsável: ${responsavel_encerramento}.${observacoes ? ` ${observacoes}` : ""}`,
       metadata: { cv_id: id, vaga_id: cv.vaga_id, motivo_reprovacao, responsavel_encerramento, observacoes },
+    });
+
+    registrarAuditoria({
+      acao: "candidato_finalizado",
+      entidade: "candidatos_vagas",
+      entidade_id: id,
+      detalhes: { resultado: "reprovado_final", candidato_id: cv.candidato_id, vaga_id: cv.vaga_id, motivo_reprovacao },
     });
 
     return NextResponse.json({ resultado: "reprovado_final", vaga_reaberta: vagaReaberta });

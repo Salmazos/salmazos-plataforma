@@ -9,6 +9,7 @@ import { consultarProcessos } from "@/lib/consultaJuridica";
 import mammoth from "mammoth";
 import { calcularDuracaoResumo } from "@/lib/calcularDuracaoResumo";
 import { registrarHistorico } from "@/lib/registrarHistorico";
+import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, candidatoCreateSchema } from "@/lib/schemas";
 
 async function extractAndUpdateCandidato(
@@ -333,6 +334,13 @@ export async function POST(request: NextRequest) {
       descricao: `Candidato cadastrado via ${body.origem || "cadastro_rapido"}`,
       metadata: { origem: body.origem || "cadastro_rapido", cargo: body.cargo_pretendido },
       criado_por: body.origem || null,
+    });
+
+    registrarAuditoria({
+      acao: "candidato_criado",
+      entidade: "candidatos",
+      entidade_id: data.id,
+      detalhes: { nome: data.nome_completo, cargo: data.cargo_pretendido, origem: data.origem },
     });
 
     // Salvar vagas de interesse e vincular candidato às vagas

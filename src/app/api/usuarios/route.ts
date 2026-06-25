@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, usuarioCreateSchema } from "@/lib/schemas";
 
 async function guardSuperuser() {
@@ -26,7 +27,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await guardSuperuser())) {
+  const actor = await guardSuperuser();
+  if (!actor) {
     return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
 
@@ -66,6 +68,15 @@ export async function POST(req: NextRequest) {
     await supabase.auth.admin.deleteUser(authUser.user.id);
     return NextResponse.json({ error: perfilError.message }, { status: 500 });
   }
+
+  registrarAuditoria({
+    usuario_id: actor.id,
+    usuario_nome: actor.email ?? null,
+    acao: "usuario_criado",
+    entidade: "usuarios",
+    entidade_id: authUser.user.id,
+    detalhes: { email, nivel_acesso: nivel_acesso || "analista" },
+  });
 
   return NextResponse.json({ success: true });
 }
