@@ -84,6 +84,7 @@ export default function BancoTalentosPage() {
     resumo_candidato: "",
   });
   const [curriculo, setCurriculo] = useState<File | null>(null);
+  const [lgpdConsentimento, setLgpdConsentimento] = useState(false);
   const [erros, setErros] = useState<Record<string, string>>({});
   const [enviando, setEnviando] = useState(false);
   const [erroGeral, setErroGeral] = useState<string | null>(null);
@@ -123,6 +124,8 @@ export default function BancoTalentosPage() {
       if (!["pdf", "doc", "docx", "jpg", "jpeg", "png"].includes(ext))
         e.curriculo = "Envie PDF, Word ou imagem (JPG, PNG).";
     }
+    if (!lgpdConsentimento)
+      e.lgpd = "É necessário aceitar a Política de Privacidade para continuar.";
     setErros(e);
     return Object.keys(e).length === 0;
   };
@@ -168,6 +171,7 @@ export default function BancoTalentosPage() {
           resumo_candidato: form.resumo_candidato || null,
           curriculo_url,
           origem: "banco_talentos",
+          lgpd_consentimento: lgpdConsentimento,
         }),
       });
 
@@ -422,6 +426,34 @@ export default function BancoTalentosPage() {
                 {erros.curriculo && <p style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>{erros.curriculo}</p>}
               </div>
             </div>
+
+            {/* LGPD Consent */}
+            <div style={{ backgroundColor: "#111", border: `1px solid ${erros.lgpd ? "#ef4444" : "#333"}`, borderRadius: "12px", padding: "16px 20px", marginBottom: "12px" }}>
+              <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={lgpdConsentimento}
+                  onChange={(e) => setLgpdConsentimento(e.target.checked)}
+                  style={{ marginTop: "2px", flexShrink: 0, accentColor: "#FFD700", width: "16px", height: "16px", cursor: "pointer" }}
+                />
+                <span style={{ fontSize: "13px", color: "#d1d5db", lineHeight: 1.6 }}>
+                  Li e aceito a{" "}
+                  <a
+                    href="/politica-de-privacidade"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "#FFD700", textDecoration: "underline", fontWeight: 600 }}
+                  >
+                    Política de Privacidade
+                  </a>
+                  {" "}da Salmazos RH. Autorizo o uso dos meus dados pessoais para fins de recrutamento e seleção, conforme a Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018).
+                  <span style={{ color: "#ef4444", marginLeft: "4px" }}>*</span>
+                </span>
+              </label>
+            </div>
+            {erros.lgpd && (
+              <p style={{ color: "#ef4444", fontSize: "12px", marginBottom: "12px" }}>{erros.lgpd}</p>
+            )}
 
             {erroGeral && (
               <div style={{ backgroundColor: "#2d1a1a", border: "1px solid #7f1d1d", color: "#fca5a5", borderRadius: "8px", padding: "12px 16px", fontSize: "14px", marginBottom: "16px" }}>

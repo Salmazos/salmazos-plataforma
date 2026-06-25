@@ -177,6 +177,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
 
+    if (body.origem !== "cadastro_rapido" && !body.lgpd_consentimento) {
+      return NextResponse.json({ error: "Consentimento LGPD obrigatório" }, { status: 400 });
+    }
+
     const supabase = createServiceClient();
 
     // ── Duplicate detection ────────────────────────────────────────────────────
@@ -319,6 +323,8 @@ export async function POST(request: NextRequest) {
         formacao_academica: body.formacao_academica || null,
         origem: body.origem || "cadastro_rapido",
         etapa_kanban: "triagem",
+        lgpd_consentimento: body.lgpd_consentimento === true,
+        lgpd_data_consentimento: body.lgpd_consentimento === true ? new Date().toISOString() : null,
       })
       .select()
       .single();
