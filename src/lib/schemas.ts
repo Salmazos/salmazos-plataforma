@@ -269,7 +269,7 @@ export const documentoCreateSchema = z.object({
   categoria: z.string().min(1),
   tipo: z.enum(["salmazos", "cliente"]),
   storage_path: z.string().min(1),
-  descricao: z.string().optional(),
+  descricao: z.string().nullable().optional(),
   cliente_id: z.string().uuid().optional().nullable(),
   tamanho_bytes: coerceNumberOptional,
   extensao: z.string().optional(),

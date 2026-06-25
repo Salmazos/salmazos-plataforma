@@ -324,7 +324,7 @@ export default function DocumentosPageClient({
           nome: nomeDocumento,
           descricao: null,
           categoria,
-          tipo: tab,
+          tipo: tab === "clientes" ? "cliente" : "salmazos",
           cliente_id: tab === "clientes" ? clienteSel!.id : null,
           storage_path: storagePath,
           tamanho_bytes: uploadFile.size,
