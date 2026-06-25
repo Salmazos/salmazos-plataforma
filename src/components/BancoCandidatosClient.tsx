@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ORIGEM_LABELS } from "@/lib/constants";
@@ -83,7 +83,7 @@ function triagemStyle(score: number): { bg: string; fg: string } {
 }
 
 function ScoreBadge({ score, label, resumo }: { score: number | null; label: string | null; resumo: string | null }) {
-  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number; yBottom: number } | null>(null);
 
   if (score === null) return <span style={{ color: "#9CA3AF" }}>—</span>;
 
@@ -94,7 +94,7 @@ function ScoreBadge({ score, label, resumo }: { score: number | null; label: str
       style={{ display: "inline-block" }}
       onMouseEnter={(e) => {
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top });
+        setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top, yBottom: rect.bottom });
       }}
       onMouseLeave={() => setTooltipPos(null)}
     >
@@ -118,9 +118,9 @@ function ScoreBadge({ score, label, resumo }: { score: number | null; label: str
         <div
           style={{
             position: "fixed",
-            top: tooltipPos.y - 8,
+            top: tooltipPos.y > 140 ? tooltipPos.y - 8 : tooltipPos.yBottom + 8,
             left: tooltipPos.x,
-            transform: "translate(-50%, -100%)",
+            transform: tooltipPos.y > 140 ? "translate(-50%, -100%)" : "translate(-50%, 0)",
             background: "#1F2937",
             color: "#F9FAFB",
             fontSize: 12,
@@ -156,8 +156,22 @@ function MatchCell({
   savedScore: number | null;
   savedTitulo: string | null;
 }) {
-  const [showTooltip, setShowTooltip] = useState(false);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number; above: boolean } | null>(null);
   const matches = matchMap[candidatoId];
+
+  function handleMouseEnter() {
+    if (!matches || matches.length === 0) return;
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const W = 240;
+    let left = rect.left + rect.width / 2 - W / 2;
+    if (left + W > window.innerWidth - 8) left = window.innerWidth - W - 8;
+    if (left < 8) left = 8;
+    const above = rect.top > 220;
+    setTooltipPos({ top: above ? rect.top - 6 : rect.bottom + 6, left, above });
+  }
 
   const displayScore = matches?.[0]?.score ?? savedScore;
   const displayTitulo = matches?.[0]?.titulo ?? savedTitulo;
@@ -178,9 +192,10 @@ function MatchCell({
 
   return (
     <div
+      ref={triggerRef}
       style={{ position: "relative", display: "inline-block" }}
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => setTooltipPos(null)}
     >
       <div style={{ cursor: "default", textAlign: "center" }}>
         <span
@@ -212,21 +227,21 @@ function MatchCell({
         </div>
       </div>
 
-      {showTooltip && matches && matches.length > 0 && (
+      {tooltipPos && matches && matches.length > 0 && (
         <div
           style={{
-            position: "absolute",
-            bottom: "100%",
-            left: "50%",
-            transform: "translateX(-50%)",
-            marginBottom: 6,
+            position: "fixed",
+            top: tooltipPos.top,
+            left: tooltipPos.left,
+            transform: tooltipPos.above ? "translateY(-100%)" : "none",
             background: "#fff",
             border: "1px solid #E5E7EB",
             borderRadius: 10,
             boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
             padding: "12px 14px",
-            zIndex: 50,
-            minWidth: 230,
+            zIndex: 9999,
+            minWidth: 240,
+            pointerEvents: "none",
           }}
         >
           <div
