@@ -13,6 +13,24 @@ export function parseBody<T>(schema: z.ZodSchema<T>, data: unknown):
   return { success: true, data: result.data };
 }
 
+const coerceNumber = z.preprocess((val) => {
+  if (val === "" || val === null || val === undefined) return undefined;
+  const n = Number(val);
+  return isNaN(n) ? val : n;
+}, z.number());
+
+const coerceNumberOptional = z.preprocess((val) => {
+  if (val === "" || val === null || val === undefined) return undefined;
+  const n = Number(val);
+  return isNaN(n) ? val : n;
+}, z.number().optional());
+
+const coerceNumberNullable = z.preprocess((val) => {
+  if (val === "" || val === null || val === undefined) return null;
+  const n = Number(val);
+  return isNaN(n) ? val : n;
+}, z.number().nullable());
+
 // ── Candidato ────────────────────────────────────────────────────────────────
 
 export const candidatoCreateSchema = z.object({
@@ -31,7 +49,7 @@ export const candidatoCreateSchema = z.object({
   resumo_candidato: z.string().optional().nullable(),
   experiencias_profissionais: z.string().optional().nullable(),
   curriculo_url: z.string().optional().nullable(),
-  idade: z.number().min(14).max(100).optional().nullable(),
+  idade: z.preprocess((v) => (v === "" || v === null || v === undefined ? null : Number(v)), z.number().min(14).max(100).nullable()).optional(),
   formacao_academica: z.string().optional().nullable(),
   origem: z.string().optional(),
   vaga_id: z.string().uuid().optional(),
@@ -49,7 +67,7 @@ export const candidatoUpdateSchema = z.object({
   tempo_experiencia: z.string().optional(),
   turno_disponivel: z.string().optional(),
   pretensao_salarial: z.string().optional().nullable(),
-  idade: z.number().min(14).max(100).optional().nullable(),
+  idade: z.preprocess((v) => (v === "" || v === null || v === undefined ? null : Number(v)), z.number().min(14).max(100).nullable()).optional(),
   formacao_academica: z.string().optional().nullable(),
   resumo_profissional: z.string().optional().nullable(),
   experiencias_profissionais: z.string().optional().nullable(),
@@ -60,7 +78,7 @@ export const candidatoUpdateSchema = z.object({
 export const vagaCreateSchema = z.object({
   titulo: z.string().min(2),
   tipo_servico: z.string().min(1),
-  num_posicoes: z.number().min(1),
+  num_posicoes: coerceNumber.pipe(z.number().min(1)),
   responsavel: z.string().min(2),
   cliente_id: z.string().uuid().optional().nullable(),
   prazo: z.string().optional().nullable(),
@@ -73,7 +91,7 @@ export const vagaCreateSchema = z.object({
   horario: z.string().optional().nullable(),
   habilidades_desejadas: z.array(z.string()).optional(),
   observacoes: z.string().optional().nullable(),
-  fee_rs_percentual: z.number().optional().nullable(),
+  fee_rs_percentual: coerceNumberNullable,
   fee_rs_prazo_cobranca: z.string().optional().nullable(),
 });
 
@@ -210,7 +228,7 @@ export const portalAcessoSchema = z.object({
 
 export const slaConfigUpdateSchema = z.object({
   id: z.string().uuid(),
-  prazo_dias_uteis: z.number().min(1).optional(),
+  prazo_dias_uteis: coerceNumberOptional,
   ativo: z.boolean().optional(),
 });
 
@@ -251,7 +269,7 @@ export const documentoCreateSchema = z.object({
   storage_path: z.string().min(1),
   descricao: z.string().optional(),
   cliente_id: z.string().uuid().optional().nullable(),
-  tamanho_bytes: z.number().optional(),
+  tamanho_bytes: coerceNumberOptional,
   extensao: z.string().optional(),
   uploaded_by: z.string().optional(),
 });
@@ -284,28 +302,28 @@ export const kmVisitaCreateSchema = z.object({
   contato: z.string().optional(),
   motivo: z.string().optional(),
   resultado: z.string().optional(),
-  ordem: z.number().optional(),
+  ordem: coerceNumberOptional,
 });
 
 export const kmRegistroCreateSchema = z.object({
   analista_id: z.string().uuid(),
   data: z.string().min(1),
-  km_inicial: z.number().min(0),
-  km_final: z.number().min(0),
+  km_inicial: coerceNumber.pipe(z.number().min(0)),
+  km_final: coerceNumber.pipe(z.number().min(0)),
   destino: z.string().optional(),
   cliente_visitado: z.string().optional(),
   motivo: z.string().optional(),
   resultado: z.string().optional(),
   tipo_servico: z.string().optional(),
-  valor_por_km: z.number().optional(),
-  outros_custos: z.number().optional(),
+  valor_por_km: coerceNumberOptional,
+  outros_custos: coerceNumberOptional,
 });
 
 export const kmRegistroUpdateSchema = kmRegistroCreateSchema.partial();
 
 export const kmConfigSchema = z.object({
   tipo_servico: z.string().min(1),
-  valor_por_km: z.number().min(0),
+  valor_por_km: coerceNumber.pipe(z.number().min(0)),
   analista_id: z.string().uuid().optional().nullable(),
   is_global: z.boolean().optional(),
 });
@@ -323,7 +341,7 @@ export const portalSolicitarVagaSchema = z.object({
   tipo_servico: z.string().min(1),
   cidade: z.string().min(1),
   estado: z.string().max(2),
-  num_posicoes: z.number().min(1).optional(),
+  num_posicoes: coerceNumberOptional,
   salario: z.string().optional(),
   horario_tipo: z.string().optional(),
   horario_texto: z.string().optional(),

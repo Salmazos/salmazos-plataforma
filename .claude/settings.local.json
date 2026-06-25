@@ -53,7 +53,8 @@
       "Bash(npx vercel *)",
       "Bash(NODE_OPTIONS=\"--use-system-ca\" npx vercel *)",
       "Bash(xargs grep -l \"VagasPageClient\\\\|vagas.*page\\\\|Dashboard\")",
-      "Skill(run)"
+      "Skill(run)",
+      "Bash(npx tsx -e ' *)"
     ]
   }
 }
