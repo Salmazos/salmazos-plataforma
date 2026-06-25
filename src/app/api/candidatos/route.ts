@@ -172,6 +172,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    if (body.honeypot && body.honeypot.trim() !== "") {
+      return NextResponse.json({ success: true }, { status: 200 });
+    }
+
     const parsed = parseBody(candidatoCreateSchema, body);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });

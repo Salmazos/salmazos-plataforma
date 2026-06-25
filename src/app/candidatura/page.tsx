@@ -21,6 +21,7 @@ interface FormData {
   pretensao_salarial: string;
   habilidades: string[];
   resumo_candidato: string;
+  website: string;
 }
 
 const CARD: React.CSSProperties = {
@@ -82,6 +83,7 @@ export default function BancoTalentosPage() {
     pretensao_salarial: "",
     habilidades: [],
     resumo_candidato: "",
+    website: "",
   });
   const [curriculo, setCurriculo] = useState<File | null>(null);
   const [lgpdConsentimento, setLgpdConsentimento] = useState(false);
@@ -172,6 +174,7 @@ export default function BancoTalentosPage() {
           curriculo_url,
           origem: "banco_talentos",
           lgpd_consentimento: lgpdConsentimento,
+          honeypot: form.website,
         }),
       });
 
@@ -246,6 +249,17 @@ export default function BancoTalentosPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} noValidate>
+            {/* Honeypot — hidden from real users, bots fill it */}
+            <div style={{ position: "absolute", left: -9999, opacity: 0, pointerEvents: "none" }} aria-hidden="true">
+              <input
+                type="text"
+                name="website"
+                value={form.website}
+                onChange={(e) => set("website", e.target.value)}
+                tabIndex={-1}
+                autoComplete="off"
+              />
+            </div>
 
             {/* Dados Pessoais */}
             <div style={CARD}>

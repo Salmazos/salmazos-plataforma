@@ -55,6 +55,7 @@ export const candidatoCreateSchema = z.object({
   vaga_id: z.string().uuid().optional(),
   vaga_ids: z.array(z.string().uuid()).optional(),
   lgpd_consentimento: z.boolean().optional(),
+  honeypot: z.string().optional(),
 });
 
 export const candidatoUpdateSchema = z.object({

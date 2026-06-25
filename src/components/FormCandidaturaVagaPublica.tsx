@@ -24,6 +24,7 @@ interface FormData {
   resumo_candidato: string;
   formacao_academica: string;
   idade: string;
+  website: string;
 }
 
 // Shared inline style tokens
@@ -77,6 +78,7 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
     resumo_candidato: "",
     formacao_academica: "",
     idade: "",
+    website: "",
   });
   const [curriculo, setCurriculo] = useState<File | null>(null);
   const [erros, setErros] = useState<Record<string, string>>({});
@@ -185,6 +187,7 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
           formacao_academica: form.formacao_academica || null,
           idade: form.idade ? parseInt(form.idade) : null,
           lgpd_consentimento: lgpdConsentimento,
+          honeypot: form.website,
         }),
       });
 
@@ -323,6 +326,17 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
       </div>
 
     <form onSubmit={handleSubmit} noValidate>
+      {/* Honeypot — hidden from real users, bots fill it */}
+      <div style={{ position: "absolute", left: -9999, opacity: 0, pointerEvents: "none" }} aria-hidden="true">
+        <input
+          type="text"
+          name="website"
+          value={form.website}
+          onChange={(e) => set("website", e.target.value)}
+          tabIndex={-1}
+          autoComplete="off"
+        />
+      </div>
 
       {/* Dados Pessoais */}
       <div style={CARD}>
