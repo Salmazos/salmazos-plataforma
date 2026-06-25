@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
+import { parseBody, vagaCreateSchema } from "@/lib/schemas";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -22,11 +23,9 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const required = ["titulo", "tipo_servico", "num_posicoes", "responsavel"];
-    for (const field of required) {
-      if (!body[field]) {
-        return NextResponse.json({ error: `Campo obrigatório: ${field}` }, { status: 400 });
-      }
+    const parsed = parseBody(vagaCreateSchema, body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
     const supabase = createServiceClient();
     const { data, error } = await supabase

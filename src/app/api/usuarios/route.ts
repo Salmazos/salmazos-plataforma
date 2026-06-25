@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { parseBody, usuarioCreateSchema } from "@/lib/schemas";
 
 async function guardSuperuser() {
   const supabaseAuth = await createClient();
@@ -30,15 +31,13 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { nome_completo, email, cargo, departamento, nivel_acesso, senha } = body;
 
-  if (!nome_completo || !email || !senha) {
-    return NextResponse.json({ error: "Campos obrigatórios faltando" }, { status: 400 });
+  const parsed = parseBody(usuarioCreateSchema, body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
-  if (senha.length < 8) {
-    return NextResponse.json({ error: "Senha deve ter no mínimo 8 caracteres" }, { status: 400 });
-  }
+  const { nome_completo, email, cargo, departamento, nivel_acesso, senha } = parsed.data;
 
   const supabase = createServiceClient();
 

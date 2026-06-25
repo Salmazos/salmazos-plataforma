@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { parseBody, usuarioUpdateSchema } from "@/lib/schemas";
 
 async function guardSuperuser() {
   const supabaseAuth = await createClient();
@@ -16,7 +17,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { id } = await params;
   const body = await req.json();
-  const { nome_completo, cargo, departamento, nivel_acesso, ativo } = body;
+
+  const parsed = parseBody(usuarioUpdateSchema, body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
+  }
+
+  const { nome_completo, cargo, departamento, nivel_acesso, ativo } = parsed.data;
 
   const supabase = createServiceClient();
 

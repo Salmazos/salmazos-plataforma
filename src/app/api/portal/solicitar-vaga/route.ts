@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
+import { parseBody, portalSolicitarVagaSchema } from "@/lib/schemas";
 
 const TIPO_LABEL: Record<string, string> = {
   recrutamento_selecao: "Recrutamento e Seleção",
@@ -57,16 +58,8 @@ export async function POST(request: NextRequest) {
 
     const clienteNome = cliente?.nome ?? "Cliente";
     const body = await request.json();
-
-    if (!body.cargo?.trim()) {
-      return NextResponse.json({ error: "Cargo é obrigatório." }, { status: 400 });
-    }
-    if (!body.tipo_servico) {
-      return NextResponse.json({ error: "Tipo de serviço é obrigatório." }, { status: 400 });
-    }
-    if (!body.cidade?.trim() || !body.estado?.trim()) {
-      return NextResponse.json({ error: "Cidade e estado são obrigatórios." }, { status: 400 });
-    }
+    const parsed = parseBody(portalSolicitarVagaSchema, body);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
     const { data: solicitacao, error } = await service
       .from("solicitacoes_vagas")

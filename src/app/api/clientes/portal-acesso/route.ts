@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createAuthClient } from "@/lib/supabase/server";
+import { parseBody, portalAcessoSchema } from "@/lib/schemas";
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,14 +11,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { cliente_id, email, senha } = await request.json();
-
-    if (!cliente_id || !email || !senha) {
-      return NextResponse.json(
-        { error: "Campos obrigatórios: cliente_id, email, senha." },
-        { status: 400 }
-      );
+    const body = await request.json();
+    const parsed = parseBody(portalAcessoSchema, body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
+    const { cliente_id, email, senha } = parsed.data;
 
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,

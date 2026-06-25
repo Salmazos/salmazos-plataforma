@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
+import { parseBody, encaminhamentoCreateSchema } from "@/lib/schemas";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -29,12 +30,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const required = ["candidato_id", "cliente_id", "data_entrevista"];
-    for (const field of required) {
-      if (!body[field]) {
-        return NextResponse.json({ error: `Campo obrigatório: ${field}` }, { status: 400 });
-      }
-    }
+    const parsed = parseBody(encaminhamentoCreateSchema, body);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
     const supabase = createServiceClient();
 

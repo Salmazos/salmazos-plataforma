@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { parseBody, clienteUpdateSchema } from "@/lib/schemas";
 
 export async function PATCH(
   request: NextRequest,
@@ -8,6 +9,11 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
+
+    const parsed = parseBody(clienteUpdateSchema, body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
 
     const campos: Record<string, unknown> = {};
     if (body.nome !== undefined) campos.nome = body.nome;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { parseBody, kmConfigSchema } from "@/lib/schemas";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -40,11 +41,9 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await request.json();
-  const { analista_id, tipo_servico, valor_por_km, is_global } = body;
-
-  if (!tipo_servico || valor_por_km === undefined) {
-    return NextResponse.json({ error: "Campos obrigatórios: tipo_servico, valor_por_km" }, { status: 400 });
-  }
+  const parsed = parseBody(kmConfigSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const { analista_id, tipo_servico, valor_por_km, is_global } = parsed.data;
 
   const svc = createServiceClient();
 

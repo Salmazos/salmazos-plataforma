@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { parseBody, candidatoVagaCreateSchema } from "@/lib/schemas";
 
 export async function GET(request: NextRequest) {
   const vagaId = request.nextUrl.searchParams.get("vaga_id");
@@ -34,10 +35,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { vaga_id, candidato_id, etapa = null, responsavel = null } = await request.json();
-    if (!vaga_id || !candidato_id) {
-      return NextResponse.json({ error: "vaga_id e candidato_id são obrigatórios." }, { status: 400 });
-    }
+    const body = await request.json();
+    const parsed = parseBody(candidatoVagaCreateSchema, body);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const { vaga_id, candidato_id, etapa = null, responsavel = null } = parsed.data;
     const supabase = createServiceClient();
 
     const { data: existente } = await supabase

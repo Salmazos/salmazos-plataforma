@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { parseBody, meuPerfilUpdateSchema } from "@/lib/schemas";
 
 async function autenticar() {
   const supabase = await createClient();
@@ -39,10 +40,12 @@ export async function PATCH(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await request.json();
+  const parsed = parseBody(meuPerfilUpdateSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const updates: Record<string, unknown> = {};
   for (const campo of CAMPOS_EDITAVEIS) {
-    if (campo in body) updates[campo] = body[campo];
+    if (campo in parsed.data) updates[campo] = (parsed.data as Record<string, unknown>)[campo];
   }
 
   if (Object.keys(updates).length === 0) {

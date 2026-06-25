@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
+import { parseBody, candidatoResponsavelSchema } from "@/lib/schemas";
 
 const ETAPAS_ATIVAS = ["triagem", "entrevista_salmazos", "entrevista_cliente", "aprovado_cliente"];
 
@@ -16,7 +17,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await request.json();
-  const { responsavel } = body;
+  const parsed = parseBody(candidatoResponsavelSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const { responsavel } = parsed.data;
 
   const svc = createServiceClient();
 

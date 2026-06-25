@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { parseBody, documentoCreateSchema } from "@/lib/schemas";
 
 export async function GET(request: NextRequest) {
   try {
@@ -34,25 +35,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const parsed = parseBody(documentoCreateSchema, body);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
-    const required = ["nome", "categoria", "tipo", "storage_path"];
-    for (const field of required) {
-      if (!body[field]) {
-        return NextResponse.json(
-          { error: `Campo obrigatório: ${field}` },
-          { status: 400 }
-        );
-      }
-    }
-
-    if (!["salmazos", "cliente"].includes(body.tipo)) {
-      return NextResponse.json(
-        { error: "Tipo deve ser 'salmazos' ou 'cliente'." },
-        { status: 400 }
-      );
-    }
-
-    if (body.tipo === "cliente" && !body.cliente_id) {
+    if (parsed.data.tipo === "cliente" && !parsed.data.cliente_id) {
       return NextResponse.json(
         { error: "cliente_id é obrigatório para documentos do tipo 'cliente'." },
         { status: 400 }
@@ -63,15 +49,15 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from("documentos")
       .insert({
-        nome: body.nome,
-        descricao: body.descricao ?? null,
-        categoria: body.categoria,
-        tipo: body.tipo,
-        cliente_id: body.cliente_id ?? null,
-        storage_path: body.storage_path,
-        tamanho_bytes: body.tamanho_bytes ?? null,
-        extensao: body.extensao ?? null,
-        uploaded_by: body.uploaded_by ?? null,
+        nome: parsed.data.nome,
+        descricao: parsed.data.descricao ?? null,
+        categoria: parsed.data.categoria,
+        tipo: parsed.data.tipo,
+        cliente_id: parsed.data.cliente_id ?? null,
+        storage_path: parsed.data.storage_path,
+        tamanho_bytes: parsed.data.tamanho_bytes ?? null,
+        extensao: parsed.data.extensao ?? null,
+        uploaded_by: parsed.data.uploaded_by ?? null,
       })
       .select()
       .single();

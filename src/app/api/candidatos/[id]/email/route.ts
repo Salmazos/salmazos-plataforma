@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import type { EmailTemplateName } from "@/lib/emailTemplates";
+import { parseBody, candidatoEmailSchema } from "@/lib/schemas";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -16,19 +17,9 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await request.json();
-  const { template } = body as { template: EmailTemplateName };
-
-  const TEMPLATES_VALIDOS: EmailTemplateName[] = [
-    "entrevista_salmazos",
-    "entrevista_cliente",
-    "aprovado_cliente",
-    "reprovado",
-    "solicitar_documentos",
-  ];
-
-  if (!TEMPLATES_VALIDOS.includes(template)) {
-    return NextResponse.json({ error: "Template inválido." }, { status: 400 });
-  }
+  const parsed = parseBody(candidatoEmailSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const { template } = parsed.data;
 
   const svc = createServiceClient();
   const { data: candidato, error } = await svc

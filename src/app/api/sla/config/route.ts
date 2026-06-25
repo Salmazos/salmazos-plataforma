@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { parseBody, slaConfigUpdateSchema } from "@/lib/schemas";
 
 async function autenticar() {
   const supabase = await createClient();
@@ -29,13 +30,9 @@ export async function PATCH(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { id, prazo_dias_uteis, ativo } = body as {
-    id: string;
-    prazo_dias_uteis: number;
-    ativo: boolean;
-  };
-
-  if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
+  const parsed = parseBody(slaConfigUpdateSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const { id, prazo_dias_uteis, ativo } = parsed.data;
 
   const svc = createServiceClient();
   const { data, error } = await svc

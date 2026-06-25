@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { parseBody, clienteCreateSchema } from "@/lib/schemas";
 
 export async function GET() {
   const supabase = createServiceClient();
@@ -14,11 +15,9 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const required = ["nome", "contato_nome", "contato_telefone", "contato_email", "cidade", "segmento"];
-    for (const field of required) {
-      if (!body[field]) {
-        return NextResponse.json({ error: `Campo obrigatório: ${field}` }, { status: 400 });
-      }
+    const parsed = parseBody(clienteCreateSchema, body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
     const supabase = createServiceClient();
     const { data, error } = await supabase

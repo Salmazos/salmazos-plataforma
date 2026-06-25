@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
+import { parseBody, fromSolicitacaoSchema } from "@/lib/schemas";
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,11 +11,9 @@ export async function POST(request: NextRequest) {
     if (!user) return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
 
     const body = await request.json();
-    const { solicitacao_id } = body;
-
-    if (!solicitacao_id) {
-      return NextResponse.json({ error: "solicitacao_id é obrigatório." }, { status: 400 });
-    }
+    const parsed = parseBody(fromSolicitacaoSchema, body);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const { solicitacao_id } = parsed.data;
 
     const service = createServiceClient();
 

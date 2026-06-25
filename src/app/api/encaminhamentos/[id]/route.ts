@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-
-const STATUS_VALIDOS = ["aguardando", "aprovado", "reprovado", "desistiu"] as const;
+import { parseBody, encaminhamentoUpdateSchema } from "@/lib/schemas";
 
 export async function PATCH(
   request: NextRequest,
@@ -10,14 +9,12 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-
-    if (body.status && !STATUS_VALIDOS.includes(body.status)) {
-      return NextResponse.json({ error: "Status inválido." }, { status: 400 });
-    }
+    const parsed = parseBody(encaminhamentoUpdateSchema, body);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
     const campos: Record<string, unknown> = {};
-    if (body.status !== undefined) campos.status = body.status;
-    if (body.observacoes !== undefined) campos.observacoes = body.observacoes;
+    if (parsed.data.status !== undefined) campos.status = parsed.data.status;
+    if (parsed.data.observacoes !== undefined) campos.observacoes = parsed.data.observacoes;
 
     const supabase = createServiceClient();
     const { data, error } = await supabase

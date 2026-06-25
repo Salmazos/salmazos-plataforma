@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { parseBody, kmRegistroUpdateSchema } from "@/lib/schemas";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -12,18 +13,20 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const { id } = await params;
   const body = await request.json();
+  const parsed = parseBody(kmRegistroUpdateSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const updatePayload: Record<string, unknown> = {};
-  if (body.data !== undefined) updatePayload.data = body.data;
-  if (body.km_inicial !== undefined) updatePayload.km_inicial = Number(body.km_inicial);
-  if (body.km_final !== undefined) updatePayload.km_final = Number(body.km_final);
-  if (body.destino !== undefined) updatePayload.destino = body.destino || null;
-  if (body.cliente_visitado !== undefined) updatePayload.cliente_visitado = body.cliente_visitado || null;
-  if (body.motivo !== undefined) updatePayload.motivo = body.motivo || null;
-  if (body.resultado !== undefined) updatePayload.resultado = body.resultado || null;
-  if (body.tipo_servico !== undefined) updatePayload.tipo_servico = body.tipo_servico || null;
-  if (body.valor_por_km !== undefined) updatePayload.valor_por_km = body.valor_por_km ? Number(body.valor_por_km) : null;
-  if (body.outros_custos !== undefined) updatePayload.outros_custos = body.outros_custos;
+  if (parsed.data.data !== undefined) updatePayload.data = parsed.data.data;
+  if (parsed.data.km_inicial !== undefined) updatePayload.km_inicial = Number(parsed.data.km_inicial);
+  if (parsed.data.km_final !== undefined) updatePayload.km_final = Number(parsed.data.km_final);
+  if (parsed.data.destino !== undefined) updatePayload.destino = parsed.data.destino || null;
+  if (parsed.data.cliente_visitado !== undefined) updatePayload.cliente_visitado = parsed.data.cliente_visitado || null;
+  if (parsed.data.motivo !== undefined) updatePayload.motivo = parsed.data.motivo || null;
+  if (parsed.data.resultado !== undefined) updatePayload.resultado = parsed.data.resultado || null;
+  if (parsed.data.tipo_servico !== undefined) updatePayload.tipo_servico = parsed.data.tipo_servico || null;
+  if (parsed.data.valor_por_km !== undefined) updatePayload.valor_por_km = parsed.data.valor_por_km ? Number(parsed.data.valor_por_km) : null;
+  if (parsed.data.outros_custos !== undefined) updatePayload.outros_custos = parsed.data.outros_custos;
 
   if (updatePayload.km_inicial !== undefined || updatePayload.km_final !== undefined) {
     const svcCheck = createServiceClient();

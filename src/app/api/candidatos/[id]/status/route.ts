@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-
-const ACOES_VALIDAS = ["retornar_banco", "reprovar", "negativar"] as const;
-type Acao = (typeof ACOES_VALIDAS)[number];
+import { parseBody, candidatoStatusSchema } from "@/lib/schemas";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -18,15 +16,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await request.json();
-  const { action, motivo, etapa } = body as {
-    action: Acao;
-    motivo?: string;
-    etapa?: string;
-  };
-
-  if (!ACOES_VALIDAS.includes(action)) {
-    return NextResponse.json({ error: "Ação inválida." }, { status: 400 });
-  }
+  const parsed = parseBody(candidatoStatusSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const { action, motivo, etapa } = parsed.data;
 
   const now = new Date().toISOString();
   let updates: Record<string, unknown> = {

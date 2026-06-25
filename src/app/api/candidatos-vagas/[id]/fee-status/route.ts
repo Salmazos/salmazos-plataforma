@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
+import { parseBody, feeStatusSchema } from "@/lib/schemas";
 
 interface Params {
   params: Promise<{ id: string }>;
 }
 
-const VALID = ["pendente", "cobrado", "recebido"] as const;
 const LABELS: Record<string, string> = {
   pendente: "Pendente",
   cobrado: "Cobrado",
@@ -17,10 +17,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { fee_status } = body;
-
-    if (!fee_status || !VALID.includes(fee_status))
-      return NextResponse.json({ error: "Status inválido." }, { status: 400 });
+    const parsed = parseBody(feeStatusSchema, body);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const { fee_status } = parsed.data;
 
     const supabase = createServiceClient();
 

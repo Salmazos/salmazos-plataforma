@@ -4,12 +4,7 @@ import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import type { EmailTemplateName } from "@/lib/emailTemplates";
 import { registrarHistorico } from "@/lib/registrarHistorico";
-
-const ETAPAS_VALIDAS = [
-  "triagem", "entrevista_salmazos", "entrevista_rh", "entrevista_cliente",
-  "aprovado_cliente", "contratado", "reprovado", "nao_tem_interesse",
-  "nao_compareceu", "bloqueado",
-];
+import { parseBody, candidatoEtapaSchema } from "@/lib/schemas";
 
 const ETAPA_LABEL: Record<string, string> = {
   triagem: "Triagem",
@@ -44,11 +39,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await request.json();
-  const { etapa_kanban, comentario } = body;
-
-  if (!ETAPAS_VALIDAS.includes(etapa_kanban)) {
-    return NextResponse.json({ error: "Etapa inválida." }, { status: 400 });
-  }
+  const parsed = parseBody(candidatoEtapaSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const { etapa_kanban, comentario } = parsed.data;
 
   const svc = createServiceClient();
 

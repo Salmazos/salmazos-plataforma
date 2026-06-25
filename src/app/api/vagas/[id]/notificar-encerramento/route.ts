@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
+import { parseBody, vagaNotificarEncerramentoSchema } from "@/lib/schemas";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -16,11 +17,10 @@ const TIPO_LABELS: Record<string, string> = {
 
 export async function POST(request: NextRequest, { params }: Params) {
   const { id } = await params;
-  const { status } = await request.json();
-
-  if (status !== "fechada" && status !== "cancelada") {
-    return NextResponse.json({ error: "Status inválido" }, { status: 400 });
-  }
+  const body = await request.json();
+  const parsed = parseBody(vagaNotificarEncerramentoSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const { status } = parsed.data;
 
   after(async () => {
     console.log(`[notificar-encerramento] Enviando emails para vaga ${id}, status=${status}`);

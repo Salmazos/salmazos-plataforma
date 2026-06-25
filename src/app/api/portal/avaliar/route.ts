@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { sendEmail } from "@/lib/sendEmail";
-
-const STATUS_VALIDOS = ["aprovado", "reprovado"] as const;
+import { parseBody, portalAvaliarSchema } from "@/lib/schemas";
 
 export async function PATCH(request: NextRequest) {
   try {
@@ -26,13 +25,9 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Acesso não autorizado." }, { status: 403 });
 
     const body = await request.json();
-    const { encaminhamento_id, status, feedback_cliente } = body;
-
-    if (!encaminhamento_id || !status || !feedback_cliente?.trim())
-      return NextResponse.json({ error: "Dados incompletos." }, { status: 400 });
-
-    if (!STATUS_VALIDOS.includes(status))
-      return NextResponse.json({ error: "Status inválido." }, { status: 400 });
+    const parsed = parseBody(portalAvaliarSchema, body);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const { encaminhamento_id, status, feedback_cliente } = parsed.data;
 
     const { data: enc } = await service
       .from("encaminhamentos")

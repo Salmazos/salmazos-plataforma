@@ -9,6 +9,7 @@ import { consultarProcessos } from "@/lib/consultaJuridica";
 import mammoth from "mammoth";
 import { calcularDuracaoResumo } from "@/lib/calcularDuracaoResumo";
 import { registrarHistorico } from "@/lib/registrarHistorico";
+import { parseBody, candidatoCreateSchema } from "@/lib/schemas";
 
 async function extractAndUpdateCandidato(
   candidatoId: string,
@@ -170,20 +171,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const required = [
-      "nome_completo",
-      "telefone",
-      "cargo_pretendido",
-      "tempo_experiencia",
-      "turno_disponivel",
-    ];
-    for (const field of required) {
-      if (!body[field]) {
-        return NextResponse.json(
-          { error: `Campo obrigatório ausente: ${field}` },
-          { status: 400 }
-        );
-      }
+    const parsed = parseBody(candidatoCreateSchema, body);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
 
     const supabase = createServiceClient();

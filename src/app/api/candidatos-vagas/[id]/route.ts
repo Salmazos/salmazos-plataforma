@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
+import { parseBody, candidatoVagaUpdateSchema } from "@/lib/schemas";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -24,12 +25,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
     const body = await request.json();
+    const parsed = parseBody(candidatoVagaUpdateSchema, body);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
     const campos: Record<string, unknown> = {};
-    if (body.etapa !== undefined) campos.etapa = body.etapa;
-    if (body.observacoes !== undefined) campos.observacoes = body.observacoes;
-    if (body.cliente_id !== undefined) campos.cliente_id = body.cliente_id || null;
-    if (body.data_entrevista_salmazos !== undefined) campos.data_entrevista_salmazos = body.data_entrevista_salmazos || null;
+    if (parsed.data.etapa !== undefined) campos.etapa = parsed.data.etapa;
+    if (parsed.data.observacoes !== undefined) campos.observacoes = parsed.data.observacoes;
+    if (parsed.data.cliente_id !== undefined) campos.cliente_id = parsed.data.cliente_id || null;
+    if (parsed.data.data_entrevista_salmazos !== undefined) campos.data_entrevista_salmazos = parsed.data.data_entrevista_salmazos || null;
 
     const supabase = createServiceClient();
     const { data, error } = await supabase
@@ -43,12 +46,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const candidatoId = (data as { candidato_id: string }).candidato_id;
 
-    if (body.etapa) {
+    if (parsed.data.etapa) {
       void registrarHistorico({
         candidato_id: candidatoId,
         tipo: "etapa_alterada",
-        descricao: `Movido para ${ETAPA_LABEL[body.etapa] ?? body.etapa}${body.observacoes ? ` — ${body.observacoes}` : ""}`,
-        metadata: { etapa: body.etapa, observacoes: body.observacoes || null },
+        descricao: `Movido para ${ETAPA_LABEL[parsed.data.etapa] ?? parsed.data.etapa}${parsed.data.observacoes ? ` — ${parsed.data.observacoes}` : ""}`,
+        metadata: { etapa: parsed.data.etapa, observacoes: parsed.data.observacoes || null },
         criado_por: null,
       });
     }

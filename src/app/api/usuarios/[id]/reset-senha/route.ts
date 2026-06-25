@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { parseBody, resetSenhaSchema } from "@/lib/schemas";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabaseAuth = await createClient();
@@ -10,11 +11,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const { id } = await params;
-  const { senha } = await req.json();
+  const body = await req.json();
 
-  if (!senha || senha.length < 8) {
-    return NextResponse.json({ error: "Senha deve ter no mínimo 8 caracteres" }, { status: 400 });
+  const parsed = parseBody(resetSenhaSchema, body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
+
+  const { senha } = parsed.data;
 
   const supabase = createServiceClient();
 

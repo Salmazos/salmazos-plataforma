@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { parseBody, kmRegistroCreateSchema } from "@/lib/schemas";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -34,11 +35,9 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await request.json();
-  const { analista_id, data: dataRegistro, km_inicial, km_final, destino, cliente_visitado, motivo, resultado, tipo_servico, valor_por_km, outros_custos } = body;
-
-  if (!analista_id || !dataRegistro || km_inicial === undefined || km_final === undefined) {
-    return NextResponse.json({ error: "Campos obrigatórios: analista_id, data, km_inicial, km_final" }, { status: 400 });
-  }
+  const parsed = parseBody(kmRegistroCreateSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const { analista_id, data: dataRegistro, km_inicial, km_final, destino, cliente_visitado, motivo, resultado, tipo_servico, valor_por_km, outros_custos } = parsed.data;
 
   if (Number(km_final) < Number(km_inicial)) {
     return NextResponse.json({ error: "km_final deve ser maior ou igual a km_inicial." }, { status: 400 });

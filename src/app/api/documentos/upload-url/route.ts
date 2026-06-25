@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { parseBody, storagePathSchema } from "@/lib/schemas";
 
 export async function POST(request: NextRequest) {
   try {
-    const { path } = await request.json();
-
-    if (!path) {
-      return NextResponse.json(
-        { error: "Campo obrigatório: path" },
-        { status: 400 }
-      );
-    }
+    const body = await request.json();
+    const parsed = parseBody(storagePathSchema, body);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const { path } = parsed.data;
 
     const supabase = createServiceClient();
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { parseBody, candidatoUpdateSchema } from "@/lib/schemas";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -31,25 +32,27 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const body = await request.json();
+  const parsed = parseBody(candidatoUpdateSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const svc = createServiceClient();
   const { data, error } = await svc
     .from("candidatos")
     .update({
-      nome_completo: body.nome_completo,
-      telefone: body.telefone,
-      email: body.email,
-      cpf: body.cpf,
-      cidade: body.cidade,
-      estado: body.estado,
-      cargo_pretendido: body.cargo_pretendido,
-      tempo_experiencia: body.tempo_experiencia,
-      turno_disponivel: body.turno_disponivel,
-      pretensao_salarial: body.pretensao_salarial ?? null,
-      idade: body.idade ?? null,
-      formacao_academica: body.formacao_academica ?? null,
-      resumo_profissional: body.resumo_profissional ?? null,
-      experiencias_profissionais: body.experiencias_profissionais ?? null,
+      nome_completo: parsed.data.nome_completo,
+      telefone: parsed.data.telefone,
+      email: parsed.data.email,
+      cpf: parsed.data.cpf,
+      cidade: parsed.data.cidade,
+      estado: parsed.data.estado,
+      cargo_pretendido: parsed.data.cargo_pretendido,
+      tempo_experiencia: parsed.data.tempo_experiencia,
+      turno_disponivel: parsed.data.turno_disponivel,
+      pretensao_salarial: parsed.data.pretensao_salarial ?? null,
+      idade: parsed.data.idade ?? null,
+      formacao_academica: parsed.data.formacao_academica ?? null,
+      resumo_profissional: parsed.data.resumo_profissional ?? null,
+      experiencias_profissionais: parsed.data.experiencias_profissionais ?? null,
     })
     .eq("id", id)
     .select()

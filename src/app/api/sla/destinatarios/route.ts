@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { parseBody, slaDestinatarioCreateSchema } from "@/lib/schemas";
 
 async function autenticar() {
   const supabase = await createClient();
@@ -29,11 +30,9 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { nome, email } = body as { nome: string; email: string };
-
-  if (!nome?.trim() || !email?.trim()) {
-    return NextResponse.json({ error: "Nome e e-mail são obrigatórios." }, { status: 400 });
-  }
+  const parsed = parseBody(slaDestinatarioCreateSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const { nome, email } = parsed.data;
 
   const svc = createServiceClient();
   const { data, error } = await svc
