@@ -150,10 +150,12 @@ export default function DocumentosPageClient({
     setLoading(true);
     setErro("");
     try {
-      const params = new URLSearchParams({ tipo: tab, categoria });
+      const tipoParam = tab === "clientes" ? "cliente" : "salmazos";
+      const params = new URLSearchParams({ tipo: tipoParam, categoria });
       if (tab === "clientes" && clienteSel) {
         params.set("cliente_id", clienteSel.id);
       }
+      console.log("[fetchDocumentos] params →", Object.fromEntries(params));
       const res = await fetch(`/api/documentos?${params}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Erro ao carregar documentos");

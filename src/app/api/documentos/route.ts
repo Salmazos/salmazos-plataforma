@@ -9,6 +9,8 @@ export async function GET(request: NextRequest) {
     const categoria = searchParams.get("categoria");
     const cliente_id = searchParams.get("cliente_id");
 
+    console.log("[GET /api/documentos] params →", { tipo, categoria, cliente_id });
+
     const supabase = createServiceClient();
     let query = supabase
       .from("documentos")
