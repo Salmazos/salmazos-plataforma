@@ -36,7 +36,7 @@ export default function PoliticaPrivacidadePage() {
             A <strong>Salmazos RH & Serviços</strong> é uma empresa especializada em recrutamento, seleção e gestão de mão de obra. Esta Política de Privacidade descreve como coletamos, usamos, armazenamos e protegemos os dados pessoais dos candidatos que utilizam nossa plataforma.
           </p>
           <p style={{ marginTop: 12 }}>
-            Para exercer seus direitos ou esclarecer dúvidas, entre em contato com nosso Encarregado de Proteção de Dados (DPO) pelo e-mail <a href="mailto:privacidade@salmazos.com.br" style={linkStyle}>privacidade@salmazos.com.br</a>.
+            Para exercer seus direitos ou esclarecer dúvidas, entre em contato com nosso Encarregado de Proteção de Dados (DPO) pelo e-mail <a href="mailto:salmazos.vagas@gmail.com" style={linkStyle}>salmazos.vagas@gmail.com</a>.
           </p>
         </Section>
 
@@ -112,7 +112,7 @@ export default function PoliticaPrivacidadePage() {
             <li><strong>Informação:</strong> ser informado sobre as entidades com as quais seus dados foram compartilhados</li>
           </ul>
           <p style={{ marginTop: 12 }}>
-            Para exercer qualquer um desses direitos, envie um e-mail para <a href="mailto:privacidade@salmazos.com.br" style={linkStyle}>privacidade@salmazos.com.br</a> com o assunto "Direitos LGPD" e identificação completa. Responderemos em até 15 dias úteis.
+            Para exercer qualquer um desses direitos, envie um e-mail para <a href="mailto:salmazos.vagas@gmail.com" style={linkStyle}>salmazos.vagas@gmail.com</a> com o assunto "Direitos LGPD" e identificação completa. Responderemos em até 15 dias úteis.
           </p>
         </Section>
 
@@ -135,7 +135,7 @@ export default function PoliticaPrivacidadePage() {
           <div style={{ marginTop: 16, padding: "16px 20px", background: "#F9FAFB", borderRadius: 10, border: "1px solid #E5E7EB" }}>
             <p style={{ margin: 0, fontWeight: 700, color: "#111827" }}>Salmazos RH & Serviços</p>
             <p style={{ margin: "4px 0 0", color: "#374151" }}>
-              E-mail DPO: <a href="mailto:privacidade@salmazos.com.br" style={linkStyle}>privacidade@salmazos.com.br</a>
+              E-mail DPO: <a href="mailto:salmazos.vagas@gmail.com" style={linkStyle}>salmazos.vagas@gmail.com</a>
             </p>
           </div>
         </Section>
