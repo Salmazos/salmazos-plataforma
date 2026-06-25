@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { calcularTriagem } from "@/lib/triagemAutomatica";
 
 export const maxDuration = 300;
 
 export async function GET() {
+  const supabaseAuth = await createClient();
+  const { data: { user } } = await supabaseAuth.auth.getUser();
+  const role = user?.app_metadata?.role ?? "analista";
+  if (role !== "superuser") {
+    return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+  }
+
   const supabase = createServiceClient();
 
   const { data: candidatos, error } = await supabase

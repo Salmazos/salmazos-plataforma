@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { enviarEmailConfirmacao } from "@/lib/email";
 import { registrarLogEmail } from "@/lib/emailLogger";
 import { calcularTriagem } from "@/lib/triagemAutomatica";
@@ -142,6 +142,12 @@ async function enviarEmailsVaga({
 }
 
 export async function GET(request: NextRequest) {
+  const supabaseAuth = await createClient();
+  const { data: { user } } = await supabaseAuth.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const busca  = request.nextUrl.searchParams.get("busca") ?? "";
   const status = request.nextUrl.searchParams.get("status") ?? "ativo";
 
