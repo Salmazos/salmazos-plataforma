@@ -1,7 +1,6 @@
 export const ANALISTAS = [
   "Giovanni",
-  "Kaynara",
-  "Rebeca",
+  "Rebecca",
   "Andreza",
   "Lucas",
   "Edivan",
