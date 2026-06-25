@@ -123,8 +123,6 @@ export default function DocumentosPageClient({
 
   // Upload modal
   const [showUpload, setShowUpload] = useState(false);
-  const [uploadNome, setUploadNome] = useState("");
-  const [uploadDesc, setUploadDesc] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -259,8 +257,6 @@ export default function DocumentosPageClient({
   // ── Upload ─────────────────────────────────────────────────────────────────
 
   function openUploadModal() {
-    setUploadNome("");
-    setUploadDesc("");
     setUploadFile(null);
     setUploadErro("");
     setUploadProgress(0);
@@ -270,7 +266,8 @@ export default function DocumentosPageClient({
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
-    if (!uploadFile || !uploadNome.trim() || !categoria) return;
+    if (!uploadFile || !categoria) return;
+    const nomeDocumento = uploadFile.name.replace(/\.[^/.]+$/, "");
 
     setUploading(true);
     setUploadErro("");
@@ -324,8 +321,8 @@ export default function DocumentosPageClient({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nome: uploadNome.trim(),
-          descricao: uploadDesc.trim() || null,
+          nome: nomeDocumento,
+          descricao: null,
           categoria,
           tipo: tab,
           cliente_id: tab === "clientes" ? clienteSel!.id : null,
@@ -795,67 +792,6 @@ export default function DocumentosPageClient({
             </div>
 
             <form onSubmit={handleUpload}>
-              <div style={{ marginBottom: 14 }}>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "#374151",
-                    marginBottom: 4,
-                  }}
-                >
-                  Nome *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={uploadNome}
-                  onChange={(e) => setUploadNome(e.target.value)}
-                  placeholder="Ex: Manual de Procedimentos 2026"
-                  disabled={uploading}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    borderRadius: 8,
-                    border: "1px solid #E5E7EB",
-                    fontSize: 14,
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: 14 }}>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "#374151",
-                    marginBottom: 4,
-                  }}
-                >
-                  Descrição
-                </label>
-                <input
-                  type="text"
-                  value={uploadDesc}
-                  onChange={(e) => setUploadDesc(e.target.value)}
-                  placeholder="Opcional"
-                  disabled={uploading}
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    borderRadius: 8,
-                    border: "1px solid #E5E7EB",
-                    fontSize: 14,
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-              </div>
-
               <div style={{ marginBottom: 20 }}>
                 <label
                   style={{
@@ -958,25 +894,16 @@ export default function DocumentosPageClient({
                 </button>
                 <button
                   type="submit"
-                  disabled={uploading || !uploadFile || !uploadNome.trim()}
+                  disabled={uploading || !uploadFile}
                   style={{
                     padding: "8px 20px",
                     borderRadius: 8,
                     border: "none",
-                    background:
-                      uploading || !uploadFile || !uploadNome.trim()
-                        ? "#D1D5DB"
-                        : "#111827",
-                    color:
-                      uploading || !uploadFile || !uploadNome.trim()
-                        ? "#9CA3AF"
-                        : "#FFD700",
+                    background: uploading || !uploadFile ? "#D1D5DB" : "#111827",
+                    color: uploading || !uploadFile ? "#9CA3AF" : "#FFD700",
                     fontSize: 14,
                     fontWeight: 600,
-                    cursor:
-                      uploading || !uploadFile || !uploadNome.trim()
-                        ? "not-allowed"
-                        : "pointer",
+                    cursor: uploading || !uploadFile ? "not-allowed" : "pointer",
                   }}
                 >
                   {uploading ? "Enviando…" : "Enviar"}
