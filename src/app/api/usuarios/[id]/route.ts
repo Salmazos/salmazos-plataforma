@@ -56,9 +56,44 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json({ success: true });
 }
 
-export async function DELETE() {
-  return NextResponse.json(
-    { error: "Exclusão não permitida. Use PATCH para desativar." },
-    { status: 405 }
-  );
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await guardSuperuser())) {
+    return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+  }
+
+  const { id } = await params;
+  const supabase = createServiceClient();
+
+  const { data: perfil } = await supabase
+    .from("analistas_perfil")
+    .select("user_id, nivel_acesso, ativo")
+    .eq("id", id)
+    .single();
+
+  if (!perfil) {
+    return NextResponse.json({ error: "Usuário não encontrado" }, { status: 404 });
+  }
+
+  if (perfil.nivel_acesso === "superuser") {
+    return NextResponse.json({ error: "Não é permitido excluir um superuser" }, { status: 403 });
+  }
+
+  if (perfil.ativo) {
+    return NextResponse.json({ error: "Desative o usuário antes de excluir" }, { status: 400 });
+  }
+
+  const { error: deleteError } = await supabase
+    .from("analistas_perfil")
+    .delete()
+    .eq("id", id);
+
+  if (deleteError) {
+    return NextResponse.json({ error: deleteError.message }, { status: 500 });
+  }
+
+  if (perfil.user_id) {
+    await supabase.auth.admin.deleteUser(perfil.user_id);
+  }
+
+  return NextResponse.json({ ok: true });
 }

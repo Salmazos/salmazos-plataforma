@@ -14,6 +14,7 @@ import {
   KeyRound,
   UserX,
   UserCheck,
+  Trash2,
 } from "lucide-react";
 import type { AnalistaPerfil } from "@/app/painel/usuarios/page";
 
@@ -83,6 +84,7 @@ export default function UsuariosPageClient({ analistas }: Props) {
   const [modalEditar, setModalEditar] = useState<AnalistaPerfil | null>(null);
   const [modalSenha, setModalSenha] = useState<AnalistaPerfil | null>(null);
   const [confirmToggle, setConfirmToggle] = useState<AnalistaPerfil | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<AnalistaPerfil | null>(null);
   const [loading, setLoading] = useState(false);
 
   const filtered = useMemo(() => {
@@ -122,6 +124,21 @@ export default function UsuariosPageClient({ analistas }: Props) {
     } finally {
       setLoading(false);
       setConfirmToggle(null);
+    }
+  }
+
+  async function handleDelete(user: AnalistaPerfil) {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/usuarios/${user.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(err.error || "Erro ao excluir");
+      }
+      router.refresh();
+    } finally {
+      setLoading(false);
+      setConfirmDelete(null);
     }
   }
 
@@ -282,6 +299,15 @@ export default function UsuariosPageClient({ analistas }: Props) {
                         >
                           {a.ativo ? <UserX size={14} /> : <UserCheck size={14} />}
                         </button>
+                        {!a.ativo && (a.nivel_acesso || "analista") !== "superuser" && (
+                          <button
+                            onClick={() => setConfirmDelete(a)}
+                            className="p-1.5 rounded-md hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
+                            title="Excluir permanentemente"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -316,6 +342,42 @@ export default function UsuariosPageClient({ analistas }: Props) {
           onClose={() => setModalSenha(null)}
           onSuccess={() => { setModalSenha(null); router.refresh(); }}
         />
+      )}
+
+      {/* Confirm delete */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            <div className="p-6 text-center">
+              <Trash2 size={40} className="mx-auto text-red-500 mb-3" />
+              <h3 className="font-bold text-lg text-gray-900 mb-1">
+                Excluir usuário permanentemente
+              </h3>
+              <p className="text-sm text-gray-500 mb-5">
+                Esta ação não pode ser desfeita. O usuário{" "}
+                <strong>{confirmDelete.nome_completo}</strong> será removido
+                permanentemente da plataforma.
+              </p>
+              <div className="flex gap-2 justify-center">
+                <button
+                  onClick={() => setConfirmDelete(null)}
+                  className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 hover:bg-gray-50 transition-colors"
+                  disabled={loading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleDelete(confirmDelete)}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors"
+                  style={{ background: "#ef4444" }}
+                  disabled={loading}
+                >
+                  {loading ? "Excluindo..." : "Excluir permanentemente"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Confirm toggle ativo */}
