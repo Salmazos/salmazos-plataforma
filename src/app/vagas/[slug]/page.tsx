@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createServiceClient } from "@/lib/supabase/server";
 import { TIPOS_SERVICO } from "@/lib/constants";
@@ -47,9 +47,12 @@ export default async function VagaPublicaPage({ params }: Props) {
   if (!vaga) {
     const { data: vagaById } = await supabase
       .from("vagas")
-      .select("id, titulo, cidade, estado, salario, tipo_servico, requisitos, beneficios, horario, observacoes, status")
+      .select("id, titulo, cidade, estado, salario, tipo_servico, requisitos, beneficios, horario, observacoes, status, slug")
       .eq("id", slug)
       .maybeSingle();
+    if (vagaById?.slug) {
+      redirect(`/vagas/${vagaById.slug}`);
+    }
     vaga = vagaById;
   }
 

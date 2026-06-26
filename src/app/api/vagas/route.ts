@@ -4,6 +4,7 @@ import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, vagaCreateSchema } from "@/lib/schemas";
+import { generateUniqueSlug } from "@/lib/slug";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -29,10 +30,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
     const supabase = createServiceClient();
+    const slug = await generateUniqueSlug(body.titulo, supabase);
     const { data, error } = await supabase
       .from("vagas")
       .insert({
         titulo: body.titulo,
+        slug,
         cliente_id: body.cliente_id ?? null,
         tipo_servico: body.tipo_servico,
         num_posicoes: Number(body.num_posicoes),

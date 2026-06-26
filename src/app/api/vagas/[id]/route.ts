@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, vagaUpdateSchema } from "@/lib/schemas";
+import { generateUniqueSlug } from "@/lib/slug";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -29,8 +30,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
 
+    const supabase = createServiceClient();
+
     const campos: Record<string, unknown> = {};
-    if (body.titulo !== undefined)              campos.titulo = body.titulo;
+    if (body.titulo !== undefined) {
+      campos.titulo = body.titulo;
+      campos.slug = await generateUniqueSlug(body.titulo, supabase, id);
+    }
     if (body.cliente_id !== undefined)          campos.cliente_id = body.cliente_id ?? null;
     if (body.tipo_servico !== undefined)        campos.tipo_servico = body.tipo_servico;
     if (body.num_posicoes !== undefined)        campos.num_posicoes = Number(body.num_posicoes);
@@ -47,8 +53,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (body.observacoes !== undefined)         campos.observacoes = body.observacoes || null;
     if (body.fee_rs_percentual !== undefined)  campos.fee_rs_percentual = body.fee_rs_percentual !== "" ? Number(body.fee_rs_percentual) : null;
     if (body.fee_rs_prazo_cobranca !== undefined) campos.fee_rs_prazo_cobranca = body.fee_rs_prazo_cobranca || null;
-
-    const supabase = createServiceClient();
 
     let statusAlterado = false;
     let statusAnterior: string | null = null;
