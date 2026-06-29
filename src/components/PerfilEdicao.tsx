@@ -8,6 +8,7 @@ import { TEMPLATE_OPTIONS } from "@/lib/emailTemplates";
 import type { EmailTemplateName } from "@/lib/emailTemplates";
 import PerfilEtapaSelector from "@/components/PerfilEtapaSelector";
 import PerfilAnotacoes from "@/components/PerfilAnotacoes";
+import BotaoCurriculo from "@/components/BotaoCurriculo";
 import TriagemBadge from "@/components/TriagemBadge";
 import type { Candidato } from "@/types";
 import type { GarantiaInfo, MelhorRetencao } from "@/components/CandidatoPerfilTabs";
@@ -276,18 +277,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao }
 
           <div className="flex items-center gap-3 flex-wrap">
             {candidato.curriculo_url && (
-              <a
-                href={candidato.curriculo_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-outline flex items-center gap-1.5"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Baixar currículo
-              </a>
+              <BotaoCurriculo storagePath={candidato.curriculo_url} variant="button" label="Ver currículo" />
             )}
 
             {!editando && (
