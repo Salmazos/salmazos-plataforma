@@ -22,6 +22,7 @@ interface FormData {
   formacao_academica: string;
   idade: string;
   experiencias_profissionais: string;
+  lgpd_consentimento: boolean;
 }
 
 interface Props {
@@ -46,6 +47,7 @@ export default function FormularioCadastro({ vagaParam }: Props) {
     formacao_academica: "",
     idade: "",
     experiencias_profissionais: "",
+    lgpd_consentimento: false,
   });
   const [curriculo, setCurriculo] = useState<File | null>(null);
   const [erros, setErros] = useState<Record<string, string>>({});
@@ -95,6 +97,8 @@ export default function FormularioCadastro({ vagaParam }: Props) {
       if (!allowed.includes(ext))
         e.curriculo = "Envie PDF, Word ou imagem (JPG, PNG).";
     }
+    if (!form.lgpd_consentimento)
+      e.lgpd_consentimento = "Você precisa aceitar a Política de Privacidade para continuar.";
     setErros(e);
     return Object.keys(e).length === 0;
   };
@@ -120,7 +124,7 @@ export default function FormularioCadastro({ vagaParam }: Props) {
           .from("curriculos")
           .upload(fileName, curriculo, { contentType });
         if (uploadErr) throw new Error("Falha ao enviar o currículo. Tente novamente.");
-        curriculo_url = supabase.storage.from("curriculos").getPublicUrl(fileName).data.publicUrl;
+        curriculo_url = fileName;
       }
 
       const origem = vagaParam ? "vaga_especifica" : "banco_talentos";
@@ -135,6 +139,8 @@ export default function FormularioCadastro({ vagaParam }: Props) {
           formacao_academica: form.formacao_academica || null,
           idade: form.idade ? parseInt(form.idade) : null,
           experiencias_profissionais: form.experiencias_profissionais || null,
+          lgpd_consentimento: true,
+          lgpd_data_consentimento: new Date().toISOString(),
         }),
       });
 
@@ -384,6 +390,30 @@ export default function FormularioCadastro({ vagaParam }: Props) {
               </div>
               {erros.curriculo && <p className="text-red-500 text-xs mt-1">{erros.curriculo}</p>}
             </div>
+          </div>
+
+          {/* ── Consentimento LGPD ── */}
+          <div className="card">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5 shrink-0 w-4 h-4 accent-[#FFB800]"
+                checked={form.lgpd_consentimento}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, lgpd_consentimento: e.target.checked }))
+                }
+              />
+              <span className="text-sm text-gray-300 leading-relaxed">
+                Li e aceito a{" "}
+                <span className="text-[#FFD700] underline">Política de Privacidade</span>{" "}
+                e consinto com o tratamento dos meus dados pessoais para fins de recrutamento e
+                seleção, conforme a Lei Geral de Proteção de Dados (LGPD – Lei 13.709/2018).{" "}
+                <span className="text-red-500">*</span>
+              </span>
+            </label>
+            {erros.lgpd_consentimento && (
+              <p className="text-red-500 text-xs mt-2 ml-7">{erros.lgpd_consentimento}</p>
+            )}
           </div>
 
           {/* ── Submit ── */}
