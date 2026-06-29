@@ -8,7 +8,7 @@ import { TEMPLATE_OPTIONS } from "@/lib/emailTemplates";
 import type { EmailTemplateName } from "@/lib/emailTemplates";
 import PerfilEtapaSelector from "@/components/PerfilEtapaSelector";
 import PerfilAnotacoes from "@/components/PerfilAnotacoes";
-import BotaoCurriculo from "@/components/BotaoCurriculo";
+import { BotaoCurriculo } from "@/components/BotaoCurriculo";
 import TriagemBadge from "@/components/TriagemBadge";
 import type { Candidato } from "@/types";
 import type { GarantiaInfo, MelhorRetencao } from "@/components/CandidatoPerfilTabs";

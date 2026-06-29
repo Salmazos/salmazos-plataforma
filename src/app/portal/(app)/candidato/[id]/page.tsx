@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import PortalAvaliacaoBtn from "@/components/PortalAvaliacaoBtn";
 import MatchScoreBadge from "@/components/MatchScoreBadge";
-import BotaoCurriculo from "@/components/BotaoCurriculo";
+import { BotaoCurriculo } from "@/components/BotaoCurriculo";
 import type { MatchDetalhes } from "@/types";
 
 export const dynamic = "force-dynamic";
