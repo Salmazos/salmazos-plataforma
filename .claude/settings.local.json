@@ -56,7 +56,8 @@
       "Skill(run)",
       "Bash(npx tsx -e ' *)",
       "PowerShell(git push *)",
-      "PowerShell(npx vercel --prod 2>&1)"
+      "PowerShell(npx vercel --prod 2>&1)",
+      "mcp__claude_ai_Supabase__get_logs"
     ]
   }
 }

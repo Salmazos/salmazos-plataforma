@@ -31,7 +31,8 @@ export async function POST(request: NextRequest) {
     }
 
     const buffer = Buffer.from(await arquivo.arrayBuffer());
-    const nomeArquivo = `${Date.now()}-${arquivo.name.replace(/\s+/g, "_")}`;
+    const ext = arquivo.name.split(".").pop()?.toLowerCase() ?? "pdf";
+    const nomeArquivo = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
     const supabase = createServiceClient();
 

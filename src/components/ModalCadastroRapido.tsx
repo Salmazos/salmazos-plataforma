@@ -188,10 +188,14 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
         const formData = new FormData();
         formData.append("arquivo", arquivo);
         const resUpload = await fetch("/api/upload-curriculo", { method: "POST", body: formData });
-        if (resUpload.ok) {
-          const { path } = await resUpload.json();
-          curriculo_url = path;
+        if (!resUpload.ok) {
+          const errData = await resUpload.json().catch(() => ({}));
+          setErro(errData.error || "Falha ao enviar o currículo. Tente novamente.");
+          setEnviando(false);
+          return;
         }
+        const { path } = await resUpload.json();
+        curriculo_url = path;
       }
       const res = await fetch("/api/candidatos", {
         method: "POST",

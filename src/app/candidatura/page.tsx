@@ -147,10 +147,12 @@ export default function BancoTalentosPage() {
           method: "POST",
           body: formData,
         });
-        if (resUpload.ok) {
-          const { path } = await resUpload.json();
-          curriculo_url = path;
+        if (!resUpload.ok) {
+          const errData = await resUpload.json().catch(() => ({}));
+          throw new Error(errData.error || "Falha ao enviar o currículo. Tente novamente.");
         }
+        const { path } = await resUpload.json();
+        curriculo_url = path;
       }
 
       const res = await fetch("/api/candidatos", {
