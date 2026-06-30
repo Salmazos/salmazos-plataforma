@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { SEGMENTOS_CLIENTE, TIPOS_SERVICO, ANALISTAS } from "@/lib/constants";
 import type { Cliente } from "@/types";
 
@@ -28,6 +29,7 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
   const [erro, setErro] = useState("");
   const [confirmandoInativar, setConfirmandoInativar] = useState(false);
   const [senhaPortal, setSenhaPortal] = useState("");
+  const [mostrarSenha, setMostrarSenha] = useState(false);
   const [criandoAcesso, setCriandoAcesso] = useState(false);
   const [acessoCriado, setAcessoCriado] = useState(false);
   const [erroAcesso, setErroAcesso] = useState("");
@@ -54,6 +56,7 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
       setErro("");
       setConfirmandoInativar(false);
       setSenhaPortal("");
+      setMostrarSenha(false);
       setCriandoAcesso(false);
       setAcessoCriado(false);
       setErroAcesso("");
@@ -332,13 +335,23 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
                     <label className="block text-xs text-gray-500 mb-1">
                       {temAcesso ? "Nova senha do portal" : "Senha do portal"}
                     </label>
-                    <input
-                      type="password"
-                      value={senhaPortal}
-                      onChange={(e) => setSenhaPortal(e.target.value)}
-                      placeholder="Digite a senha de acesso"
-                      className="input-field"
-                    />
+                    <div className="relative">
+                      <input
+                        type={mostrarSenha ? "text" : "password"}
+                        value={senhaPortal}
+                        onChange={(e) => setSenhaPortal(e.target.value)}
+                        placeholder="Digite a senha de acesso"
+                        className="input-field pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setMostrarSenha((v) => !v)}
+                        aria-label={mostrarSenha ? "Ocultar senha" : "Mostrar senha"}
+                        className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600"
+                      >
+                        {mostrarSenha ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
                   </div>
                   {erroAcesso && (
                     <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
