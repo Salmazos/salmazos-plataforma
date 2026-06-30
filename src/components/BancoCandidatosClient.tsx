@@ -472,6 +472,11 @@ export default function BancoCandidatosClient({
   const [scoreOverrides, setScoreOverrides] = useState<Record<string, { score: number; label: string }>>({});
   const router = useRouter();
 
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const floatScrollRef = useRef<HTMLDivElement>(null);
+  const isSyncingRef = useRef(false);
+  const [floatBar, setFloatBar] = useState({ visible: false, left: 0, width: 0, innerW: 0 });
+
   useEffect(() => {
     const pending = candidatos.some(
       (c) => c.triagem_score === null || c.juridico_consultado_em === null
@@ -689,8 +694,67 @@ export default function BancoCandidatosClient({
     });
   }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, matchMap, filtroAlocacao, keyword, filtroOrigem]);
 
+  const refreshFloatBar = useCallback(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const visible = el.scrollWidth > el.clientWidth && rect.top < window.innerHeight && rect.bottom > 0;
+    setFloatBar(prev => {
+      const next = { visible, left: rect.left, width: rect.width, innerW: el.scrollWidth };
+      if (prev.visible === next.visible && prev.left === next.left && prev.width === next.width && prev.innerW === next.innerW) return prev;
+      return next;
+    });
+  }, []);
+
+  const handleTableScroll = useCallback(() => {
+    if (isSyncingRef.current) return;
+    const table = tableScrollRef.current;
+    const float = floatScrollRef.current;
+    if (table && float && float.scrollLeft !== table.scrollLeft) {
+      isSyncingRef.current = true;
+      float.scrollLeft = table.scrollLeft;
+      isSyncingRef.current = false;
+    }
+    refreshFloatBar();
+  }, [refreshFloatBar]);
+
+  const handleFloatScroll = useCallback(() => {
+    if (isSyncingRef.current) return;
+    const table = tableScrollRef.current;
+    const float = floatScrollRef.current;
+    if (table && float && table.scrollLeft !== float.scrollLeft) {
+      isSyncingRef.current = true;
+      table.scrollLeft = float.scrollLeft;
+      isSyncingRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+    refreshFloatBar();
+    const ro = new ResizeObserver(refreshFloatBar);
+    ro.observe(el);
+    const io = new IntersectionObserver(refreshFloatBar, { threshold: 0 });
+    io.observe(el);
+    window.addEventListener("scroll", refreshFloatBar, { passive: true });
+    window.addEventListener("resize", refreshFloatBar, { passive: true });
+    return () => {
+      ro.disconnect();
+      io.disconnect();
+      window.removeEventListener("scroll", refreshFloatBar);
+      window.removeEventListener("resize", refreshFloatBar);
+    };
+  }, [refreshFloatBar]);
+
+  useEffect(() => {
+    if (floatBar.visible && floatScrollRef.current && tableScrollRef.current) {
+      floatScrollRef.current.scrollLeft = tableScrollRef.current.scrollLeft;
+    }
+  }, [floatBar.visible]);
+
   return (
-    <div style={{ overflow: "hidden" }}>
+    <div>
       {/* Success banner */}
       {successMsg && (
         <div
@@ -954,7 +1018,7 @@ export default function BancoCandidatosClient({
 
       {/* Table */}
       <div className="card" style={{ padding: 0 }}>
-        <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "calc(100vh - 32rem)" }}>
+        <div ref={tableScrollRef} style={{ overflowX: "auto" }} onScroll={handleTableScroll}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
@@ -1581,6 +1645,27 @@ export default function BancoCandidatosClient({
         onClose={() => setModalCadastroAberto(false)}
         onCadastrado={() => router.refresh()}
       />
+
+      {floatBar.visible && (
+        <div
+          ref={floatScrollRef}
+          onScroll={handleFloatScroll}
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: floatBar.left,
+            width: floatBar.width,
+            height: 14,
+            overflowX: "auto",
+            overflowY: "hidden",
+            zIndex: 50,
+            background: "#F9FAFB",
+            borderTop: "1px solid #E5E7EB",
+          }}
+        >
+          <div style={{ width: floatBar.innerW, height: 1 }} />
+        </div>
+      )}
     </div>
   );
 }
