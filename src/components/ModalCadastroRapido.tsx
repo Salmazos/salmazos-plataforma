@@ -189,8 +189,8 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
         formData.append("arquivo", arquivo);
         const resUpload = await fetch("/api/upload-curriculo", { method: "POST", body: formData });
         if (resUpload.ok) {
-          const { url } = await resUpload.json();
-          curriculo_url = url;
+          const { path } = await resUpload.json();
+          curriculo_url = path;
         }
       }
       const res = await fetch("/api/candidatos", {

@@ -46,11 +46,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    const { data: publicUrl } = supabase.storage
-      .from("curriculos")
-      .getPublicUrl(nomeArquivo);
-
-    return NextResponse.json({ url: publicUrl.publicUrl }, { status: 201 });
+    return NextResponse.json({ path: nomeArquivo }, { status: 201 });
   } catch (err) {
     console.error("[POST /api/upload-curriculo]", err);
     return NextResponse.json({ error: "Erro interno do servidor." }, { status: 500 });

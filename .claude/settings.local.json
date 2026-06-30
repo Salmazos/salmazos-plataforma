@@ -55,7 +55,8 @@
       "Bash(xargs grep -l \"VagasPageClient\\\\|vagas.*page\\\\|Dashboard\")",
       "Skill(run)",
       "Bash(npx tsx -e ' *)",
-      "PowerShell(git push *)"
+      "PowerShell(git push *)",
+      "PowerShell(npx vercel --prod 2>&1)"
     ]
   }
 }

@@ -169,7 +169,7 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
           .from("curriculos")
           .upload(fileName, curriculo, { contentType });
         if (uploadErr) throw new Error("Falha ao enviar o currículo. Tente novamente.");
-        curriculo_url = supabase.storage.from("curriculos").getPublicUrl(fileName).data.publicUrl;
+        curriculo_url = fileName;
       }
 
       const vaga_ids = [vagaId, ...additionalVagaIds.filter(Boolean)];

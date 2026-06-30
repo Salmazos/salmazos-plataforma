@@ -148,8 +148,8 @@ export default function BancoTalentosPage() {
           body: formData,
         });
         if (resUpload.ok) {
-          const { url } = await resUpload.json();
-          curriculo_url = url;
+          const { path } = await resUpload.json();
+          curriculo_url = path;
         }
       }
 
