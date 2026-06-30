@@ -22,6 +22,7 @@ import {
   Clock,
   Receipt,
   ShieldCheck,
+  MapPin,
 } from "lucide-react";
 
 interface Props {
@@ -67,6 +68,7 @@ const menuItems: MenuItemDef[] = [
   { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },
   { label: "Dashboard", href: "/painel/dashboard", icon: TrendingUp, requireFullAccess: true },
   { label: "Reembolsos", href: "/painel/reembolsos", icon: Receipt, requireFullAccess: true },
+  { label: "Empresas Visitadas", href: "/painel/empresas-visitadas", icon: MapPin, requireSupervisor: true },
   { label: "Documentos", href: "/painel/documentos", icon: FolderOpen },
   {
     label: "Configurações",

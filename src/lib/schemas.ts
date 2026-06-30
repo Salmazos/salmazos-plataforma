@@ -307,6 +307,8 @@ export const kmVisitaCreateSchema = z.object({
   registro_id: z.string().uuid(),
   empresa: z.string().min(1),
   contato: z.string().optional(),
+  contato_telefone: z.string().optional(),
+  contato_email: z.string().optional(),
   motivo: z.string().optional(),
   resultado: z.string().optional(),
   ordem: coerceNumberOptional,

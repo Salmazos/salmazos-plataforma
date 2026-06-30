@@ -57,7 +57,10 @@
       "Bash(npx tsx -e ' *)",
       "PowerShell(git push *)",
       "PowerShell(npx vercel --prod 2>&1)",
-      "mcp__claude_ai_Supabase__get_logs"
+      "mcp__claude_ai_Supabase__get_logs",
+      "Bash(New-Item -ItemType Directory -Force \"C:/Users/Olver/Desktop/salmazos-plataforma/src/app/api/km/empresas-visitadas\")",
+      "Bash(Out-Null)",
+      "PowerShell(New-Item *)"
     ]
   }
 }

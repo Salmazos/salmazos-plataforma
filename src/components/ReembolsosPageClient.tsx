@@ -48,9 +48,9 @@ interface Props {
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const TIPOS_DESLOCAMENTO: Record<string, { label: string; color: string; bg: string }> = {
-  visita_comercial: { label: "Visita Comercial", color: "#3B82F6", bg: "#DBEAFE" },
-  visita_tecnica: { label: "Visita Técnica", color: "#10B981", bg: "#D1FAE5" },
+  visita: { label: "Visita (Comercial / Técnica / Supervisão)", color: "#3B82F6", bg: "#DBEAFE" },
   treinamento: { label: "Treinamento", color: "#8B5CF6", bg: "#EDE9FE" },
+  diretoria: { label: "Diretoria", color: "#F59E0B", bg: "#FEF3C7" },
   outros: { label: "Outros", color: "#6B7280", bg: "#F3F4F6" },
 };
 

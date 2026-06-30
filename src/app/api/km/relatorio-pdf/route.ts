@@ -17,9 +17,9 @@ const GREEN  = rgb(0.04, 0.59, 0.26);
 const BLUE   = rgb(0.23, 0.51, 0.96);
 
 const TIPO_LABELS: Record<string, string> = {
-  visita_comercial: "Visita Comercial",
-  visita_tecnica: "Visita Tecnica",
+  visita: "Visita (Com. / Tec. / Sup.)",
   treinamento: "Treinamento",
+  diretoria: "Diretoria",
   outros: "Outros",
 };
 
