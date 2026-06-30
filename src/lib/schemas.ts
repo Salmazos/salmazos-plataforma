@@ -226,6 +226,11 @@ export const portalAcessoSchema = z.object({
   senha: z.string().min(6),
 });
 
+export const portalSenhaSchema = z.object({
+  cliente_id: z.string().uuid(),
+  senha: z.string().min(6),
+});
+
 // ── SLA ──────────────────────────────────────────────────────────────────────
 
 export const slaConfigUpdateSchema = z.object({

@@ -31,6 +31,7 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
   const [criandoAcesso, setCriandoAcesso] = useState(false);
   const [acessoCriado, setAcessoCriado] = useState(false);
   const [erroAcesso, setErroAcesso] = useState("");
+  const [temAcesso, setTemAcesso] = useState<boolean | null>(null);
 
   const editando = !!cliente;
 
@@ -56,6 +57,16 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
       setCriandoAcesso(false);
       setAcessoCriado(false);
       setErroAcesso("");
+      setTemAcesso(null);
+
+      if (cliente) {
+        let active = true;
+        fetch(`/api/clientes/portal-acesso?cliente_id=${cliente.id}`)
+          .then((r) => r.json())
+          .then((json) => { if (active) setTemAcesso(json.temAcesso ?? false); })
+          .catch(() => { if (active) setTemAcesso(false); });
+        return () => { active = false; };
+      }
     }
   }, [isOpen, cliente]);
 
@@ -93,17 +104,18 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
     setCriandoAcesso(true);
     setErroAcesso("");
     try {
+      const atualizando = temAcesso === true;
       const res = await fetch("/api/clientes/portal-acesso", {
-        method: "POST",
+        method: atualizando ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cliente_id: cliente!.id,
-          email: form.contato_email,
-          senha: senhaPortal,
-        }),
+        body: JSON.stringify(
+          atualizando
+            ? { cliente_id: cliente!.id, senha: senhaPortal }
+            : { cliente_id: cliente!.id, email: form.contato_email, senha: senhaPortal }
+        ),
       });
       const json = await res.json();
-      if (!res.ok) { setErroAcesso(json.error ?? "Erro ao criar acesso."); return; }
+      if (!res.ok) { setErroAcesso(json.error ?? "Erro."); return; }
       setAcessoCriado(true);
     } catch {
       setErroAcesso("Erro de conexão.");
@@ -304,7 +316,7 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
               </p>
               {acessoCriado ? (
                 <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                  Acesso criado com sucesso!
+                  {temAcesso ? "Senha atualizada com sucesso!" : "Acesso criado com sucesso!"}
                 </p>
               ) : (
                 <div className="space-y-3">
@@ -317,7 +329,9 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Senha do portal</label>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      {temAcesso ? "Nova senha do portal" : "Senha do portal"}
+                    </label>
                     <input
                       type="password"
                       value={senhaPortal}
@@ -334,10 +348,16 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
                   <button
                     type="button"
                     onClick={handleCriarAcesso}
-                    disabled={criandoAcesso || !senhaPortal}
+                    disabled={criandoAcesso || !senhaPortal || temAcesso === null}
                     className="text-sm px-4 py-2 rounded-lg bg-black text-[#FFD700] font-medium transition-colors hover:bg-gray-800 disabled:opacity-50"
                   >
-                    {criandoAcesso ? "Criando..." : "Criar acesso ao portal"}
+                    {criandoAcesso
+                      ? (temAcesso ? "Atualizando..." : "Criando...")
+                      : temAcesso === null
+                      ? "Verificando..."
+                      : temAcesso
+                      ? "Atualizar senha do portal"
+                      : "Criar acesso ao portal"}
                   </button>
                 </div>
               )}
