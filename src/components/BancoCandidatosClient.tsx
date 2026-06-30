@@ -67,6 +67,10 @@ const thStyle: React.CSSProperties = {
   borderBottom: "2px solid #F3F4F6",
   whiteSpace: "nowrap",
   textAlign: "left",
+  position: "sticky",
+  top: 0,
+  zIndex: 1,
+  background: "#FAFAFA",
 };
 
 function colorForScore(score: number): { bg: string; fg: string } {
@@ -686,7 +690,7 @@ export default function BancoCandidatosClient({
   }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, matchMap, filtroAlocacao, keyword, filtroOrigem]);
 
   return (
-    <div>
+    <div style={{ overflow: "hidden" }}>
       {/* Success banner */}
       {successMsg && (
         <div
@@ -949,11 +953,11 @@ export default function BancoCandidatosClient({
       </div>
 
       {/* Table */}
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ overflowX: "auto" }}>
+      <div className="card" style={{ padding: 0 }}>
+        <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "calc(100vh - 32rem)" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
-              <tr style={{ background: "#FAFAFA" }}>
+              <tr>
                 <th style={thStyle}>Nome</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Idade</th>
                 <th style={thStyle}>Cargo Pretendido</th>
