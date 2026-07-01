@@ -85,6 +85,15 @@ interface AdmissaoTokenData {
 
 const STATUS_JA_ENVIADO = ["aguardando_analise", "em_analise", "aprovado", "enviado_contabilidade"];
 
+// Campos vazios precisam virar null (não "") antes de ir pro backend: os campos de
+// enum (sexo, estado_civil, grau_instrucao, tipo_conta) rejeitam "" no zod, e os campos
+// de data (data_nascimento, rg_data_emissao, cnh_validade) rejeitam "" no Postgres (DATE).
+function sanitizarForm(form: FormState): Record<string, string | null> {
+  return Object.fromEntries(
+    Object.entries(form).map(([k, v]) => [k, v.trim() === "" ? null : v])
+  );
+}
+
 function validarPasso(passo: number, form: FormState, isMotorista: boolean, possuiDependentes: boolean, dependentesCount: number): string[] {
   const faltando: string[] = [];
   const req = (campo: keyof FormState) => { if (!form[campo]?.trim()) faltando.push(campo); };
@@ -130,6 +139,7 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
   const [toastVisivel, setToastVisivel] = useState(false);
   const [avisoFalhaSalvar, setAvisoFalhaSalvar] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [erroEnvio, setErroEnvio] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -179,13 +189,19 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
       const res = await fetch(`/api/admissoes/token/${token}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dados_pessoais: form }),
+        body: JSON.stringify({ dados_pessoais: sanitizarForm(form) }),
       });
-      if (!res.ok) { setAvisoFalhaSalvar(true); return false; }
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        console.error("[admissao] Falha ao salvar progresso:", json.error || res.status);
+        setAvisoFalhaSalvar(true);
+        return false;
+      }
       setToastVisivel(true);
       setTimeout(() => setToastVisivel(false), 2500);
       return true;
-    } catch {
+    } catch (err) {
+      console.error("[admissao] Erro de conexão ao salvar progresso:", err);
       setAvisoFalhaSalvar(true);
       return false;
     } finally {
@@ -213,13 +229,23 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
 
   const enviarParaAnalise = async () => {
     setEnviando(true);
+    setErroEnvio("");
     try {
       const res = await fetch(`/api/admissoes/token/${token}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dados_pessoais: form, submit: true }),
+        body: JSON.stringify({ dados_pessoais: sanitizarForm(form), submit: true }),
       });
-      if (res.ok) setEnvioConcluido(true);
+      if (res.ok) {
+        setEnvioConcluido(true);
+        return;
+      }
+      const json = await res.json().catch(() => ({}));
+      console.error("[admissao] Falha ao enviar para análise:", json.error || res.status);
+      setErroEnvio(json.error || "Não foi possível enviar seus dados agora. Tente novamente em instantes.");
+    } catch (err) {
+      console.error("[admissao] Erro de conexão ao enviar para análise:", err);
+      setErroEnvio("Erro de conexão. Verifique sua internet e tente novamente.");
     } finally {
       setEnviando(false);
     }
@@ -343,6 +369,12 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
         {avisoFalhaSalvar && (
           <p style={{ color: "#DC2626", fontSize: 13, marginTop: 12 }}>
             ⚠️ Não conseguimos salvar seu progresso agora, mas você pode continuar preenchendo.
+          </p>
+        )}
+
+        {passo === 7 && erroEnvio && (
+          <p style={{ color: "#DC2626", fontSize: 13, marginTop: 12 }}>
+            ⚠️ {erroEnvio}
           </p>
         )}
 
