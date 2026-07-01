@@ -61,7 +61,8 @@
       "Bash(New-Item -ItemType Directory -Force \"C:/Users/Olver/Desktop/salmazos-plataforma/src/app/api/km/empresas-visitadas\")",
       "Bash(Out-Null)",
       "PowerShell(New-Item *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "mcp__claude_ai_Supabase__list_extensions"
     ]
   }
 }

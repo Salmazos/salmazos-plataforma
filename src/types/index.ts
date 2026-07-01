@@ -12,6 +12,106 @@ export type StatusEncaminhamento =
   | "reprovado"
   | "desistiu";
 
+// ── Admissão Digital ─────────────────────────────────────────────────────────
+
+export type ModalidadeAdmissao = "MOT" | "terceirizacao";
+
+export type StatusAdmissao =
+  | "aguardando_candidato"
+  | "em_preenchimento"
+  | "aguardando_analise"
+  | "em_analise"
+  | "aprovado"
+  | "enviado_contabilidade";
+
+export interface Admissao {
+  id: string;
+  candidato_id: string;
+  vaga_id: string | null;
+  modalidade: ModalidadeAdmissao;
+  status: StatusAdmissao;
+  token: string;
+  token_expira_em: string;
+  token_usado_em: string | null;
+  criado_por: string | null;
+  criado_em: string;
+  updated_at: string;
+  observacoes_internas: string | null;
+}
+
+export interface AdmissaoDadosPessoais {
+  id: string;
+  admissao_id: string;
+  nome_completo: string | null;
+  data_nascimento: string | null;
+  sexo: "M" | "F" | null;
+  estado_civil: "solteiro" | "casado" | "divorciado" | "viuvo" | "uniao_estavel" | null;
+  nacionalidade: string | null;
+  naturalidade: string | null;
+  cpf: string | null;
+  rg_numero: string | null;
+  rg_orgao_emissor: string | null;
+  rg_uf: string | null;
+  rg_data_emissao: string | null;
+  titulo_eleitor: string | null;
+  zona_eleitoral: string | null;
+  secao_eleitoral: string | null;
+  pis_pasep: string | null;
+  carteira_trabalho_numero: string | null;
+  carteira_trabalho_serie: string | null;
+  carteira_trabalho_uf: string | null;
+  cnh_numero: string | null;
+  cnh_categoria: string | null;
+  cnh_validade: string | null;
+  reservista: string | null;
+  nome_mae: string | null;
+  nome_pai: string | null;
+  grau_instrucao:
+    | "fundamental_incompleto" | "fundamental_completo"
+    | "medio_incompleto" | "medio_completo"
+    | "superior_incompleto" | "superior_completo" | "pos_graduacao" | null;
+  endereco_cep: string | null;
+  endereco_logradouro: string | null;
+  endereco_numero: string | null;
+  endereco_complemento: string | null;
+  endereco_bairro: string | null;
+  endereco_cidade: string | null;
+  endereco_uf: string | null;
+  telefone: string | null;
+  email: string | null;
+  banco: string | null;
+  agencia: string | null;
+  conta: string | null;
+  tipo_conta: "corrente" | "poupanca" | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdmissaoDependente {
+  id: string;
+  admissao_id: string;
+  nome: string;
+  parentesco: "filho" | "filha" | "conjuge" | "outro" | null;
+  data_nascimento: string | null;
+  cpf: string | null;
+  nome_mae: string | null;
+  cpf_mae: string | null;
+  created_at: string;
+}
+
+export interface AdmissaoDocumento {
+  id: string;
+  admissao_id: string;
+  tipo_documento: string;
+  storage_path: string | null;
+  status: "pendente" | "enviado" | "aprovado" | "rejeitado";
+  motivo_rejeicao: string | null;
+  obrigatorio: boolean;
+  condicional: "masculino" | "motorista" | "dependente" | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Candidato {
   id: string;
   nome_completo: string;

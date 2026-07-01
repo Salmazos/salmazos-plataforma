@@ -305,6 +305,14 @@ export const feeStatusSchema = z.object({
   fee_status: z.enum(["pendente", "cobrado", "recebido"]),
 });
 
+// ── Admissão Digital ─────────────────────────────────────────────────────────
+
+export const admissaoCreateSchema = z.object({
+  candidato_id: z.string().uuid(),
+  vaga_id: z.string().uuid().optional().nullable(),
+  modalidade: z.enum(["MOT", "terceirizacao"]),
+});
+
 // ── KM ───────────────────────────────────────────────────────────────────────
 
 export const kmVisitaCreateSchema = z.object({
