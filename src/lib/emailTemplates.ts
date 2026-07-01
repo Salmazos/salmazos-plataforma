@@ -7,7 +7,8 @@ export type EmailTemplateName =
   | "vaga_aprovada_cliente"
   | "candidato_entrevista_cliente"
   | "nova_vaga_criada"
-  | "vaga_encerrada";
+  | "vaga_encerrada"
+  | "admissao_link";
 
 interface TemplateData {
   nome: string;
@@ -27,6 +28,7 @@ interface TemplateData {
   observacoes?: string;
   vagaUrl?: string;
   statusEncerramento?: string;
+  admissaoUrl?: string;
 }
 
 export interface EmailTemplate {
@@ -75,7 +77,7 @@ function layout(subtitle: string, body: string): string {
 
 export function getEmailTemplate(
   name: EmailTemplateName,
-  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento }: TemplateData
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl }: TemplateData
 ): EmailTemplate {
   switch (name) {
     case "entrevista_salmazos":
@@ -375,5 +377,32 @@ export function getEmailTemplate(
         ),
       };
     }
+
+    case "admissao_link":
+      return {
+        subject: "Salmazos RH - Complete seus dados de admissão",
+        descricao: `Link de admissão digital enviado para ${nome} referente à vaga de ${cargo}.`,
+        html: layout(
+          "Complete seus Dados de Admissão",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Olá, <strong>${nome}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Parabéns novamente pela aprovação para a vaga de <strong style="color:#d97706;">${cargo}</strong>!
+            Para darmos continuidade à sua contratação, precisamos que você preencha seus dados
+            e envie alguns documentos pelo link abaixo.
+          </p>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0;color:#92400e;font-size:14px;line-height:1.8;">
+              Você pode preencher pelo celular, em qualquer lugar. O link é válido por
+              <strong>5 dias</strong> e você pode fechar e voltar a qualquer momento — seu
+              progresso fica salvo automaticamente.
+            </p>
+          </div>
+          <div style="text-align:center;margin-top:24px;">
+            <a href="${admissaoUrl ?? "#"}" style="display:inline-block;background:#000000;color:#FFD700;font-weight:700;font-size:15px;padding:14px 32px;border-radius:8px;text-decoration:none;">
+              Preencher meus dados
+            </a>
+          </div>`
+        ),
+      };
   }
 }

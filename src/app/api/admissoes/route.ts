@@ -3,6 +3,9 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, admissaoCreateSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
+import { sendEmail } from "@/lib/sendEmail";
+import { getEmailTemplate } from "@/lib/emailTemplates";
+import { linkAdmissaoWhatsapp } from "@/lib/waLinks";
 
 const TOKEN_VALIDADE_DIAS = 5;
 
@@ -21,6 +24,12 @@ export async function POST(request: NextRequest) {
   const svc = createServiceClient();
 
   const tokenExpiraEm = new Date(Date.now() + TOKEN_VALIDADE_DIAS * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: candidato } = await svc
+    .from("candidatos")
+    .select("nome_completo, telefone, email, cargo_pretendido")
+    .eq("id", candidato_id)
+    .single();
 
   const { data: admissao, error } = await svc
     .from("admissoes")
@@ -57,7 +66,21 @@ export async function POST(request: NextRequest) {
 
   const url = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/admissao/${admissao.token}`;
 
-  return NextResponse.json({ data: admissao, url });
+  let whatsappUrl: string | null = null;
+  if (candidato?.telefone) {
+    whatsappUrl = linkAdmissaoWhatsapp(candidato.nome_completo, candidato.telefone, candidato.cargo_pretendido, url);
+  }
+
+  if (candidato?.email) {
+    const { subject, html } = getEmailTemplate("admissao_link", {
+      nome: candidato.nome_completo,
+      cargo: candidato.cargo_pretendido,
+      admissaoUrl: url,
+    });
+    sendEmail({ to: candidato.email, subject, html, tipo: "admissao_link", candidato_id, vaga_id: vaga_id ?? undefined });
+  }
+
+  return NextResponse.json({ data: admissao, url, whatsappUrl });
 }
 
 export async function GET(request: NextRequest) {

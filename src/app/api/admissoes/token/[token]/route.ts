@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { parseBody, admissaoTokenUpdateSchema } from "@/lib/schemas";
+import { resolveAdmissaoByToken } from "@/lib/admissaoToken";
 
 interface Params {
   params: Promise<{ token: string }>;
@@ -45,4 +47,38 @@ export async function GET(_request: NextRequest, { params }: Params) {
       documentos: documentos ?? [],
     },
   });
+}
+
+// Autosave de passo (dados_pessoais parcial) e/ou envio final (submit) — rota pública via token.
+export async function PATCH(request: NextRequest, { params }: Params) {
+  const { token } = await params;
+
+  const resolved = await resolveAdmissaoByToken(token);
+  if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: resolved.httpStatus });
+  const { admissaoId, status: statusAtual, svc } = resolved;
+
+  const body = await request.json();
+  const parsed = parseBody(admissaoTokenUpdateSchema, body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const { dados_pessoais, submit } = parsed.data;
+
+  if (dados_pessoais && Object.keys(dados_pessoais).length > 0) {
+    const { error: upsertError } = await svc
+      .from("admissao_dados_pessoais")
+      .upsert({ admissao_id: admissaoId, ...dados_pessoais }, { onConflict: "admissao_id" });
+    if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 400 });
+  }
+
+  const statusUpdates: Record<string, unknown> = {};
+  if (submit) {
+    statusUpdates.status = "aguardando_analise";
+  } else if (statusAtual === "aguardando_candidato") {
+    statusUpdates.status = "em_preenchimento";
+  }
+
+  if (Object.keys(statusUpdates).length > 0) {
+    await svc.from("admissoes").update(statusUpdates).eq("id", admissaoId);
+  }
+
+  return NextResponse.json({ success: true, status: statusUpdates.status ?? statusAtual });
 }

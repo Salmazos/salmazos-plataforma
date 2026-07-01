@@ -313,6 +313,87 @@ export const admissaoCreateSchema = z.object({
   modalidade: z.enum(["MOT", "terceirizacao"]),
 });
 
+export const admissaoUpdateSchema = z.object({
+  status: z.enum([
+    "aguardando_candidato", "em_preenchimento", "aguardando_analise",
+    "em_analise", "aprovado", "enviado_contabilidade",
+  ]).optional(),
+  observacoes_internas: z.string().optional().nullable(),
+});
+
+const optStr = z.string().optional().nullable();
+
+export const admissaoDadosPessoaisSchema = z.object({
+  nome_completo: optStr,
+  data_nascimento: optStr,
+  sexo: z.enum(["M", "F"]).optional().nullable(),
+  estado_civil: z.enum(["solteiro", "casado", "divorciado", "viuvo", "uniao_estavel"]).optional().nullable(),
+  nacionalidade: optStr,
+  naturalidade: optStr,
+  cpf: optStr,
+  rg_numero: optStr,
+  rg_orgao_emissor: optStr,
+  rg_uf: optStr,
+  rg_data_emissao: optStr,
+  titulo_eleitor: optStr,
+  zona_eleitoral: optStr,
+  secao_eleitoral: optStr,
+  pis_pasep: optStr,
+  carteira_trabalho_numero: optStr,
+  carteira_trabalho_serie: optStr,
+  carteira_trabalho_uf: optStr,
+  cnh_numero: optStr,
+  cnh_categoria: optStr,
+  cnh_validade: optStr,
+  reservista: optStr,
+  nome_mae: optStr,
+  nome_pai: optStr,
+  grau_instrucao: z.enum([
+    "fundamental_incompleto", "fundamental_completo",
+    "medio_incompleto", "medio_completo",
+    "superior_incompleto", "superior_completo", "pos_graduacao",
+  ]).optional().nullable(),
+  endereco_cep: optStr,
+  endereco_logradouro: optStr,
+  endereco_numero: optStr,
+  endereco_complemento: optStr,
+  endereco_bairro: optStr,
+  endereco_cidade: optStr,
+  endereco_uf: optStr,
+  telefone: optStr,
+  email: optStr,
+  banco: optStr,
+  agencia: optStr,
+  conta: optStr,
+  tipo_conta: z.enum(["corrente", "poupanca"]).optional().nullable(),
+});
+
+export const admissaoTokenUpdateSchema = z.object({
+  dados_pessoais: admissaoDadosPessoaisSchema.partial().optional(),
+  submit: z.boolean().optional(),
+});
+
+export const admissaoDependenteCreateSchema = z.object({
+  nome: z.string().min(1),
+  parentesco: z.enum(["filho", "filha", "conjuge", "outro"]).optional().nullable(),
+  data_nascimento: optStr,
+  cpf: optStr,
+  nome_mae: optStr,
+  cpf_mae: optStr,
+});
+
+export const admissaoDocumentoConfirmarSchema = z.object({
+  storage_path: z.string().min(1),
+});
+
+export const admissaoDocumentoRevisarSchema = z.object({
+  status: z.enum(["aprovado", "rejeitado"]),
+  motivo_rejeicao: z.string().optional().nullable(),
+}).refine((d) => d.status !== "rejeitado" || !!d.motivo_rejeicao?.trim(), {
+  message: "Motivo da rejeição é obrigatório",
+  path: ["motivo_rejeicao"],
+});
+
 // ── KM ───────────────────────────────────────────────────────────────────────
 
 export const kmVisitaCreateSchema = z.object({
