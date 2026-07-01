@@ -20,6 +20,9 @@ interface AdmissaoFull {
   token_expira_em: string;
   criado_em: string;
   observacoes_internas: string | null;
+  pdf_pacote_path: string | null;
+  pdf_pacote_gerado_em: string | null;
+  pdf_pacote_gerado_por: string | null;
   candidatos: { id: string; nome_completo: string; cargo_pretendido: string; telefone: string | null; email: string | null } | null;
   vagas: { id: string; titulo: string } | null;
 }
@@ -78,7 +81,9 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [motivoOutro, setMotivoOutro] = useState("");
   const [processandoDocId, setProcessandoDocId] = useState<string | null>(null);
   const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [abrindoPacote, setAbrindoPacote] = useState(false);
   const [toast, setToast] = useState("");
+  const [erroPacote, setErroPacote] = useState("");
 
   const dp = dadosPessoais;
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 4000); };
@@ -163,9 +168,17 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
 
   const handleGerarPdf = async () => {
     setGerandoPdf(true);
+    setErroPacote("");
     try {
       const res = await fetch(`/api/admissoes/${admissao.id}/gerar-pdf`, { method: "POST" });
-      if (!res.ok) { showToast("Erro ao gerar o PDF."); return; }
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        const msg = json.error || "Erro ao gerar o PDF.";
+        setErroPacote(msg);
+        showToast(msg);
+        setTab("documentos");
+        return;
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -178,14 +191,39 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       setStatus("enviado_contabilidade");
       showToast("⚠️ Este PDF contém dados pessoais sensíveis. Envie com segurança e não compartilhe por canais não seguros.");
       router.refresh();
+    } catch {
+      const msg = "Erro de conexão ao gerar o PDF.";
+      setErroPacote(msg);
+      showToast(msg);
     } finally {
       setGerandoPdf(false);
     }
   };
 
-  const podeGerarPdf = ["em_analise", "aprovado", "enviado_contabilidade"].includes(status);
+  const handleVerPacote = async () => {
+    setAbrindoPacote(true);
+    try {
+      const res = await fetch(`/api/admissoes/${admissao.id}/pacote`);
+      const json = await res.json();
+      if (res.ok && json.signedUrl) window.open(json.signedUrl, "_blank");
+      else showToast(json.error || "Erro ao abrir o pacote.");
+    } finally {
+      setAbrindoPacote(false);
+    }
+  };
+
+  // A liberação do botão depende EXCLUSIVAMENTE dos documentos obrigatórios aprovados
+  // em admissao_documentos — o campo admissoes.status (editável manualmente pela equipe)
+  // nunca deve entrar nessa conta, para não abrir um atalho de aprovação sem revisão.
+  const docsObrigatoriosPendentes = documentos.filter((d) => d.obrigatorio && d.status !== "aprovado");
+  const nomesDocsPendentes = docsObrigatoriosPendentes.map(
+    (d) => DOCUMENTOS_ADMISSAO.find((def) => def.tipo_documento === d.tipo_documento)?.label ?? d.tipo_documento
+  );
+  const podeGerarPdf = docsObrigatoriosPendentes.length === 0;
+  const tituloBotaoPdf = nomesDocsPendentes.length > 0 ? `Faltam aprovar: ${nomesDocsPendentes.join(", ")}` : undefined;
   const docsAprovados = documentos.filter((d) => d.status === "aprovado").length;
   const badge = ADMISSAO_STATUS_BADGE[status] ?? { label: status, bg: "#F3F4F6", text: "#374151" };
+  const logGeracaoPacote = auditLogs.find((l) => l.acao === "admissao_pacote_gerado");
 
   return (
     <div>
@@ -273,6 +311,11 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
 
       {tab === "documentos" && (
         <div>
+          {erroPacote && (
+            <div className="rounded-lg p-3 mb-4 text-sm" style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#991B1B" }}>
+              ⚠️ {erroPacote}
+            </div>
+          )}
           <p className="text-sm font-semibold text-gray-700 mb-4">{docsAprovados} de {documentos.length} documentos aprovados</p>
           {documentos.map((doc) => {
             const def = DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === doc.tipo_documento);
@@ -396,15 +439,36 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
             {ADMISSAO_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
-        <button
-          onClick={handleGerarPdf}
-          disabled={!podeGerarPdf || gerandoPdf}
-          className="btn-primary"
-          style={{ opacity: !podeGerarPdf || gerandoPdf ? 0.5 : 1 }}
-        >
-          {gerandoPdf ? "Gerando PDF..." : "Gerar pacote para contabilidade"}
-        </button>
+        <div>
+          <button
+            onClick={handleGerarPdf}
+            disabled={!podeGerarPdf || gerandoPdf}
+            title={tituloBotaoPdf}
+            className="btn-primary"
+            style={{ opacity: !podeGerarPdf || gerandoPdf ? 0.5 : 1 }}
+          >
+            {gerandoPdf ? "Gerando PDF..." : "Gerar pacote para contabilidade"}
+          </button>
+          {nomesDocsPendentes.length > 0 && (
+            <p style={{ fontSize: 12, color: "#DC2626", marginTop: 6, maxWidth: 320, textAlign: "right" }}>
+              ⚠️ Aprove antes: {nomesDocsPendentes.join(", ")}
+            </p>
+          )}
+        </div>
       </div>
+
+      {admissao.pdf_pacote_path && (
+        <div className="card mt-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Pacote para contabilidade</p>
+          <p className="text-sm text-gray-600 mb-2">
+            Gerado em {admissao.pdf_pacote_gerado_em ? formatarData(admissao.pdf_pacote_gerado_em) : "—"}
+            {logGeracaoPacote?.usuario_nome ? ` por ${logGeracaoPacote.usuario_nome}` : ""}
+          </p>
+          <button onClick={handleVerPacote} disabled={abrindoPacote} className="btn-outline">
+            {abrindoPacote ? "Abrindo..." : "Ver pacote gerado"}
+          </button>
+        </div>
+      )}
 
       {toast && (
         <div style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", maxWidth: 420, textAlign: "center", background: "#111827", color: "#fff", padding: "12px 20px", borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 60 }}>

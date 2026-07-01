@@ -49,6 +49,20 @@ export async function POST(_request: NextRequest, { params }: Params) {
   const deps = (dependentes ?? []) as AdmissaoDependente[];
   const docs = (documentos ?? []) as AdmissaoDocumento[];
 
+  const obrigatoriosPendentes = docs.filter((d) => d.obrigatorio && d.status !== "aprovado");
+  if (obrigatoriosPendentes.length > 0) {
+    const labels = obrigatoriosPendentes.map(
+      (d) => DOCUMENTOS_ADMISSAO.find((def) => def.tipo_documento === d.tipo_documento)?.label ?? d.tipo_documento
+    );
+    return NextResponse.json(
+      {
+        error: `Não é possível gerar o pacote: ${obrigatoriosPendentes.length} documento(s) obrigatório(s) ainda não foram aprovados: ${labels.join(", ")}`,
+        pendentes: labels,
+      },
+      { status: 400 }
+    );
+  }
+
   const pdfDoc = await PDFDocument.create();
   const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const regular = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -203,10 +217,22 @@ export async function POST(_request: NextRequest, { params }: Params) {
 
   const pdfBytes = await pdfDoc.save();
 
-  const uploadPath = `${id}/pacote-contabilidade-${Date.now()}.pdf`;
-  await svc.storage.from("admissao-docs").upload(uploadPath, Buffer.from(pdfBytes), { contentType: "application/pdf" });
+  const uploadPath = `pacotes-contabilidade/${id}/pacote-${Date.now()}.pdf`;
+  const { error: uploadError } = await svc.storage
+    .from("admissao-docs")
+    .upload(uploadPath, Buffer.from(pdfBytes), { contentType: "application/pdf" });
+  if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
 
-  await svc.from("admissoes").update({ status: "enviado_contabilidade" }).eq("id", id);
+  const geradoEm = new Date().toISOString();
+  await svc
+    .from("admissoes")
+    .update({
+      status: "enviado_contabilidade",
+      pdf_pacote_path: uploadPath,
+      pdf_pacote_gerado_em: geradoEm,
+      pdf_pacote_gerado_por: user.id,
+    })
+    .eq("id", id);
 
   registrarAuditoria({
     usuario_id: user.id,
