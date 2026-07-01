@@ -253,7 +253,7 @@ export default function KmTab({ analistaId, isGestor }: Props) {
           : [{ empresa: "", contato: "", contato_telefone: "", contato_email: "", motivo: "", resultado: "" }]
       );
     } catch {
-      setVisitas([{ empresa: "", contato: "", motivo: "", resultado: "" }]);
+      setVisitas([{ empresa: "", contato: "", contato_telefone: "", contato_email: "", motivo: "", resultado: "" }]);
     }
     setModalOpen(true);
   };
