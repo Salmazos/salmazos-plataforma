@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import KmTab from "@/components/KmTab";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -604,12 +603,6 @@ export default function MeuPerfilClient({ perfil, userEmail, userId }: Props) {
               icon={<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>}
               onClick={() => setTab(3)}
             />
-            <TabBtn
-              active={tab === 4}
-              label="Quilometragem"
-              icon={<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>}
-              onClick={() => setTab(4)}
-            />
           </div>
 
           {/* Tab content */}
@@ -909,13 +902,6 @@ export default function MeuPerfilClient({ perfil, userEmail, userId }: Props) {
               </div>
             )}
 
-            {/* ── TAB 4: Quilometragem ── */}
-            {tab === 4 && (
-              <KmTab
-                analistaId={perfil.id}
-                isGestor={perfil.nivel_acesso === "superuser" || perfil.nivel_acesso === "diretoria"}
-              />
-            )}
           </div>
         </div>
       </div>
