@@ -26,10 +26,11 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });
 
-  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }] = await Promise.all([
+  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: auditLogs }] = await Promise.all([
     svc.from("admissao_dados_pessoais").select("*").eq("admissao_id", id).maybeSingle(),
     svc.from("admissao_dependentes").select("*").eq("admissao_id", id).order("created_at", { ascending: true }),
     svc.from("admissao_documentos").select("*").eq("admissao_id", id).order("created_at", { ascending: true }),
+    svc.from("audit_logs").select("id, created_at, usuario_nome, acao, detalhes").eq("entidade", "admissoes").eq("entidade_id", id).order("created_at", { ascending: false }),
   ]);
 
   return NextResponse.json({
@@ -38,6 +39,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
       dados_pessoais: dadosPessoais ?? null,
       dependentes: dependentes ?? [],
       documentos: documentos ?? [],
+      audit_logs: auditLogs ?? [],
     },
   });
 }

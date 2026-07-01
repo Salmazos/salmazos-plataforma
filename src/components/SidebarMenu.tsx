@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   MapPin,
   Car,
+  FileCheck,
 } from "lucide-react";
 
 interface Props {
@@ -64,6 +65,7 @@ const menuItems: MenuItemDef[] = [
   { label: "Banco de Candidatos", href: "/painel/banco-candidatos", icon: Users },
   { label: "Painel", href: "/painel", icon: LayoutDashboard },
   { label: "Vagas", href: "/painel/vagas", icon: Briefcase },
+  { label: "Admissões", href: "/painel/admissoes", icon: FileCheck, requireSupervisor: true },
   { label: "Clientes", href: "/painel/clientes", icon: Building2 },
   { label: "Agenda", href: "/painel/agenda", icon: Calendar },
   { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },

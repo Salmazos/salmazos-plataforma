@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseBody, admissaoDocumentoConfirmarSchema } from "@/lib/schemas";
 import { resolveAdmissaoByToken } from "@/lib/admissaoToken";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
+import { registrarAuditoria } from "@/lib/audit";
 
 interface Params {
   params: Promise<{ token: string; tipo: string }>;
@@ -57,5 +58,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  registrarAuditoria({
+    usuario_id: null,
+    usuario_nome: "Candidato (autoatendimento)",
+    acao: "admissao_documento_enviado",
+    entidade: "admissao_documentos",
+    entidade_id: data.id,
+    detalhes: { admissao_id: admissaoId, tipo_documento: tipo },
+  });
+
   return NextResponse.json({ data });
 }

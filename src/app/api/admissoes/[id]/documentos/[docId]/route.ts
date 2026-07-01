@@ -9,6 +9,9 @@ interface Params {
   params: Promise<{ id: string; docId: string }>;
 }
 
+// Documentos de admissão contêm dados sensíveis (LGPD) — signed URL de no máximo 15 minutos.
+const SIGNED_URL_TTL_SECONDS = 900;
+
 // Signed URL para o time interno visualizar o documento enviado.
 export async function GET(_request: NextRequest, { params }: Params) {
   const { id, docId } = await params;
@@ -23,7 +26,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
   const { data: doc, error } = await svc
     .from("admissao_documentos")
-    .select("storage_path")
+    .select("storage_path, tipo_documento")
     .eq("id", docId)
     .eq("admissao_id", id)
     .single();
@@ -33,9 +36,18 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
   const { data, error: signError } = await svc.storage
     .from("admissao-docs")
-    .createSignedUrl(doc.storage_path, 60);
+    .createSignedUrl(doc.storage_path, SIGNED_URL_TTL_SECONDS);
 
   if (signError) return NextResponse.json({ error: signError.message }, { status: 500 });
+
+  registrarAuditoria({
+    usuario_id: user.id,
+    usuario_nome: user.email ?? null,
+    acao: "admissao_documento_visualizado",
+    entidade: "admissao_documentos",
+    entidade_id: docId,
+    detalhes: { admissao_id: id, tipo_documento: doc.tipo_documento },
+  });
 
   return NextResponse.json({ signedUrl: data.signedUrl });
 }
