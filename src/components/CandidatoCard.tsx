@@ -183,6 +183,11 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
             <p className="text-gray-400 text-[10px] truncate">
               Vaga: {card.vaga_titulo}
             </p>
+            {card.cliente_nome && (
+              <p className="text-gray-400 text-[10px] truncate">
+                Cliente: {card.cliente_nome}
+              </p>
+            )}
             {card.triagem_score != null && card.triagem_label && (
               <div className="mt-0.5">
                 <TriagemBadge score={card.triagem_score} label={card.triagem_label} size="sm" />
