@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import CandidatoPerfilTabs from "@/components/CandidatoPerfilTabs";
 import type { Candidato } from "@/types";
 
@@ -13,6 +13,12 @@ interface Props {
 export default async function CandidatoPerfilPage({ params }: Props) {
   const { id } = await params;
   const supabase = createServiceClient();
+  const authClient = await createClient();
+  const {
+    data: { user },
+  } = await authClient.auth.getUser();
+  const role = user?.app_metadata?.role ?? "analista";
+
   const { data } = await supabase
     .from("candidatos")
     .select("*")
@@ -81,7 +87,7 @@ export default async function CandidatoPerfilPage({ params }: Props) {
         </Link>
       </div>
 
-      <CandidatoPerfilTabs candidato={candidato} garantiaInfo={garantiaInfo} melhorRetencao={melhorRetencao} />
+      <CandidatoPerfilTabs candidato={candidato} garantiaInfo={garantiaInfo} melhorRetencao={melhorRetencao} role={role} />
     </div>
   );
 }

@@ -59,6 +59,11 @@ export interface Candidato {
   alocacao_data_fim?: string | null;
   alocacao_tipo_servico?: string | null;
   alocacao_renovavel?: boolean | null;
+  reprovado_internamente?: boolean | null;
+  reprovacao_motivo?: string | null;
+  reprovado_por_id?: string | null;
+  reprovado_por_nome?: string | null;
+  reprovado_em?: string | null;
   created_at: string;
   updated_at: string;
 }

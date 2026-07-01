@@ -37,6 +37,7 @@ export type CandidatoRow = {
   habilidades: string[] | null;
   formacao_academica: string | null;
   vagas_interesse: string[] | null;
+  reprovado_internamente: boolean | null;
 };
 
 type MatchEntry = { vaga_id: string; titulo: string; score: number };
@@ -1060,6 +1061,11 @@ export default function BancoCandidatosClient({
                     <td style={{ padding: "10px 12px", fontSize: 14, color: c.bloqueado ? "#fff" : "#111827", fontWeight: 600 }}>
                       <div style={{ whiteSpace: "nowrap" }}>
                         {c.nome_completo}
+                        {c.reprovado_internamente && (
+                          <span style={{ display: "inline-block", background: "#dc2626", color: "#fff", padding: "1px 6px", borderRadius: 6, fontSize: 10, fontWeight: 700, marginLeft: 6, verticalAlign: "middle" }}>
+                            ⛔ Reprovado
+                          </span>
+                        )}
                         {c.bloqueado && (
                           <span style={{ display: "inline-block", background: "#dc2626", color: "#fff", padding: "1px 6px", borderRadius: 6, fontSize: 10, fontWeight: 700, marginLeft: 6, verticalAlign: "middle" }}>
                             BLOQUEADO

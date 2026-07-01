@@ -17,6 +17,7 @@ interface Props {
   candidato: Candidato;
   garantiaInfo?: GarantiaInfo | null;
   melhorRetencao?: MelhorRetencao | null;
+  role: string;
 }
 
 const TURNOS = ["Integral", "Manhã", "Tarde", "Noite", "Flexível"];
@@ -80,9 +81,10 @@ function formatarCpf(v: string): string {
   return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6, 9)}-${nums.slice(9)}`;
 }
 
-export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao }: Props) {
+export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, role }: Props) {
   const router = useRouter();
   const etapa = ETAPAS_KANBAN.find((e) => e.id === candidato.etapa_kanban);
+  const podeRemoverReprovacao = ["superuser", "diretoria"].includes(role);
 
   const [editando, setEditando] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -105,6 +107,13 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao }
   const [feeStatus, setFeeStatus] = useState(garantiaInfo?.fee_status ?? "pendente");
   const [feeSaving, setFeeSaving] = useState(false);
   const [feeToast, setFeeToast] = useState("");
+
+  const [reprovarModalOpen, setReprovarModalOpen] = useState(false);
+  const [reprovarMotivo, setReprovarMotivo] = useState("");
+  const [reprovarSalvando, setReprovarSalvando] = useState(false);
+  const [reprovarErro, setReprovarErro] = useState("");
+  const [removerReprovacaoAberto, setRemoverReprovacaoAberto] = useState(false);
+  const [removendoReprovacao, setRemovendoReprovacao] = useState(false);
 
   const WA_OPCOES = [
     {
@@ -192,6 +201,44 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao }
       setEmailMensagem({ ok: false, texto: "Erro ao enviar e-mail. Tente novamente." });
     } finally {
       setEmailEnviando(false);
+    }
+  };
+
+  const handleConfirmarReprovacao = async () => {
+    if (!reprovarMotivo.trim()) return;
+    setReprovarSalvando(true);
+    setReprovarErro("");
+    try {
+      const res = await fetch(`/api/candidatos/${candidato.id}/reprovar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo: reprovarMotivo.trim() }),
+      });
+      if (!res.ok) {
+        const json = await res.json();
+        setReprovarErro(json.error || "Erro ao reprovar candidato.");
+        return;
+      }
+      setReprovarModalOpen(false);
+      setReprovarMotivo("");
+      router.refresh();
+    } catch {
+      setReprovarErro("Erro ao reprovar candidato. Tente novamente.");
+    } finally {
+      setReprovarSalvando(false);
+    }
+  };
+
+  const handleRemoverReprovacao = async () => {
+    setRemovendoReprovacao(true);
+    try {
+      const res = await fetch(`/api/candidatos/${candidato.id}/reprovar`, { method: "DELETE" });
+      if (res.ok) {
+        setRemoverReprovacaoAberto(false);
+        router.refresh();
+      }
+    } finally {
+      setRemovendoReprovacao(false);
     }
   };
 
@@ -369,6 +416,101 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao }
                           {label}
                         </button>
                       ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {!editando && !candidato.reprovado_internamente && (
+              <button
+                onClick={() => { setReprovarErro(""); setReprovarMotivo(""); setReprovarModalOpen(true); }}
+                style={{
+                  backgroundColor: "#fff",
+                  color: "#dc2626",
+                  border: "1px solid #dc2626",
+                  borderRadius: "8px",
+                  padding: "7px 14px",
+                  fontWeight: 600,
+                  fontSize: "14px",
+                  cursor: "pointer",
+                }}
+              >
+                ⛔ Reprovar candidato
+              </button>
+            )}
+
+            {!editando && candidato.reprovado_internamente && (
+              <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8 }}>
+                <span
+                  style={{
+                    backgroundColor: "#dc2626",
+                    color: "#fff",
+                    borderRadius: "8px",
+                    padding: "7px 14px",
+                    fontWeight: 700,
+                    fontSize: "14px",
+                  }}
+                >
+                  ✓ Reprovado internamente
+                </span>
+                {podeRemoverReprovacao && (
+                  <button
+                    onClick={() => setRemoverReprovacaoAberto((o) => !o)}
+                    className="btn-outline"
+                  >
+                    Remover reprovação
+                  </button>
+                )}
+                {removerReprovacaoAberto && (
+                  <>
+                    <div
+                      style={{ position: "fixed", inset: 0, zIndex: 10 }}
+                      onClick={() => setRemoverReprovacaoAberto(false)}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        right: 0,
+                        top: "calc(100% + 6px)",
+                        background: "#fff",
+                        borderRadius: "10px",
+                        boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+                        minWidth: "260px",
+                        zIndex: 20,
+                        border: "1px solid #e5e7eb",
+                        padding: "14px",
+                      }}
+                    >
+                      <p style={{ fontSize: 13, color: "#374151", marginBottom: 10 }}>
+                        Tem certeza que deseja remover a reprovação interna deste candidato?
+                      </p>
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                        <button
+                          onClick={() => setRemoverReprovacaoAberto(false)}
+                          className="btn-outline"
+                          disabled={removendoReprovacao}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={handleRemoverReprovacao}
+                          disabled={removendoReprovacao}
+                          style={{
+                            backgroundColor: "#374151",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: "8px",
+                            padding: "7px 14px",
+                            fontWeight: 600,
+                            fontSize: "13px",
+                            cursor: removendoReprovacao ? "not-allowed" : "pointer",
+                            opacity: removendoReprovacao ? 0.7 : 1,
+                          }}
+                        >
+                          {removendoReprovacao ? "Removendo..." : "Confirmar"}
+                        </button>
+                      </div>
                     </div>
                   </>
                 )}
@@ -1151,6 +1293,81 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao }
                 }}
               >
                 {emailEnviando ? "Enviando..." : "Enviar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de reprovação interna */}
+      {reprovarModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={(e) => { if (e.target === e.currentTarget && !reprovarSalvando) setReprovarModalOpen(false); }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Reprovar candidato internamente</h2>
+              <button
+                onClick={() => setReprovarModalOpen(false)}
+                disabled={reprovarSalvando}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div
+              className="rounded-lg p-4 mb-4 text-sm leading-relaxed"
+              style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b" }}
+            >
+              Esta ação marca o candidato como inapto para futuras seleções. Ele continuará no
+              banco de dados mas será sinalizado para toda a equipe.
+            </div>
+
+            <label className="block text-sm font-semibold text-red-700 mb-1">
+              Motivo da reprovação *
+            </label>
+            <textarea
+              value={reprovarMotivo}
+              onChange={(e) => setReprovarMotivo(e.target.value)}
+              placeholder="Descreva o motivo..."
+              rows={3}
+              autoFocus
+              className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm outline-none resize-none mb-4"
+            />
+
+            {reprovarErro && (
+              <p className="text-sm rounded-lg px-3 py-2 mb-4 bg-red-50 text-red-600 border border-red-200">
+                {reprovarErro}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setReprovarModalOpen(false)}
+                className="btn-outline"
+                disabled={reprovarSalvando}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmarReprovacao}
+                disabled={reprovarSalvando || !reprovarMotivo.trim()}
+                style={{
+                  backgroundColor: "#dc2626",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "8px 20px",
+                  fontWeight: 700,
+                  fontSize: "14px",
+                  cursor: reprovarSalvando || !reprovarMotivo.trim() ? "not-allowed" : "pointer",
+                  opacity: reprovarSalvando || !reprovarMotivo.trim() ? 0.6 : 1,
+                }}
+              >
+                {reprovarSalvando ? "Salvando..." : "Confirmar reprovação"}
               </button>
             </div>
           </div>

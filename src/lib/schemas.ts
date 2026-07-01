@@ -174,6 +174,10 @@ export const candidatoStatusSchema = z.object({
   etapa: z.string().optional(),
 });
 
+export const candidatoReprovarInternoSchema = z.object({
+  motivo: z.string().trim().min(1, "Motivo é obrigatório"),
+});
+
 export const candidatoEmailSchema = z.object({
   template: z.enum([
     "entrevista_salmazos",

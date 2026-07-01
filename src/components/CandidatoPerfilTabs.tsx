@@ -7,6 +7,7 @@ import EncaminhamentosSection from "@/components/EncaminhamentosSection";
 import RetencaoSection from "@/components/RetencaoSection";
 import HistoricoCandidato from "@/components/HistoricoCandidato";
 import AvaliacoesPsicologicas from "@/components/AvaliacoesPsicologicas";
+import { formatarData } from "@/lib/utils";
 
 type Tab = "perfil" | "avaliacoes";
 
@@ -39,13 +40,33 @@ interface Props {
   candidato: Candidato;
   garantiaInfo?: GarantiaInfo | null;
   melhorRetencao?: MelhorRetencao | null;
+  role: string;
 }
 
-export default function CandidatoPerfilTabs({ candidato, garantiaInfo, melhorRetencao }: Props) {
+export default function CandidatoPerfilTabs({ candidato, garantiaInfo, melhorRetencao, role }: Props) {
   const [tab, setTab] = useState<Tab>("perfil");
 
   return (
     <div>
+      {candidato.reprovado_internamente && (
+        <div
+          style={{
+            background: "#dc2626",
+            color: "#fff",
+            borderRadius: 10,
+            padding: "12px 18px",
+            marginBottom: 20,
+            fontSize: 14,
+            fontWeight: 600,
+            lineHeight: 1.5,
+          }}
+        >
+          ⛔ Candidato reprovado internamente por {candidato.reprovado_por_nome ?? "—"}
+          {candidato.reprovado_em ? ` em ${formatarData(candidato.reprovado_em)}` : ""}
+          {candidato.reprovacao_motivo ? ` · Motivo: ${candidato.reprovacao_motivo}` : ""}
+        </div>
+      )}
+
       {/* Tab bar */}
       <div
         style={{
@@ -85,7 +106,7 @@ export default function CandidatoPerfilTabs({ candidato, garantiaInfo, melhorRet
 
       {tab === "perfil" && (
         <>
-          <PerfilEdicao candidato={candidato} garantiaInfo={garantiaInfo} melhorRetencao={melhorRetencao} />
+          <PerfilEdicao candidato={candidato} garantiaInfo={garantiaInfo} melhorRetencao={melhorRetencao} role={role} />
           <div className="mt-6">
             <EncaminhamentosSection candidatoId={candidato.id} />
           </div>
