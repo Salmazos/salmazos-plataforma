@@ -234,7 +234,7 @@ export default function EmpresasVisitadasClient({ analistas: _analistas }: Props
                                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                                   <thead>
                                     <tr>
-                                      {["Data", "Analista", "Contato", "Motivo", "Resultado"].map((h) => (
+                                      {["Data", "Analista", "Contato", "Motivo", "Resumo"].map((h) => (
                                         <th key={h} style={{ padding: "4px 8px", fontSize: 10, color: "#9CA3AF", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "left", borderBottom: "1px solid #E5E7EB" }}>{h}</th>
                                       ))}
                                     </tr>

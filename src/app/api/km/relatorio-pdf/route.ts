@@ -298,7 +298,7 @@ export async function POST(request: NextRequest) {
     if (rv && rv.length > 0) {
       for (const v of rv) {
         ensure(14);
-        const parts = [v.empresa, v.contato ? `Contato: ${v.contato}` : "", v.motivo ?? "", v.resultado ? `-> ${v.resultado}` : ""].filter(Boolean).join("  |  ");
+        const parts = [v.empresa, v.contato ? `Contato: ${v.contato}` : "", v.motivo ?? "", v.resultado ? `Resumo: ${v.resultado}` : ""].filter(Boolean).join("  |  ");
         for (const line of wrapText(parts, regular, 7, CW - 20)) {
           ensure(12);
           drawText(line, ML + 16, y - 10, regular, 7, GRAY);

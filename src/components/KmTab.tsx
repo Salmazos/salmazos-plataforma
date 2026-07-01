@@ -701,16 +701,16 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                       <input style={inputStyle} type="email" placeholder="contato@empresa.com" value={v.contato_email} onChange={(e) => updateVisita(idx, "contato_email", e.target.value)} />
                     </div>
 
-                    {/* Motivo + Resultado */}
+                    {/* Motivo + Resumo */}
                     <div>
                       <label style={labelStyle}>Motivo da visita</label>
                       <input style={inputStyle} placeholder="Ex: Prospecção comercial" value={v.motivo} onChange={(e) => updateVisita(idx, "motivo", e.target.value)} />
                     </div>
                     <div>
-                      <label style={labelStyle}>Resultado obtido</label>
+                      <label style={labelStyle}>Resumo da visita</label>
                       <textarea
                         style={{ ...inputStyle, resize: "none", minHeight: 38 }}
-                        placeholder="Resultado..."
+                        placeholder="Resumo da visita..."
                         value={v.resultado}
                         onChange={(e) => updateVisita(idx, "resultado", e.target.value)}
                       />
