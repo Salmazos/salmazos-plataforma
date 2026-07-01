@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { MOTIVOS_REPROVACAO_INTERNA, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
 
 interface Props {
   isOpen: boolean;
@@ -19,15 +20,6 @@ export interface FinalizarResult {
   vaga_reaberta?: boolean;
 }
 
-const MOTIVOS_ENCERRAMENTO = [
-  "Candidato desistiu",
-  "Cliente cancelou a vaga",
-  "Reprovado na entrevista final pelo cliente",
-  "Proposta recusada pelo candidato",
-  "Impedimento documental ou médico",
-  "Outro",
-];
-
 const RESPONSAVEIS = [
   "Cliente",
   "Candidato",
@@ -35,13 +27,13 @@ const RESPONSAVEIS = [
   "Externo (vaga cancelada, corte de budget, etc.)",
 ];
 
-function EncerrarInfoBox({ motivo }: { motivo: string }) {
-  if (!motivo) return null;
+function EncerrarInfoBox({ motivo, vagaCancelada }: { motivo: string; vagaCancelada: boolean }) {
+  if (!motivo && !vagaCancelada) return null;
   let bg: string, border: string, color: string, text: string;
-  if (motivo === "Cliente cancelou a vaga") {
+  if (vagaCancelada) {
     bg = "#FFFBEB"; border = "#FCD34D"; color = "#92400E";
     text = "A vaga será reaberta automaticamente e o candidato retornará ao Banco de Candidatos.";
-  } else if (motivo === "Candidato desistiu" || motivo === "Proposta recusada pelo candidato") {
+  } else if (motivo === "Desistência do processo seletivo") {
     bg = "#EFF6FF"; border = "#93C5FD"; color = "#1E40AF";
     text = "O candidato retornará ao Banco de Candidatos disponível para outras vagas.";
   } else {
@@ -135,6 +127,8 @@ export default function ModalFinalizarProcesso({
   const [dataFim, setDataFim] = useState("");
   const [renovavel, setRenovavel] = useState(true);
   const [motivoReprovacao, setMotivoReprovacao] = useState("");
+  const [motivoOutro, setMotivoOutro] = useState("");
+  const [vagaCanceladaCliente, setVagaCanceladaCliente] = useState(false);
   const [responsavelEncerramento, setResponsavelEncerramento] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -146,6 +140,7 @@ export default function ModalFinalizarProcesso({
   const isContratado = resultado === "contratado";
   const cfg = getContratadoConfig(tipoServico ?? null);
   const invalidStyle = { borderColor: "#EF4444", boxShadow: "0 0 0 1px #EF4444" };
+  const isOutroMotivo = motivoReprovacao === OUTRO_MOTIVO_REPROVACAO;
 
   const handleConfirmar = async () => {
     setTentouEnviar(true);
@@ -155,12 +150,14 @@ export default function ModalFinalizarProcesso({
       if (cfg.dataFimRequired && !dataFim) { setErro("Informe a data de término."); return; }
     } else {
       if (!motivoReprovacao) { setErro("Selecione o motivo do encerramento."); return; }
+      if (isOutroMotivo && !motivoOutro.trim()) { setErro("Descreva o motivo."); return; }
       if (!responsavelEncerramento) { setErro("Selecione o responsável pelo encerramento."); return; }
     }
 
     setEnviando(true);
     setErro("");
     try {
+      const motivoFinal = isOutroMotivo ? `Outro motivo: ${motivoOutro.trim()}` : motivoReprovacao;
       const res = await fetch(`/api/candidatos-vagas/${cvId}/finalizar`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -173,7 +170,11 @@ export default function ModalFinalizarProcesso({
                 renovavel: tipoServico === "terceirizacao" ? renovavel : undefined,
                 tipo_servico: tipoServico,
               }
-            : { motivo_reprovacao: motivoReprovacao, responsavel_encerramento: responsavelEncerramento }),
+            : {
+                motivo_reprovacao: motivoFinal,
+                responsavel_encerramento: responsavelEncerramento,
+                vaga_cancelada_cliente: vagaCanceladaCliente,
+              }),
           observacoes: observacoes || null,
         }),
       });
@@ -301,7 +302,7 @@ export default function ModalFinalizarProcesso({
                   style={tentouEnviar && !motivoReprovacao ? invalidStyle : undefined}
                 >
                   <option value="">Selecione o motivo...</option>
-                  {MOTIVOS_ENCERRAMENTO.map((m) => (
+                  {MOTIVOS_REPROVACAO_INTERNA.map((m) => (
                     <option key={m} value={m}>{m}</option>
                   ))}
                 </select>
@@ -309,6 +310,33 @@ export default function ModalFinalizarProcesso({
                   <p className="text-red-500 text-xs mt-1">Selecione o motivo do encerramento.</p>
                 )}
               </div>
+
+              {isOutroMotivo && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    Descreva o motivo:
+                  </label>
+                  <textarea
+                    value={motivoOutro}
+                    onChange={(e) => setMotivoOutro(e.target.value)}
+                    placeholder="Descreva o motivo..."
+                    rows={2}
+                    className="input-field resize-none"
+                    style={tentouEnviar && !motivoOutro.trim() ? invalidStyle : undefined}
+                  />
+                </div>
+              )}
+
+              {/* Vaga cancelada pelo cliente */}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={vagaCanceladaCliente}
+                  onChange={(e) => setVagaCanceladaCliente(e.target.checked)}
+                  className="accent-black"
+                />
+                <span className="text-sm text-gray-700 font-medium">Vaga foi cancelada pelo cliente</span>
+              </label>
 
               {/* Responsável */}
               <div>
@@ -331,7 +359,7 @@ export default function ModalFinalizarProcesso({
                 )}
               </div>
 
-              <EncerrarInfoBox motivo={motivoReprovacao} />
+              <EncerrarInfoBox motivo={motivoReprovacao} vagaCancelada={vagaCanceladaCliente} />
             </>
           )}
 

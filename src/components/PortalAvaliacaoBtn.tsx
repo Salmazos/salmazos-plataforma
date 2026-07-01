@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { MOTIVOS_REPROVACAO_CLIENTE, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
 
 interface Props {
   encaminhamentoId: string;
@@ -40,6 +41,8 @@ export default function PortalAvaliacaoBtn({
   const [modalAberto, setModalAberto] = useState(false);
   const [acaoPendente, setAcaoPendente] = useState<"aprovado" | "reprovado" | null>(null);
   const [feedback, setFeedback] = useState("");
+  const [motivoSelecionado, setMotivoSelecionado] = useState("");
+  const [motivoOutro, setMotivoOutro] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [tentouEnviar, setTentouEnviar] = useState(false);
@@ -87,6 +90,8 @@ export default function PortalAvaliacaoBtn({
   const handleAbrir = (acao: "aprovado" | "reprovado") => {
     setAcaoPendente(acao);
     setFeedback("");
+    setMotivoSelecionado("");
+    setMotivoOutro("");
     setErro("");
     setTentouEnviar(false);
     setModalAberto(true);
@@ -97,14 +102,20 @@ export default function PortalAvaliacaoBtn({
   const isTerc = tipoServico === "terceirizacao";
   const isAprovacao = acaoPendente === "aprovado";
   const showAdmissao = isAprovacao && (isRS || isMOT || isTerc);
+  const isOutroMotivo = motivoSelecionado === OUTRO_MOTIVO_REPROVACAO;
+  const motivoValido = isOutroMotivo ? motivoOutro.trim().length > 0 : motivoSelecionado.trim().length > 0;
 
   const feeValor = isRS && feePercentual && admSalario
     ? (parseFloat(admSalario) * feePercentual / 100)
     : null;
 
   const validateRequired = (): string | null => {
+    if (!isAprovacao) {
+      if (!motivoValido) return isOutroMotivo ? "Descreva o motivo." : "Selecione o motivo da reprovação.";
+      return null;
+    }
+
     if (!feedback.trim()) return "Adicione um comentário.";
-    if (!isAprovacao) return null;
 
     if (isRS) {
       if (!admDataInicio) return "Informe a data de início.";
@@ -143,13 +154,16 @@ export default function PortalAvaliacaoBtn({
     setSalvando(true);
     setErro("");
     try {
+      const feedbackFinal = isAprovacao
+        ? feedback
+        : (isOutroMotivo ? `Outro motivo: ${motivoOutro.trim()}` : motivoSelecionado);
       const res = await fetch("/api/portal/avaliar", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           encaminhamento_id: encaminhamentoId,
           status: acaoPendente,
-          feedback_cliente: feedback,
+          feedback_cliente: feedbackFinal,
           ...(isAprovacao && cvId ? {
             cv_id: cvId,
             tipo_servico: tipoServico,
@@ -232,22 +246,50 @@ export default function PortalAvaliacaoBtn({
             </div>
 
             <div className="p-6 space-y-5">
-              {/* Section 1: Feedback */}
-              <Field label="Feedback" required>
-                <textarea
-                  value={feedback}
-                  onChange={(e) => setFeedback(e.target.value)}
-                  rows={3}
-                  placeholder={
-                    isAprovacao
-                      ? "Ex: Perfil excelente, boa comunicação e experiência relevante..."
-                      : "Ex: O candidato não possui a experiência específica que precisamos..."
-                  }
-                  className="input-field resize-none w-full"
-                  style={missing(feedback) ? inv : undefined}
-                  autoFocus
-                />
-              </Field>
+              {/* Section 1: Feedback / Motivo */}
+              {isAprovacao ? (
+                <Field label="Feedback" required>
+                  <textarea
+                    value={feedback}
+                    onChange={(e) => setFeedback(e.target.value)}
+                    rows={3}
+                    placeholder="Ex: Perfil excelente, boa comunicação e experiência relevante..."
+                    className="input-field resize-none w-full"
+                    style={missing(feedback) ? inv : undefined}
+                    autoFocus
+                  />
+                </Field>
+              ) : (
+                <>
+                  <Field label="Motivo da reprovação" required>
+                    <select
+                      value={motivoSelecionado}
+                      onChange={(e) => setMotivoSelecionado(e.target.value)}
+                      className="input-field w-full"
+                      style={tentouEnviar && !motivoSelecionado ? inv : undefined}
+                      autoFocus
+                    >
+                      <option value="" disabled>Selecione o motivo...</option>
+                      {MOTIVOS_REPROVACAO_CLIENTE.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  {isOutroMotivo && (
+                    <Field label="Descreva o motivo" required>
+                      <textarea
+                        value={motivoOutro}
+                        onChange={(e) => setMotivoOutro(e.target.value)}
+                        rows={3}
+                        placeholder="Descreva o motivo..."
+                        className="input-field resize-none w-full"
+                        style={tentouEnviar && !motivoOutro.trim() ? inv : undefined}
+                      />
+                    </Field>
+                  )}
+                </>
+              )}
 
               {/* Section 2: Admission data */}
               {showAdmissao && (
@@ -460,7 +502,7 @@ export default function PortalAvaliacaoBtn({
                 </button>
                 <button
                   onClick={handleConfirmar}
-                  disabled={salvando || !feedback.trim()}
+                  disabled={salvando || (isAprovacao ? !feedback.trim() : !motivoValido)}
                   className="flex-1 py-2.5 rounded-xl font-semibold text-white transition-opacity disabled:opacity-50"
                   style={{ backgroundColor: isAprovacao ? "#16A34A" : "#DC2626" }}
                 >

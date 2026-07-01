@@ -7,6 +7,21 @@ import { formatarData } from "@/lib/utils";
 import type { KanbanCard } from "@/types";
 import TriagemBadge from "./TriagemBadge";
 import ModalEntrevistaSalmazos from "./ModalEntrevistaSalmazos";
+import { MOTIVOS_REPROVACAO_INTERNA, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
+
+const ETAPAS_REJEICAO = ["reprovado", "reprovado_cliente"];
+
+const fieldStyle: React.CSSProperties = {
+  width: "100%",
+  border: "1px solid #E5E7EB",
+  borderRadius: 8,
+  padding: "8px 12px",
+  fontSize: 13,
+  color: "#111827",
+  outline: "none",
+  boxSizing: "border-box",
+  marginBottom: 16,
+};
 
 type Analista = { id: string; nome_completo: string; email: string };
 
@@ -66,6 +81,8 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
   const [salvando, setSalvando] = useState(false);
   const [modalEtapa, setModalEtapa] = useState<EtapaOption | null>(null);
   const [comentario, setComentario] = useState("");
+  const [motivoSelecionado, setMotivoSelecionado] = useState("");
+  const [motivoOutro, setMotivoOutro] = useState("");
   const [analistas, setAnalistas] = useState<Analista[]>([]);
   const [modalEntrevistaSalmazos, setModalEntrevistaSalmazos] = useState(false);
 
@@ -109,20 +126,35 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
     const opcao = opcoes.find((o) => o.value === value);
     if (opcao) {
       setComentario("");
+      setMotivoSelecionado("");
+      setMotivoOutro("");
       setModalEtapa(opcao);
     }
   };
 
+  const isRejection = modalEtapa ? ETAPAS_REJEICAO.includes(modalEtapa.value) : false;
+  const isOutroMotivo = motivoSelecionado === OUTRO_MOTIVO_REPROVACAO;
+  const motivoValido = isOutroMotivo ? motivoOutro.trim().length > 0 : motivoSelecionado.trim().length > 0;
+
   const handleConfirmar = async () => {
     if (!modalEtapa) return;
+    if (isRejection && !motivoValido) return;
+    const motivoFinal = isRejection
+      ? (isOutroMotivo ? `Outro motivo: ${motivoOutro.trim()}` : motivoSelecionado)
+      : (comentario.trim() || undefined);
+    const etapaValue = modalEtapa.value;
     setModalEtapa(null);
-    await onMover(card.cv_id, modalEtapa.value, comentario.trim() || undefined);
+    await onMover(card.cv_id, etapaValue, motivoFinal);
     setComentario("");
+    setMotivoSelecionado("");
+    setMotivoOutro("");
   };
 
   const handleCancelar = () => {
     setModalEtapa(null);
     setComentario("");
+    setMotivoSelecionado("");
+    setMotivoOutro("");
   };
 
   const etapaAtual = ETAPAS_KANBAN.find((e) => e.id === card.etapa) ??
@@ -293,27 +325,51 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
               Vaga: {card.vaga_titulo}
             </p>
 
-            <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
-              Comentário
-            </label>
-            <textarea
-              value={comentario}
-              onChange={(e) => setComentario(e.target.value)}
-              placeholder="Adicione um comentário sobre esta movimentação..."
-              rows={3}
-              style={{
-                width: "100%",
-                border: "1px solid #E5E7EB",
-                borderRadius: 8,
-                padding: "8px 12px",
-                fontSize: 13,
-                color: "#111827",
-                outline: "none",
-                resize: "vertical",
-                boxSizing: "border-box",
-                marginBottom: 16,
-              }}
-            />
+            {isRejection ? (
+              <>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
+                  Motivo da reprovação *
+                </label>
+                <select
+                  value={motivoSelecionado}
+                  onChange={(e) => setMotivoSelecionado(e.target.value)}
+                  style={fieldStyle}
+                >
+                  <option value="" disabled>Selecione o motivo...</option>
+                  {MOTIVOS_REPROVACAO_INTERNA.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+
+                {isOutroMotivo && (
+                  <>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
+                      Descreva o motivo:
+                    </label>
+                    <textarea
+                      value={motivoOutro}
+                      onChange={(e) => setMotivoOutro(e.target.value)}
+                      placeholder="Descreva o motivo..."
+                      rows={3}
+                      style={{ ...fieldStyle, resize: "vertical" }}
+                    />
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
+                  Comentário
+                </label>
+                <textarea
+                  value={comentario}
+                  onChange={(e) => setComentario(e.target.value)}
+                  placeholder="Adicione um comentário sobre esta movimentação..."
+                  rows={3}
+                  style={{ ...fieldStyle, resize: "vertical" }}
+                />
+              </>
+            )}
 
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button
@@ -333,6 +389,7 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
               </button>
               <button
                 onClick={handleConfirmar}
+                disabled={isRejection && !motivoValido}
                 style={{
                   padding: "8px 20px",
                   borderRadius: 8,
@@ -341,7 +398,8 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
                   color: "#000",
                   fontSize: 13,
                   fontWeight: 700,
-                  cursor: "pointer",
+                  cursor: isRejection && !motivoValido ? "not-allowed" : "pointer",
+                  opacity: isRejection && !motivoValido ? 0.6 : 1,
                 }}
               >
                 Confirmar

@@ -25,6 +25,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const {
       resultado, data_inicio, data_fim, renovavel,
       tipo_servico, motivo_reprovacao, responsavel_encerramento, observacoes,
+      vaga_cancelada_cliente,
     } = body;
 
     if (!resultado || !RESULTADOS_VALIDOS.includes(resultado))
@@ -133,7 +134,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       .eq("id", cv.candidato_id);
 
     let vagaReaberta = false;
-    if (motivo_reprovacao === "Cliente cancelou a vaga" && vaga) {
+    if (vaga_cancelada_cliente && vaga) {
       await supabase
         .from("vagas")
         .update({ status: "aberta", num_posicoes_abertas: vaga.num_posicoes })

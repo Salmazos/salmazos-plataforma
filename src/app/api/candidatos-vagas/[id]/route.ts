@@ -56,6 +56,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       });
     }
 
+    if (parsed.data.etapa === "reprovado") {
+      return NextResponse.json({ data, showReprovacaoModal: true, candidatoId });
+    }
+
     return NextResponse.json({ data });
   } catch (err) {
     console.error("[PATCH /api/candidatos-vagas/[id]]", err);

@@ -12,6 +12,7 @@ import { BotaoCurriculo } from "@/components/BotaoCurriculo";
 import TriagemBadge from "@/components/TriagemBadge";
 import type { Candidato } from "@/types";
 import type { GarantiaInfo, MelhorRetencao } from "@/components/CandidatoPerfilTabs";
+import { MOTIVOS_REPROVACAO_INTERNA, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
 
 interface Props {
   candidato: Candidato;
@@ -21,24 +22,6 @@ interface Props {
 }
 
 const TURNOS = ["Integral", "Manhã", "Tarde", "Noite", "Flexível"];
-
-const OUTRO_MOTIVO_REPROVACAO = "Outro motivo (campo livre)";
-
-const MOTIVOS_REPROVACAO_INTERNA = [
-  "Não atingiu a pontuação mínima na avaliação técnica",
-  "Experiência profissional insuficiente para os requisitos da vaga",
-  "Não possui certificação obrigatória",
-  "Incompatibilidade entre disponibilidade de horário e a jornada exigida",
-  "Expectativa salarial incompatível com o orçamento aprovado",
-  "Outro candidato apresentou aderência técnica superior",
-  "Não demonstrou as competências comportamentais previamente definidas para a função",
-  "Reprovado em etapa técnica conforme critérios previamente estabelecidos",
-  "Desistência do processo seletivo",
-  "Não compareceu à entrevista sem aviso prévio",
-  "Inconsistência nas informações do currículo",
-  "Comportamento inadequado em processo anterior",
-  OUTRO_MOTIVO_REPROVACAO,
-];
 
 function makeForm(c: Candidato) {
   return {

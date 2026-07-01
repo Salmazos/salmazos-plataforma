@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Candidato } from "@/types";
 import { ETAPAS_KANBAN } from "@/lib/constants";
+import { MOTIVOS_REPROVACAO_INTERNA, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
 
 type Acao = "retornar_banco" | "reprovar" | "negativar";
 
@@ -14,22 +15,29 @@ interface Props {
 }
 
 export default function ModalReprovacao({ isOpen, candidato, onClose, onReprovado }: Props) {
-  const [motivo, setMotivo] = useState("");
+  const [motivoSelecionado, setMotivoSelecionado] = useState("");
+  const [motivoOutro, setMotivoOutro] = useState("");
   const [enviando, setEnviando] = useState(false);
 
   const etapaLabel =
     ETAPAS_KANBAN.find((e) => e.id === candidato.etapa_kanban)?.label ??
     candidato.etapa_kanban;
 
+  const isOutroMotivo = motivoSelecionado === OUTRO_MOTIVO_REPROVACAO;
+  const motivoValido = isOutroMotivo ? motivoOutro.trim().length > 0 : motivoSelecionado.trim().length > 0;
+
   async function handleAction(action: Acao) {
+    if (!motivoValido) return;
+    const motivoFinal = isOutroMotivo ? `Outro motivo: ${motivoOutro.trim()}` : motivoSelecionado;
     setEnviando(true);
     try {
       await fetch(`/api/candidatos/${candidato.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, motivo, etapa: candidato.etapa_kanban }),
+        body: JSON.stringify({ action, motivo: motivoFinal, etapa: candidato.etapa_kanban }),
       });
-      setMotivo("");
+      setMotivoSelecionado("");
+      setMotivoOutro("");
       onReprovado();
       onClose();
     } finally {
@@ -39,7 +47,8 @@ export default function ModalReprovacao({ isOpen, candidato, onClose, onReprovad
 
   function handleClose() {
     if (enviando) return;
-    setMotivo("");
+    setMotivoSelecionado("");
+    setMotivoOutro("");
     onClose();
   }
 
@@ -79,23 +88,42 @@ export default function ModalReprovacao({ isOpen, candidato, onClose, onReprovad
           {/* Motivo */}
           <div className="mb-6">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-              Motivo
+              Motivo da reprovação *
             </p>
-            <textarea
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              placeholder="Descreva o motivo da reprovação..."
-              rows={3}
+            <select
+              value={motivoSelecionado}
+              onChange={(e) => setMotivoSelecionado(e.target.value)}
               disabled={enviando}
-              className="input-field resize-none text-sm disabled:opacity-50"
-            />
+              className="input-field text-sm disabled:opacity-50"
+            >
+              <option value="" disabled>Selecione o motivo...</option>
+              {MOTIVOS_REPROVACAO_INTERNA.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+
+            {isOutroMotivo && (
+              <>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 mt-3">
+                  Descreva o motivo:
+                </p>
+                <textarea
+                  value={motivoOutro}
+                  onChange={(e) => setMotivoOutro(e.target.value)}
+                  placeholder="Descreva o motivo..."
+                  rows={3}
+                  disabled={enviando}
+                  className="input-field resize-none text-sm disabled:opacity-50"
+                />
+              </>
+            )}
           </div>
 
           {/* Ações */}
           <div className="flex flex-col gap-2">
             <button
               onClick={() => handleAction("retornar_banco")}
-              disabled={enviando}
+              disabled={enviando || !motivoValido}
               className="w-full py-2.5 px-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 font-medium text-sm hover:bg-blue-100 transition-colors disabled:opacity-50 text-left flex items-start gap-3"
             >
               <span className="text-base shrink-0 mt-0.5">↩</span>
@@ -109,7 +137,7 @@ export default function ModalReprovacao({ isOpen, candidato, onClose, onReprovad
 
             <button
               onClick={() => handleAction("reprovar")}
-              disabled={enviando}
+              disabled={enviando || !motivoValido}
               className="w-full py-2.5 px-4 rounded-xl bg-red-50 border border-red-200 text-red-700 font-medium text-sm hover:bg-red-100 transition-colors disabled:opacity-50 text-left flex items-start gap-3"
             >
               <span className="text-base shrink-0 mt-0.5">✕</span>
@@ -123,7 +151,7 @@ export default function ModalReprovacao({ isOpen, candidato, onClose, onReprovad
 
             <button
               onClick={() => handleAction("negativar")}
-              disabled={enviando}
+              disabled={enviando || !motivoValido}
               className="w-full py-2.5 px-4 rounded-xl bg-gray-900 border border-gray-800 text-white font-medium text-sm hover:bg-black transition-colors disabled:opacity-50 text-left flex items-start gap-3"
             >
               <span className="text-base shrink-0 mt-0.5">⊘</span>
