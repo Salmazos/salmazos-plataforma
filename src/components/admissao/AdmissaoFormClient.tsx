@@ -234,7 +234,7 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
       const res = await fetch(`/api/admissoes/token/${token}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dados_pessoais: sanitizarForm(form), submit: true }),
+        body: JSON.stringify({ dados_pessoais: sanitizarForm(form), submit: true, lgpd_aceite: lgpdAceite }),
       });
       if (res.ok) {
         setEnvioConcluido(true);

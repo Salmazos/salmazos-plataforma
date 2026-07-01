@@ -371,6 +371,10 @@ export const admissaoDadosPessoaisSchema = z.object({
 export const admissaoTokenUpdateSchema = z.object({
   dados_pessoais: admissaoDadosPessoaisSchema.partial().optional(),
   submit: z.boolean().optional(),
+  lgpd_aceite: z.boolean().optional(),
+}).refine((d) => !d.submit || d.lgpd_aceite === true, {
+  message: "Consentimento LGPD é obrigatório para enviar a admissão.",
+  path: ["lgpd_aceite"],
 });
 
 export const admissaoDependenteCreateSchema = z.object({

@@ -60,7 +60,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const body = await request.json();
   const parsed = parseBody(admissaoTokenUpdateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
-  const { dados_pessoais, submit } = parsed.data;
+  const { dados_pessoais, submit, lgpd_aceite } = parsed.data;
+
+  // Defesa redundante ao .refine() do schema — se o envio final não vier com o
+  // consentimento LGPD marcado, bloqueia aqui também.
+  if (submit && lgpd_aceite !== true) {
+    return NextResponse.json({ error: "Consentimento LGPD é obrigatório para enviar a admissão." }, { status: 400 });
+  }
 
   if (dados_pessoais && Object.keys(dados_pessoais).length > 0) {
     const { error: upsertError } = await svc
@@ -71,7 +77,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const statusUpdates: Record<string, unknown> = {};
   if (submit) {
+    // A schema já garante lgpd_aceite === true quando submit === true (ver admissaoTokenUpdateSchema).
     statusUpdates.status = "aguardando_analise";
+    statusUpdates.lgpd_aceite_em = new Date().toISOString();
+    statusUpdates.lgpd_aceite_ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      ?? request.headers.get("x-real-ip")
+      ?? null;
   } else if (statusAtual === "aguardando_candidato") {
     statusUpdates.status = "em_preenchimento";
   }

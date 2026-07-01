@@ -37,6 +37,8 @@ export interface Admissao {
   criado_em: string;
   updated_at: string;
   observacoes_internas: string | null;
+  lgpd_aceite_em: string | null;
+  lgpd_aceite_ip: string | null;
 }
 
 export interface AdmissaoDadosPessoais {

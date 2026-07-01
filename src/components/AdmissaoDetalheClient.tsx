@@ -23,6 +23,8 @@ interface AdmissaoFull {
   pdf_pacote_path: string | null;
   pdf_pacote_gerado_em: string | null;
   pdf_pacote_gerado_por: string | null;
+  lgpd_aceite_em: string | null;
+  lgpd_aceite_ip: string | null;
   candidatos: { id: string; nome_completo: string; cargo_pretendido: string; telefone: string | null; email: string | null } | null;
   vagas: { id: string; titulo: string } | null;
 }
@@ -258,6 +260,24 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
 
       {tab === "dados" && (
         <>
+          <div
+            className="rounded-lg p-3 mb-4 text-sm"
+            style={
+              admissao.lgpd_aceite_em
+                ? { background: "#F0FDF4", border: "1px solid #BBF7D0", color: "#166534" }
+                : { background: "#FEF2F2", border: "1px solid #FECACA", color: "#991B1B" }
+            }
+          >
+            {admissao.lgpd_aceite_em ? (
+              <>
+                ✅ Consentimento LGPD aceito em: {new Date(admissao.lgpd_aceite_em).toLocaleString("pt-BR")}
+                {admissao.lgpd_aceite_ip ? ` · IP: ${admissao.lgpd_aceite_ip}` : ""}
+              </>
+            ) : (
+              "⚠️ Consentimento LGPD ainda não registrado — candidato não concluiu o envio final."
+            )}
+          </div>
+
           <Secao titulo="Dados Pessoais">
             <Linha label="Nome completo" value={dp?.nome_completo} />
             <Linha label="Data de nascimento" value={dp?.data_nascimento} />
