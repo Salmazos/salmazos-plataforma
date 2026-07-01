@@ -3,12 +3,14 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import { useScrollHorizontalSincronizado } from "@/hooks/useScrollHorizontalSincronizado";
 import { ETAPAS_KANBAN, HABILIDADES, ORIGEM_LABELS } from "@/lib/constants";
 import type { KanbanCard } from "@/types";
 import CandidatoCard from "./CandidatoCard";
 import ModalEncaminhamento from "./ModalEncaminhamento";
 import ModalFinalizarProcesso from "./ModalFinalizarProcesso";
 import type { FinalizarResult } from "./ModalFinalizarProcesso";
+import BarraScrollFlutuante from "./BarraScrollFlutuante";
 
 interface Props {
   cards: KanbanCard[];
@@ -61,6 +63,7 @@ const ETAPA_COLUMN_MAP: Record<string, string> = {
 export default function KanbanBoard({ cards, filtroOrigem, analistaLogado }: Props) {
   const router = useRouter();
   useAutoRefresh(30000);
+  const { scrollRef: colunasScrollRef, floatScrollRef, floatBar, handleScroll: handleColunasScroll, handleFloatScroll } = useScrollHorizontalSincronizado();
 
   const [filtroCargo, setFiltroCargo] = useState("");
   const [filtroMeus, setFiltroMeus] = useState(false);
@@ -376,7 +379,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado }: Pro
       </div>
 
       {/* Kanban columns */}
-      <div className="flex gap-2 overflow-x-auto pb-6">
+      <div ref={colunasScrollRef} onScroll={handleColunasScroll} className="flex gap-2 overflow-x-auto pb-6">
         {ETAPAS_KANBAN.map((etapa) => {
           const columnCards = filtrados.filter((c) => {
             const mapped = ETAPA_COLUMN_MAP[c.etapa] ?? c.etapa;
@@ -486,6 +489,8 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado }: Pro
           <span>{toastIcon}</span> {toast}
         </div>
       )}
+
+      <BarraScrollFlutuante floatBar={floatBar} floatScrollRef={floatScrollRef} onScroll={handleFloatScroll} />
     </div>
   );
 }
