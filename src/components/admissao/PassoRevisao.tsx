@@ -137,10 +137,17 @@ export default function PassoRevisao({ form, dependentes, documentos, sexo, isMo
             style={{ width: 22, height: 22, marginTop: 2, flexShrink: 0 }}
           />
           <span style={{ fontSize: 12, color: "#374151", lineHeight: 1.5 }}>
-            Li e autorizo a Salmazos RH &amp; Terceirização de Serviços a utilizar meus dados pessoais e documentos
-            para fins de admissão trabalhista, em conformidade com a Lei Geral de Proteção de Dados Pessoais
-            (LGPD — Lei 13.709/2018). Estou ciente de que meus dados serão mantidos com segurança e utilizados
-            exclusivamente para esta finalidade.
+            Li e aceito a{" "}
+            <a
+              href="/politica-de-privacidade"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "#B45309", textDecoration: "underline", fontWeight: 600 }}
+            >
+              Política de Privacidade
+            </a>{" "}
+            da Salmazos RH. Autorizo o uso dos meus dados pessoais e documentos para fins de admissão
+            trabalhista, conforme a Lei Geral de Proteção de Dados (LGPD - Lei 13.709/2018).
           </span>
         </label>
       </div>
