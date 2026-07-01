@@ -23,6 +23,15 @@ const TIPO_LABELS: Record<string, string> = {
   outros: "Outros",
 };
 
+const TIPO_SHORT: Record<string, string> = {
+  visita: "Visita",
+  treinamento: "Treinamento",
+  diretoria: "Diretoria",
+  outros: "Outros",
+};
+
+const TIPO_ORDEM = ["visita", "treinamento", "diretoria", "outros"];
+
 function safe(v: unknown): string {
   return (v == null ? "" : String(v))
     .replace(/[–—]/g, "-")
@@ -128,6 +137,14 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── Collect rates actually used in this period ──
+  const taxasAplicadas = new Map<string, number>();
+  registros.forEach((r) => {
+    if (r.tipo_servico && r.valor_por_km != null && !taxasAplicadas.has(r.tipo_servico)) {
+      taxasAplicadas.set(r.tipo_servico, r.valor_por_km);
+    }
+  });
+
   // ── Totals ──
   const ocSum = (c: OutroCustoDB[] | null) => (c ?? []).reduce((s, x) => s + x.valor, 0);
   const totalKm = registros.reduce((s, r) => s + r.km_rodados, 0);
@@ -205,11 +222,15 @@ export async function POST(request: NextRequest) {
   y -= 60;
 
   // ── TABLE ──
+  // Column widths sum to CW (495px). Valor/km col added after Tipo.
+  // Individual: 56+95+44+60+80+80+80 = 495
+  // Consolidated: 52+83+74+40+50+68+60+68 = 495 (Analista/Tipo trimmed to make room)
   const cols = isConsolidated
     ? [
         { label: "Data",       w: 52 },
-        { label: "Analista",   w: 90 },
-        { label: "Tipo",       w: 80 },
+        { label: "Analista",   w: 83 },
+        { label: "Tipo",       w: 74 },
+        { label: "Valor/km",   w: 40, right: true },
         { label: "KM Rod.",    w: 50, right: true },
         { label: "Reemb. KM",  w: 68, right: true },
         { label: "Outros",     w: 60, right: true },
@@ -218,6 +239,7 @@ export async function POST(request: NextRequest) {
     : [
         { label: "Data",       w: 56 },
         { label: "Tipo",       w: 95 },
+        { label: "Valor/km",   w: 44, right: true },
         { label: "KM Rod.",    w: 60, right: true },
         { label: "Reemb. KM",  w: 80, right: true },
         { label: "Outros",     w: 80, right: true },
@@ -264,9 +286,10 @@ export async function POST(request: NextRequest) {
     const bg = idx % 2 === 0 ? undefined : LGRAY;
     const tipoLabel = TIPO_LABELS[r.tipo_servico ?? ""] ?? (r.tipo_servico ?? "-");
 
+    const valorKmStr = r.valor_por_km != null ? fmtCurrency(r.valor_por_km) : "-";
     const values = isConsolidated
-      ? [fmtDate(r.data), analistaNames.get(r.analista_id) ?? "-", tipoLabel, String(r.km_rodados), fmtCurrency(r.valor_total ?? 0), oc > 0 ? fmtCurrency(oc) : "-", fmtCurrency(rowTotal)]
-      : [fmtDate(r.data), tipoLabel, String(r.km_rodados), fmtCurrency(r.valor_total ?? 0), oc > 0 ? fmtCurrency(oc) : "-", fmtCurrency(rowTotal)];
+      ? [fmtDate(r.data), analistaNames.get(r.analista_id) ?? "-", tipoLabel, valorKmStr, String(r.km_rodados), fmtCurrency(r.valor_total ?? 0), oc > 0 ? fmtCurrency(oc) : "-", fmtCurrency(rowTotal)]
+      : [fmtDate(r.data), tipoLabel, valorKmStr, String(r.km_rodados), fmtCurrency(r.valor_total ?? 0), oc > 0 ? fmtCurrency(oc) : "-", fmtCurrency(rowTotal)];
 
     drawRow(values, false, bg);
 
@@ -289,9 +312,24 @@ export async function POST(request: NextRequest) {
   if (registros.length > 0) {
     page.drawLine({ start: { x: ML, y }, end: { x: PW - ML, y }, thickness: 1, color: DARK });
     const totValues = isConsolidated
-      ? ["", "TOTAIS", "", String(totalKm), fmtCurrency(totalReembolso), fmtCurrency(totalOutros), fmtCurrency(totalGeral)]
-      : ["TOTAIS", "", String(totalKm), fmtCurrency(totalReembolso), fmtCurrency(totalOutros), fmtCurrency(totalGeral)];
+      ? ["", "TOTAIS", "", "", String(totalKm), fmtCurrency(totalReembolso), fmtCurrency(totalOutros), fmtCurrency(totalGeral)]
+      : ["TOTAIS", "", "", String(totalKm), fmtCurrency(totalReembolso), fmtCurrency(totalOutros), fmtCurrency(totalGeral)];
     drawRow(totValues, true);
+  }
+
+  // ── RATES NOTE ──
+  const taxaPartes = TIPO_ORDEM
+    .filter((t) => taxasAplicadas.has(t))
+    .map((t) => `${TIPO_SHORT[t] ?? t} ${fmtCurrency(taxasAplicadas.get(t)!)}/km`);
+  if (taxaPartes.length > 0) {
+    y -= 10;
+    ensure(14);
+    const taxaStr = `Taxas aplicadas no periodo: ${taxaPartes.join("  \xB7  ")}`;
+    for (const line of wrapText(taxaStr, regular, 7, CW)) {
+      ensure(12);
+      drawText(line, ML, y, regular, 7, GRAY);
+      y -= 11;
+    }
   }
 
   // ── FOOTER ──

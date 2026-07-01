@@ -642,7 +642,9 @@ export default function KmTab({ analistaId, isGestor }: Props) {
             </div>
             {kmRodados > 0 && (
               <div style={{ marginTop: 12, padding: "10px 14px", background: "#111827", borderRadius: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 13, color: "#FFD700", fontWeight: 700 }}>{kmRodados.toLocaleString("pt-BR")} km rodados</span>
+                <span style={{ fontSize: 13, color: "#FFD700", fontWeight: 700 }}>
+                  {kmRodados.toLocaleString("pt-BR")} km rodados · {valorKm > 0 ? `${formatCurrency(valorKm)}/km` : "—"}
+                </span>
                 <span style={{ fontSize: 13, color: "#10B981", fontWeight: 700 }}>→ {formatCurrency(reembolsoKm)} a reembolsar</span>
               </div>
             )}
