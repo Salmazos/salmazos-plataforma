@@ -152,6 +152,11 @@ export default function PassoRevisao({ form, dependentes, documentos, sexo, isMo
       >
         {enviando ? "Enviando..." : "Enviar para análise"}
       </button>
+      {!lgpdAceite && (
+        <p style={{ fontSize: 12, color: "#DC2626", marginTop: 6 }}>
+          ⚠️ Você precisa ler e aceitar a Política de Privacidade (LGPD) para enviar seus dados.
+        </p>
+      )}
     </div>
   );
 }
