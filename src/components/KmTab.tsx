@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -67,6 +68,14 @@ interface EmpresaSugestao {
   contato_email: string | null;
   ultima_visita_em: string | null;
   ultimo_visitante_nome: string | null;
+}
+
+interface HistoricoVisita {
+  id: string;
+  data: string | null;
+  analista_nome: string | null;
+  motivo: string | null;
+  resultado: string | null;
 }
 
 interface VisitaLocal {
@@ -159,6 +168,10 @@ export default function KmTab({ analistaId, isGestor }: Props) {
   const [sugestoes, setSugestoes] = useState<Record<number, EmpresaSugestao[]>>({});
   const [sugestaoAberta, setSugestaoAberta] = useState<number | null>(null);
   const autocompleteTimers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+  const inputRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [empresaSelecionada, setEmpresaSelecionada] = useState<Record<number, EmpresaSugestao>>({});
+  const [visitaHistorico, setVisitaHistorico] = useState<Record<number, HistoricoVisita[]>>({});
 
   // Toast
   const [toast, setToast] = useState<string | null>(null);
@@ -223,6 +236,9 @@ export default function KmTab({ analistaId, isGestor }: Props) {
     setFormData({ data: new Date().toISOString().split("T")[0], tipo_servico: "visita", km_inicial: "", km_final: "" });
     setSugestoes({});
     setSugestaoAberta(null);
+    setDropdownPos(null);
+    setEmpresaSelecionada({});
+    setVisitaHistorico({});
     setVisitas([{ empresa: "", contato: "", contato_telefone: "", contato_email: "", motivo: "", resultado: "" }]);
     setOutrosCustos([]);
     setModalOpen(true);
@@ -247,12 +263,16 @@ export default function KmTab({ analistaId, isGestor }: Props) {
       const loaded: KmVisita[] = json.data ?? [];
       setSugestoes({});
       setSugestaoAberta(null);
+      setDropdownPos(null);
+      setEmpresaSelecionada({});
+      setVisitaHistorico({});
       setVisitas(
         loaded.length > 0
           ? loaded.map((v) => ({ empresa: v.empresa, contato: v.contato ?? "", contato_telefone: v.contato_telefone ?? "", contato_email: v.contato_email ?? "", motivo: v.motivo ?? "", resultado: v.resultado ?? "" }))
           : [{ empresa: "", contato: "", contato_telefone: "", contato_email: "", motivo: "", resultado: "" }]
       );
     } catch {
+      setSugestoes({}); setSugestaoAberta(null); setDropdownPos(null); setEmpresaSelecionada({}); setVisitaHistorico({});
       setVisitas([{ empresa: "", contato: "", contato_telefone: "", contato_email: "", motivo: "", resultado: "" }]);
     }
     setModalOpen(true);
@@ -379,17 +399,22 @@ export default function KmTab({ analistaId, isGestor }: Props) {
   const removeVisita = (idx: number) => {
     setVisitas((prev) => prev.filter((_, i) => i !== idx));
     setSugestoes((prev) => { const n = { ...prev }; delete n[idx]; return n; });
-    if (sugestaoAberta === idx) setSugestaoAberta(null);
+    if (sugestaoAberta === idx) { setSugestaoAberta(null); setDropdownPos(null); }
+    setEmpresaSelecionada((prev) => { const n = { ...prev }; delete n[idx]; return n; });
+    setVisitaHistorico((prev) => { const n = { ...prev }; delete n[idx]; return n; });
   };
   const updateVisita = (idx: number, field: keyof VisitaLocal, value: string) =>
     setVisitas((prev) => prev.map((v, i) => (i === idx ? { ...v, [field]: value } : v)));
 
   const handleEmpresaChange = (idx: number, value: string) => {
     updateVisita(idx, "empresa", value);
+    setEmpresaSelecionada((prev) => { const n = { ...prev }; delete n[idx]; return n; });
+    setVisitaHistorico((prev) => { const n = { ...prev }; delete n[idx]; return n; });
     if (autocompleteTimers.current[idx]) clearTimeout(autocompleteTimers.current[idx]);
     if (value.length < 2) {
       setSugestoes((prev) => ({ ...prev, [idx]: [] }));
       setSugestaoAberta(null);
+      setDropdownPos(null);
       return;
     }
     autocompleteTimers.current[idx] = setTimeout(async () => {
@@ -398,12 +423,22 @@ export default function KmTab({ analistaId, isGestor }: Props) {
         const json = await res.json();
         const results: EmpresaSugestao[] = json.data ?? [];
         setSugestoes((prev) => ({ ...prev, [idx]: results }));
-        setSugestaoAberta(results.length > 0 ? idx : null);
+        if (results.length > 0) {
+          const el = inputRefs.current[idx];
+          if (el) {
+            const rect = el.getBoundingClientRect();
+            setDropdownPos({ top: rect.bottom + 2, left: rect.left, width: rect.width });
+          }
+          setSugestaoAberta(idx);
+        } else {
+          setSugestaoAberta(null);
+          setDropdownPos(null);
+        }
       } catch { /* ignore */ }
     }, 300);
   };
 
-  const selecionarSugestao = (idx: number, s: EmpresaSugestao) => {
+  const selecionarSugestao = async (idx: number, s: EmpresaSugestao) => {
     setVisitas((prev) => prev.map((v, i) => i === idx ? {
       ...v,
       empresa: s.nome,
@@ -413,6 +448,13 @@ export default function KmTab({ analistaId, isGestor }: Props) {
     } : v));
     setSugestaoAberta(null);
     setSugestoes((prev) => ({ ...prev, [idx]: [] }));
+    setDropdownPos(null);
+    setEmpresaSelecionada((prev) => ({ ...prev, [idx]: s }));
+    try {
+      const res = await fetch(`/api/km/empresas-visitadas?empresa_id=${s.id}`);
+      const json = await res.json();
+      setVisitaHistorico((prev) => ({ ...prev, [idx]: (json.data ?? []).slice(0, 3) }));
+    } catch { /* ignore */ }
   };
 
   const addCusto = () => setOutrosCustos((prev) => [...prev, { tipo: "Alimentação", descricao: "", valor: "", file: null }]);
@@ -608,8 +650,7 @@ export default function KmTab({ analistaId, isGestor }: Props) {
             {/* Section B: Visitas do dia */}
             <p style={sectionHeader}>Visitas realizadas no dia</p>
             {visitas.map((v, idx) => {
-              const sugs = sugestoes[idx] ?? [];
-              const alerta = sugs.find((s) => s.nome.toLowerCase() === v.empresa.toLowerCase());
+              const hist = visitaHistorico[idx];
               return (
                 <div key={idx} style={{ border: "1px solid #E5E7EB", borderRadius: 10, padding: 16, marginBottom: 12, position: "relative" }}>
                   {visitas.length > 1 && (
@@ -618,43 +659,28 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                     </button>
                   )}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    {/* Empresa com autocomplete */}
-                    <div style={{ position: "relative" }}>
+                    {/* Empresa com autocomplete (dropdown via portal) */}
+                    <div>
                       <label style={labelStyle}>Empresa visitada *</label>
                       <input
+                        ref={(el) => { inputRefs.current[idx] = el; }}
                         style={inputStyle}
                         placeholder="Nome da empresa"
                         value={v.empresa}
                         onChange={(e) => handleEmpresaChange(idx, e.target.value)}
-                        onFocus={() => { if (sugs.length > 0) setSugestaoAberta(idx); }}
-                        onBlur={() => setTimeout(() => setSugestaoAberta(null), 150)}
+                        onFocus={() => {
+                          if ((sugestoes[idx] ?? []).length > 0) {
+                            const el = inputRefs.current[idx];
+                            if (el) {
+                              const rect = el.getBoundingClientRect();
+                              setDropdownPos({ top: rect.bottom + 2, left: rect.left, width: rect.width });
+                            }
+                            setSugestaoAberta(idx);
+                          }
+                        }}
+                        onBlur={() => setTimeout(() => { setSugestaoAberta(null); setDropdownPos(null); }, 150)}
                         autoComplete="off"
                       />
-                      {sugestaoAberta === idx && sugs.length > 0 && (
-                        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 200, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", overflow: "hidden", marginTop: 2 }}>
-                          {sugs.map((s) => (
-                            <button
-                              key={s.id}
-                              type="button"
-                              onMouseDown={() => selecionarSugestao(idx, s)}
-                              style={{ display: "block", width: "100%", padding: "8px 12px", textAlign: "left", background: "none", border: "none", cursor: "pointer", borderBottom: "1px solid #F3F4F6" }}
-                              onMouseEnter={(e) => { e.currentTarget.style.background = "#F9FAFB"; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
-                            >
-                              <span style={{ fontSize: 13, fontWeight: 600, color: "#111827", display: "block" }}>{s.nome}</span>
-                              <span style={{ fontSize: 11, color: "#9CA3AF" }}>
-                                Última visita: {s.ultima_visita_em ? new Date(s.ultima_visita_em).toLocaleDateString("pt-BR") : "—"}
-                                {s.ultimo_visitante_nome ? ` • por ${s.ultimo_visitante_nome}` : ""}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {alerta && (
-                        <div style={{ marginTop: 4, padding: "4px 8px", background: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 6, fontSize: 11, color: "#92400E" }}>
-                          ⚠️ Já visitada por {alerta.ultimo_visitante_nome ?? "alguém"} em {alerta.ultima_visita_em ? new Date(alerta.ultima_visita_em).toLocaleDateString("pt-BR") : "—"}
-                        </div>
-                      )}
                     </div>
 
                     {/* Contato nome */}
@@ -688,6 +714,25 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                       />
                     </div>
                   </div>
+
+                  {/* Inline history — only shown after selecting from autocomplete */}
+                  {empresaSelecionada[idx] && hist && hist.length > 0 && (
+                    <div style={{ marginTop: 10, padding: "10px 12px", background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 8 }}>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 8px" }}>
+                        Últimas visitas registradas
+                      </p>
+                      {hist.map((h, hi) => (
+                        <div key={hi} style={{ display: "flex", gap: 12, fontSize: 12, color: "#374151", padding: "4px 0", borderTop: hi > 0 ? "1px solid #E2E8F0" : "none" }}>
+                          <span style={{ fontWeight: 600, whiteSpace: "nowrap", color: "#1E293B", minWidth: 70 }}>
+                            {h.data ? new Date(h.data).toLocaleDateString("pt-BR") : "—"}
+                          </span>
+                          <span style={{ color: "#64748B", whiteSpace: "nowrap", flex: "0 0 auto" }}>{h.analista_nome ?? "—"}</span>
+                          {h.motivo && <span style={{ color: "#94A3B8", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.motivo}</span>}
+                          {h.resultado && <span style={{ color: "#374151", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>→ {h.resultado}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -773,6 +818,29 @@ export default function KmTab({ analistaId, isGestor }: Props) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Dropdown portal — escapes modal overflowY:auto clipping by rendering at document.body */}
+      {typeof document !== "undefined" && sugestaoAberta !== null && dropdownPos && (sugestoes[sugestaoAberta] ?? []).length > 0 && createPortal(
+        <div style={{ position: "fixed", top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width, zIndex: 9999, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", overflow: "hidden" }}>
+          {(sugestoes[sugestaoAberta] ?? []).map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onMouseDown={() => selecionarSugestao(sugestaoAberta!, s)}
+              style={{ display: "block", width: "100%", padding: "8px 12px", textAlign: "left", background: "none", border: "none", cursor: "pointer", borderBottom: "1px solid #F3F4F6" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#F9FAFB"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+            >
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#111827", display: "block" }}>{s.nome}</span>
+              <span style={{ fontSize: 11, color: "#9CA3AF" }}>
+                Última visita: {s.ultima_visita_em ? new Date(s.ultima_visita_em).toLocaleDateString("pt-BR") : "—"}
+                {s.ultimo_visitante_nome ? ` • por ${s.ultimo_visitante_nome}` : ""}
+              </span>
+            </button>
+          ))}
+        </div>,
+        document.body
       )}
     </div>
   );
