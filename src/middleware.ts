@@ -7,6 +7,10 @@ const PUBLIC_API_PREFIXES = [
   "/api/auth/",
   "/api/portal/",
   "/api/cron/",
+  // Formulário público de admissão — sem login, autenticado via token na URL.
+  // Cada rota valida o token manualmente (existência, expiração, status editável)
+  // usando o cliente service role, que ignora RLS.
+  "/api/admissoes/token/",
 ];
 
 const PUBLIC_API_POST_ONLY = [
