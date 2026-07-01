@@ -442,27 +442,25 @@ export default function KmTab({ analistaId, isGestor }: Props) {
         <p style={{ fontSize: 13, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
           Valor por KM
         </p>
-        {!isGestor && (
+        {!isGestor ? (
           <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 12px" }}>Valores definidos pela diretoria</p>
-        )}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, maxWidth: 600 }}>
-          {TIPOS_DESLOCAMENTO.map((tipo) => (
-            <div key={tipo.id}>
-              <label style={labelStyle}>
-                <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: tipo.color, marginRight: 6 }} />
-                {tipo.label} (R$/km)
-              </label>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  type="number"
-                  step="0.01"
-                  style={{ ...inputStyle, background: isGestor ? "#fff" : "#F3F4F6" }}
-                  value={configValues[tipo.id] ?? ""}
-                  onChange={(e) => isGestor && setConfigValues((prev) => ({ ...prev, [tipo.id]: e.target.value }))}
-                  readOnly={!isGestor}
-                  placeholder="0.00"
-                />
-                {isGestor && (
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, maxWidth: 600 }}>
+            {TIPOS_DESLOCAMENTO.map((tipo) => (
+              <div key={tipo.id}>
+                <label style={labelStyle}>
+                  <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: tipo.color, marginRight: 6 }} />
+                  {tipo.label} (R$/km)
+                </label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="number"
+                    step="0.01"
+                    style={inputStyle}
+                    value={configValues[tipo.id] ?? ""}
+                    onChange={(e) => setConfigValues((prev) => ({ ...prev, [tipo.id]: e.target.value }))}
+                    placeholder="0.00"
+                  />
                   <button
                     onClick={() => saveConfig(tipo.id)}
                     disabled={savingConfig}
@@ -470,11 +468,11 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                   >
                     Salvar
                   </button>
-                )}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Summary Cards ── */}

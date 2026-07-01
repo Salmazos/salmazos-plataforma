@@ -110,7 +110,7 @@ export default function EmpresasVisitadasClient({ analistas: _analistas }: Props
     <div className="max-w-6xl mx-auto">
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>Empresas Visitadas</h1>
+        <h1 style={{ fontSize: 22, fontWeight: 700, color: "#111827", margin: 0 }}>Carteira de Clientes</h1>
         <p style={{ fontSize: 13, color: "#9CA3AF", marginTop: 4 }}>Base permanente de empresas prospectadas e visitadas</p>
       </div>
 
