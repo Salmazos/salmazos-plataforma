@@ -22,6 +22,24 @@ interface Props {
 
 const TURNOS = ["Integral", "Manhã", "Tarde", "Noite", "Flexível"];
 
+const OUTRO_MOTIVO_REPROVACAO = "Outro motivo (campo livre)";
+
+const MOTIVOS_REPROVACAO_INTERNA = [
+  "Não atingiu a pontuação mínima na avaliação técnica",
+  "Experiência profissional insuficiente para os requisitos da vaga",
+  "Não possui certificação obrigatória",
+  "Incompatibilidade entre disponibilidade de horário e a jornada exigida",
+  "Expectativa salarial incompatível com o orçamento aprovado",
+  "Outro candidato apresentou aderência técnica superior",
+  "Não demonstrou as competências comportamentais previamente definidas para a função",
+  "Reprovado em etapa técnica conforme critérios previamente estabelecidos",
+  "Desistência do processo seletivo",
+  "Não compareceu à entrevista sem aviso prévio",
+  "Inconsistência nas informações do currículo",
+  "Comportamento inadequado em processo anterior",
+  OUTRO_MOTIVO_REPROVACAO,
+];
+
 function makeForm(c: Candidato) {
   return {
     nome_completo: c.nome_completo,
@@ -109,7 +127,8 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, 
   const [feeToast, setFeeToast] = useState("");
 
   const [reprovarModalOpen, setReprovarModalOpen] = useState(false);
-  const [reprovarMotivo, setReprovarMotivo] = useState("");
+  const [reprovarMotivoSelecionado, setReprovarMotivoSelecionado] = useState("");
+  const [reprovarMotivoOutro, setReprovarMotivoOutro] = useState("");
   const [reprovarSalvando, setReprovarSalvando] = useState(false);
   const [reprovarErro, setReprovarErro] = useState("");
   const [removerReprovacaoAberto, setRemoverReprovacaoAberto] = useState(false);
@@ -204,15 +223,23 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, 
     }
   };
 
+  const reprovarEhOutroMotivo = reprovarMotivoSelecionado === OUTRO_MOTIVO_REPROVACAO;
+  const reprovarMotivoValido = reprovarEhOutroMotivo
+    ? reprovarMotivoOutro.trim().length > 0
+    : reprovarMotivoSelecionado.trim().length > 0;
+
   const handleConfirmarReprovacao = async () => {
-    if (!reprovarMotivo.trim()) return;
+    if (!reprovarMotivoValido) return;
+    const motivoFinal = reprovarEhOutroMotivo
+      ? `Outro motivo: ${reprovarMotivoOutro.trim()}`
+      : reprovarMotivoSelecionado;
     setReprovarSalvando(true);
     setReprovarErro("");
     try {
       const res = await fetch(`/api/candidatos/${candidato.id}/reprovar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ motivo: reprovarMotivo.trim() }),
+        body: JSON.stringify({ motivo: motivoFinal }),
       });
       if (!res.ok) {
         const json = await res.json();
@@ -220,7 +247,8 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, 
         return;
       }
       setReprovarModalOpen(false);
-      setReprovarMotivo("");
+      setReprovarMotivoSelecionado("");
+      setReprovarMotivoOutro("");
       router.refresh();
     } catch {
       setReprovarErro("Erro ao reprovar candidato. Tente novamente.");
@@ -424,7 +452,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, 
 
             {!editando && !candidato.reprovado_internamente && (
               <button
-                onClick={() => { setReprovarErro(""); setReprovarMotivo(""); setReprovarModalOpen(true); }}
+                onClick={() => { setReprovarErro(""); setReprovarMotivoSelecionado(""); setReprovarMotivoOutro(""); setReprovarModalOpen(true); }}
                 style={{
                   backgroundColor: "#fff",
                   color: "#dc2626",
@@ -1329,14 +1357,32 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, 
             <label className="block text-sm font-semibold text-red-700 mb-1">
               Motivo da reprovação *
             </label>
-            <textarea
-              value={reprovarMotivo}
-              onChange={(e) => setReprovarMotivo(e.target.value)}
-              placeholder="Descreva o motivo..."
-              rows={3}
+            <select
+              value={reprovarMotivoSelecionado}
+              onChange={(e) => setReprovarMotivoSelecionado(e.target.value)}
               autoFocus
-              className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm outline-none resize-none mb-4"
-            />
+              className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm outline-none mb-4 bg-white"
+            >
+              <option value="" disabled>Selecione o motivo...</option>
+              {MOTIVOS_REPROVACAO_INTERNA.map((motivo) => (
+                <option key={motivo} value={motivo}>{motivo}</option>
+              ))}
+            </select>
+
+            {reprovarEhOutroMotivo && (
+              <>
+                <label className="block text-sm font-semibold text-red-700 mb-1">
+                  Descreva o motivo:
+                </label>
+                <textarea
+                  value={reprovarMotivoOutro}
+                  onChange={(e) => setReprovarMotivoOutro(e.target.value)}
+                  placeholder="Descreva o motivo..."
+                  rows={3}
+                  className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm outline-none resize-none mb-4"
+                />
+              </>
+            )}
 
             {reprovarErro && (
               <p className="text-sm rounded-lg px-3 py-2 mb-4 bg-red-50 text-red-600 border border-red-200">
@@ -1354,7 +1400,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, 
               </button>
               <button
                 onClick={handleConfirmarReprovacao}
-                disabled={reprovarSalvando || !reprovarMotivo.trim()}
+                disabled={reprovarSalvando || !reprovarMotivoValido}
                 style={{
                   backgroundColor: "#dc2626",
                   color: "#fff",
@@ -1363,8 +1409,8 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, 
                   padding: "8px 20px",
                   fontWeight: 700,
                   fontSize: "14px",
-                  cursor: reprovarSalvando || !reprovarMotivo.trim() ? "not-allowed" : "pointer",
-                  opacity: reprovarSalvando || !reprovarMotivo.trim() ? 0.6 : 1,
+                  cursor: reprovarSalvando || !reprovarMotivoValido ? "not-allowed" : "pointer",
+                  opacity: reprovarSalvando || !reprovarMotivoValido ? 0.6 : 1,
                 }}
               >
                 {reprovarSalvando ? "Salvando..." : "Confirmar reprovação"}
