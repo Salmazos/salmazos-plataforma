@@ -3,7 +3,9 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 
 const MODALIDADES_ELEGIVEIS = ["mao_obra_temporaria", "terceirizacao"];
 
-// Candidatos aprovados pelo cliente (aprovado_cliente), em vagas MOT/Terceirização,
+const ETAPAS_ELEGIVEIS = ["aprovado_cliente", "contratado"];
+
+// Candidatos aprovados pelo cliente ou já contratados, em vagas MOT/Terceirização,
 // que ainda não têm uma admissão criada para aquela vaga.
 export async function GET(_request: NextRequest) {
   const supabase = await createClient();
@@ -18,7 +20,7 @@ export async function GET(_request: NextRequest) {
     svc
       .from("candidatos_vagas")
       .select("id, candidato_id, vaga_id, candidatos(id, nome_completo, cargo_pretendido, telefone), vagas(id, titulo, tipo_servico)")
-      .eq("etapa", "aprovado_cliente")
+      .in("etapa", ETAPAS_ELEGIVEIS)
       .order("created_at", { ascending: false }),
     svc.from("admissoes").select("candidato_id, vaga_id"),
   ]);
