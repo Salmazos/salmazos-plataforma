@@ -1,10 +1,9 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import PainelLayout from "@/components/PainelLayout";
 import type { KanbanCard } from "@/types";
+import { ETAPAS_KANBAN_VISIVEIS } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
-
-const ETAPAS_KANBAN_VISIVEIS = ["triagem", "entrevista_salmazos", "entrevista_cliente", "aprovado_cliente"];
 
 export default async function PainelPage() {
   const supabase = createServiceClient();

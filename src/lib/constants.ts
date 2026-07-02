@@ -195,6 +195,10 @@ export const ETAPAS_KANBAN = [
   },
 ] as const;
 
+// Etapas "ativas" do funil (não finalizadas/reprovadas) — mesma lista usada para
+// montar as colunas do Kanban. Reutilizada em Gestão de Clientes e no Dashboard.
+export const ETAPAS_KANBAN_VISIVEIS = ETAPAS_KANBAN.map((e) => e.id);
+
 export const ORIGEM_LABELS: Record<string, string> = {
   cadastro_rapido: "Cadastro Rápido",
   vaga_especifica: "Vaga Específica",

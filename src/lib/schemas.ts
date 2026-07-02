@@ -126,6 +126,11 @@ export const clienteUpdateSchema = z.object({
   responsavel_comercial: z.string().optional().nullable(),
 });
 
+export const clienteAtencaoEspecialSchema = z.object({
+  atencao_especial: z.boolean(),
+  nota: z.string().optional().nullable(),
+});
+
 // ── Usuário ──────────────────────────────────────────────────────────────────
 
 export const usuarioCreateSchema = z.object({

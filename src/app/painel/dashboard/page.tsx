@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { ORIGEM_LABELS } from "@/lib/constants";
+import { ORIGEM_LABELS, ETAPAS_KANBAN_VISIVEIS } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -11,14 +11,16 @@ function KpiCard({
   value,
   sub,
   accent,
+  href,
 }: {
   title: string;
   value: string | number;
   sub: string;
   accent: string;
+  href?: string;
 }) {
-  return (
-    <div className="card" style={{ position: "relative", overflow: "hidden" }}>
+  const content = (
+    <>
       <p className="section-title">{title}</p>
       <p style={{ fontSize: 38, fontWeight: 800, color: "#111827", lineHeight: 1, margin: 0 }}>
         {value}
@@ -35,6 +37,18 @@ function KpiCard({
           borderRadius: "0 0 12px 12px",
         }}
       />
+    </>
+  );
+  if (href) {
+    return (
+      <a href={href} className="card" style={{ position: "relative", overflow: "hidden", display: "block", textDecoration: "none" }}>
+        {content}
+      </a>
+    );
+  }
+  return (
+    <div className="card" style={{ position: "relative", overflow: "hidden" }}>
+      {content}
     </div>
   );
 }
@@ -127,8 +141,8 @@ export default async function DashboardPage() {
       .select("id, etapa_kanban, status, responsavel, origem, created_at, updated_at"),
     supabase.from("vagas").select("id, status, titulo, data_abertura, data_fechamento, created_at, tipo_servico, responsavel"),
     supabase.from("encaminhamentos").select("id, cliente_id, status, created_at"),
-    supabase.from("candidatos_vagas").select("vaga_id, candidato_id, etapa, created_at"),
-    supabase.from("clientes").select("id, nome"),
+    supabase.from("candidatos_vagas").select("vaga_id, candidato_id, cliente_id, etapa, created_at, updated_at"),
+    supabase.from("clientes").select("id, nome, atencao_especial"),
   ]);
 
   const c = candidatos ?? [];
@@ -312,6 +326,19 @@ export default async function DashboardPage() {
     origemCount[key] = (origemCount[key] ?? 0) + 1;
   }
 
+  // ── 8. Clientes que precisam de atenção ─────────────────────────────────
+  const HORAS_PARADO_LIMITE = 48;
+  const clientesComCandidatoParado = new Set<string>();
+  for (const entry of cv) {
+    if (!entry.cliente_id) continue;
+    if (!ETAPAS_KANBAN_VISIVEIS.includes(entry.etapa as (typeof ETAPAS_KANBAN_VISIVEIS)[number])) continue;
+    const horasParado = (now - new Date(entry.updated_at as string).getTime()) / 3600000;
+    if (horasParado >= HORAS_PARADO_LIMITE) clientesComCandidatoParado.add(entry.cliente_id as string);
+  }
+  const clientesPrecisandoAtencao = cl.filter(
+    (x) => x.atencao_especial || clientesComCandidatoParado.has(x.id as string)
+  ).length;
+
   const thStyle: React.CSSProperties = {
     padding: "8px 12px",
     fontSize: 11,
@@ -442,6 +469,13 @@ export default async function DashboardPage() {
           value={tempoMedioFechamento !== null ? `${tempoMedioFechamento}d` : "—"}
           sub={`Baseado em ${vagasFechadas.length} vagas fechadas`}
           accent="#F59E0B"
+        />
+        <KpiCard
+          title="⚠️ Clientes p/ Atenção"
+          value={clientesPrecisandoAtencao}
+          sub="Marcados ou com candidatura parada 48h+"
+          accent="#EF4444"
+          href="/painel/gestao-clientes"
         />
       </div>
 

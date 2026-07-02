@@ -25,6 +25,7 @@ import {
   MapPin,
   Car,
   FileCheck,
+  AlertTriangle,
 } from "lucide-react";
 
 interface Props {
@@ -64,6 +65,7 @@ const menuItems: MenuItemDef[] = [
   { label: "Meu Perfil", href: "/painel/meu-perfil", icon: User },
   { label: "Banco de Candidatos", href: "/painel/banco-candidatos", icon: Users },
   { label: "Painel", href: "/painel", icon: LayoutDashboard },
+  { label: "Gestão de Clientes", href: "/painel/gestao-clientes", icon: AlertTriangle },
   { label: "Vagas", href: "/painel/vagas", icon: Briefcase },
   { label: "Admissões", href: "/painel/admissoes", icon: FileCheck, requireSupervisor: true },
   { label: "Clientes", href: "/painel/clientes", icon: Building2 },
