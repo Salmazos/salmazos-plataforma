@@ -15,6 +15,8 @@ const TIPOS_DESLOCAMENTO = [
 
 const TIPOS_CUSTO = ["Alimentação", "Pedágio", "Estacionamento", "Outro"] as const;
 
+const MOTIVOS_VISITA = ["Comercial", "Supervisão", "Serviços", "Outros"] as const;
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface KmConfig {
@@ -714,7 +716,19 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                     {/* Motivo + Resumo */}
                     <div>
                       <label style={labelStyle}>Motivo da visita</label>
-                      <input style={inputStyle} placeholder="Ex: Prospecção comercial" value={v.motivo} onChange={(e) => updateVisita(idx, "motivo", e.target.value)} />
+                      <select
+                        style={{ ...inputStyle, cursor: "pointer" }}
+                        value={v.motivo}
+                        onChange={(e) => updateVisita(idx, "motivo", e.target.value)}
+                      >
+                        <option value="">Selecione...</option>
+                        {v.motivo && !(MOTIVOS_VISITA as readonly string[]).includes(v.motivo) && (
+                          <option value={v.motivo}>{`(valor antigo) ${v.motivo}`}</option>
+                        )}
+                        {MOTIVOS_VISITA.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label style={labelStyle}>Resumo da visita</label>
