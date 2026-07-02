@@ -196,7 +196,10 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
         cvId,
         candidatoNome: card?.nome_completo ?? "",
         vagaTitulo: card?.vaga_titulo ?? "",
-        tipoServico: card?.vaga_tipo_servico ?? null,
+        // Prioriza o tipo_servico do encaminhamento mais recente (o que foi de fato
+        // combinado com o cliente na entrevista) — cai para o da vaga só quando o
+        // candidato nunca passou por um encaminhamento vinculado a essa vaga.
+        tipoServico: card?.encaminhamento_tipo_servico ?? card?.vaga_tipo_servico ?? null,
         resultado: novaEtapa as "contratado" | "reprovado_final",
       });
       return;

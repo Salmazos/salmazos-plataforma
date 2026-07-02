@@ -8,6 +8,10 @@ interface CandidatoElegivel {
   vaga_id: string;
   candidatos: { id: string; nome_completo: string; cargo_pretendido: string; telefone: string | null } | null;
   vagas: { id: string; titulo: string; tipo_servico: string } | null;
+  // Modalidade "vigente" da candidatura (encaminhamento mais recente, com fallback pra
+  // vagas.tipo_servico) — ver src/lib/tipoServicoVigente.ts. Usar em vez de
+  // vagas.tipo_servico direto, que pode divergir do que foi combinado com o cliente.
+  tipo_servico_vigente: string | null;
 }
 
 interface Props {
@@ -16,7 +20,7 @@ interface Props {
   onCriado: () => void;
 }
 
-function modalidadeDefault(tipoServico: string | undefined): string {
+function modalidadeDefault(tipoServico: string | null | undefined): string {
   if (tipoServico === "mao_obra_temporaria") return "MOT";
   if (tipoServico === "terceirizacao") return "terceirizacao";
   return "MOT";
@@ -80,7 +84,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
 
   const handleSelecionar = (c: CandidatoElegivel) => {
     setSelecionado(c);
-    setModalidade(modalidadeDefault(c.vagas?.tipo_servico));
+    setModalidade(modalidadeDefault(c.tipo_servico_vigente));
   };
 
   const dadosValidos = Boolean(funcao.trim() && parseSalario(salario) > 0 && horarioTrabalho.trim() && dataAdmissao);

@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { mapTipoServicoPorCandidatura } from "@/lib/tipoServicoVigente";
 
 const MODALIDADES_ELEGIVEIS = ["mao_obra_temporaria", "terceirizacao"];
 
 const ETAPAS_ELEGIVEIS = ["aprovado_cliente", "contratado"];
 
-// Candidatos aprovados pelo cliente ou já contratados, em vagas MOT/Terceirização,
-// que ainda não têm uma admissão criada para aquela vaga.
+// Candidatos aprovados pelo cliente ou já contratados, em processos MOT/Terceirização,
+// que ainda não têm uma admissão criada para aquela vaga. A modalidade considerada é a
+// "vigente" da candidatura (encaminhamento mais recente, com fallback pra vagas.tipo_servico
+// — ver src/lib/tipoServicoVigente.ts), não vagas.tipo_servico direto: o tipo_servico
+// combinado com o cliente na entrevista pode divergir do fixado na vaga.
 export async function GET(_request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -30,9 +34,17 @@ export async function GET(_request: NextRequest) {
   const existentesSet = new Set((existentes ?? []).map((a) => `${a.candidato_id}|${a.vaga_id ?? ""}`));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const elegiveis = (cvRows ?? []).filter((cv: any) => {
-    const tipoServico = cv.vagas?.tipo_servico;
-    if (!MODALIDADES_ELEGIVEIS.includes(tipoServico)) return false;
+  const candidatoIds = Array.from(new Set((cvRows ?? []).map((cv: any) => cv.candidato_id)));
+  const tipoServicoPorCandidatura = await mapTipoServicoPorCandidatura(svc, candidatoIds);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const comTipoServicoVigente = (cvRows ?? []).map((cv: any) => ({
+    ...cv,
+    tipo_servico_vigente: tipoServicoPorCandidatura.get(`${cv.candidato_id}|${cv.vaga_id}`) ?? cv.vagas?.tipo_servico ?? null,
+  }));
+
+  const elegiveis = comTipoServicoVigente.filter((cv) => {
+    if (!MODALIDADES_ELEGIVEIS.includes(cv.tipo_servico_vigente)) return false;
     const key = `${cv.candidato_id}|${cv.vaga_id ?? ""}`;
     return !existentesSet.has(key);
   });
