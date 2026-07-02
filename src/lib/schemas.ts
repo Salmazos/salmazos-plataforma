@@ -316,6 +316,10 @@ export const admissaoCreateSchema = z.object({
   candidato_id: z.string().uuid(),
   vaga_id: z.string().uuid().optional().nullable(),
   modalidade: z.enum(["MOT", "terceirizacao"]),
+  funcao: z.string().min(1, "Função é obrigatória"),
+  salario: coerceNumber.refine((v) => v > 0, "Salário deve ser maior que zero"),
+  horario_trabalho: z.string().min(1, "Horário de trabalho é obrigatório"),
+  data_admissao: z.string().min(1, "Data de admissão é obrigatória"),
 });
 
 export const admissaoUpdateSchema = z.object({

@@ -19,6 +19,10 @@ interface AdmissaoFull {
   token: string;
   token_expira_em: string;
   criado_em: string;
+  funcao: string | null;
+  salario: number | null;
+  horario_trabalho: string | null;
+  data_admissao: string | null;
   observacoes_internas: string | null;
   pdf_pacote_path: string | null;
   pdf_pacote_gerado_em: string | null;
@@ -277,6 +281,13 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
               "⚠️ Consentimento LGPD ainda não registrado — candidato não concluiu o envio final."
             )}
           </div>
+
+          <Secao titulo="Dados da Admissão">
+            <Linha label="Função" value={admissao.funcao} />
+            <Linha label="Salário" value={admissao.salario != null ? admissao.salario.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : null} />
+            <Linha label="Horário de trabalho" value={admissao.horario_trabalho} />
+            <Linha label="Data de admissão" value={admissao.data_admissao} />
+          </Secao>
 
           <Secao titulo="Dados Pessoais">
             <Linha label="Nome completo" value={dp?.nome_completo} />

@@ -22,6 +22,20 @@ function modalidadeDefault(tipoServico: string | undefined): string {
   return "MOT";
 }
 
+function formatSalarioBR(value: string): string {
+  if (!value.trim()) return value;
+  const digits = value.replace(/\s/g, "").replace(/^R\$/, "").replace(/\./g, "").replace(",", ".").trim();
+  const num = parseFloat(digits);
+  if (isNaN(num)) return value;
+  return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function parseSalario(value: string): number {
+  const digits = value.replace(/\s/g, "").replace(/^R\$/, "").replace(/\./g, "").replace(",", ".").trim();
+  const num = parseFloat(digits);
+  return isNaN(num) ? 0 : num;
+}
+
 export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Props) {
   const [carregando, setCarregando] = useState(true);
   const [elegiveis, setElegiveis] = useState<CandidatoElegivel[]>([]);
@@ -33,12 +47,24 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
   const [resultado, setResultado] = useState<{ url: string; whatsappUrl: string | null } | null>(null);
   const [copiado, setCopiado] = useState(false);
 
+  // Etapa 2: dados da admissão (preenchidos pelo RH antes de gerar o token)
+  const [etapaDados, setEtapaDados] = useState(false);
+  const [funcao, setFuncao] = useState("");
+  const [salario, setSalario] = useState("");
+  const [horarioTrabalho, setHorarioTrabalho] = useState("");
+  const [dataAdmissao, setDataAdmissao] = useState("");
+
   useEffect(() => {
     if (!isOpen) return;
     setSelecionado(null);
     setResultado(null);
     setErro("");
     setBusca("");
+    setEtapaDados(false);
+    setFuncao("");
+    setSalario("");
+    setHorarioTrabalho("");
+    setDataAdmissao("");
     setCarregando(true);
     fetch("/api/admissoes/candidatos-elegiveis")
       .then((r) => r.json())
@@ -57,8 +83,21 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
     setModalidade(modalidadeDefault(c.vagas?.tipo_servico));
   };
 
-  const handleConfirmar = async () => {
+  const dadosValidos = Boolean(funcao.trim() && parseSalario(salario) > 0 && horarioTrabalho.trim() && dataAdmissao);
+
+  const handleContinuar = () => {
     if (!selecionado) return;
+    setErro("");
+    setEtapaDados(true);
+  };
+
+  const handleVoltar = () => {
+    setErro("");
+    setEtapaDados(false);
+  };
+
+  const handleConfirmar = async () => {
+    if (!selecionado || !dadosValidos) return;
     setEnviando(true);
     setErro("");
     try {
@@ -69,6 +108,10 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
           candidato_id: selecionado.candidato_id,
           vaga_id: selecionado.vaga_id,
           modalidade,
+          funcao: funcao.trim(),
+          salario: parseSalario(salario),
+          horario_trabalho: horarioTrabalho.trim(),
+          data_admissao: dataAdmissao,
         }),
       });
       const json = await res.json();
@@ -124,7 +167,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
             )}
             <button onClick={onCriado} className="btn-primary w-full">Concluir</button>
           </div>
-        ) : (
+        ) : !etapaDados ? (
           <>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Candidato aprovado (MOT/Terceirização)</label>
             <input
@@ -170,7 +213,66 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
 
             <div className="flex gap-3">
               <button onClick={onClose} className="btn-outline flex-1" disabled={enviando}>Cancelar</button>
-              <button onClick={handleConfirmar} disabled={!selecionado || enviando} className="btn-primary flex-1 disabled:opacity-50">
+              <button onClick={handleContinuar} disabled={!selecionado} className="btn-primary flex-1 disabled:opacity-50">
+                Continuar
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="rounded-lg p-3 mb-4 text-sm bg-gray-50 border border-gray-200">
+              <p className="font-semibold text-gray-900">{selecionado?.candidatos?.nome_completo ?? "—"}</p>
+              <p className="text-xs text-gray-500">{selecionado?.candidatos?.cargo_pretendido} · {selecionado?.vagas?.titulo}</p>
+            </div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+              Dados da admissão — preenchidos pelo RH antes de gerar o link
+            </p>
+
+            <div className="mb-3">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Função *</label>
+              <input
+                type="text" value={funcao}
+                onChange={(e) => setFuncao(e.target.value)}
+                placeholder="Ex: Auxiliar de Produção"
+                className="input-field"
+              />
+            </div>
+
+            <div className="mb-3">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Salário *</label>
+              <input
+                type="text" value={salario}
+                onChange={(e) => setSalario(e.target.value)}
+                onBlur={() => setSalario(formatSalarioBR(salario))}
+                placeholder="Ex: R$ 2.500,00"
+                className="input-field"
+              />
+            </div>
+
+            <div className="mb-3">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Horário de trabalho *</label>
+              <input
+                type="text" value={horarioTrabalho}
+                onChange={(e) => setHorarioTrabalho(e.target.value)}
+                placeholder="Ex: 08h às 17h48, seg-sex"
+                className="input-field"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data de admissão *</label>
+              <input
+                type="date" value={dataAdmissao}
+                onChange={(e) => setDataAdmissao(e.target.value)}
+                className="input-field"
+              />
+            </div>
+
+            {erro && <p className="text-red-600 text-sm mb-3">{erro}</p>}
+
+            <div className="flex gap-3">
+              <button onClick={handleVoltar} className="btn-outline flex-1" disabled={enviando}>Voltar</button>
+              <button onClick={handleConfirmar} disabled={!dadosValidos || enviando} className="btn-primary flex-1 disabled:opacity-50">
                 {enviando ? "Criando..." : "Criar admissão"}
               </button>
             </div>
