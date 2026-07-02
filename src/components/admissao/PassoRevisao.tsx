@@ -5,7 +5,7 @@ import type { AdmissaoDependente } from "@/types";
 import type { FormState, DocumentoToken, ValeTransporteState, AutorizacaoSindicalState } from "./AdmissaoFormClient";
 import { cardStyle, botaoPrimarioStyle } from "./styles";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
-import { ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, PARENTESCO_OPTIONS } from "@/lib/admissaoConstants";
+import { ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, PARENTESCO_OPTIONS, OPCAO_VALE_TRANSPORTE_LABEL } from "@/lib/admissaoConstants";
 
 interface Props {
   form: FormState;
@@ -21,12 +21,6 @@ interface Props {
   onEnviar: () => void;
   enviando: boolean;
 }
-
-const OPCAO_VT_LABEL: Record<string, string> = {
-  vale_transporte: "Vale Transporte",
-  transporte_fretado: "Transporte Fretado pela Empresa",
-  nao_opta: "Não opta",
-};
 
 function docVisivel(doc: DocumentoToken, sexo: string, isMotorista: boolean, possuiDependentes: boolean): boolean {
   if (doc.obrigatorio) return true;
@@ -120,7 +114,7 @@ export default function PassoRevisao({ form, dependentes, documentos, valeTransp
       )}
 
       <Secao titulo="Vale Transporte">
-        <Linha label="Opção" value={OPCAO_VT_LABEL[valeTransporte.opcao] ?? ""} />
+        <Linha label="Opção" value={OPCAO_VALE_TRANSPORTE_LABEL[valeTransporte.opcao] ?? ""} />
         <Linha label="Dias na semana" value={valeTransporte.dias_semana} />
         <Linha label="Local de trabalho" value={valeTransporte.bairro_cidade_trabalho} />
         {valeTransporte.opcao === "vale_transporte" && valeTransporte.linhas.map((l, i) => (

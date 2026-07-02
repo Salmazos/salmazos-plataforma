@@ -29,11 +29,13 @@ export default async function AdmissaoDetalhePage({ params }: Props) {
 
   if (!admissao) notFound();
 
-  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: auditLogs }] = await Promise.all([
+  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: auditLogs }, { data: valeTransporte }, { data: autorizacaoSindical }] = await Promise.all([
     svc.from("admissao_dados_pessoais").select("*").eq("admissao_id", id).maybeSingle(),
     svc.from("admissao_dependentes").select("*").eq("admissao_id", id).order("created_at", { ascending: true }),
     svc.from("admissao_documentos").select("*").eq("admissao_id", id).order("created_at", { ascending: true }),
     svc.from("audit_logs").select("id, created_at, usuario_nome, acao, detalhes").eq("entidade", "admissoes").eq("entidade_id", id).order("created_at", { ascending: false }),
+    svc.from("admissao_vale_transporte").select("*, admissao_vt_linhas(*)").eq("admissao_id", id).order("ordem", { referencedTable: "admissao_vt_linhas", ascending: true }).maybeSingle(),
+    svc.from("admissao_autorizacao_sindical").select("*").eq("admissao_id", id).maybeSingle(),
   ]);
 
   return (
@@ -50,6 +52,8 @@ export default async function AdmissaoDetalhePage({ params }: Props) {
         dependentes={dependentes ?? []}
         documentos={documentos ?? []}
         auditLogs={auditLogs ?? []}
+        valeTransporte={valeTransporte ?? null}
+        autorizacaoSindical={autorizacaoSindical ?? null}
       />
     </div>
   );

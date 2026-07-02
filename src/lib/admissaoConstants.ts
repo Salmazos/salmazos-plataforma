@@ -48,6 +48,12 @@ export const PARENTESCO_OPTIONS: { value: string; label: string }[] = [
   { value: "outro", label: "Outro" },
 ];
 
+export const OPCAO_VALE_TRANSPORTE_LABEL: Record<string, string> = {
+  vale_transporte: "Vale Transporte",
+  transporte_fretado: "Transporte Fretado pela Empresa",
+  nao_opta: "Não opta",
+};
+
 // DP (Departamento Pessoal)
 export const WHATSAPP_SUPORTE = "5519992923939";
 

@@ -7,10 +7,32 @@ import { ADMISSAO_STATUS_BADGE, ADMISSAO_STATUS_OPTIONS, MODALIDADE_LABEL } from
 import { MOTIVOS_REJEICAO_DOCUMENTO } from "@/lib/admissaoConstants";
 import { OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
-import { ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS } from "@/lib/admissaoConstants";
+import { ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, OPCAO_VALE_TRANSPORTE_LABEL } from "@/lib/admissaoConstants";
 import type { AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
 
 type Tab = "dados" | "documentos" | "notas";
+
+interface AdmissaoVtLinha {
+  id: string;
+  onibus_viacao: string | null;
+  percurso: string | null;
+  valor_unitario: number | null;
+  valor_total_diario: number | null;
+  ordem: number;
+}
+
+interface AdmissaoValeTransporte {
+  opcao: string | null;
+  dias_semana: string | null;
+  bairro_cidade_trabalho: string | null;
+  admissao_vt_linhas: AdmissaoVtLinha[];
+}
+
+interface AdmissaoAutorizacaoSindical {
+  nome_sindicato: string | null;
+  autoriza_assistencial_confederativa: boolean | null;
+  autoriza_sindical: boolean | null;
+}
 
 interface AdmissaoFull {
   id: string;
@@ -47,6 +69,8 @@ interface Props {
   dependentes: AdmissaoDependente[];
   documentos: AdmissaoDocumento[];
   auditLogs: AuditLogEntry[];
+  valeTransporte: AdmissaoValeTransporte | null;
+  autorizacaoSindical: AdmissaoAutorizacaoSindical | null;
 }
 
 const ACAO_LABEL: Record<string, string> = {
@@ -74,7 +98,7 @@ function Secao({ titulo, children }: { titulo: string; children: React.ReactNode
   );
 }
 
-export default function AdmissaoDetalheClient({ admissao, dadosPessoais, dependentes, documentos: documentosIniciais, auditLogs }: Props) {
+export default function AdmissaoDetalheClient({ admissao, dadosPessoais, dependentes, documentos: documentosIniciais, auditLogs, valeTransporte, autorizacaoSindical }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("dados");
   const [status, setStatus] = useState(admissao.status);
@@ -335,6 +359,46 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                   {d.nome_mae && <p className="text-xs text-gray-500">Mãe: {d.nome_mae}</p>}
                 </div>
               ))}
+            </Secao>
+          )}
+
+          {/* Candidato ainda não chegou nesse passo do formulário (ou admissão criada
+              antes da Fase C) — sem registro nenhum, não faz sentido mostrar a seção. */}
+          {valeTransporte && (
+            <Secao titulo="Vale Transporte">
+              <Linha label="Opção" value={valeTransporte.opcao ? OPCAO_VALE_TRANSPORTE_LABEL[valeTransporte.opcao] ?? valeTransporte.opcao : null} />
+              <Linha label="Dias na semana" value={valeTransporte.dias_semana} />
+              <Linha label="Local de trabalho" value={valeTransporte.bairro_cidade_trabalho} />
+              {valeTransporte.opcao === "vale_transporte" && valeTransporte.admissao_vt_linhas.length > 0 && (
+                <div className="mt-2">
+                  {valeTransporte.admissao_vt_linhas.map((l) => (
+                    <div key={l.id} className="py-2 border-b border-gray-50 last:border-0">
+                      <p className="text-sm font-semibold text-gray-900">
+                        {[l.onibus_viacao, l.percurso].filter(Boolean).join(" — ") || "—"}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Unitário: {l.valor_unitario != null ? l.valor_unitario.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}
+                        {" · "}
+                        Total diário: {l.valor_total_diario != null ? l.valor_total_diario.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Secao>
+          )}
+
+          {autorizacaoSindical && (
+            <Secao titulo="Autorização Sindical">
+              <Linha label="Sindicato" value={autorizacaoSindical.nome_sindicato} />
+              <Linha
+                label="Desconto assistencial/confederativa"
+                value={autorizacaoSindical.autoriza_assistencial_confederativa === true ? "Autorizado" : autorizacaoSindical.autoriza_assistencial_confederativa === false ? "Não autorizado" : null}
+              />
+              <Linha
+                label="Desconto sindical"
+                value={autorizacaoSindical.autoriza_sindical === true ? "Autorizado" : autorizacaoSindical.autoriza_sindical === false ? "Não autorizado" : null}
+              />
             </Secao>
           )}
         </>
