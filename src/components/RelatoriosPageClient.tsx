@@ -2,16 +2,23 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ANALISTAS, TIPOS_SERVICO } from "@/lib/constants";
-import type { EtapaKanban, StatusEncaminhamento } from "@/types";
+import { ANALISTAS, TIPOS_SERVICO, ETAPAS_KANBAN_VISIVEIS } from "@/lib/constants";
+import type { StatusEncaminhamento } from "@/types";
 
 interface CandidatoData {
   id: string;
   responsavel: string | null;
-  etapa_kanban: EtapaKanban;
   status: string;
   created_at: string;
 }
+
+interface CandidatoVagaData {
+  candidato_id: string;
+  etapa: string;
+}
+
+// Etapas ativas que ainda não viraram aprovação — mesmo critério do Kanban/Dashboard.
+const ETAPAS_EM_ANDAMENTO = ETAPAS_KANBAN_VISIVEIS.filter((e) => e !== "aprovado_cliente");
 
 interface EncaminhamentoData {
   id: string;
@@ -68,21 +75,28 @@ interface Props {
   encaminhamentos: EncaminhamentoData[];
   clientes: ClienteData[];
   vagas: VagaData[];
+  candidatosVagas: CandidatoVagaData[];
 }
 
 function calcularMetricasAnalista(
   nome: string,
   candidatosFiltrados: CandidatoData[],
   encaminhamentos: EncaminhamentoData[],
-  candidatoMap: Map<string, CandidatoData>
+  candidatoMap: Map<string, CandidatoData>,
+  candidatosVagas: CandidatoVagaData[]
 ): MetricasAnalista {
   const meusCandidatos = candidatosFiltrados.filter((c) => c.responsavel === nome);
   const meusIds = new Set(meusCandidatos.map((c) => c.id));
 
-  const ativos = meusCandidatos.filter(
-    (c) => c.etapa_kanban !== "aprovado_cliente" && c.status === "ativo"
-  ).length;
-  const aprovados = meusCandidatos.filter((c) => c.etapa_kanban === "aprovado_cliente").length;
+  // Cada candidatura (linha de candidatos_vagas) conta separadamente — um candidato
+  // pode ter mais de uma candidatura ativa ao mesmo tempo, em vagas diferentes.
+  const minhasCandidaturas = candidatosVagas.filter((cv) => meusIds.has(cv.candidato_id));
+
+  const ativos = minhasCandidaturas.filter((cv) => {
+    const cand = candidatoMap.get(cv.candidato_id);
+    return cand?.status === "ativo" && (ETAPAS_EM_ANDAMENTO as readonly string[]).includes(cv.etapa);
+  }).length;
+  const aprovados = minhasCandidaturas.filter((cv) => cv.etapa === "aprovado_cliente").length;
   const reprovadosEncaminhamentos = encaminhamentos.filter(
     (e) => e.status === "reprovado" && meusIds.has(e.candidato_id)
   ).length;
@@ -208,7 +222,7 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-export default function RelatoriosPageClient({ candidatos, encaminhamentos, clientes, vagas }: Props) {
+export default function RelatoriosPageClient({ candidatos, encaminhamentos, clientes, vagas, candidatosVagas }: Props) {
   const hoje = new Date();
   const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
     .toISOString()
@@ -256,9 +270,9 @@ export default function RelatoriosPageClient({ candidatos, encaminhamentos, clie
   const metricas = useMemo<MetricasAnalista[]>(
     () =>
       ANALISTAS.map((nome) =>
-        calcularMetricasAnalista(nome, candidatosFiltrados, encaminhamentos, candidatoMap)
+        calcularMetricasAnalista(nome, candidatosFiltrados, encaminhamentos, candidatoMap, candidatosVagas)
       ),
-    [candidatosFiltrados, encaminhamentos, candidatoMap]
+    [candidatosFiltrados, encaminhamentos, candidatoMap, candidatosVagas]
   );
 
   const ranking = useMemo(

@@ -138,7 +138,7 @@ export default async function DashboardPage() {
   ] = await Promise.all([
     supabase
       .from("candidatos")
-      .select("id, etapa_kanban, status, responsavel, origem, created_at, updated_at"),
+      .select("id, status, responsavel, origem, created_at"),
     supabase.from("vagas").select("id, status, titulo, data_abertura, data_fechamento, created_at, tipo_servico, responsavel"),
     supabase.from("encaminhamentos").select("id, cliente_id, status, created_at"),
     supabase.from("candidatos_vagas").select("vaga_id, candidato_id, cliente_id, etapa, created_at, updated_at"),
@@ -152,6 +152,10 @@ export default async function DashboardPage() {
   const cl = clientes ?? [];
 
   const clienteNomeMap = new Map(cl.map((x) => [x.id, x.nome as string]));
+  // candidatos_vagas.etapa é a fonte de verdade da etapa do candidato (é de lá que o
+  // próprio Kanban lê); candidatos.etapa_kanban não é atualizado de forma confiável
+  // e não deve ser usado para métricas de etapa.
+  const candidatoMap = new Map(c.map((x) => [x.id as string, x]));
 
   // ── 1. Candidatos por etapa ──────────────────────────────────────────────
   const ativos = c.filter((x) => x.status === "ativo");
@@ -166,13 +170,16 @@ export default async function DashboardPage() {
     { label: "Aprovado Cliente", key: "aprovado_cliente", color: "#10B981" },
     { label: "Reprovado / Negativado", key: "__reprovado__", color: "#EF4444" },
   ];
+  // Cada candidatura (linha de candidatos_vagas) conta separadamente — um candidato
+  // pode ter mais de uma candidatura ativa ao mesmo tempo, em vagas diferentes.
+  // Mesmo critério usado pelo próprio board do Kanban (painel/page.tsx).
   const etapaData = etapaRows.map((row) => ({
     label: row.label,
     color: row.color,
     value:
       row.key === "__reprovado__"
         ? reprovadoTotal
-        : ativos.filter((x) => x.etapa_kanban === row.key).length,
+        : cv.filter((x) => x.etapa === row.key).length,
   }));
   const maxEtapa = Math.max(1, ...etapaData.map((x) => x.value));
 
@@ -261,8 +268,18 @@ export default async function DashboardPage() {
     const key = (cand.responsavel as string | null) || "Não atribuído";
     const entry = analistaMap.get(key) ?? { cadastrados: 0, aprovados: 0 };
     entry.cadastrados++;
-    if (cand.etapa_kanban === "aprovado_cliente") entry.aprovados++;
     analistaMap.set(key, entry);
+  }
+  // "Aprovados" conta candidaturas (candidatos_vagas), não candidatos: se a mesma
+  // pessoa foi aprovada em mais de uma vaga, cada aprovação é uma colocação distinta
+  // e soma para o analista responsável.
+  for (const entry of cv) {
+    if (entry.etapa !== "aprovado_cliente") continue;
+    const cand = candidatoMap.get(entry.candidato_id as string);
+    if (!cand) continue;
+    const key = (cand.responsavel as string | null) || "Não atribuído";
+    const stats = analistaMap.get(key);
+    if (stats) stats.aprovados++;
   }
   const performanceAnalistas = Array.from(analistaMap.entries())
     .map(([nome, data]) => ({ nome, ...data }))
@@ -271,27 +288,13 @@ export default async function DashboardPage() {
 
   // ── 5. Tempo médio de preenchimento de vagas ─────────────────────────────
   const vagaMap = new Map(v.map((x) => [x.id as string, x]));
-  const candidatoMap = new Map(c.map((x) => [x.id as string, x]));
 
   const vagaFirstApproval = new Map<string, Date>();
-
-  // Primary: cv.etapa === "aprovado_cliente"
   for (const entry of cv) {
     if (entry.etapa === "aprovado_cliente") {
       const date = new Date(entry.created_at as string);
       const existing = vagaFirstApproval.get(entry.vaga_id as string);
       if (!existing || date < existing) vagaFirstApproval.set(entry.vaga_id as string, date);
-    }
-  }
-  // Fallback: candidato with etapa_kanban = "aprovado_cliente" linked to a vaga
-  if (vagaFirstApproval.size === 0) {
-    for (const entry of cv) {
-      const cand = candidatoMap.get(entry.candidato_id as string);
-      if (cand?.etapa_kanban === "aprovado_cliente") {
-        const date = new Date(cand.updated_at as string);
-        const existing = vagaFirstApproval.get(entry.vaga_id as string);
-        if (!existing || date < existing) vagaFirstApproval.set(entry.vaga_id as string, date);
-      }
     }
   }
 
