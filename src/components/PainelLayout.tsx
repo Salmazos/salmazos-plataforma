@@ -26,6 +26,7 @@ interface Props {
   recentes: CandidatoRecente[];
   analistaLogado: string;
   isFullAccess: boolean;
+  analistas: string[];
 }
 
 export default function PainelLayout({
@@ -37,6 +38,7 @@ export default function PainelLayout({
   recentes,
   analistaLogado,
   isFullAccess,
+  analistas,
 }: Props) {
   const [filtroOrigem, setFiltroOrigem] = useState<string | null>(null);
   const [metricasVisiveis, setMetricasVisiveis] = useState(false);
@@ -93,7 +95,7 @@ export default function PainelLayout({
       </div>
 
       {/* Kanban abaixo */}
-      <KanbanBoard cards={cards} filtroOrigem={filtroOrigem} analistaLogado={analistaLogado} />
+      <KanbanBoard cards={cards} filtroOrigem={filtroOrigem} analistaLogado={analistaLogado} analistas={analistas} />
     </div>
   );
 }

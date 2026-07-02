@@ -20,6 +20,14 @@ export default async function PainelPage() {
     .in("etapa", ETAPAS_KANBAN_VISIVEIS)
     .order("created_at", { ascending: false });
 
+  // Mesma fonte usada em Gestão de Clientes e Relatórios — não a constante ANALISTAS
+  // (nomes curtos, usada só para responsavel_comercial de clientes/vagas).
+  const { data: analistasPerfil } = await supabase
+    .from("analistas_perfil")
+    .select("nome_completo")
+    .eq("ativo", true)
+    .order("nome_completo");
+
   if (cvError) {
     return (
       <div className="text-red-600 text-sm p-4 bg-red-50 rounded-lg">
@@ -132,6 +140,7 @@ export default async function PainelPage() {
       recentes={recentes}
       analistaLogado={analistaLogado}
       isFullAccess={isFullAccess}
+      analistas={(analistasPerfil ?? []).map((a) => a.nome_completo)}
     />
   );
 }

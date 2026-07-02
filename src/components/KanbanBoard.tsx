@@ -16,6 +16,7 @@ interface Props {
   cards: KanbanCard[];
   filtroOrigem?: string | null;
   analistaLogado: string;
+  analistas: string[];
 }
 
 interface PendingEncaminhamento {
@@ -60,13 +61,14 @@ const ETAPA_COLUMN_MAP: Record<string, string> = {
   reprovado_cliente: "aprovado_cliente",
 };
 
-export default function KanbanBoard({ cards, filtroOrigem, analistaLogado }: Props) {
+export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, analistas }: Props) {
   const router = useRouter();
   useAutoRefresh(30000);
   const { scrollRef: colunasScrollRef, floatScrollRef, floatBar, handleScroll: handleColunasScroll, handleFloatScroll } = useScrollHorizontalSincronizado();
 
   const [filtroCargo, setFiltroCargo] = useState("");
   const [filtroMeus, setFiltroMeus] = useState(false);
+  const [filtroResponsavel, setFiltroResponsavel] = useState("");
   const [movendo, setMovendo] = useState<string | null>(null);
   const [pendingEncaminhamento, setPendingEncaminhamento] =
     useState<PendingEncaminhamento | null>(null);
@@ -110,9 +112,38 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado }: Pro
     [cards, analistaLogado],
   );
 
+  // Contagem de cards por responsável — usada para popular o dropdown, restrito aos
+  // responsáveis de analistas_perfil que de fato têm candidatos no board agora.
+  const contagemPorResponsavel = useMemo(() => {
+    const mapa = new Map<string, number>();
+    cards.forEach((c) => {
+      if (c.responsavel) mapa.set(c.responsavel, (mapa.get(c.responsavel) ?? 0) + 1);
+    });
+    return mapa;
+  }, [cards]);
+
+  const responsaveisDisponiveis = useMemo(
+    () => analistas.filter((nome) => contagemPorResponsavel.has(nome)),
+    [analistas, contagemPorResponsavel],
+  );
+
+  const handleSelecionarResponsavel = (nome: string) => {
+    setFiltroResponsavel(nome);
+    setFiltroMeus(false);
+  };
+
+  const handleToggleMeus = () => {
+    setFiltroMeus((v) => {
+      const next = !v;
+      if (next) setFiltroResponsavel("");
+      return next;
+    });
+  };
+
   const filtrados = useMemo(() => {
     return cards.filter((c) => {
       if (filtroMeus && c.responsavel !== analistaLogado) return false;
+      if (filtroResponsavel && c.responsavel !== filtroResponsavel) return false;
       if (filtroCargo && !c.cargo_pretendido.toLowerCase().includes(filtroCargo.toLowerCase())) return false;
       if (filtroOrigem && (c.origem ?? "cadastro_rapido") !== filtroOrigem) return false;
       if (filtroKeyword) {
@@ -133,7 +164,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado }: Pro
       return true;
     });
   }, [
-    cards, filtroCargo, filtroOrigem, filtroMeus, analistaLogado,
+    cards, filtroCargo, filtroOrigem, filtroMeus, filtroResponsavel, analistaLogado,
     filtroKeyword, filtroCidade, filtroFormacao,
     filtroExperiencia, filtroOrigemFonte,
     filtroHabilidades,
@@ -245,29 +276,26 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado }: Pro
         </div>
 
         {analistaLogado && (
-          <div className="flex gap-1.5">
-            <button
-              onClick={() => setFiltroMeus(false)}
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all"
+          <div className="flex gap-1.5 items-center">
+            <select
+              value={filtroResponsavel}
+              onChange={(e) => handleSelecionarResponsavel(e.target.value)}
+              className="text-xs font-semibold pl-3 pr-2 py-1.5 rounded-full transition-all cursor-pointer"
               style={{
-                background: !filtroMeus ? "#111827" : "#fff",
-                color: !filtroMeus ? "#FFD700" : "#6B7280",
-                border: `1.5px solid ${!filtroMeus ? "#111827" : "#E5E7EB"}`,
+                background: !filtroMeus && !filtroResponsavel ? "#111827" : "#fff",
+                color: !filtroMeus && !filtroResponsavel ? "#FFD700" : "#374151",
+                border: `1.5px solid ${!filtroMeus && !filtroResponsavel ? "#111827" : "#E5E7EB"}`,
               }}
             >
-              Todos
-              <span
-                className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                style={{
-                  background: !filtroMeus ? "#FFD700" : "#F3F4F6",
-                  color: !filtroMeus ? "#000" : "#6B7280",
-                }}
-              >
-                {cards.length}
-              </span>
-            </button>
+              <option value="">Todos ({cards.length})</option>
+              {responsaveisDisponiveis.map((nome) => (
+                <option key={nome} value={nome}>
+                  {nome} ({contagemPorResponsavel.get(nome) ?? 0})
+                </option>
+              ))}
+            </select>
             <button
-              onClick={() => setFiltroMeus(true)}
+              onClick={handleToggleMeus}
               className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full transition-all"
               style={{
                 background: filtroMeus ? "#111827" : "#fff",
