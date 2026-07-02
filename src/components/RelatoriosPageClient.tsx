@@ -76,6 +76,9 @@ interface Props {
   clientes: ClienteData[];
   vagas: VagaData[];
   candidatosVagas: CandidatoVagaData[];
+  // Nomes completos vindos de analistas_perfil — candidatos.responsavel guarda o
+  // nome completo, não o primeiro nome de ANALISTAS (usado só para responsavel_comercial).
+  analistas: string[];
 }
 
 function calcularMetricasAnalista(
@@ -222,7 +225,7 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-export default function RelatoriosPageClient({ candidatos, encaminhamentos, clientes, vagas, candidatosVagas }: Props) {
+export default function RelatoriosPageClient({ candidatos, encaminhamentos, clientes, vagas, candidatosVagas, analistas }: Props) {
   const hoje = new Date();
   const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
     .toISOString()
@@ -269,10 +272,10 @@ export default function RelatoriosPageClient({ candidatos, encaminhamentos, clie
 
   const metricas = useMemo<MetricasAnalista[]>(
     () =>
-      ANALISTAS.map((nome) =>
+      analistas.map((nome) =>
         calcularMetricasAnalista(nome, candidatosFiltrados, encaminhamentos, candidatoMap, candidatosVagas)
       ),
-    [candidatosFiltrados, encaminhamentos, candidatoMap, candidatosVagas]
+    [analistas, candidatosFiltrados, encaminhamentos, candidatoMap, candidatosVagas]
   );
 
   const ranking = useMemo(

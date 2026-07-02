@@ -13,7 +13,7 @@ export default async function RelatoriosPage() {
 
   const supabase = createServiceClient();
 
-  const [{ data: candidatos }, { data: encaminhamentos }, { data: clientes }, { data: vagas }, { data: candidatosVagas }] =
+  const [{ data: candidatos }, { data: encaminhamentos }, { data: clientes }, { data: vagas }, { data: candidatosVagas }, { data: analistasPerfil }] =
     await Promise.all([
       supabase
         .from("candidatos")
@@ -35,6 +35,14 @@ export default async function RelatoriosPage() {
         .from("candidatos_vagas")
         .select("candidato_id, etapa")
         .in("etapa", ETAPAS_KANBAN_VISIVEIS),
+      // candidatos.responsavel guarda o nome completo (atribuído via analistas_perfil,
+      // desde 20/06/2026) — não o primeiro nome de ANALISTAS. Buscamos os nomes reais
+      // aqui em vez de depender da constante desatualizada.
+      supabase
+        .from("analistas_perfil")
+        .select("nome_completo")
+        .eq("ativo", true)
+        .order("nome_completo"),
     ]);
 
   return (
@@ -44,6 +52,7 @@ export default async function RelatoriosPage() {
       clientes={clientes ?? []}
       vagas={vagas ?? []}
       candidatosVagas={candidatosVagas ?? []}
+      analistas={(analistasPerfil ?? []).map((a) => a.nome_completo)}
     />
   );
 }
