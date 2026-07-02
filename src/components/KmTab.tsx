@@ -199,7 +199,7 @@ export default function KmTab({ analistaId, isGestor }: Props) {
   }, [analistaId, from, to]);
 
   useEffect(() => { loadData(); }, [loadData]);
-  useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3000); return () => clearTimeout(t); } }, [toast]);
+  useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), toast.length > 60 ? 8000 : 3000); return () => clearTimeout(t); } }, [toast]);
 
   // ── Config ──
 
@@ -339,9 +339,9 @@ export default function KmTab({ analistaId, isGestor }: Props) {
       if (editingId) {
         await fetch(`/api/km/visitas?registro_id=${registroId}`, { method: "DELETE" });
       }
-      await Promise.all(
-        validVisitas.map((v, idx) =>
-          fetch("/api/km/visitas", {
+      const visitaResults = await Promise.all(
+        validVisitas.map(async (v, idx) => {
+          const vRes = await fetch("/api/km/visitas", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -354,11 +354,21 @@ export default function KmTab({ analistaId, isGestor }: Props) {
               resultado: v.resultado || null,
               ordem: idx + 1,
             }),
-          })
-        )
+          });
+          if (vRes.ok) return { empresa: v.empresa, ok: true as const };
+          const vJson = await vRes.json().catch(() => ({}));
+          return { empresa: v.empresa, ok: false as const, error: vJson.error ?? `Erro ${vRes.status}` };
+        })
       );
+      const falhas = visitaResults.filter((r) => !r.ok) as { empresa: string; ok: false; error: string }[];
 
-      setToast(editingId ? "Registro atualizado!" : "Registro criado!");
+      if (falhas.length > 0) {
+        setToast(
+          `Registro salvo, mas ${falhas.length} visita(s) NÃO foram salvas: ${falhas.map((f) => `${f.empresa} (${f.error})`).join("; ")}. Edite o registro e adicione essas visitas novamente.`
+        );
+      } else {
+        setToast(editingId ? "Registro atualizado!" : "Registro criado!");
+      }
       setModalOpen(false);
       setRowVisitas({});
       loadData();
@@ -474,7 +484,7 @@ export default function KmTab({ analistaId, isGestor }: Props) {
   return (
     <div>
       {toast && (
-        <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, background: "#059669", color: "#fff", padding: "12px 20px", borderRadius: 10, fontSize: 14, fontWeight: 600, boxShadow: "0 4px 20px rgba(0,0,0,0.2)" }}>
+        <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, maxWidth: 420, background: toast.includes("NÃO foram salvas") ? "#DC2626" : "#059669", color: "#fff", padding: "12px 20px", borderRadius: 10, fontSize: 14, fontWeight: 600, boxShadow: "0 4px 20px rgba(0,0,0,0.2)" }}>
           {toast}
         </div>
       )}
