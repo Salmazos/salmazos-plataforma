@@ -377,8 +377,32 @@ export const admissaoDadosPessoaisSchema = z.object({
   tipo_conta: z.enum(["corrente", "poupanca"]).optional().nullable(),
 });
 
+export const admissaoVtLinhaSchema = z.object({
+  onibus_viacao: optStr,
+  percurso: optStr,
+  valor_unitario: coerceNumberOptional,
+  valor_total_diario: coerceNumberOptional,
+});
+
+export const admissaoValeTransporteSchema = z.object({
+  // Sem enum rígido no banco (text puro) — validado só aqui, mesmo raciocínio já
+  // usado no campo "motivo" do KM.
+  opcao: z.enum(["vale_transporte", "transporte_fretado", "nao_opta"]).optional().nullable(),
+  dias_semana: optStr,
+  bairro_cidade_trabalho: optStr,
+  linhas: z.array(admissaoVtLinhaSchema).max(2).optional(),
+});
+
+export const admissaoAutorizacaoSindicalSchema = z.object({
+  nome_sindicato: optStr,
+  autoriza_assistencial_confederativa: z.boolean().optional().nullable(),
+  autoriza_sindical: z.boolean().optional().nullable(),
+});
+
 export const admissaoTokenUpdateSchema = z.object({
   dados_pessoais: admissaoDadosPessoaisSchema.partial().optional(),
+  vale_transporte: admissaoValeTransporteSchema.partial().optional(),
+  autorizacao_sindical: admissaoAutorizacaoSindicalSchema.partial().optional(),
   submit: z.boolean().optional(),
   lgpd_aceite: z.boolean().optional(),
 }).refine((d) => !d.submit || d.lgpd_aceite === true, {

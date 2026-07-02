@@ -33,10 +33,12 @@ export async function GET(_request: NextRequest, { params }: Params) {
       .eq("id", admissao.id);
   }
 
-  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }] = await Promise.all([
+  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: valeTransporte }, { data: autorizacaoSindical }] = await Promise.all([
     svc.from("admissao_dados_pessoais").select("*").eq("admissao_id", admissao.id).maybeSingle(),
     svc.from("admissao_dependentes").select("*").eq("admissao_id", admissao.id).order("created_at", { ascending: true }),
     svc.from("admissao_documentos").select("id, tipo_documento, status, obrigatorio, condicional, motivo_rejeicao").eq("admissao_id", admissao.id).order("created_at", { ascending: true }),
+    svc.from("admissao_vale_transporte").select("*, admissao_vt_linhas(*)").eq("admissao_id", admissao.id).order("ordem", { referencedTable: "admissao_vt_linhas", ascending: true }).maybeSingle(),
+    svc.from("admissao_autorizacao_sindical").select("*").eq("admissao_id", admissao.id).maybeSingle(),
   ]);
 
   return NextResponse.json({
@@ -45,6 +47,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
       dados_pessoais: dadosPessoais ?? null,
       dependentes: dependentes ?? [],
       documentos: documentos ?? [],
+      vale_transporte: valeTransporte ?? null,
+      autorizacao_sindical: autorizacaoSindical ?? null,
     },
   });
 }
@@ -60,7 +64,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const body = await request.json();
   const parsed = parseBody(admissaoTokenUpdateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
-  const { dados_pessoais, submit, lgpd_aceite } = parsed.data;
+  const { dados_pessoais, vale_transporte, autorizacao_sindical, submit, lgpd_aceite } = parsed.data;
 
   // Defesa redundante ao .refine() do schema — se o envio final não vier com o
   // consentimento LGPD marcado, bloqueia aqui também.
@@ -73,6 +77,36 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       .from("admissao_dados_pessoais")
       .upsert({ admissao_id: admissaoId, ...dados_pessoais }, { onConflict: "admissao_id" });
     if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 400 });
+  }
+
+  if (vale_transporte && Object.keys(vale_transporte).length > 0) {
+    const { linhas, ...vtFields } = vale_transporte;
+    const { data: vtRow, error: vtError } = await svc
+      .from("admissao_vale_transporte")
+      .upsert({ admissao_id: admissaoId, ...vtFields }, { onConflict: "admissao_id" })
+      .select("id")
+      .single();
+    if (vtError) return NextResponse.json({ error: vtError.message }, { status: 400 });
+
+    if (linhas) {
+      // Até 2 linhas, sem persistência individual — substitui tudo a cada save
+      // (mesmo raciocínio do delete+insert já usado em km_visitas).
+      const { error: delError } = await svc.from("admissao_vt_linhas").delete().eq("vale_transporte_id", vtRow.id);
+      if (delError) return NextResponse.json({ error: delError.message }, { status: 400 });
+      if (linhas.length > 0) {
+        const { error: linhasError } = await svc.from("admissao_vt_linhas").insert(
+          linhas.map((l, idx) => ({ vale_transporte_id: vtRow.id, ...l, ordem: idx + 1 }))
+        );
+        if (linhasError) return NextResponse.json({ error: linhasError.message }, { status: 400 });
+      }
+    }
+  }
+
+  if (autorizacao_sindical && Object.keys(autorizacao_sindical).length > 0) {
+    const { error: asError } = await svc
+      .from("admissao_autorizacao_sindical")
+      .upsert({ admissao_id: admissaoId, ...autorizacao_sindical }, { onConflict: "admissao_id" });
+    if (asError) return NextResponse.json({ error: asError.message }, { status: 400 });
   }
 
   const statusUpdates: Record<string, unknown> = {};

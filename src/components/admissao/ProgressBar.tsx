@@ -6,6 +6,8 @@ const PASSOS = [
   "Endereço",
   "Dados Bancários",
   "Dependentes",
+  "Vale Transporte",
+  "Autorização Sindical",
   "Documentos",
   "Revisão",
 ];

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { AdmissaoDependente } from "@/types";
-import type { FormState, DocumentoToken } from "./AdmissaoFormClient";
+import type { FormState, DocumentoToken, ValeTransporteState, AutorizacaoSindicalState } from "./AdmissaoFormClient";
 import { cardStyle, botaoPrimarioStyle } from "./styles";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
 import { ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, PARENTESCO_OPTIONS } from "@/lib/admissaoConstants";
@@ -11,6 +11,8 @@ interface Props {
   form: FormState;
   dependentes: AdmissaoDependente[];
   documentos: DocumentoToken[];
+  valeTransporte: ValeTransporteState;
+  autorizacaoSindical: AutorizacaoSindicalState;
   sexo: string;
   isMotorista: boolean;
   possuiDependentes: boolean;
@@ -19,6 +21,12 @@ interface Props {
   onEnviar: () => void;
   enviando: boolean;
 }
+
+const OPCAO_VT_LABEL: Record<string, string> = {
+  vale_transporte: "Vale Transporte",
+  transporte_fretado: "Transporte Fretado pela Empresa",
+  nao_opta: "Não opta",
+};
 
 function docVisivel(doc: DocumentoToken, sexo: string, isMotorista: boolean, possuiDependentes: boolean): boolean {
   if (doc.obrigatorio) return true;
@@ -54,7 +62,7 @@ function Linha({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default function PassoRevisao({ form, dependentes, documentos, sexo, isMotorista, possuiDependentes, lgpdAceite, setLgpdAceite, onEnviar, enviando }: Props) {
+export default function PassoRevisao({ form, dependentes, documentos, valeTransporte, autorizacaoSindical, sexo, isMotorista, possuiDependentes, lgpdAceite, setLgpdAceite, onEnviar, enviando }: Props) {
   const visiveis = documentos.filter((d) => docVisivel(d, sexo, isMotorista, possuiDependentes));
   const pendentesObrigatorios = visiveis.filter((d) => d.obrigatorio && d.status !== "enviado" && d.status !== "aprovado");
 
@@ -110,6 +118,27 @@ export default function PassoRevisao({ form, dependentes, documentos, sexo, isMo
           ))}
         </Secao>
       )}
+
+      <Secao titulo="Vale Transporte">
+        <Linha label="Opção" value={OPCAO_VT_LABEL[valeTransporte.opcao] ?? ""} />
+        <Linha label="Dias na semana" value={valeTransporte.dias_semana} />
+        <Linha label="Local de trabalho" value={valeTransporte.bairro_cidade_trabalho} />
+        {valeTransporte.opcao === "vale_transporte" && valeTransporte.linhas.map((l, i) => (
+          <Linha key={i} label={`Linha ${i + 1}`} value={[l.onibus_viacao, l.percurso].filter(Boolean).join(" — ")} />
+        ))}
+      </Secao>
+
+      <Secao titulo="Autorização Sindical">
+        <Linha label="Sindicato" value={autorizacaoSindical.nome_sindicato} />
+        <Linha
+          label="Desconto assistencial/confederativa"
+          value={autorizacaoSindical.autoriza_assistencial_confederativa === "sim" ? "Autorizado" : autorizacaoSindical.autoriza_assistencial_confederativa === "nao" ? "Não autorizado" : ""}
+        />
+        <Linha
+          label="Desconto sindical"
+          value={autorizacaoSindical.autoriza_sindical === "sim" ? "Autorizado" : autorizacaoSindical.autoriza_sindical === "nao" ? "Não autorizado" : ""}
+        />
+      </Secao>
 
       <Secao titulo="Documentos">
         {pendentesObrigatorios.length > 0 && (
