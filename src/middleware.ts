@@ -180,6 +180,61 @@ function makeCookieHandlers(request: NextRequest, response: { value: NextRespons
   };
 }
 
+// ── Cookie propagation ──────────────────────────────────────────────────────
+//
+// getUser() pode rotacionar o refresh token (chamando setAll via
+// makeCookieHandlers, que grava o cookie novo em responseRef.value) e ainda
+// assim, para ESSA mesma requisição, terminarmos retornando null em `user`
+// (ex: a chamada de verificação que vem depois do refresh falha por um
+// motivo transitório). Se, nesse caso, devolvermos uma resposta nova
+// (NextResponse.json/redirect) sem copiar os cookies de responseRef.value,
+// o cookie novo se perde: o navegador continua com o refresh token ANTIGO,
+// que o Supabase já invalidou ao rotacionar — toda requisição seguinte falha
+// com 401, de forma permanente, até um login manual. É o aviso oficial do
+// guia de SSR do Supabase: "If this is not done, you may be causing the
+// browser and server to go out of sync and terminate the user's session
+// prematurely." https://supabase.com/docs/guides/auth/server-side/nextjs
+function withCookies(response: NextResponse, from: NextResponse): NextResponse {
+  from.cookies.getAll().forEach((cookie) => response.cookies.set(cookie));
+  return response;
+}
+
+// ── Auth retry ───────────────────────────────────────────────────────────────
+//
+// Testado empiricamente contra o projeto Supabase real (8 chamadas
+// concorrentes de refresh com o MESMO refresh_token, todas 200 OK) — o
+// "Refresh Token Reuse Interval" padrão do Supabase já absorve bem rajadas
+// de requisições paralelas (ex: o Promise.all de visitas no formulário de
+// KM), então isso não é a causa raiz do 401 intermitente. Esta retentativa
+// fica como rede de segurança adicional para falhas transitórias de rede
+// durante o refresh (timeout, blip) que não a corrida de reuse em si.
+async function getUserWithRetry(
+  supabase: ReturnType<typeof createServerClient>,
+  pathname: string,
+) {
+  const first = await supabase.auth.getUser();
+  if (!first.error) return first.data.user;
+
+  // "Auth session missing!" é o estado normal de um visitante sem cookie de
+  // sessão nenhum (anônimo) — não é uma corrida, não vale retentar.
+  if (first.error.message === "Auth session missing!") return null;
+
+  console.warn(
+    `[middleware] getUser() falhou em ${pathname}, tentando novamente em 300ms: ${first.error.message}`,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  const second = await supabase.auth.getUser();
+  if (second.error) {
+    console.error(
+      `[middleware] getUser() falhou após retry em ${pathname}: ${second.error.message}`,
+    );
+    return null;
+  }
+  console.warn(`[middleware] getUser() recuperou no retry em ${pathname}`);
+  return second.data.user;
+}
+
 // ── Middleware entry point ───────────────────────────────────────────────────
 
 export async function middleware(request: NextRequest) {
@@ -208,14 +263,12 @@ export async function middleware(request: NextRequest) {
     supabaseConfig,
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getUserWithRetry(supabase, pathname);
 
   // API route protection
   if (isApiRoute && !isPublicApiRoute(pathname, request.method)) {
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return withCookies(NextResponse.json({ error: "Unauthorized" }, { status: 401 }), responseRef.value);
     }
     return responseRef.value;
   }
@@ -224,20 +277,20 @@ export async function middleware(request: NextRequest) {
   if (!user && pathname.startsWith("/painel")) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    return NextResponse.redirect(url);
+    return withCookies(NextResponse.redirect(url), responseRef.value);
   }
 
   if (user && pathname === "/login") {
     const url = request.nextUrl.clone();
     url.pathname = "/painel";
-    return NextResponse.redirect(url);
+    return withCookies(NextResponse.redirect(url), responseRef.value);
   }
 
   // Portal protection
   if (!user && isPortalRoute && pathname !== "/portal/login") {
     const url = request.nextUrl.clone();
     url.pathname = "/portal/login";
-    return NextResponse.redirect(url);
+    return withCookies(NextResponse.redirect(url), responseRef.value);
   }
 
   return responseRef.value;
