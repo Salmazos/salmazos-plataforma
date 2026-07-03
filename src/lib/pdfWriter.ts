@@ -75,7 +75,7 @@ export class PdfWriter {
     if (!this.logo) return;
     const scale = LOGO_H / this.logo.height;
     const logoW = this.logo.width * scale;
-    this.page.drawImage(this.logo, { x: ML, y: PH - 20 - LOGO_H, width: logoW, height: LOGO_H });
+    this.page.drawImage(this.logo, { x: PW - ML - logoW, y: PH - 20 - LOGO_H, width: logoW, height: LOGO_H });
   }
 
   private drawFooter() {
