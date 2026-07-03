@@ -18,8 +18,14 @@ async function extractAndUpdateCandidato(
   curriculoUrl: string,
   resumoExistente: string
 ) {
-  const fileRes = await fetch(curriculoUrl);
-  const buffer = await fileRes.arrayBuffer();
+  const supabaseStorage = createServiceClient();
+  const { data: fileBlob, error: downloadError } = await supabaseStorage.storage
+    .from("curriculos")
+    .download(curriculoUrl);
+  if (downloadError || !fileBlob) {
+    throw new Error(`Falha ao baixar currículo do storage: ${downloadError?.message ?? "arquivo não encontrado"}`);
+  }
+  const buffer = await fileBlob.arrayBuffer();
   const base64 = Buffer.from(buffer).toString("base64");
 
   const urlPath = curriculoUrl.split("?")[0];
