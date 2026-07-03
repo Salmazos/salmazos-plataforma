@@ -15,6 +15,7 @@ const PUBLIC_API_PREFIXES = [
 
 const PUBLIC_API_POST_ONLY = [
   "/api/candidatos",
+  "/api/upload-curriculo",
 ];
 
 function isPublicApiRoute(pathname: string, method: string): boolean {
@@ -65,6 +66,11 @@ const RATE_LIMIT_RULES: RateLimitRule[] = [
   },
   {
     match: (p) => p === "/api/extrair-curriculo",
+    maxRequests: 20,
+    windowMs: 60 * 60 * 1000,
+  },
+  {
+    match: (p, m) => p === "/api/upload-curriculo" && m === "POST",
     maxRequests: 20,
     windowMs: 60 * 60 * 1000,
   },

@@ -86,6 +86,7 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
   const [erroGeral, setErroGeral] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState(false);
   const [hovering, setHovering] = useState(false);
+  const [tentouEnviar, setTentouEnviar] = useState(false);
 
   const [lgpdConsentimento, setLgpdConsentimento] = useState(false);
 
@@ -144,11 +145,19 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
     if (!lgpdConsentimento)
       e.lgpd = "É necessário aceitar a Política de Privacidade para continuar.";
     setErros(e);
+    if (Object.keys(e).length > 0) {
+      const primeiroErro = Object.keys(e)[0];
+      setTimeout(() => {
+        const el = document.getElementById(primeiroErro);
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 50);
+    }
     return Object.keys(e).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setTentouEnviar(true);
     if (!validar()) return;
     setEnviando(true);
     setErroGeral(null);
@@ -338,43 +347,58 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
         />
       </div>
 
+      {tentouEnviar && Object.keys(erros).length > 0 && (
+        <div style={{
+          backgroundColor: "#FEE2E2",
+          border: "1px solid #EF4444",
+          borderRadius: "8px",
+          padding: "12px 16px",
+          marginBottom: "16px",
+          color: "#991B1B",
+          fontSize: "14px",
+          fontWeight: 600,
+        }}>
+          ⚠ Por favor, corrija os campos destacados em vermelho antes de continuar.
+        </div>
+      )}
+
       {/* Dados Pessoais */}
       <div style={CARD}>
         <p style={SECTION_TITLE}>Dados Pessoais</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="sm:col-span-2">
             <label style={LABEL}>Nome completo <span style={{ color: "#ef4444" }}>*</span></label>
-            <input type="text" style={INPUT} placeholder="Seu nome completo"
+            <input id="nome_completo" type="text" style={INPUT} placeholder="Seu nome completo"
               value={form.nome_completo} onChange={(e) => set("nome_completo", e.target.value)} />
             {erros.nome_completo && <p style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>{erros.nome_completo}</p>}
           </div>
           <div>
             <label style={LABEL}>CPF <span style={{ color: "#ef4444" }}>*</span></label>
-            <input type="text" inputMode="numeric" style={INPUT} placeholder="000.000.000-00"
+            <input id="cpf" type="text" inputMode="numeric" style={INPUT} placeholder="000.000.000-00"
               value={form.cpf} onChange={(e) => set("cpf", formatarCPF(e.target.value))} />
             {erros.cpf && <p style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>{erros.cpf}</p>}
           </div>
           <div>
             <label style={LABEL}>Telefone / WhatsApp <span style={{ color: "#ef4444" }}>*</span></label>
-            <input type="text" inputMode="tel" style={INPUT} placeholder="(00) 00000-0000"
+            <input id="telefone" type="text" inputMode="tel" style={INPUT} placeholder="(00) 00000-0000"
               value={form.telefone} onChange={(e) => set("telefone", formatarTelefone(e.target.value))} />
             {erros.telefone && <p style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>{erros.telefone}</p>}
           </div>
           <div className="sm:col-span-2">
             <label style={LABEL}>E-mail <span style={{ color: "#ef4444" }}>*</span></label>
-            <input type="email" style={INPUT} placeholder="seuemail@exemplo.com"
+            <input id="email" type="email" style={INPUT} placeholder="seuemail@exemplo.com"
               value={form.email} onChange={(e) => set("email", e.target.value)} />
             {erros.email && <p style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>{erros.email}</p>}
           </div>
           <div>
             <label style={LABEL}>Cidade <span style={{ color: "#ef4444" }}>*</span></label>
-            <input type="text" style={INPUT} placeholder="Sua cidade"
+            <input id="cidade" type="text" style={INPUT} placeholder="Sua cidade"
               value={form.cidade} onChange={(e) => set("cidade", e.target.value)} />
             {erros.cidade && <p style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>{erros.cidade}</p>}
           </div>
           <div>
             <label style={LABEL}>Estado <span style={{ color: "#ef4444" }}>*</span></label>
-            <select style={INPUT} value={form.estado} onChange={(e) => set("estado", e.target.value)}>
+            <select id="estado" style={INPUT} value={form.estado} onChange={(e) => set("estado", e.target.value)}>
               <option value="">Selecione</option>
               {ESTADOS.map((s) => (
                 <option key={s.uf} value={s.uf}>{s.nome} ({s.uf})</option>
@@ -401,7 +425,7 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label style={LABEL}>Tempo de experiência <span style={{ color: "#ef4444" }}>*</span></label>
-            <select style={INPUT} value={form.tempo_experiencia} onChange={(e) => set("tempo_experiencia", e.target.value)}>
+            <select id="tempo_experiencia" style={INPUT} value={form.tempo_experiencia} onChange={(e) => set("tempo_experiencia", e.target.value)}>
               <option value="">Selecione</option>
               {TEMPO_EXPERIENCIA.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -409,7 +433,7 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
           </div>
           <div>
             <label style={LABEL}>Turno disponível <span style={{ color: "#ef4444" }}>*</span></label>
-            <select style={INPUT} value={form.turno_disponivel} onChange={(e) => set("turno_disponivel", e.target.value)}>
+            <select id="turno_disponivel" style={INPUT} value={form.turno_disponivel} onChange={(e) => set("turno_disponivel", e.target.value)}>
               <option value="">Selecione</option>
               {TURNOS.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -464,6 +488,7 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
         <div>
           <label style={LABEL}>Currículo</label>
           <div
+            id="curriculo"
             onMouseEnter={() => setHovering(true)}
             onMouseLeave={() => setHovering(false)}
             style={{
@@ -506,6 +531,7 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
       <div style={{ backgroundColor: "#111", border: `1px solid ${erros.lgpd ? "#ef4444" : "#333"}`, borderRadius: "12px", padding: "16px 20px", marginBottom: "12px" }}>
         <label style={{ display: "flex", gap: "12px", alignItems: "flex-start", cursor: "pointer" }}>
           <input
+            id="lgpd"
             type="checkbox"
             checked={lgpdConsentimento}
             onChange={(e) => setLgpdConsentimento(e.target.checked)}
