@@ -7,6 +7,38 @@ const SYSTEM_PROMPT =
 
 const MAX_CONCURRENT_AI_CALLS = 5;
 
+const STOPWORDS = new Set(["de", "da", "do", "das", "dos", "em", "para", "com", "sem", "e", "ou", "a", "o", "as", "os"]);
+
+function normalizar(texto: string): string {
+  return texto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
+function palavrasRelevantes(texto: string): string[] {
+  return normalizar(texto)
+    .split(/[^a-z0-9]+/)
+    .filter((p) => p.length >= 4 && !STOPWORDS.has(p));
+}
+
+function prefiltrarVagas(
+  cargoPretendido: string | null,
+  vagas: { id: string; titulo: string; requisitos: string | null }[]
+): { id: string; titulo: string; requisitos: string | null }[] {
+  if (!cargoPretendido) return vagas;
+
+  const palavrasCandidato = palavrasRelevantes(cargoPretendido);
+  if (palavrasCandidato.length === 0) return vagas;
+
+  const compativeis = vagas.filter((vaga) => {
+    const textoVaga = normalizar(`${vaga.titulo} ${vaga.requisitos ?? ""}`);
+    return palavrasCandidato.some((p) => textoVaga.includes(p));
+  });
+
+  return compativeis.length > 0 ? compativeis : vagas;
+}
+
 async function withConcurrencyLimit<T, R>(
   items: T[],
   limit: number,
@@ -35,6 +67,8 @@ export async function calcularMatchCandidato(candidatoId: string): Promise<void>
 
   if (!candidato) return;
 
+  const cargo = ((candidato.cargo_pretendido as string | null) ?? "").trim() || null;
+
   const { data: vagas } = await supabase
     .from("vagas")
     .select("id, titulo, requisitos")
@@ -45,15 +79,16 @@ export async function calcularMatchCandidato(candidatoId: string): Promise<void>
     return;
   }
 
+  const vagasFiltradas = prefiltrarVagas(cargo, vagas as { id: string; titulo: string; requisitos: string | null }[]);
+
   const nome = candidato.nome_completo as string;
-  const cargo = ((candidato.cargo_pretendido as string | null) ?? "").trim() || null;
   const resumo = (candidato.resumo_profissional as string | null) || "Não informado";
   const experiencias = (candidato.experiencias_profissionais as string | null) || "Não informado";
   const semCargo = !cargo;
   const cargoText = cargo ?? "Generalista - sem cargo definido";
 
   const results = await withConcurrencyLimit(
-    vagas as { id: string; titulo: string; requisitos: string | null }[],
+    vagasFiltradas,
     MAX_CONCURRENT_AI_CALLS,
     async (vaga) => {
       const base = `Candidato: ${nome}, Cargo pretendido: ${cargoText}, Resumo: ${resumo}, Experiências: ${experiencias}. Vaga: ${vaga.titulo}, Requisitos: ${vaga.requisitos ?? "Não informado"}. Retorne apenas o número.`;
