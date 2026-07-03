@@ -38,6 +38,7 @@ export default function AdmissoesClient({ admissoesIniciais }: Props) {
   const [filtroStatus, setFiltroStatus] = useState<string | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
   const [toast, setToast] = useState("");
+  const [gerandoFormularios, setGerandoFormularios] = useState(false);
 
   useEffect(() => setAdmissoes(admissoesIniciais), [admissoesIniciais]);
 
@@ -76,13 +77,39 @@ export default function AdmissoesClient({ admissoesIniciais }: Props) {
     window.open(wa, "_blank");
   };
 
+  const handleImprimirFormularios = async () => {
+    setGerandoFormularios(true);
+    try {
+      const res = await fetch("/api/admissoes/formularios-em-branco");
+      if (!res.ok) { showToast("Erro ao gerar os formulários."); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "formularios-admissao-em-branco.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      showToast("Erro de conexão ao gerar os formulários.");
+    } finally {
+      setGerandoFormularios(false);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-xl font-bold text-gray-900">Admissões</h1>
-        <button onClick={() => setModalAberto(true)} className="btn-primary">
-          + Iniciar admissão
-        </button>
+        <div className="flex gap-2">
+          <button onClick={handleImprimirFormularios} disabled={gerandoFormularios} className="btn-outline" style={{ opacity: gerandoFormularios ? 0.6 : 1 }}>
+            {gerandoFormularios ? "Gerando..." : "🖨️ Imprimir formulário em branco"}
+          </button>
+          <button onClick={() => setModalAberto(true)} className="btn-primary">
+            + Iniciar admissão
+          </button>
+        </div>
       </div>
 
       {/* Summary cards */}

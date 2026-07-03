@@ -1,25 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { PDFDocument, PDFPage, rgb, StandardFonts, PageSizes } from "pdf-lib";
+import { PDFDocument, PageSizes } from "pdf-lib";
 import { registrarAuditoria } from "@/lib/audit";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
+import { PdfWriter, PW, PH, ML, safe, BLACK, YELLOW, DARK, GRAY } from "@/lib/pdfWriter";
+import { desenharFichaCadastral, desenharAutorizacaoSindical, desenharSolicitacaoValeTransporte } from "@/lib/admissaoDocumentosPdf";
 import type { AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
 
 interface Params { params: Promise<{ id: string }> }
-
-const PW = PageSizes.A4[0];
-const PH = PageSizes.A4[1];
-const ML = 50;
-const CW = PW - ML * 2;
-
-const BLACK = rgb(0, 0, 0);
-const YELLOW = rgb(1, 0.843, 0);
-const DARK = rgb(0.12, 0.14, 0.16);
-const GRAY = rgb(0.43, 0.46, 0.50);
-
-function safe(v: unknown): string {
-  return (v == null ? "" : String(v)).replace(/[–—]/g, "-").replace(/[^\x20-\xFF]/g, " ").trim();
-}
 
 export async function POST(_request: NextRequest, { params }: Params) {
   const { id } = await params;
@@ -39,10 +27,12 @@ export async function POST(_request: NextRequest, { params }: Params) {
     .single();
   if (admError) return NextResponse.json({ error: admError.message }, { status: 404 });
 
-  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }] = await Promise.all([
+  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: valeTransporte }, { data: autorizacaoSindical }] = await Promise.all([
     svc.from("admissao_dados_pessoais").select("*").eq("admissao_id", id).maybeSingle(),
     svc.from("admissao_dependentes").select("*").eq("admissao_id", id).order("created_at", { ascending: true }),
     svc.from("admissao_documentos").select("*").eq("admissao_id", id).order("created_at", { ascending: true }),
+    svc.from("admissao_vale_transporte").select("*, admissao_vt_linhas(*)").eq("admissao_id", id).order("ordem", { referencedTable: "admissao_vt_linhas", ascending: true }).maybeSingle(),
+    svc.from("admissao_autorizacao_sindical").select("*").eq("admissao_id", id).maybeSingle(),
   ]);
 
   const dp = (dadosPessoais ?? {}) as Partial<AdmissaoDadosPessoais>;
@@ -64,110 +54,106 @@ export async function POST(_request: NextRequest, { params }: Params) {
   }
 
   const pdfDoc = await PDFDocument.create();
-  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const regular = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  type Font = typeof bold;
-  type Color = typeof BLACK;
-
-  let page: PDFPage = pdfDoc.addPage(PageSizes.A4);
-  let y = PH - ML;
-
-  function newPage() {
-    page = pdfDoc.addPage(PageSizes.A4);
-    y = PH - ML;
-  }
-
-  function ensureSpace(needed: number) {
-    if (y - needed < ML + 20) newPage();
-  }
-
-  function drawText(text: string, font: Font, size: number, color: Color, x = ML) {
-    ensureSpace(size + 4);
-    page.drawText(safe(text), { x, y, size, font, color });
-    y -= size + 4;
-  }
-
-  function drawField(label: string, value: unknown) {
-    const v = safe(value);
-    if (!v) return;
-    ensureSpace(14);
-    page.drawText(`${label}:`, { x: ML, y, size: 9, font: bold, color: GRAY });
-    page.drawText(v, { x: ML + 140, y, size: 9, font: regular, color: DARK });
-    y -= 14;
-  }
-
-  function sectionTitle(text: string) {
-    y -= 6;
-    ensureSpace(30);
-    page.drawRectangle({ x: ML, y: y - 22, width: CW, height: 22, color: BLACK });
-    page.drawText(text, { x: ML + 8, y: y - 16, size: 11, font: bold, color: YELLOW });
-    y -= 32;
-  }
+  const w = await PdfWriter.create(pdfDoc);
 
   // ── Cover ──────────────────────────────────────────────────
-  page.drawRectangle({ x: 0, y: PH - 110, width: PW, height: 110, color: BLACK });
-  page.drawText("SALMAZOS RH", { x: ML, y: PH - 52, size: 30, font: bold, color: YELLOW });
-  page.drawText("Pacote de Admissão", { x: ML, y: PH - 75, size: 11, font: regular, color: YELLOW });
-  y = PH - 140;
+  w.page.drawRectangle({ x: 0, y: PH - 110, width: PW, height: 110, color: BLACK });
+  w.page.drawText("SALMAZOS RH", { x: ML, y: PH - 52, size: 30, font: w.bold, color: YELLOW });
+  w.page.drawText("Pacote de Admissão", { x: ML, y: PH - 75, size: 11, font: w.regular, color: YELLOW });
+  w.y = PH - 140;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const candidatoNome = (admissao.candidatos as any)?.nome_completo ?? dp.nome_completo ?? "—";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vagaTitulo = (admissao.vagas as any)?.titulo ?? "—";
-  drawText(candidatoNome, bold, 20, DARK);
-  drawField("Vaga", vagaTitulo);
-  drawField("Modalidade", admissao.modalidade === "MOT" ? "Mão de Obra Temporária" : "Terceirização");
-  drawField("Data de geração", new Date().toLocaleDateString("pt-BR"));
+  w.drawText(candidatoNome, w.bold, 20, DARK);
+  w.drawField("Vaga", vagaTitulo);
+  w.drawField("Modalidade", admissao.modalidade === "MOT" ? "Mão de Obra Temporária" : "Terceirização");
+  w.drawField("Data de geração", new Date().toLocaleDateString("pt-BR"));
 
   // ── Dados pessoais ─────────────────────────────────────────
-  sectionTitle("Dados Pessoais");
-  drawField("Nome completo", dp.nome_completo);
-  drawField("Data de nascimento", dp.data_nascimento);
-  drawField("Sexo", dp.sexo === "M" ? "Masculino" : dp.sexo === "F" ? "Feminino" : "");
-  drawField("Estado civil", dp.estado_civil);
-  drawField("Nacionalidade", dp.nacionalidade);
-  drawField("Naturalidade", dp.naturalidade);
-  drawField("CPF", dp.cpf);
-  drawField("RG", [dp.rg_numero, dp.rg_orgao_emissor, dp.rg_uf].filter(Boolean).join(" / "));
-  drawField("RG - Data emissão", dp.rg_data_emissao);
-  drawField("Nome da mãe", dp.nome_mae);
-  drawField("Nome do pai", dp.nome_pai);
-  drawField("Grau de instrução", dp.grau_instrucao);
+  w.sectionTitle("Dados Pessoais");
+  w.drawField("Nome completo", dp.nome_completo);
+  w.drawField("Data de nascimento", dp.data_nascimento);
+  w.drawField("Sexo", dp.sexo === "M" ? "Masculino" : dp.sexo === "F" ? "Feminino" : "");
+  w.drawField("Estado civil", dp.estado_civil);
+  w.drawField("Nacionalidade", dp.nacionalidade);
+  w.drawField("Naturalidade", dp.naturalidade);
+  w.drawField("CPF", dp.cpf);
+  w.drawField("RG", [dp.rg_numero, dp.rg_orgao_emissor, dp.rg_uf].filter(Boolean).join(" / "));
+  w.drawField("RG - Data emissão", dp.rg_data_emissao);
+  w.drawField("Nome da mãe", dp.nome_mae);
+  w.drawField("Nome do pai", dp.nome_pai);
+  w.drawField("Grau de instrução", dp.grau_instrucao);
 
   // ── Documentos profissionais ───────────────────────────────
-  sectionTitle("Documentos Profissionais");
-  drawField("PIS/PASEP", dp.pis_pasep);
-  drawField("CTPS", [dp.carteira_trabalho_numero, dp.carteira_trabalho_serie, dp.carteira_trabalho_uf].filter(Boolean).join(" / "));
-  drawField("Título de eleitor", dp.titulo_eleitor);
-  drawField("Zona / Seção eleitoral", [dp.zona_eleitoral, dp.secao_eleitoral].filter(Boolean).join(" / "));
-  drawField("Reservista", dp.reservista);
-  drawField("CNH", dp.cnh_numero ? `${dp.cnh_numero} — Cat. ${dp.cnh_categoria ?? "—"} — Val. ${dp.cnh_validade ?? "—"}` : "");
+  w.sectionTitle("Documentos Profissionais");
+  w.drawField("PIS/PASEP", dp.pis_pasep);
+  w.drawField("CTPS", [dp.carteira_trabalho_numero, dp.carteira_trabalho_serie, dp.carteira_trabalho_uf].filter(Boolean).join(" / "));
+  w.drawField("Título de eleitor", dp.titulo_eleitor);
+  w.drawField("Zona / Seção eleitoral", [dp.zona_eleitoral, dp.secao_eleitoral].filter(Boolean).join(" / "));
+  w.drawField("Reservista", dp.reservista);
+  w.drawField("CNH", dp.cnh_numero ? `${dp.cnh_numero} — Cat. ${dp.cnh_categoria ?? "—"} — Val. ${dp.cnh_validade ?? "—"}` : "");
 
   // ── Endereço e contato ─────────────────────────────────────
-  sectionTitle("Endereço e Contato");
-  drawField("CEP", dp.endereco_cep);
-  drawField("Logradouro", [dp.endereco_logradouro, dp.endereco_numero, dp.endereco_complemento].filter(Boolean).join(", "));
-  drawField("Bairro / Cidade / UF", [dp.endereco_bairro, dp.endereco_cidade, dp.endereco_uf].filter(Boolean).join(" / "));
-  drawField("Telefone", dp.telefone);
-  drawField("E-mail", dp.email);
+  w.sectionTitle("Endereço e Contato");
+  w.drawField("CEP", dp.endereco_cep);
+  w.drawField("Logradouro", [dp.endereco_logradouro, dp.endereco_numero, dp.endereco_complemento].filter(Boolean).join(", "));
+  w.drawField("Bairro / Cidade / UF", [dp.endereco_bairro, dp.endereco_cidade, dp.endereco_uf].filter(Boolean).join(" / "));
+  w.drawField("Telefone", dp.telefone);
+  w.drawField("E-mail", dp.email);
 
   // ── Dados bancários ────────────────────────────────────────
-  sectionTitle("Dados Bancários");
-  drawField("Banco", dp.banco);
-  drawField("Agência", dp.agencia);
-  drawField("Conta", dp.conta);
-  drawField("Tipo de conta", dp.tipo_conta === "corrente" ? "Conta Corrente" : dp.tipo_conta === "poupanca" ? "Conta Poupança" : "");
+  w.sectionTitle("Dados Bancários");
+  w.drawField("Banco", dp.banco);
+  w.drawField("Agência", dp.agencia);
+  w.drawField("Conta", dp.conta);
+  w.drawField("Tipo de conta", dp.tipo_conta === "corrente" ? "Conta Corrente" : dp.tipo_conta === "poupanca" ? "Conta Poupança" : "");
 
   // ── Dependentes ────────────────────────────────────────────
   if (deps.length > 0) {
-    sectionTitle("Dependentes");
-    for (const d of deps) {
-      drawText(`${d.nome} (${d.parentesco ?? "—"})`, bold, 10, DARK);
-      drawField("Data de nascimento", d.data_nascimento);
-      drawField("CPF", d.cpf);
-      if (d.nome_mae) drawField("Nome da mãe", d.nome_mae);
-      y -= 6;
+    w.sectionTitle("Dependentes");
+    for (const dep of deps) {
+      w.drawText(`${dep.nome} (${dep.parentesco ?? "—"})`, w.bold, 10, DARK);
+      w.drawField("Data de nascimento", dep.data_nascimento);
+      w.drawField("CPF", dep.cpf);
+      if (dep.nome_mae) w.drawField("Nome da mãe", dep.nome_mae);
+      w.y -= 6;
     }
   }
+
+  // ── Documentos formais para assinatura ──────────────────────
+  // Anexados ao mesmo pacote (não geramos um PDF separado): esses 3 documentos só
+  // fazem sentido depois que a documentação toda já foi aprovada — que é exatamente
+  // o momento em que este pacote é gerado — então reusar o mesmo botão/link "Ver
+  // pacote gerado" já existente é o comportamento certo, sem precisar de UI nova.
+  desenharFichaCadastral(
+    w,
+    {
+      funcao: admissao.funcao,
+      salario: admissao.salario,
+      horario_trabalho: admissao.horario_trabalho,
+      data_admissao: admissao.data_admissao,
+      ...dp,
+    },
+    deps
+  );
+
+  desenharAutorizacaoSindical(w, {
+    nome_completo: dp.nome_completo,
+    cpf: dp.cpf,
+    nome_sindicato: autorizacaoSindical?.nome_sindicato ?? null,
+    autoriza_assistencial_confederativa: autorizacaoSindical?.autoriza_assistencial_confederativa ?? null,
+    autoriza_sindical: autorizacaoSindical?.autoriza_sindical ?? null,
+  });
+
+  desenharSolicitacaoValeTransporte(w, {
+    nome_completo: dp.nome_completo,
+    opcao: valeTransporte?.opcao ?? null,
+    dias_semana: valeTransporte?.dias_semana ?? null,
+    bairro_cidade_trabalho: valeTransporte?.bairro_cidade_trabalho ?? null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    linhas: ((valeTransporte as any)?.admissao_vt_linhas ?? []),
+  });
 
   // ── Documentos anexados (imagens/PDFs incorporados) ─────────
   const naoEmbutidos: string[] = [];
@@ -185,13 +171,13 @@ export async function POST(_request: NextRequest, { params }: Params) {
       if (ext === "jpg" || ext === "jpeg") {
         const img = await pdfDoc.embedJpg(bytes);
         const docPage = pdfDoc.addPage(PageSizes.A4);
-        docPage.drawText(label, { x: ML, y: PH - ML, size: 12, font: bold, color: DARK });
+        docPage.drawText(label, { x: ML, y: PH - ML, size: 12, font: w.bold, color: DARK });
         const scale = Math.min((PW - ML * 2) / img.width, (PH - ML * 2 - 30) / img.height, 1);
         docPage.drawImage(img, { x: ML, y: ML, width: img.width * scale, height: img.height * scale });
       } else if (ext === "png") {
         const img = await pdfDoc.embedPng(bytes);
         const docPage = pdfDoc.addPage(PageSizes.A4);
-        docPage.drawText(label, { x: ML, y: PH - ML, size: 12, font: bold, color: DARK });
+        docPage.drawText(label, { x: ML, y: PH - ML, size: 12, font: w.bold, color: DARK });
         const scale = Math.min((PW - ML * 2) / img.width, (PH - ML * 2 - 30) / img.height, 1);
         docPage.drawImage(img, { x: ML, y: ML, width: img.width * scale, height: img.height * scale });
       } else if (ext === "pdf") {
@@ -208,11 +194,11 @@ export async function POST(_request: NextRequest, { params }: Params) {
   }
 
   if (naoEmbutidos.length > 0) {
-    newPage();
-    drawText("Documentos não incorporados automaticamente", bold, 12, DARK);
-    drawText("(formato não suportado — baixe o arquivo original no painel)", regular, 9, GRAY);
-    y -= 6;
-    for (const label of naoEmbutidos) drawText(`• ${label}`, regular, 10, DARK);
+    w.newPage();
+    w.drawText("Documentos não incorporados automaticamente", w.bold, 12, DARK);
+    w.drawText("(formato não suportado — baixe o arquivo original no painel)", w.regular, 9, GRAY);
+    w.y -= 6;
+    for (const label of naoEmbutidos) w.drawText(`• ${label}`, w.regular, 10, DARK);
   }
 
   const pdfBytes = await pdfDoc.save();
