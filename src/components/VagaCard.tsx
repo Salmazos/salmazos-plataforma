@@ -3,13 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 
-const TIPO_MAP: Record<string, { label: string; bg: string }> = {
-  recrutamento_selecao:  { label: "Recrutamento e Seleção",    bg: "#1D6FA4" },
-  mao_obra_temporaria:   { label: "Mão de Obra Temporária",    bg: "#F59E0B" },
-  terceirizacao:         { label: "Terceirização de Serviços", bg: "#10B981" },
-  avaliacao_psicologica: { label: "Avaliação Psicológica",     bg: "#8B5CF6" },
-};
-
 interface Props {
   id: string;
   slug: string;
@@ -22,11 +15,8 @@ interface Props {
   salarioFormatado: string;
 }
 
-export default function VagaCard({ slug, titulo, cidade, estado, tipoServico, salarioFormatado }: Props) {
+export default function VagaCard({ slug, titulo, cidade, estado, salarioFormatado }: Props) {
   const [hovered, setHovered] = useState(false);
-  const chip = tipoServico
-    ? (TIPO_MAP[tipoServico] ?? { label: tipoServico, bg: "#6b7280" })
-    : null;
 
   return (
     <Link
@@ -41,22 +31,7 @@ export default function VagaCard({ slug, titulo, cidade, estado, tipoServico, sa
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {chip && (
-        <span style={{
-          display: "inline-block",
-          alignSelf: "flex-start",
-          backgroundColor: chip.bg,
-          color: "#fff",
-          fontSize: "12px",
-          fontWeight: 600,
-          padding: "4px 10px",
-          borderRadius: "20px",
-        }}>
-          {chip.label}
-        </span>
-      )}
-
-      <h2 style={{ fontWeight: 700, fontSize: "15px", lineHeight: 1.35, color: "#111827" }}>
+      <h2 style={{ fontWeight: 700, fontSize: "19px", lineHeight: 1.35, color: "#111827" }}>
         {titulo}
       </h2>
 
