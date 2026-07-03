@@ -40,6 +40,7 @@ export type CandidatoRow = {
   formacao_academica: string | null;
   vagas_interesse: string[] | null;
   reprovado_internamente: boolean | null;
+  matches_calculados?: MatchEntry[] | null;
 };
 
 type MatchEntry = { vaga_id: string; titulo: string; score: number };
@@ -152,13 +153,11 @@ function ScoreBadge({ score, label, resumo }: { score: number | null; label: str
 
 function MatchCell({
   candidatoId,
-  loading,
   matchMap,
   savedScore,
   savedTitulo,
 }: {
   candidatoId: string;
-  loading: boolean;
   matchMap: Record<string, MatchEntry[]>;
   savedScore: number | null;
   savedTitulo: string | null;
@@ -184,13 +183,6 @@ function MatchCell({
   const displayTitulo = matches?.[0]?.titulo ?? savedTitulo;
 
   if (displayScore === null || displayScore === undefined) {
-    if (loading) {
-      return (
-        <span style={{ color: "#9CA3AF", fontSize: 12, fontStyle: "italic" }}>
-          Calculando...
-        </span>
-      );
-    }
     return <span style={{ color: "#9CA3AF", fontSize: 13 }}>Sem vagas</span>;
   }
 
@@ -459,7 +451,6 @@ export default function BancoCandidatosClient({
   const [filtroOrigem, setFiltroOrigem] = useState("");
 
   const [matchMap, setMatchMap] = useState<Record<string, MatchEntry[]>>({});
-  const [loadingMatches, setLoadingMatches] = useState(false);
 
   const [vagasAbertas, setVagasAbertas] = useState<VagaAberta[]>([]);
   const emProcessoSet = useMemo(() => new Set(idsEmProcesso), [idsEmProcesso]);
@@ -487,50 +478,13 @@ export default function BancoCandidatosClient({
     return () => clearInterval(interval);
   }, [candidatos, router]);
 
-  const candidatoIdsKey = useMemo(
-    () => candidatos.map((c) => c.id).sort().join(","),
-    [candidatos]
-  );
-
   useEffect(() => {
-    const pendentes = candidatos.filter((c) => !(c.id in matchMap));
-    if (pendentes.length === 0) return;
-
-    setLoadingMatches(true);
-
-    async function fetchComLimite(lista: CandidatoRow[], limite = 4) {
-      const resultados: { id: string; matches: MatchEntry[] }[] = [];
-      for (let i = 0; i < lista.length; i += limite) {
-        const lote = lista.slice(i, i + limite);
-        const loteResultados = await Promise.all(
-          lote.map(async (c) => {
-            try {
-              const res = await fetch(`/api/banco-candidatos/match?candidato_id=${c.id}`);
-              if (!res.ok) return { id: c.id, matches: [] as MatchEntry[] };
-              const json = await res.json();
-              return { id: c.id, matches: (json.matches ?? []) as MatchEntry[] };
-            } catch {
-              return { id: c.id, matches: [] as MatchEntry[] };
-            }
-          })
-        );
-        resultados.push(...loteResultados);
-      }
-      return resultados;
-    }
-
-    fetchComLimite(pendentes).then((results) => {
-      setMatchMap((prev) => {
-        const map = { ...prev };
-        results.forEach(({ id, matches }) => {
-          map[id] = matches;
-        });
-        return map;
-      });
-      setLoadingMatches(false);
+    const map: Record<string, MatchEntry[]> = {};
+    candidatos.forEach((c) => {
+      map[c.id] = (c.matches_calculados as MatchEntry[] | null) ?? [];
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candidatoIdsKey]);
+    setMatchMap(map);
+  }, [candidatos]);
 
   useEffect(() => {
     fetch("/api/banco-candidatos/vagas-abertas")
@@ -1179,7 +1133,6 @@ export default function BancoCandidatosClient({
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
                       <MatchCell
                         candidatoId={c.id}
-                        loading={loadingMatches}
                         matchMap={matchMap}
                         savedScore={c.melhor_match_score}
                         savedTitulo={c.melhor_match_vaga_titulo}

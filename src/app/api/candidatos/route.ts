@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { enviarEmailConfirmacao } from "@/lib/email";
 import { registrarLogEmail } from "@/lib/emailLogger";
 import { calcularTriagem } from "@/lib/triagemAutomatica";
+import { calcularMatchCandidato } from "@/lib/calcularMatchCandidato";
 import { detectarDuplicata } from "@/lib/detectarDuplicata";
 import { consultarProcessos } from "@/lib/consultaJuridica";
 import mammoth from "mammoth";
@@ -273,6 +274,7 @@ export async function POST(request: NextRequest) {
 
       // Re-run triagem with enriched data
       calcularTriagem(existente.id).catch(() => {});
+      waitUntil(calcularMatchCandidato(existente.id).catch(console.error));
 
       if (origemTipo === "publico") {
         waitUntil(
@@ -380,10 +382,12 @@ export async function POST(request: NextRequest) {
       console.log("Triggering AI extraction for candidato:", data.id);
       waitUntil(
         extractAndUpdateCandidato(data.id, body.curriculo_url, body.resumo_candidato ?? "")
+          .then(() => calcularMatchCandidato(data.id))
           .catch(console.error)
       );
     } else {
       waitUntil(calcularTriagem(data.id).catch(console.error));
+      waitUntil(calcularMatchCandidato(data.id).catch(console.error));
     }
 
     waitUntil(
