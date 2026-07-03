@@ -17,6 +17,14 @@ function moeda(v: number | null | undefined): string {
   return v != null ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "";
 }
 
+// "vale_transporte" -> Sim; "transporte_fretado"/"nao_opta" -> Não (nenhum dos dois é
+// vale-transporte propriamente); ainda não respondido -> em branco.
+function optaValeTransporte(opcao: string | null | undefined): string {
+  if (opcao === "vale_transporte") return "Sim";
+  if (opcao === "transporte_fretado" || opcao === "nao_opta") return "Não";
+  return "";
+}
+
 // ── Ficha Cadastral de Funcionário ──────────────────────────────────────────
 
 export interface FichaCadastralDados {
@@ -79,6 +87,11 @@ export interface FichaCadastralDados {
   dependente_ir?: boolean | null;
   dependente_salario_familia?: boolean | null;
   tera_adiantamento?: boolean | null;
+  // Resolvidos pelo chamador (não são colunas de admissao_dados_pessoais):
+  empresa_cliente?: string | null; // vagas.cliente_id -> clientes.nome
+  opta_vale_transporte?: string | null; // admissao_vale_transporte.opcao (cru — Sim/Não calculado aqui dentro)
+  autoriza_sindical?: boolean | null; // admissao_autorizacao_sindical.autoriza_sindical
+  possui_dependentes?: boolean | null; // calculado pelo chamador (dependentes.length > 0) — null = ainda não se sabe (formulário em branco)
 }
 
 export interface FichaCadastralDependente {
@@ -103,10 +116,11 @@ export function desenharFichaCadastral(w: PdfWriter, d: FichaCadastralDados, dep
 
   w.sectionTitle("Dados da Contratação");
   w.formFieldRow([
+    { label: "Empresa/Cliente", value: d.empresa_cliente },
     { label: "Função", value: d.funcao },
-    { label: "Salário", value: moeda(d.salario) },
   ]);
   w.formFieldRow([
+    { label: "Salário", value: moeda(d.salario) },
     { label: "Horário de trabalho", value: d.horario_trabalho },
     { label: "Data de admissão", value: d.data_admissao },
   ]);
@@ -191,6 +205,10 @@ export function desenharFichaCadastral(w: PdfWriter, d: FichaCadastralDados, dep
     { label: "CEP", value: d.endereco_cep },
   ]);
   w.formFieldRow([
+    // País de residência — não existe coluna própria (só "país de nascimento", que é
+    // outra coisa); na prática 100% dos candidatos residem no Brasil, então fixo aqui
+    // em vez de criar uma migration só pra isso.
+    { label: "País", value: "Brasil" },
     { label: "Telefone", value: d.telefone },
     { label: "E-mail", value: d.email },
   ]);
@@ -222,6 +240,11 @@ export function desenharFichaCadastral(w: PdfWriter, d: FichaCadastralDados, dep
   w.formFieldRow([
     { label: "Terá adiantamento salarial?", value: simNao(d.tera_adiantamento) },
     { label: "Data do exame admissional", value: d.data_exame_admissional },
+  ]);
+  w.formFieldRow([
+    { label: "Opta pelo Vale Transporte?", value: optaValeTransporte(d.opta_vale_transporte) },
+    { label: "Autoriza desconto da Sindical?", value: simNao(d.autoriza_sindical) },
+    { label: "Possui dependentes?", value: simNao(d.possui_dependentes) },
   ]);
 
   if (dependentes.length > 0) {
@@ -259,9 +282,16 @@ export function desenharFichaCadastral(w: PdfWriter, d: FichaCadastralDados, dep
 export interface AutorizacaoSindicalDados {
   nome_completo?: string | null;
   cpf?: string | null;
+  rg_numero?: string | null;
+  carteira_trabalho_numero?: string | null;
+  carteira_trabalho_serie?: string | null;
   nome_sindicato?: string | null;
   autoriza_assistencial_confederativa?: boolean | null;
   autoriza_sindical?: boolean | null;
+  // Resolvidos pelo chamador a partir de clientes.entidade_contratante (ver ENTIDADES_CONTRATANTES
+  // em @/lib/constants) — em branco se o cliente ainda não tiver isso configurado.
+  empresa_razao_social?: string | null;
+  empresa_cnpj?: string | null;
 }
 
 export function desenharAutorizacaoSindical(w: PdfWriter, d: AutorizacaoSindicalDados) {
@@ -274,8 +304,21 @@ export function desenharAutorizacaoSindical(w: PdfWriter, d: AutorizacaoSindical
   w.y -= 6;
 
   const nome = d.nome_completo?.trim() || "_______________________________________________";
-  const cpf = d.cpf?.trim() || "________________________";
-  w.drawText(`Eu, ${nome}, portador(a) do CPF ${cpf}, admitido(a) pela Salmazos RH,`, w.regular, 10);
+  const cpf = d.cpf?.trim() || "________________";
+  const rg = d.rg_numero?.trim() || "________________";
+  const ctpsNum = d.carteira_trabalho_numero?.trim() || "__________";
+  const ctpsSerie = d.carteira_trabalho_serie?.trim() || "______";
+  const empresa = d.empresa_razao_social?.trim() || "_______________________________________________";
+  const cnpj = d.empresa_cnpj?.trim() || "__________________";
+  // Quebrado em várias linhas curtas de propósito: nome e razão social podem ser longos
+  // o bastante pra estourar a largura da página numa linha só (já vimos isso acontecer
+  // na validação — o CNPJ sumia, cortado silenciosamente fora da área visível).
+  w.drawText(`Eu, ${nome},`, w.regular, 9);
+  w.drawText(`portador(a) do CPF ${cpf}, RG nº ${rg},`, w.regular, 9);
+  w.drawText(`CTPS nº ${ctpsNum} série ${ctpsSerie},`, w.regular, 9);
+  w.drawText(`admitido(a) por ${empresa}`, w.regular, 9);
+  w.drawText(`(CNPJ ${cnpj}),`, w.regular, 9);
+  w.y -= 4;
   w.drawText("DECLARO o seguinte:", w.bold, 10);
   w.y -= 8;
 
@@ -285,7 +328,9 @@ export function desenharAutorizacaoSindical(w: PdfWriter, d: AutorizacaoSindical
   w.checkOption("AUTORIZO o desconto da Contribuição Sindical.", d.autoriza_sindical === true);
   w.checkOption("NÃO AUTORIZO o desconto da Contribuição Sindical.", d.autoriza_sindical === false);
 
-  w.signatureLine("Assinatura do Funcionário");
+  // Local fixo + data por extenso deixada em branco de propósito — evita fixar uma data
+  // errada num documento que pode ser impresso e assinado fisicamente depois.
+  w.signatureLine("Assinatura do Funcionário", "Monte Mor, ____ de _______________ de 20____");
 }
 
 // ── Solicitação de Vale Transporte ──────────────────────────────────────────
@@ -299,18 +344,70 @@ export interface ValeTransporteLinhaDados {
 
 export interface ValeTransporteDados {
   nome_completo?: string | null;
+  cpf?: string | null;
+  funcao?: string | null;
+  carteira_trabalho_numero?: string | null;
+  carteira_trabalho_serie?: string | null;
+  data_admissao?: string | null;
+  empresa_cliente?: string | null; // vagas.cliente_id -> clientes.nome (mesma fonte da Ficha Cadastral)
+  banco?: string | null;
+  agencia?: string | null;
+  conta?: string | null;
+  pix?: string | null;
+  endereco_logradouro?: string | null;
+  endereco_numero?: string | null;
+  endereco_bairro?: string | null;
+  endereco_cidade?: string | null;
+  endereco_uf?: string | null;
+  endereco_cep?: string | null;
+  horario_trabalho?: string | null;
   opcao?: string | null;
   dias_semana?: string | null;
   bairro_cidade_trabalho?: string | null;
   linhas?: ValeTransporteLinhaDados[];
 }
 
+// Documento pensado pra ficar autônomo/assinável separadamente dos outros dois — por
+// isso repete alguns dados (CPF, função, dados bancários) já presentes na Ficha Cadastral.
 export function desenharSolicitacaoValeTransporte(w: PdfWriter, d: ValeTransporteDados) {
   w.newPage();
   w.drawText("SOLICITAÇÃO DE VALE TRANSPORTE", w.bold, 14);
   w.y -= 6;
 
-  w.formField("Nome do funcionário", d.nome_completo);
+  // Não existe conceito de "número de registro/matrícula de funcionário" no sistema
+  // hoje — fica só o rótulo com linha em branco pra preencher à mão.
+  w.formField("Nº do Registro", null);
+  w.formFieldRow([
+    { label: "Nome do funcionário", value: d.nome_completo },
+    { label: "CPF", value: d.cpf },
+  ]);
+  w.formFieldRow([
+    { label: "Função", value: d.funcao },
+    { label: "CTPS número", value: d.carteira_trabalho_numero },
+    { label: "CTPS série", value: d.carteira_trabalho_serie },
+  ]);
+  w.formFieldRow([
+    { label: "Data do início", value: d.data_admissao },
+    { label: "Empresa/Cliente", value: d.empresa_cliente },
+  ]);
+  w.formFieldRow([
+    { label: "Banco", value: d.banco },
+    { label: "Agência", value: d.agencia },
+    { label: "Conta", value: d.conta },
+  ]);
+  w.formField("Chave PIX", d.pix);
+
+  w.sectionTitle("Minha Residência Atual");
+  w.formFieldRow([
+    { label: "Logradouro", value: d.endereco_logradouro },
+    { label: "Número", value: d.endereco_numero },
+    { label: "Bairro", value: d.endereco_bairro },
+  ]);
+  w.formFieldRow([
+    { label: "Cidade", value: d.endereco_cidade },
+    { label: "UF", value: d.endereco_uf },
+    { label: "CEP", value: d.endereco_cep },
+  ]);
   w.y -= 4;
 
   w.drawText("Opção de deslocamento:", w.bold, 9, GRAY);
@@ -320,6 +417,7 @@ export function desenharSolicitacaoValeTransporte(w: PdfWriter, d: ValeTransport
   w.y -= 4;
 
   w.formFieldRow([
+    { label: "Horário de trabalho", value: d.horario_trabalho },
     { label: "Dias que irá trabalhar na semana", value: d.dias_semana },
     { label: "Bairro e cidade do local de trabalho", value: d.bairro_cidade_trabalho },
   ]);

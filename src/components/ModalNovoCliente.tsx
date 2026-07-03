@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { SEGMENTOS_CLIENTE, TIPOS_SERVICO, ANALISTAS } from "@/lib/constants";
+import { SEGMENTOS_CLIENTE, TIPOS_SERVICO, ANALISTAS, ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import type { Cliente } from "@/types";
 
 interface Props {
@@ -20,6 +20,7 @@ const FORM_VAZIO = {
   cidade: "",
   segmento: "",
   responsavel_comercial: "",
+  entidade_contratante: "",
 };
 
 export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: Props) {
@@ -49,6 +50,7 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
               cidade: cliente.cidade,
               segmento: cliente.segmento,
               responsavel_comercial: cliente.responsavel_comercial ?? "",
+              entidade_contratante: cliente.entidade_contratante ?? "",
             }
           : FORM_VAZIO
       );
@@ -218,6 +220,26 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
                 <option key={a} value={a}>{a}</option>
               ))}
             </select>
+          </div>
+
+          {/* Entidade contratante */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Entidade contratante (razão social)
+            </label>
+            <select
+              value={form.entidade_contratante}
+              onChange={(e) => set("entidade_contratante", e.target.value)}
+              className="input-field"
+            >
+              <option value="">Não definido</option>
+              {ENTIDADES_CONTRATANTES.map((e) => (
+                <option key={e.value} value={e.value}>{e.razaoSocial}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">
+              Necessário para gerar a Autorização Sindical na admissão de candidatos deste cliente.
+            </p>
           </div>
 
           {/* Tipos de serviço */}

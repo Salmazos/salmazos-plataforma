@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
         servicos: Array.isArray(body.servicos) ? body.servicos : [],
         ativo: true,
         responsavel_comercial: body.responsavel_comercial ?? null,
+        entidade_contratante: body.entidade_contratante || null,
       })
       .select()
       .single();

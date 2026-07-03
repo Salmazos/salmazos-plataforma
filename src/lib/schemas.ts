@@ -112,6 +112,7 @@ export const clienteCreateSchema = z.object({
   segmento: z.string().min(1),
   servicos: z.array(z.string()).optional(),
   responsavel_comercial: z.string().optional(),
+  entidade_contratante: z.string().optional().nullable(),
 });
 
 export const clienteUpdateSchema = z.object({
@@ -124,6 +125,7 @@ export const clienteUpdateSchema = z.object({
   servicos: z.array(z.string()).optional(),
   ativo: z.boolean().optional(),
   responsavel_comercial: z.string().optional().nullable(),
+  entidade_contratante: z.string().optional().nullable(),
 });
 
 export const clienteAtencaoEspecialSchema = z.object({

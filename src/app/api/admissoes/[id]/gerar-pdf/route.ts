@@ -5,6 +5,7 @@ import { registrarAuditoria } from "@/lib/audit";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
 import { PdfWriter, PW, PH, ML, safe, BLACK, YELLOW, DARK, GRAY } from "@/lib/pdfWriter";
 import { desenharFichaCadastral, desenharAutorizacaoSindical, desenharSolicitacaoValeTransporte } from "@/lib/admissaoDocumentosPdf";
+import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import type { AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
 
 interface Params { params: Promise<{ id: string }> }
@@ -22,10 +23,25 @@ export async function POST(_request: NextRequest, { params }: Params) {
 
   const { data: admissao, error: admError } = await svc
     .from("admissoes")
-    .select("*, candidatos(nome_completo, cargo_pretendido), vagas(titulo)")
+    .select("*, candidatos(nome_completo, cargo_pretendido), vagas(titulo, cliente_id, clientes(nome, entidade_contratante))")
     .eq("id", id)
     .single();
   if (admError) return NextResponse.json({ error: admError.message }, { status: 404 });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const vagaCliente = (admissao.vagas as any)?.clientes as { nome: string; entidade_contratante: string | null } | null;
+  if (!vagaCliente) {
+    return NextResponse.json(
+      { error: "Não é possível gerar o pacote: esta admissão não tem uma vaga com cliente vinculado. Verifique o cadastro da vaga antes de continuar." },
+      { status: 400 }
+    );
+  } else if (!vagaCliente.entidade_contratante) {
+    return NextResponse.json(
+      { error: `Não é possível gerar o pacote: o cliente ${vagaCliente.nome} não tem a entidade contratante configurada. Edite o cadastro do cliente antes de continuar.` },
+      { status: 400 }
+    );
+  }
+  const entidade = ENTIDADES_CONTRATANTES.find((e) => e.value === vagaCliente.entidade_contratante);
 
   const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: valeTransporte }, { data: autorizacaoSindical }] = await Promise.all([
     svc.from("admissao_dados_pessoais").select("*").eq("admissao_id", id).maybeSingle(),
@@ -134,6 +150,10 @@ export async function POST(_request: NextRequest, { params }: Params) {
       horario_trabalho: admissao.horario_trabalho,
       data_admissao: admissao.data_admissao,
       ...dp,
+      empresa_cliente: vagaCliente?.nome ?? null,
+      opta_vale_transporte: valeTransporte?.opcao ?? null,
+      autoriza_sindical: autorizacaoSindical?.autoriza_sindical ?? null,
+      possui_dependentes: deps.length > 0,
     },
     deps
   );
@@ -141,13 +161,35 @@ export async function POST(_request: NextRequest, { params }: Params) {
   desenharAutorizacaoSindical(w, {
     nome_completo: dp.nome_completo,
     cpf: dp.cpf,
+    rg_numero: dp.rg_numero,
+    carteira_trabalho_numero: dp.carteira_trabalho_numero,
+    carteira_trabalho_serie: dp.carteira_trabalho_serie,
     nome_sindicato: autorizacaoSindical?.nome_sindicato ?? null,
     autoriza_assistencial_confederativa: autorizacaoSindical?.autoriza_assistencial_confederativa ?? null,
     autoriza_sindical: autorizacaoSindical?.autoriza_sindical ?? null,
+    empresa_razao_social: entidade?.razaoSocial ?? null,
+    empresa_cnpj: entidade?.cnpj ?? null,
   });
 
   desenharSolicitacaoValeTransporte(w, {
     nome_completo: dp.nome_completo,
+    cpf: dp.cpf,
+    funcao: admissao.funcao,
+    carteira_trabalho_numero: dp.carteira_trabalho_numero,
+    carteira_trabalho_serie: dp.carteira_trabalho_serie,
+    data_admissao: admissao.data_admissao,
+    empresa_cliente: vagaCliente?.nome ?? null,
+    banco: dp.banco,
+    agencia: dp.agencia,
+    conta: dp.conta,
+    pix: dp.pix,
+    endereco_logradouro: dp.endereco_logradouro,
+    endereco_numero: dp.endereco_numero,
+    endereco_bairro: dp.endereco_bairro,
+    endereco_cidade: dp.endereco_cidade,
+    endereco_uf: dp.endereco_uf,
+    endereco_cep: dp.endereco_cep,
+    horario_trabalho: admissao.horario_trabalho,
     opcao: valeTransporte?.opcao ?? null,
     dias_semana: valeTransporte?.dias_semana ?? null,
     bairro_cidade_trabalho: valeTransporte?.bairro_cidade_trabalho ?? null,

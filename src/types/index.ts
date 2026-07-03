@@ -85,6 +85,7 @@ export interface AdmissaoDadosPessoais {
   agencia: string | null;
   conta: string | null;
   tipo_conta: "corrente" | "poupanca" | null;
+  pix: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -216,6 +217,7 @@ export interface Cliente {
   servicos: string[];
   ativo: boolean;
   responsavel_comercial?: string;
+  entidade_contratante?: string | null;
   created_at: string;
 }
 

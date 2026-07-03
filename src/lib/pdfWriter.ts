@@ -117,16 +117,18 @@ export class PdfWriter {
 
   // Linha reservada pra assinatura manual — nunca preenchida nesta fase (fica pra
   // integração futura de assinatura eletrônica ou assinatura física sobre o PDF impresso).
-  signatureLine(label: string) {
+  // dataLabel permite trocar o "Data" genérico por algo como "Monte Mor, ___ de ___ de 20___"
+  // sem afetar os documentos que já usam o rótulo padrão.
+  signatureLine(label: string, dataLabel: string = "Data") {
     this.y -= 20;
     this.ensureSpace(50);
     this.page.drawLine({ start: { x: ML, y: this.y }, end: { x: ML + 260, y: this.y }, thickness: 0.8, color: DARK });
     this.y -= 12;
     this.page.drawText(label, { x: ML, y: this.y, size: 9, font: this.regular, color: GRAY });
     this.y -= 24;
-    this.page.drawLine({ start: { x: ML, y: this.y }, end: { x: ML + 150, y: this.y }, thickness: 0.8, color: DARK });
+    this.page.drawLine({ start: { x: ML, y: this.y }, end: { x: ML + 260, y: this.y }, thickness: 0.8, color: DARK });
     this.y -= 12;
-    this.page.drawText("Data", { x: ML, y: this.y, size: 9, font: this.regular, color: GRAY });
+    this.page.drawText(dataLabel, { x: ML, y: this.y, size: 9, font: this.regular, color: GRAY });
     this.y -= 10;
   }
 }

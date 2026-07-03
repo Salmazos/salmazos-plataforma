@@ -25,6 +25,7 @@ export async function PATCH(
     if (body.servicos !== undefined) campos.servicos = Array.isArray(body.servicos) ? body.servicos : [];
     if (body.ativo !== undefined) campos.ativo = body.ativo;
     if (body.responsavel_comercial !== undefined) campos.responsavel_comercial = body.responsavel_comercial || null;
+    if (body.entidade_contratante !== undefined) campos.entidade_contratante = body.entidade_contratante || null;
 
     const supabase = createServiceClient();
     const { data, error } = await supabase

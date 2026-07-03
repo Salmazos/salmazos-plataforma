@@ -129,6 +129,22 @@ export const SEGMENTOS_CLIENTE = [
   "Outros",
 ];
 
+// A Salmazos opera sob 2 razões sociais/CNPJs diferentes, dependendo do cliente — usado
+// tanto no seletor de cadastro de cliente quanto na Autorização Sindical (PDF de admissão),
+// que precisa declarar formalmente quem é o empregador. Um único ponto de verdade pros dois.
+export const ENTIDADES_CONTRATANTES = [
+  {
+    value: "recrutamento_selecao_terceirizacao",
+    razaoSocial: "SALMAZOS RECRUTAMENTO, SELEÇÃO E TERCEIRIZAÇÃO DE SERVIÇOS LTDA",
+    cnpj: "18.545.074/0001-79",
+  },
+  {
+    value: "rh_servicos_terceirizados",
+    razaoSocial: "SALMAZOS RH E SERVIÇOS TERCEIRIZADOS LTDA",
+    cnpj: "54.986.213/0001-63",
+  },
+] as const;
+
 export const STATUS_ENCAMINHAMENTO: Record<string, { label: string; bg: string; text: string }> = {
   aguardando: { label: "Aguardando", bg: "bg-yellow-100", text: "text-yellow-800" },
   aprovado:   { label: "Aprovado",   bg: "bg-green-100",  text: "text-green-800"  },
