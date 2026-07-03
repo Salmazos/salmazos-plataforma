@@ -382,8 +382,8 @@ export async function POST(request: NextRequest) {
       console.log("Triggering AI extraction for candidato:", data.id);
       waitUntil(
         extractAndUpdateCandidato(data.id, body.curriculo_url, body.resumo_candidato ?? "")
-          .then(() => calcularMatchCandidato(data.id))
           .catch(console.error)
+          .finally(() => calcularMatchCandidato(data.id).catch(console.error))
       );
     } else {
       waitUntil(calcularTriagem(data.id).catch(console.error));
