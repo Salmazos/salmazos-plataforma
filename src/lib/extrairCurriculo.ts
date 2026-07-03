@@ -63,15 +63,30 @@ export async function extractAndUpdateCandidato(
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 2000,
+      max_tokens: 4000,
       messages: [{ role: "user", content }],
     }),
   });
 
   const aiData = await aiRes.json();
+
+  if (aiData.stop_reason === "max_tokens") {
+    throw new Error(
+      `Resposta da IA cortada por limite de tokens (max_tokens atingido). Currículo pode ser muito extenso.`
+    );
+  }
+
   const texto = aiData.content?.map((i: { type: string; text?: string }) => i.text || "").join("") || "";
   const limpo = texto.replace(/```json|```/g, "").trim();
-  const extraido = JSON.parse(limpo);
+
+  let extraido;
+  try {
+    extraido = JSON.parse(limpo);
+  } catch (parseErr) {
+    throw new Error(
+      `Falha ao interpretar JSON da IA: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}. Resposta bruta (primeiros 200 caracteres): ${limpo.slice(0, 200)}`
+    );
+  }
 
   if (typeof extraido.resumo === "string") {
     extraido.resumo = calcularDuracaoResumo(extraido.resumo);

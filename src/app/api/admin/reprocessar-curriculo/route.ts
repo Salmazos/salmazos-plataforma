@@ -37,7 +37,12 @@ export async function POST(req: NextRequest) {
       await extractAndUpdateCandidato(c.id, c.curriculo_url as string, (c.resumo_candidato as string) ?? "");
       await calcularMatchCandidato(c.id);
     } catch (err) {
-      console.error(`[reprocessar-curriculo] erro no candidato ${c.id}:`, err);
+      const mensagem = err instanceof Error ? err.message : String(err);
+      console.error(`[reprocessar-curriculo] erro no candidato ${c.id}:`, mensagem);
+      await supabase
+        .from("candidatos")
+        .update({ resumo_profissional: `[ERRO_REPROCESSAMENTO] ${mensagem.slice(0, 200)}` })
+        .eq("id", c.id);
     }
   }
 
