@@ -487,30 +487,50 @@ export default function BancoCandidatosClient({
     return () => clearInterval(interval);
   }, [candidatos, router]);
 
+  const candidatoIdsKey = useMemo(
+    () => candidatos.map((c) => c.id).sort().join(","),
+    [candidatos]
+  );
+
   useEffect(() => {
-    if (candidatos.length === 0) return;
+    const pendentes = candidatos.filter((c) => !(c.id in matchMap));
+    if (pendentes.length === 0) return;
+
     setLoadingMatches(true);
 
-    Promise.all(
-      candidatos.map(async (c) => {
-        try {
-          const res = await fetch(`/api/banco-candidatos/match?candidato_id=${c.id}`);
-          if (!res.ok) return { id: c.id, matches: [] as MatchEntry[] };
-          const json = await res.json();
-          return { id: c.id, matches: (json.matches ?? []) as MatchEntry[] };
-        } catch {
-          return { id: c.id, matches: [] as MatchEntry[] };
-        }
-      })
-    ).then((results) => {
-      const map: Record<string, MatchEntry[]> = {};
-      results.forEach(({ id, matches }) => {
-        map[id] = matches;
+    async function fetchComLimite(lista: CandidatoRow[], limite = 4) {
+      const resultados: { id: string; matches: MatchEntry[] }[] = [];
+      for (let i = 0; i < lista.length; i += limite) {
+        const lote = lista.slice(i, i + limite);
+        const loteResultados = await Promise.all(
+          lote.map(async (c) => {
+            try {
+              const res = await fetch(`/api/banco-candidatos/match?candidato_id=${c.id}`);
+              if (!res.ok) return { id: c.id, matches: [] as MatchEntry[] };
+              const json = await res.json();
+              return { id: c.id, matches: (json.matches ?? []) as MatchEntry[] };
+            } catch {
+              return { id: c.id, matches: [] as MatchEntry[] };
+            }
+          })
+        );
+        resultados.push(...loteResultados);
+      }
+      return resultados;
+    }
+
+    fetchComLimite(pendentes).then((results) => {
+      setMatchMap((prev) => {
+        const map = { ...prev };
+        results.forEach(({ id, matches }) => {
+          map[id] = matches;
+        });
+        return map;
       });
-      setMatchMap(map);
       setLoadingMatches(false);
     });
-  }, [candidatos]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidatoIdsKey]);
 
   useEffect(() => {
     fetch("/api/banco-candidatos/vagas-abertas")
