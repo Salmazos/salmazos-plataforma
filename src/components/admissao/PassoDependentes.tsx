@@ -22,9 +22,18 @@ interface NovoDependente {
   cpf: string;
   nome_mae: string;
   cpf_mae: string;
+  cartorio: string;
+  local_nascimento: string;
+  declaracao_nascido_vivo: string;
+  num_registro: string;
+  num_livro: string;
+  num_folha: string;
 }
 
-const DEPENDENTE_VAZIO: NovoDependente = { nome: "", parentesco: "", data_nascimento: "", cpf: "", nome_mae: "", cpf_mae: "" };
+const DEPENDENTE_VAZIO: NovoDependente = {
+  nome: "", parentesco: "", data_nascimento: "", cpf: "", nome_mae: "", cpf_mae: "",
+  cartorio: "", local_nascimento: "", declaracao_nascido_vivo: "", num_registro: "", num_livro: "", num_folha: "",
+};
 
 export default function PassoDependentes({ token, possuiDependentes, setPossuiDependentes, dependentes, setDependentes, errosVisiveis }: Props) {
   const [formAberto, setFormAberto] = useState(false);
@@ -147,6 +156,24 @@ export default function PassoDependentes({ token, possuiDependentes, setPossuiDe
                   </Campo>
                   <Campo label="CPF da mãe">
                     <input type="text" inputMode="numeric" value={novo.cpf_mae} onChange={(e) => setNovo({ ...novo, cpf_mae: e.target.value })} style={campoErroStyle(false)} />
+                  </Campo>
+                  <Campo label="Cartório">
+                    <input type="text" value={novo.cartorio} onChange={(e) => setNovo({ ...novo, cartorio: e.target.value })} style={campoErroStyle(false)} />
+                  </Campo>
+                  <Campo label="Local de nascimento">
+                    <input type="text" value={novo.local_nascimento} onChange={(e) => setNovo({ ...novo, local_nascimento: e.target.value })} style={campoErroStyle(false)} />
+                  </Campo>
+                  <Campo label="Nº Declaração de Nascido Vivo">
+                    <input type="text" value={novo.declaracao_nascido_vivo} onChange={(e) => setNovo({ ...novo, declaracao_nascido_vivo: e.target.value })} style={campoErroStyle(false)} />
+                  </Campo>
+                  <Campo label="Nº de Registro">
+                    <input type="text" value={novo.num_registro} onChange={(e) => setNovo({ ...novo, num_registro: e.target.value })} style={campoErroStyle(false)} />
+                  </Campo>
+                  <Campo label="Nº Livro">
+                    <input type="text" value={novo.num_livro} onChange={(e) => setNovo({ ...novo, num_livro: e.target.value })} style={campoErroStyle(false)} />
+                  </Campo>
+                  <Campo label="Nº Folha">
+                    <input type="text" value={novo.num_folha} onChange={(e) => setNovo({ ...novo, num_folha: e.target.value })} style={campoErroStyle(false)} />
                   </Campo>
                 </>
               )}

@@ -195,6 +195,8 @@ export async function POST(_request: NextRequest, { params }: Params) {
     bairro_cidade_trabalho: valeTransporte?.bairro_cidade_trabalho ?? null,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     linhas: ((valeTransporte as any)?.admissao_vt_linhas ?? []),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    termos_aceitos_em: (valeTransporte as any)?.termos_aceitos_em ?? null,
   });
 
   // ── Documentos anexados (imagens/PDFs incorporados) ─────────

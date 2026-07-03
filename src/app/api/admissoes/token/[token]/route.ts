@@ -81,9 +81,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   if (vale_transporte && Object.keys(vale_transporte).length > 0) {
     const { linhas, ...vtFields } = vale_transporte;
+    const vtPayload: Record<string, unknown> = { admissao_id: admissaoId, ...vtFields };
+    // Registra o momento exato do aceite como prova de consentimento (mesmo raciocínio
+    // do lgpd_aceite_em) — atualiza a cada vez que o aceite chega marcado como true. Se o
+    // candidato desmarcar o checkbox depois (termos_aceitos === false explicitamente), o
+    // timestamp anterior precisa ser zerado também — senão o PDF mostraria "aceito em
+    // [data]" para um aceite que não está mais marcado.
+    if (vtFields.termos_aceitos === true) vtPayload.termos_aceitos_em = new Date().toISOString();
+    else if (vtFields.termos_aceitos === false) vtPayload.termos_aceitos_em = null;
+
     const { data: vtRow, error: vtError } = await svc
       .from("admissao_vale_transporte")
-      .upsert({ admissao_id: admissaoId, ...vtFields }, { onConflict: "admissao_id" })
+      .upsert(vtPayload, { onConflict: "admissao_id" })
       .select("id")
       .single();
     if (vtError) return NextResponse.json({ error: vtError.message }, { status: 400 });

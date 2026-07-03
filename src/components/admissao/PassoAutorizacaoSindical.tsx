@@ -2,33 +2,13 @@
 
 import type { AutorizacaoSindicalState } from "./AdmissaoFormClient";
 import Campo from "./Campo";
+import CampoSimNao from "./CampoSimNao";
 import { campoErroStyle, cardStyle } from "./styles";
 
 interface Props {
   autorizacaoSindical: AutorizacaoSindicalState;
   setCampo: <K extends keyof AutorizacaoSindicalState>(campo: K, valor: AutorizacaoSindicalState[K]) => void;
   errosVisiveis: Set<string>;
-}
-
-function CampoSimNao({
-  label, valor, onChange, erro,
-}: { label: string; valor: string; onChange: (v: string) => void; erro: boolean }) {
-  return (
-    <Campo label={label} required erro={erro}>
-      <div style={{ display: "flex", gap: 20 }}>
-        {[{ v: "sim", l: "Sim" }, { v: "nao", l: "Não" }].map((opt) => (
-          <label key={opt.v} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 16, minHeight: 44 }}>
-            <input
-              type="radio" checked={valor === opt.v}
-              onChange={() => onChange(opt.v)}
-              style={{ width: 20, height: 20 }}
-            />
-            {opt.l}
-          </label>
-        ))}
-      </div>
-    </Campo>
-  );
 }
 
 export default function PassoAutorizacaoSindical({ autorizacaoSindical, setCampo, errosVisiveis }: Props) {

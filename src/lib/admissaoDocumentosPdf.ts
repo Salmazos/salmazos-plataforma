@@ -1,6 +1,6 @@
 import type { PdfWriter } from "./pdfWriter";
 import { GRAY } from "./pdfWriter";
-import { ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS } from "./admissaoConstants";
+import { ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, TERMOS_VALE_TRANSPORTE_TEXTO } from "./admissaoConstants";
 
 function optLabel(options: { value: string; label: string }[], value: string | null | undefined): string {
   if (!value) return "";
@@ -365,6 +365,9 @@ export interface ValeTransporteDados {
   dias_semana?: string | null;
   bairro_cidade_trabalho?: string | null;
   linhas?: ValeTransporteLinhaDados[];
+  // Timestamp do aceite digital da cláusula legal do decreto (ver TERMOS_VALE_TRANSPORTE_TEXTO)
+  // — null quando ainda não foi aceito digitalmente (documento em branco ou aceite pendente).
+  termos_aceitos_em?: string | null;
 }
 
 // Documento pensado pra ficar autônomo/assinável separadamente dos outros dois — por
@@ -415,6 +418,17 @@ export function desenharSolicitacaoValeTransporte(w: PdfWriter, d: ValeTransport
   w.checkOption("Transporte Fretado pela Empresa", d.opcao === "transporte_fretado");
   w.checkOption("Não opta", d.opcao === "nao_opta");
   w.y -= 4;
+
+  // Sempre visível (é o texto do documento físico) — mesmo no formulário em branco
+  // pra impressão, onde termos_aceitos_em nunca está preenchido.
+  TERMOS_VALE_TRANSPORTE_TEXTO.forEach((linha) => w.paragraph(linha, w.regular, 9));
+  w.y -= 4;
+  if (d.termos_aceitos_em) {
+    w.drawText(`Termos aceitos digitalmente em: ${new Date(d.termos_aceitos_em).toLocaleString("pt-BR")}`, w.bold, 9, GRAY);
+  } else {
+    w.drawText("Termos a serem aceitos com a assinatura abaixo.", w.regular, 9, GRAY);
+  }
+  w.y -= 6;
 
   w.formFieldRow([
     { label: "Horário de trabalho", value: d.horario_trabalho },

@@ -3,10 +3,12 @@
 import { useEffect, useState, useCallback } from "react";
 import type { AdmissaoDependente } from "@/types";
 import ProgressBar from "./ProgressBar";
+import PassoBoasVindas from "./PassoBoasVindas";
 import PassoDadosPessoais from "./PassoDadosPessoais";
 import PassoDocumentosProfissionais from "./PassoDocumentosProfissionais";
 import PassoEndereco from "./PassoEndereco";
 import PassoDadosBancarios from "./PassoDadosBancarios";
+import PassoSituacaoTrabalhista from "./PassoSituacaoTrabalhista";
 import PassoDependentes from "./PassoDependentes";
 import PassoValeTransporte from "./PassoValeTransporte";
 import PassoAutorizacaoSindical from "./PassoAutorizacaoSindical";
@@ -15,7 +17,7 @@ import PassoRevisao from "./PassoRevisao";
 import { botaoPrimarioStyle, botaoSecundarioStyle } from "./styles";
 import { WHATSAPP_SUPORTE } from "@/lib/admissaoConstants";
 
-const TOTAL_PASSOS = 9;
+const TOTAL_PASSOS = 10;
 
 export interface FormState {
   nome_completo: string;
@@ -24,6 +26,8 @@ export interface FormState {
   estado_civil: string;
   nacionalidade: string;
   naturalidade: string;
+  pais_nascimento: string;
+  cor_raca: string;
   cpf: string;
   rg_numero: string;
   rg_orgao_emissor: string;
@@ -33,15 +37,21 @@ export interface FormState {
   zona_eleitoral: string;
   secao_eleitoral: string;
   pis_pasep: string;
+  pis_data_cadastramento: string;
   carteira_trabalho_numero: string;
   carteira_trabalho_serie: string;
   carteira_trabalho_uf: string;
+  ctps_data_emissao: string;
   cnh_numero: string;
   cnh_categoria: string;
   cnh_validade: string;
+  cnh_data_emissao: string;
+  cnh_uf: string;
   reservista: string;
   nome_mae: string;
+  nacionalidade_mae: string;
   nome_pai: string;
+  nacionalidade_pai: string;
   grau_instrucao: string;
   endereco_cep: string;
   endereco_logradouro: string;
@@ -56,18 +66,35 @@ export interface FormState {
   agencia: string;
   conta: string;
   tipo_conta: string;
+  pix: string;
 }
 
 const FORM_VAZIO: FormState = {
   nome_completo: "", data_nascimento: "", sexo: "", estado_civil: "", nacionalidade: "Brasileira",
-  naturalidade: "", cpf: "", rg_numero: "", rg_orgao_emissor: "", rg_uf: "", rg_data_emissao: "",
-  titulo_eleitor: "", zona_eleitoral: "", secao_eleitoral: "", pis_pasep: "",
-  carteira_trabalho_numero: "", carteira_trabalho_serie: "", carteira_trabalho_uf: "",
-  cnh_numero: "", cnh_categoria: "", cnh_validade: "", reservista: "",
-  nome_mae: "", nome_pai: "", grau_instrucao: "",
+  naturalidade: "", pais_nascimento: "Brasil", cor_raca: "",
+  cpf: "", rg_numero: "", rg_orgao_emissor: "", rg_uf: "", rg_data_emissao: "",
+  titulo_eleitor: "", zona_eleitoral: "", secao_eleitoral: "", pis_pasep: "", pis_data_cadastramento: "",
+  carteira_trabalho_numero: "", carteira_trabalho_serie: "", carteira_trabalho_uf: "", ctps_data_emissao: "",
+  cnh_numero: "", cnh_categoria: "", cnh_validade: "", cnh_data_emissao: "", cnh_uf: "", reservista: "",
+  nome_mae: "", nacionalidade_mae: "", nome_pai: "", nacionalidade_pai: "", grau_instrucao: "",
   endereco_cep: "", endereco_logradouro: "", endereco_numero: "", endereco_complemento: "",
   endereco_bairro: "", endereco_cidade: "", endereco_uf: "", telefone: "", email: "",
-  banco: "", agencia: "", conta: "", tipo_conta: "",
+  banco: "", agencia: "", conta: "", tipo_conta: "", pix: "",
+};
+
+export interface SituacaoTrabalhistaState {
+  recebendo_seguro_desemprego: string; // "sim" | "nao" | ""
+  primeiro_emprego: string;
+  trabalhou_empresa_antes: string;
+  aposentado: string;
+  dependente_ir: string;
+  dependente_salario_familia: string;
+  tera_adiantamento: string;
+}
+
+const SITUACAO_TRABALHISTA_VAZIO: SituacaoTrabalhistaState = {
+  recebendo_seguro_desemprego: "", primeiro_emprego: "", trabalhou_empresa_antes: "", aposentado: "",
+  dependente_ir: "", dependente_salario_familia: "", tera_adiantamento: "",
 };
 
 export interface ValeTransporteLinha {
@@ -82,10 +109,11 @@ export interface ValeTransporteState {
   dias_semana: string;
   bairro_cidade_trabalho: string;
   linhas: ValeTransporteLinha[];
+  termos_aceitos: boolean;
 }
 
 const VALE_TRANSPORTE_VAZIO: ValeTransporteState = {
-  opcao: "", dias_semana: "", bairro_cidade_trabalho: "", linhas: [],
+  opcao: "", dias_semana: "", bairro_cidade_trabalho: "", linhas: [], termos_aceitos: false,
 };
 
 export interface AutorizacaoSindicalState {
@@ -149,6 +177,7 @@ function sanitizarValeTransporte(vt: ValeTransporteState): Record<string, unknow
         valor_unitario: l.valor_unitario.trim() || null,
         valor_total_diario: l.valor_total_diario.trim() || null,
       })),
+    termos_aceitos: vt.termos_aceitos,
   };
 }
 
@@ -160,9 +189,23 @@ function sanitizarAutorizacaoSindical(as: AutorizacaoSindicalState): Record<stri
   };
 }
 
+function sanitizarSituacaoTrabalhista(st: SituacaoTrabalhistaState): Record<string, boolean | null> {
+  const simNao = (v: string) => (v === "sim" ? true : v === "nao" ? false : null);
+  return {
+    recebendo_seguro_desemprego: simNao(st.recebendo_seguro_desemprego),
+    primeiro_emprego: simNao(st.primeiro_emprego),
+    trabalhou_empresa_antes: simNao(st.trabalhou_empresa_antes),
+    aposentado: simNao(st.aposentado),
+    dependente_ir: simNao(st.dependente_ir),
+    dependente_salario_familia: simNao(st.dependente_salario_familia),
+    tera_adiantamento: simNao(st.tera_adiantamento),
+  };
+}
+
 function validarPasso(
   passo: number, form: FormState, isMotorista: boolean, possuiDependentes: boolean, dependentesCount: number,
   valeTransporte: ValeTransporteState, autorizacaoSindical: AutorizacaoSindicalState,
+  situacaoTrabalhista: SituacaoTrabalhistaState,
 ): string[] {
   const faltando: string[] = [];
   const req = (campo: keyof FormState) => { if (!form[campo]?.trim()) faltando.push(campo); };
@@ -183,16 +226,21 @@ function validarPasso(
   } else if (passo === 4) {
     req("banco"); req("agencia"); req("conta"); req("tipo_conta");
   } else if (passo === 5) {
-    if (possuiDependentes && dependentesCount === 0) faltando.push("dependentes");
+    const reqSt = (campo: keyof SituacaoTrabalhistaState) => { if (!situacaoTrabalhista[campo]) faltando.push(campo); };
+    reqSt("recebendo_seguro_desemprego"); reqSt("primeiro_emprego"); reqSt("trabalhou_empresa_antes");
+    reqSt("aposentado"); reqSt("dependente_ir"); reqSt("dependente_salario_familia"); reqSt("tera_adiantamento");
   } else if (passo === 6) {
+    if (possuiDependentes && dependentesCount === 0) faltando.push("dependentes");
+  } else if (passo === 7) {
     if (!valeTransporte.opcao) faltando.push("vt_opcao");
     if (!valeTransporte.dias_semana.trim()) faltando.push("vt_dias_semana");
     if (!valeTransporte.bairro_cidade_trabalho.trim()) faltando.push("vt_bairro_cidade");
     if (valeTransporte.opcao === "vale_transporte") {
       const linhaValida = valeTransporte.linhas.some((l) => l.onibus_viacao.trim() && l.percurso.trim() && l.valor_unitario.trim());
       if (!linhaValida) faltando.push("vt_linhas");
+      if (!valeTransporte.termos_aceitos) faltando.push("vt_termos_aceitos");
     }
-  } else if (passo === 7) {
+  } else if (passo === 8) {
     if (!autorizacaoSindical.autoriza_assistencial_confederativa) faltando.push("as_assistencial");
     if (!autorizacaoSindical.autoriza_sindical) faltando.push("as_sindical");
   }
@@ -206,6 +254,7 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
   const [jaEnviado, setJaEnviado] = useState(false);
   const [envioConcluido, setEnvioConcluido] = useState(false);
 
+  const [iniciado, setIniciado] = useState(false);
   const [passo, setPasso] = useState(1);
   const [form, setForm] = useState<FormState>(FORM_VAZIO);
   const [isMotorista, setIsMotorista] = useState(false);
@@ -214,6 +263,7 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
   const [documentos, setDocumentos] = useState<DocumentoToken[]>([]);
   const [valeTransporte, setValeTransporte] = useState<ValeTransporteState>(VALE_TRANSPORTE_VAZIO);
   const [autorizacaoSindical, setAutorizacaoSindical] = useState<AutorizacaoSindicalState>(AUTORIZACAO_SINDICAL_VAZIO);
+  const [situacaoTrabalhista, setSituacaoTrabalhista] = useState<SituacaoTrabalhistaState>(SITUACAO_TRABALHISTA_VAZIO);
   const [lgpdAceite, setLgpdAceite] = useState(false);
 
   const [errosVisiveis, setErrosVisiveis] = useState<Set<string>>(new Set());
@@ -248,6 +298,17 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
             ),
           }));
           setIsMotorista(!!data.dados_pessoais.cnh_numero);
+
+          const simNao = (v: boolean | null | undefined) => (v === true ? "sim" : v === false ? "nao" : "");
+          setSituacaoTrabalhista({
+            recebendo_seguro_desemprego: simNao(data.dados_pessoais.recebendo_seguro_desemprego),
+            primeiro_emprego: simNao(data.dados_pessoais.primeiro_emprego),
+            trabalhou_empresa_antes: simNao(data.dados_pessoais.trabalhou_empresa_antes),
+            aposentado: simNao(data.dados_pessoais.aposentado),
+            dependente_ir: simNao(data.dados_pessoais.dependente_ir),
+            dependente_salario_familia: simNao(data.dados_pessoais.dependente_salario_familia),
+            tera_adiantamento: simNao(data.dados_pessoais.tera_adiantamento),
+          });
         }
         setDependentes(data.dependentes ?? []);
         setPossuiDependentes((data.dependentes ?? []).length > 0);
@@ -269,6 +330,7 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
               valor_unitario: l.valor_unitario != null ? String(l.valor_unitario) : "",
               valor_total_diario: l.valor_total_diario != null ? String(l.valor_total_diario) : "",
             })),
+          termos_aceitos: vt?.termos_aceitos === true,
         });
 
         const as = data.autorizacao_sindical;
@@ -297,6 +359,10 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
     setAutorizacaoSindical((prev) => ({ ...prev, [campo]: valor }));
   }, []);
 
+  const setCampoSt = useCallback(<K extends keyof SituacaoTrabalhistaState>(campo: K, valor: SituacaoTrabalhistaState[K]) => {
+    setSituacaoTrabalhista((prev) => ({ ...prev, [campo]: valor }));
+  }, []);
+
   const salvarProgresso = useCallback(async (): Promise<boolean> => {
     setSalvando(true);
     setAvisoFalhaSalvar(false);
@@ -305,7 +371,7 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          dados_pessoais: sanitizarForm(form),
+          dados_pessoais: { ...sanitizarForm(form), ...sanitizarSituacaoTrabalhista(situacaoTrabalhista) },
           vale_transporte: sanitizarValeTransporte(valeTransporte),
           autorizacao_sindical: sanitizarAutorizacaoSindical(autorizacaoSindical),
         }),
@@ -326,10 +392,10 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
     } finally {
       setSalvando(false);
     }
-  }, [token, form, valeTransporte, autorizacaoSindical]);
+  }, [token, form, valeTransporte, autorizacaoSindical, situacaoTrabalhista]);
 
   const avancar = async () => {
-    const faltando = validarPasso(passo, form, isMotorista, possuiDependentes, dependentes.length, valeTransporte, autorizacaoSindical);
+    const faltando = validarPasso(passo, form, isMotorista, possuiDependentes, dependentes.length, valeTransporte, autorizacaoSindical, situacaoTrabalhista);
     if (faltando.length > 0) {
       setErrosVisiveis(new Set(faltando));
       return;
@@ -354,7 +420,7 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          dados_pessoais: sanitizarForm(form),
+          dados_pessoais: { ...sanitizarForm(form), ...sanitizarSituacaoTrabalhista(situacaoTrabalhista) },
           vale_transporte: sanitizarValeTransporte(valeTransporte),
           autorizacao_sindical: sanitizarAutorizacaoSindical(autorizacaoSindical),
           submit: true,
@@ -448,6 +514,20 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
   const nome = admissao?.candidatos?.nome_completo ?? "";
   const cargo = admissao?.candidatos?.cargo_pretendido ?? admissao?.vagas?.titulo ?? "";
 
+  if (!iniciado) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#F9FAFB", paddingBottom: 32 }}>
+        <div style={{ maxWidth: 560, margin: "0 auto", padding: "20px 16px" }}>
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: 13, color: "#9CA3AF", margin: 0 }}>Olá, {nome || "candidato(a)"}!</p>
+            {cargo && <p style={{ fontSize: 13, color: "#9CA3AF", margin: 0 }}>Vaga: {cargo}</p>}
+          </div>
+          <PassoBoasVindas onIniciar={() => setIniciado(true)} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "#F9FAFB", paddingBottom: 32 }}>
       <ProgressBar passoAtual={passo} />
@@ -468,6 +548,11 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
         {passo === 3 && <PassoEndereco form={form} setCampo={setCampo} errosVisiveis={errosVisiveis} />}
         {passo === 4 && <PassoDadosBancarios form={form} setCampo={setCampo} errosVisiveis={errosVisiveis} />}
         {passo === 5 && (
+          <PassoSituacaoTrabalhista
+            situacaoTrabalhista={situacaoTrabalhista} setCampo={setCampoSt} errosVisiveis={errosVisiveis}
+          />
+        )}
+        {passo === 6 && (
           <PassoDependentes
             token={token}
             possuiDependentes={possuiDependentes} setPossuiDependentes={setPossuiDependentes}
@@ -475,27 +560,28 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
             errosVisiveis={errosVisiveis}
           />
         )}
-        {passo === 6 && (
+        {passo === 7 && (
           <PassoValeTransporte
             valeTransporte={valeTransporte} setCampo={setCampoVt} errosVisiveis={errosVisiveis}
           />
         )}
-        {passo === 7 && (
+        {passo === 8 && (
           <PassoAutorizacaoSindical
             autorizacaoSindical={autorizacaoSindical} setCampo={setCampoAs} errosVisiveis={errosVisiveis}
           />
         )}
-        {passo === 8 && (
+        {passo === 9 && (
           <PassoUploadDocumentos
             token={token}
             documentos={documentos} setDocumentos={setDocumentos}
             sexo={form.sexo} isMotorista={isMotorista} possuiDependentes={possuiDependentes}
           />
         )}
-        {passo === 9 && (
+        {passo === 10 && (
           <PassoRevisao
             form={form} dependentes={dependentes} documentos={documentos}
             valeTransporte={valeTransporte} autorizacaoSindical={autorizacaoSindical}
+            situacaoTrabalhista={situacaoTrabalhista}
             sexo={form.sexo} isMotorista={isMotorista} possuiDependentes={possuiDependentes}
             lgpdAceite={lgpdAceite} setLgpdAceite={setLgpdAceite}
             onEnviar={enviarParaAnalise} enviando={enviando}

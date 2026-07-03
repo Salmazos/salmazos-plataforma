@@ -50,6 +50,12 @@ export interface AdmissaoDadosPessoais {
   estado_civil: "solteiro" | "casado" | "divorciado" | "viuvo" | "uniao_estavel" | null;
   nacionalidade: string | null;
   naturalidade: string | null;
+  pais_nascimento: string | null;
+  cor_raca: "branca" | "preta" | "parda" | "amarela" | "indigena" | "nao_informar" | null;
+  nome_mae: string | null;
+  nacionalidade_mae: string | null;
+  nome_pai: string | null;
+  nacionalidade_pai: string | null;
   cpf: string | null;
   rg_numero: string | null;
   rg_orgao_emissor: string | null;
@@ -59,15 +65,17 @@ export interface AdmissaoDadosPessoais {
   zona_eleitoral: string | null;
   secao_eleitoral: string | null;
   pis_pasep: string | null;
+  pis_data_cadastramento: string | null;
   carteira_trabalho_numero: string | null;
   carteira_trabalho_serie: string | null;
   carteira_trabalho_uf: string | null;
+  ctps_data_emissao: string | null;
   cnh_numero: string | null;
   cnh_categoria: string | null;
   cnh_validade: string | null;
+  cnh_data_emissao: string | null;
+  cnh_uf: string | null;
   reservista: string | null;
-  nome_mae: string | null;
-  nome_pai: string | null;
   grau_instrucao:
     | "fundamental_incompleto" | "fundamental_completo"
     | "medio_incompleto" | "medio_completo"
@@ -86,6 +94,14 @@ export interface AdmissaoDadosPessoais {
   conta: string | null;
   tipo_conta: "corrente" | "poupanca" | null;
   pix: string | null;
+  data_exame_admissional: string | null;
+  recebendo_seguro_desemprego: boolean | null;
+  primeiro_emprego: boolean | null;
+  trabalhou_empresa_antes: boolean | null;
+  aposentado: boolean | null;
+  dependente_ir: boolean | null;
+  dependente_salario_familia: boolean | null;
+  tera_adiantamento: boolean | null;
   created_at: string;
   updated_at: string;
 }
@@ -99,6 +115,12 @@ export interface AdmissaoDependente {
   cpf: string | null;
   nome_mae: string | null;
   cpf_mae: string | null;
+  cartorio: string | null;
+  local_nascimento: string | null;
+  declaracao_nascido_vivo: string | null;
+  num_registro: string | null;
+  num_livro: string | null;
+  num_folha: string | null;
   created_at: string;
 }
 

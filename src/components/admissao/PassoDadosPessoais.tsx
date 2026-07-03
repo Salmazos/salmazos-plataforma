@@ -5,7 +5,7 @@ import Campo from "./Campo";
 import { campoErroStyle, cardStyle } from "./styles";
 import { formatarCPF } from "@/lib/utils";
 import { ESTADOS } from "@/lib/constants";
-import { ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS } from "@/lib/admissaoConstants";
+import { ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, COR_RACA_OPTIONS } from "@/lib/admissaoConstants";
 
 interface Props {
   form: FormState;
@@ -78,6 +78,24 @@ export default function PassoDadosPessoais({ form, setCampo, errosVisiveis }: Pr
         />
       </Campo>
 
+      <Campo label="País de nascimento">
+        <input
+          type="text" value={form.pais_nascimento}
+          onChange={(e) => setCampo("pais_nascimento", e.target.value)}
+          style={campoErroStyle(false)}
+        />
+      </Campo>
+
+      <Campo label="Cor/Raça">
+        <select
+          value={form.cor_raca} onChange={(e) => setCampo("cor_raca", e.target.value)}
+          style={campoErroStyle(false)}
+        >
+          <option value="" disabled>Selecione...</option>
+          {COR_RACA_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </Campo>
+
       <Campo label="CPF" required erro={erro("cpf")}>
         <input
           type="text" inputMode="numeric" value={form.cpf}
@@ -128,10 +146,26 @@ export default function PassoDadosPessoais({ form, setCampo, errosVisiveis }: Pr
         />
       </Campo>
 
+      <Campo label="Nacionalidade da mãe">
+        <input
+          type="text" value={form.nacionalidade_mae}
+          onChange={(e) => setCampo("nacionalidade_mae", e.target.value)}
+          style={campoErroStyle(false)}
+        />
+      </Campo>
+
       <Campo label="Nome do pai">
         <input
           type="text" value={form.nome_pai}
           onChange={(e) => setCampo("nome_pai", e.target.value)}
+          style={campoErroStyle(false)}
+        />
+      </Campo>
+
+      <Campo label="Nacionalidade do pai">
+        <input
+          type="text" value={form.nacionalidade_pai}
+          onChange={(e) => setCampo("nacionalidade_pai", e.target.value)}
           style={campoErroStyle(false)}
         />
       </Campo>

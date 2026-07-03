@@ -1,3 +1,6 @@
+// Sem "Outro" aqui de propósito — a opção "Outro (não está na lista)" é adicionada
+// separadamente no <select> (PassoDadosBancarios.tsx), que revela um campo de texto
+// livre em vez de salvar a string "Outro" como se fosse o nome do banco.
 export const BANCOS = [
   "Banco do Brasil",
   "Bradesco",
@@ -9,7 +12,6 @@ export const BANCOS = [
   "Sicoob",
   "Sicredi",
   "BTG Pactual",
-  "Outro",
 ];
 
 export const CNH_CATEGORIAS = ["A", "B", "AB", "C", "D", "E"];
@@ -41,11 +43,30 @@ export const GRAU_INSTRUCAO_OPTIONS: { value: string; label: string }[] = [
   { value: "pos_graduacao", label: "Pós-Graduação" },
 ];
 
+export const COR_RACA_OPTIONS: { value: string; label: string }[] = [
+  { value: "branca", label: "Branca" },
+  { value: "preta", label: "Preta" },
+  { value: "parda", label: "Parda" },
+  { value: "amarela", label: "Amarela" },
+  { value: "indigena", label: "Indígena" },
+  { value: "nao_informar", label: "Não informar" },
+];
+
 export const PARENTESCO_OPTIONS: { value: string; label: string }[] = [
   { value: "filho", label: "Filho" },
   { value: "filha", label: "Filha" },
   { value: "conjuge", label: "Cônjuge" },
   { value: "outro", label: "Outro" },
+];
+
+// Redação literal do decreto — não parafrasear. Fonte única usada tanto no formulário
+// do candidato (PassoValeTransporte.tsx) quanto no PDF (desenharSolicitacaoValeTransporte),
+// pra evitar o texto legal divergir entre as duas telas.
+export const TERMOS_VALE_TRANSPORTE_TEXTO = [
+  "Nos termos do artigo 7º do Decreto nº 95.247 de 17 de novembro de 1987, solicito receber o Vale Transporte e comprometo-me:",
+  "a) a utilizá-lo exclusivamente para meu efetivo deslocamento residência – trabalho e vice-versa;",
+  "b) a renovar anualmente e sempre que ocorrer alteração no meu endereço residencial ou dos serviços e meios de transporte mais adequados ao meu deslocamento residência – trabalho e vice-versa;",
+  "c) autorizo a descontar 6% (seis por cento) do meu salário base mensal para concorrer ao custeio do Vale Transporte (conforme parágrafo 3º do artigo 7º do decreto nº 95247/87).",
 ];
 
 export const OPCAO_VALE_TRANSPORTE_LABEL: Record<string, string> = {

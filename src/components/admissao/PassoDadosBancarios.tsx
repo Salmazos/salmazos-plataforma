@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { FormState } from "./AdmissaoFormClient";
 import Campo from "./Campo";
 import { campoErroStyle, cardStyle, infoBoxStyle } from "./styles";
@@ -14,6 +15,13 @@ interface Props {
 export default function PassoDadosBancarios({ form, setCampo, errosVisiveis }: Props) {
   const erro = (campo: keyof FormState) => errosVisiveis.has(campo);
 
+  // "Outro" precisa de um modo local só pra saber que o select está nessa opção mesmo
+  // com o texto ainda vazio — o valor final continua indo direto pro campo banco (mesmo
+  // raciocínio do modo "outros" em Dias que irá trabalhar, no Vale Transporte).
+  const [bancoModo, setBancoModo] = useState<"lista" | "outro">(() =>
+    form.banco && !BANCOS.includes(form.banco) ? "outro" : "lista"
+  );
+
   return (
     <div style={cardStyle}>
       <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>Dados Bancários</h2>
@@ -24,10 +32,26 @@ export default function PassoDadosBancarios({ form, setCampo, errosVisiveis }: P
       </div>
 
       <Campo label="Banco" required erro={erro("banco")}>
-        <select value={form.banco} onChange={(e) => setCampo("banco", e.target.value)} style={campoErroStyle(erro("banco"))}>
+        <select
+          value={bancoModo === "outro" ? "outro" : form.banco}
+          onChange={(e) => {
+            if (e.target.value === "outro") { setBancoModo("outro"); setCampo("banco", ""); }
+            else { setBancoModo("lista"); setCampo("banco", e.target.value); }
+          }}
+          style={campoErroStyle(erro("banco"))}
+        >
           <option value="" disabled>Selecione...</option>
           {BANCOS.map((b) => <option key={b} value={b}>{b}</option>)}
+          <option value="outro">Outro (não está na lista)</option>
         </select>
+        {bancoModo === "outro" && (
+          <input
+            type="text" value={form.banco}
+            onChange={(e) => setCampo("banco", e.target.value)}
+            placeholder="Digite o nome do banco"
+            style={{ ...campoErroStyle(erro("banco")), marginTop: 8 }}
+          />
+        )}
       </Campo>
 
       <Campo label="Agência" required erro={erro("agencia")}>
@@ -51,6 +75,10 @@ export default function PassoDadosBancarios({ form, setCampo, errosVisiveis }: P
             </label>
           ))}
         </div>
+      </Campo>
+
+      <Campo label="Chave PIX">
+        <input type="text" value={form.pix} onChange={(e) => setCampo("pix", e.target.value)} style={campoErroStyle(false)} />
       </Campo>
     </div>
   );

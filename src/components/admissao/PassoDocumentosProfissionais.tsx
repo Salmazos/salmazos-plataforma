@@ -26,6 +26,10 @@ export default function PassoDocumentosProfissionais({ form, setCampo, errosVisi
         <input type="text" inputMode="numeric" value={form.pis_pasep} onChange={(e) => setCampo("pis_pasep", e.target.value)} style={campoErroStyle(erro("pis_pasep"))} />
       </Campo>
 
+      <Campo label="Data de cadastramento do PIS">
+        <input type="date" value={form.pis_data_cadastramento} onChange={(e) => setCampo("pis_data_cadastramento", e.target.value)} style={campoErroStyle(false)} />
+      </Campo>
+
       <Campo label="Número da Carteira de Trabalho" required erro={erro("carteira_trabalho_numero")}>
         <input type="text" value={form.carteira_trabalho_numero} onChange={(e) => setCampo("carteira_trabalho_numero", e.target.value)} style={campoErroStyle(erro("carteira_trabalho_numero"))} />
       </Campo>
@@ -39,6 +43,10 @@ export default function PassoDocumentosProfissionais({ form, setCampo, errosVisi
           <option value="" disabled>Selecione...</option>
           {ESTADOS.map((e) => <option key={e.uf} value={e.uf}>{e.uf} — {e.nome}</option>)}
         </select>
+      </Campo>
+
+      <Campo label="Data de emissão da Carteira de Trabalho">
+        <input type="date" value={form.ctps_data_emissao} onChange={(e) => setCampo("ctps_data_emissao", e.target.value)} style={campoErroStyle(false)} />
       </Campo>
 
       <Campo label="Título de eleitor" required erro={erro("titulo_eleitor")}>
@@ -82,6 +90,15 @@ export default function PassoDocumentosProfissionais({ form, setCampo, errosVisi
             </Campo>
             <Campo label="Validade da CNH" required erro={erro("cnh_validade")}>
               <input type="date" value={form.cnh_validade} onChange={(e) => setCampo("cnh_validade", e.target.value)} style={campoErroStyle(erro("cnh_validade"))} />
+            </Campo>
+            <Campo label="Data de emissão da CNH">
+              <input type="date" value={form.cnh_data_emissao} onChange={(e) => setCampo("cnh_data_emissao", e.target.value)} style={campoErroStyle(false)} />
+            </Campo>
+            <Campo label="UF da CNH">
+              <select value={form.cnh_uf} onChange={(e) => setCampo("cnh_uf", e.target.value)} style={campoErroStyle(false)}>
+                <option value="" disabled>Selecione...</option>
+                {ESTADOS.map((e) => <option key={e.uf} value={e.uf}>{e.uf} — {e.nome}</option>)}
+              </select>
             </Campo>
           </div>
         )}

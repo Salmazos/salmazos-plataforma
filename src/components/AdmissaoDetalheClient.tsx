@@ -105,6 +105,8 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [documentos, setDocumentos] = useState(documentosIniciais);
   const [observacoes, setObservacoes] = useState(admissao.observacoes_internas ?? "");
   const [salvandoObs, setSalvandoObs] = useState(false);
+  const [dataExameAdmissional, setDataExameAdmissional] = useState(dadosPessoais?.data_exame_admissional ?? "");
+  const [salvandoExame, setSalvandoExame] = useState(false);
   const [salvandoStatus, setSalvandoStatus] = useState(false);
   const [rejeitandoId, setRejeitandoId] = useState<string | null>(null);
   const [motivoSelecionado, setMotivoSelecionado] = useState("");
@@ -142,6 +144,25 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       });
     } finally {
       setSalvandoObs(false);
+    }
+  };
+
+  const handleSalvarExameAdmissional = async () => {
+    setSalvandoExame(true);
+    try {
+      const res = await fetch(`/api/admissoes/${admissao.id}/dados-pessoais`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data_exame_admissional: dataExameAdmissional || null }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        showToast(json.error || "Erro ao salvar a data do exame admissional.");
+      }
+    } catch {
+      showToast("Erro de conexão ao salvar a data do exame admissional.");
+    } finally {
+      setSalvandoExame(false);
     }
   };
 
@@ -311,6 +332,19 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
             <Linha label="Salário" value={admissao.salario != null ? admissao.salario.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : null} />
             <Linha label="Horário de trabalho" value={admissao.horario_trabalho} />
             <Linha label="Data de admissão" value={admissao.data_admissao} />
+            <div className="flex justify-between items-center py-1.5 border-b border-gray-50 text-sm">
+              <span className="text-gray-500">Data do exame admissional</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={dataExameAdmissional ?? ""}
+                  onChange={(e) => setDataExameAdmissional(e.target.value)}
+                  onBlur={handleSalvarExameAdmissional}
+                  className="input-field !w-auto !py-1 !text-sm"
+                />
+                {salvandoExame && <span className="text-xs text-gray-400">Salvando...</span>}
+              </div>
+            </div>
           </Secao>
 
           <Secao titulo="Dados Pessoais">

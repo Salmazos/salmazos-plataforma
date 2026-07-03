@@ -332,6 +332,13 @@ export const admissaoUpdateSchema = z.object({
   observacoes_internas: z.string().optional().nullable(),
 });
 
+// Data do exame admissional só é conhecida depois que o exame acontece — diferente dos
+// outros campos de "Dados da Admissão" (função/salário/horário/data), fica editável pelo
+// RH a qualquer momento, mesmo depois do link já ter sido gerado para o candidato.
+export const admissaoDadosPessoaisAdminUpdateSchema = z.object({
+  data_exame_admissional: z.string().optional().nullable(),
+});
+
 const optStr = z.string().optional().nullable();
 
 export const admissaoDadosPessoaisSchema = z.object({
@@ -341,6 +348,12 @@ export const admissaoDadosPessoaisSchema = z.object({
   estado_civil: z.enum(["solteiro", "casado", "divorciado", "viuvo", "uniao_estavel"]).optional().nullable(),
   nacionalidade: optStr,
   naturalidade: optStr,
+  pais_nascimento: optStr,
+  cor_raca: z.enum(["branca", "preta", "parda", "amarela", "indigena", "nao_informar"]).optional().nullable(),
+  nome_mae: optStr,
+  nacionalidade_mae: optStr,
+  nome_pai: optStr,
+  nacionalidade_pai: optStr,
   cpf: optStr,
   rg_numero: optStr,
   rg_orgao_emissor: optStr,
@@ -350,15 +363,17 @@ export const admissaoDadosPessoaisSchema = z.object({
   zona_eleitoral: optStr,
   secao_eleitoral: optStr,
   pis_pasep: optStr,
+  pis_data_cadastramento: optStr,
   carteira_trabalho_numero: optStr,
   carteira_trabalho_serie: optStr,
   carteira_trabalho_uf: optStr,
+  ctps_data_emissao: optStr,
   cnh_numero: optStr,
   cnh_categoria: optStr,
   cnh_validade: optStr,
+  cnh_data_emissao: optStr,
+  cnh_uf: optStr,
   reservista: optStr,
-  nome_mae: optStr,
-  nome_pai: optStr,
   grau_instrucao: z.enum([
     "fundamental_incompleto", "fundamental_completo",
     "medio_incompleto", "medio_completo",
@@ -377,6 +392,17 @@ export const admissaoDadosPessoaisSchema = z.object({
   agencia: optStr,
   conta: optStr,
   tipo_conta: z.enum(["corrente", "poupanca"]).optional().nullable(),
+  pix: optStr,
+  // Preenchido pelo RH depois que o exame médico admissional acontece — o candidato não
+  // tem esse dado no momento do preenchimento do formulário (ver PassoSituacaoTrabalhista).
+  data_exame_admissional: optStr,
+  recebendo_seguro_desemprego: z.boolean().optional().nullable(),
+  primeiro_emprego: z.boolean().optional().nullable(),
+  trabalhou_empresa_antes: z.boolean().optional().nullable(),
+  aposentado: z.boolean().optional().nullable(),
+  dependente_ir: z.boolean().optional().nullable(),
+  dependente_salario_familia: z.boolean().optional().nullable(),
+  tera_adiantamento: z.boolean().optional().nullable(),
 });
 
 export const admissaoVtLinhaSchema = z.object({
@@ -393,6 +419,7 @@ export const admissaoValeTransporteSchema = z.object({
   dias_semana: optStr,
   bairro_cidade_trabalho: optStr,
   linhas: z.array(admissaoVtLinhaSchema).max(2).optional(),
+  termos_aceitos: z.boolean().optional().nullable(),
 });
 
 export const admissaoAutorizacaoSindicalSchema = z.object({
@@ -410,6 +437,9 @@ export const admissaoTokenUpdateSchema = z.object({
 }).refine((d) => !d.submit || d.lgpd_aceite === true, {
   message: "Consentimento LGPD é obrigatório para enviar a admissão.",
   path: ["lgpd_aceite"],
+}).refine((d) => !d.submit || d.vale_transporte?.opcao !== "vale_transporte" || d.vale_transporte?.termos_aceitos === true, {
+  message: "É necessário aceitar os termos do Vale Transporte para enviar a admissão.",
+  path: ["vale_transporte", "termos_aceitos"],
 });
 
 export const admissaoDependenteCreateSchema = z.object({
@@ -419,6 +449,12 @@ export const admissaoDependenteCreateSchema = z.object({
   cpf: optStr,
   nome_mae: optStr,
   cpf_mae: optStr,
+  cartorio: optStr,
+  local_nascimento: optStr,
+  declaracao_nascido_vivo: optStr,
+  num_registro: optStr,
+  num_livro: optStr,
+  num_folha: optStr,
 });
 
 export const admissaoDocumentoConfirmarSchema = z.object({

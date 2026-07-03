@@ -5,6 +5,7 @@ const PASSOS = [
   "Doc. Profissionais",
   "Endereço",
   "Dados Bancários",
+  "Situação Trabalhista",
   "Dependentes",
   "Vale Transporte",
   "Autorização Sindical",

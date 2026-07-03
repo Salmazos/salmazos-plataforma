@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ValeTransporteState, ValeTransporteLinha } from "./AdmissaoFormClient";
 import Campo from "./Campo";
 import { campoErroStyle, cardStyle, botaoSecundarioStyle, erroTextStyle } from "./styles";
+import { TERMOS_VALE_TRANSPORTE_TEXTO } from "@/lib/admissaoConstants";
 
 interface Props {
   valeTransporte: ValeTransporteState;
@@ -101,6 +102,25 @@ export default function PassoValeTransporte({ valeTransporte, setCampo, errosVis
           style={campoErroStyle(erro("vt_bairro_cidade"))}
         />
       </Campo>
+
+      {valeTransporte.opcao === "vale_transporte" && (
+        <div style={{ border: "1px solid #E5E7EB", borderRadius: 10, padding: 14, marginBottom: 16 }}>
+          {TERMOS_VALE_TRANSPORTE_TEXTO.map((linha, i) => (
+            <p key={i} style={{ fontSize: 12, color: "#374151", lineHeight: 1.6, margin: i === 0 ? "0 0 8px" : "0 0 6px" }}>{linha}</p>
+          ))}
+          <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", marginTop: 8 }}>
+            <input
+              type="checkbox" checked={valeTransporte.termos_aceitos}
+              onChange={(e) => setCampo("termos_aceitos", e.target.checked)}
+              style={{ width: 22, height: 22, marginTop: 2, flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>Li e concordo com os termos acima</span>
+          </label>
+          {erro("vt_termos_aceitos") && (
+            <p style={erroTextStyle}>⚠️ Você precisa concordar com os termos do Vale Transporte para continuar.</p>
+          )}
+        </div>
+      )}
 
       {valeTransporte.opcao === "vale_transporte" && (
         <div>

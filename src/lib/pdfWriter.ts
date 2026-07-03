@@ -1,4 +1,6 @@
-import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts, PageSizes } from "pdf-lib";
+import fs from "fs";
+import path from "path";
+import { PDFDocument, PDFFont, PDFImage, PDFPage, rgb, StandardFonts, PageSizes } from "pdf-lib";
 
 export const PW = PageSizes.A4[0];
 export const PH = PageSizes.A4[1];
@@ -10,6 +12,16 @@ export const YELLOW = rgb(1, 0.843, 0);
 export const DARK = rgb(0.12, 0.14, 0.16);
 export const GRAY = rgb(0.43, 0.46, 0.50);
 export const LIGHT_GRAY = rgb(0.7, 0.72, 0.75);
+
+// Faixas fixas desenhadas em toda página por newPage() (ver drawHeader/drawFooter) — logo
+// no topo e timbre com endereço no rodapé. Nenhum template precisa chamar nada extra.
+const LOGO_H = 30; // altura de desenho do logo; a largura é calculada a partir da proporção original da imagem
+const HEADER_RESERVED = 62; // y onde o conteúdo do corpo começa em cada página nova (abaixo do logo, com respiro)
+// Igual ao limite inferior original (ML + 20) — já havia espaço de sobra nessa margem pra
+// caber o rodapé sem precisar reduzir a área útil de conteúdo nem mudar a paginação existente.
+const FOOTER_RESERVED = ML + 20;
+const FOOTER_TEXT_Y = 28; // altura do texto do rodapé a partir da base da página (dentro da faixa reservada)
+const RODAPE_TEXTO = "Rua Hipólito Piva, 30, Centro, Monte Mor - SP, CEP 13190-093 | (19) 3217-7899";
 
 export function safe(v: unknown): string {
   return (v == null ? "" : String(v)).replace(/[–—]/g, "-").replace(/[^\x20-\xFF]/g, " ").trim();
@@ -23,6 +35,7 @@ export class PdfWriter {
   bold!: PDFFont;
   regular!: PDFFont;
   page!: PDFPage;
+  logo: PDFImage | null = null;
   y = 0;
 
   private constructor(doc: PDFDocument) {
@@ -38,17 +51,41 @@ export class PdfWriter {
     const w = new PdfWriter(doc);
     w.bold = await doc.embedFont(StandardFonts.HelveticaBold);
     w.regular = await doc.embedFont(StandardFonts.Helvetica);
+    // Falha ao ler/embutir o logo não pode derrubar a geração do PDF inteiro — loga um
+    // warning e segue sem logo (drawHeader() já lida com w.logo === null).
+    try {
+      const logoPath = path.join(process.cwd(), "public", "Salmazos logo Preto.png");
+      const logoBytes = fs.readFileSync(logoPath);
+      w.logo = await doc.embedPng(logoBytes);
+    } catch (err) {
+      console.warn("[PdfWriter] Não foi possível carregar o logo:", err);
+    }
     if (criarPaginaInicial) w.newPage();
     return w;
   }
 
   newPage() {
     this.page = this.doc.addPage(PageSizes.A4);
-    this.y = PH - ML;
+    this.drawHeader();
+    this.drawFooter();
+    this.y = PH - HEADER_RESERVED;
+  }
+
+  private drawHeader() {
+    if (!this.logo) return;
+    const scale = LOGO_H / this.logo.height;
+    const logoW = this.logo.width * scale;
+    this.page.drawImage(this.logo, { x: ML, y: PH - 20 - LOGO_H, width: logoW, height: LOGO_H });
+  }
+
+  private drawFooter() {
+    const size = 8;
+    const textWidth = this.regular.widthOfTextAtSize(RODAPE_TEXTO, size);
+    this.page.drawText(RODAPE_TEXTO, { x: (PW - textWidth) / 2, y: FOOTER_TEXT_Y, size, font: this.regular, color: GRAY });
   }
 
   ensureSpace(needed: number) {
-    if (this.y - needed < ML + 20) this.newPage();
+    if (this.y - needed < FOOTER_RESERVED) this.newPage();
   }
 
   drawText(text: string, font: PDFFont, size: number, color = DARK, x = ML) {
@@ -105,6 +142,25 @@ export class PdfWriter {
       x += colWidth + 10;
     }
     this.y = startY - maxDrop;
+  }
+
+  // Quebra texto longo em várias linhas que cabem em `width` — pdf-lib não quebra
+  // linha sozinho (drawText estoura a página se o texto for maior que a largura),
+  // então isso existe pra declarações de texto corrido (ex: cláusulas legais) em vez
+  // de cada chamador ter que quebrar a mão feito foi feito na Autorização Sindical.
+  paragraph(text: string, font: PDFFont, size: number, color = DARK, x: number = ML, width: number = CW) {
+    const palavras = safe(text).split(" ");
+    let linha = "";
+    for (const palavra of palavras) {
+      const tentativa = linha ? `${linha} ${palavra}` : palavra;
+      if (linha && font.widthOfTextAtSize(tentativa, size) > width) {
+        this.drawText(linha, font, size, color, x);
+        linha = palavra;
+      } else {
+        linha = tentativa;
+      }
+    }
+    if (linha) this.drawText(linha, font, size, color, x);
   }
 
   // ( ) ou (X) — pra opções de múltipla escolha (rádio) desenhadas manualmente.

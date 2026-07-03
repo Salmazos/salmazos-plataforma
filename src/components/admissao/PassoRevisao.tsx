@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { AdmissaoDependente } from "@/types";
-import type { FormState, DocumentoToken, ValeTransporteState, AutorizacaoSindicalState } from "./AdmissaoFormClient";
+import type { FormState, DocumentoToken, ValeTransporteState, AutorizacaoSindicalState, SituacaoTrabalhistaState } from "./AdmissaoFormClient";
 import { cardStyle, botaoPrimarioStyle } from "./styles";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
 import { ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, PARENTESCO_OPTIONS, OPCAO_VALE_TRANSPORTE_LABEL } from "@/lib/admissaoConstants";
@@ -13,6 +13,7 @@ interface Props {
   documentos: DocumentoToken[];
   valeTransporte: ValeTransporteState;
   autorizacaoSindical: AutorizacaoSindicalState;
+  situacaoTrabalhista: SituacaoTrabalhistaState;
   sexo: string;
   isMotorista: boolean;
   possuiDependentes: boolean;
@@ -56,7 +57,9 @@ function Linha({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default function PassoRevisao({ form, dependentes, documentos, valeTransporte, autorizacaoSindical, sexo, isMotorista, possuiDependentes, lgpdAceite, setLgpdAceite, onEnviar, enviando }: Props) {
+const SIM_NAO_LABEL: Record<string, string> = { sim: "Sim", nao: "Não" };
+
+export default function PassoRevisao({ form, dependentes, documentos, valeTransporte, autorizacaoSindical, situacaoTrabalhista, sexo, isMotorista, possuiDependentes, lgpdAceite, setLgpdAceite, onEnviar, enviando }: Props) {
   const visiveis = documentos.filter((d) => docVisivel(d, sexo, isMotorista, possuiDependentes));
   const pendentesObrigatorios = visiveis.filter((d) => d.obrigatorio && d.status !== "enviado" && d.status !== "aprovado");
 
@@ -103,6 +106,16 @@ export default function PassoRevisao({ form, dependentes, documentos, valeTransp
         <Linha label="Agência" value={form.agencia} />
         <Linha label="Conta" value={form.conta} />
         <Linha label="Tipo de conta" value={form.tipo_conta === "corrente" ? "Conta Corrente" : form.tipo_conta === "poupanca" ? "Conta Poupança" : ""} />
+      </Secao>
+
+      <Secao titulo="Situação Trabalhista e Benefícios">
+        <Linha label="Recebendo seguro-desemprego?" value={SIM_NAO_LABEL[situacaoTrabalhista.recebendo_seguro_desemprego] ?? ""} />
+        <Linha label="Primeiro emprego?" value={SIM_NAO_LABEL[situacaoTrabalhista.primeiro_emprego] ?? ""} />
+        <Linha label="Já trabalhou nesta empresa antes?" value={SIM_NAO_LABEL[situacaoTrabalhista.trabalhou_empresa_antes] ?? ""} />
+        <Linha label="Aposentado?" value={SIM_NAO_LABEL[situacaoTrabalhista.aposentado] ?? ""} />
+        <Linha label="Dependente para Imposto de Renda?" value={SIM_NAO_LABEL[situacaoTrabalhista.dependente_ir] ?? ""} />
+        <Linha label="Dependente para Salário Família?" value={SIM_NAO_LABEL[situacaoTrabalhista.dependente_salario_familia] ?? ""} />
+        <Linha label="Terá adiantamento salarial?" value={SIM_NAO_LABEL[situacaoTrabalhista.tera_adiantamento] ?? ""} />
       </Secao>
 
       {possuiDependentes && dependentes.length > 0 && (
