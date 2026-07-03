@@ -17,7 +17,10 @@ export async function GET(_request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const pdfDoc = await PDFDocument.create();
-  const w = await PdfWriter.create(pdfDoc);
+  // Sem capa aqui — o primeiro conteúdo real já é desenharFichaCadastral, que abre
+  // sua própria página. Sem isso, a página criada automaticamente pelo create()
+  // fica órfã e em branco antes da Ficha Cadastral.
+  const w = await PdfWriter.create(pdfDoc, false);
 
   // Duas linhas em branco pra cada seção repetível — dá espaço físico pra preencher
   // à mão sem forçar a pessoa a escrever nas margens.

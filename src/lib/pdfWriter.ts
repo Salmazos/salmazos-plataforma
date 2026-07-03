@@ -29,11 +29,16 @@ export class PdfWriter {
     this.doc = doc;
   }
 
-  static async create(doc: PDFDocument): Promise<PdfWriter> {
+  // criarPaginaInicial=false pula a criação automática da primeira página — usar
+  // quando o primeiro conteúdo desenhado já for iniciado por uma função que chama
+  // newPage() sozinha (ex: os templates de desenharFichaCadastral/etc., que sempre
+  // abrem página própria). Deixar o default true preserva o comportamento de quem
+  // já desenha direto em w.page logo após o create() (ex: a capa do pacote).
+  static async create(doc: PDFDocument, criarPaginaInicial = true): Promise<PdfWriter> {
     const w = new PdfWriter(doc);
     w.bold = await doc.embedFont(StandardFonts.HelveticaBold);
     w.regular = await doc.embedFont(StandardFonts.Helvetica);
-    w.newPage();
+    if (criarPaginaInicial) w.newPage();
     return w;
   }
 
