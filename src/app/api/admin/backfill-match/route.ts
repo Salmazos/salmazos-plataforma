@@ -20,9 +20,11 @@ export async function POST(req: NextRequest) {
   const { data: candidatos } = await supabase
     .from("candidatos")
     .select("id")
-    .eq("matches_calculados", [])
+    .eq("matches_calculados", "[]")
     .order("created_at", { ascending: true })
     .limit(limit);
+
+  console.log(`[backfill-match] encontrados: ${candidatos?.length ?? 0}`);
 
   if (!candidatos || candidatos.length === 0) {
     return NextResponse.json({ processed: 0, remaining: 0 });
@@ -37,7 +39,7 @@ export async function POST(req: NextRequest) {
   const { count } = await supabase
     .from("candidatos")
     .select("id", { count: "exact", head: true })
-    .eq("matches_calculados", []);
+    .eq("matches_calculados", "[]");
 
   return NextResponse.json({ processed: candidatos.length, remaining: count ?? 0 });
 }
