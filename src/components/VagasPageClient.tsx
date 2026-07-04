@@ -5,9 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ModalNovaVaga from "./ModalNovaVaga";
 import ModalSolicitacoesVagas from "./ModalSolicitacoesVagas";
+import PainelVagasView from "./painel/PainelVagasView";
 import { TIPOS_SERVICO } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
 import type { Vaga } from "@/types";
+
+type AbaVagas = "lista" | "painel";
 
 const CORES_TIPO: Record<string, { bg: string; color: string }> = {
   recrutamento_selecao:  { bg: "#1D6FA4", color: "#ffffff" },
@@ -31,6 +34,7 @@ interface Props {
 
 export default function VagasPageClient({ vagas: inicial, pendingCount }: Props) {
   const router = useRouter();
+  const [aba, setAba] = useState<AbaVagas>("lista");
   const [vagas, setVagas] = useState<Vaga[]>(inicial);
   const [modalAberto, setModalAberto] = useState(false);
   const [modalSolicitacoes, setModalSolicitacoes] = useState(false);
@@ -209,104 +213,134 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
         </div>
       )}
 
-      {/* Métricas */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="card text-center py-4">
-          <p className="text-3xl font-bold text-[#22c55e]">{totais.abertas}</p>
-          <p className="text-xs text-gray-500 mt-1">Total abertas</p>
-        </div>
-        <div className="card text-center py-4">
-          <p className="text-3xl font-bold text-gray-400">{totais.fechadas}</p>
-          <p className="text-xs text-gray-500 mt-1">Fechadas</p>
-        </div>
-        <div className="card text-center py-4">
-          <p className="text-3xl font-bold text-[#ef4444]">{totais.canceladas}</p>
-          <p className="text-xs text-gray-500 mt-1">Canceladas</p>
-        </div>
-        <div className="card text-center py-4">
-          <p className="text-3xl font-bold text-[#FFD700]">{totais.total_posicoes}</p>
-          <p className="text-xs text-gray-500 mt-1">Total de posições</p>
-        </div>
+      {/* Abas */}
+      <div className="flex rounded-lg border border-gray-200 overflow-hidden w-fit mb-6">
+        <button
+          onClick={() => setAba("lista")}
+          className={`px-4 py-2 text-sm transition-colors ${
+            aba === "lista"
+              ? "bg-black text-[#FFD700] font-medium"
+              : "text-gray-600 hover:bg-gray-50"
+          }`}
+        >
+          Lista
+        </button>
+        <button
+          onClick={() => setAba("painel")}
+          className={`px-4 py-2 text-sm transition-colors ${
+            aba === "painel"
+              ? "bg-black text-[#FFD700] font-medium"
+              : "text-gray-600 hover:bg-gray-50"
+          }`}
+        >
+          Painel
+        </button>
       </div>
 
-      {/* Filtros + Busca */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="relative flex-1 min-w-[200px]">
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Buscar por título, cliente ou cidade..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            className="input-field pl-9"
-          />
-        </div>
-
-        <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-          {FILTROS.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setFiltroStatus(f.value)}
-              className={`px-4 py-2 text-sm transition-colors ${
-                filtroStatus === f.value
-                  ? "bg-black text-[#FFD700] font-medium"
-                  : "text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2 ml-auto">
-          <span className="text-sm text-gray-400">Ordenar:</span>
-          <select
-            value={ordenacao}
-            onChange={(e) => setOrdenacao(e.target.value)}
-            style={{ padding: "8px 12px", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 14, background: "#fff", color: "#374151", cursor: "pointer", outline: "none" }}
-          >
-            <option value="recentes">Mais recentes</option>
-            <option value="antigas">Mais antigas</option>
-            <option value="az">A–Z</option>
-            <option value="za">Z–A</option>
-            <option value="posicoes">Mais posições</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Lista */}
-      {filtradas.length === 0 ? (
-        <div className="card text-center py-12 text-gray-400">
-          <svg
-            className="w-12 h-12 mx-auto mb-3 opacity-30"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6a4 4 0 11-8 0 4 4 0 018 0zm-8 8a4 4 0 00-4 4h16a4 4 0 00-4-4H8z" />
-          </svg>
-          <p className="font-medium">Nenhuma vaga encontrada</p>
-          {filtroStatus !== "todas" && (
-            <p className="text-sm mt-1">
-              Tente mudar o filtro para &quot;Todas&quot;
-            </p>
-          )}
-        </div>
+      {aba === "painel" ? (
+        <PainelVagasView />
       ) : (
-        <div className="space-y-3">
-          {filtradas.map((v) => (
-            <VagaCard key={v.id} vaga={v} />
-          ))}
-        </div>
+        <>
+          {/* Métricas */}
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            <div className="card text-center py-4">
+              <p className="text-3xl font-bold text-[#22c55e]">{totais.abertas}</p>
+              <p className="text-xs text-gray-500 mt-1">Total abertas</p>
+            </div>
+            <div className="card text-center py-4">
+              <p className="text-3xl font-bold text-gray-400">{totais.fechadas}</p>
+              <p className="text-xs text-gray-500 mt-1">Fechadas</p>
+            </div>
+            <div className="card text-center py-4">
+              <p className="text-3xl font-bold text-[#ef4444]">{totais.canceladas}</p>
+              <p className="text-xs text-gray-500 mt-1">Canceladas</p>
+            </div>
+            <div className="card text-center py-4">
+              <p className="text-3xl font-bold text-[#FFD700]">{totais.total_posicoes}</p>
+              <p className="text-xs text-gray-500 mt-1">Total de posições</p>
+            </div>
+          </div>
+
+          {/* Filtros + Busca */}
+          <div className="flex flex-wrap items-center gap-3 mb-4">
+            <div className="relative flex-1 min-w-[200px]">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Buscar por título, cliente ou cidade..."
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                className="input-field pl-9"
+              />
+            </div>
+
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+              {FILTROS.map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => setFiltroStatus(f.value)}
+                  className={`px-4 py-2 text-sm transition-colors ${
+                    filtroStatus === f.value
+                      ? "bg-black text-[#FFD700] font-medium"
+                      : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 ml-auto">
+              <span className="text-sm text-gray-400">Ordenar:</span>
+              <select
+                value={ordenacao}
+                onChange={(e) => setOrdenacao(e.target.value)}
+                style={{ padding: "8px 12px", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 14, background: "#fff", color: "#374151", cursor: "pointer", outline: "none" }}
+              >
+                <option value="recentes">Mais recentes</option>
+                <option value="antigas">Mais antigas</option>
+                <option value="az">A–Z</option>
+                <option value="za">Z–A</option>
+                <option value="posicoes">Mais posições</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Lista */}
+          {filtradas.length === 0 ? (
+            <div className="card text-center py-12 text-gray-400">
+              <svg
+                className="w-12 h-12 mx-auto mb-3 opacity-30"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                  d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6a4 4 0 11-8 0 4 4 0 018 0zm-8 8a4 4 0 00-4 4h16a4 4 0 00-4-4H8z" />
+              </svg>
+              <p className="font-medium">Nenhuma vaga encontrada</p>
+              {filtroStatus !== "todas" && (
+                <p className="text-sm mt-1">
+                  Tente mudar o filtro para &quot;Todas&quot;
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filtradas.map((v) => (
+                <VagaCard key={v.id} vaga={v} />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <ModalNovaVaga
