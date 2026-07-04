@@ -70,9 +70,9 @@ export const TERMOS_VALE_TRANSPORTE_TEXTO = [
 ];
 
 export const OPCAO_VALE_TRANSPORTE_LABEL: Record<string, string> = {
-  vale_transporte: "Vale Transporte",
-  transporte_fretado: "Transporte Fretado pela Empresa",
-  nao_opta: "Não opta",
+  vale_transporte: "Opto pela utilização do Vale Transporte",
+  nao_opta: "Não opto pela utilização do Vale Transporte",
+  transporte_fretado: "Opto pela utilização do Transporte Fretado pela Empresa",
 };
 
 // DP (Departamento Pessoal)

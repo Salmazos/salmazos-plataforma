@@ -413,10 +413,9 @@ export function desenharSolicitacaoValeTransporte(w: PdfWriter, d: ValeTransport
   ]);
   w.y -= 4;
 
-  w.drawText("Opção de deslocamento:", w.bold, 9, GRAY);
-  w.checkOption("Vale Transporte", d.opcao === "vale_transporte");
-  w.checkOption("Transporte Fretado pela Empresa", d.opcao === "transporte_fretado");
-  w.checkOption("Não opta", d.opcao === "nao_opta");
+  w.checkOption("Opto pela utilização do Vale Transporte", d.opcao === "vale_transporte");
+  w.checkOption("Não opto pela utilização do Vale Transporte", d.opcao === "nao_opta");
+  w.checkOption("Opto pela utilização do Transporte Fretado pela Empresa", d.opcao === "transporte_fretado");
   w.y -= 4;
 
   // Sempre visível (é o texto do documento físico) — mesmo no formulário em branco

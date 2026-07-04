@@ -13,9 +13,9 @@ interface Props {
 }
 
 const OPCOES = [
-  { value: "vale_transporte", label: "Vale Transporte" },
-  { value: "transporte_fretado", label: "Transporte Fretado pela Empresa" },
-  { value: "nao_opta", label: "Não opta" },
+  { value: "vale_transporte", label: "Opto pela utilização do Vale Transporte" },
+  { value: "nao_opta", label: "Não opto pela utilização do Vale Transporte" },
+  { value: "transporte_fretado", label: "Opto pela utilização do Transporte Fretado pela Empresa" },
 ];
 
 const DIAS_SEMANA_PRESETS = ["Segunda a Sexta-feira", "Segunda a Sábado"];
