@@ -1,13 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 
 interface CandidatoElegivel {
   id: string;
   candidato_id: string;
   vaga_id: string;
   candidatos: { id: string; nome_completo: string; cargo_pretendido: string; telefone: string | null } | null;
-  vagas: { id: string; titulo: string; tipo_servico: string } | null;
+  vagas: {
+    id: string;
+    titulo: string;
+    tipo_servico: string;
+    cliente_id: string | null;
+    clientes: { nome: string; entidade_contratante: string | null } | null;
+  } | null;
   // Modalidade "vigente" da candidatura (encaminhamento mais recente, com fallback pra
   // vagas.tipo_servico) — ver src/lib/tipoServicoVigente.ts. Usar em vez de
   // vagas.tipo_servico direto, que pode divergir do que foi combinado com o cliente.
@@ -57,6 +64,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
   const [salario, setSalario] = useState("");
   const [horarioTrabalho, setHorarioTrabalho] = useState("");
   const [dataAdmissao, setDataAdmissao] = useState("");
+  const [entidadeContratante, setEntidadeContratante] = useState("");
 
   useEffect(() => {
     if (!isOpen) return;
@@ -69,6 +77,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
     setSalario("");
     setHorarioTrabalho("");
     setDataAdmissao("");
+    setEntidadeContratante("");
     setCarregando(true);
     fetch("/api/admissoes/candidatos-elegiveis")
       .then((r) => r.json())
@@ -85,9 +94,10 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
   const handleSelecionar = (c: CandidatoElegivel) => {
     setSelecionado(c);
     setModalidade(modalidadeDefault(c.tipo_servico_vigente));
+    setEntidadeContratante(c.vagas?.clientes?.entidade_contratante ?? "");
   };
 
-  const dadosValidos = Boolean(funcao.trim() && parseSalario(salario) > 0 && horarioTrabalho.trim() && dataAdmissao);
+  const dadosValidos = Boolean(funcao.trim() && parseSalario(salario) > 0 && horarioTrabalho.trim() && dataAdmissao && entidadeContratante);
 
   const handleContinuar = () => {
     if (!selecionado) return;
@@ -116,6 +126,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
           salario: parseSalario(salario),
           horario_trabalho: horarioTrabalho.trim(),
           data_admissao: dataAdmissao,
+          entidade_contratante: entidadeContratante,
         }),
       });
       const json = await res.json();
@@ -270,6 +281,22 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
                 onChange={(e) => setDataAdmissao(e.target.value)}
                 className="input-field"
               />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Entidade Contratante (CNPJ) *</label>
+              <select
+                value={entidadeContratante}
+                onChange={(e) => setEntidadeContratante(e.target.value)}
+                className="input-field"
+              >
+                <option value="">Selecione</option>
+                {ENTIDADES_CONTRATANTES.map((ent) => (
+                  <option key={ent.value} value={ent.value}>
+                    {ent.razaoSocial} — {ent.cnpj}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {erro && <p className="text-red-600 text-sm mb-3">{erro}</p>}

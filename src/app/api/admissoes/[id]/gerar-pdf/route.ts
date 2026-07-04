@@ -30,18 +30,20 @@ export async function POST(_request: NextRequest, { params }: Params) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vagaCliente = (admissao.vagas as any)?.clientes as { nome: string; entidade_contratante: string | null } | null;
+  const entidadeContratanteValue = (admissao as any).entidade_contratante ?? vagaCliente?.entidade_contratante ?? null;
+
   if (!vagaCliente) {
     return NextResponse.json(
       { error: "Não é possível gerar o pacote: esta admissão não tem uma vaga com cliente vinculado. Verifique o cadastro da vaga antes de continuar." },
       { status: 400 }
     );
-  } else if (!vagaCliente.entidade_contratante) {
+  } else if (!entidadeContratanteValue) {
     return NextResponse.json(
-      { error: `Não é possível gerar o pacote: o cliente ${vagaCliente.nome} não tem a entidade contratante configurada. Edite o cadastro do cliente antes de continuar.` },
+      { error: "Não é possível gerar o pacote: esta admissão não tem entidade contratante (CNPJ) definida. Isso deveria ter sido preenchido ao iniciar a admissão." },
       { status: 400 }
     );
   }
-  const entidade = ENTIDADES_CONTRATANTES.find((e) => e.value === vagaCliente.entidade_contratante);
+  const entidade = ENTIDADES_CONTRATANTES.find((e) => e.value === entidadeContratanteValue);
 
   const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: valeTransporte }, { data: autorizacaoSindical }] = await Promise.all([
     svc.from("admissao_dados_pessoais").select("*").eq("admissao_id", id).maybeSingle(),

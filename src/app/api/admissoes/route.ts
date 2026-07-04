@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const parsed = parseBody(admissaoCreateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
-  const { candidato_id, vaga_id, modalidade, funcao, salario, horario_trabalho, data_admissao } = parsed.data;
+  const { candidato_id, vaga_id, modalidade, funcao, salario, horario_trabalho, data_admissao, entidade_contratante } = parsed.data;
 
   const svc = createServiceClient();
 
@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
       salario,
       horario_trabalho,
       data_admissao,
+      entidade_contratante,
       criado_por: user.id,
       token_expira_em: tokenExpiraEm,
     })

@@ -23,7 +23,7 @@ export async function GET(_request: NextRequest) {
   const [{ data: cvRows, error }, { data: existentes }] = await Promise.all([
     svc
       .from("candidatos_vagas")
-      .select("id, candidato_id, vaga_id, candidatos(id, nome_completo, cargo_pretendido, telefone), vagas(id, titulo, tipo_servico)")
+      .select("id, candidato_id, vaga_id, candidatos(id, nome_completo, cargo_pretendido, telefone), vagas(id, titulo, tipo_servico, cliente_id, clientes(nome, entidade_contratante))")
       .in("etapa", ETAPAS_ELEGIVEIS)
       .order("created_at", { ascending: false }),
     svc.from("admissoes").select("candidato_id, vaga_id"),

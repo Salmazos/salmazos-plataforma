@@ -322,6 +322,7 @@ export const admissaoCreateSchema = z.object({
   salario: coerceNumber.refine((v) => v > 0, "Salário deve ser maior que zero"),
   horario_trabalho: z.string().min(1, "Horário de trabalho é obrigatório"),
   data_admissao: z.string().min(1, "Data de admissão é obrigatória"),
+  entidade_contratante: z.string().min(1, "Entidade contratante é obrigatória"),
 });
 
 export const admissaoUpdateSchema = z.object({
