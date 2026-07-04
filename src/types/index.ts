@@ -289,6 +289,7 @@ export interface CandidatoVaga {
   candidato_id: string;
   etapa: string | null;
   created_at: string;
+  updated_at: string;
   match_score?: number | null;
   match_detalhes?: MatchDetalhes | null;
   match_calculado_em?: string | null;

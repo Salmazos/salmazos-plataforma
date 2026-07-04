@@ -14,7 +14,7 @@ export interface IndicadoresVaga {
   nivel_alerta: NivelAlerta;
 }
 
-const ETAPAS_PIPELINE_ATIVO = [
+export const ETAPAS_PIPELINE_ATIVO = [
   "triagem",
   "entrevista_rh",
   "entrevista_salmazos",

@@ -8,6 +8,7 @@ import ModalAdicionarCandidatoVaga from "./ModalAdicionarCandidatoVaga";
 import ModalReprovacao from "./ModalReprovacao";
 import MatchScoreBadge from "./MatchScoreBadge";
 import RetencaoBadge from "./RetencaoBadge";
+import VagaIndicadoresSection from "./painel/VagaIndicadoresSection";
 import { TIPOS_SERVICO } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
 import type { Vaga, CandidatoVaga, Candidato, MatchDetalhes } from "@/types";
@@ -263,6 +264,9 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
         </svg>
         Voltar às vagas
       </Link>
+
+      {/* Indicadores da vaga */}
+      <VagaIndicadoresSection vaga={vaga} candidatosVaga={candidatosVaga} />
 
       {/* Header card */}
       <div className="card mb-6">
