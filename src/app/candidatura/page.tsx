@@ -213,7 +213,7 @@ export default function BancoTalentosPage() {
           <img
             src="/Salmazos_logo_Amarelo.png"
             alt="Salmazos RH"
-            className="h-12 w-auto object-contain"
+            className="h-[75px] w-auto object-contain"
           />
           <Link
             href="/vagas"

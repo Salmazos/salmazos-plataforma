@@ -48,7 +48,7 @@ export default async function VagasPublicaPage() {
       <header style={{ backgroundColor: "#000", borderBottom: "3px solid #FFD700" }}>
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/Salmazos_logo_Amarelo.png" alt="Salmazos RH" className="h-12 w-auto object-contain" />
+          <img src="/Salmazos_logo_Amarelo.png" alt="Salmazos RH" className="h-[75px] w-auto object-contain" />
           <span className="text-white/60 text-sm hidden sm:block">Vagas disponíveis</span>
         </div>
       </header>

@@ -19,13 +19,13 @@ export default function NavbarPortal({ userEmail }: Props) {
 
   return (
     <header style={{ backgroundColor: "#000", borderBottom: "3px solid #FFD700" }}>
-      <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div className="max-w-5xl mx-auto px-4 h-[74px] flex items-center justify-between">
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/Salmazos_logo_Amarelo.png"
             alt="Salmazos RH"
-            className="h-10 w-auto object-contain"
+            className="h-[63px] w-auto object-contain"
           />
           <span
             className="text-xs font-semibold px-2.5 py-1 rounded-full hidden sm:inline"

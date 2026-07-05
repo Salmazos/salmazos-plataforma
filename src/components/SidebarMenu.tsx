@@ -168,7 +168,7 @@ export default function SidebarMenu({
     >
       {/* Toggle button */}
       <div
-        className="flex items-center px-4 h-14 shrink-0"
+        className="flex items-center px-4 h-[62px] shrink-0"
         style={{ justifyContent: collapsed && !mobileOpen ? "center" : "space-between" }}
       >
         {(!collapsed || mobileOpen) && (
@@ -177,7 +177,7 @@ export default function SidebarMenu({
             <img
               src="/Salmazos_logo_Amarelo.png"
               alt="Salmazos"
-              style={{ height: 32, width: "auto", objectFit: "contain" }}
+              style={{ height: 50, width: "auto", objectFit: "contain" }}
             />
           </Link>
         )}
