@@ -18,7 +18,7 @@
            transition-colors placeholder:text-gray-400 disabled:bg-gray-50 disabled:text-gray-500;
   }
   .btn-primary {
-    @apply bg-black hover:bg-gray-900 text-[#FFB800] font-semibold px-6 py-2.5 rounded-lg
+    @apply bg-black hover:bg-gray-900 text-[#FFD700] font-semibold px-6 py-2.5 rounded-lg
            transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed
            focus:outline-none focus:ring-2 focus:ring-[#FFB800]/30;
   }

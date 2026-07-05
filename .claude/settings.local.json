@@ -101,7 +101,11 @@
       "Bash(echo \"EXIT: $?\")",
       "Bash(grep -n -B3 -A3 \"Olá, {nome\" src/components/admissao/AdmissaoFormClient.tsx)",
       "Bash(git check-ignore *)",
-      "Bash(command -v chromium-cli)"
+      "Bash(command -v chromium-cli)",
+      "Bash(cat tailwind.config.ts)",
+      "Bash(cat tailwind.config.js)",
+      "Bash(xargs grep -ln \"FFD700\\\\|FFCC29\\\\|FFC107\\\\|F5C518\\\\|FFD\" -i)",
+      "Bash(grep -rln \"admissao/ProgressBar\\\\|from \\\\\"\\\\.\\\\/ProgressBar\\\\\"\\\\|from \\\\\"\\\\.\\\\./admissao/ProgressBar\\\\\"\" src --include=\"*.tsx\")"
     ]
   }
 }
