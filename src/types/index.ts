@@ -253,6 +253,23 @@ export interface Cliente {
   created_at: string;
 }
 
+export interface AniversarianteContato {
+  id: string;
+  cliente_id: string | null;
+  empresa_nome: string | null;
+  nome_contato: string;
+  cargo: string | null;
+  data_nascimento: string;
+  email: string | null;
+  telefone: string | null;
+  observacoes: string | null;
+  ativo: boolean;
+  criado_por: string | null;
+  criado_em: string;
+  atualizado_em: string;
+  clientes: { id: string; nome: string } | null;
+}
+
 export type StatusVaga = "aberta" | "fechada" | "cancelada";
 
 export interface Vaga {

@@ -614,3 +614,46 @@ export const fromSolicitacaoSchema = z.object({
 export const storagePathSchema = z.object({
   path: z.string().min(1),
 });
+
+// ── Aniversariantes ──────────────────────────────────────────────────────────
+
+const aniversarianteEmailSchema = z.preprocess(
+  (v) => (v === "" ? null : v),
+  z.string().email("E-mail inválido").nullable().optional()
+);
+
+const aniversarianteBaseSchema = z.object({
+  cliente_id: z.string().uuid().optional().nullable(),
+  empresa_nome: z.string().min(1).optional().nullable(),
+  nome_contato: z.string().min(1, "Nome do contato é obrigatório"),
+  cargo: optStr,
+  data_nascimento: z.string().min(1, "Data de nascimento é obrigatória"),
+  email: aniversarianteEmailSchema,
+  telefone: optStr,
+  observacoes: optStr,
+});
+
+// cliente_id XOR empresa_nome — exatamente um dos dois preenchido, nunca os dois nem nenhum.
+function xorClienteEmpresa(d: { cliente_id?: string | null; empresa_nome?: string | null }): boolean {
+  return Boolean(d.cliente_id) !== Boolean(d.empresa_nome?.trim());
+}
+
+const XOR_MENSAGEM = "Selecione um cliente cadastrado OU informe o nome da empresa — não os dois, nem nenhum.";
+
+export const aniversarianteCreateSchema = aniversarianteBaseSchema.refine(xorClienteEmpresa, {
+  message: XOR_MENSAGEM,
+  path: ["cliente_id"],
+});
+
+export const aniversarianteUpdateSchema = aniversarianteBaseSchema
+  .partial()
+  .extend({ ativo: z.boolean().optional() })
+  .refine((d) => {
+    // Edição parcial: só reforça o XOR se o payload realmente tocou em algum dos dois
+    // campos — uma chamada que só muda "cargo", por exemplo, não precisa reenviar os dois.
+    if (d.cliente_id === undefined && d.empresa_nome === undefined) return true;
+    return xorClienteEmpresa(d);
+  }, {
+    message: XOR_MENSAGEM,
+    path: ["cliente_id"],
+  });

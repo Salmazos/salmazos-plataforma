@@ -110,7 +110,10 @@
       "mcp__claude_ai_Vercel__list_deployments",
       "Bash(date -u -d @$\\(\\(1783522978763/1000\\)\\))",
       "Bash(date -u -d @$\\(\\(1783279948234/1000\\)\\))",
-      "Bash(date -u -d @$\\(\\(1783528524190/1000\\)\\))"
+      "Bash(date -u -d @$\\(\\(1783528524190/1000\\)\\))",
+      "Bash(find src/app/api/cron -type f)",
+      "Bash(grep -A5 '\"crons\"' vercel.json)",
+      "Bash(grep -v \"src\\\\\\\\\\\\\\\\lib\\\\\\\\\\\\\\\\slaChecker.ts\")"
     ]
   }
 }
