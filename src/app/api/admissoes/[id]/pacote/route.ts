@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -17,6 +18,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const acessoNegado = checarPapelAdmissoes(user);
+  if (acessoNegado) return acessoNegado;
 
   const svc = createServiceClient();
 

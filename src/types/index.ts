@@ -70,6 +70,7 @@ export interface AdmissaoDadosPessoais {
   carteira_trabalho_serie: string | null;
   carteira_trabalho_uf: string | null;
   ctps_data_emissao: string | null;
+  possui_ctps_digital: boolean | null;
   cnh_numero: string | null;
   cnh_categoria: string | null;
   cnh_validade: string | null;
@@ -122,6 +123,15 @@ export interface AdmissaoDependente {
   num_livro: string | null;
   num_folha: string | null;
   created_at: string;
+}
+
+export interface AdmissaoAdicional {
+  id: string;
+  admissao_id: string;
+  tipo: string;
+  formato_valor: "percentual" | "fixo";
+  valor: number;
+  criado_em: string;
 }
 
 export interface AdmissaoDocumento {

@@ -314,6 +314,22 @@ export const feeStatusSchema = z.object({
 
 // ── Admissão Digital ─────────────────────────────────────────────────────────
 
+export const admissaoAutorizacaoSindicalCreateSchema = z.object({
+  nome_sindicato: z.string().optional().nullable(),
+  autoriza_assistencial_confederativa: z.boolean(),
+  autoriza_sindical: z.boolean(),
+});
+
+export const admissaoAdicionalSchema = z.object({
+  tipo: z.string().min(1, "Tipo do adicional é obrigatório"),
+  formato_valor: z.enum(["percentual", "fixo"]),
+  valor: coerceNumber.refine((v) => v > 0, "Valor deve ser maior que zero"),
+});
+
+export const admissaoAdicionaisUpdateSchema = z.object({
+  adicionais: z.array(admissaoAdicionalSchema),
+});
+
 export const admissaoCreateSchema = z.object({
   candidato_id: z.string().uuid(),
   vaga_id: z.string().uuid().optional().nullable(),
@@ -323,6 +339,8 @@ export const admissaoCreateSchema = z.object({
   horario_trabalho: z.string().min(1, "Horário de trabalho é obrigatório"),
   data_admissao: z.string().min(1, "Data de admissão é obrigatória"),
   entidade_contratante: z.string().min(1, "Entidade contratante é obrigatória"),
+  adicionais: z.array(admissaoAdicionalSchema).optional(),
+  autorizacao_sindical: admissaoAutorizacaoSindicalCreateSchema.optional(),
 });
 
 export const admissaoUpdateSchema = z.object({
@@ -331,13 +349,6 @@ export const admissaoUpdateSchema = z.object({
     "em_analise", "aprovado", "enviado_contabilidade",
   ]).optional(),
   observacoes_internas: z.string().optional().nullable(),
-});
-
-// Data do exame admissional só é conhecida depois que o exame acontece — diferente dos
-// outros campos de "Dados da Admissão" (função/salário/horário/data), fica editável pelo
-// RH a qualquer momento, mesmo depois do link já ter sido gerado para o candidato.
-export const admissaoDadosPessoaisAdminUpdateSchema = z.object({
-  data_exame_admissional: z.string().optional().nullable(),
 });
 
 const optStr = z.string().optional().nullable();
@@ -369,6 +380,7 @@ export const admissaoDadosPessoaisSchema = z.object({
   carteira_trabalho_serie: optStr,
   carteira_trabalho_uf: optStr,
   ctps_data_emissao: optStr,
+  possui_ctps_digital: z.boolean().optional().nullable(),
   cnh_numero: optStr,
   cnh_categoria: optStr,
   cnh_validade: optStr,
@@ -406,6 +418,11 @@ export const admissaoDadosPessoaisSchema = z.object({
   tera_adiantamento: z.boolean().optional().nullable(),
 });
 
+// Edição pelo analista no painel — poder de edição total sobre os mesmos campos que o
+// candidato preenche (inclui data_exame_admissional, que já era exclusiva do RH). Substituiu
+// o antigo admissaoDadosPessoaisAdminUpdateSchema, que só cobria data_exame_admissional.
+export const admissaoDadosPessoaisAdminUpdateSchema = admissaoDadosPessoaisSchema.partial();
+
 export const admissaoVtLinhaSchema = z.object({
   onibus_viacao: optStr,
   percurso: optStr,
@@ -432,7 +449,6 @@ export const admissaoAutorizacaoSindicalSchema = z.object({
 export const admissaoTokenUpdateSchema = z.object({
   dados_pessoais: admissaoDadosPessoaisSchema.partial().optional(),
   vale_transporte: admissaoValeTransporteSchema.partial().optional(),
-  autorizacao_sindical: admissaoAutorizacaoSindicalSchema.partial().optional(),
   submit: z.boolean().optional(),
   lgpd_aceite: z.boolean().optional(),
 }).refine((d) => !d.submit || d.lgpd_aceite === true, {
@@ -458,8 +474,26 @@ export const admissaoDependenteCreateSchema = z.object({
   num_folha: optStr,
 });
 
+export const admissaoDependenteUpdateSchema = admissaoDependenteCreateSchema.partial();
+
+// "Forçar geração" (Parte 2 — edição total do analista): gera o pacote mesmo com
+// documentos obrigatórios pendentes/rejeitados, desde que justificado — refine garante que
+// a justificativa não chega em branco quando forcar=true (defesa redundante à checagem no
+// próprio componente, que já desabilita o botão sem o campo preenchido).
+export const admissaoGerarPdfSchema = z.object({
+  forcar: z.boolean().optional(),
+  justificativa: z.string().optional(),
+}).refine((d) => !d.forcar || !!d.justificativa?.trim(), {
+  message: "Justificativa é obrigatória para forçar a geração do pacote.",
+  path: ["justificativa"],
+});
+
 export const admissaoDocumentoConfirmarSchema = z.object({
   storage_path: z.string().min(1),
+  // Só usado pra reenvio de uma linha específica em tipos que aceitam múltiplos arquivos
+  // (ex.: documentos de dependente) — sem isso, o backend não sabe qual das várias linhas
+  // do mesmo tipo_documento deve ser substituída em vez de virar uma linha nova.
+  doc_id: z.string().uuid().optional(),
 });
 
 export const admissaoDocumentoRevisarSchema = z.object({

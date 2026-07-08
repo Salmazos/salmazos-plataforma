@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, admissaoUpdateSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
+import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -15,6 +16,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const acessoNegado = checarPapelAdmissoes(user);
+  if (acessoNegado) return acessoNegado;
 
   const svc = createServiceClient();
 
@@ -26,10 +29,11 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });
 
-  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: auditLogs }] = await Promise.all([
+  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: adicionais }, { data: auditLogs }] = await Promise.all([
     svc.from("admissao_dados_pessoais").select("*").eq("admissao_id", id).maybeSingle(),
     svc.from("admissao_dependentes").select("*").eq("admissao_id", id).order("created_at", { ascending: true }),
     svc.from("admissao_documentos").select("*").eq("admissao_id", id).order("created_at", { ascending: true }),
+    svc.from("admissao_adicionais").select("*").eq("admissao_id", id).order("criado_em", { ascending: true }),
     svc.from("audit_logs").select("id, created_at, usuario_nome, acao, detalhes").eq("entidade", "admissoes").eq("entidade_id", id).order("created_at", { ascending: false }),
   ]);
 
@@ -39,6 +43,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
       dados_pessoais: dadosPessoais ?? null,
       dependentes: dependentes ?? [],
       documentos: documentos ?? [],
+      adicionais: adicionais ?? [],
       audit_logs: auditLogs ?? [],
     },
   });
@@ -52,6 +57,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const acessoNegado = checarPapelAdmissoes(user);
+  if (acessoNegado) return acessoNegado;
 
   const body = await request.json();
   const parsed = parseBody(admissaoUpdateSchema, body);

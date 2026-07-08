@@ -14,7 +14,7 @@ export const DOCUMENTOS_ADMISSAO: DocumentoAdmissaoDef[] = [
   { tipo_documento: "titulo_eleitor", label: "Título de Eleitor", obrigatorio: true, condicional: null },
   { tipo_documento: "cartao_sus", label: "Cartão do SUS", obrigatorio: true, condicional: null },
   { tipo_documento: "rg", label: "Identidade RG", obrigatorio: true, condicional: null },
-  { tipo_documento: "reservista", label: "Reservista", obrigatorio: true, condicional: "masculino" },
+  { tipo_documento: "reservista", label: "Reservista", obrigatorio: false, condicional: "masculino" },
   { tipo_documento: "certidao_civil", label: "Certidão de Nascimento/Casamento/União Estável", obrigatorio: true, condicional: null },
   { tipo_documento: "comprovante_escolaridade", label: "Comprovante de Escolaridade", obrigatorio: true, condicional: null },
   { tipo_documento: "pis_pasep", label: "Cartão PIS/PASEP", obrigatorio: true, condicional: null },

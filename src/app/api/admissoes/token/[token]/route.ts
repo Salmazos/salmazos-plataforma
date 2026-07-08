@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { parseBody, admissaoTokenUpdateSchema } from "@/lib/schemas";
 import { resolveAdmissaoByToken } from "@/lib/admissaoToken";
+import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
 
 interface Params {
   params: Promise<{ token: string }>;
@@ -33,12 +34,11 @@ export async function GET(_request: NextRequest, { params }: Params) {
       .eq("id", admissao.id);
   }
 
-  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: valeTransporte }, { data: autorizacaoSindical }] = await Promise.all([
+  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: valeTransporte }] = await Promise.all([
     svc.from("admissao_dados_pessoais").select("*").eq("admissao_id", admissao.id).maybeSingle(),
     svc.from("admissao_dependentes").select("*").eq("admissao_id", admissao.id).order("created_at", { ascending: true }),
-    svc.from("admissao_documentos").select("id, tipo_documento, status, obrigatorio, condicional, motivo_rejeicao").eq("admissao_id", admissao.id).order("created_at", { ascending: true }),
+    svc.from("admissao_documentos").select("id, tipo_documento, status, obrigatorio, condicional, motivo_rejeicao, storage_path").eq("admissao_id", admissao.id).order("created_at", { ascending: true }),
     svc.from("admissao_vale_transporte").select("*, admissao_vt_linhas(*)").eq("admissao_id", admissao.id).order("ordem", { referencedTable: "admissao_vt_linhas", ascending: true }).maybeSingle(),
-    svc.from("admissao_autorizacao_sindical").select("*").eq("admissao_id", admissao.id).maybeSingle(),
   ]);
 
   return NextResponse.json({
@@ -48,7 +48,6 @@ export async function GET(_request: NextRequest, { params }: Params) {
       dependentes: dependentes ?? [],
       documentos: documentos ?? [],
       vale_transporte: valeTransporte ?? null,
-      autorizacao_sindical: autorizacaoSindical ?? null,
     },
   });
 }
@@ -64,7 +63,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const body = await request.json();
   const parsed = parseBody(admissaoTokenUpdateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
-  const { dados_pessoais, vale_transporte, autorizacao_sindical, submit, lgpd_aceite } = parsed.data;
+  const { dados_pessoais, vale_transporte, submit, lgpd_aceite } = parsed.data;
 
   // Defesa redundante ao .refine() do schema — se o envio final não vier com o
   // consentimento LGPD marcado, bloqueia aqui também.
@@ -77,6 +76,22 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       .from("admissao_dados_pessoais")
       .upsert({ admissao_id: admissaoId, ...dados_pessoais }, { onConflict: "admissao_id" });
     if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 400 });
+
+    // O sexo só é conhecido depois que o candidato preenche esse passo do
+    // formulário — os documentos condicionados a "masculino" (ex.: Reservista)
+    // nascem com obrigatorio=false em DOCUMENTOS_ADMISSAO e só passam a ser
+    // exigidos aqui, quando dá pra saber se a condição se aplica.
+    if (dados_pessoais.sexo === "M" || dados_pessoais.sexo === "F") {
+      const tiposMasculino = DOCUMENTOS_ADMISSAO.filter((d) => d.condicional === "masculino").map((d) => d.tipo_documento);
+      if (tiposMasculino.length > 0) {
+        const { error: docsSyncError } = await svc
+          .from("admissao_documentos")
+          .update({ obrigatorio: dados_pessoais.sexo === "M" })
+          .eq("admissao_id", admissaoId)
+          .in("tipo_documento", tiposMasculino);
+        if (docsSyncError) return NextResponse.json({ error: docsSyncError.message }, { status: 400 });
+      }
+    }
   }
 
   if (vale_transporte && Object.keys(vale_transporte).length > 0) {
@@ -109,13 +124,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         if (linhasError) return NextResponse.json({ error: linhasError.message }, { status: 400 });
       }
     }
-  }
-
-  if (autorizacao_sindical && Object.keys(autorizacao_sindical).length > 0) {
-    const { error: asError } = await svc
-      .from("admissao_autorizacao_sindical")
-      .upsert({ admissao_id: admissaoId, ...autorizacao_sindical }, { onConflict: "admissao_id" });
-    if (asError) return NextResponse.json({ error: asError.message }, { status: 400 });
   }
 
   const statusUpdates: Record<string, unknown> = {};

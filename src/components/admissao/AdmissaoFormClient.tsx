@@ -11,13 +11,13 @@ import PassoDadosBancarios from "./PassoDadosBancarios";
 import PassoSituacaoTrabalhista from "./PassoSituacaoTrabalhista";
 import PassoDependentes from "./PassoDependentes";
 import PassoValeTransporte from "./PassoValeTransporte";
-import PassoAutorizacaoSindical from "./PassoAutorizacaoSindical";
 import PassoUploadDocumentos from "./PassoUploadDocumentos";
 import PassoRevisao from "./PassoRevisao";
 import { botaoPrimarioStyle, botaoSecundarioStyle } from "./styles";
 import { WHATSAPP_SUPORTE } from "@/lib/admissaoConstants";
+import { STATUS_JA_ENVIADO } from "@/lib/admissaoStatus";
 
-const TOTAL_PASSOS = 10;
+const TOTAL_PASSOS = 9;
 
 export interface FormState {
   nome_completo: string;
@@ -42,6 +42,7 @@ export interface FormState {
   carteira_trabalho_serie: string;
   carteira_trabalho_uf: string;
   ctps_data_emissao: string;
+  possui_ctps_digital: boolean;
   cnh_numero: string;
   cnh_categoria: string;
   cnh_validade: string;
@@ -75,6 +76,7 @@ const FORM_VAZIO: FormState = {
   cpf: "", rg_numero: "", rg_orgao_emissor: "", rg_uf: "", rg_data_emissao: "",
   titulo_eleitor: "", zona_eleitoral: "", secao_eleitoral: "", pis_pasep: "", pis_data_cadastramento: "",
   carteira_trabalho_numero: "", carteira_trabalho_serie: "", carteira_trabalho_uf: "", ctps_data_emissao: "",
+  possui_ctps_digital: false,
   cnh_numero: "", cnh_categoria: "", cnh_validade: "", cnh_data_emissao: "", cnh_uf: "", reservista: "",
   nome_mae: "", nacionalidade_mae: "", nome_pai: "", nacionalidade_pai: "", grau_instrucao: "",
   endereco_cep: "", endereco_logradouro: "", endereco_numero: "", endereco_complemento: "",
@@ -116,16 +118,6 @@ const VALE_TRANSPORTE_VAZIO: ValeTransporteState = {
   opcao: "", dias_semana: "", bairro_cidade_trabalho: "", linhas: [], termos_aceitos: false,
 };
 
-export interface AutorizacaoSindicalState {
-  nome_sindicato: string;
-  autoriza_assistencial_confederativa: string; // "sim" | "nao" | ""
-  autoriza_sindical: string; // "sim" | "nao" | ""
-}
-
-const AUTORIZACAO_SINDICAL_VAZIO: AutorizacaoSindicalState = {
-  nome_sindicato: "", autoriza_assistencial_confederativa: "", autoriza_sindical: "",
-};
-
 // Autocomplete entre passos: se o campo já tem um valor salvo, mantém — senão usa a
 // sugestão vinda de outro passo já preenchido (ex: bairro/cidade do endereço residencial
 // sugerindo o local de trabalho). Continua editável; a sugestão só entra quando o campo
@@ -141,6 +133,7 @@ export interface DocumentoToken {
   obrigatorio: boolean;
   condicional: string | null;
   motivo_rejeicao: string | null;
+  storage_path: string | null;
 }
 
 interface AdmissaoTokenData {
@@ -151,14 +144,12 @@ interface AdmissaoTokenData {
   vagas: { titulo: string } | null;
 }
 
-const STATUS_JA_ENVIADO = ["aguardando_analise", "em_analise", "aprovado", "enviado_contabilidade"];
-
 // Campos vazios precisam virar null (não "") antes de ir pro backend: os campos de
 // enum (sexo, estado_civil, grau_instrucao, tipo_conta) rejeitam "" no zod, e os campos
 // de data (data_nascimento, rg_data_emissao, cnh_validade) rejeitam "" no Postgres (DATE).
-function sanitizarForm(form: FormState): Record<string, string | null> {
+function sanitizarForm(form: FormState): Record<string, string | boolean | null> {
   return Object.fromEntries(
-    Object.entries(form).map(([k, v]) => [k, v.trim() === "" ? null : v])
+    Object.entries(form).map(([k, v]) => [k, typeof v === "string" ? (v.trim() === "" ? null : v) : v])
   );
 }
 
@@ -181,14 +172,6 @@ function sanitizarValeTransporte(vt: ValeTransporteState): Record<string, unknow
   };
 }
 
-function sanitizarAutorizacaoSindical(as: AutorizacaoSindicalState): Record<string, unknown> {
-  return {
-    nome_sindicato: as.nome_sindicato.trim() || null,
-    autoriza_assistencial_confederativa: as.autoriza_assistencial_confederativa === "sim" ? true : as.autoriza_assistencial_confederativa === "nao" ? false : null,
-    autoriza_sindical: as.autoriza_sindical === "sim" ? true : as.autoriza_sindical === "nao" ? false : null,
-  };
-}
-
 function sanitizarSituacaoTrabalhista(st: SituacaoTrabalhistaState): Record<string, boolean | null> {
   const simNao = (v: string) => (v === "sim" ? true : v === "nao" ? false : null);
   return {
@@ -204,19 +187,21 @@ function sanitizarSituacaoTrabalhista(st: SituacaoTrabalhistaState): Record<stri
 
 function validarPasso(
   passo: number, form: FormState, isMotorista: boolean, possuiDependentes: boolean, dependentesCount: number,
-  valeTransporte: ValeTransporteState, autorizacaoSindical: AutorizacaoSindicalState,
+  valeTransporte: ValeTransporteState,
   situacaoTrabalhista: SituacaoTrabalhistaState,
 ): string[] {
   const faltando: string[] = [];
-  const req = (campo: keyof FormState) => { if (!form[campo]?.trim()) faltando.push(campo); };
+  const req = (campo: keyof FormState) => {
+    const v = form[campo];
+    if (typeof v === "string" ? !v.trim() : !v) faltando.push(campo);
+  };
 
   if (passo === 1) {
     req("nome_completo"); req("data_nascimento"); req("sexo"); req("estado_civil");
     req("naturalidade"); req("cpf"); req("rg_numero"); req("rg_orgao_emissor");
     req("rg_uf"); req("rg_data_emissao"); req("nome_mae"); req("grau_instrucao");
   } else if (passo === 2) {
-    req("pis_pasep"); req("carteira_trabalho_numero"); req("carteira_trabalho_serie");
-    req("carteira_trabalho_uf"); req("titulo_eleitor");
+    req("pis_pasep"); req("titulo_eleitor");
     if (form.sexo === "M") req("reservista");
     if (isMotorista) { req("cnh_numero"); req("cnh_categoria"); req("cnh_validade"); }
   } else if (passo === 3) {
@@ -240,11 +225,37 @@ function validarPasso(
       if (!linhaValida) faltando.push("vt_linhas");
       if (!valeTransporte.termos_aceitos) faltando.push("vt_termos_aceitos");
     }
-  } else if (passo === 8) {
-    if (!autorizacaoSindical.autoriza_assistencial_confederativa) faltando.push("as_assistencial");
-    if (!autorizacaoSindical.autoriza_sindical) faltando.push("as_sindical");
   }
   return faltando;
+}
+
+// Ponto de entrada ao reabrir o link: em vez de sempre recomeçar do Passo 1, calcula o
+// primeiro passo que realmente precisa de atenção. Documento rejeitado tem prioridade
+// máxima (o candidato já passou pelos passos 1-7 antes pra ter chegado no upload, então
+// não faz sentido mandá-lo de volta pro início só porque um documento foi rejeitado depois).
+function calcularPassoInicial(
+  form: FormState, isMotorista: boolean, possuiDependentes: boolean, dependentesCount: number,
+  valeTransporte: ValeTransporteState, situacaoTrabalhista: SituacaoTrabalhistaState,
+  documentos: DocumentoToken[],
+): number {
+  if (documentos.some((d) => d.status === "rejeitado")) return 8;
+
+  for (let p = 1; p <= 7; p++) {
+    if (validarPasso(p, form, isMotorista, possuiDependentes, dependentesCount, valeTransporte, situacaoTrabalhista).length > 0) {
+      return p;
+    }
+  }
+
+  const obrigatoriosVisiveis = documentos.filter((d) => {
+    if (!d.obrigatorio) return false;
+    if (d.condicional === "masculino") return form.sexo === "M";
+    if (d.condicional === "motorista") return isMotorista;
+    if (d.condicional === "dependente") return possuiDependentes;
+    return true;
+  });
+  if (obrigatoriosVisiveis.some((d) => d.status === "pendente")) return 8;
+
+  return 9;
 }
 
 export default function AdmissaoFormClient({ token }: { token: string }) {
@@ -262,7 +273,6 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
   const [dependentes, setDependentes] = useState<AdmissaoDependente[]>([]);
   const [documentos, setDocumentos] = useState<DocumentoToken[]>([]);
   const [valeTransporte, setValeTransporte] = useState<ValeTransporteState>(VALE_TRANSPORTE_VAZIO);
-  const [autorizacaoSindical, setAutorizacaoSindical] = useState<AutorizacaoSindicalState>(AUTORIZACAO_SINDICAL_VAZIO);
   const [situacaoTrabalhista, setSituacaoTrabalhista] = useState<SituacaoTrabalhistaState>(SITUACAO_TRABALHISTA_VAZIO);
   const [lgpdAceite, setLgpdAceite] = useState(false);
 
@@ -290,17 +300,25 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
           return;
         }
 
+        let formCompleto = FORM_VAZIO;
+        let isMotoristaCalc = false;
+        let situacaoTrabalhistaCalc = SITUACAO_TRABALHISTA_VAZIO;
         if (data.dados_pessoais) {
-          setForm((prev) => ({
-            ...prev,
+          formCompleto = {
+            ...FORM_VAZIO,
             ...Object.fromEntries(
-              Object.entries(data.dados_pessoais).filter(([k, v]) => k in prev && v != null).map(([k, v]) => [k, String(v)])
+              Object.entries(data.dados_pessoais)
+                .filter(([k, v]) => k in FORM_VAZIO && v != null && k !== "possui_ctps_digital")
+                .map(([k, v]) => [k, String(v)])
             ),
-          }));
-          setIsMotorista(!!data.dados_pessoais.cnh_numero);
+            possui_ctps_digital: !!data.dados_pessoais.possui_ctps_digital,
+          };
+          setForm(formCompleto);
+          isMotoristaCalc = !!data.dados_pessoais.cnh_numero;
+          setIsMotorista(isMotoristaCalc);
 
           const simNao = (v: boolean | null | undefined) => (v === true ? "sim" : v === false ? "nao" : "");
-          setSituacaoTrabalhista({
+          situacaoTrabalhistaCalc = {
             recebendo_seguro_desemprego: simNao(data.dados_pessoais.recebendo_seguro_desemprego),
             primeiro_emprego: simNao(data.dados_pessoais.primeiro_emprego),
             trabalhou_empresa_antes: simNao(data.dados_pessoais.trabalhou_empresa_antes),
@@ -308,18 +326,22 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
             dependente_ir: simNao(data.dados_pessoais.dependente_ir),
             dependente_salario_familia: simNao(data.dados_pessoais.dependente_salario_familia),
             tera_adiantamento: simNao(data.dados_pessoais.tera_adiantamento),
-          });
+          };
+          setSituacaoTrabalhista(situacaoTrabalhistaCalc);
         }
-        setDependentes(data.dependentes ?? []);
-        setPossuiDependentes((data.dependentes ?? []).length > 0);
-        setDocumentos(data.documentos ?? []);
+        const dependentesCalc: AdmissaoDependente[] = data.dependentes ?? [];
+        const possuiDependentesCalc = dependentesCalc.length > 0;
+        setDependentes(dependentesCalc);
+        setPossuiDependentes(possuiDependentesCalc);
+        const documentosCalc: DocumentoToken[] = data.documentos ?? [];
+        setDocumentos(documentosCalc);
 
         // Autocomplete: bairro/cidade do local de trabalho sugerido a partir do
         // endereço residencial, só quando o campo ainda não foi salvo antes.
         const bairroCidadeResidencial = [data.dados_pessoais?.endereco_bairro, data.dados_pessoais?.endereco_cidade]
           .filter(Boolean).join(", ");
         const vt = data.vale_transporte;
-        setValeTransporte({
+        const valeTransporteCalc: ValeTransporteState = {
           opcao: vt?.opcao ?? "",
           dias_semana: vt?.dias_semana ?? "",
           bairro_cidade_trabalho: sugerirSeVazio(vt?.bairro_cidade_trabalho, bairroCidadeResidencial),
@@ -331,14 +353,18 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
               valor_total_diario: l.valor_total_diario != null ? String(l.valor_total_diario) : "",
             })),
           termos_aceitos: vt?.termos_aceitos === true,
-        });
+        };
+        setValeTransporte(valeTransporteCalc);
 
-        const as = data.autorizacao_sindical;
-        setAutorizacaoSindical({
-          nome_sindicato: as?.nome_sindicato ?? "",
-          autoriza_assistencial_confederativa: as?.autoriza_assistencial_confederativa === true ? "sim" : as?.autoriza_assistencial_confederativa === false ? "nao" : "",
-          autoriza_sindical: as?.autoriza_sindical === true ? "sim" : as?.autoriza_sindical === false ? "nao" : "",
-        });
+        // Reabrindo o link (status já saiu de "aguardando_candidato" em algum momento):
+        // pula direto pro primeiro passo com pendência real em vez de recomeçar do 1.
+        if (data.admissao.status !== "aguardando_candidato") {
+          setPasso(calcularPassoInicial(
+            formCompleto, isMotoristaCalc, possuiDependentesCalc, dependentesCalc.length,
+            valeTransporteCalc, situacaoTrabalhistaCalc, documentosCalc,
+          ));
+          setIniciado(true);
+        }
       } catch {
         setErroCarregamento("Não foi possível carregar seus dados. Verifique sua conexão e tente novamente.");
       } finally {
@@ -355,10 +381,6 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
     setValeTransporte((prev) => ({ ...prev, [campo]: valor }));
   }, []);
 
-  const setCampoAs = useCallback(<K extends keyof AutorizacaoSindicalState>(campo: K, valor: AutorizacaoSindicalState[K]) => {
-    setAutorizacaoSindical((prev) => ({ ...prev, [campo]: valor }));
-  }, []);
-
   const setCampoSt = useCallback(<K extends keyof SituacaoTrabalhistaState>(campo: K, valor: SituacaoTrabalhistaState[K]) => {
     setSituacaoTrabalhista((prev) => ({ ...prev, [campo]: valor }));
   }, []);
@@ -373,7 +395,6 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
         body: JSON.stringify({
           dados_pessoais: { ...sanitizarForm(form), ...sanitizarSituacaoTrabalhista(situacaoTrabalhista) },
           vale_transporte: sanitizarValeTransporte(valeTransporte),
-          autorizacao_sindical: sanitizarAutorizacaoSindical(autorizacaoSindical),
         }),
       });
       if (!res.ok) {
@@ -392,10 +413,10 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
     } finally {
       setSalvando(false);
     }
-  }, [token, form, valeTransporte, autorizacaoSindical, situacaoTrabalhista]);
+  }, [token, form, valeTransporte, situacaoTrabalhista]);
 
   const avancar = async () => {
-    const faltando = validarPasso(passo, form, isMotorista, possuiDependentes, dependentes.length, valeTransporte, autorizacaoSindical, situacaoTrabalhista);
+    const faltando = validarPasso(passo, form, isMotorista, possuiDependentes, dependentes.length, valeTransporte, situacaoTrabalhista);
     if (faltando.length > 0) {
       setErrosVisiveis(new Set(faltando));
       return;
@@ -422,7 +443,6 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
         body: JSON.stringify({
           dados_pessoais: { ...sanitizarForm(form), ...sanitizarSituacaoTrabalhista(situacaoTrabalhista) },
           vale_transporte: sanitizarValeTransporte(valeTransporte),
-          autorizacao_sindical: sanitizarAutorizacaoSindical(autorizacaoSindical),
           submit: true,
           lgpd_aceite: lgpdAceite,
         }),
@@ -566,21 +586,16 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
           />
         )}
         {passo === 8 && (
-          <PassoAutorizacaoSindical
-            autorizacaoSindical={autorizacaoSindical} setCampo={setCampoAs} errosVisiveis={errosVisiveis}
-          />
-        )}
-        {passo === 9 && (
           <PassoUploadDocumentos
             token={token}
             documentos={documentos} setDocumentos={setDocumentos}
             sexo={form.sexo} isMotorista={isMotorista} possuiDependentes={possuiDependentes}
           />
         )}
-        {passo === 10 && (
+        {passo === 9 && (
           <PassoRevisao
             form={form} dependentes={dependentes} documentos={documentos}
-            valeTransporte={valeTransporte} autorizacaoSindical={autorizacaoSindical}
+            valeTransporte={valeTransporte}
             situacaoTrabalhista={situacaoTrabalhista}
             sexo={form.sexo} isMotorista={isMotorista} possuiDependentes={possuiDependentes}
             lgpdAceite={lgpdAceite} setLgpdAceite={setLgpdAceite}

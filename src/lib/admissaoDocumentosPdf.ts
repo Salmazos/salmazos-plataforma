@@ -1,5 +1,5 @@
 import type { PdfWriter } from "./pdfWriter";
-import { GRAY } from "./pdfWriter";
+import { GRAY, DARK } from "./pdfWriter";
 import { ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, TERMOS_VALE_TRANSPORTE_TEXTO } from "./admissaoConstants";
 
 function optLabel(options: { value: string; label: string }[], value: string | null | undefined): string {
@@ -26,6 +26,12 @@ function optaValeTransporte(opcao: string | null | undefined): string {
 }
 
 // ── Ficha Cadastral de Funcionário ──────────────────────────────────────────
+
+export interface FichaCadastralAdicional {
+  tipo: string;
+  formato_valor: "percentual" | "fixo";
+  valor: number;
+}
 
 export interface FichaCadastralDados {
   funcao?: string | null;
@@ -58,6 +64,7 @@ export interface FichaCadastralDados {
   carteira_trabalho_serie?: string | null;
   carteira_trabalho_uf?: string | null;
   ctps_data_emissao?: string | null;
+  possui_ctps_digital?: boolean | null;
   cnh_numero?: string | null;
   cnh_categoria?: string | null;
   cnh_validade?: string | null;
@@ -92,6 +99,7 @@ export interface FichaCadastralDados {
   opta_vale_transporte?: string | null; // admissao_vale_transporte.opcao (cru — Sim/Não calculado aqui dentro)
   autoriza_sindical?: boolean | null; // admissao_autorizacao_sindical.autoriza_sindical
   possui_dependentes?: boolean | null; // calculado pelo chamador (dependentes.length > 0) — null = ainda não se sabe (formulário em branco)
+  adicionais?: FichaCadastralAdicional[]; // admissao_adicionais — preenchidos pelo analista, não pelo candidato
 }
 
 export interface FichaCadastralDependente {
@@ -124,6 +132,15 @@ export function desenharFichaCadastral(w: PdfWriter, d: FichaCadastralDados, dep
     { label: "Horário de trabalho", value: d.horario_trabalho },
     { label: "Data de admissão", value: d.data_admissao },
   ]);
+
+  if (d.adicionais && d.adicionais.length > 0) {
+    w.y -= 2;
+    w.drawText("Adicionais:", w.bold, 9, GRAY);
+    for (const ad of d.adicionais) {
+      w.drawText(`• ${ad.tipo} — ${ad.formato_valor === "percentual" ? `${ad.valor.toLocaleString("pt-BR")}%` : moeda(ad.valor)}`, w.regular, 9, DARK);
+    }
+    w.y -= 4;
+  }
 
   w.sectionTitle("Dados Pessoais");
   w.formField("Nome completo", d.nome_completo);
@@ -172,12 +189,15 @@ export function desenharFichaCadastral(w: PdfWriter, d: FichaCadastralDados, dep
     { label: "Data de cadastramento do PIS", value: d.pis_data_cadastramento },
   ]);
   w.formFieldRow([
-    { label: "CTPS número", value: d.carteira_trabalho_numero },
-    { label: "CTPS série", value: d.carteira_trabalho_serie },
-    { label: "CTPS UF", value: d.carteira_trabalho_uf },
+    { label: "Possui CTPS Digital?", value: simNao(d.possui_ctps_digital) },
   ]);
   w.formFieldRow([
-    { label: "CTPS data de emissão", value: d.ctps_data_emissao },
+    { label: "CTPS Física - número", value: d.carteira_trabalho_numero },
+    { label: "CTPS Física - série", value: d.carteira_trabalho_serie },
+    { label: "CTPS Física - UF", value: d.carteira_trabalho_uf },
+  ]);
+  w.formFieldRow([
+    { label: "CTPS Física - data de emissão", value: d.ctps_data_emissao },
     { label: "Reservista", value: d.reservista },
   ]);
   w.formFieldRow([
@@ -285,6 +305,7 @@ export interface AutorizacaoSindicalDados {
   rg_numero?: string | null;
   carteira_trabalho_numero?: string | null;
   carteira_trabalho_serie?: string | null;
+  possui_ctps_digital?: boolean | null;
   nome_sindicato?: string | null;
   autoriza_assistencial_confederativa?: boolean | null;
   autoriza_sindical?: boolean | null;
@@ -310,12 +331,20 @@ export function desenharAutorizacaoSindical(w: PdfWriter, d: AutorizacaoSindical
   const ctpsSerie = d.carteira_trabalho_serie?.trim() || "______";
   const empresa = d.empresa_razao_social?.trim() || "_______________________________________________";
   const cnpj = d.empresa_cnpj?.trim() || "__________________";
+  // CTPS Digital não tem número/série no formato antigo — se o candidato marcou que
+  // usa a digital e não preencheu a física, referencia pelo CPF em vez de imprimir
+  // linhas em branco que sugeririam CTPS física não preenchida.
+  const usaCtpsDigital = d.possui_ctps_digital === true && !d.carteira_trabalho_numero?.trim();
   // Quebrado em várias linhas curtas de propósito: nome e razão social podem ser longos
   // o bastante pra estourar a largura da página numa linha só (já vimos isso acontecer
   // na validação — o CNPJ sumia, cortado silenciosamente fora da área visível).
   w.drawText(`Eu, ${nome},`, w.regular, 9);
   w.drawText(`portador(a) do CPF ${cpf}, RG nº ${rg},`, w.regular, 9);
-  w.drawText(`CTPS nº ${ctpsNum} série ${ctpsSerie},`, w.regular, 9);
+  if (usaCtpsDigital) {
+    w.drawText(`CTPS Digital (vinculada ao CPF ${cpf}),`, w.regular, 9);
+  } else {
+    w.drawText(`CTPS nº ${ctpsNum} série ${ctpsSerie},`, w.regular, 9);
+  }
   w.drawText(`admitido(a) por ${empresa}`, w.regular, 9);
   w.drawText(`(CNPJ ${cnpj}),`, w.regular, 9);
   w.y -= 4;

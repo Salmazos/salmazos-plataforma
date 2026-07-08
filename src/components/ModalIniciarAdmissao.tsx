@@ -27,6 +27,12 @@ interface Props {
   onCriado: () => void;
 }
 
+interface AdicionalForm {
+  tipo: string;
+  valor: string;
+  formato_valor: "percentual" | "fixo";
+}
+
 function modalidadeDefault(tipoServico: string | null | undefined): string {
   if (tipoServico === "mao_obra_temporaria") return "MOT";
   if (tipoServico === "terceirizacao") return "terceirizacao";
@@ -65,6 +71,10 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
   const [horarioTrabalho, setHorarioTrabalho] = useState("");
   const [dataAdmissao, setDataAdmissao] = useState("");
   const [entidadeContratante, setEntidadeContratante] = useState("");
+  const [adicionais, setAdicionais] = useState<AdicionalForm[]>([]);
+  const [nomeSindicato, setNomeSindicato] = useState("");
+  const [autorizaAssistencial, setAutorizaAssistencial] = useState<"" | "sim" | "nao">("");
+  const [autorizaSindical, setAutorizaSindical] = useState<"" | "sim" | "nao">("");
 
   useEffect(() => {
     if (!isOpen) return;
@@ -78,6 +88,10 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
     setHorarioTrabalho("");
     setDataAdmissao("");
     setEntidadeContratante("");
+    setAdicionais([]);
+    setNomeSindicato("");
+    setAutorizaAssistencial("");
+    setAutorizaSindical("");
     setCarregando(true);
     fetch("/api/admissoes/candidatos-elegiveis")
       .then((r) => r.json())
@@ -97,7 +111,22 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
     setEntidadeContratante(c.vagas?.clientes?.entidade_contratante ?? "");
   };
 
-  const dadosValidos = Boolean(funcao.trim() && parseSalario(salario) > 0 && horarioTrabalho.trim() && dataAdmissao && entidadeContratante);
+  const dadosValidos = Boolean(
+    funcao.trim() && parseSalario(salario) > 0 && horarioTrabalho.trim() && dataAdmissao && entidadeContratante
+      && autorizaAssistencial && autorizaSindical
+  );
+
+  const adicionarLinhaAdicional = () => {
+    setAdicionais((prev) => [...prev, { tipo: "", valor: "", formato_valor: "percentual" }]);
+  };
+
+  const removerLinhaAdicional = (idx: number) => {
+    setAdicionais((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const atualizarLinhaAdicional = <K extends keyof AdicionalForm>(idx: number, campo: K, valor: AdicionalForm[K]) => {
+    setAdicionais((prev) => prev.map((a, i) => (i === idx ? { ...a, [campo]: valor } : a)));
+  };
 
   const handleContinuar = () => {
     if (!selecionado) return;
@@ -127,6 +156,14 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
           horario_trabalho: horarioTrabalho.trim(),
           data_admissao: dataAdmissao,
           entidade_contratante: entidadeContratante,
+          adicionais: adicionais
+            .filter((a) => a.tipo.trim() && parseSalario(a.valor) > 0)
+            .map((a) => ({ tipo: a.tipo.trim(), formato_valor: a.formato_valor, valor: parseSalario(a.valor) })),
+          autorizacao_sindical: {
+            nome_sindicato: nomeSindicato.trim() || null,
+            autoriza_assistencial_confederativa: autorizaAssistencial === "sim",
+            autoriza_sindical: autorizaSindical === "sim",
+          },
         }),
       });
       const json = await res.json();
@@ -281,6 +318,76 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
                 onChange={(e) => setDataAdmissao(e.target.value)}
                 className="input-field"
               />
+            </div>
+
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">Adicionais</label>
+                <button type="button" onClick={adicionarLinhaAdicional} className="text-xs font-semibold" style={{ color: "#B45309" }}>
+                  + Adicionar
+                </button>
+              </div>
+              {adicionais.length === 0 ? (
+                <p className="text-xs text-gray-400">Nenhum adicional. Opcional — ex: insalubridade, periculosidade, assiduidade.</p>
+              ) : (
+                adicionais.map((a, idx) => (
+                  <div key={idx} className="flex gap-2 items-center mb-2">
+                    <input
+                      type="text" placeholder="Tipo (ex: Insalubridade)" value={a.tipo}
+                      onChange={(e) => atualizarLinhaAdicional(idx, "tipo", e.target.value)}
+                      className="input-field flex-1 text-sm"
+                    />
+                    <input
+                      type="text" inputMode="decimal" placeholder="Valor" value={a.valor}
+                      onChange={(e) => atualizarLinhaAdicional(idx, "valor", e.target.value)}
+                      className="input-field text-sm" style={{ width: 90 }}
+                    />
+                    <select
+                      value={a.formato_valor}
+                      onChange={(e) => atualizarLinhaAdicional(idx, "formato_valor", e.target.value as "percentual" | "fixo")}
+                      className="input-field text-sm" style={{ width: 70 }}
+                    >
+                      <option value="percentual">%</option>
+                      <option value="fixo">R$</option>
+                    </select>
+                    <button
+                      type="button" onClick={() => removerLinhaAdicional(idx)}
+                      className="text-red-600 text-sm" style={{ padding: 6 }} aria-label="Remover adicional"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Autorização Sindical</label>
+              <div className="mb-2">
+                <label className="block text-xs text-gray-500 mb-1">Nome do sindicato</label>
+                <input
+                  type="text" value={nomeSindicato}
+                  onChange={(e) => setNomeSindicato(e.target.value)}
+                  placeholder="Se souber — a Salmazos pode confirmar depois"
+                  className="input-field"
+                />
+              </div>
+              <div className="mb-2">
+                <label className="block text-xs text-gray-500 mb-1">Autoriza desconto das Contribuições Assistencial e Confederativa? *</label>
+                <select value={autorizaAssistencial} onChange={(e) => setAutorizaAssistencial(e.target.value as "" | "sim" | "nao")} className="input-field">
+                  <option value="">Selecione</option>
+                  <option value="sim">Sim</option>
+                  <option value="nao">Não</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Autoriza desconto da Contribuição Sindical? *</label>
+                <select value={autorizaSindical} onChange={(e) => setAutorizaSindical(e.target.value as "" | "sim" | "nao")} className="input-field">
+                  <option value="">Selecione</option>
+                  <option value="sim">Sim</option>
+                  <option value="nao">Não</option>
+                </select>
+              </div>
             </div>
 
             <div className="mb-4">

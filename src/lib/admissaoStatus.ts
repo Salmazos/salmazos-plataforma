@@ -20,3 +20,11 @@ export const MODALIDADE_LABEL: Record<string, string> = {
   MOT: "MOT",
   terceirizacao: "Terc.",
 };
+
+// Status em que o candidato perde o acesso de edição ao formulário público (ver
+// STATUS_JA_ENVIADO em AdmissaoFormClient.tsx). O botão "Solicitar correção" em
+// AdmissaoDetalheClient.tsx reabre o acesso levando o status de volta pra
+// "em_preenchimento" — o único fora dessa lista que faz sentido como "retomando o
+// preenchimento" (o outro, "aguardando_candidato", é o estado anterior ao candidato
+// sequer ter começado).
+export const STATUS_JA_ENVIADO = ["aguardando_analise", "em_analise", "aprovado", "enviado_contabilidade"];

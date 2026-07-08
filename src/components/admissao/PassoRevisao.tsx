@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { AdmissaoDependente } from "@/types";
-import type { FormState, DocumentoToken, ValeTransporteState, AutorizacaoSindicalState, SituacaoTrabalhistaState } from "./AdmissaoFormClient";
+import type { FormState, DocumentoToken, ValeTransporteState, SituacaoTrabalhistaState } from "./AdmissaoFormClient";
 import { cardStyle, botaoPrimarioStyle } from "./styles";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
 import { ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, PARENTESCO_OPTIONS, OPCAO_VALE_TRANSPORTE_LABEL } from "@/lib/admissaoConstants";
@@ -12,7 +12,6 @@ interface Props {
   dependentes: AdmissaoDependente[];
   documentos: DocumentoToken[];
   valeTransporte: ValeTransporteState;
-  autorizacaoSindical: AutorizacaoSindicalState;
   situacaoTrabalhista: SituacaoTrabalhistaState;
   sexo: string;
   isMotorista: boolean;
@@ -59,7 +58,7 @@ function Linha({ label, value }: { label: string; value: string }) {
 
 const SIM_NAO_LABEL: Record<string, string> = { sim: "Sim", nao: "Não" };
 
-export default function PassoRevisao({ form, dependentes, documentos, valeTransporte, autorizacaoSindical, situacaoTrabalhista, sexo, isMotorista, possuiDependentes, lgpdAceite, setLgpdAceite, onEnviar, enviando }: Props) {
+export default function PassoRevisao({ form, dependentes, documentos, valeTransporte, situacaoTrabalhista, sexo, isMotorista, possuiDependentes, lgpdAceite, setLgpdAceite, onEnviar, enviando }: Props) {
   const visiveis = documentos.filter((d) => docVisivel(d, sexo, isMotorista, possuiDependentes));
   const pendentesObrigatorios = visiveis.filter((d) => d.obrigatorio && d.status !== "enviado" && d.status !== "aprovado");
 
@@ -87,7 +86,8 @@ export default function PassoRevisao({ form, dependentes, documentos, valeTransp
 
       <Secao titulo="Documentos Profissionais">
         <Linha label="PIS/PASEP" value={form.pis_pasep} />
-        <Linha label="Carteira de Trabalho" value={[form.carteira_trabalho_numero, form.carteira_trabalho_serie, form.carteira_trabalho_uf].filter(Boolean).join(" / ")} />
+        <Linha label="CTPS Digital" value={form.possui_ctps_digital ? "Sim" : ""} />
+        <Linha label="CTPS Física" value={[form.carteira_trabalho_numero, form.carteira_trabalho_serie, form.carteira_trabalho_uf].filter(Boolean).join(" / ")} />
         <Linha label="Título de eleitor" value={form.titulo_eleitor} />
         {sexo === "M" && <Linha label="Reservista" value={form.reservista} />}
         {isMotorista && <Linha label="CNH" value={form.cnh_numero ? `${form.cnh_numero} - Cat. ${form.cnh_categoria}` : ""} />}
@@ -133,18 +133,6 @@ export default function PassoRevisao({ form, dependentes, documentos, valeTransp
         {valeTransporte.opcao === "vale_transporte" && valeTransporte.linhas.map((l, i) => (
           <Linha key={i} label={`Linha ${i + 1}`} value={[l.onibus_viacao, l.percurso].filter(Boolean).join(" — ")} />
         ))}
-      </Secao>
-
-      <Secao titulo="Autorização Sindical">
-        <Linha label="Sindicato" value={autorizacaoSindical.nome_sindicato} />
-        <Linha
-          label="Desconto assistencial/confederativa"
-          value={autorizacaoSindical.autoriza_assistencial_confederativa === "sim" ? "Autorizado" : autorizacaoSindical.autoriza_assistencial_confederativa === "nao" ? "Não autorizado" : ""}
-        />
-        <Linha
-          label="Desconto sindical"
-          value={autorizacaoSindical.autoriza_sindical === "sim" ? "Autorizado" : autorizacaoSindical.autoriza_sindical === "nao" ? "Não autorizado" : ""}
-        />
       </Secao>
 
       <Secao titulo="Documentos">

@@ -8,7 +8,6 @@ const PASSOS = [
   "Situação Trabalhista",
   "Dependentes",
   "Vale Transporte",
-  "Autorização Sindical",
   "Documentos",
   "Revisão",
 ];

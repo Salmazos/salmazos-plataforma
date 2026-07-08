@@ -30,22 +30,37 @@ export default function PassoDocumentosProfissionais({ form, setCampo, errosVisi
         <input type="date" value={form.pis_data_cadastramento} onChange={(e) => setCampo("pis_data_cadastramento", e.target.value)} style={campoErroStyle(false)} />
       </Campo>
 
-      <Campo label="Número da Carteira de Trabalho" required erro={erro("carteira_trabalho_numero")}>
-        <input type="text" value={form.carteira_trabalho_numero} onChange={(e) => setCampo("carteira_trabalho_numero", e.target.value)} style={campoErroStyle(erro("carteira_trabalho_numero"))} />
+      <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 8, paddingTop: 16, marginBottom: 8 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 16, minHeight: 44, cursor: "pointer" }}>
+          <input
+            type="checkbox" checked={form.possui_ctps_digital}
+            onChange={(e) => setCampo("possui_ctps_digital", e.target.checked)}
+            style={{ width: 22, height: 22 }}
+          />
+          Possuo CTPS Digital (vinculada ao CPF)
+        </label>
+      </div>
+
+      <p style={{ fontSize: 13, color: "#9CA3AF", margin: "0 0 8px" }}>
+        Se você ainda tiver a Carteira de Trabalho física (modelo antigo), preencha os dados abaixo. Não é obrigatório.
+      </p>
+
+      <Campo label="Número da Carteira de Trabalho (física)">
+        <input type="text" value={form.carteira_trabalho_numero} onChange={(e) => setCampo("carteira_trabalho_numero", e.target.value)} style={campoErroStyle(false)} />
       </Campo>
 
-      <Campo label="Série da Carteira de Trabalho" required erro={erro("carteira_trabalho_serie")}>
-        <input type="text" value={form.carteira_trabalho_serie} onChange={(e) => setCampo("carteira_trabalho_serie", e.target.value)} style={campoErroStyle(erro("carteira_trabalho_serie"))} />
+      <Campo label="Série da Carteira de Trabalho (física)">
+        <input type="text" value={form.carteira_trabalho_serie} onChange={(e) => setCampo("carteira_trabalho_serie", e.target.value)} style={campoErroStyle(false)} />
       </Campo>
 
-      <Campo label="UF da Carteira de Trabalho" required erro={erro("carteira_trabalho_uf")}>
-        <select value={form.carteira_trabalho_uf} onChange={(e) => setCampo("carteira_trabalho_uf", e.target.value)} style={campoErroStyle(erro("carteira_trabalho_uf"))}>
+      <Campo label="UF da Carteira de Trabalho (física)">
+        <select value={form.carteira_trabalho_uf} onChange={(e) => setCampo("carteira_trabalho_uf", e.target.value)} style={campoErroStyle(false)}>
           <option value="" disabled>Selecione...</option>
           {ESTADOS.map((e) => <option key={e.uf} value={e.uf}>{e.uf} — {e.nome}</option>)}
         </select>
       </Campo>
 
-      <Campo label="Data de emissão da Carteira de Trabalho">
+      <Campo label="Data de emissão da Carteira de Trabalho (física)">
         <input type="date" value={form.ctps_data_emissao} onChange={(e) => setCampo("ctps_data_emissao", e.target.value)} style={campoErroStyle(false)} />
       </Campo>
 

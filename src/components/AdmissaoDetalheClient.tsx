@@ -3,12 +3,15 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatarData } from "@/lib/utils";
-import { ADMISSAO_STATUS_BADGE, ADMISSAO_STATUS_OPTIONS, MODALIDADE_LABEL } from "@/lib/admissaoStatus";
+import { ADMISSAO_STATUS_BADGE, ADMISSAO_STATUS_OPTIONS, MODALIDADE_LABEL, STATUS_JA_ENVIADO } from "@/lib/admissaoStatus";
 import { MOTIVOS_REJEICAO_DOCUMENTO } from "@/lib/admissaoConstants";
 import { OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
-import { ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, OPCAO_VALE_TRANSPORTE_LABEL } from "@/lib/admissaoConstants";
-import type { AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
+import {
+  ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, OPCAO_VALE_TRANSPORTE_LABEL,
+  COR_RACA_OPTIONS, PARENTESCO_OPTIONS, CNH_CATEGORIAS,
+} from "@/lib/admissaoConstants";
+import type { AdmissaoAdicional, AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
 
 type Tab = "dados" | "documentos" | "notas";
 
@@ -49,6 +52,8 @@ interface AdmissaoFull {
   pdf_pacote_path: string | null;
   pdf_pacote_gerado_em: string | null;
   pdf_pacote_gerado_por: string | null;
+  pacote_gerado_forcado: boolean;
+  pacote_gerado_justificativa: string | null;
   lgpd_aceite_em: string | null;
   lgpd_aceite_ip: string | null;
   candidatos: { id: string; nome_completo: string; cargo_pretendido: string; telefone: string | null; email: string | null } | null;
@@ -68,6 +73,7 @@ interface Props {
   dadosPessoais: AdmissaoDadosPessoais | null;
   dependentes: AdmissaoDependente[];
   documentos: AdmissaoDocumento[];
+  adicionais: AdmissaoAdicional[];
   auditLogs: AuditLogEntry[];
   valeTransporte: AdmissaoValeTransporte | null;
   autorizacaoSindical: AdmissaoAutorizacaoSindical | null;
@@ -77,6 +83,14 @@ const ACAO_LABEL: Record<string, string> = {
   admissao_criada: "Admissão criada",
   admissao_atualizada: "Admissão atualizada",
   admissao_pacote_gerado: "Pacote para contabilidade gerado",
+  admissao_pacote_gerado_forcado: "Pacote gerado com pendências (forçado)",
+  admissao_dados_pessoais_editados_pelo_analista: "Dados pessoais editados pelo analista",
+  admissao_dependente_criado_pelo_analista: "Dependente adicionado pelo analista",
+  admissao_dependente_editado_pelo_analista: "Dependente editado pelo analista",
+  admissao_dependente_removido_pelo_analista: "Dependente removido pelo analista",
+  admissao_vale_transporte_editado_pelo_analista: "Vale Transporte editado pelo analista",
+  admissao_adicionais_atualizados: "Adicionais atualizados",
+  admissao_autorizacao_sindical_atualizada: "Autorização Sindical atualizada",
 };
 
 function Linha({ label, value }: { label: string; value: string | null | undefined }) {
@@ -98,11 +112,269 @@ function Secao({ titulo, children }: { titulo: string; children: React.ReactNode
   );
 }
 
-export default function AdmissaoDetalheClient({ admissao, dadosPessoais, dependentes, documentos: documentosIniciais, auditLogs, valeTransporte, autorizacaoSindical }: Props) {
+function formatarAdicionalValor(formatoValor: "percentual" | "fixo", valor: number): string {
+  return formatoValor === "percentual"
+    ? `${valor.toLocaleString("pt-BR")}%`
+    : valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function parseValorAdicional(value: string): number {
+  const digits = value.replace(/\s/g, "").replace(/^R\$/, "").replace(/\./g, "").replace(",", ".").trim();
+  const num = parseFloat(digits);
+  return isNaN(num) ? 0 : num;
+}
+
+interface AdicionalLinha {
+  tipo: string;
+  valor: string;
+  formato_valor: "percentual" | "fixo";
+}
+
+// ── Edição total pelo analista: infraestrutura genérica para os campos de
+// admissao_dados_pessoais, organizados nas mesmas seções que já existiam como somente
+// leitura. Cada seção compartilha o mesmo formDP/handleSalvarDP (uma linha só na tabela),
+// só muda qual subconjunto de campos é mostrado no formulário de edição.
+type TipoCampo = "text" | "date" | "select" | "simnao";
+
+interface CampoDef {
+  key: string;
+  label: string;
+  tipo: TipoCampo;
+  options?: { value: string; label: string }[];
+}
+
+const SIMNAO_OPTIONS = [{ value: "sim", label: "Sim" }, { value: "nao", label: "Não" }];
+
+const CAMPOS_DADOS_PESSOAIS: CampoDef[] = [
+  { key: "nome_completo", label: "Nome completo", tipo: "text" },
+  { key: "data_nascimento", label: "Data de nascimento", tipo: "date" },
+  { key: "sexo", label: "Sexo", tipo: "select", options: [{ value: "M", label: "Masculino" }, { value: "F", label: "Feminino" }] },
+  { key: "estado_civil", label: "Estado civil", tipo: "select", options: ESTADO_CIVIL_OPTIONS },
+  { key: "nacionalidade", label: "Nacionalidade", tipo: "text" },
+  { key: "naturalidade", label: "Naturalidade", tipo: "text" },
+  { key: "pais_nascimento", label: "País de nascimento", tipo: "text" },
+  { key: "cor_raca", label: "Cor/Raça", tipo: "select", options: COR_RACA_OPTIONS },
+  { key: "cpf", label: "CPF", tipo: "text" },
+  { key: "rg_numero", label: "RG número", tipo: "text" },
+  { key: "rg_orgao_emissor", label: "RG órgão emissor", tipo: "text" },
+  { key: "rg_uf", label: "RG UF", tipo: "text" },
+  { key: "rg_data_emissao", label: "RG data de emissão", tipo: "date" },
+  { key: "nome_mae", label: "Nome da mãe", tipo: "text" },
+  { key: "nacionalidade_mae", label: "Nacionalidade da mãe", tipo: "text" },
+  { key: "nome_pai", label: "Nome do pai", tipo: "text" },
+  { key: "nacionalidade_pai", label: "Nacionalidade do pai", tipo: "text" },
+  { key: "grau_instrucao", label: "Grau de instrução", tipo: "select", options: GRAU_INSTRUCAO_OPTIONS },
+];
+
+const CAMPOS_DOCUMENTOS_PROFISSIONAIS: CampoDef[] = [
+  { key: "pis_pasep", label: "PIS/PASEP", tipo: "text" },
+  { key: "pis_data_cadastramento", label: "Data de cadastramento do PIS", tipo: "date" },
+  { key: "possui_ctps_digital", label: "Possui CTPS Digital?", tipo: "simnao" },
+  { key: "carteira_trabalho_numero", label: "CTPS Física — número", tipo: "text" },
+  { key: "carteira_trabalho_serie", label: "CTPS Física — série", tipo: "text" },
+  { key: "carteira_trabalho_uf", label: "CTPS Física — UF", tipo: "text" },
+  { key: "ctps_data_emissao", label: "CTPS Física — data de emissão", tipo: "date" },
+  { key: "titulo_eleitor", label: "Título de eleitor", tipo: "text" },
+  { key: "zona_eleitoral", label: "Zona eleitoral", tipo: "text" },
+  { key: "secao_eleitoral", label: "Seção eleitoral", tipo: "text" },
+  { key: "reservista", label: "Reservista", tipo: "text" },
+  { key: "cnh_numero", label: "CNH número", tipo: "text" },
+  { key: "cnh_categoria", label: "CNH categoria", tipo: "select", options: CNH_CATEGORIAS.map((c) => ({ value: c, label: c })) },
+  { key: "cnh_validade", label: "CNH validade", tipo: "date" },
+  { key: "cnh_data_emissao", label: "CNH data de emissão", tipo: "date" },
+  { key: "cnh_uf", label: "CNH UF", tipo: "text" },
+];
+
+const CAMPOS_ENDERECO: CampoDef[] = [
+  { key: "endereco_cep", label: "CEP", tipo: "text" },
+  { key: "endereco_logradouro", label: "Logradouro", tipo: "text" },
+  { key: "endereco_numero", label: "Número", tipo: "text" },
+  { key: "endereco_complemento", label: "Complemento", tipo: "text" },
+  { key: "endereco_bairro", label: "Bairro", tipo: "text" },
+  { key: "endereco_cidade", label: "Cidade", tipo: "text" },
+  { key: "endereco_uf", label: "UF", tipo: "text" },
+  { key: "telefone", label: "Telefone", tipo: "text" },
+  { key: "email", label: "E-mail", tipo: "text" },
+];
+
+const CAMPOS_BANCARIOS: CampoDef[] = [
+  { key: "banco", label: "Banco", tipo: "text" },
+  { key: "agencia", label: "Agência", tipo: "text" },
+  { key: "conta", label: "Conta", tipo: "text" },
+  { key: "tipo_conta", label: "Tipo de conta", tipo: "select", options: [{ value: "corrente", label: "Conta Corrente" }, { value: "poupanca", label: "Conta Poupança" }] },
+  { key: "pix", label: "Chave PIX", tipo: "text" },
+];
+
+const CAMPOS_SITUACAO_TRABALHISTA: CampoDef[] = [
+  { key: "recebendo_seguro_desemprego", label: "Recebendo seguro-desemprego?", tipo: "simnao" },
+  { key: "primeiro_emprego", label: "Primeiro emprego?", tipo: "simnao" },
+  { key: "trabalhou_empresa_antes", label: "Já trabalhou nesta empresa antes?", tipo: "simnao" },
+  { key: "aposentado", label: "Aposentado?", tipo: "simnao" },
+  { key: "dependente_ir", label: "Dependente para Imposto de Renda?", tipo: "simnao" },
+  { key: "dependente_salario_familia", label: "Dependente para Salário Família?", tipo: "simnao" },
+  { key: "tera_adiantamento", label: "Terá adiantamento salarial?", tipo: "simnao" },
+];
+
+const CAMPOS_BOOLEANOS_DP = new Set(
+  [...CAMPOS_DOCUMENTOS_PROFISSIONAIS, ...CAMPOS_SITUACAO_TRABALHISTA]
+    .filter((c) => c.tipo === "simnao")
+    .map((c) => c.key)
+);
+
+function dpParaFormulario(dp: AdmissaoDadosPessoais | null): Record<string, string> {
+  if (!dp) return {};
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(dp)) {
+    if (v == null) { out[k] = ""; continue; }
+    if (typeof v === "boolean") { out[k] = v ? "sim" : "nao"; continue; }
+    out[k] = String(v);
+  }
+  return out;
+}
+
+function formularioParaPayload(form: Record<string, string>): Record<string, unknown> {
+  const payload: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(form)) {
+    if (CAMPOS_BOOLEANOS_DP.has(k)) { payload[k] = v === "sim" ? true : v === "nao" ? false : null; continue; }
+    payload[k] = v.trim() === "" ? null : v;
+  }
+  return payload;
+}
+
+function CampoValor({ def, valor, onChange }: { def: CampoDef; valor: string; onChange: (v: string) => void }) {
+  if (def.tipo === "select" || def.tipo === "simnao") {
+    const options = def.tipo === "simnao" ? SIMNAO_OPTIONS : def.options ?? [];
+    return (
+      <select value={valor} onChange={(e) => onChange(e.target.value)} className="input-field text-sm">
+        <option value="">Selecione</option>
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    );
+  }
+  return (
+    <input
+      type={def.tipo === "date" ? "date" : "text"}
+      value={valor}
+      onChange={(e) => onChange(e.target.value)}
+      className="input-field text-sm"
+    />
+  );
+}
+
+function SecaoEditavelDP({
+  titulo, campos, editando, formDP, salvando, onIniciarEdicao, onCampo, onSalvar, onCancelar, children,
+}: {
+  titulo: string;
+  campos: CampoDef[];
+  editando: boolean;
+  formDP: Record<string, string>;
+  salvando: boolean;
+  onIniciarEdicao: () => void;
+  onCampo: (key: string, valor: string) => void;
+  onSalvar: () => void;
+  onCancelar: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Secao titulo={titulo}>
+      <div className="flex justify-end mb-1">
+        {!editando && (
+          <button onClick={onIniciarEdicao} className="text-xs font-semibold" style={{ color: "#B45309" }}>
+            Editar
+          </button>
+        )}
+      </div>
+      {editando ? (
+        <div>
+          {campos.map((c) => (
+            <div key={c.key} className="mb-2">
+              <label className="block text-xs text-gray-500 mb-1">{c.label}</label>
+              <CampoValor def={c} valor={formDP[c.key] ?? ""} onChange={(v) => onCampo(c.key, v)} />
+            </div>
+          ))}
+          <div className="flex gap-2 justify-end mt-2">
+            <button onClick={onCancelar} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }} disabled={salvando}>
+              Cancelar
+            </button>
+            <button onClick={onSalvar} className="btn-primary" style={{ padding: "5px 12px", fontSize: 12 }} disabled={salvando}>
+              {salvando ? "Salvando..." : "Salvar"}
+            </button>
+          </div>
+        </div>
+      ) : children}
+    </Secao>
+  );
+}
+
+interface DependenteForm {
+  id?: string;
+  nome: string;
+  parentesco: string;
+  data_nascimento: string;
+  cpf: string;
+  nome_mae: string;
+  cpf_mae: string;
+  cartorio: string;
+  local_nascimento: string;
+  declaracao_nascido_vivo: string;
+  num_registro: string;
+  num_livro: string;
+  num_folha: string;
+}
+
+function dependenteParaFormulario(d: AdmissaoDependente): DependenteForm {
+  return {
+    id: d.id,
+    nome: d.nome ?? "",
+    parentesco: d.parentesco ?? "",
+    data_nascimento: d.data_nascimento ?? "",
+    cpf: d.cpf ?? "",
+    nome_mae: d.nome_mae ?? "",
+    cpf_mae: d.cpf_mae ?? "",
+    cartorio: d.cartorio ?? "",
+    local_nascimento: d.local_nascimento ?? "",
+    declaracao_nascido_vivo: d.declaracao_nascido_vivo ?? "",
+    num_registro: d.num_registro ?? "",
+    num_livro: d.num_livro ?? "",
+    num_folha: d.num_folha ?? "",
+  };
+}
+
+const DEPENDENTE_VAZIO: DependenteForm = {
+  nome: "", parentesco: "", data_nascimento: "", cpf: "", nome_mae: "", cpf_mae: "",
+  cartorio: "", local_nascimento: "", declaracao_nascido_vivo: "", num_registro: "", num_livro: "", num_folha: "",
+};
+
+interface ValeTransporteLinhaForm {
+  onibus_viacao: string;
+  percurso: string;
+  valor_unitario: string;
+  valor_total_diario: string;
+}
+
+interface ValeTransporteForm {
+  opcao: string;
+  dias_semana: string;
+  bairro_cidade_trabalho: string;
+  termos_aceitos: string;
+  linhas: ValeTransporteLinhaForm[];
+}
+
+export default function AdmissaoDetalheClient({ admissao, dadosPessoais, dependentes, documentos: documentosIniciais, adicionais: adicionaisIniciais, auditLogs, valeTransporte, autorizacaoSindical }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("dados");
   const [status, setStatus] = useState(admissao.status);
   const [documentos, setDocumentos] = useState(documentosIniciais);
+  const [adicionais, setAdicionais] = useState(adicionaisIniciais);
+  const [editandoAdicionais, setEditandoAdicionais] = useState(false);
+  const [linhasAdicionais, setLinhasAdicionais] = useState<AdicionalLinha[]>([]);
+  const [salvandoAdicionais, setSalvandoAdicionais] = useState(false);
+  const [autorizacaoSindicalAtual, setAutorizacaoSindicalAtual] = useState(autorizacaoSindical);
+  const [editandoAS, setEditandoAS] = useState(false);
+  const [nomeSindicatoEdit, setNomeSindicatoEdit] = useState("");
+  const [autorizaAssistencialEdit, setAutorizaAssistencialEdit] = useState<"" | "sim" | "nao">("");
+  const [autorizaSindicalEdit, setAutorizaSindicalEdit] = useState<"" | "sim" | "nao">("");
+  const [salvandoAS, setSalvandoAS] = useState(false);
   const [observacoes, setObservacoes] = useState(admissao.observacoes_internas ?? "");
   const [salvandoObs, setSalvandoObs] = useState(false);
   const [dataExameAdmissional, setDataExameAdmissional] = useState(dadosPessoais?.data_exame_admissional ?? "");
@@ -116,9 +388,192 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [abrindoPacote, setAbrindoPacote] = useState(false);
   const [toast, setToast] = useState("");
   const [erroPacote, setErroPacote] = useState("");
+  const [solicitandoCorrecao, setSolicitandoCorrecao] = useState(false);
+  const [notaCorrecao, setNotaCorrecao] = useState("");
+  const [enviandoCorrecao, setEnviandoCorrecao] = useState(false);
+  const [forcandoPacote, setForcandoPacote] = useState(false);
+  const [justificativaForcar, setJustificativaForcar] = useState("");
+  const [gerandoPdfForcado, setGerandoPdfForcado] = useState(false);
 
-  const dp = dadosPessoais;
+  // ── Edição total pelo analista ──────────────────────────────────────────
+  const [dp, setDp] = useState(dadosPessoais);
+  const [secaoDPEditando, setSecaoDPEditando] = useState<string | null>(null);
+  const [formDP, setFormDP] = useState<Record<string, string>>({});
+  const [salvandoDP, setSalvandoDP] = useState(false);
+
+  const [dependentesAtuais, setDependentesAtuais] = useState(dependentes);
+  const [editandoDependentes, setEditandoDependentes] = useState(false);
+  const [linhasDependentes, setLinhasDependentes] = useState<DependenteForm[]>([]);
+  const [salvandoDependentes, setSalvandoDependentes] = useState(false);
+
+  const [valeTransporteAtual, setValeTransporteAtual] = useState(valeTransporte);
+  const [editandoVT, setEditandoVT] = useState(false);
+  const [formVT, setFormVT] = useState<ValeTransporteForm>({ opcao: "", dias_semana: "", bairro_cidade_trabalho: "", termos_aceitos: "", linhas: [] });
+  const [salvandoVT, setSalvandoVT] = useState(false);
+
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 4000); };
+
+  const iniciarEdicaoDP = (secao: string) => {
+    setFormDP(dpParaFormulario(dp));
+    setSecaoDPEditando(secao);
+  };
+
+  const cancelarEdicaoDP = () => setSecaoDPEditando(null);
+
+  const atualizarCampoDP = (key: string, valor: string) => {
+    setFormDP((prev) => ({ ...prev, [key]: valor }));
+  };
+
+  const handleSalvarDP = async () => {
+    setSalvandoDP(true);
+    try {
+      const payload = formularioParaPayload(formDP);
+      const res = await fetch(`/api/admissoes/${admissao.id}/dados-pessoais`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok) { showToast(json.error || "Erro ao salvar."); return; }
+      setDp(json.data);
+      setSecaoDPEditando(null);
+      router.refresh();
+    } catch {
+      showToast("Erro de conexão ao salvar.");
+    } finally {
+      setSalvandoDP(false);
+    }
+  };
+
+  const iniciarEdicaoDependentes = () => {
+    setLinhasDependentes(dependentesAtuais.map(dependenteParaFormulario));
+    setEditandoDependentes(true);
+  };
+
+  const cancelarEdicaoDependentes = () => setEditandoDependentes(false);
+
+  const adicionarDependenteLinha = () => setLinhasDependentes((prev) => [...prev, { ...DEPENDENTE_VAZIO }]);
+
+  const removerDependenteLinha = (idx: number) => setLinhasDependentes((prev) => prev.filter((_, i) => i !== idx));
+
+  const atualizarCampoDependente = <K extends keyof DependenteForm>(idx: number, campo: K, valor: DependenteForm[K]) => {
+    setLinhasDependentes((prev) => prev.map((d, i) => (i === idx ? { ...d, [campo]: valor } : d)));
+  };
+
+  const handleSalvarDependentes = async () => {
+    setSalvandoDependentes(true);
+    try {
+      const idsAtuais = new Set(linhasDependentes.filter((d) => d.id).map((d) => d.id));
+      const removidos = dependentesAtuais.filter((d) => !idsAtuais.has(d.id));
+
+      for (const rem of removidos) {
+        await fetch(`/api/admissoes/${admissao.id}/dependentes/${rem.id}`, { method: "DELETE" });
+      }
+
+      const resultado: AdmissaoDependente[] = [];
+      for (const linha of linhasDependentes) {
+        if (!linha.nome.trim()) continue;
+        const payload = {
+          nome: linha.nome.trim(),
+          parentesco: linha.parentesco || null,
+          data_nascimento: linha.data_nascimento || null,
+          cpf: linha.cpf || null,
+          nome_mae: linha.nome_mae || null,
+          cpf_mae: linha.cpf_mae || null,
+          cartorio: linha.cartorio || null,
+          local_nascimento: linha.local_nascimento || null,
+          declaracao_nascido_vivo: linha.declaracao_nascido_vivo || null,
+          num_registro: linha.num_registro || null,
+          num_livro: linha.num_livro || null,
+          num_folha: linha.num_folha || null,
+        };
+        const url = linha.id ? `/api/admissoes/${admissao.id}/dependentes/${linha.id}` : `/api/admissoes/${admissao.id}/dependentes`;
+        const res = await fetch(url, {
+          method: linha.id ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const json = await res.json();
+        if (!res.ok) { showToast(json.error || "Erro ao salvar um dos dependentes."); continue; }
+        resultado.push(json.data);
+      }
+
+      setDependentesAtuais(resultado);
+      setEditandoDependentes(false);
+      router.refresh();
+    } catch {
+      showToast("Erro de conexão ao salvar dependentes.");
+    } finally {
+      setSalvandoDependentes(false);
+    }
+  };
+
+  const iniciarEdicaoVT = () => {
+    setFormVT({
+      opcao: valeTransporteAtual?.opcao ?? "",
+      dias_semana: valeTransporteAtual?.dias_semana ?? "",
+      bairro_cidade_trabalho: valeTransporteAtual?.bairro_cidade_trabalho ?? "",
+      termos_aceitos: "",
+      linhas: (valeTransporteAtual?.admissao_vt_linhas ?? []).map((l) => ({
+        onibus_viacao: l.onibus_viacao ?? "",
+        percurso: l.percurso ?? "",
+        valor_unitario: l.valor_unitario != null ? String(l.valor_unitario) : "",
+        valor_total_diario: l.valor_total_diario != null ? String(l.valor_total_diario) : "",
+      })),
+    });
+    setEditandoVT(true);
+  };
+
+  const cancelarEdicaoVT = () => setEditandoVT(false);
+
+  const atualizarCampoVT = <K extends keyof ValeTransporteForm>(campo: K, valor: ValeTransporteForm[K]) => {
+    setFormVT((prev) => ({ ...prev, [campo]: valor }));
+  };
+
+  const adicionarLinhaVT = () => {
+    if (formVT.linhas.length >= 2) return;
+    setFormVT((prev) => ({ ...prev, linhas: [...prev.linhas, { onibus_viacao: "", percurso: "", valor_unitario: "", valor_total_diario: "" }] }));
+  };
+
+  const removerLinhaVT = (idx: number) => setFormVT((prev) => ({ ...prev, linhas: prev.linhas.filter((_, i) => i !== idx) }));
+
+  const atualizarLinhaVT = <K extends keyof ValeTransporteLinhaForm>(idx: number, campo: K, valor: ValeTransporteLinhaForm[K]) => {
+    setFormVT((prev) => ({ ...prev, linhas: prev.linhas.map((l, i) => (i === idx ? { ...l, [campo]: valor } : l)) }));
+  };
+
+  const handleSalvarVT = async () => {
+    setSalvandoVT(true);
+    try {
+      const payload = {
+        opcao: formVT.opcao || null,
+        dias_semana: formVT.dias_semana.trim() || null,
+        bairro_cidade_trabalho: formVT.bairro_cidade_trabalho.trim() || null,
+        termos_aceitos: formVT.termos_aceitos === "sim" ? true : formVT.termos_aceitos === "nao" ? false : null,
+        linhas: formVT.linhas
+          .filter((l) => l.onibus_viacao.trim() || l.percurso.trim())
+          .map((l) => ({
+            onibus_viacao: l.onibus_viacao.trim() || null,
+            percurso: l.percurso.trim() || null,
+            valor_unitario: l.valor_unitario.trim() || null,
+            valor_total_diario: l.valor_total_diario.trim() || null,
+          })),
+      };
+      const res = await fetch(`/api/admissoes/${admissao.id}/vale-transporte`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok) { showToast(json.error || "Erro ao salvar o Vale Transporte."); return; }
+      setValeTransporteAtual(json.data);
+      setEditandoVT(false);
+      router.refresh();
+    } catch {
+      showToast("Erro de conexão ao salvar o Vale Transporte.");
+    } finally {
+      setSalvandoVT(false);
+    }
+  };
 
   const handleStatusChange = async (novoStatus: string) => {
     setSalvandoStatus(true);
@@ -131,6 +586,43 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       if (res.ok) { setStatus(novoStatus); router.refresh(); }
     } finally {
       setSalvandoStatus(false);
+    }
+  };
+
+  // Reabre o acesso do candidato ao mesmo link — mesma lógica que hoje é feita "na mão"
+  // pelo dropdown de status genérico (levando de volta pra "em_preenchimento", o único
+  // valor fora de STATUS_JA_ENVIADO que faz sentido como "retomando o preenchimento").
+  const handleSolicitarCorrecao = async () => {
+    setEnviandoCorrecao(true);
+    try {
+      const notaFinal = notaCorrecao.trim()
+        ? `[Solicitação de correção — ${new Date().toLocaleString("pt-BR")}] ${notaCorrecao.trim()}`
+        : "";
+      const observacoesAtualizadas = notaFinal
+        ? (observacoes.trim() ? `${observacoes.trim()}\n\n${notaFinal}` : notaFinal)
+        : undefined;
+
+      const res = await fetch(`/api/admissoes/${admissao.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "em_preenchimento",
+          ...(observacoesAtualizadas !== undefined ? { observacoes_internas: observacoesAtualizadas } : {}),
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { showToast(json.error || "Erro ao solicitar correção."); return; }
+
+      setStatus("em_preenchimento");
+      if (observacoesAtualizadas !== undefined) setObservacoes(observacoesAtualizadas);
+      setSolicitandoCorrecao(false);
+      setNotaCorrecao("");
+      showToast("Acesso do candidato reaberto — ele já pode corrigir o documento pelo mesmo link.");
+      router.refresh();
+    } catch {
+      showToast("Erro de conexão ao solicitar correção.");
+    } finally {
+      setEnviandoCorrecao(false);
     }
   };
 
@@ -163,6 +655,91 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       showToast("Erro de conexão ao salvar a data do exame admissional.");
     } finally {
       setSalvandoExame(false);
+    }
+  };
+
+  const iniciarEdicaoAdicionais = () => {
+    setLinhasAdicionais(adicionais.map((a) => ({ tipo: a.tipo, valor: String(a.valor), formato_valor: a.formato_valor })));
+    setEditandoAdicionais(true);
+  };
+
+  const cancelarEdicaoAdicionais = () => {
+    setEditandoAdicionais(false);
+    setLinhasAdicionais([]);
+  };
+
+  const adicionarLinhaAdicional = () => {
+    setLinhasAdicionais((prev) => [...prev, { tipo: "", valor: "", formato_valor: "percentual" }]);
+  };
+
+  const removerLinhaAdicional = (idx: number) => {
+    setLinhasAdicionais((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const atualizarLinhaAdicional = <K extends keyof AdicionalLinha>(idx: number, campo: K, valor: AdicionalLinha[K]) => {
+    setLinhasAdicionais((prev) => prev.map((a, i) => (i === idx ? { ...a, [campo]: valor } : a)));
+  };
+
+  const handleSalvarAdicionais = async () => {
+    setSalvandoAdicionais(true);
+    try {
+      const payload = linhasAdicionais
+        .filter((a) => a.tipo.trim() && parseValorAdicional(a.valor) > 0)
+        .map((a) => ({ tipo: a.tipo.trim(), formato_valor: a.formato_valor, valor: parseValorAdicional(a.valor) }));
+      const res = await fetch(`/api/admissoes/${admissao.id}/adicionais`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adicionais: payload }),
+      });
+      const json = await res.json();
+      if (!res.ok) { showToast(json.error || "Erro ao salvar os adicionais."); return; }
+      setAdicionais(json.data);
+      setEditandoAdicionais(false);
+      setLinhasAdicionais([]);
+    } catch {
+      showToast("Erro de conexão ao salvar os adicionais.");
+    } finally {
+      setSalvandoAdicionais(false);
+    }
+  };
+
+  const iniciarEdicaoAS = () => {
+    setNomeSindicatoEdit(autorizacaoSindicalAtual?.nome_sindicato ?? "");
+    setAutorizaAssistencialEdit(
+      autorizacaoSindicalAtual?.autoriza_assistencial_confederativa === true ? "sim"
+        : autorizacaoSindicalAtual?.autoriza_assistencial_confederativa === false ? "nao" : ""
+    );
+    setAutorizaSindicalEdit(
+      autorizacaoSindicalAtual?.autoriza_sindical === true ? "sim"
+        : autorizacaoSindicalAtual?.autoriza_sindical === false ? "nao" : ""
+    );
+    setEditandoAS(true);
+  };
+
+  const cancelarEdicaoAS = () => {
+    setEditandoAS(false);
+  };
+
+  const handleSalvarAS = async () => {
+    setSalvandoAS(true);
+    try {
+      const res = await fetch(`/api/admissoes/${admissao.id}/autorizacao-sindical`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome_sindicato: nomeSindicatoEdit.trim() || null,
+          autoriza_assistencial_confederativa: autorizaAssistencialEdit === "sim" ? true : autorizaAssistencialEdit === "nao" ? false : null,
+          autoriza_sindical: autorizaSindicalEdit === "sim" ? true : autorizaSindicalEdit === "nao" ? false : null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) { showToast(json.error || "Erro ao salvar a autorização sindical."); return; }
+      setAutorizacaoSindicalAtual(json.data);
+      setEditandoAS(false);
+    } catch {
+      showToast("Erro de conexão ao salvar a autorização sindical.");
+    } finally {
+      setSalvandoAS(false);
     }
   };
 
@@ -248,6 +825,50 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       showToast(msg);
     } finally {
       setGerandoPdf(false);
+    }
+  };
+
+  // Mesmo fluxo de handleGerarPdf, mas envia forcar+justificativa — só chamado quando o
+  // botão normal já está bloqueado por pendência (ver podeGerarPdf) e a equipe decidiu
+  // seguir mesmo assim. A rota registra em audit_logs quais documentos estavam pendentes
+  // no momento e a justificativa escrita.
+  const handleForcarGeracaoPacote = async () => {
+    if (!justificativaForcar.trim()) return;
+    setGerandoPdfForcado(true);
+    setErroPacote("");
+    try {
+      const res = await fetch(`/api/admissoes/${admissao.id}/gerar-pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ forcar: true, justificativa: justificativaForcar.trim() }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        const msg = json.error || "Erro ao gerar o PDF.";
+        setErroPacote(msg);
+        showToast(msg);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `admissao-${(admissao.candidatos?.nome_completo ?? "candidato").toLowerCase().replace(/\s+/g, "-")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setStatus("enviado_contabilidade");
+      setForcandoPacote(false);
+      setJustificativaForcar("");
+      showToast("⚠️ Pacote gerado com pendências — este PDF contém dados sensíveis, envie com segurança.");
+      router.refresh();
+    } catch {
+      const msg = "Erro de conexão ao gerar o PDF.";
+      setErroPacote(msg);
+      showToast(msg);
+    } finally {
+      setGerandoPdfForcado(false);
     }
   };
 
@@ -345,96 +966,408 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                 {salvandoExame && <span className="text-xs text-gray-400">Salvando...</span>}
               </div>
             </div>
+
+            <div className="pt-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-sm text-gray-500">Adicionais</span>
+                {!editandoAdicionais && (
+                  <button onClick={iniciarEdicaoAdicionais} className="text-xs font-semibold" style={{ color: "#B45309" }}>
+                    Editar
+                  </button>
+                )}
+              </div>
+
+              {editandoAdicionais ? (
+                <div>
+                  {linhasAdicionais.length === 0 && (
+                    <p className="text-xs text-gray-400 mb-2">Nenhum adicional. Opcional.</p>
+                  )}
+                  {linhasAdicionais.map((a, idx) => (
+                    <div key={idx} className="flex gap-2 items-center mb-2">
+                      <input
+                        type="text" placeholder="Tipo (ex: Insalubridade)" value={a.tipo}
+                        onChange={(e) => atualizarLinhaAdicional(idx, "tipo", e.target.value)}
+                        className="input-field flex-1 text-sm"
+                      />
+                      <input
+                        type="text" inputMode="decimal" placeholder="Valor" value={a.valor}
+                        onChange={(e) => atualizarLinhaAdicional(idx, "valor", e.target.value)}
+                        className="input-field text-sm" style={{ width: 90 }}
+                      />
+                      <select
+                        value={a.formato_valor}
+                        onChange={(e) => atualizarLinhaAdicional(idx, "formato_valor", e.target.value as "percentual" | "fixo")}
+                        className="input-field text-sm" style={{ width: 70 }}
+                      >
+                        <option value="percentual">%</option>
+                        <option value="fixo">R$</option>
+                      </select>
+                      <button
+                        onClick={() => removerLinhaAdicional(idx)}
+                        className="text-red-600 text-sm" style={{ padding: 6 }} aria-label="Remover adicional"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between mt-2">
+                    <button onClick={adicionarLinhaAdicional} className="text-xs font-semibold" style={{ color: "#B45309" }}>
+                      + Adicionar
+                    </button>
+                    <div className="flex gap-2">
+                      <button onClick={cancelarEdicaoAdicionais} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }} disabled={salvandoAdicionais}>
+                        Cancelar
+                      </button>
+                      <button onClick={handleSalvarAdicionais} className="btn-primary" style={{ padding: "5px 12px", fontSize: 12 }} disabled={salvandoAdicionais}>
+                        {salvandoAdicionais ? "Salvando..." : "Salvar"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : adicionais.length === 0 ? (
+                <p className="text-sm text-gray-400">Nenhum adicional registrado.</p>
+              ) : (
+                adicionais.map((a) => (
+                  <div key={a.id} className="flex justify-between py-1.5 border-b border-gray-50 text-sm">
+                    <span className="text-gray-500">{a.tipo}</span>
+                    <span className="text-gray-900 font-medium text-right">{formatarAdicionalValor(a.formato_valor, a.valor)}</span>
+                  </div>
+                ))
+              )}
+            </div>
           </Secao>
 
-          <Secao titulo="Dados Pessoais">
+          <SecaoEditavelDP
+            titulo="Dados Pessoais" campos={CAMPOS_DADOS_PESSOAIS}
+            editando={secaoDPEditando === "pessoais"} formDP={formDP} salvando={salvandoDP}
+            onIniciarEdicao={() => iniciarEdicaoDP("pessoais")} onCampo={atualizarCampoDP}
+            onSalvar={handleSalvarDP} onCancelar={cancelarEdicaoDP}
+          >
             <Linha label="Nome completo" value={dp?.nome_completo} />
             <Linha label="Data de nascimento" value={dp?.data_nascimento} />
             <Linha label="Sexo" value={dp?.sexo === "M" ? "Masculino" : dp?.sexo === "F" ? "Feminino" : ""} />
             <Linha label="Estado civil" value={ESTADO_CIVIL_OPTIONS.find((o) => o.value === dp?.estado_civil)?.label} />
             <Linha label="Nacionalidade" value={dp?.nacionalidade} />
             <Linha label="Naturalidade" value={dp?.naturalidade} />
+            <Linha label="País de nascimento" value={dp?.pais_nascimento} />
+            <Linha label="Cor/Raça" value={COR_RACA_OPTIONS.find((o) => o.value === dp?.cor_raca)?.label} />
             <Linha label="CPF" value={dp?.cpf} />
             <Linha label="RG" value={[dp?.rg_numero, dp?.rg_orgao_emissor, dp?.rg_uf].filter(Boolean).join(" / ")} />
             <Linha label="Nome da mãe" value={dp?.nome_mae} />
             <Linha label="Nome do pai" value={dp?.nome_pai} />
             <Linha label="Grau de instrução" value={GRAU_INSTRUCAO_OPTIONS.find((o) => o.value === dp?.grau_instrucao)?.label} />
-          </Secao>
+          </SecaoEditavelDP>
 
-          <Secao titulo="Documentos Profissionais">
+          <SecaoEditavelDP
+            titulo="Documentos Profissionais" campos={CAMPOS_DOCUMENTOS_PROFISSIONAIS}
+            editando={secaoDPEditando === "documentos"} formDP={formDP} salvando={salvandoDP}
+            onIniciarEdicao={() => iniciarEdicaoDP("documentos")} onCampo={atualizarCampoDP}
+            onSalvar={handleSalvarDP} onCancelar={cancelarEdicaoDP}
+          >
             <Linha label="PIS/PASEP" value={dp?.pis_pasep} />
-            <Linha label="Carteira de Trabalho" value={[dp?.carteira_trabalho_numero, dp?.carteira_trabalho_serie, dp?.carteira_trabalho_uf].filter(Boolean).join(" / ")} />
+            <Linha label="CTPS Digital" value={dp?.possui_ctps_digital ? "Sim" : ""} />
+            <Linha label="CTPS Física" value={[dp?.carteira_trabalho_numero, dp?.carteira_trabalho_serie, dp?.carteira_trabalho_uf].filter(Boolean).join(" / ")} />
             <Linha label="Título de eleitor" value={[dp?.titulo_eleitor, dp?.zona_eleitoral, dp?.secao_eleitoral].filter(Boolean).join(" / ")} />
             <Linha label="Reservista" value={dp?.reservista} />
             <Linha label="CNH" value={dp?.cnh_numero ? `${dp.cnh_numero} — Cat. ${dp.cnh_categoria ?? "—"} — Val. ${dp.cnh_validade ?? "—"}` : ""} />
-          </Secao>
+          </SecaoEditavelDP>
 
-          <Secao titulo="Endereço e Contato">
+          <SecaoEditavelDP
+            titulo="Endereço e Contato" campos={CAMPOS_ENDERECO}
+            editando={secaoDPEditando === "endereco"} formDP={formDP} salvando={salvandoDP}
+            onIniciarEdicao={() => iniciarEdicaoDP("endereco")} onCampo={atualizarCampoDP}
+            onSalvar={handleSalvarDP} onCancelar={cancelarEdicaoDP}
+          >
             <Linha label="Endereço" value={[dp?.endereco_logradouro, dp?.endereco_numero, dp?.endereco_complemento].filter(Boolean).join(", ")} />
             <Linha label="Bairro / Cidade / UF" value={[dp?.endereco_bairro, dp?.endereco_cidade, dp?.endereco_uf].filter(Boolean).join(" / ")} />
             <Linha label="CEP" value={dp?.endereco_cep} />
             <Linha label="Telefone" value={dp?.telefone} />
             <Linha label="E-mail" value={dp?.email} />
-          </Secao>
+          </SecaoEditavelDP>
 
-          <Secao titulo="Dados Bancários">
+          <SecaoEditavelDP
+            titulo="Dados Bancários" campos={CAMPOS_BANCARIOS}
+            editando={secaoDPEditando === "bancarios"} formDP={formDP} salvando={salvandoDP}
+            onIniciarEdicao={() => iniciarEdicaoDP("bancarios")} onCampo={atualizarCampoDP}
+            onSalvar={handleSalvarDP} onCancelar={cancelarEdicaoDP}
+          >
             <Linha label="Banco" value={dp?.banco} />
             <Linha label="Agência" value={dp?.agencia} />
             <Linha label="Conta" value={dp?.conta} />
             <Linha label="Tipo de conta" value={dp?.tipo_conta === "corrente" ? "Conta Corrente" : dp?.tipo_conta === "poupanca" ? "Conta Poupança" : ""} />
-          </Secao>
+            <Linha label="Chave PIX" value={dp?.pix} />
+          </SecaoEditavelDP>
 
-          {dependentes.length > 0 && (
-            <Secao titulo="Dependentes">
-              {dependentes.map((d) => (
+          <SecaoEditavelDP
+            titulo="Situação Trabalhista e Benefícios" campos={CAMPOS_SITUACAO_TRABALHISTA}
+            editando={secaoDPEditando === "trabalhista"} formDP={formDP} salvando={salvandoDP}
+            onIniciarEdicao={() => iniciarEdicaoDP("trabalhista")} onCampo={atualizarCampoDP}
+            onSalvar={handleSalvarDP} onCancelar={cancelarEdicaoDP}
+          >
+            <Linha label="Recebendo seguro-desemprego?" value={dp?.recebendo_seguro_desemprego === true ? "Sim" : dp?.recebendo_seguro_desemprego === false ? "Não" : ""} />
+            <Linha label="Primeiro emprego?" value={dp?.primeiro_emprego === true ? "Sim" : dp?.primeiro_emprego === false ? "Não" : ""} />
+            <Linha label="Já trabalhou nesta empresa antes?" value={dp?.trabalhou_empresa_antes === true ? "Sim" : dp?.trabalhou_empresa_antes === false ? "Não" : ""} />
+            <Linha label="Aposentado?" value={dp?.aposentado === true ? "Sim" : dp?.aposentado === false ? "Não" : ""} />
+            <Linha label="Dependente para Imposto de Renda?" value={dp?.dependente_ir === true ? "Sim" : dp?.dependente_ir === false ? "Não" : ""} />
+            <Linha label="Dependente para Salário Família?" value={dp?.dependente_salario_familia === true ? "Sim" : dp?.dependente_salario_familia === false ? "Não" : ""} />
+            <Linha label="Terá adiantamento salarial?" value={dp?.tera_adiantamento === true ? "Sim" : dp?.tera_adiantamento === false ? "Não" : ""} />
+          </SecaoEditavelDP>
+
+          <Secao titulo="Dependentes">
+            <div className="flex justify-end mb-1">
+              {!editandoDependentes && (
+                <button onClick={iniciarEdicaoDependentes} className="text-xs font-semibold" style={{ color: "#B45309" }}>
+                  Editar
+                </button>
+              )}
+            </div>
+
+            {editandoDependentes ? (
+              <div>
+                {linhasDependentes.length === 0 && <p className="text-xs text-gray-400 mb-2">Nenhum dependente.</p>}
+                {linhasDependentes.map((d, idx) => (
+                  <div key={idx} className="border border-gray-200 rounded-lg p-3 mb-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs font-bold text-gray-700">Dependente {idx + 1}</span>
+                      <button onClick={() => removerDependenteLinha(idx)} className="text-red-600 text-xs font-semibold">Remover</button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Nome *</label>
+                        <input type="text" value={d.nome} onChange={(e) => atualizarCampoDependente(idx, "nome", e.target.value)} className="input-field text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Parentesco</label>
+                        <select value={d.parentesco} onChange={(e) => atualizarCampoDependente(idx, "parentesco", e.target.value)} className="input-field text-sm">
+                          <option value="">Selecione</option>
+                          {PARENTESCO_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Data de nascimento</label>
+                        <input type="date" value={d.data_nascimento} onChange={(e) => atualizarCampoDependente(idx, "data_nascimento", e.target.value)} className="input-field text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">CPF</label>
+                        <input type="text" value={d.cpf} onChange={(e) => atualizarCampoDependente(idx, "cpf", e.target.value)} className="input-field text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Nome da mãe</label>
+                        <input type="text" value={d.nome_mae} onChange={(e) => atualizarCampoDependente(idx, "nome_mae", e.target.value)} className="input-field text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">CPF da mãe</label>
+                        <input type="text" value={d.cpf_mae} onChange={(e) => atualizarCampoDependente(idx, "cpf_mae", e.target.value)} className="input-field text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Cartório</label>
+                        <input type="text" value={d.cartorio} onChange={(e) => atualizarCampoDependente(idx, "cartorio", e.target.value)} className="input-field text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Local de nascimento</label>
+                        <input type="text" value={d.local_nascimento} onChange={(e) => atualizarCampoDependente(idx, "local_nascimento", e.target.value)} className="input-field text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Declaração de nascido vivo</label>
+                        <input type="text" value={d.declaracao_nascido_vivo} onChange={(e) => atualizarCampoDependente(idx, "declaracao_nascido_vivo", e.target.value)} className="input-field text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Nº registro</label>
+                        <input type="text" value={d.num_registro} onChange={(e) => atualizarCampoDependente(idx, "num_registro", e.target.value)} className="input-field text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Nº livro</label>
+                        <input type="text" value={d.num_livro} onChange={(e) => atualizarCampoDependente(idx, "num_livro", e.target.value)} className="input-field text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Nº folha</label>
+                        <input type="text" value={d.num_folha} onChange={(e) => atualizarCampoDependente(idx, "num_folha", e.target.value)} className="input-field text-sm" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between mt-2">
+                  <button onClick={adicionarDependenteLinha} className="text-xs font-semibold" style={{ color: "#B45309" }}>
+                    + Adicionar dependente
+                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={cancelarEdicaoDependentes} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }} disabled={salvandoDependentes}>
+                      Cancelar
+                    </button>
+                    <button onClick={handleSalvarDependentes} className="btn-primary" style={{ padding: "5px 12px", fontSize: 12 }} disabled={salvandoDependentes}>
+                      {salvandoDependentes ? "Salvando..." : "Salvar"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : dependentesAtuais.length === 0 ? (
+              <p className="text-sm text-gray-400">Nenhum dependente registrado.</p>
+            ) : (
+              dependentesAtuais.map((d) => (
                 <div key={d.id} className="py-2 border-b border-gray-50 last:border-0">
                   <p className="text-sm font-semibold text-gray-900">{d.nome} <span className="text-gray-400 font-normal">({d.parentesco})</span></p>
                   <p className="text-xs text-gray-500">Nascimento: {d.data_nascimento || "—"} {d.cpf ? `· CPF: ${d.cpf}` : ""}</p>
                   {d.nome_mae && <p className="text-xs text-gray-500">Mãe: {d.nome_mae}</p>}
                 </div>
-              ))}
-            </Secao>
-          )}
+              ))
+            )}
+          </Secao>
 
-          {/* Candidato ainda não chegou nesse passo do formulário (ou admissão criada
-              antes da Fase C) — sem registro nenhum, não faz sentido mostrar a seção. */}
-          {valeTransporte && (
-            <Secao titulo="Vale Transporte">
-              <Linha label="Opção" value={valeTransporte.opcao ? OPCAO_VALE_TRANSPORTE_LABEL[valeTransporte.opcao] ?? valeTransporte.opcao : null} />
-              <Linha label="Dias na semana" value={valeTransporte.dias_semana} />
-              <Linha label="Local de trabalho" value={valeTransporte.bairro_cidade_trabalho} />
-              {valeTransporte.opcao === "vale_transporte" && valeTransporte.admissao_vt_linhas.length > 0 && (
-                <div className="mt-2">
-                  {valeTransporte.admissao_vt_linhas.map((l) => (
-                    <div key={l.id} className="py-2 border-b border-gray-50 last:border-0">
-                      <p className="text-sm font-semibold text-gray-900">
-                        {[l.onibus_viacao, l.percurso].filter(Boolean).join(" — ") || "—"}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Unitário: {l.valor_unitario != null ? l.valor_unitario.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}
-                        {" · "}
-                        Total diário: {l.valor_total_diario != null ? l.valor_total_diario.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+          <Secao titulo="Vale Transporte">
+            <div className="flex justify-end mb-1">
+              {!editandoVT && (
+                <button onClick={iniciarEdicaoVT} className="text-xs font-semibold" style={{ color: "#B45309" }}>
+                  Editar
+                </button>
               )}
-            </Secao>
-          )}
+            </div>
 
-          {autorizacaoSindical && (
-            <Secao titulo="Autorização Sindical">
-              <Linha label="Sindicato" value={autorizacaoSindical.nome_sindicato} />
-              <Linha
-                label="Desconto assistencial/confederativa"
-                value={autorizacaoSindical.autoriza_assistencial_confederativa === true ? "Autorizado" : autorizacaoSindical.autoriza_assistencial_confederativa === false ? "Não autorizado" : null}
-              />
-              <Linha
-                label="Desconto sindical"
-                value={autorizacaoSindical.autoriza_sindical === true ? "Autorizado" : autorizacaoSindical.autoriza_sindical === false ? "Não autorizado" : null}
-              />
-            </Secao>
-          )}
+            {editandoVT ? (
+              <div>
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-500 mb-1">Opção</label>
+                  <select value={formVT.opcao} onChange={(e) => atualizarCampoVT("opcao", e.target.value)} className="input-field text-sm">
+                    <option value="">Selecione</option>
+                    {Object.entries(OPCAO_VALE_TRANSPORTE_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </div>
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-500 mb-1">Dias na semana</label>
+                  <input type="text" value={formVT.dias_semana} onChange={(e) => atualizarCampoVT("dias_semana", e.target.value)} className="input-field text-sm" />
+                </div>
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-500 mb-1">Local de trabalho (bairro/cidade)</label>
+                  <input type="text" value={formVT.bairro_cidade_trabalho} onChange={(e) => atualizarCampoVT("bairro_cidade_trabalho", e.target.value)} className="input-field text-sm" />
+                </div>
+                <div className="mb-3">
+                  <label className="block text-xs text-gray-500 mb-1">Termos aceitos?</label>
+                  <select value={formVT.termos_aceitos} onChange={(e) => atualizarCampoVT("termos_aceitos", e.target.value)} className="input-field text-sm">
+                    <option value="">Não alterar</option>
+                    <option value="sim">Sim</option>
+                    <option value="nao">Não</option>
+                  </select>
+                </div>
+
+                {formVT.opcao === "vale_transporte" && (
+                  <div className="mb-3">
+                    <p className="text-xs font-semibold text-gray-700 mb-2">Linhas de ônibus (até 2)</p>
+                    {formVT.linhas.map((l, idx) => (
+                      <div key={idx} className="border border-gray-200 rounded-lg p-3 mb-2">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-bold text-gray-700">Linha {idx + 1}</span>
+                          <button onClick={() => removerLinhaVT(idx)} className="text-red-600 text-xs font-semibold">Remover</button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input type="text" placeholder="Ônibus/Viação" value={l.onibus_viacao} onChange={(e) => atualizarLinhaVT(idx, "onibus_viacao", e.target.value)} className="input-field text-sm" />
+                          <input type="text" placeholder="Percurso" value={l.percurso} onChange={(e) => atualizarLinhaVT(idx, "percurso", e.target.value)} className="input-field text-sm" />
+                          <input type="text" inputMode="decimal" placeholder="Valor unitário" value={l.valor_unitario} onChange={(e) => atualizarLinhaVT(idx, "valor_unitario", e.target.value)} className="input-field text-sm" />
+                          <input type="text" inputMode="decimal" placeholder="Valor total diário" value={l.valor_total_diario} onChange={(e) => atualizarLinhaVT(idx, "valor_total_diario", e.target.value)} className="input-field text-sm" />
+                        </div>
+                      </div>
+                    ))}
+                    {formVT.linhas.length < 2 && (
+                      <button onClick={adicionarLinhaVT} className="text-xs font-semibold" style={{ color: "#B45309" }}>+ Adicionar linha</button>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex gap-2 justify-end">
+                  <button onClick={cancelarEdicaoVT} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }} disabled={salvandoVT}>
+                    Cancelar
+                  </button>
+                  <button onClick={handleSalvarVT} className="btn-primary" style={{ padding: "5px 12px", fontSize: 12 }} disabled={salvandoVT}>
+                    {salvandoVT ? "Salvando..." : "Salvar"}
+                  </button>
+                </div>
+              </div>
+            ) : valeTransporteAtual ? (
+              <>
+                <Linha label="Opção" value={valeTransporteAtual.opcao ? OPCAO_VALE_TRANSPORTE_LABEL[valeTransporteAtual.opcao] ?? valeTransporteAtual.opcao : null} />
+                <Linha label="Dias na semana" value={valeTransporteAtual.dias_semana} />
+                <Linha label="Local de trabalho" value={valeTransporteAtual.bairro_cidade_trabalho} />
+                {valeTransporteAtual.opcao === "vale_transporte" && valeTransporteAtual.admissao_vt_linhas.length > 0 && (
+                  <div className="mt-2">
+                    {valeTransporteAtual.admissao_vt_linhas.map((l) => (
+                      <div key={l.id} className="py-2 border-b border-gray-50 last:border-0">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {[l.onibus_viacao, l.percurso].filter(Boolean).join(" — ") || "—"}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Unitário: {l.valor_unitario != null ? l.valor_unitario.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}
+                          {" · "}
+                          Total diário: {l.valor_total_diario != null ? l.valor_total_diario.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-gray-400">Nenhum vale transporte registrado ainda.</p>
+            )}
+          </Secao>
+
+          <Secao titulo="Autorização Sindical">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs text-gray-400">Preenchido pelo analista</span>
+              {!editandoAS && (
+                <button onClick={iniciarEdicaoAS} className="text-xs font-semibold" style={{ color: "#B45309" }}>
+                  Editar
+                </button>
+              )}
+            </div>
+
+            {editandoAS ? (
+              <div>
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-500 mb-1">Nome do sindicato</label>
+                  <input
+                    type="text" value={nomeSindicatoEdit}
+                    onChange={(e) => setNomeSindicatoEdit(e.target.value)}
+                    className="input-field text-sm"
+                  />
+                </div>
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-500 mb-1">Autoriza desconto das Contribuições Assistencial e Confederativa?</label>
+                  <select value={autorizaAssistencialEdit} onChange={(e) => setAutorizaAssistencialEdit(e.target.value as "" | "sim" | "nao")} className="input-field text-sm">
+                    <option value="">Selecione</option>
+                    <option value="sim">Sim</option>
+                    <option value="nao">Não</option>
+                  </select>
+                </div>
+                <div className="mb-3">
+                  <label className="block text-xs text-gray-500 mb-1">Autoriza desconto da Contribuição Sindical?</label>
+                  <select value={autorizaSindicalEdit} onChange={(e) => setAutorizaSindicalEdit(e.target.value as "" | "sim" | "nao")} className="input-field text-sm">
+                    <option value="">Selecione</option>
+                    <option value="sim">Sim</option>
+                    <option value="nao">Não</option>
+                  </select>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={cancelarEdicaoAS} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }} disabled={salvandoAS}>
+                    Cancelar
+                  </button>
+                  <button onClick={handleSalvarAS} className="btn-primary" style={{ padding: "5px 12px", fontSize: 12 }} disabled={salvandoAS}>
+                    {salvandoAS ? "Salvando..." : "Salvar"}
+                  </button>
+                </div>
+              </div>
+            ) : autorizacaoSindicalAtual ? (
+              <>
+                <Linha label="Sindicato" value={autorizacaoSindicalAtual.nome_sindicato} />
+                <Linha
+                  label="Desconto assistencial/confederativa"
+                  value={autorizacaoSindicalAtual.autoriza_assistencial_confederativa === true ? "Autorizado" : autorizacaoSindicalAtual.autoriza_assistencial_confederativa === false ? "Não autorizado" : null}
+                />
+                <Linha
+                  label="Desconto sindical"
+                  value={autorizacaoSindicalAtual.autoriza_sindical === true ? "Autorizado" : autorizacaoSindicalAtual.autoriza_sindical === false ? "Não autorizado" : null}
+                />
+              </>
+            ) : (
+              <p className="text-sm text-gray-400">Nenhuma autorização sindical registrada.</p>
+            )}
+          </Secao>
         </>
       )}
 
@@ -446,21 +1379,31 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
             </div>
           )}
           <p className="text-sm font-semibold text-gray-700 mb-4">{docsAprovados} de {documentos.length} documentos aprovados</p>
-          {documentos.map((doc) => {
-            const def = DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === doc.tipo_documento);
-            const statusBadge: Record<string, { label: string; bg: string; text: string }> = {
-              pendente: { label: "Pendente", bg: "#F3F4F6", text: "#6B7280" },
-              enviado: { label: "Enviado", bg: "#DBEAFE", text: "#1D4ED8" },
-              aprovado: { label: "Aprovado ✅", bg: "#DCFCE7", text: "#15803D" },
-              rejeitado: { label: "Rejeitado ❌", bg: "#FEE2E2", text: "#991B1B" },
-            };
-            const sb = statusBadge[doc.status] ?? statusBadge.pendente;
-            const processando = processandoDocId === doc.id;
+          {(() => {
+            // Tipos com múltiplos arquivos (ex.: documentos de dependente) numeram
+            // "(1)", "(2)"... na ordem de envio — só quando há mais de uma linha do tipo.
+            const totalPorTipo: Record<string, number> = {};
+            for (const d of documentos) totalPorTipo[d.tipo_documento] = (totalPorTipo[d.tipo_documento] ?? 0) + 1;
+            const contadorPorTipo: Record<string, number> = {};
+            return documentos.map((doc) => {
+              const def = DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === doc.tipo_documento);
+              contadorPorTipo[doc.tipo_documento] = (contadorPorTipo[doc.tipo_documento] ?? 0) + 1;
+              const numero = contadorPorTipo[doc.tipo_documento];
+              const labelBase = def?.label ?? doc.tipo_documento;
+              const label = totalPorTipo[doc.tipo_documento] > 1 ? `${labelBase} (${numero})` : labelBase;
+              const statusBadge: Record<string, { label: string; bg: string; text: string }> = {
+                pendente: { label: "Pendente", bg: "#F3F4F6", text: "#6B7280" },
+                enviado: { label: "Enviado", bg: "#DBEAFE", text: "#1D4ED8" },
+                aprovado: { label: "Aprovado ✅", bg: "#DCFCE7", text: "#15803D" },
+                rejeitado: { label: "Rejeitado ❌", bg: "#FEE2E2", text: "#991B1B" },
+              };
+              const sb = statusBadge[doc.status] ?? statusBadge.pendente;
+              const processando = processandoDocId === doc.id;
 
-            return (
+              return (
               <div key={doc.id} className="card mb-3">
                 <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm font-bold text-gray-900">{def?.label ?? doc.tipo_documento}</p>
+                  <p className="text-sm font-bold text-gray-900">{label}</p>
                   <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: sb.bg, color: sb.text }}>
                     {sb.label}
                   </span>
@@ -519,8 +1462,9 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                   </div>
                 )}
               </div>
-            );
-          })}
+              );
+            });
+          })()}
         </div>
       )}
 
@@ -583,16 +1527,118 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
               ⚠️ Aprove antes: {nomesDocsPendentes.join(", ")}
             </p>
           )}
+          {!podeGerarPdf && !forcandoPacote && (
+            <button
+              onClick={() => setForcandoPacote(true)}
+              className="text-xs font-semibold mt-2"
+              style={{ color: "#DC2626", display: "block", marginLeft: "auto" }}
+            >
+              Forçar geração do pacote
+            </button>
+          )}
         </div>
       </div>
 
+      {!podeGerarPdf && forcandoPacote && (
+        <div className="card mt-3" style={{ borderColor: "#FECACA", background: "#FEF2F2" }}>
+          <p className="text-sm font-bold mb-1" style={{ color: "#991B1B" }}>⚠️ Forçar geração com documentos pendentes</p>
+          <p className="text-xs mb-2" style={{ color: "#991B1B" }}>
+            Pendentes: {nomesDocsPendentes.join(", ")}. Essa ação fica registrada no histórico de auditoria e marcada no próprio PDF.
+          </p>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            Justificativa (obrigatória) *
+          </label>
+          <textarea
+            value={justificativaForcar}
+            onChange={(e) => setJustificativaForcar(e.target.value)}
+            rows={2}
+            placeholder="Por que está gerando o pacote com documentos pendentes?"
+            className="input-field resize-none mb-2"
+          />
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={() => { setForcandoPacote(false); setJustificativaForcar(""); }}
+              className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }}
+              disabled={gerandoPdfForcado}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleForcarGeracaoPacote}
+              disabled={!justificativaForcar.trim() || gerandoPdfForcado}
+              className="btn-primary" style={{ padding: "5px 12px", fontSize: 12, background: "#DC2626", opacity: !justificativaForcar.trim() || gerandoPdfForcado ? 0.5 : 1 }}
+            >
+              {gerandoPdfForcado ? "Gerando..." : "Confirmar geração forçada"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {documentos.some((d) => d.status === "rejeitado") && (
+        <div className="card mt-3" style={{ borderColor: "#FECACA", background: "#FEF2F2" }}>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-sm font-bold" style={{ color: "#991B1B" }}>⚠️ Documento(s) rejeitado(s) pendente(s) de correção</p>
+              <p className="text-xs mt-0.5" style={{ color: "#991B1B" }}>
+                {STATUS_JA_ENVIADO.includes(status)
+                  ? "O candidato não tem mais acesso de edição ao formulário — reabra o link antes de avisá-lo."
+                  : "O candidato já tem acesso ao link para reenviar o documento."}
+              </p>
+            </div>
+            {!solicitandoCorrecao && (
+              <button onClick={() => setSolicitandoCorrecao(true)} className="btn-primary" style={{ background: "#DC2626" }}>
+                Solicitar correção
+              </button>
+            )}
+          </div>
+
+          {solicitandoCorrecao && (
+            <div className="mt-3 border-t pt-3" style={{ borderColor: "#FECACA" }}>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                Observação para a equipe (opcional)
+              </label>
+              <textarea
+                value={notaCorrecao}
+                onChange={(e) => setNotaCorrecao(e.target.value)}
+                rows={2}
+                placeholder="Ex: pedir pra reenviar o CPF dos dependentes, o anterior veio ilegível"
+                className="input-field resize-none mb-2"
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => { setSolicitandoCorrecao(false); setNotaCorrecao(""); }}
+                  className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }}
+                  disabled={enviandoCorrecao}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSolicitarCorrecao}
+                  className="btn-primary" style={{ padding: "5px 12px", fontSize: 12 }}
+                  disabled={enviandoCorrecao}
+                >
+                  {enviandoCorrecao ? "Enviando..." : "Confirmar e reabrir acesso"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {admissao.pdf_pacote_path && (
-        <div className="card mt-3">
+        <div className="card mt-3" style={admissao.pacote_gerado_forcado ? { borderColor: "#FECACA", background: "#FEF2F2" } : undefined}>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Pacote para contabilidade</p>
           <p className="text-sm text-gray-600 mb-2">
             Gerado em {admissao.pdf_pacote_gerado_em ? formatarData(admissao.pdf_pacote_gerado_em) : "—"}
             {logGeracaoPacote?.usuario_nome ? ` por ${logGeracaoPacote.usuario_nome}` : ""}
           </p>
+          {admissao.pacote_gerado_forcado && (
+            <p className="text-xs font-semibold mb-2" style={{ color: "#991B1B" }}>
+              ⚠️ Gerado com pendências em {admissao.pdf_pacote_gerado_em ? formatarData(admissao.pdf_pacote_gerado_em) : "—"}
+              {logGeracaoPacote?.usuario_nome ? ` por ${logGeracaoPacote.usuario_nome}` : ""}
+              {admissao.pacote_gerado_justificativa ? ` — justificativa: ${admissao.pacote_gerado_justificativa}` : ""}
+            </p>
+          )}
           <button onClick={handleVerPacote} disabled={abrindoPacote} className="btn-outline">
             {abrindoPacote ? "Abrindo..." : "Ver pacote gerado"}
           </button>

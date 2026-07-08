@@ -105,7 +105,8 @@
       "Bash(cat tailwind.config.ts)",
       "Bash(cat tailwind.config.js)",
       "Bash(xargs grep -ln \"FFD700\\\\|FFCC29\\\\|FFC107\\\\|F5C518\\\\|FFD\" -i)",
-      "Bash(grep -rln \"admissao/ProgressBar\\\\|from \\\\\"\\\\.\\\\/ProgressBar\\\\\"\\\\|from \\\\\"\\\\.\\\\./admissao/ProgressBar\\\\\"\" src --include=\"*.tsx\")"
+      "Bash(grep -rln \"admissao/ProgressBar\\\\|from \\\\\"\\\\.\\\\/ProgressBar\\\\\"\\\\|from \\\\\"\\\\.\\\\./admissao/ProgressBar\\\\\"\" src --include=\"*.tsx\")",
+      "Read(//dev/**)"
     ]
   }
 }

@@ -32,6 +32,11 @@ export async function POST(request: NextRequest, { params }: Params) {
   return NextResponse.json({ signedUrl: data.signedUrl, path: data.path, token: data.token });
 }
 
+// Tipos de documento de dependente aceitam múltiplos arquivos (um por dependente, sem
+// vínculo nominal) — cada admissão nasce com só 1 linha por tipo (ver POST /api/admissoes),
+// então a partir do 2º arquivo é preciso criar linhas novas em vez de sobrescrever.
+const MAX_ARQUIVOS_POR_TIPO = 10;
+
 // Confirma que o upload terminou — grava o storage_path e marca como enviado.
 export async function PATCH(request: NextRequest, { params }: Params) {
   const { token, tipo } = await params;
@@ -45,19 +50,84 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const parsed = parseBody(admissaoDocumentoConfirmarSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
-  const { data, error } = await svc
-    .from("admissao_documentos")
-    .update({
-      storage_path: parsed.data.storage_path,
-      status: "enviado",
-      motivo_rejeicao: null,
-    })
-    .eq("admissao_id", admissaoId)
-    .eq("tipo_documento", tipo)
-    .select()
-    .single();
+  const def = DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === tipo)!;
+  const aceitaMultiplos = def.condicional === "dependente";
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  let data;
+  if (parsed.data.doc_id) {
+    // Reenvio de uma linha específica (ex.: arquivo rejeitado de um tipo com múltiplos
+    // arquivos) — substitui só aquela linha, nunca cria uma nova.
+    const { data: updated, error } = await svc
+      .from("admissao_documentos")
+      .update({ storage_path: parsed.data.storage_path, status: "enviado", motivo_rejeicao: null })
+      .eq("id", parsed.data.doc_id)
+      .eq("admissao_id", admissaoId)
+      .eq("tipo_documento", tipo)
+      .select()
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    data = updated;
+  } else if (aceitaMultiplos) {
+    // Reaproveita a linha semeada na criação da admissão (ainda sem arquivo) se existir;
+    // senão cria uma linha nova — é assim que o mesmo tipo passa a comportar vários arquivos.
+    const { data: slotVazio } = await svc
+      .from("admissao_documentos")
+      .select("id")
+      .eq("admissao_id", admissaoId)
+      .eq("tipo_documento", tipo)
+      .is("storage_path", null)
+      .limit(1)
+      .maybeSingle();
+
+    if (slotVazio) {
+      const { data: updated, error } = await svc
+        .from("admissao_documentos")
+        .update({ storage_path: parsed.data.storage_path, status: "enviado", motivo_rejeicao: null })
+        .eq("id", slotVazio.id)
+        .select()
+        .single();
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      data = updated;
+    } else {
+      const { count } = await svc
+        .from("admissao_documentos")
+        .select("id", { count: "exact", head: true })
+        .eq("admissao_id", admissaoId)
+        .eq("tipo_documento", tipo);
+      if ((count ?? 0) >= MAX_ARQUIVOS_POR_TIPO) {
+        return NextResponse.json({ error: `Limite de ${MAX_ARQUIVOS_POR_TIPO} arquivos por documento atingido.` }, { status: 400 });
+      }
+
+      const { data: inserted, error } = await svc
+        .from("admissao_documentos")
+        .insert({
+          admissao_id: admissaoId,
+          tipo_documento: tipo,
+          obrigatorio: def.obrigatorio,
+          condicional: def.condicional,
+          storage_path: parsed.data.storage_path,
+          status: "enviado",
+        })
+        .select()
+        .single();
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      data = inserted;
+    }
+  } else {
+    const { data: updated, error } = await svc
+      .from("admissao_documentos")
+      .update({
+        storage_path: parsed.data.storage_path,
+        status: "enviado",
+        motivo_rejeicao: null,
+      })
+      .eq("admissao_id", admissaoId)
+      .eq("tipo_documento", tipo)
+      .select()
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    data = updated;
+  }
 
   registrarAuditoria({
     usuario_id: null,

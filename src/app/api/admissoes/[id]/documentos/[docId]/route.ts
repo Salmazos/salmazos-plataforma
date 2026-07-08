@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, admissaoDocumentoRevisarSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
+import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
 import { linkDocumentoRejeitadoWhatsapp } from "@/lib/waLinks";
 
@@ -21,6 +22,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const acessoNegado = checarPapelAdmissoes(user);
+  if (acessoNegado) return acessoNegado;
 
   const svc = createServiceClient();
 
@@ -61,6 +64,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const acessoNegado = checarPapelAdmissoes(user);
+  if (acessoNegado) return acessoNegado;
 
   const body = await request.json();
   const parsed = parseBody(admissaoDocumentoRevisarSchema, body);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
 import { PDFDocument } from "pdf-lib";
 import { PdfWriter } from "@/lib/pdfWriter";
 import { desenharFichaCadastral, desenharAutorizacaoSindical, desenharSolicitacaoValeTransporte } from "@/lib/admissaoDocumentosPdf";
@@ -15,6 +16,8 @@ export async function GET(_request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const acessoNegado = checarPapelAdmissoes(user);
+  if (acessoNegado) return acessoNegado;
 
   const pdfDoc = await PDFDocument.create();
   // Sem capa aqui — o primeiro conteúdo real já é desenharFichaCadastral, que abre

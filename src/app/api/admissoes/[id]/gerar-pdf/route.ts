@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { PDFDocument, PageSizes } from "pdf-lib";
+import { PDFDocument, PageSizes, rgb } from "pdf-lib";
 import { registrarAuditoria } from "@/lib/audit";
+import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
+import { parseBody, admissaoGerarPdfSchema } from "@/lib/schemas";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
 import { PdfWriter, PW, PH, ML, safe, BLACK, YELLOW, DARK, GRAY } from "@/lib/pdfWriter";
 import { desenharFichaCadastral, desenharAutorizacaoSindical, desenharSolicitacaoValeTransporte } from "@/lib/admissaoDocumentosPdf";
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
-import type { AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
+import type { AdmissaoAdicional, AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
 
 interface Params { params: Promise<{ id: string }> }
 
-export async function POST(_request: NextRequest, { params }: Params) {
+export async function POST(request: NextRequest, { params }: Params) {
   const { id } = await params;
 
   const supabase = await createClient();
@@ -18,6 +20,14 @@ export async function POST(_request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const acessoNegado = checarPapelAdmissoes(user);
+  if (acessoNegado) return acessoNegado;
+
+  const body = await request.json().catch(() => ({}));
+  const parsedForcar = parseBody(admissaoGerarPdfSchema, body);
+  if (!parsedForcar.success) return NextResponse.json({ error: parsedForcar.error }, { status: 400 });
+  const forcarComPendencias = parsedForcar.data.forcar === true;
+  const justificativa = parsedForcar.data.justificativa?.trim() || null;
 
   const svc = createServiceClient();
 
@@ -45,10 +55,11 @@ export async function POST(_request: NextRequest, { params }: Params) {
   }
   const entidade = ENTIDADES_CONTRATANTES.find((e) => e.value === entidadeContratanteValue);
 
-  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: valeTransporte }, { data: autorizacaoSindical }] = await Promise.all([
+  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: adicionais }, { data: valeTransporte }, { data: autorizacaoSindical }] = await Promise.all([
     svc.from("admissao_dados_pessoais").select("*").eq("admissao_id", id).maybeSingle(),
     svc.from("admissao_dependentes").select("*").eq("admissao_id", id).order("created_at", { ascending: true }),
     svc.from("admissao_documentos").select("*").eq("admissao_id", id).order("created_at", { ascending: true }),
+    svc.from("admissao_adicionais").select("*").eq("admissao_id", id).order("criado_em", { ascending: true }),
     svc.from("admissao_vale_transporte").select("*, admissao_vt_linhas(*)").eq("admissao_id", id).order("ordem", { referencedTable: "admissao_vt_linhas", ascending: true }).maybeSingle(),
     svc.from("admissao_autorizacao_sindical").select("*").eq("admissao_id", id).maybeSingle(),
   ]);
@@ -56,20 +67,24 @@ export async function POST(_request: NextRequest, { params }: Params) {
   const dp = (dadosPessoais ?? {}) as Partial<AdmissaoDadosPessoais>;
   const deps = (dependentes ?? []) as AdmissaoDependente[];
   const docs = (documentos ?? []) as AdmissaoDocumento[];
+  const adics = (adicionais ?? []) as AdmissaoAdicional[];
 
   const obrigatoriosPendentes = docs.filter((d) => d.obrigatorio && d.status !== "aprovado");
-  if (obrigatoriosPendentes.length > 0) {
-    const labels = obrigatoriosPendentes.map(
-      (d) => DOCUMENTOS_ADMISSAO.find((def) => def.tipo_documento === d.tipo_documento)?.label ?? d.tipo_documento
-    );
+  const labelsPendentes = obrigatoriosPendentes.map(
+    (d) => DOCUMENTOS_ADMISSAO.find((def) => def.tipo_documento === d.tipo_documento)?.label ?? d.tipo_documento
+  );
+  if (obrigatoriosPendentes.length > 0 && !forcarComPendencias) {
     return NextResponse.json(
       {
-        error: `Não é possível gerar o pacote: ${obrigatoriosPendentes.length} documento(s) obrigatório(s) ainda não foram aprovados: ${labels.join(", ")}`,
-        pendentes: labels,
+        error: `Não é possível gerar o pacote: ${obrigatoriosPendentes.length} documento(s) obrigatório(s) ainda não foram aprovados: ${labelsPendentes.join(", ")}. Use "Forçar geração" com justificativa se precisar seguir mesmo assim.`,
+        pendentes: labelsPendentes,
       },
       { status: 400 }
     );
   }
+  // "Forçar geração" exige justificativa mesmo sem pendência real (ex.: chamada direta à
+  // API) — sem pendência, forcar=true simplesmente não tem efeito nenhum no fluxo.
+  const geradoComPendencias = forcarComPendencias && obrigatoriosPendentes.length > 0;
 
   const pdfDoc = await PDFDocument.create();
   const w = await PdfWriter.create(pdfDoc);
@@ -87,6 +102,17 @@ export async function POST(_request: NextRequest, { params }: Params) {
   w.drawField("Vaga", vagaTitulo);
   w.drawField("Modalidade", admissao.modalidade === "MOT" ? "Mão de Obra Temporária" : "Terceirização");
   w.drawField("Data de geração", new Date().toLocaleDateString("pt-BR"));
+
+  // Selo de auditoria: deixa explícito no próprio PDF que esse pacote saiu com
+  // documentos obrigatórios pendentes/rejeitados, pra não passar como um envio "limpo".
+  if (geradoComPendencias) {
+    const RED = rgb(0.8, 0.15, 0.15);
+    w.y -= 4;
+    w.drawText("⚠ GERADO COM PENDÊNCIAS — DOCUMENTOS OBRIGATÓRIOS NÃO APROVADOS", w.bold, 10, RED);
+    w.drawText(`Justificativa: ${justificativa}`, w.regular, 9, GRAY);
+    w.drawText(`Pendências no momento da geração: ${labelsPendentes.join(", ")}`, w.regular, 9, GRAY);
+    w.y -= 4;
+  }
 
   // ── Dados pessoais ─────────────────────────────────────────
   w.sectionTitle("Dados Pessoais");
@@ -156,6 +182,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       opta_vale_transporte: valeTransporte?.opcao ?? null,
       autoriza_sindical: autorizacaoSindical?.autoriza_sindical ?? null,
       possui_dependentes: deps.length > 0,
+      adicionais: adics,
     },
     deps
   );
@@ -166,6 +193,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
     rg_numero: dp.rg_numero,
     carteira_trabalho_numero: dp.carteira_trabalho_numero,
     carteira_trabalho_serie: dp.carteira_trabalho_serie,
+    possui_ctps_digital: dp.possui_ctps_digital,
     nome_sindicato: autorizacaoSindical?.nome_sindicato ?? null,
     autoriza_assistencial_confederativa: autorizacaoSindical?.autoriza_assistencial_confederativa ?? null,
     autoriza_sindical: autorizacaoSindical?.autoriza_sindical ?? null,
@@ -263,16 +291,26 @@ export async function POST(_request: NextRequest, { params }: Params) {
       pdf_pacote_path: uploadPath,
       pdf_pacote_gerado_em: geradoEm,
       pdf_pacote_gerado_por: user.id,
+      // Reflete o resultado desta geração específica — uma geração limpa subsequente
+      // limpa o selo de uma forçada anterior, e vice-versa.
+      pacote_gerado_forcado: geradoComPendencias,
+      pacote_gerado_justificativa: geradoComPendencias ? justificativa : null,
     })
     .eq("id", id);
 
   registrarAuditoria({
     usuario_id: user.id,
     usuario_nome: user.email ?? null,
-    acao: "admissao_pacote_gerado",
+    acao: geradoComPendencias ? "admissao_pacote_gerado_forcado" : "admissao_pacote_gerado",
     entidade: "admissoes",
     entidade_id: id,
-    detalhes: { storage_path: uploadPath, documentos_nao_incorporados: naoEmbutidos },
+    detalhes: {
+      storage_path: uploadPath,
+      documentos_nao_incorporados: naoEmbutidos,
+      ...(geradoComPendencias
+        ? { forcado: true, justificativa, documentos_pendentes: labelsPendentes }
+        : {}),
+    },
   });
 
   const slug = safe(candidatoNome).toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 50);
