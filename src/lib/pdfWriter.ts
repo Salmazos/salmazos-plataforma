@@ -27,6 +27,28 @@ export function safe(v: unknown): string {
   return (v == null ? "" : String(v)).replace(/[–—]/g, "-").replace(/[^\x20-\xFF]/g, " ").trim();
 }
 
+// Quebra texto em linhas que cabem em `width` — pdf-lib não quebra linha sozinho
+// (drawText desenha reto, estourando a largura se o texto for maior que o espaço
+// disponível). Usado tanto por paragraph() (texto corrido) quanto por formField()
+// (valores de campo que podem ser mais longos que a coluna, ex: horário de trabalho
+// colando no campo vizinho de um formFieldRow).
+function quebrarLinhas(text: string, font: PDFFont, size: number, width: number): string[] {
+  const palavras = safe(text).split(" ");
+  const linhas: string[] = [];
+  let linha = "";
+  for (const palavra of palavras) {
+    const tentativa = linha ? `${linha} ${palavra}` : palavra;
+    if (linha && font.widthOfTextAtSize(tentativa, size) > width) {
+      linhas.push(linha);
+      linha = palavra;
+    } else {
+      linha = tentativa;
+    }
+  }
+  if (linha) linhas.push(linha);
+  return linhas;
+}
+
 // Encapsula o cursor de escrita (página atual + posição Y) usado em todos os PDFs
 // gerados no projeto — extraído do que já existia (duplicado) em gerar-pdf/route.ts,
 // pra ser reaproveitado tanto ali quanto nos templates novos da Fase E.
@@ -114,18 +136,26 @@ export class PdfWriter {
 
   // Campo de formulário de verdade: rótulo em cima, valor OU linha em branco embaixo
   // pra preencher à caneta — usado nos 3 documentos da Fase E (sempre desenha o rótulo,
-  // preenchido ou não, ao contrário de drawField que some se vazio).
+  // preenchido ou não, ao contrário de drawField que some se vazio). Valores mais longos
+  // que `width` quebram em várias linhas em vez de estourar por cima do campo vizinho
+  // (era o caso de "Horário de trabalho" colando em "Data de admissão").
   formField(label: string, value: unknown, width: number = CW, x: number = ML) {
     const v = safe(value);
     this.ensureSpace(28);
     this.page.drawText(label, { x, y: this.y, size: 8, font: this.bold, color: GRAY });
     this.y -= 12;
     if (v) {
-      this.page.drawText(v, { x, y: this.y, size: 10, font: this.regular, color: DARK });
+      const linhas = quebrarLinhas(v, this.regular, 10, width);
+      for (const linha of linhas) {
+        this.ensureSpace(12);
+        this.page.drawText(linha, { x, y: this.y, size: 10, font: this.regular, color: DARK });
+        this.y -= 12;
+      }
+      this.y -= 4;
     } else {
       this.page.drawLine({ start: { x, y: this.y - 1 }, end: { x: x + width, y: this.y - 1 }, thickness: 0.5, color: LIGHT_GRAY });
+      this.y -= 16;
     }
-    this.y -= 16;
   }
 
   // Duas colunas de formField lado a lado, na mesma linha.
@@ -144,23 +174,13 @@ export class PdfWriter {
     this.y = startY - maxDrop;
   }
 
-  // Quebra texto longo em várias linhas que cabem em `width` — pdf-lib não quebra
-  // linha sozinho (drawText estoura a página se o texto for maior que a largura),
-  // então isso existe pra declarações de texto corrido (ex: cláusulas legais) em vez
-  // de cada chamador ter que quebrar a mão feito foi feito na Autorização Sindical.
+  // Quebra texto longo em várias linhas que cabem em `width` — usado pra declarações
+  // de texto corrido (ex: cláusulas legais) em vez de cada chamador ter que quebrar a
+  // mão feito foi feito na Autorização Sindical.
   paragraph(text: string, font: PDFFont, size: number, color = DARK, x: number = ML, width: number = CW) {
-    const palavras = safe(text).split(" ");
-    let linha = "";
-    for (const palavra of palavras) {
-      const tentativa = linha ? `${linha} ${palavra}` : palavra;
-      if (linha && font.widthOfTextAtSize(tentativa, size) > width) {
-        this.drawText(linha, font, size, color, x);
-        linha = palavra;
-      } else {
-        linha = tentativa;
-      }
+    for (const linha of quebrarLinhas(text, font, size, width)) {
+      this.drawText(linha, font, size, color, x);
     }
-    if (linha) this.drawText(linha, font, size, color, x);
   }
 
   // ( ) ou (X) — pra opções de múltipla escolha (rádio) desenhadas manualmente.
