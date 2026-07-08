@@ -11,6 +11,7 @@ import {
   ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, OPCAO_VALE_TRANSPORTE_LABEL,
   COR_RACA_OPTIONS, PARENTESCO_OPTIONS, CNH_CATEGORIAS,
 } from "@/lib/admissaoConstants";
+import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import type { AdmissaoAdicional, AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
 
 type Tab = "dados" | "documentos" | "notas";
@@ -44,10 +45,12 @@ interface AdmissaoFull {
   token: string;
   token_expira_em: string;
   criado_em: string;
+  vaga_id: string | null;
   funcao: string | null;
   salario: number | null;
   horario_trabalho: string | null;
   data_admissao: string | null;
+  entidade_contratante: string | null;
   observacoes_internas: string | null;
   pdf_pacote_path: string | null;
   pdf_pacote_gerado_em: string | null;
@@ -57,7 +60,7 @@ interface AdmissaoFull {
   lgpd_aceite_em: string | null;
   lgpd_aceite_ip: string | null;
   candidatos: { id: string; nome_completo: string; cargo_pretendido: string; telefone: string | null; email: string | null } | null;
-  vagas: { id: string; titulo: string } | null;
+  vagas: { id: string; titulo: string; cliente_id: string | null; clientes: { id: string; nome: string } | null } | null;
 }
 
 interface AuditLogEntry {
@@ -90,6 +93,7 @@ const ACAO_LABEL: Record<string, string> = {
   admissao_dependente_editado_pelo_analista: "Dependente editado pelo analista",
   admissao_dependente_removido_pelo_analista: "Dependente removido pelo analista",
   admissao_vale_transporte_editado_pelo_analista: "Vale Transporte editado pelo analista",
+  admissao_dados_admissao_editados_pelo_analista: "Vaga/dados da admissão editados pelo analista",
   admissao_adicionais_atualizados: "Adicionais atualizados",
   admissao_autorizacao_sindical_atualizada: "Autorização Sindical atualizada",
 };
@@ -361,6 +365,13 @@ interface ValeTransporteForm {
   linhas: ValeTransporteLinhaForm[];
 }
 
+interface VagaOpcao {
+  id: string;
+  titulo: string;
+  status: string;
+  clientes: { id: string; nome: string } | null;
+}
+
 export default function AdmissaoDetalheClient({ admissao, dadosPessoais, dependentes, documentos: documentosIniciais, adicionais: adicionaisIniciais, auditLogs, valeTransporte, autorizacaoSindical }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("dados");
@@ -406,6 +417,22 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [formDP, setFormDP] = useState<Record<string, string>>({});
   const [salvandoDP, setSalvandoDP] = useState(false);
 
+  const [vagaAtual, setVagaAtual] = useState({
+    id: admissao.vaga_id,
+    titulo: admissao.vagas?.titulo ?? null,
+    clienteNome: admissao.vagas?.clientes?.nome ?? null,
+  });
+  const [funcaoAtual, setFuncaoAtual] = useState(admissao.funcao);
+  const [salarioAtual, setSalarioAtual] = useState(admissao.salario);
+  const [horarioAtual, setHorarioAtual] = useState(admissao.horario_trabalho);
+  const [entidadeAtual, setEntidadeAtual] = useState(admissao.entidade_contratante);
+  const [editandoDadosAdmissao, setEditandoDadosAdmissao] = useState(false);
+  const [formDadosAdmissao, setFormDadosAdmissao] = useState({ vagaId: "", funcao: "", salario: "", horario: "", entidade: "" });
+  const [vagasDisponiveis, setVagasDisponiveis] = useState<VagaOpcao[]>([]);
+  const [carregandoVagas, setCarregandoVagas] = useState(false);
+  const [buscaVaga, setBuscaVaga] = useState("");
+  const [salvandoDadosAdmissao, setSalvandoDadosAdmissao] = useState(false);
+
   const [dependentesAtuais, setDependentesAtuais] = useState(dependentes);
   const [editandoDependentes, setEditandoDependentes] = useState(false);
   const [linhasDependentes, setLinhasDependentes] = useState<DependenteForm[]>([]);
@@ -449,6 +476,74 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       setSalvandoDP(false);
     }
   };
+
+  const iniciarEdicaoDadosAdmissao = () => {
+    setFormDadosAdmissao({
+      vagaId: vagaAtual.id ?? "",
+      funcao: funcaoAtual ?? "",
+      salario: salarioAtual != null ? String(salarioAtual) : "",
+      horario: horarioAtual ?? "",
+      entidade: entidadeAtual ?? "",
+    });
+    setBuscaVaga("");
+    setEditandoDadosAdmissao(true);
+    if (vagasDisponiveis.length === 0) {
+      setCarregandoVagas(true);
+      fetch("/api/vagas")
+        .then((r) => r.json())
+        .then(({ data }) => setVagasDisponiveis(data ?? []))
+        .catch(() => showToast("Erro ao carregar lista de vagas."))
+        .finally(() => setCarregandoVagas(false));
+    }
+  };
+
+  const cancelarEdicaoDadosAdmissao = () => setEditandoDadosAdmissao(false);
+
+  const atualizarCampoDadosAdmissao = <K extends keyof typeof formDadosAdmissao>(campo: K, valor: (typeof formDadosAdmissao)[K]) => {
+    setFormDadosAdmissao((prev) => ({ ...prev, [campo]: valor }));
+  };
+
+  const vagaTrocada = editandoDadosAdmissao && formDadosAdmissao.vagaId && formDadosAdmissao.vagaId !== (vagaAtual.id ?? "");
+
+  const handleSalvarDadosAdmissao = async () => {
+    setSalvandoDadosAdmissao(true);
+    try {
+      const payload: Record<string, unknown> = {};
+      if (formDadosAdmissao.vagaId && formDadosAdmissao.vagaId !== (vagaAtual.id ?? "")) payload.vaga_id = formDadosAdmissao.vagaId;
+      if (formDadosAdmissao.funcao.trim()) payload.funcao = formDadosAdmissao.funcao.trim();
+      const salarioNum = parseValorAdicional(formDadosAdmissao.salario);
+      if (salarioNum > 0) payload.salario = salarioNum;
+      if (formDadosAdmissao.horario.trim()) payload.horario_trabalho = formDadosAdmissao.horario.trim();
+      if (formDadosAdmissao.entidade) payload.entidade_contratante = formDadosAdmissao.entidade;
+
+      const res = await fetch(`/api/admissoes/${admissao.id}/dados-admissao`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok) { showToast(json.error || "Erro ao salvar dados da admissão."); return; }
+
+      const novaVaga = json.data.vagas as { id: string; titulo: string; clientes: { nome: string } | null } | null;
+      setVagaAtual({ id: json.data.vaga_id, titulo: novaVaga?.titulo ?? null, clienteNome: novaVaga?.clientes?.nome ?? null });
+      setFuncaoAtual(json.data.funcao);
+      setSalarioAtual(json.data.salario);
+      setHorarioAtual(json.data.horario_trabalho);
+      setEntidadeAtual(json.data.entidade_contratante);
+      setEditandoDadosAdmissao(false);
+      router.refresh();
+    } catch {
+      showToast("Erro de conexão ao salvar dados da admissão.");
+    } finally {
+      setSalvandoDadosAdmissao(false);
+    }
+  };
+
+  const vagasFiltradas = vagasDisponiveis.filter((v) => {
+    if (!buscaVaga.trim()) return true;
+    const termo = buscaVaga.trim().toLowerCase();
+    return v.titulo.toLowerCase().includes(termo) || (v.clientes?.nome ?? "").toLowerCase().includes(termo);
+  });
 
   const iniciarEdicaoDependentes = () => {
     setLinhasDependentes(dependentesAtuais.map(dependenteParaFormulario));
@@ -1001,9 +1096,89 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           </div>
 
           <Secao titulo="Dados da Admissão">
-            <Linha label="Função" value={admissao.funcao} />
-            <Linha label="Salário" value={admissao.salario != null ? admissao.salario.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : null} />
-            <Linha label="Horário de trabalho" value={admissao.horario_trabalho} />
+            <div className="flex justify-end mb-1">
+              {!editandoDadosAdmissao && (
+                <button onClick={iniciarEdicaoDadosAdmissao} className="text-xs font-semibold" style={{ color: "#B45309" }}>
+                  Editar
+                </button>
+              )}
+            </div>
+
+            {editandoDadosAdmissao ? (
+              <div>
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-500 mb-1">Vaga vinculada</label>
+                  <input
+                    type="text" placeholder="Buscar por título ou cliente..." value={buscaVaga}
+                    onChange={(e) => setBuscaVaga(e.target.value)}
+                    className="input-field text-sm mb-1"
+                  />
+                  {carregandoVagas ? (
+                    <p className="text-xs text-gray-400">Carregando vagas...</p>
+                  ) : (
+                    <select
+                      value={formDadosAdmissao.vagaId}
+                      onChange={(e) => atualizarCampoDadosAdmissao("vagaId", e.target.value)}
+                      className="input-field text-sm"
+                    >
+                      <option value="">Selecione a vaga</option>
+                      {vagasFiltradas.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.titulo} — {v.clientes?.nome ?? "sem cliente"}{v.status !== "aberta" ? ` (${v.status})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {vagaTrocada && (
+                  <div className="rounded-lg p-2 mb-2 text-xs" style={{ background: "#FFFBEB", border: "1px solid #FDE68A", color: "#92400E" }}>
+                    ⚠️ Trocar a vaga muda o Cliente exibido no painel e no PDF. Função, salário, horário e entidade contratante <strong>não são atualizados automaticamente</strong> — revise e ajuste manualmente abaixo antes de salvar.
+                  </div>
+                )}
+
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-500 mb-1">Função</label>
+                  <input type="text" value={formDadosAdmissao.funcao} onChange={(e) => atualizarCampoDadosAdmissao("funcao", e.target.value)} className="input-field text-sm" />
+                </div>
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-500 mb-1">Salário</label>
+                  <input type="text" inputMode="decimal" value={formDadosAdmissao.salario} onChange={(e) => atualizarCampoDadosAdmissao("salario", e.target.value)} className="input-field text-sm" />
+                </div>
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-500 mb-1">Horário de trabalho</label>
+                  <input type="text" value={formDadosAdmissao.horario} onChange={(e) => atualizarCampoDadosAdmissao("horario", e.target.value)} className="input-field text-sm" />
+                </div>
+                <div className="mb-3">
+                  <label className="block text-xs text-gray-500 mb-1">Entidade Contratante (CNPJ)</label>
+                  <select value={formDadosAdmissao.entidade} onChange={(e) => atualizarCampoDadosAdmissao("entidade", e.target.value)} className="input-field text-sm">
+                    <option value="">Selecione</option>
+                    {ENTIDADES_CONTRATANTES.map((ent) => (
+                      <option key={ent.value} value={ent.value}>{ent.razaoSocial} — {ent.cnpj}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex gap-2 justify-end">
+                  <button onClick={cancelarEdicaoDadosAdmissao} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }} disabled={salvandoDadosAdmissao}>
+                    Cancelar
+                  </button>
+                  <button onClick={handleSalvarDadosAdmissao} className="btn-primary" style={{ padding: "5px 12px", fontSize: 12 }} disabled={salvandoDadosAdmissao}>
+                    {salvandoDadosAdmissao ? "Salvando..." : "Salvar"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <Linha label="Vaga" value={vagaAtual.titulo} />
+                <Linha label="Cliente" value={vagaAtual.clienteNome} />
+                <Linha label="Função" value={funcaoAtual} />
+                <Linha label="Salário" value={salarioAtual != null ? salarioAtual.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : null} />
+                <Linha label="Horário de trabalho" value={horarioAtual} />
+                <Linha label="Entidade Contratante" value={ENTIDADES_CONTRATANTES.find((e) => e.value === entidadeAtual)?.razaoSocial ?? entidadeAtual} />
+              </>
+            )}
+
             <Linha label="Data de admissão" value={admissao.data_admissao} />
             <div className="flex justify-between items-center py-1.5 border-b border-gray-50 text-sm">
               <span className="text-gray-500">Data do exame admissional</span>

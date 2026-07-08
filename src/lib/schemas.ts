@@ -343,6 +343,18 @@ export const admissaoCreateSchema = z.object({
   autorizacao_sindical: admissaoAutorizacaoSindicalCreateSchema.optional(),
 });
 
+// Edição pelo analista da vaga vinculada + campos que dependem dela (função/salário/
+// horário/entidade contratante) — pra corrigir admissões cujo candidato foi reencaminhado
+// pra outra vaga/cliente depois de criada. Todos opcionais (edição parcial); a UI sempre
+// manda os 5 juntos, mas o schema não exige isso.
+export const admissaoDadosAdmissaoUpdateSchema = z.object({
+  vaga_id: z.string().uuid().optional(),
+  funcao: z.string().min(1, "Função é obrigatória").optional(),
+  salario: coerceNumberOptional.refine((v) => v === undefined || v > 0, "Salário deve ser maior que zero"),
+  horario_trabalho: z.string().min(1, "Horário de trabalho é obrigatório").optional(),
+  entidade_contratante: z.string().min(1, "Entidade contratante é obrigatória").optional(),
+});
+
 export const admissaoUpdateSchema = z.object({
   status: z.enum([
     "aguardando_candidato", "em_preenchimento", "aguardando_analise",

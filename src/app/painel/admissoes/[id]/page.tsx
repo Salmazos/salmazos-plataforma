@@ -23,7 +23,7 @@ export default async function AdmissaoDetalhePage({ params }: Props) {
 
   const { data: admissao } = await svc
     .from("admissoes")
-    .select("*, candidatos(id, nome_completo, cargo_pretendido, telefone, email), vagas(id, titulo)")
+    .select("*, candidatos(id, nome_completo, cargo_pretendido, telefone, email), vagas(id, titulo, cliente_id, clientes(id, nome))")
     .eq("id", id)
     .single();
 
