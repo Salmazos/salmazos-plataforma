@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatarData } from "@/lib/utils";
 import { ADMISSAO_STATUS_BADGE, ADMISSAO_STATUS_OPTIONS, MODALIDADE_LABEL, STATUS_JA_ENVIADO } from "@/lib/admissaoStatus";
@@ -84,6 +84,7 @@ const ACAO_LABEL: Record<string, string> = {
   admissao_atualizada: "Admissão atualizada",
   admissao_pacote_gerado: "Pacote para contabilidade gerado",
   admissao_pacote_gerado_forcado: "Pacote gerado com pendências (forçado)",
+  admissao_documento_upload_pela_equipe: "Documento enviado pela equipe",
   admissao_dados_pessoais_editados_pelo_analista: "Dados pessoais editados pelo analista",
   admissao_dependente_criado_pelo_analista: "Dependente adicionado pelo analista",
   admissao_dependente_editado_pelo_analista: "Dependente editado pelo analista",
@@ -384,6 +385,10 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [motivoSelecionado, setMotivoSelecionado] = useState("");
   const [motivoOutro, setMotivoOutro] = useState("");
   const [processandoDocId, setProcessandoDocId] = useState<string | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [uploadAlvo, setUploadAlvo] = useState<{ tipo: string; docId?: string; label: string } | null>(null);
+  const [enviandoUpload, setEnviandoUpload] = useState(false);
+  const [erroUpload, setErroUpload] = useState("");
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [abrindoPacote, setAbrindoPacote] = useState(false);
   const [toast, setToast] = useState("");
@@ -740,6 +745,53 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       showToast("Erro de conexão ao salvar a autorização sindical.");
     } finally {
       setSalvandoAS(false);
+    }
+  };
+
+  // Upload feito pela própria equipe em nome do candidato — caminho paralelo ao do
+  // candidato (mesmo padrão de doc_id pra tipos multi-arquivo), pros casos em que ele
+  // perde acesso, se confunde, ou é mais rápido a equipe resolver direto pelo painel.
+  const iniciarUpload = (tipo: string, docId: string | undefined, label: string) => {
+    setErroUpload("");
+    setUploadAlvo({ tipo, docId, label });
+    uploadInputRef.current?.click();
+  };
+
+  const handleArquivoSelecionado = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !uploadAlvo) return;
+
+    setErroUpload("");
+    if (file.size > 10 * 1024 * 1024) { setErroUpload(`"${file.name}" é maior que 10MB.`); return; }
+    const tiposAceitos = ["image/jpeg", "image/png", "image/heic", "application/pdf"];
+    if (!tiposAceitos.includes(file.type) && !file.name.toLowerCase().endsWith(".heic")) {
+      setErroUpload(`Formato de "${file.name}" não aceito. Envie JPG, PNG, PDF ou HEIC.`);
+      return;
+    }
+
+    setEnviandoUpload(true);
+    try {
+      const formData = new FormData();
+      formData.append("arquivo", file);
+      if (uploadAlvo.docId) formData.append("doc_id", uploadAlvo.docId);
+      const res = await fetch(`/api/admissoes/${admissao.id}/documentos-upload/${uploadAlvo.tipo}`, {
+        method: "PATCH",
+        body: formData,
+      });
+      const json = await res.json();
+      if (!res.ok) { setErroUpload(json.error || "Erro ao enviar o documento."); return; }
+
+      setDocumentos((prev) => {
+        const existe = prev.some((d) => d.id === json.data.id);
+        return existe ? prev.map((d) => (d.id === json.data.id ? json.data : d)) : [...prev, json.data];
+      });
+      showToast(`"${uploadAlvo.label}" enviado com sucesso — aguardando aprovação.`);
+    } catch {
+      setErroUpload("Erro de conexão ao enviar o documento.");
+    } finally {
+      setEnviandoUpload(false);
+      setUploadAlvo(null);
     }
   };
 
@@ -1378,93 +1430,121 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
               ⚠️ {erroPacote}
             </div>
           )}
+          {erroUpload && (
+            <div className="rounded-lg p-3 mb-4 text-sm" style={{ background: "#FEF2F2", border: "1px solid #FECACA", color: "#991B1B" }}>
+              ⚠️ {erroUpload}
+            </div>
+          )}
           <p className="text-sm font-semibold text-gray-700 mb-4">{docsAprovados} de {documentos.length} documentos aprovados</p>
-          {(() => {
-            // Tipos com múltiplos arquivos (ex.: documentos de dependente) numeram
-            // "(1)", "(2)"... na ordem de envio — só quando há mais de uma linha do tipo.
-            const totalPorTipo: Record<string, number> = {};
-            for (const d of documentos) totalPorTipo[d.tipo_documento] = (totalPorTipo[d.tipo_documento] ?? 0) + 1;
-            const contadorPorTipo: Record<string, number> = {};
-            return documentos.map((doc) => {
-              const def = DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === doc.tipo_documento);
-              contadorPorTipo[doc.tipo_documento] = (contadorPorTipo[doc.tipo_documento] ?? 0) + 1;
-              const numero = contadorPorTipo[doc.tipo_documento];
-              const labelBase = def?.label ?? doc.tipo_documento;
-              const label = totalPorTipo[doc.tipo_documento] > 1 ? `${labelBase} (${numero})` : labelBase;
-              const statusBadge: Record<string, { label: string; bg: string; text: string }> = {
-                pendente: { label: "Pendente", bg: "#F3F4F6", text: "#6B7280" },
-                enviado: { label: "Enviado", bg: "#DBEAFE", text: "#1D4ED8" },
-                aprovado: { label: "Aprovado ✅", bg: "#DCFCE7", text: "#15803D" },
-                rejeitado: { label: "Rejeitado ❌", bg: "#FEE2E2", text: "#991B1B" },
-              };
-              const sb = statusBadge[doc.status] ?? statusBadge.pendente;
-              const processando = processandoDocId === doc.id;
+          {DOCUMENTOS_ADMISSAO.map((def) => {
+            const rows = documentos.filter((d) => d.tipo_documento === def.tipo_documento);
+            if (rows.length === 0) return null;
+            const aceitaMultiplos = def.condicional === "dependente";
 
-              return (
-              <div key={doc.id} className="card mb-3">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm font-bold text-gray-900">{label}</p>
-                  <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: sb.bg, color: sb.text }}>
-                    {sb.label}
-                  </span>
-                </div>
-                {doc.motivo_rejeicao && <p className="text-xs text-red-600 mb-2">Motivo: {doc.motivo_rejeicao}</p>}
+            return (
+              <div key={def.tipo_documento}>
+                {rows.map((doc, idx) => {
+                  const label = rows.length > 1 ? `${def.label} (${idx + 1})` : def.label;
+                  const statusBadge: Record<string, { label: string; bg: string; text: string }> = {
+                    pendente: { label: "Pendente", bg: "#F3F4F6", text: "#6B7280" },
+                    enviado: { label: "Enviado", bg: "#DBEAFE", text: "#1D4ED8" },
+                    aprovado: { label: "Aprovado ✅", bg: "#DCFCE7", text: "#15803D" },
+                    rejeitado: { label: "Rejeitado ❌", bg: "#FEE2E2", text: "#991B1B" },
+                  };
+                  const sb = statusBadge[doc.status] ?? statusBadge.pendente;
+                  const processando = processandoDocId === doc.id;
+                  const enviandoEsta = enviandoUpload && uploadAlvo?.docId === doc.id;
 
-                <div className="flex gap-2 flex-wrap mt-2">
-                  {doc.storage_path && (
-                    <button onClick={() => handleVisualizar(doc)} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }}>
-                      Visualizar
-                    </button>
-                  )}
-                  {doc.status === "enviado" && (
-                    <>
-                      <button
-                        onClick={() => handleAprovar(doc)} disabled={processando}
-                        style={{ padding: "5px 12px", fontSize: 12, fontWeight: 600, borderRadius: 8, border: "1px solid #16A34A", background: "#F0FDF4", color: "#15803D", cursor: "pointer" }}
-                      >
-                        ✅ Aprovar
-                      </button>
-                      <button
-                        onClick={() => { setRejeitandoId(rejeitandoId === doc.id ? null : doc.id); setMotivoSelecionado(""); setMotivoOutro(""); }}
-                        disabled={processando}
-                        style={{ padding: "5px 12px", fontSize: 12, fontWeight: 600, borderRadius: 8, border: "1px solid #DC2626", background: "#FEF2F2", color: "#991B1B", cursor: "pointer" }}
-                      >
-                        ❌ Rejeitar
-                      </button>
-                    </>
-                  )}
-                </div>
+                  return (
+                    <div key={doc.id} className="card mb-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-sm font-bold text-gray-900">{label}</p>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: sb.bg, color: sb.text }}>
+                          {sb.label}
+                        </span>
+                      </div>
+                      {doc.motivo_rejeicao && <p className="text-xs text-red-600 mb-2">Motivo: {doc.motivo_rejeicao}</p>}
 
-                {rejeitandoId === doc.id && (
-                  <div className="mt-3 border-t border-gray-100 pt-3">
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Motivo da rejeição *</label>
-                    <select value={motivoSelecionado} onChange={(e) => setMotivoSelecionado(e.target.value)} className="input-field mb-2">
-                      <option value="" disabled>Selecione o motivo...</option>
-                      {MOTIVOS_REJEICAO_DOCUMENTO.map((m) => <option key={m} value={m}>{m}</option>)}
-                    </select>
-                    {isOutroMotivo && (
-                      <textarea
-                        value={motivoOutro} onChange={(e) => setMotivoOutro(e.target.value)}
-                        placeholder="Descreva o motivo..." rows={2}
-                        className="input-field resize-none mb-2"
-                      />
-                    )}
-                    <div className="flex gap-2 justify-end">
-                      <button onClick={() => setRejeitandoId(null)} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }}>Cancelar</button>
-                      <button
-                        onClick={() => handleConfirmarRejeicao(doc)}
-                        disabled={!motivoValido || processando}
-                        style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", background: "#DC2626", color: "#fff", cursor: "pointer", opacity: !motivoValido || processando ? 0.6 : 1 }}
-                      >
-                        {processando ? "Salvando..." : "Confirmar rejeição"}
-                      </button>
+                      <div className="flex gap-2 flex-wrap mt-2">
+                        {doc.storage_path && (
+                          <button onClick={() => handleVisualizar(doc)} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }}>
+                            Visualizar
+                          </button>
+                        )}
+                        <button
+                          onClick={() => iniciarUpload(def.tipo_documento, doc.id, label)}
+                          disabled={enviandoEsta}
+                          className="btn-outline" style={{ padding: "5px 12px", fontSize: 12, opacity: enviandoEsta ? 0.6 : 1 }}
+                        >
+                          {enviandoEsta ? "Enviando..." : doc.storage_path ? "Substituir arquivo" : "Enviar documento"}
+                        </button>
+                        {doc.status === "enviado" && (
+                          <>
+                            <button
+                              onClick={() => handleAprovar(doc)} disabled={processando}
+                              style={{ padding: "5px 12px", fontSize: 12, fontWeight: 600, borderRadius: 8, border: "1px solid #16A34A", background: "#F0FDF4", color: "#15803D", cursor: "pointer" }}
+                            >
+                              ✅ Aprovar
+                            </button>
+                            <button
+                              onClick={() => { setRejeitandoId(rejeitandoId === doc.id ? null : doc.id); setMotivoSelecionado(""); setMotivoOutro(""); }}
+                              disabled={processando}
+                              style={{ padding: "5px 12px", fontSize: 12, fontWeight: 600, borderRadius: 8, border: "1px solid #DC2626", background: "#FEF2F2", color: "#991B1B", cursor: "pointer" }}
+                            >
+                              ❌ Rejeitar
+                            </button>
+                          </>
+                        )}
+                      </div>
+
+                      {rejeitandoId === doc.id && (
+                        <div className="mt-3 border-t border-gray-100 pt-3">
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Motivo da rejeição *</label>
+                          <select value={motivoSelecionado} onChange={(e) => setMotivoSelecionado(e.target.value)} className="input-field mb-2">
+                            <option value="" disabled>Selecione o motivo...</option>
+                            {MOTIVOS_REJEICAO_DOCUMENTO.map((m) => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                          {isOutroMotivo && (
+                            <textarea
+                              value={motivoOutro} onChange={(e) => setMotivoOutro(e.target.value)}
+                              placeholder="Descreva o motivo..." rows={2}
+                              className="input-field resize-none mb-2"
+                            />
+                          )}
+                          <div className="flex gap-2 justify-end">
+                            <button onClick={() => setRejeitandoId(null)} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }}>Cancelar</button>
+                            <button
+                              onClick={() => handleConfirmarRejeicao(doc)}
+                              disabled={!motivoValido || processando}
+                              style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", background: "#DC2626", color: "#fff", cursor: "pointer", opacity: !motivoValido || processando ? 0.6 : 1 }}
+                            >
+                              {processando ? "Salvando..." : "Confirmar rejeição"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  );
+                })}
+
+                {aceitaMultiplos && (
+                  <button
+                    onClick={() => iniciarUpload(def.tipo_documento, undefined, def.label)}
+                    disabled={enviandoUpload && uploadAlvo?.tipo === def.tipo_documento && !uploadAlvo?.docId}
+                    className="btn-outline mb-3" style={{ padding: "6px 12px", fontSize: 12 }}
+                  >
+                    {enviandoUpload && uploadAlvo?.tipo === def.tipo_documento && !uploadAlvo?.docId
+                      ? "Enviando..."
+                      : `+ Adicionar novo arquivo (${def.label})`}
+                  </button>
                 )}
               </div>
-              );
-            });
-          })()}
+            );
+          })}
+          <input
+            ref={uploadInputRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }}
+            onChange={handleArquivoSelecionado}
+          />
         </div>
       )}
 
