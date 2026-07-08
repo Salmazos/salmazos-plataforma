@@ -25,6 +25,7 @@ const RESPONSAVEIS = [
   "Candidato",
   "Ambos",
   "Externo (vaga cancelada, corte de budget, etc.)",
+  "Salmazos RH (decisão interna)",
 ];
 
 function EncerrarInfoBox({ motivo, vagaCancelada }: { motivo: string; vagaCancelada: boolean }) {
