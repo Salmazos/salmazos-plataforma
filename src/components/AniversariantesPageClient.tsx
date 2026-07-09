@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { AniversarianteContato, Cliente } from "@/types";
+import { obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
 
 const MESES = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -16,6 +17,21 @@ function diaMes(dataISO: string): { dia: number; mes: number } {
 function formatarDiaMes(dataISO: string): string {
   const { dia, mes } = diaMes(dataISO);
   return `${dia} de ${MESES[mes - 1] ?? "—"}`;
+}
+
+function formatarDataHoraBrasil(iso: string): string {
+  return new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+}
+
+function templateFelicitacao(nome: string): string {
+  return `Olá ${nome},
+
+A equipe da Salmazos RH & Terceirização de Serviços deseja um Feliz Aniversário! Que este novo ciclo seja repleto de conquistas, saúde e realizações, tanto na vida pessoal quanto profissional.
+
+Agradecemos a parceria de sempre e estamos à disposição para o que precisar.
+
+Um forte abraço,
+Equipe Salmazos RH`;
 }
 
 interface FormState {
@@ -51,6 +67,15 @@ export default function AniversariantesPageClient() {
   const [tentouSalvar, setTentouSalvar] = useState(false);
   const [arquivandoId, setArquivandoId] = useState<string | null>(null);
 
+  const [modalFelicitacaoAberto, setModalFelicitacaoAberto] = useState(false);
+  const [contatoFelicitacao, setContatoFelicitacao] = useState<AniversarianteContato | null>(null);
+  const [assuntoFelicitacao, setAssuntoFelicitacao] = useState("");
+  const [corpoFelicitacao, setCorpoFelicitacao] = useState("");
+  const [enviandoFelicitacao, setEnviandoFelicitacao] = useState(false);
+  const [erroFelicitacao, setErroFelicitacao] = useState("");
+  const [ultimaFelicitacao, setUltimaFelicitacao] = useState<{ enviado_em: string; enviado_por_nome: string | null } | null>(null);
+  const [carregandoUltimaFelicitacao, setCarregandoUltimaFelicitacao] = useState(false);
+
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 3000); };
 
   const carregar = useCallback(async () => {
@@ -78,7 +103,9 @@ export default function AniversariantesPageClient() {
       .catch(() => showToast("Erro ao carregar lista de clientes."));
   };
 
-  const mesAtual = new Date().getMonth() + 1;
+  const hoje = useMemo(() => obterDataHojeBrasil(), []);
+  const mesAtual = hoje.getMonth() + 1;
+  const diaAtual = hoje.getDate();
 
   // Ordenado por dia/mês, ignorando o ano — a ideia é ver o calendário anual de
   // aniversários, não "quem é mais velho".
@@ -183,6 +210,47 @@ export default function AniversariantesPageClient() {
     }
   };
 
+  const abrirFelicitacao = (item: AniversarianteContato) => {
+    setContatoFelicitacao(item);
+    setAssuntoFelicitacao(`Feliz Aniversário, ${item.nome_contato}! 🎉`);
+    setCorpoFelicitacao(templateFelicitacao(item.nome_contato));
+    setErroFelicitacao("");
+    setUltimaFelicitacao(null);
+    setModalFelicitacaoAberto(true);
+
+    setCarregandoUltimaFelicitacao(true);
+    fetch(`/api/aniversariantes/${item.id}/enviar-felicitacao`)
+      .then((r) => r.json())
+      .then((json) => setUltimaFelicitacao(json.ultima_felicitacao ?? null))
+      .catch(() => {})
+      .finally(() => setCarregandoUltimaFelicitacao(false));
+  };
+
+  const handleEnviarFelicitacao = async () => {
+    if (!contatoFelicitacao) return;
+    if (!assuntoFelicitacao.trim() || !corpoFelicitacao.trim()) {
+      setErroFelicitacao("Preencha o assunto e a mensagem.");
+      return;
+    }
+    setEnviandoFelicitacao(true);
+    setErroFelicitacao("");
+    try {
+      const res = await fetch(`/api/aniversariantes/${contatoFelicitacao.id}/enviar-felicitacao`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assunto: assuntoFelicitacao.trim(), corpo: corpoFelicitacao.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setErroFelicitacao(json.error ?? "Erro ao enviar."); return; }
+      setModalFelicitacaoAberto(false);
+      showToast(`Felicitação enviada para ${contatoFelicitacao.nome_contato}!`);
+    } catch {
+      setErroFelicitacao("Erro de conexão.");
+    } finally {
+      setEnviandoFelicitacao(false);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto">
       <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
@@ -231,8 +299,9 @@ export default function AniversariantesPageClient() {
               </thead>
               <tbody>
                 {filtrados.map((it) => {
-                  const { mes } = diaMes(it.data_nascimento);
+                  const { mes, dia } = diaMes(it.data_nascimento);
                   const doMes = mes === mesAtual;
+                  const ehHoje = it.ativo && mes === mesAtual && dia === diaAtual;
                   const empresa = it.clientes?.nome ?? it.empresa_nome ?? "—";
                   const td: React.CSSProperties = { padding: "10px 14px", fontSize: 13, color: "#374151", verticalAlign: "middle", borderBottom: "1px solid #F3F4F6" };
                   return (
@@ -252,6 +321,26 @@ export default function AniversariantesPageClient() {
                       </td>
                       <td style={td}>{it.telefone ?? "—"}</td>
                       <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+                        {ehHoje && (
+                          it.email ? (
+                            <button
+                              onClick={() => abrirFelicitacao(it)}
+                              className="btn-outline"
+                              style={{ padding: "4px 10px", fontSize: 12, marginRight: 6, borderColor: "#FFD700", color: "#92700C", background: "#FFFBEB" }}
+                            >
+                              🎉 Enviar felicitação
+                            </button>
+                          ) : (
+                            <button
+                              disabled
+                              title="Contato sem e-mail cadastrado"
+                              className="btn-outline"
+                              style={{ padding: "4px 10px", fontSize: 12, marginRight: 6, opacity: 0.5, cursor: "not-allowed" }}
+                            >
+                              🎉 Enviar felicitação
+                            </button>
+                          )
+                        )}
                         <button onClick={() => abrirEdicao(it)} className="btn-outline" style={{ padding: "4px 10px", fontSize: 12, marginRight: 6 }}>
                           Editar
                         </button>
@@ -402,6 +491,69 @@ export default function AniversariantesPageClient() {
                 <button onClick={() => setModalAberto(false)} className="btn-outline flex-1" disabled={salvando}>Cancelar</button>
                 <button onClick={handleSalvar} disabled={salvando} className="btn-primary flex-1 disabled:opacity-50">
                   {salvando ? "Salvando..." : editandoId ? "Salvar alterações" : "Cadastrar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalFelicitacaoAberto && contatoFelicitacao && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={(e) => { if (e.target === e.currentTarget && !enviandoFelicitacao) setModalFelicitacaoAberto(false); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="bg-black px-6 py-4 rounded-t-2xl">
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-lg text-[#FFD700]">🎉 Felicitação — {contatoFelicitacao.nome_contato}</h2>
+                <button
+                  onClick={() => !enviandoFelicitacao && setModalFelicitacaoAberto(false)}
+                  className="text-[#FFD700]/70 hover:text-[#FFD700] transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {!carregandoUltimaFelicitacao && ultimaFelicitacao && (
+                <p style={{ fontSize: 13, background: "#FFFBEB", border: "1px solid #FDE68A", color: "#92400E", borderRadius: 8, padding: "8px 12px" }}>
+                  ⚠️ Uma felicitação já foi enviada para este contato em {formatarDataHoraBrasil(ultimaFelicitacao.enviado_em)}
+                  {ultimaFelicitacao.enviado_por_nome ? ` por ${ultimaFelicitacao.enviado_por_nome}` : ""}.
+                </p>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Assunto</label>
+                <input
+                  type="text"
+                  value={assuntoFelicitacao}
+                  onChange={(e) => setAssuntoFelicitacao(e.target.value)}
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Mensagem</label>
+                <textarea
+                  value={corpoFelicitacao}
+                  onChange={(e) => setCorpoFelicitacao(e.target.value)}
+                  rows={10}
+                  className="input-field resize-none"
+                  style={{ fontFamily: "inherit" }}
+                />
+              </div>
+
+              {erroFelicitacao && (
+                <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">{erroFelicitacao}</p>
+              )}
+
+              <div className="flex gap-3 pt-2 border-t">
+                <button onClick={() => setModalFelicitacaoAberto(false)} className="btn-outline flex-1" disabled={enviandoFelicitacao}>
+                  Cancelar
+                </button>
+                <button onClick={handleEnviarFelicitacao} disabled={enviandoFelicitacao} className="btn-primary flex-1 disabled:opacity-50">
+                  {enviandoFelicitacao ? "Enviando..." : "Enviar"}
                 </button>
               </div>
             </div>

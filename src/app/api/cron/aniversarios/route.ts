@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
 import { obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
+import { envolucroAniversario } from "@/lib/emailAniversarioTemplate";
 
 export const dynamic = "force-dynamic";
 
@@ -34,23 +35,6 @@ function parseMesDia(iso: string) {
 
 function diasEntre(a: Date, b: Date) {
   return Math.round((b.getTime() - a.getTime()) / 86400000);
-}
-
-function envolucro(titulo: string, conteudo: string) {
-  return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
-<div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
-  <div style="background:#000;padding:24px 28px;text-align:center">
-    <h1 style="color:#FFD700;margin:0;font-size:18px">${titulo}</h1>
-  </div>
-  <div style="padding:24px 28px">
-    ${conteudo}
-  </div>
-  <div style="background:#f9fafb;padding:12px 28px;text-align:center">
-    <p style="margin:0;font-size:11px;color:#9CA3AF">Salmazos RH — Lembrete automático de aniversário</p>
-  </div>
-</div>
-</body></html>`;
 }
 
 export async function GET(request: Request) {
@@ -121,7 +105,7 @@ export async function GET(request: Request) {
             })
             .join("");
 
-          const html = envolucro(
+          const html = envolucroAniversario(
             `🎂 Aniversariantes de ${nomeMes}`,
             `<p style="margin:0 0 16px;color:#374151;font-size:14px">Confira quem faz aniversário em <strong>${nomeMes}</strong>:</p>
             <table style="width:100%;border-collapse:collapse;font-size:13px">
@@ -164,7 +148,7 @@ export async function GET(request: Request) {
           .insert({ contato_id: c.id, tipo: "tres_dias_antes", ano: anoAtual });
 
         if (!errInsert) {
-          const html = envolucro(
+          const html = envolucroAniversario(
             `🎂 Faltam 3 dias!`,
             `<table style="width:100%;border-collapse:collapse;font-size:13px">
               <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Nome</td><td style="padding:6px 0;color:#111827">${c.nome_contato}</td></tr>
@@ -206,7 +190,7 @@ export async function GET(request: Request) {
               : "",
           ].join("");
 
-          const html = envolucro(
+          const html = envolucroAniversario(
             `🎂 Hoje é aniversário de ${c.nome_contato}!`,
             `<table style="width:100%;border-collapse:collapse;font-size:13px">
               <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Nome</td><td style="padding:6px 0;color:#111827">${c.nome_contato}</td></tr>

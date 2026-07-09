@@ -657,3 +657,8 @@ export const aniversarianteUpdateSchema = aniversarianteBaseSchema
     message: XOR_MENSAGEM,
     path: ["cliente_id"],
   });
+
+export const aniversarianteFelicitacaoSchema = z.object({
+  assunto: z.string().trim().min(1, "Assunto é obrigatório"),
+  corpo: z.string().trim().min(1, "Mensagem é obrigatória"),
+});
