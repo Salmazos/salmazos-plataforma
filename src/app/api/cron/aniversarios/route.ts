@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
+import { obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
 
 export const dynamic = "force-dynamic";
 
@@ -73,12 +74,11 @@ export async function GET(request: Request) {
         const [ano, mes, dia] = dataTeste.split("-").map(Number);
         hoje = new Date(ano, mes - 1, dia);
       } else {
-        hoje = new Date();
+        hoje = obterDataHojeBrasil();
       }
     } else {
-      hoje = new Date();
+      hoje = obterDataHojeBrasil();
     }
-    hoje.setHours(0, 0, 0, 0);
     const anoAtual = hoje.getFullYear();
     const mesAtual = hoje.getMonth(); // 0-11
     const diaAtual = hoje.getDate();

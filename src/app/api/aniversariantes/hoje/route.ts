@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +27,10 @@ export async function GET() {
 
   const svc = createServiceClient();
 
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
+  const hoje = obterDataHojeBrasil();
   const mesAtual = hoje.getMonth() + 1;
   const diaAtual = hoje.getDate();
-  const hojeISO = hoje.toISOString().split("T")[0];
+  const hojeISO = formatarDataISO(hoje);
 
   const { data: contatosRaw, error: errContatos } = await svc
     .from("aniversariantes_contatos")

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +11,7 @@ export async function POST() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-  const hojeISO = hoje.toISOString().split("T")[0];
+  const hojeISO = formatarDataISO(obterDataHojeBrasil());
 
   const svc = createServiceClient();
   const { error } = await svc
