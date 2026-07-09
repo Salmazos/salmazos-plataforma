@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import SidebarMenu from "@/components/SidebarMenu";
+import PopupAniversariosHoje from "@/components/PopupAniversariosHoje";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,7 @@ export default async function PainelLayout({
         isSupervisorOrAbove={isSupervisorOrAbove}
       />
       <main className="flex-1 min-w-0 px-6 py-6">{children}</main>
+      <PopupAniversariosHoje />
     </div>
   );
 }
