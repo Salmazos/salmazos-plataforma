@@ -15,7 +15,7 @@ export default async function PainelPage() {
     .select(`
       id, etapa, vaga_id, observacoes, created_at,
       candidatos!inner(id, nome_completo, cargo_pretendido, cidade, estado, triagem_score, triagem_label, origem, bloqueado, responsavel, habilidades, resumo_profissional, created_at, updated_at),
-      vagas!inner(id, titulo, tipo_servico),
+      vagas!inner(id, titulo, tipo_servico, cliente_id, clientes(nome)),
       clientes(nome)
     `)
     .in("etapa", ETAPAS_KANBAN_VISIVEIS)
@@ -64,7 +64,7 @@ export default async function PainelPage() {
       created_at: string;
       updated_at: string;
     };
-    vagas: { id: string; titulo: string; tipo_servico: string | null };
+    vagas: { id: string; titulo: string; tipo_servico: string | null; cliente_id: string | null; clientes: { nome: string } | null };
     clientes: { nome: string } | null;
   }[]).map((cv) => ({
     cv_id: cv.id,
@@ -73,7 +73,9 @@ export default async function PainelPage() {
     vaga_titulo: cv.vagas.titulo,
     vaga_tipo_servico: cv.vagas.tipo_servico,
     encaminhamento_tipo_servico: tipoServicoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`) ?? null,
-    cliente_nome: cv.clientes?.nome ?? null,
+    // candidatos_vagas.cliente_id é exceção manual (renegociação para outro cliente);
+    // na ausência, o padrão é o cliente já vinculado à vaga.
+    cliente_nome: cv.clientes?.nome ?? cv.vagas.clientes?.nome ?? null,
     observacoes: cv.observacoes,
     candidato_id: cv.candidatos.id,
     nome_completo: cv.candidatos.nome_completo,
