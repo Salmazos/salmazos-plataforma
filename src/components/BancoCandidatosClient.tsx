@@ -44,7 +44,16 @@ export type CandidatoRow = {
 };
 
 type MatchEntry = { vaga_id: string; titulo: string; score: number };
-type VagaAberta = { id: string; titulo: string; cliente_id: string | null };
+type VagaAberta = { id: string; titulo: string; cliente_id: string | null; cidade: string | null; clientes: { nome: string } | null };
+
+function vagaDetalheLabel(v: VagaAberta): string {
+  return [v.clientes?.nome, v.cidade].filter(Boolean).join(" · ");
+}
+
+function vagaOptionLabel(v: VagaAberta): string {
+  const detalhe = vagaDetalheLabel(v);
+  return detalhe ? `${v.titulo} — ${detalhe}` : v.titulo;
+}
 
 type ModalState = {
   candidatoId: string;
@@ -1283,7 +1292,7 @@ export default function BancoCandidatosClient({
                   <option value="">Selecione uma vaga...</option>
                   {vagasAbertas.map((v) => (
                     <option key={v.id} value={v.id}>
-                      {v.titulo}
+                      {vagaOptionLabel(v)}
                     </option>
                   ))}
                 </>
@@ -1305,6 +1314,32 @@ export default function BancoCandidatosClient({
                 {modal.error}
               </div>
             )}
+
+            {modal.selectedVagaId && (() => {
+              const vagaSelecionada = vagasAbertas.find((v) => v.id === modal.selectedVagaId);
+              if (!vagaSelecionada) return null;
+              const clienteNome = vagaSelecionada.clientes?.nome;
+              return (
+                <div
+                  style={{
+                    background: "#FFFBEB",
+                    border: "1px solid #FCD34D",
+                    borderRadius: 8,
+                    padding: "10px 14px",
+                    fontSize: 13,
+                    color: "#92400E",
+                    marginBottom: 16,
+                  }}
+                >
+                  Você está encaminhando <strong>{modal.candidatoNome}</strong> para:{" "}
+                  <strong>
+                    {clienteNome
+                      ? `${clienteNome} — ${vagaSelecionada.titulo}`
+                      : `${vagaSelecionada.titulo} (vaga interna, sem cliente vinculado)`}
+                  </strong>
+                </div>
+              );
+            })()}
 
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button
