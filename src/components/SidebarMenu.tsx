@@ -76,7 +76,7 @@ const menuItems: MenuItemDef[] = [
   { label: "Reembolsos", href: "/painel/reembolsos", icon: Receipt, requireFullAccess: true },
   { label: "Quilometragem", href: "/painel/quilometragem", icon: Car },
   { label: "Carteira de Clientes", href: "/painel/empresas-visitadas", icon: MapPin, requireSupervisor: true },
-  { label: "Aniversários", href: "/painel/aniversarios", icon: Cake, requireSupervisor: true },
+  { label: "Aniversários", href: "/painel/aniversarios", icon: Cake },
   { label: "Documentos", href: "/painel/documentos", icon: FolderOpen },
   {
     label: "Configurações",

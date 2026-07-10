@@ -9,8 +9,7 @@ export default async function AniversariosPage() {
   const {
     data: { user },
   } = await supabaseAuth.auth.getUser();
-  const role = user?.app_metadata?.role ?? "analista";
-  if (!["superuser", "diretoria", "supervisor"].includes(role)) redirect("/painel");
+  if (!user) redirect("/painel");
 
   return <AniversariantesPageClient />;
 }
