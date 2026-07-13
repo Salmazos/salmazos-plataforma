@@ -17,6 +17,19 @@ function moeda(v: number | null | undefined): string {
   return v != null ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "";
 }
 
+// "R$ 1.837,40 + 20% de Insalubridade, R$ 150,00 de Periculosidade" — concatena os
+// adicionais salariais ao lado do salário base, cada um no formato do seu formato_valor.
+function salarioComAdicionais(salario: number | null | undefined, adicionais: FichaCadastralAdicional[] | undefined): string {
+  const base = moeda(salario);
+  if (!adicionais || adicionais.length === 0) return base;
+  const partes = adicionais.map((ad) =>
+    ad.formato_valor === "percentual"
+      ? `${ad.valor.toLocaleString("pt-BR")}% de ${ad.tipo}`
+      : `${moeda(ad.valor)} de ${ad.tipo}`
+  );
+  return `${base} + ${partes.join(", ")}`;
+}
+
 // "vale_transporte" -> Sim; "transporte_fretado"/"nao_opta" -> Não (nenhum dos dois é
 // vale-transporte propriamente); ainda não respondido -> em branco.
 function optaValeTransporte(opcao: string | null | undefined): string {
@@ -128,19 +141,10 @@ export function desenharFichaCadastral(w: PdfWriter, d: FichaCadastralDados, dep
     { label: "Função", value: d.funcao },
   ]);
   w.formFieldRow([
-    { label: "Salário", value: moeda(d.salario) },
+    { label: "Salário", value: salarioComAdicionais(d.salario, d.adicionais) },
     { label: "Horário de trabalho", value: d.horario_trabalho },
     { label: "Data de admissão", value: d.data_admissao },
   ]);
-
-  if (d.adicionais && d.adicionais.length > 0) {
-    w.y -= 2;
-    w.drawText("Adicionais:", w.bold, 9, GRAY);
-    for (const ad of d.adicionais) {
-      w.drawText(`• ${ad.tipo} — ${ad.formato_valor === "percentual" ? `${ad.valor.toLocaleString("pt-BR")}%` : moeda(ad.valor)}`, w.regular, 9, DARK);
-    }
-    w.y -= 4;
-  }
 
   w.sectionTitle("Dados Pessoais");
   w.formField("Nome completo", d.nome_completo);

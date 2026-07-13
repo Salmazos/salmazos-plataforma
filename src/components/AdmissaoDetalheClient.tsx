@@ -1212,7 +1212,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                   {linhasAdicionais.map((a, idx) => (
                     <div key={idx} className="flex gap-2 items-center mb-2">
                       <input
-                        type="text" placeholder="Tipo (ex: Insalubridade)" value={a.tipo}
+                        type="text" list="adicionais-sugestoes" placeholder="Tipo (ex: Insalubridade)" value={a.tipo}
                         onChange={(e) => atualizarLinhaAdicional(idx, "tipo", e.target.value)}
                         className="input-field flex-1 text-sm"
                       />
@@ -1237,6 +1237,12 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                       </button>
                     </div>
                   ))}
+                  <datalist id="adicionais-sugestoes">
+                    <option value="Insalubridade" />
+                    <option value="Periculosidade" />
+                    <option value="Assiduidade" />
+                    <option value="Outros" />
+                  </datalist>
                   <div className="flex items-center justify-between mt-2">
                     <button onClick={adicionarLinhaAdicional} className="text-xs font-semibold" style={{ color: "#B45309" }}>
                       + Adicionar

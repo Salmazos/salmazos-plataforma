@@ -113,7 +113,9 @@
       "Bash(date -u -d @$\\(\\(1783528524190/1000\\)\\))",
       "Bash(find src/app/api/cron -type f)",
       "Bash(grep -A5 '\"crons\"' vercel.json)",
-      "Bash(grep -v \"src\\\\\\\\\\\\\\\\lib\\\\\\\\\\\\\\\\slaChecker.ts\")"
+      "Bash(grep -v \"src\\\\\\\\\\\\\\\\lib\\\\\\\\\\\\\\\\slaChecker.ts\")",
+      "Bash(npm view *)",
+      "Bash(git log *)"
     ]
   }
 }
