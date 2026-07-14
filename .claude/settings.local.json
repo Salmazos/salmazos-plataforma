@@ -115,7 +115,10 @@
       "Bash(grep -A5 '\"crons\"' vercel.json)",
       "Bash(grep -v \"src\\\\\\\\\\\\\\\\lib\\\\\\\\\\\\\\\\slaChecker.ts\")",
       "Bash(npm view *)",
-      "Bash(git log *)"
+      "Bash(git log *)",
+      "Bash(xxd)",
+      "WebFetch(domain:developers.clicksign.com)",
+      "Bash(echo \"exit=$?\")"
     ]
   }
 }

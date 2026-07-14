@@ -662,3 +662,12 @@ export const aniversarianteFelicitacaoSchema = z.object({
   assunto: z.string().trim().min(1, "Assunto é obrigatório"),
   corpo: z.string().trim().min(1, "Mensagem é obrigatória"),
 });
+
+// ── Assinatura eletrônica (Clicksign) ───────────────────────────────────────
+
+export const assinaturaClicksignCriarSchema = z.object({
+  admissaoId: z.string().uuid(),
+  pdfPath: z.string().min(1),
+  nomeCandidato: z.string().trim().min(1),
+  emailCandidato: z.string().email(),
+});
