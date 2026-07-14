@@ -24,14 +24,14 @@ export default function ModalEntrevistaSalmazos({ isOpen, card, onClose, onConfi
 
   useEffect(() => {
     if (!isOpen) return;
-    setClienteId("");
+    setClienteId(card.cliente_id ?? "");
     setDataEntrevista("");
     setComentario("");
     fetch("/api/clientes")
       .then((r) => r.json())
       .then((j) => setClientes(j.data ?? []))
       .catch(() => {});
-  }, [isOpen]);
+  }, [isOpen, card.cliente_id]);
 
   if (!isOpen) return null;
 

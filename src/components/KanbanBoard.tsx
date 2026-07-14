@@ -25,6 +25,7 @@ interface PendingEncaminhamento {
   candidatoNome: string;
   vagaId: string;
   vagaTitulo: string;
+  clienteId: string | null;
 }
 
 interface PendingFinalizar {
@@ -186,6 +187,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
         candidatoNome: card?.nome_completo ?? "",
         vagaId: card?.vaga_id ?? "",
         vagaTitulo: card?.vaga_titulo ?? "",
+        clienteId: card?.cliente_id ?? null,
       });
       return;
     }
@@ -207,20 +209,30 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
 
     setMovendo(cvId);
     try {
-      await fetch(`/api/candidatos-vagas/${cvId}`, {
+      const res = await fetch(`/api/candidatos-vagas/${cvId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ etapa: novaEtapa, observacoes: comentario || null, ...extras }),
       });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        showToast(json.error || "Não foi possível mover o candidato.", "#B91C1C", "⚠️");
+        return;
+      }
 
       if (novaEtapa === "bloqueado") {
         const card = cards.find((c) => c.cv_id === cvId);
         if (card) {
-          await fetch(`/api/candidatos/${card.candidato_id}/etapa`, {
+          const resBloqueio = await fetch(`/api/candidatos/${card.candidato_id}/etapa`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ etapa_kanban: "bloqueado", comentario: comentario || null }),
           });
+          if (!resBloqueio.ok) {
+            const json = await resBloqueio.json().catch(() => ({}));
+            showToast(json.error || "Não foi possível bloquear o candidato.", "#B91C1C", "⚠️");
+            return;
+          }
         }
       }
 
@@ -239,18 +251,26 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
   }) => {
     if (!pendingEncaminhamento) return;
     const { cvId, candidatoId } = pendingEncaminhamento;
-    await fetch("/api/encaminhamentos", {
+    const resEncaminhamento = await fetch("/api/encaminhamentos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ candidato_id: candidatoId, ...dados }),
     });
+    if (!resEncaminhamento.ok) {
+      const json = await resEncaminhamento.json().catch(() => ({}));
+      throw new Error(json.error || "Não foi possível registrar o encaminhamento.");
+    }
     setMovendo(cvId);
     try {
-      await fetch(`/api/candidatos-vagas/${cvId}`, {
+      const resEtapa = await fetch(`/api/candidatos-vagas/${cvId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ etapa: "entrevista_cliente" }),
       });
+      if (!resEtapa.ok) {
+        const json = await resEtapa.json().catch(() => ({}));
+        throw new Error(json.error || "Não foi possível mover o candidato para entrevista com cliente.");
+      }
       router.refresh();
       showToast("Entrevista agendada e candidato enviado para o painel do cliente");
     } finally {
@@ -492,6 +512,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
         candidatoNome={pendingEncaminhamento?.candidatoNome ?? ""}
         vagaId={pendingEncaminhamento?.vagaId}
         vagaTitulo={pendingEncaminhamento?.vagaTitulo}
+        clienteIdInicial={pendingEncaminhamento?.clienteId}
         onClose={() => setPendingEncaminhamento(null)}
         onConfirmar={handleConfirmarEncaminhamento}
       />

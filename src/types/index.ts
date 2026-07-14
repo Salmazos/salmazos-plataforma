@@ -210,6 +210,7 @@ export interface KanbanCard {
   vaga_titulo: string;
   vaga_tipo_servico: string | null;
   encaminhamento_tipo_servico: string | null;
+  cliente_id: string | null;
   cliente_nome: string | null;
   observacoes: string | null;
   candidato_id: string;

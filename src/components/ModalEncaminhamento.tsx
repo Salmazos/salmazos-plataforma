@@ -11,6 +11,7 @@ interface Props {
   candidatoNome: string;
   vagaId?: string;
   vagaTitulo?: string;
+  clienteIdInicial?: string | null;
   onClose: () => void;
   onConfirmar: (dados: {
     cliente_id: string;
@@ -34,6 +35,7 @@ export default function ModalEncaminhamento({
   candidatoNome,
   vagaId: vagaIdProp,
   vagaTitulo: vagaTituloProp,
+  clienteIdInicial,
   onClose,
   onConfirmar,
 }: Props) {
@@ -74,7 +76,7 @@ export default function ModalEncaminhamento({
 
   useEffect(() => {
     if (!isOpen) return;
-    setClienteId("");
+    setClienteId(clienteIdInicial ?? "");
     setDataEntrevista("");
     setTipoServico("");
     setObservacoes("");
@@ -102,11 +104,14 @@ export default function ModalEncaminhamento({
       }
     };
     carregar();
-  }, [isOpen, candidatoId]);
+  }, [isOpen, candidatoId, clienteIdInicial]);
 
   if (!isOpen) return null;
 
   const vagaIdFinal = vagaIdProp ?? vagaId;
+  // Vaga veio pré-selecionada do Kanban (candidatura já existente) mas nenhum cliente
+  // pôde ser resolvido nem por candidatos_vagas.cliente_id nem por vagas.cliente_id.
+  const vagaSemClienteVinculado = Boolean(vagaIdProp) && !clienteIdInicial;
 
   const handleConfirmar = async () => {
     setTentouEnviar(true);
@@ -130,8 +135,8 @@ export default function ModalEncaminhamento({
     setErro("");
     try {
       await onConfirmar({ cliente_id: clienteId, data_entrevista: dataEntrevista, tipo_servico: tipoServico, observacoes: obsCompleta, vaga_id: vagaIdFinal || undefined });
-    } catch {
-      setErro("Erro ao salvar encaminhamento.");
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Erro ao salvar encaminhamento.");
       setEnviando(false);
     }
   };
@@ -172,6 +177,11 @@ export default function ModalEncaminhamento({
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                   Cliente *
                 </label>
+                {vagaSemClienteVinculado && (
+                  <p className="text-amber-700 text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-2">
+                    Esta vaga não tem cliente vinculado. Selecione um cliente manualmente ou verifique o cadastro da vaga.
+                  </p>
+                )}
                 {clientes.length === 0 ? (
                   <div className="text-sm text-gray-500 bg-gray-50 rounded-lg p-3 border">
                     Nenhum cliente ativo cadastrado.{" "}

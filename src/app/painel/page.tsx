@@ -13,7 +13,7 @@ export default async function PainelPage() {
   const { data: cvData, error: cvError } = await supabase
     .from("candidatos_vagas")
     .select(`
-      id, etapa, vaga_id, observacoes, created_at,
+      id, etapa, vaga_id, cliente_id, observacoes, created_at,
       candidatos!inner(id, nome_completo, cargo_pretendido, cidade, estado, triagem_score, triagem_label, origem, bloqueado, responsavel, habilidades, resumo_profissional, created_at, updated_at),
       vagas!inner(id, titulo, tipo_servico, cliente_id, clientes(nome)),
       clientes(nome)
@@ -46,6 +46,7 @@ export default async function PainelPage() {
     id: string;
     etapa: string;
     vaga_id: string;
+    cliente_id: string | null;
     observacoes: string | null;
     created_at: string;
     candidatos: {
@@ -75,6 +76,7 @@ export default async function PainelPage() {
     encaminhamento_tipo_servico: tipoServicoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`) ?? null,
     // candidatos_vagas.cliente_id é exceção manual (renegociação para outro cliente);
     // na ausência, o padrão é o cliente já vinculado à vaga.
+    cliente_id: cv.cliente_id ?? cv.vagas.cliente_id ?? null,
     cliente_nome: cv.clientes?.nome ?? cv.vagas.clientes?.nome ?? null,
     observacoes: cv.observacoes,
     candidato_id: cv.candidatos.id,
