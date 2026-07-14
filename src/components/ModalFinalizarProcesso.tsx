@@ -20,6 +20,18 @@ export interface FinalizarResult {
   vaga_reaberta?: boolean;
 }
 
+// Soma dias em uma data "YYYY-MM-DD" usando componentes locais (evita
+// deslocamento de fuso horário que ocorreria com new Date(string) + setDate).
+function somarDias(dataISO: string, dias: number): string {
+  const [ano, mes, dia] = dataISO.split("-").map(Number);
+  const d = new Date(ano, mes - 1, dia);
+  d.setDate(d.getDate() + dias);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 const RESPONSAVEIS = [
   "Cliente",
   "Candidato",
@@ -142,6 +154,8 @@ export default function ModalFinalizarProcesso({
   const cfg = getContratadoConfig(tipoServico ?? null);
   const invalidStyle = { borderColor: "#EF4444", boxShadow: "0 0 0 1px #EF4444" };
   const isOutroMotivo = motivoReprovacao === OUTRO_MOTIVO_REPROVACAO;
+  const isMOT = tipoServico === "mao_obra_temporaria";
+  const dataFimMax = isMOT && dataInicio ? somarDias(dataInicio, 180) : undefined;
 
   const handleConfirmar = async () => {
     setTentouEnviar(true);
@@ -149,6 +163,10 @@ export default function ModalFinalizarProcesso({
     if (isContratado) {
       if (!dataInicio) { setErro("Informe a data de início."); return; }
       if (cfg.dataFimRequired && !dataFim) { setErro("Informe a data de término."); return; }
+      if (isMOT && dataFim && dataFimMax && dataFim > dataFimMax) {
+        setErro(`Data de término não pode ultrapassar 180 dias da data de início (máx. ${dataFimMax.split("-").reverse().join("/")}).`);
+        return;
+      }
     } else {
       if (!motivoReprovacao) { setErro("Selecione o motivo do encerramento."); return; }
       if (isOutroMotivo && !motivoOutro.trim()) { setErro("Descreva o motivo."); return; }
@@ -233,7 +251,13 @@ export default function ModalFinalizarProcesso({
                 <input
                   type="date"
                   value={dataInicio}
-                  onChange={(e) => setDataInicio(e.target.value)}
+                  onChange={(e) => {
+                    const novaDataInicio = e.target.value;
+                    setDataInicio(novaDataInicio);
+                    if (isMOT && novaDataInicio && !dataFim) {
+                      setDataFim(somarDias(novaDataInicio, 90));
+                    }
+                  }}
                   className="input-field"
                   style={tentouEnviar && !dataInicio ? invalidStyle : undefined}
                 />
@@ -250,15 +274,26 @@ export default function ModalFinalizarProcesso({
                 <input
                   type="date"
                   value={dataFim}
+                  max={dataFimMax}
                   onChange={(e) => setDataFim(e.target.value)}
                   className="input-field"
-                  style={tentouEnviar && cfg.dataFimRequired && !dataFim ? invalidStyle : undefined}
+                  style={
+                    (tentouEnviar && cfg.dataFimRequired && !dataFim) ||
+                    (isMOT && dataFim && dataFimMax && dataFim > dataFimMax)
+                      ? invalidStyle
+                      : undefined
+                  }
                 />
                 {cfg.dataFimHelper && (
                   <p className="text-gray-400 text-xs mt-1">{cfg.dataFimHelper}</p>
                 )}
                 {tentouEnviar && cfg.dataFimRequired && !dataFim && (
                   <p className="text-red-500 text-xs mt-1">Informe a data de término.</p>
+                )}
+                {isMOT && dataFim && dataFimMax && dataFim > dataFimMax && (
+                  <p className="text-red-500 text-xs mt-1">
+                    Máximo de 180 dias a partir da data de início ({dataFimMax.split("-").reverse().join("/")}).
+                  </p>
                 )}
               </div>
 
