@@ -73,7 +73,7 @@ function ContratadoInfoBox({ tipoServico }: { tipoServico: string | null }) {
       break;
     case "terceirizacao":
       bg = "#F0FDF4"; border = "#86EFAC"; color = "#166534";
-      text = "O candidato será alocado via Salmazos. Contrato pode ser renovado.";
+      text = "O candidato será alocado via Salmazos. Contrato inicial de até 180 dias, renovável.";
       break;
     default:
       return null;
@@ -108,9 +108,9 @@ function getContratadoConfig(tipoServico: string | null) {
     case "terceirizacao":
       return {
         title: "🎉 Finalizar — Alocação (Terceirização)",
-        dataFimLabel: "Data de Término (opcional — renovável)",
-        dataFimRequired: false,
-        dataFimHelper: null,
+        dataFimLabel: "Data de Término * (máx. 180 dias)",
+        dataFimRequired: true,
+        dataFimHelper: "Contrato inicial: máximo 180 dias, renovável em seguida",
         showRenovavel: true,
         btnLabel: "Confirmar Alocação",
       };
@@ -154,8 +154,11 @@ export default function ModalFinalizarProcesso({
   const cfg = getContratadoConfig(tipoServico ?? null);
   const invalidStyle = { borderColor: "#EF4444", boxShadow: "0 0 0 1px #EF4444" };
   const isOutroMotivo = motivoReprovacao === OUTRO_MOTIVO_REPROVACAO;
-  const isMOT = tipoServico === "mao_obra_temporaria";
-  const dataFimMax = isMOT && dataInicio ? somarDias(dataInicio, 180) : undefined;
+  // MOT e terceirização: contrato inicial obrigatoriamente limitado a 180 dias — a
+  // terceirização normalmente também começa com um contrato temporário. R&S fica de
+  // fora (cliente contrata direto e gerencia o prazo, Salmazos não acompanha).
+  const exigeDataFim = tipoServico === "mao_obra_temporaria" || tipoServico === "terceirizacao";
+  const dataFimMax = exigeDataFim && dataInicio ? somarDias(dataInicio, 180) : undefined;
 
   const handleConfirmar = async () => {
     setTentouEnviar(true);
@@ -163,7 +166,7 @@ export default function ModalFinalizarProcesso({
     if (isContratado) {
       if (!dataInicio) { setErro("Informe a data de início."); return; }
       if (cfg.dataFimRequired && !dataFim) { setErro("Informe a data de término."); return; }
-      if (isMOT && dataFim && dataFimMax && dataFim > dataFimMax) {
+      if (exigeDataFim && dataFim && dataFimMax && dataFim > dataFimMax) {
         setErro(`Data de término não pode ultrapassar 180 dias da data de início (máx. ${dataFimMax.split("-").reverse().join("/")}).`);
         return;
       }
@@ -254,7 +257,7 @@ export default function ModalFinalizarProcesso({
                   onChange={(e) => {
                     const novaDataInicio = e.target.value;
                     setDataInicio(novaDataInicio);
-                    if (isMOT && novaDataInicio && !dataFim) {
+                    if (exigeDataFim && novaDataInicio && !dataFim) {
                       setDataFim(somarDias(novaDataInicio, 90));
                     }
                   }}
@@ -279,7 +282,7 @@ export default function ModalFinalizarProcesso({
                   className="input-field"
                   style={
                     (tentouEnviar && cfg.dataFimRequired && !dataFim) ||
-                    (isMOT && dataFim && dataFimMax && dataFim > dataFimMax)
+                    (exigeDataFim && dataFim && dataFimMax && dataFim > dataFimMax)
                       ? invalidStyle
                       : undefined
                   }
@@ -290,7 +293,7 @@ export default function ModalFinalizarProcesso({
                 {tentouEnviar && cfg.dataFimRequired && !dataFim && (
                   <p className="text-red-500 text-xs mt-1">Informe a data de término.</p>
                 )}
-                {isMOT && dataFim && dataFimMax && dataFim > dataFimMax && (
+                {exigeDataFim && dataFim && dataFimMax && dataFim > dataFimMax && (
                   <p className="text-red-500 text-xs mt-1">
                     Máximo de 180 dias a partir da data de início ({dataFimMax.split("-").reverse().join("/")}).
                   </p>
