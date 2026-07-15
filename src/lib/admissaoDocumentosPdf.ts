@@ -549,7 +549,7 @@ export function desenharCartaAberturaContaSalario(w: PdfWriter, d: CartaContaSal
       { text: " para o(a) Sr.(a) " },
       { text: d.nome_completo, bold: true },
       { text: ", " },
-      { text: `celular (${d.telefone?.trim() || "—"})`, bold: true },
+      { text: `celular ${d.telefone?.trim() || "—"}`, bold: true },
       { text: ", admitido em " },
       { text: dataBR(d.data_admissao), bold: true },
       { text: ` para exercer a função de ${d.funcao}.` },

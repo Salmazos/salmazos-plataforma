@@ -214,22 +214,43 @@ export class PdfWriter {
   // de abertura de conta salário, que precisa negritar nome/telefone/data no meio do
   // texto corrido — reaproveitável por qualquer outro documento com a mesma necessidade.
   richParagraph(segments: { text: string; bold?: boolean }[], size: number, color = DARK, x: number = ML, width: number = CW) {
-    const palavras: { texto: string; font: PDFFont }[] = [];
+    interface Palavra { texto: string; font: PDFFont; semEspacoAntes: boolean }
+    const palavras: Palavra[] = [];
     for (const seg of segments) {
       const font = seg.bold ? this.bold : this.regular;
       for (const parte of seg.text.split(" ")) {
         if (parte === "") continue;
-        palavras.push({ texto: parte, font });
+        // Pontuação nunca leva espaço antes dela — sem isso, um segmento em negrito
+        // seguido de um segmento ", " (comum pra pontuar um nome/valor destacado no meio
+        // do texto corrido) virava "Nome ," em vez de "Nome," no PDF final.
+        const semEspacoAntes = /^[,.;:!?)]/.test(parte);
+        palavras.push({ texto: parte, font, semEspacoAntes });
       }
     }
 
+    // Varredura defensiva: reconstrói o texto final (na mesma ordem/espaçamento que será
+    // desenhado) e avisa em log se sobrar espaço antes de vírgula ou vírgula colada sem
+    // espaço depois em qualquer ponto — não só nas transições negrito/normal, em qualquer
+    // lugar do parágrafo. Não bloqueia o desenho (documento sai mesmo assim), só torna o
+    // problema visível nos logs em vez de passar despercebido num PDF gerado.
+    const textoReconstruido = palavras
+      .map((p, i) => (i > 0 && !p.semEspacoAntes ? " " : "") + p.texto)
+      .join("");
+    // "," e "." seguidos direto de LETRA (sem espaço) indicam pontuação colada na palavra
+    // seguinte — checagem restrita a letras pra não disparar falso positivo em número
+    // decimal ("2.500,00") ou abreviação com parênteses ("Sr.(a)").
+    if (/\s[,.]/.test(textoReconstruido) || /[,.][A-Za-zÀ-ÿ]/.test(textoReconstruido)) {
+      console.warn(`[richParagraph] Possível espaçamento incorreto de pontuação: "${textoReconstruido}"`);
+    }
+
     const espacoLargura = this.regular.widthOfTextAtSize(" ", size);
-    const linhas: { texto: string; font: PDFFont }[][] = [];
-    let linhaAtual: { texto: string; font: PDFFont }[] = [];
+    const linhas: Palavra[][] = [];
+    let linhaAtual: Palavra[] = [];
     let larguraAtual = 0;
     for (const palavra of palavras) {
       const larguraPalavra = palavra.font.widthOfTextAtSize(palavra.texto, size);
-      const larguraComEspaco = larguraAtual === 0 ? larguraPalavra : larguraAtual + espacoLargura + larguraPalavra;
+      const espaco = palavra.semEspacoAntes ? 0 : espacoLargura;
+      const larguraComEspaco = larguraAtual === 0 ? larguraPalavra : larguraAtual + espaco + larguraPalavra;
       if (larguraAtual > 0 && larguraComEspaco > width) {
         linhas.push(linhaAtual);
         linhaAtual = [palavra];
@@ -244,10 +265,11 @@ export class PdfWriter {
     for (const linha of linhas) {
       this.ensureSpace(size + 4);
       let cx = x;
-      for (const palavra of linha) {
+      linha.forEach((palavra, i) => {
+        if (i > 0 && !palavra.semEspacoAntes) cx += espacoLargura;
         this.page.drawText(safe(palavra.texto), { x: cx, y: this.y, size, font: palavra.font, color });
-        cx += palavra.font.widthOfTextAtSize(palavra.texto, size) + espacoLargura;
-      }
+        cx += palavra.font.widthOfTextAtSize(palavra.texto, size);
+      });
       this.y -= size + 4;
     }
   }
