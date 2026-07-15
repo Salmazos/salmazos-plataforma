@@ -11,6 +11,10 @@ const PUBLIC_API_PREFIXES = [
   // Cada rota valida o token manualmente (existência, expiração, status editável)
   // usando o cliente service role, que ignora RLS.
   "/api/admissoes/token/",
+  // Webhooks de provedores externos (ex: Clicksign) — não têm como enviar sessão de
+  // usuário logado. A segurança vem da validação HMAC feita dentro de cada rota, não
+  // de sessão (ver validarAssinaturaWebhook em lib/clicksign.ts).
+  "/api/webhooks/",
 ];
 
 const PUBLIC_API_POST_ONLY = [

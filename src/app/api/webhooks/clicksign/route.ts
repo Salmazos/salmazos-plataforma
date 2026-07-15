@@ -44,8 +44,10 @@ export async function POST(request: NextRequest) {
   }
 
   // Só reagimos ao evento de conclusão ("document_closed" — confirmado em
-  // docs/evento-document-closed). Outros eventos (open, upload, refusal etc.) são
-  // apenas confirmados com 200 pra Clicksign não ficar reentregando.
+  // docs/evento-document-closed e validado com payload real de sandbox; "close" e
+  // "auto_close" são eventos diferentes, também confirmados em sandbox, que ocorrem
+  // antes/durante o fechamento e não devem disparar download/upload). Outros eventos
+  // são apenas confirmados com 200 pra Clicksign não ficar reentregando.
   if (payload.event?.name !== CLICKSIGN_EVENTO_CONCLUSAO) {
     return NextResponse.json({ ok: true, ignorado: payload.event?.name ?? null });
   }
@@ -66,8 +68,10 @@ export async function POST(request: NextRequest) {
   for (const doc of documentos) {
     let admissaoId: string | undefined;
     try {
-      const metadata = doc.metadata ? JSON.parse(doc.metadata) : null;
-      admissaoId = metadata?.admissao_id;
+      // metadata pode vir como objeto ou como string JSON — ver nota no tipo
+      // ClicksignWebhookDocumento em lib/clicksign.ts.
+      const metadata = typeof doc.metadata === "string" ? JSON.parse(doc.metadata) : doc.metadata;
+      admissaoId = (metadata as { admissao_id?: string } | null | undefined)?.admissao_id;
     } catch {
       admissaoId = undefined;
     }

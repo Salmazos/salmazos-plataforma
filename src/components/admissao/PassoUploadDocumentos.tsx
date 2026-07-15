@@ -6,6 +6,7 @@ import type { DocumentoToken } from "./AdmissaoFormClient";
 import { cardStyle, infoBoxStyle } from "./styles";
 import { DOCUMENTOS_ADMISSAO, type DocumentoAdmissaoDef } from "@/lib/admissaoDocumentos";
 import { NOTAS_DOCUMENTO, NOTA_HEIC_IPHONE } from "@/lib/admissaoConstants";
+import { comprimirImagem } from "@/lib/comprimirImagemCliente";
 
 interface Props {
   token: string;
@@ -72,6 +73,7 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
   const nota = NOTAS_DOCUMENTO[doc.tipo_documento];
   const inputRef = useRef<HTMLInputElement>(null);
   const [enviando, setEnviando] = useState(false);
+  const [otimizando, setOtimizando] = useState(false);
   const [erro, setErro] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -83,11 +85,15 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
     const erroValidacao = validarArquivo(file);
     if (erroValidacao) { setErro(erroValidacao); return; }
 
+    setOtimizando(true);
+    const arquivoFinal = await comprimirImagem(file);
+    setOtimizando(false);
+
     setEnviando(true);
-    const resultado = await enviarArquivo(token, doc.tipo_documento, file);
+    const resultado = await enviarArquivo(token, doc.tipo_documento, arquivoFinal);
     if (!resultado.ok) { setErro(resultado.erro); setEnviando(false); return; }
 
-    if (file.type.startsWith("image/")) setPreviewUrl(URL.createObjectURL(file));
+    if (arquivoFinal.type.startsWith("image/")) setPreviewUrl(URL.createObjectURL(arquivoFinal));
     onAtualizado(resultado.data);
     setEnviando(false);
   };
@@ -129,16 +135,16 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
 
         <button
           onClick={() => inputRef.current?.click()}
-          disabled={enviando}
+          disabled={enviando || otimizando}
           style={{
             flex: 1, minHeight: 44, fontSize: 14, fontWeight: 600, borderRadius: 10, cursor: "pointer",
             border: enviado && !rejeitado ? "1px solid #D1D5DB" : "none",
             background: enviado && !rejeitado ? "#fff" : "#000",
             color: enviado && !rejeitado ? "#374151" : "#FFD700",
-            opacity: enviando ? 0.7 : 1,
+            opacity: enviando || otimizando ? 0.7 : 1,
           }}
         >
-          {enviando ? "Enviando..." : enviado && !rejeitado ? "Reenviar arquivo" : "Enviar arquivo"}
+          {otimizando ? "Otimizando imagem..." : enviando ? "Enviando..." : enviado && !rejeitado ? "Reenviar arquivo" : "Enviar arquivo"}
         </button>
 
         <input
@@ -158,6 +164,7 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
 function ArquivoEnviadoLinha({ doc, index, token, onAtualizado }: { doc: DocumentoToken; index: number; token: string; onAtualizado: (doc: DocumentoToken) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [enviando, setEnviando] = useState(false);
+  const [otimizando, setOtimizando] = useState(false);
   const [erro, setErro] = useState("");
   const rejeitado = doc.status === "rejeitado";
   const aprovado = doc.status === "aprovado";
@@ -167,8 +174,12 @@ function ArquivoEnviadoLinha({ doc, index, token, onAtualizado }: { doc: Documen
     const erroValidacao = validarArquivo(file);
     if (erroValidacao) { setErro(erroValidacao); return; }
 
+    setOtimizando(true);
+    const arquivoFinal = await comprimirImagem(file);
+    setOtimizando(false);
+
     setEnviando(true);
-    const resultado = await enviarArquivo(token, doc.tipo_documento, file, doc.id);
+    const resultado = await enviarArquivo(token, doc.tipo_documento, arquivoFinal, doc.id);
     if (!resultado.ok) { setErro(resultado.erro); setEnviando(false); return; }
 
     onAtualizado(resultado.data);
@@ -183,10 +194,10 @@ function ArquivoEnviadoLinha({ doc, index, token, onAtualizado }: { doc: Documen
         </span>
         <button
           onClick={() => inputRef.current?.click()}
-          disabled={enviando}
-          style={{ fontSize: 12, fontWeight: 600, color: "#B45309", background: "none", border: "none", cursor: "pointer", opacity: enviando ? 0.6 : 1 }}
+          disabled={enviando || otimizando}
+          style={{ fontSize: 12, fontWeight: 600, color: "#B45309", background: "none", border: "none", cursor: "pointer", opacity: enviando || otimizando ? 0.6 : 1 }}
         >
-          {enviando ? "Enviando..." : "Reenviar"}
+          {otimizando ? "Otimizando..." : enviando ? "Enviando..." : "Reenviar"}
         </button>
         <input
           ref={inputRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }}
@@ -215,19 +226,26 @@ function DocumentoMultiCard({
   const inputRef = useRef<HTMLInputElement>(null);
   const [staged, setStaged] = useState<File[]>([]);
   const [enviando, setEnviando] = useState(false);
+  const [otimizando, setOtimizando] = useState(false);
   const [erro, setErro] = useState("");
 
   const enviados = rows.filter((r) => r.storage_path);
 
-  const handleSelecionar = (files: FileList) => {
+  const handleSelecionar = async (files: FileList) => {
     setErro("");
-    const novos: File[] = [];
+    const validos: File[] = [];
     for (const file of Array.from(files)) {
       const erroValidacao = validarArquivo(file);
       if (erroValidacao) { setErro(erroValidacao); continue; }
-      novos.push(file);
+      validos.push(file);
     }
-    if (novos.length > 0) setStaged((prev) => [...prev, ...novos]);
+    if (validos.length === 0) return;
+
+    setOtimizando(true);
+    const comprimidos = await Promise.all(validos.map((file) => comprimirImagem(file)));
+    setOtimizando(false);
+
+    setStaged((prev) => [...prev, ...comprimidos]);
   };
 
   const removerStaged = (idx: number) => {
@@ -310,13 +328,13 @@ function DocumentoMultiCard({
 
       <button
         onClick={() => inputRef.current?.click()}
-        disabled={enviando}
+        disabled={enviando || otimizando}
         style={{
           width: "100%", minHeight: 40, fontSize: 13, fontWeight: 600, borderRadius: 10, cursor: "pointer",
-          border: "1px solid #D1D5DB", background: "#fff", color: "#374151", opacity: enviando ? 0.7 : 1,
+          border: "1px solid #D1D5DB", background: "#fff", color: "#374151", opacity: enviando || otimizando ? 0.7 : 1,
         }}
       >
-        + Adicionar outro arquivo
+        {otimizando ? "Otimizando imagem..." : "+ Adicionar outro arquivo"}
       </button>
       <input
         ref={inputRef} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }}

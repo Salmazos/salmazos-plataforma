@@ -13,18 +13,17 @@ import crypto from "crypto";
 //   - Evento de webhook de conclusão: docs/evento-document-closed → "document_closed"
 //   - Assinatura HMAC do webhook:     docs/seguranca-de-webhooks → header "Content-Hmac: sha256=<hex>"
 //
-// Download do PDF final assinado — ATENÇÃO, ponto NÃO totalmente confirmado pela doc:
-// a API v3 não documenta nenhum endpoint REST dedicado a download (conferido em toda a
-// árvore de páginas listada em developers.clicksign.com/llms.txt — não existe nenhuma
-// página sobre "download"). A única fonte documentada é o campo
-// `document.downloads.signed_file_url` que vem dentro do payload do webhook
-// "document_closed" (ver docs/exemplo-documento). Esse campo aparece nos exemplos da
-// doc como um path relativo (ex: "/2023/03/13/xxxx_Clicksign.pdf"), e a doc não diz
-// explicitamente contra qual domínio esse path deve ser resolvido. `baixarDocumentoAssinado`
-// abaixo trata os dois casos (URL já absoluta, ou relativa — nesse caso prefixa com o
-// host da API conforme CLICKSIGN_SANDBOX) mas isso é uma inferência, não um fato
-// confirmado na doc. Validar contra um payload real de sandbox antes de confiar em
-// produção — ver aviso também no PR/revisão deste arquivo.
+// Download do PDF final assinado — CONFIRMADO com payload real de sandbox em 2026-07-14
+// (a doc não documenta endpoint de download nenhum; o único jeito é o campo
+// `document.downloads.signed_file_url` do payload do webhook "document_closed"/
+// "auto_close"). Ao contrário do exemplo da doc (que mostrava path relativo), na prática
+// vem sempre como URL ABSOLUTA presignada do S3 (ex:
+// https://clicksign-sandbox-content.s3.amazonaws.com/.../arquivo.pdf?X-Amz-...),
+// expirando em ~5min (X-Amz-Expires=300) — baixar assim que o webhook chegar, sem
+// enfileirar pra depois. Por ser presignada, NÃO deve levar o header Authorization da
+// Clicksign (a autenticação já está na query string; mandar Authorization junto pode
+// fazer o S3 rejeitar). `baixarDocumentoAssinado` só usa esse header no caso (não visto
+// na prática até agora) de vir um path relativo.
 
 const SANDBOX_BASE_URL = "https://sandbox.clicksign.com/api/v3";
 const PRODUCTION_BASE_URL = "https://api.clicksign.com/api/v3";
@@ -125,6 +124,9 @@ export async function adicionarDocumento(
   contentBase64: string,
   metadata?: Record<string, unknown>
 ): Promise<ClicksignDocumento> {
+  // Confirmado em sandbox real (não na doc, que mostrava só o base64 puro no exemplo):
+  // content_base64 exige um Data URI completo, não o base64 puro. Este lib é usado só
+  // pra PDF de admissão, por isso o mime fixo.
   const json = await clicksignFetch<{ data: ClicksignDocumento }>(`/envelopes/${envelopeId}/documents`, {
     method: "POST",
     body: JSON.stringify({
@@ -132,8 +134,10 @@ export async function adicionarDocumento(
         type: "documents",
         attributes: {
           filename,
-          content_base64: contentBase64,
-          ...(metadata ? { metadata: JSON.stringify(metadata) } : {}),
+          content_base64: `data:application/pdf;base64,${contentBase64}`,
+          // Confirmado em sandbox real: a API espera um hash/objeto JSON, não uma
+          // string serializada (a doc sugeria string — errado na prática).
+          ...(metadata ? { metadata } : {}),
         },
       },
     }),
@@ -303,9 +307,12 @@ export const CLICKSIGN_EVENTO_CONCLUSAO = "document_closed";
 export interface ClicksignWebhookDocumento {
   key: string;
   filename?: string;
-  // Espelha o que foi enviado em `adicionarDocumento(..., metadata)` na criação —
-  // string JSON (não objeto), confirmado em reference/documento-campos-e-regras-de-negocio.
-  metadata?: string;
+  // Espelha o que foi enviado em `adicionarDocumento(..., metadata)` na criação. A doc
+  // (reference/documento-campos-e-regras-de-negocio) sugeria string JSON, mas o sandbox
+  // real rejeitou string na criação — enviamos objeto agora. Não confirmamos ainda em
+  // qual formato a Clicksign ecoa de volta no webhook, por isso o tipo aceita os dois e
+  // o parsing em route.ts trata ambos.
+  metadata?: string | Record<string, unknown>;
   downloads?: {
     original_file_url?: string;
     signed_file_url?: string;
@@ -322,15 +329,16 @@ export interface ClicksignWebhookPayload {
   document: ClicksignWebhookDocumento | ClicksignWebhookDocumento[];
 }
 
-// Baixa o PDF final assinado a partir da URL informada no payload do webhook.
-// Ver aviso no topo do arquivo: se a URL vier relativa, o prefixo de host usado aqui é
-// uma inferência (mesmo host da API), não um fato 100% confirmado pela doc — validar
-// com um webhook real de sandbox antes de depender disso em produção.
+// Baixa o PDF final assinado a partir da URL informada no payload do webhook. Ver nota
+// no topo do arquivo: confirmado com payload real que vem como URL presignada absoluta
+// do S3 — por isso NÃO mandamos Authorization nesse caso (a query string já autentica;
+// um header extra pode fazer o S3 rejeitar a assinatura). Authorization só é usado no
+// caso (não confirmado na prática) de vir um path relativo, resolvido contra o host da
+// própria API Clicksign.
 export async function baixarDocumentoAssinado(signedFileUrl: string): Promise<Buffer> {
-  const url = signedFileUrl.startsWith("http") ? signedFileUrl : `${fileHost()}${signedFileUrl}`;
-  const res = await fetch(url, {
-    headers: { Authorization: apiToken() },
-  });
+  const absoluta = signedFileUrl.startsWith("http");
+  const url = absoluta ? signedFileUrl : `${fileHost()}${signedFileUrl}`;
+  const res = await fetch(url, absoluta ? undefined : { headers: { Authorization: apiToken() } });
   if (!res.ok) throw new Error(`[clicksign] Falha ao baixar documento assinado: HTTP ${res.status}`);
   const arrayBuffer = await res.arrayBuffer();
   return Buffer.from(arrayBuffer);
