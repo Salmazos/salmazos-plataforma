@@ -1,5 +1,6 @@
 import type { PdfWriter } from "./pdfWriter";
-import { GRAY, DARK } from "./pdfWriter";
+import type { PDFImage } from "pdf-lib";
+import { GRAY, DARK, ML } from "./pdfWriter";
 import { ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, TERMOS_VALE_TRANSPORTE_TEXTO } from "./admissaoConstants";
 
 function optLabel(options: { value: string; label: string }[], value: string | null | undefined): string {
@@ -486,4 +487,106 @@ export function desenharSolicitacaoValeTransporte(w: PdfWriter, d: ValeTransport
   }
 
   w.signatureLine("Assinatura do Funcionário");
+}
+
+// ── Carta de Abertura de Conta Salário ──────────────────────────────────────
+
+const MESES_EXTENSO = [
+  "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+];
+
+function dataExtenso(data: Date): string {
+  return `${data.getDate()} de ${MESES_EXTENSO[data.getMonth()]} de ${data.getFullYear()}`;
+}
+
+// data_admissao vem como "YYYY-MM-DD" (coluna date) — parse por string pra não sofrer o
+// shift de timezone que `new Date(iso)` causaria.
+function dataBR(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const [ano, mes, dia] = iso.split("-");
+  return `${dia}/${mes}/${ano}`;
+}
+
+export interface CartaContaSalarioDados {
+  nome_completo: string;
+  telefone?: string | null;
+  data_admissao?: string | null;
+  funcao: string;
+  // Resolvidos pelo chamador a partir de admissoes.entidade_contratante (ver
+  // ENTIDADES_CONTRATANTES em @/lib/constants) — mesma fonte usada na Autorização Sindical.
+  entidade_razao_social?: string | null;
+  entidade_cnpj?: string | null;
+  // Endereço de registro/fiscal da Salmazos — ver ENDERECO_FISCAL_SALMAZOS em
+  // @/lib/admissaoConstants (mesma fonte do rodapé de todo PDF gerado pelo PdfWriter).
+  endereco_fiscal: string;
+  salario: number;
+  banco?: string | null;
+  agencia?: string | null;
+  conta?: string | null;
+  // Assinatura do responsável pelo RH (designado em Configurações), já embutida no
+  // PDFDocument pelo chamador — desenhada acima da linha de assinatura. Opcional: se
+  // ninguém tiver assinatura cadastrada, a carta sai igual, só sem a imagem.
+  assinaturaImg?: PDFImage | null;
+}
+
+// Carta formal solicitando ao banco parceiro a abertura de conta salário — página 1 do
+// PDF de 3 páginas (carta + RG + comprovante de endereço, anexados em página cheia por
+// quem chama esta função). Timbrado (logo + rodapé) vem automaticamente de w.newPage(),
+// igual a todo outro documento gerado pelo PdfWriter — nenhuma lógica de logo por
+// entidade aqui, só o texto (razão social/CNPJ) resolvido pelo chamador.
+export function desenharCartaAberturaContaSalario(w: PdfWriter, d: CartaContaSalarioDados) {
+  w.newPage();
+  w.drawText(`Monte Mor, ${dataExtenso(new Date())}.`, w.regular, 10, DARK);
+  w.y -= 10;
+  w.drawText("Solicitação", w.bold, 13, DARK);
+  w.y -= 10;
+
+  w.richParagraph(
+    [
+      { text: "Venho por meio desta, solicitar a abertura de " },
+      { text: "Conta Salário", bold: true },
+      { text: " para a " },
+      { text: `Sr.(a) ${d.nome_completo} CELULAR: ${d.telefone?.trim() || "—"}`, bold: true },
+      { text: ", admitido em " },
+      { text: dataBR(d.data_admissao), bold: true },
+      {
+        text: ` para exercer a função de ${d.funcao}, na empresa: ${d.entidade_razao_social ?? "—"}, inscrita no nº CNPJ/CPF: ${d.entidade_cnpj ?? "—"}, sediado à ${d.endereco_fiscal}, com o salário de: ${moeda(d.salario)} por mês.`,
+      },
+    ],
+    10,
+    DARK
+  );
+
+  if (d.banco || d.agencia || d.conta) {
+    w.y -= 10;
+    w.drawText("Dados para portabilidade:", w.bold, 10, DARK);
+    w.y -= 4;
+    w.drawText(d.banco || "—", w.regular, 10, DARK);
+    w.drawText(`ag: ${d.agencia || "—"} cc: ${d.conta || "—"}`, w.regular, 10, DARK);
+  }
+
+  w.y -= 20;
+  w.drawText("Sem mais,", w.regular, 10, DARK);
+
+  if (d.assinaturaImg) {
+    w.ensureSpace(90);
+    const maxW = 160;
+    const maxH = 50;
+    const scale = Math.min(maxW / d.assinaturaImg.width, maxH / d.assinaturaImg.height, 1);
+    const imgW = d.assinaturaImg.width * scale;
+    const imgH = d.assinaturaImg.height * scale;
+    const topGap = 10;
+    const bottomGap = 8;
+    w.page.drawImage(d.assinaturaImg, { x: ML, y: w.y - topGap - imgH, width: imgW, height: imgH });
+    w.y -= topGap + imgH + bottomGap;
+  } else {
+    w.y -= 50;
+  }
+
+  w.page.drawLine({ start: { x: ML, y: w.y }, end: { x: ML + 260, y: w.y }, thickness: 0.8, color: DARK });
+  w.y -= 14;
+  w.drawText(d.entidade_razao_social ?? "—", w.bold, 10, DARK);
+  w.y -= 2;
+  w.drawText(`CNPJ.: ${d.entidade_cnpj ?? "—"}`, w.regular, 9, GRAY);
 }

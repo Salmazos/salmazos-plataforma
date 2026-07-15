@@ -1,39 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import sharp from "sharp";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { PDFDocument, PageSizes, rgb } from "pdf-lib";
 import { registrarAuditoria } from "@/lib/audit";
 import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
 import { parseBody, admissaoGerarPdfSchema } from "@/lib/schemas";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
-import { PdfWriter, PW, PH, ML, safe, BLACK, YELLOW, DARK, GRAY } from "@/lib/pdfWriter";
+import { PdfWriter, PW, PH, ML, safe, BLACK, YELLOW, DARK, GRAY, embutirImagemComprimida } from "@/lib/pdfWriter";
 import { desenharFichaCadastral, desenharAutorizacaoSindical, desenharSolicitacaoValeTransporte } from "@/lib/admissaoDocumentosPdf";
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import type { AdmissaoAdicional, AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
 
 interface Params { params: Promise<{ id: string }> }
 
-const LADO_MAXIMO_IMAGEM = 1600;
-const QUALIDADE_JPEG = 75;
 const LIMITE_AVISO_TAMANHO_BYTES = 40 * 1024 * 1024; // 40MB
-
-// Redimensiona/recomprime a imagem antes de embutir no PDF final — os candidatos enviam
-// fotos de câmera (várias MB cada) e sem isso o pacote consolidado (até 16 documentos)
-// facilmente ultrapassa o limite do bucket. Roda para todos os documentos na hora de
-// gerar o pacote, corrigindo retroativamente uploads feitos antes desta correção.
-async function embutirImagemComprimida(pdfDoc: PDFDocument, bytes: Uint8Array, extOriginal: string) {
-  try {
-    const comprimido = await sharp(Buffer.from(bytes))
-      .rotate()
-      .resize({ width: LADO_MAXIMO_IMAGEM, height: LADO_MAXIMO_IMAGEM, fit: "inside", withoutEnlargement: true })
-      .jpeg({ quality: QUALIDADE_JPEG })
-      .toBuffer();
-    return await pdfDoc.embedJpg(comprimido);
-  } catch (err) {
-    console.error("[gerar-pdf] Falha ao comprimir imagem, usando arquivo original:", err);
-    return extOriginal === "png" ? pdfDoc.embedPng(bytes) : pdfDoc.embedJpg(bytes);
-  }
-}
 
 export async function POST(request: NextRequest, { params }: Params) {
   const { id } = await params;

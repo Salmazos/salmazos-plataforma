@@ -12,6 +12,7 @@ import {
   COR_RACA_OPTIONS, PARENTESCO_OPTIONS, CNH_CATEGORIAS,
 } from "@/lib/admissaoConstants";
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
+import ModalContaSalario from "@/components/ModalContaSalario";
 import type { AdmissaoAdicional, AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
 
 type Tab = "dados" | "documentos" | "notas";
@@ -57,6 +58,9 @@ interface AdmissaoFull {
   pdf_pacote_gerado_por: string | null;
   pacote_gerado_forcado: boolean;
   pacote_gerado_justificativa: string | null;
+  carta_banco_path: string | null;
+  carta_banco_enviada_em: string | null;
+  carta_banco_enviada_por: string | null;
   lgpd_aceite_em: string | null;
   lgpd_aceite_ip: string | null;
   candidatos: { id: string; nome_completo: string; cargo_pretendido: string; telefone: string | null; email: string | null } | null;
@@ -410,6 +414,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [forcandoPacote, setForcandoPacote] = useState(false);
   const [justificativaForcar, setJustificativaForcar] = useState("");
   const [gerandoPdfForcado, setGerandoPdfForcado] = useState(false);
+  const [modalContaSalarioAberto, setModalContaSalarioAberto] = useState(false);
 
   // ── Edição total pelo analista ──────────────────────────────────────────
   const [dp, setDp] = useState(dadosPessoais);
@@ -1043,6 +1048,24 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const docsAprovados = documentos.filter((d) => d.status === "aprovado").length;
   const badge = ADMISSAO_STATUS_BADGE[status] ?? { label: status, bg: "#F3F4F6", text: "#374151" };
   const logGeracaoPacote = auditLogs.find((l) => l.acao === "admissao_pacote_gerado");
+
+  // Carta de abertura de conta salário: só faz sentido pra admissões de fato (MOT ou
+  // terceirização) — recrutamento & seleção não passa por este fluxo de admissão digital,
+  // então admissao.modalidade nunca é "recrutamento_selecao" aqui, mas a checagem explícita
+  // documenta a regra e protege contra mudanças futuras no schema.
+  const podeAbrirContaSalario = admissao.modalidade === "MOT" || admissao.modalidade === "terceirizacao";
+  const faltaFuncaoOuSalario = !admissao.funcao || admissao.salario == null;
+  const docRgAprovadoContaSalario = documentos.some((d) => d.tipo_documento === "rg" && d.status === "aprovado");
+  const docComprovanteAprovadoContaSalario = documentos.some((d) => d.tipo_documento === "comprovante_endereco" && d.status === "aprovado");
+  const cartaBancoDesabilitada = faltaFuncaoOuSalario || !docRgAprovadoContaSalario || !docComprovanteAprovadoContaSalario;
+  const tituloBotaoCartaBanco = faltaFuncaoOuSalario
+    ? "Preencha função e salário desta admissão antes de gerar a carta."
+    : !docRgAprovadoContaSalario || !docComprovanteAprovadoContaSalario
+    ? `Aprove antes: ${[!docRgAprovadoContaSalario && "RG", !docComprovanteAprovadoContaSalario && "Comprovante de endereço"].filter(Boolean).join(", ")}`
+    : undefined;
+  const logCartaBanco = auditLogs.find(
+    (l) => l.acao === "admissao_carta_conta_salario_enviada" || l.acao === "admissao_carta_conta_salario_reenviada_forcada"
+  );
 
   return (
     <div>
@@ -1774,15 +1797,28 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           </select>
         </div>
         <div>
-          <button
-            onClick={handleGerarPdf}
-            disabled={!podeGerarPdf || gerandoPdf}
-            title={tituloBotaoPdf}
-            className="btn-primary"
-            style={{ opacity: !podeGerarPdf || gerandoPdf ? 0.5 : 1 }}
-          >
-            {gerandoPdf ? "Gerando PDF..." : "Gerar pacote para contabilidade"}
-          </button>
+          <div className="flex items-center gap-2 justify-end flex-wrap">
+            {podeAbrirContaSalario && (
+              <button
+                onClick={() => setModalContaSalarioAberto(true)}
+                disabled={cartaBancoDesabilitada}
+                title={tituloBotaoCartaBanco}
+                className="btn-outline"
+                style={{ opacity: cartaBancoDesabilitada ? 0.5 : 1 }}
+              >
+                🏦 Gerar e enviar carta de abertura de conta
+              </button>
+            )}
+            <button
+              onClick={handleGerarPdf}
+              disabled={!podeGerarPdf || gerandoPdf}
+              title={tituloBotaoPdf}
+              className="btn-primary"
+              style={{ opacity: !podeGerarPdf || gerandoPdf ? 0.5 : 1 }}
+            >
+              {gerandoPdf ? "Gerando PDF..." : "Gerar pacote para contabilidade"}
+            </button>
+          </div>
           {nomesDocsPendentes.length > 0 && (
             <p style={{ fontSize: 12, color: "#DC2626", marginTop: 6, maxWidth: 320, textAlign: "right" }}>
               ⚠️ Aprove antes: {nomesDocsPendentes.join(", ")}
@@ -1910,6 +1946,20 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
         <div style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", maxWidth: 420, textAlign: "center", background: "#111827", color: "#fff", padding: "12px 20px", borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 60 }}>
           {toast}
         </div>
+      )}
+
+      {podeAbrirContaSalario && (
+        <ModalContaSalario
+          isOpen={modalContaSalarioAberto}
+          onClose={() => setModalContaSalarioAberto(false)}
+          admissaoId={admissao.id}
+          jaEnviadaEm={admissao.carta_banco_enviada_em}
+          jaEnviadaPorNome={logCartaBanco?.usuario_nome ?? null}
+          onEnviado={() => {
+            showToast("Carta de abertura de conta salário enviada com sucesso.");
+            router.refresh();
+          }}
+        />
       )}
     </div>
   );

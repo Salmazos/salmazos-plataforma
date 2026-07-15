@@ -25,6 +25,7 @@ interface Perfil {
   contato_emergencia_nome: string | null;
   contato_emergencia_telefone: string | null;
   avatar_url: string | null;
+  assinatura_url: string | null;
   ativo: boolean;
   tipo_contrato: string | null;
   salario_base: number | null;
@@ -206,6 +207,9 @@ export default function MeuPerfilClient({ perfil, userEmail, userId }: Props) {
   const [avatarUrl, setAvatarUrl] = useState(perfil?.avatar_url ?? null);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [assinaturaUrl, setAssinaturaUrl] = useState(perfil?.assinatura_url ?? null);
+  const [uploadingAssinatura, setUploadingAssinatura] = useState(false);
+  const assinaturaFileRef = useRef<HTMLInputElement>(null);
 
   // ── Form state — Dados Pessoais ──
   const [form, setForm] = useState({
@@ -273,6 +277,48 @@ export default function MeuPerfilClient({ perfil, userEmail, userId }: Props) {
       setToast({ message: (err as Error).message, type: "error" });
     } finally {
       setUploading(false);
+    }
+  };
+
+  // ── Assinatura Upload ──
+  const handleAssinaturaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== "image/png") {
+      setToast({ message: "Use PNG com fundo transparente.", type: "error" });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setToast({ message: "Imagem muito grande. Máximo 2MB.", type: "error" });
+      return;
+    }
+
+    setUploadingAssinatura(true);
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(",")[1]);
+        };
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetch("/api/meu-perfil/assinatura", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64, contentType: file.type }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error);
+      setAssinaturaUrl(json.assinatura_url);
+      setToast({ message: "Assinatura atualizada!", type: "success" });
+      router.refresh();
+    } catch (err) {
+      setToast({ message: (err as Error).message, type: "error" });
+    } finally {
+      setUploadingAssinatura(false);
     }
   };
 
@@ -603,6 +649,12 @@ export default function MeuPerfilClient({ perfil, userEmail, userId }: Props) {
               icon={<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>}
               onClick={() => setTab(3)}
             />
+            <TabBtn
+              active={tab === 4}
+              label="Assinatura"
+              icon={<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 17l6-6 4 4 8-8M21 7v6h-6" /></svg>}
+              onClick={() => setTab(4)}
+            />
           </div>
 
           {/* Tab content */}
@@ -899,6 +951,59 @@ export default function MeuPerfilClient({ perfil, userEmail, userId }: Props) {
                 <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 20, textAlign: "center" }}>
                   Estes dados são gerenciados pelo RH da Salmazos
                 </p>
+              </div>
+            )}
+
+            {/* ── TAB 4: Assinatura ── */}
+            {tab === 4 && (
+              <div>
+                <p style={{ fontSize: 13, color: "#6B7280", marginTop: 0, marginBottom: 20 }}>
+                  Envie uma imagem PNG com fundo transparente da sua assinatura. Ela é usada em documentos
+                  formais gerados pela plataforma (ex.: carta de abertura de conta salário) quando você é
+                  designado como responsável pelo RH em Configurações.
+                </p>
+
+                <div
+                  style={{
+                    border: "1px dashed #D1D5DB",
+                    borderRadius: 10,
+                    padding: 24,
+                    textAlign: "center",
+                    background: "#FAFAFA",
+                    marginBottom: 16,
+                  }}
+                >
+                  {assinaturaUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={assinaturaUrl}
+                      alt="Sua assinatura"
+                      style={{ maxWidth: 280, maxHeight: 120, margin: "0 auto", display: "block" }}
+                    />
+                  ) : (
+                    <p style={{ fontSize: 13, color: "#9CA3AF", margin: 0 }}>Nenhuma assinatura cadastrada ainda.</p>
+                  )}
+                </div>
+
+                <input
+                  ref={assinaturaFileRef}
+                  type="file"
+                  accept="image/png"
+                  style={{ display: "none" }}
+                  onChange={handleAssinaturaUpload}
+                />
+                <button
+                  onClick={() => assinaturaFileRef.current?.click()}
+                  disabled={uploadingAssinatura}
+                  style={{
+                    padding: "10px 20px", borderRadius: 8, border: "1px solid #D1D5DB",
+                    background: "#fff", color: "#374151", fontSize: 14, fontWeight: 600,
+                    cursor: uploadingAssinatura ? "not-allowed" : "pointer",
+                    opacity: uploadingAssinatura ? 0.6 : 1,
+                  }}
+                >
+                  {uploadingAssinatura ? "Enviando..." : assinaturaUrl ? "Substituir assinatura" : "Enviar assinatura"}
+                </button>
               </div>
             )}
 

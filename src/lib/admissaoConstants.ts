@@ -78,6 +78,12 @@ export const OPCAO_VALE_TRANSPORTE_LABEL: Record<string, string> = {
 // DP (Departamento Pessoal)
 export const WHATSAPP_SUPORTE = "5519992923939";
 
+// Endereço de REGISTRO/FISCAL da Salmazos — usado em documentos legais (rodapé dos PDFs
+// via PdfWriter, Ficha Cadastral, Autorização Sindical, Vale Transporte, e-mail de
+// abertura de conta salário). Diferente do endereço de atendimento ao público (divulgado
+// no site institucional, fora deste repositório) — não confundir os dois.
+export const ENDERECO_FISCAL_SALMAZOS = "Rua Paineira, nº209 – Parque Figueira - Monte Mor/SP - CEP: 13.193-150";
+
 export const NOTA_HEIC_IPHONE =
   "📱 Se você usa iPhone: vá em Ajustes → Câmera → Formatos → selecione \"Mais Compatível\" para enviar fotos em JPEG e evitar problemas de compatibilidade.";
 

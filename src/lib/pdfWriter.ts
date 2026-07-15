@@ -1,6 +1,8 @@
 import fs from "fs";
 import path from "path";
+import sharp from "sharp";
 import { PDFDocument, PDFFont, PDFImage, PDFPage, rgb, StandardFonts, PageSizes } from "pdf-lib";
+import { ENDERECO_FISCAL_SALMAZOS } from "@/lib/admissaoConstants";
 
 export const PW = PageSizes.A4[0];
 export const PH = PageSizes.A4[1];
@@ -21,10 +23,32 @@ const HEADER_RESERVED = 62; // y onde o conteúdo do corpo começa em cada pági
 // caber o rodapé sem precisar reduzir a área útil de conteúdo nem mudar a paginação existente.
 const FOOTER_RESERVED = ML + 20;
 const FOOTER_TEXT_Y = 28; // altura do texto do rodapé a partir da base da página (dentro da faixa reservada)
-const RODAPE_TEXTO = "Rua Hipólito Piva, 30, Centro, Monte Mor - SP, CEP 13190-093 | (19) 3217-7899";
+const RODAPE_TEXTO = `${ENDERECO_FISCAL_SALMAZOS} | (19) 3217-7899`;
+
+const LADO_MAXIMO_IMAGEM = 1600;
+const QUALIDADE_JPEG = 75;
 
 export function safe(v: unknown): string {
   return (v == null ? "" : String(v)).replace(/[–—]/g, "-").replace(/[^\x20-\xFF]/g, " ").trim();
+}
+
+// Redimensiona/recomprime a imagem antes de embutir no PDF — os candidatos enviam fotos
+// de câmera (várias MB cada) e sem isso qualquer PDF que embuta essas imagens (pacote de
+// contabilidade, carta de conta salário, etc.) facilmente estoura o limite do bucket.
+// Extraído do gerar-pdf/route.ts original pra ser reaproveitado por qualquer gerador de
+// PDF que precise embutir documentos enviados pelo candidato.
+export async function embutirImagemComprimida(pdfDoc: PDFDocument, bytes: Uint8Array, extOriginal: string): Promise<PDFImage> {
+  try {
+    const comprimido = await sharp(Buffer.from(bytes))
+      .rotate()
+      .resize({ width: LADO_MAXIMO_IMAGEM, height: LADO_MAXIMO_IMAGEM, fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: QUALIDADE_JPEG })
+      .toBuffer();
+    return await pdfDoc.embedJpg(comprimido);
+  } catch (err) {
+    console.error("[embutirImagemComprimida] Falha ao comprimir imagem, usando arquivo original:", err);
+    return extOriginal === "png" ? pdfDoc.embedPng(bytes) : pdfDoc.embedJpg(bytes);
+  }
 }
 
 // Quebra texto em linhas que cabem em `width` — pdf-lib não quebra linha sozinho
@@ -181,6 +205,66 @@ export class PdfWriter {
     for (const linha of quebrarLinhas(text, font, size, width)) {
       this.drawText(linha, font, size, color, x);
     }
+  }
+
+  // Parágrafo com trechos em negrito misturados a trechos normais na mesma linha
+  // visual — drawText/paragraph só desenham com UMA fonte por chamada, então aqui a
+  // quebra de linha é feita palavra a palavra, medindo cada palavra com a fonte do seu
+  // próprio segmento (bold é mais largo que regular no mesmo tamanho). Usado pela carta
+  // de abertura de conta salário, que precisa negritar nome/telefone/data no meio do
+  // texto corrido — reaproveitável por qualquer outro documento com a mesma necessidade.
+  richParagraph(segments: { text: string; bold?: boolean }[], size: number, color = DARK, x: number = ML, width: number = CW) {
+    const palavras: { texto: string; font: PDFFont }[] = [];
+    for (const seg of segments) {
+      const font = seg.bold ? this.bold : this.regular;
+      for (const parte of seg.text.split(" ")) {
+        if (parte === "") continue;
+        palavras.push({ texto: parte, font });
+      }
+    }
+
+    const espacoLargura = this.regular.widthOfTextAtSize(" ", size);
+    const linhas: { texto: string; font: PDFFont }[][] = [];
+    let linhaAtual: { texto: string; font: PDFFont }[] = [];
+    let larguraAtual = 0;
+    for (const palavra of palavras) {
+      const larguraPalavra = palavra.font.widthOfTextAtSize(palavra.texto, size);
+      const larguraComEspaco = larguraAtual === 0 ? larguraPalavra : larguraAtual + espacoLargura + larguraPalavra;
+      if (larguraAtual > 0 && larguraComEspaco > width) {
+        linhas.push(linhaAtual);
+        linhaAtual = [palavra];
+        larguraAtual = larguraPalavra;
+      } else {
+        linhaAtual.push(palavra);
+        larguraAtual = larguraComEspaco;
+      }
+    }
+    if (linhaAtual.length > 0) linhas.push(linhaAtual);
+
+    for (const linha of linhas) {
+      this.ensureSpace(size + 4);
+      let cx = x;
+      for (const palavra of linha) {
+        this.page.drawText(safe(palavra.texto), { x: cx, y: this.y, size, font: palavra.font, color });
+        cx += palavra.font.widthOfTextAtSize(palavra.texto, size) + espacoLargura;
+      }
+      this.y -= size + 4;
+    }
+  }
+
+  // Página inteira ocupada por uma única imagem (ex.: documento escaneado anexado a uma
+  // carta) — maximiza a imagem dentro da área útil (abaixo do logo, acima do rodapé),
+  // preservando a proporção original, centralizada.
+  drawImagemPagina(img: PDFImage) {
+    this.newPage();
+    const areaW = PW - ML * 2;
+    const areaH = this.y - FOOTER_RESERVED;
+    const scale = Math.min(areaW / img.width, areaH / img.height, 1);
+    const w2 = img.width * scale;
+    const h2 = img.height * scale;
+    const x = (PW - w2) / 2;
+    const y = FOOTER_RESERVED + (areaH - h2) / 2;
+    this.page.drawImage(img, { x, y, width: w2, height: h2 });
   }
 
   // ( ) ou (X) — pra opções de múltipla escolha (rádio) desenhadas manualmente.

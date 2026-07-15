@@ -500,6 +500,32 @@ export const admissaoGerarPdfSchema = z.object({
   path: ["justificativa"],
 });
 
+// Carta de abertura de conta salário: preview=true só gera e devolve o PDF (sem efeitos
+// colaterais, "para" não é obrigatório nesse modo). Fora do preview, "para" é obrigatório
+// e o refine de forcar+justificativa espelha exatamente admissaoGerarPdfSchema acima —
+// mesmo padrão de reenvio forçado com justificativa.
+export const admissaoCartaBancoSchema = z.object({
+  preview: z.boolean().optional(),
+  para: z.string().optional(),
+  cc: z.string().optional(),
+  forcar: z.boolean().optional(),
+  justificativa: z.string().optional(),
+}).refine((d) => d.preview === true || !!d.para?.trim(), {
+  message: "Informe pelo menos um destinatário em \"Para\".",
+  path: ["para"],
+}).refine((d) => !d.forcar || !!d.justificativa?.trim(), {
+  message: "Justificativa é obrigatória para reenviar a carta.",
+  path: ["justificativa"],
+});
+
+// Configuração da carta de abertura de conta salário — todos os campos opcionais porque
+// os dois blocos da tela (destinatários / responsável RH) salvam separadamente.
+export const configCartaBancoSchema = z.object({
+  para: z.string().optional(),
+  cc: z.string().optional(),
+  responsavel_rh_user_id: z.string().uuid().nullable().optional(),
+});
+
 export const admissaoDocumentoConfirmarSchema = z.object({
   storage_path: z.string().min(1),
   // Só usado pra reenvio de uma linha específica em tipos que aceitam múltiplos arquivos

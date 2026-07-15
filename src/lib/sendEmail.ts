@@ -1,6 +1,12 @@
 import nodemailer from "nodemailer";
 import { registrarLogEmail } from "@/lib/emailLogger";
 
+interface SendEmailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+}
+
 interface SendEmailOpts {
   to: string;
   subject: string;
@@ -8,6 +14,8 @@ interface SendEmailOpts {
   tipo?: string;
   candidato_id?: string;
   vaga_id?: string;
+  cc?: string;
+  attachments?: SendEmailAttachment[];
 }
 
 export async function sendEmail({
@@ -17,6 +25,8 @@ export async function sendEmail({
   tipo = "outro",
   candidato_id,
   vaga_id,
+  cc,
+  attachments,
 }: SendEmailOpts): Promise<{ success: boolean; error?: string }> {
   try {
     const transporter = nodemailer.createTransport({
@@ -35,8 +45,10 @@ export async function sendEmail({
     await transporter.sendMail({
       from: process.env.SMTP_FROM || `"Salmazos RH" <${process.env.SMTP_USER}>`,
       to,
+      cc,
       subject,
       html,
+      attachments,
     });
 
     await registrarLogEmail({ destinatario: to, assunto: subject, tipo, status: "enviado", candidato_id, vaga_id });

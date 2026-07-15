@@ -27,6 +27,7 @@ import {
   FileCheck,
   AlertTriangle,
   Cake,
+  Landmark,
 } from "lucide-react";
 
 interface Props {
@@ -89,6 +90,7 @@ const menuItems: MenuItemDef[] = [
       { label: "Log de E-mails", href: "/painel/email-logs", icon: Mail },
       { label: "Usuários", href: "/painel/usuarios", icon: Users, requireSuperuser: true },
       { label: "Audit Logs", href: "/painel/audit-logs", icon: ShieldCheck, requireSuperuser: true },
+      { label: "Carta de Abertura de Conta", href: "/painel/carta-conta-salario-config", icon: Landmark, requireSuperuser: true },
     ],
   },
 ];
