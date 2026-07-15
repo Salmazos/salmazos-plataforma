@@ -544,14 +544,26 @@ export function desenharCartaAberturaContaSalario(w: PdfWriter, d: CartaContaSal
 
   w.richParagraph(
     [
-      { text: "Venho por meio desta, solicitar a abertura de " },
+      { text: "Venho, por meio desta, solicitar a abertura de " },
       { text: "Conta Salário", bold: true },
-      { text: " para a " },
-      { text: `Sr.(a) ${d.nome_completo} CELULAR: ${d.telefone?.trim() || "—"}`, bold: true },
+      { text: " para o(a) Sr.(a) " },
+      { text: d.nome_completo, bold: true },
+      { text: ", " },
+      { text: `celular (${d.telefone?.trim() || "—"})`, bold: true },
       { text: ", admitido em " },
       { text: dataBR(d.data_admissao), bold: true },
+      { text: ` para exercer a função de ${d.funcao}.` },
+    ],
+    10,
+    DARK
+  );
+
+  w.y -= 10;
+
+  w.richParagraph(
+    [
       {
-        text: ` para exercer a função de ${d.funcao}, na empresa: ${d.entidade_razao_social ?? "—"}, inscrita no nº CNPJ/CPF: ${d.entidade_cnpj ?? "—"}, sediado à ${d.endereco_fiscal}, com o salário de: ${moeda(d.salario)} por mês.`,
+        text: `O(a) colaborador(a) foi contratado(a) pela empresa ${d.entidade_razao_social ?? "—"}, inscrita no CNPJ nº ${d.entidade_cnpj ?? "—"}, sediada à ${d.endereco_fiscal}, com salário de ${moeda(d.salario)} por mês.`,
       },
     ],
     10,
