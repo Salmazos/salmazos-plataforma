@@ -149,7 +149,9 @@
       "Bash(head -c 300 /tmp_response.html)",
       "Bash(grep -o \"<html\" /tmp_response.html)",
       "Bash(NODE_PATH=\"C:\\\\Users\\\\Olver\\\\Desktop\\\\salmazos-plataforma\\\\node_modules\" node \"C:\\\\Users\\\\Olver\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Olver-Desktop-salmazos-plataforma\\\\c4fe2c3b-b1d4-4645-8f8e-969c61cc688b\\\\scratchpad\\\\limpar-teste-clicksign.js\")",
-      "Bash(git -C \"C:\\\\Users\\\\Olver\\\\Desktop\\\\salmazos-plataforma\" status --short)"
+      "Bash(git -C \"C:\\\\Users\\\\Olver\\\\Desktop\\\\salmazos-plataforma\" status --short)",
+      "Bash(git -C \"C:\\\\Users\\\\Olver\\\\Desktop\\\\salmazos-plataforma\" status)",
+      "Bash(git -C \"C:\\\\Users\\\\Olver\\\\Desktop\\\\salmazos-plataforma\" log --oneline -5)"
     ]
   }
 }
