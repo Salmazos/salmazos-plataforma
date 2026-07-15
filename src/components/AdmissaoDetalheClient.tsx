@@ -61,6 +61,8 @@ interface AdmissaoFull {
   carta_banco_path: string | null;
   carta_banco_enviada_em: string | null;
   carta_banco_enviada_por: string | null;
+  carta_banco_id: string | null;
+  carta_banco_nome: string | null;
   lgpd_aceite_em: string | null;
   lgpd_aceite_ip: string | null;
   candidatos: { id: string; nome_completo: string; cargo_pretendido: string; telefone: string | null; email: string | null } | null;
@@ -1955,6 +1957,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           admissaoId={admissao.id}
           jaEnviadaEm={admissao.carta_banco_enviada_em}
           jaEnviadaPorNome={logCartaBanco?.usuario_nome ?? null}
+          jaEnviadaBancoNome={admissao.carta_banco_nome}
           onEnviado={() => {
             showToast("Carta de abertura de conta salário enviada com sucesso.");
             router.refresh();

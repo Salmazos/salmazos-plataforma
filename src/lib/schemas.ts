@@ -501,11 +501,13 @@ export const admissaoGerarPdfSchema = z.object({
 });
 
 // Carta de abertura de conta salário: preview=true só gera e devolve o PDF (sem efeitos
-// colaterais, "para" não é obrigatório nesse modo). Fora do preview, "para" é obrigatório
-// e o refine de forcar+justificativa espelha exatamente admissaoGerarPdfSchema acima —
-// mesmo padrão de reenvio forçado com justificativa.
+// colaterais, "para"/banco_parceiro_id não são obrigatórios nesse modo). Fora do preview,
+// ambos são obrigatórios (o banco fica registrado em admissoes pra rastreabilidade) e o
+// refine de forcar+justificativa espelha exatamente admissaoGerarPdfSchema acima — mesmo
+// padrão de reenvio forçado com justificativa.
 export const admissaoCartaBancoSchema = z.object({
   preview: z.boolean().optional(),
+  banco_parceiro_id: z.string().uuid().optional(),
   para: z.string().optional(),
   cc: z.string().optional(),
   forcar: z.boolean().optional(),
@@ -513,17 +515,34 @@ export const admissaoCartaBancoSchema = z.object({
 }).refine((d) => d.preview === true || !!d.para?.trim(), {
   message: "Informe pelo menos um destinatário em \"Para\".",
   path: ["para"],
+}).refine((d) => d.preview === true || !!d.banco_parceiro_id, {
+  message: "Selecione o banco parceiro.",
+  path: ["banco_parceiro_id"],
 }).refine((d) => !d.forcar || !!d.justificativa?.trim(), {
   message: "Justificativa é obrigatória para reenviar a carta.",
   path: ["justificativa"],
 });
 
-// Configuração da carta de abertura de conta salário — todos os campos opcionais porque
-// os dois blocos da tela (destinatários / responsável RH) salvam separadamente.
+// Configuração da carta de abertura de conta salário — só o responsável RH continua
+// aqui (Bloco 2). Os destinatários por banco viraram cadastro próprio (bancoParceiroSchema).
 export const configCartaBancoSchema = z.object({
-  para: z.string().optional(),
-  cc: z.string().optional(),
   responsavel_rh_user_id: z.string().uuid().nullable().optional(),
+});
+
+// Cadastro de banco parceiro — nome + listas de e-mails (Para/Cc) como string separada
+// por vírgula na borda da API (convertida pra TEXT[] em src/lib/bancosParceiros.ts),
+// mesmo formato já usado nos campos "Para"/"Cc" em todo o resto do módulo.
+export const bancoParceiroSchema = z.object({
+  nome: z.string().trim().min(1, "Informe o nome do banco."),
+  para: z.string().trim().min(1, "Informe pelo menos um destinatário em \"Para\"."),
+  cc: z.string().optional(),
+});
+
+export const bancoParceiroUpdateSchema = z.object({
+  nome: z.string().trim().min(1).optional(),
+  para: z.string().trim().min(1).optional(),
+  cc: z.string().optional(),
+  ativo: z.boolean().optional(),
 });
 
 export const admissaoDocumentoConfirmarSchema = z.object({

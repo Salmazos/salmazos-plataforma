@@ -4,13 +4,10 @@ import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
 import { parseBody, configCartaBancoSchema } from "@/lib/schemas";
 import { getConfiguracoesGerais, setConfiguracaoGeral } from "@/lib/configuracoesGerais";
 
-const CHAVE_PARA = "carta_conta_salario_destinatarios_para";
-const CHAVE_CC = "carta_conta_salario_destinatarios_cc";
 const CHAVE_RESPONSAVEL = "carta_conta_salario_responsavel_rh_user_id";
 
-// Leitura liberada pra qualquer perfil com acesso ao módulo de Admissões (é quem abre o
-// modal da carta e precisa dos destinatários padrão) — só a escrita (PATCH) é restrita
-// a superuser, que é quem vê o item "Carta de Abertura de Conta" em Configurações.
+// Bloco 2 (Responsável pelo RH / assinatura) — o Bloco 1 (destinatários por banco
+// parceiro) virou cadastro próprio em /api/configuracoes/bancos-parceiros.
 export async function GET() {
   const supabase = await createClient();
   const {
@@ -20,7 +17,7 @@ export async function GET() {
   const acessoNegado = checarPapelAdmissoes(user);
   if (acessoNegado) return acessoNegado;
 
-  const config = await getConfiguracoesGerais([CHAVE_PARA, CHAVE_CC, CHAVE_RESPONSAVEL]);
+  const config = await getConfiguracoesGerais([CHAVE_RESPONSAVEL]);
   const responsavelUserId = config[CHAVE_RESPONSAVEL];
 
   let responsavelNome: string | null = null;
@@ -37,8 +34,6 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    para: config[CHAVE_PARA] ?? "",
-    cc: config[CHAVE_CC] ?? "",
     responsavel_rh_user_id: responsavelUserId,
     responsavel_rh_nome: responsavelNome,
     responsavel_rh_assinatura_url: responsavelAssinaturaUrl,
@@ -59,15 +54,8 @@ export async function PATCH(request: NextRequest) {
   const parsed = parseBody(configCartaBancoSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
-  const updates: { chave: string; valor: string | null }[] = [];
-  if (parsed.data.para !== undefined) updates.push({ chave: CHAVE_PARA, valor: parsed.data.para.trim() || null });
-  if (parsed.data.cc !== undefined) updates.push({ chave: CHAVE_CC, valor: parsed.data.cc.trim() || null });
   if (parsed.data.responsavel_rh_user_id !== undefined) {
-    updates.push({ chave: CHAVE_RESPONSAVEL, valor: parsed.data.responsavel_rh_user_id });
-  }
-
-  for (const u of updates) {
-    const { error } = await setConfiguracaoGeral(u.chave, u.valor, user.id);
+    const { error } = await setConfiguracaoGeral(CHAVE_RESPONSAVEL, parsed.data.responsavel_rh_user_id, user.id);
     if (error) return NextResponse.json({ error }, { status: 500 });
   }
 

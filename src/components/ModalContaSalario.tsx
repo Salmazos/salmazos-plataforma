@@ -2,19 +2,30 @@
 
 import { useEffect, useState } from "react";
 
+interface BancoParceiro {
+  id: string;
+  nome: string;
+  emails_para: string[];
+  emails_cc: string[];
+  ativo: boolean;
+}
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   admissaoId: string;
   jaEnviadaEm: string | null;
   jaEnviadaPorNome: string | null;
+  jaEnviadaBancoNome: string | null;
   onEnviado: () => void;
 }
 
-export default function ModalContaSalario({ isOpen, onClose, admissaoId, jaEnviadaEm, jaEnviadaPorNome, onEnviado }: Props) {
+export default function ModalContaSalario({ isOpen, onClose, admissaoId, jaEnviadaEm, jaEnviadaPorNome, jaEnviadaBancoNome, onEnviado }: Props) {
+  const [bancos, setBancos] = useState<BancoParceiro[]>([]);
+  const [carregandoBancos, setCarregandoBancos] = useState(false);
+  const [bancoId, setBancoId] = useState("");
   const [to, setTo] = useState("");
   const [cc, setCc] = useState("");
-  const [carregandoDestinatarios, setCarregandoDestinatarios] = useState(false);
   const [justificativa, setJustificativa] = useState("");
   const [gerandoPreview, setGerandoPreview] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -24,24 +35,43 @@ export default function ModalContaSalario({ isOpen, onClose, admissaoId, jaEnvia
     if (!isOpen) return;
     setJustificativa("");
     setErro("");
-    setCarregandoDestinatarios(true);
-    fetch("/api/configuracoes/carta-conta-salario")
+    setBancoId("");
+    setTo("");
+    setCc("");
+    setCarregandoBancos(true);
+    fetch("/api/configuracoes/bancos-parceiros?ativo=true")
       .then((r) => r.json())
       .then((json) => {
-        setTo(json.para ?? "");
-        setCc(json.cc ?? "");
+        const lista: BancoParceiro[] = json.data ?? [];
+        setBancos(lista);
+        if (lista.length === 1) {
+          setBancoId(lista[0].id);
+          setTo(lista[0].emails_para.join(", "));
+          setCc(lista[0].emails_cc.join(", "));
+        }
       })
-      .catch(() => {
-        setTo("");
-        setCc("");
-      })
-      .finally(() => setCarregandoDestinatarios(false));
+      .catch(() => setBancos([]))
+      .finally(() => setCarregandoBancos(false));
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   const precisaJustificar = Boolean(jaEnviadaEm);
-  const podeEnviar = to.trim().length > 0 && (!precisaJustificar || justificativa.trim().length > 0);
+  const semBancoConfigurado = !carregandoBancos && bancos.length === 0;
+  const podeEnviar =
+    !semBancoConfigurado &&
+    Boolean(bancoId) &&
+    to.trim().length > 0 &&
+    (!precisaJustificar || justificativa.trim().length > 0);
+
+  const handleSelecionarBanco = (id: string) => {
+    setBancoId(id);
+    const banco = bancos.find((b) => b.id === id);
+    if (banco) {
+      setTo(banco.emails_para.join(", "));
+      setCc(banco.emails_cc.join(", "));
+    }
+  };
 
   const handlePreview = async () => {
     setGerandoPreview(true);
@@ -76,6 +106,7 @@ export default function ModalContaSalario({ isOpen, onClose, admissaoId, jaEnvia
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          banco_parceiro_id: bancoId,
           para: to.trim(),
           cc: cc.trim(),
           ...(precisaJustificar ? { forcar: true, justificativa: justificativa.trim() } : {}),
@@ -112,18 +143,35 @@ export default function ModalContaSalario({ isOpen, onClose, admissaoId, jaEnvia
           {jaEnviadaEm && (
             <div className="rounded-lg p-3 text-xs font-semibold" style={{ background: "#FEF3C7", color: "#92400E" }}>
               ⚠️ Já enviado em {new Date(jaEnviadaEm).toLocaleString("pt-BR")}
-              {jaEnviadaPorNome ? ` por ${jaEnviadaPorNome}` : ""}. Justifique abaixo para reenviar.
+              {jaEnviadaPorNome ? ` por ${jaEnviadaPorNome}` : ""}
+              {jaEnviadaBancoNome ? ` (banco: ${jaEnviadaBancoNome})` : ""}. Justifique abaixo para reenviar.
+            </div>
+          )}
+
+          {semBancoConfigurado && (
+            <div className="rounded-lg p-3 text-xs font-semibold" style={{ background: "#FEE2E2", color: "#991B1B" }}>
+              ⚠️ Nenhum banco parceiro configurado — cadastre em Configurações antes de enviar.
             </div>
           )}
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Para</label>
-            <input
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              placeholder={carregandoDestinatarios ? "Carregando destinatários padrão..." : undefined}
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Banco parceiro</label>
+            <select
+              value={bancoId}
+              onChange={(e) => handleSelecionarBanco(e.target.value)}
+              disabled={carregandoBancos || semBancoConfigurado}
               className="input-field"
-            />
+            >
+              <option value="">{carregandoBancos ? "Carregando..." : "Selecione um banco"}</option>
+              {bancos.map((b) => (
+                <option key={b.id} value={b.id}>{b.nome}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Para</label>
+            <input value={to} onChange={(e) => setTo(e.target.value)} className="input-field" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cc</label>

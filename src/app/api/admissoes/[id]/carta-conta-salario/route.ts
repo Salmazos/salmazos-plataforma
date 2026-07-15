@@ -106,6 +106,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   const justificativa = parsed.data.justificativa?.trim() || null;
   const para = parsed.data.para?.trim() ?? "";
   const cc = parsed.data.cc?.trim() ?? "";
+  const bancoParceiroId = parsed.data.banco_parceiro_id ?? null;
 
   const svc = createServiceClient();
 
@@ -173,6 +174,21 @@ export async function POST(request: NextRequest, { params }: Params) {
       },
       { status: 400 }
     );
+  }
+
+  // Snapshot do nome do banco no momento do envio — resiliente a uma renomeação futura
+  // do cadastro, sem precisar de join pra exibir o histórico depois.
+  let bancoParceiroNome: string | null = null;
+  if (!preview && bancoParceiroId) {
+    const { data: banco } = await svc
+      .from("bancos_parceiros")
+      .select("nome")
+      .eq("id", bancoParceiroId)
+      .maybeSingle();
+    if (!banco) {
+      return NextResponse.json({ error: "Banco parceiro não encontrado. Selecione novamente." }, { status: 400 });
+    }
+    bancoParceiroNome = banco.nome;
   }
 
   // ── Gera o PDF de 3 páginas: carta + RG + comprovante de endereço ─────────
@@ -266,6 +282,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       carta_banco_path: uploadPath,
       carta_banco_enviada_em: enviadaEm,
       carta_banco_enviada_por: user.id,
+      carta_banco_id: bancoParceiroId,
+      carta_banco_nome: bancoParceiroNome,
     })
     .eq("id", id);
 
@@ -279,6 +297,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       storage_path: uploadPath,
       para,
       cc: cc || null,
+      banco_parceiro_id: bancoParceiroId,
+      banco_parceiro_nome: bancoParceiroNome,
       ...(jaEnviadaAntes ? { forcado: true, justificativa, enviada_anteriormente_em: admissao.carta_banco_enviada_em } : {}),
     },
   });
