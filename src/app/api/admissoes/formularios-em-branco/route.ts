@@ -27,7 +27,7 @@ export async function GET(_request: NextRequest) {
 
   // Duas linhas em branco pra cada seção repetível — dá espaço físico pra preencher
   // à mão sem forçar a pessoa a escrever nas margens.
-  desenharFichaCadastral(w, {}, [{}, {}]);
+  desenharFichaCadastral(w, {}, [{}, {}], { emBranco: true });
   desenharAutorizacaoSindical(w, {});
   desenharSolicitacaoValeTransporte(w, { linhas: [{}, {}] });
 

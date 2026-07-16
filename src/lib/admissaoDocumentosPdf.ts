@@ -131,7 +131,17 @@ export interface FichaCadastralDependente {
   num_folha?: string | null;
 }
 
-export function desenharFichaCadastral(w: PdfWriter, d: FichaCadastralDados, dependentes: FichaCadastralDependente[]) {
+export function desenharFichaCadastral(
+  w: PdfWriter,
+  d: FichaCadastralDados,
+  dependentes: FichaCadastralDependente[],
+  // emBranco: só o formulário em branco (formularios-em-branco/route.ts) passa true.
+  // A pergunta de portabilidade salarial existe apenas como checkbox pra marcar à
+  // caneta no papel — o pacote de contabilidade (gerar-pdf/route.ts) já mostra a
+  // resposta real na Carta de Abertura de Conta Salário (desenharCartaAberturaContaSalario),
+  // então não precisa repeti-la aqui na Ficha Cadastral preenchida.
+  opcoes?: { emBranco?: boolean }
+) {
   w.newPage();
   w.drawText("FICHA CADASTRAL DE FUNCIONÁRIO", w.bold, 14);
   w.y -= 6;
@@ -248,6 +258,11 @@ export function desenharFichaCadastral(w: PdfWriter, d: FichaCadastralDados, dep
     { label: "Tipo de conta", value: d.tipo_conta === "corrente" ? "Conta Corrente" : d.tipo_conta === "poupanca" ? "Conta Poupança" : "" },
     { label: "Chave PIX", value: d.pix },
   ]);
+  if (opcoes?.emBranco) {
+    w.ensureSpace(24);
+    w.drawText("Deseja portar seu salário para esta conta bancária?     (  ) Sim     (  ) Não", w.regular, 10);
+    w.y -= 8;
+  }
 
   w.sectionTitle("Situação Trabalhista e Benefícios");
   w.formFieldRow([
