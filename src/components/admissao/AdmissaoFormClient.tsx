@@ -151,12 +151,26 @@ interface AdmissaoTokenData {
   vagas: { titulo: string } | null;
 }
 
+// Únicos dois campos boolean do FormState — precisam de coerção explícita em sanitizarForm
+// porque, mesmo o TypeScript declarando `boolean`, um bug de carregamento (ou uma aba já
+// aberta em memória de antes de um fix desse tipo) pode deixar "true"/"false" como string
+// aqui em runtime; o zod do backend rejeita string onde espera boolean.
+const CAMPOS_BOOLEANOS: (keyof FormState)[] = ["possui_ctps_digital", "deseja_portabilidade_salario"];
+
+function coagirBoolean(v: unknown): boolean {
+  if (typeof v === "string") return v === "true";
+  return !!v;
+}
+
 // Campos vazios precisam virar null (não "") antes de ir pro backend: os campos de
 // enum (sexo, estado_civil, grau_instrucao, tipo_conta) rejeitam "" no zod, e os campos
 // de data (data_nascimento, rg_data_emissao, cnh_validade) rejeitam "" no Postgres (DATE).
 function sanitizarForm(form: FormState): Record<string, string | boolean | null> {
   return Object.fromEntries(
-    Object.entries(form).map(([k, v]) => [k, typeof v === "string" ? (v.trim() === "" ? null : v) : v])
+    Object.entries(form).map(([k, v]) => {
+      if (CAMPOS_BOOLEANOS.includes(k as keyof FormState)) return [k, coagirBoolean(v)];
+      return [k, typeof v === "string" ? (v.trim() === "" ? null : v) : v];
+    })
   );
 }
 
@@ -315,10 +329,16 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
             ...FORM_VAZIO,
             ...Object.fromEntries(
               Object.entries(data.dados_pessoais)
-                .filter(([k, v]) => k in FORM_VAZIO && v != null && k !== "possui_ctps_digital")
+                .filter(([k, v]) => k in FORM_VAZIO && v != null && k !== "possui_ctps_digital" && k !== "deseja_portabilidade_salario")
                 .map(([k, v]) => [k, String(v)])
             ),
             possui_ctps_digital: !!data.dados_pessoais.possui_ctps_digital,
+            // Campo boolean no banco — precisa da mesma exceção de possui_ctps_digital acima,
+            // senão o map genérico de String(v) transforma o boolean numa string "true"/"false"
+            // que o zod rejeita no próximo autosave (era mascarado pelo toggle antigo, que
+            // reescrevia isto com um boolean real a cada clique; sem o toggle, nada corrige
+            // o valor depois do load).
+            deseja_portabilidade_salario: !!data.dados_pessoais.deseja_portabilidade_salario,
           };
           setForm(formCompleto);
           isMotoristaCalc = !!data.dados_pessoais.cnh_numero;
