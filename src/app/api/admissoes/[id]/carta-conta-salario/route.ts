@@ -198,6 +198,13 @@ export async function POST(request: NextRequest, { params }: Params) {
   const w = await PdfWriter.create(pdfDoc, false);
   const assinaturaImg = await resolverAssinaturaResponsavel(svc, pdfDoc);
 
+  // Exceção manual do RH (painel de admissão): só prevalece quando o toggle está ligado
+  // E os 4 campos de destino foram preenchidos — caso contrário a carta usa
+  // automaticamente o cadastro bancário geral (banco/agencia/conta/tipo_conta), sem
+  // depender de nenhum toggle, já que o formulário público não pergunta mais isso.
+  const temExcecaoPortabilidade =
+    !!dp.deseja_portabilidade_salario && !!dp.banco_portabilidade && !!dp.agencia_portabilidade && !!dp.conta_portabilidade && !!dp.tipo_conta_portabilidade;
+
   desenharCartaAberturaContaSalario(w, {
     nome_completo: nomeCompleto,
     telefone,
@@ -207,13 +214,10 @@ export async function POST(request: NextRequest, { params }: Params) {
     entidade_cnpj: entidade?.cnpj ?? null,
     endereco_fiscal: ENDERECO_FISCAL_SALMAZOS,
     salario: admissao.salario,
-    // Dados de PORTABILIDADE (não o cadastro bancário geral banco/agencia/conta) — só
-    // entram na carta se o candidato explicitamente optou por portar o salário; senão o
-    // bloco "Dados para portabilidade:" simplesmente não aparece.
-    banco_portabilidade: dp.deseja_portabilidade_salario ? dp.banco_portabilidade : null,
-    agencia_portabilidade: dp.deseja_portabilidade_salario ? dp.agencia_portabilidade : null,
-    conta_portabilidade: dp.deseja_portabilidade_salario ? dp.conta_portabilidade : null,
-    tipo_conta_portabilidade: dp.deseja_portabilidade_salario ? dp.tipo_conta_portabilidade : null,
+    banco_portabilidade: temExcecaoPortabilidade ? dp.banco_portabilidade : dp.banco,
+    agencia_portabilidade: temExcecaoPortabilidade ? dp.agencia_portabilidade : dp.agencia,
+    conta_portabilidade: temExcecaoPortabilidade ? dp.conta_portabilidade : dp.conta,
+    tipo_conta_portabilidade: temExcecaoPortabilidade ? dp.tipo_conta_portabilidade : dp.tipo_conta,
     assinaturaImg,
   });
 

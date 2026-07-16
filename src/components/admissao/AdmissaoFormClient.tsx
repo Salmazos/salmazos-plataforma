@@ -160,23 +160,6 @@ function sanitizarForm(form: FormState): Record<string, string | boolean | null>
   );
 }
 
-// Os 4 campos de portabilidade não têm mais input manual no formulário público — quando
-// o candidato marca "Sim", eles viram espelho automático dos dados bancários gerais.
-// Isso só roda no momento do envio (enviarParaAnalise), nunca a cada tecla digitada nos
-// campos gerais, pra sempre refletir o valor final que o candidato confirmou.
-function espelharPortabilidade(form: FormState): FormState {
-  if (!form.deseja_portabilidade_salario) {
-    return { ...form, banco_portabilidade: "", agencia_portabilidade: "", conta_portabilidade: "", tipo_conta_portabilidade: "" };
-  }
-  return {
-    ...form,
-    banco_portabilidade: form.banco,
-    agencia_portabilidade: form.agencia,
-    conta_portabilidade: form.conta,
-    tipo_conta_portabilidade: form.tipo_conta,
-  };
-}
-
 function sanitizarValeTransporte(vt: ValeTransporteState): Record<string, unknown> {
   return {
     opcao: vt.opcao || null,
@@ -465,7 +448,7 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          dados_pessoais: { ...sanitizarForm(espelharPortabilidade(form)), ...sanitizarSituacaoTrabalhista(situacaoTrabalhista) },
+          dados_pessoais: { ...sanitizarForm(form), ...sanitizarSituacaoTrabalhista(situacaoTrabalhista) },
           vale_transporte: sanitizarValeTransporte(valeTransporte),
           submit: true,
           lgpd_aceite: lgpdAceite,

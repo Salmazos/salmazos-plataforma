@@ -536,10 +536,10 @@ export interface CartaContaSalarioDados {
   // @/lib/admissaoConstants (mesma fonte do rodapé de todo PDF gerado pelo PdfWriter).
   endereco_fiscal: string;
   salario: number;
-  // Dados de PORTABILIDADE de salário (admissao_dados_pessoais.banco_portabilidade/etc,
-  // resolvidos pelo chamador só quando deseja_portabilidade_salario é true) — não o
-  // cadastro bancário geral do candidato (banco/agencia/conta), que é um conceito
-  // diferente e nunca aparece nesta carta.
+  // Dados bancários a exibir no bloco "Dados para portabilidade:" — o chamador resolve
+  // a prioridade: exceção manual do RH (admissao_dados_pessoais.banco_portabilidade/etc,
+  // quando deseja_portabilidade_salario está ligado e os 4 campos estão preenchidos) ou,
+  // por padrão, o cadastro bancário geral do candidato (banco/agencia/conta/tipo_conta).
   banco_portabilidade?: string | null;
   agencia_portabilidade?: string | null;
   conta_portabilidade?: string | null;

@@ -22,13 +22,6 @@ export default function PassoDadosBancarios({ form, setCampo, errosVisiveis }: P
     form.banco && !BANCOS.includes(form.banco) ? "outro" : "lista"
   );
 
-  // A pergunta de portabilidade só faz sentido depois que o candidato já informou os
-  // dados bancários gerais — não existe mais input manual separado pra portabilidade
-  // (ver AdmissaoFormClient.enviarParaAnalise): os 4 campos de portabilidade viram
-  // espelho automático de banco/agencia/conta/tipo_conta no momento do envio.
-  const dadosBancariosPreenchidos =
-    form.banco.trim() !== "" && form.agencia.trim() !== "" && form.conta.trim() !== "" && form.tipo_conta.trim() !== "";
-
   return (
     <div style={cardStyle}>
       <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>Dados Bancários</h2>
@@ -87,30 +80,6 @@ export default function PassoDadosBancarios({ form, setCampo, errosVisiveis }: P
       <Campo label="Chave PIX">
         <input type="text" value={form.pix} onChange={(e) => setCampo("pix", e.target.value)} style={campoErroStyle(false)} />
       </Campo>
-
-      {/* Portabilidade de salário: pergunta simples de Sim/Não. Quando "Sim", os campos
-          de portabilidade viram espelho automático dos dados bancários gerais acima no
-          momento do envio (ver AdmissaoFormClient.enviarParaAnalise) — não existe mais
-          formulário separado pra digitar uma conta de destino diferente aqui. */}
-      {dadosBancariosPreenchidos && (
-        <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 20, paddingTop: 16 }}>
-          <Campo label="Deseja portar seu salário para esta conta bancária?">
-            <div style={{ display: "flex", gap: 20 }}>
-              {[{ v: true, l: "Sim" }, { v: false, l: "Não" }].map((opt) => (
-                <label key={String(opt.v)} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, minHeight: 44 }}>
-                  <input
-                    type="radio" name="deseja_portabilidade_salario"
-                    checked={form.deseja_portabilidade_salario === opt.v}
-                    onChange={() => setCampo("deseja_portabilidade_salario", opt.v)}
-                    style={{ width: 20, height: 20 }}
-                  />
-                  {opt.l}
-                </label>
-              ))}
-            </div>
-          </Campo>
-        </div>
-      )}
     </div>
   );
 }
