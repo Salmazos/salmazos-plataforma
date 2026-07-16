@@ -980,6 +980,111 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
     }
   };
 
+  // Card de um documento — extraído do loop principal (DOCUMENTOS_ADMISSAO.map abaixo)
+  // pra ser reaproveitado também pelo bloco especial de "RG (verso)", que não faz parte
+  // desse loop (é posicionado manualmente ao lado do card de "rg", não na ordem do array).
+  const renderDocCard = (doc: AdmissaoDocumento, label: string) => {
+    const statusBadge: Record<string, { label: string; bg: string; text: string }> = {
+      pendente: { label: "Pendente", bg: "#F3F4F6", text: "#6B7280" },
+      enviado: { label: "Enviado", bg: "#DBEAFE", text: "#1D4ED8" },
+      aprovado: { label: "Aprovado ✅", bg: "#DCFCE7", text: "#15803D" },
+      rejeitado: { label: "Rejeitado ❌", bg: "#FEE2E2", text: "#991B1B" },
+    };
+    const sb = statusBadge[doc.status] ?? statusBadge.pendente;
+    const processando = processandoDocId === doc.id;
+    const enviandoEsta = enviandoUpload && uploadAlvo?.docId === doc.id;
+
+    return (
+      <div key={doc.id} className="card mb-3">
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-sm font-bold text-gray-900">{label}</p>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: sb.bg, color: sb.text }}>
+            {sb.label}
+          </span>
+        </div>
+        {doc.motivo_rejeicao && <p className="text-xs text-red-600 mb-2">Motivo: {doc.motivo_rejeicao}</p>}
+
+        <div className="flex gap-2 flex-wrap mt-2">
+          {doc.storage_path && (
+            <button onClick={() => handleVisualizar(doc)} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }}>
+              Visualizar
+            </button>
+          )}
+          <button
+            onClick={() => iniciarUpload(doc.tipo_documento, doc.id, label)}
+            disabled={enviandoEsta}
+            className="btn-outline" style={{ padding: "5px 12px", fontSize: 12, opacity: enviandoEsta ? 0.6 : 1 }}
+          >
+            {enviandoEsta ? "Enviando..." : doc.storage_path ? "Substituir arquivo" : "Enviar documento"}
+          </button>
+          {doc.status === "enviado" && (
+            <>
+              <button
+                onClick={() => handleAprovar(doc)} disabled={processando}
+                style={{ padding: "5px 12px", fontSize: 12, fontWeight: 600, borderRadius: 8, border: "1px solid #16A34A", background: "#F0FDF4", color: "#15803D", cursor: "pointer" }}
+              >
+                ✅ Aprovar
+              </button>
+              <button
+                onClick={() => { setRejeitandoId(rejeitandoId === doc.id ? null : doc.id); setMotivoSelecionado(""); setMotivoOutro(""); }}
+                disabled={processando}
+                style={{ padding: "5px 12px", fontSize: 12, fontWeight: 600, borderRadius: 8, border: "1px solid #DC2626", background: "#FEF2F2", color: "#991B1B", cursor: "pointer" }}
+              >
+                ❌ Rejeitar
+              </button>
+            </>
+          )}
+        </div>
+
+        {rejeitandoId === doc.id && (
+          <div className="mt-3 border-t border-gray-100 pt-3">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Motivo da rejeição *</label>
+            <select value={motivoSelecionado} onChange={(e) => setMotivoSelecionado(e.target.value)} className="input-field mb-2">
+              <option value="" disabled>Selecione o motivo...</option>
+              {MOTIVOS_REJEICAO_DOCUMENTO.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+            {isOutroMotivo && (
+              <textarea
+                value={motivoOutro} onChange={(e) => setMotivoOutro(e.target.value)}
+                placeholder="Descreva o motivo..." rows={2}
+                className="input-field resize-none mb-2"
+              />
+            )}
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setRejeitandoId(null)} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }}>Cancelar</button>
+              <button
+                onClick={() => handleConfirmarRejeicao(doc)}
+                disabled={!motivoValido || processando}
+                style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", background: "#DC2626", color: "#fff", cursor: "pointer", opacity: !motivoValido || processando ? 0.6 : 1 }}
+              >
+                {processando ? "Salvando..." : "Confirmar rejeição"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Card de "RG (verso)": documento apenasPainel, sem linha pré-criada — enquanto não
+  // existir, mostra só o botão de opt-in; depois do primeiro upload, vira um card normal
+  // (reaproveita renderDocCard) posicionado logo depois do card de "rg".
+  const renderRgVersoBlock = () => {
+    const docVerso = documentos.find((d) => d.tipo_documento === "rg_verso");
+    if (docVerso) return renderDocCard(docVerso, "RG (verso)");
+
+    const enviandoVerso = enviandoUpload && uploadAlvo?.tipo === "rg_verso";
+    return (
+      <button
+        onClick={() => iniciarUpload("rg_verso", undefined, "RG (verso)")}
+        disabled={enviandoVerso}
+        className="btn-outline mb-3" style={{ padding: "6px 12px", fontSize: 12, opacity: enviandoVerso ? 0.6 : 1 }}
+      >
+        {enviandoVerso ? "Enviando..." : "+ Adicionar verso do RG"}
+      </button>
+    );
+  };
+
   const handleGerarPdf = async () => {
     setGerandoPdf(true);
     setErroPacote("");
@@ -1792,7 +1897,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
             </div>
           )}
           <p className="text-sm font-semibold text-gray-700 mb-4">{docsAprovados} de {documentos.length} documentos aprovados</p>
-          {DOCUMENTOS_ADMISSAO.map((def) => {
+          {DOCUMENTOS_ADMISSAO.filter((def) => !def.apenasPainel).map((def) => {
             const rows = documentos.filter((d) => d.tipo_documento === def.tipo_documento);
             if (rows.length === 0) return null;
             const aceitaMultiplos = def.condicional === "dependente";
@@ -1801,86 +1906,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
               <div key={def.tipo_documento}>
                 {rows.map((doc, idx) => {
                   const label = rows.length > 1 ? `${def.label} (${idx + 1})` : def.label;
-                  const statusBadge: Record<string, { label: string; bg: string; text: string }> = {
-                    pendente: { label: "Pendente", bg: "#F3F4F6", text: "#6B7280" },
-                    enviado: { label: "Enviado", bg: "#DBEAFE", text: "#1D4ED8" },
-                    aprovado: { label: "Aprovado ✅", bg: "#DCFCE7", text: "#15803D" },
-                    rejeitado: { label: "Rejeitado ❌", bg: "#FEE2E2", text: "#991B1B" },
-                  };
-                  const sb = statusBadge[doc.status] ?? statusBadge.pendente;
-                  const processando = processandoDocId === doc.id;
-                  const enviandoEsta = enviandoUpload && uploadAlvo?.docId === doc.id;
-
-                  return (
-                    <div key={doc.id} className="card mb-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-sm font-bold text-gray-900">{label}</p>
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: sb.bg, color: sb.text }}>
-                          {sb.label}
-                        </span>
-                      </div>
-                      {doc.motivo_rejeicao && <p className="text-xs text-red-600 mb-2">Motivo: {doc.motivo_rejeicao}</p>}
-
-                      <div className="flex gap-2 flex-wrap mt-2">
-                        {doc.storage_path && (
-                          <button onClick={() => handleVisualizar(doc)} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }}>
-                            Visualizar
-                          </button>
-                        )}
-                        <button
-                          onClick={() => iniciarUpload(def.tipo_documento, doc.id, label)}
-                          disabled={enviandoEsta}
-                          className="btn-outline" style={{ padding: "5px 12px", fontSize: 12, opacity: enviandoEsta ? 0.6 : 1 }}
-                        >
-                          {enviandoEsta ? "Enviando..." : doc.storage_path ? "Substituir arquivo" : "Enviar documento"}
-                        </button>
-                        {doc.status === "enviado" && (
-                          <>
-                            <button
-                              onClick={() => handleAprovar(doc)} disabled={processando}
-                              style={{ padding: "5px 12px", fontSize: 12, fontWeight: 600, borderRadius: 8, border: "1px solid #16A34A", background: "#F0FDF4", color: "#15803D", cursor: "pointer" }}
-                            >
-                              ✅ Aprovar
-                            </button>
-                            <button
-                              onClick={() => { setRejeitandoId(rejeitandoId === doc.id ? null : doc.id); setMotivoSelecionado(""); setMotivoOutro(""); }}
-                              disabled={processando}
-                              style={{ padding: "5px 12px", fontSize: 12, fontWeight: 600, borderRadius: 8, border: "1px solid #DC2626", background: "#FEF2F2", color: "#991B1B", cursor: "pointer" }}
-                            >
-                              ❌ Rejeitar
-                            </button>
-                          </>
-                        )}
-                      </div>
-
-                      {rejeitandoId === doc.id && (
-                        <div className="mt-3 border-t border-gray-100 pt-3">
-                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Motivo da rejeição *</label>
-                          <select value={motivoSelecionado} onChange={(e) => setMotivoSelecionado(e.target.value)} className="input-field mb-2">
-                            <option value="" disabled>Selecione o motivo...</option>
-                            {MOTIVOS_REJEICAO_DOCUMENTO.map((m) => <option key={m} value={m}>{m}</option>)}
-                          </select>
-                          {isOutroMotivo && (
-                            <textarea
-                              value={motivoOutro} onChange={(e) => setMotivoOutro(e.target.value)}
-                              placeholder="Descreva o motivo..." rows={2}
-                              className="input-field resize-none mb-2"
-                            />
-                          )}
-                          <div className="flex gap-2 justify-end">
-                            <button onClick={() => setRejeitandoId(null)} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }}>Cancelar</button>
-                            <button
-                              onClick={() => handleConfirmarRejeicao(doc)}
-                              disabled={!motivoValido || processando}
-                              style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700, borderRadius: 8, border: "none", background: "#DC2626", color: "#fff", cursor: "pointer", opacity: !motivoValido || processando ? 0.6 : 1 }}
-                            >
-                              {processando ? "Salvando..." : "Confirmar rejeição"}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
+                  return renderDocCard(doc, label);
                 })}
 
                 {aceitaMultiplos && (
@@ -1894,6 +1920,10 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                       : `+ Adicionar novo arquivo (${def.label})`}
                   </button>
                 )}
+
+                {/* RG (verso) fica logo ao lado do card de RG — apenasPainel, sem linha
+                    pré-criada, só aparece quando o RH clica em "+ Adicionar verso do RG". */}
+                {def.tipo_documento === "rg" && renderRgVersoBlock()}
               </div>
             );
           })}

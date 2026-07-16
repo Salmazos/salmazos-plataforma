@@ -347,7 +347,10 @@ function DocumentoMultiCard({
 }
 
 export default function PassoUploadDocumentos({ token, documentos, setDocumentos, sexo, isMotorista, possuiDependentes }: Props) {
-  const tiposVisiveis = DOCUMENTOS_ADMISSAO.filter((def) => tipoVisivel(def, sexo, isMotorista, possuiDependentes));
+  // apenasPainel (ex.: rg_verso) é exclusivo do upload manual pela equipe — nunca aparece
+  // aqui, mesmo defensivamente (a linha em admissao_documentos nem chega a existir pra um
+  // tipo assim, já que o seed automático da criação também o exclui).
+  const tiposVisiveis = DOCUMENTOS_ADMISSAO.filter((def) => !def.apenasPainel && tipoVisivel(def, sexo, isMotorista, possuiDependentes));
 
   const handleAtualizado = (docAtualizado: DocumentoToken) => {
     setDocumentos((prev) => {

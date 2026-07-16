@@ -144,12 +144,16 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const [{ data: dadosPessoais }, { data: documentos }] = await Promise.all([
     svc.from("admissao_dados_pessoais").select("*").eq("admissao_id", id).maybeSingle(),
-    svc.from("admissao_documentos").select("*").eq("admissao_id", id).in("tipo_documento", ["rg", "comprovante_endereco"]),
+    svc.from("admissao_documentos").select("*").eq("admissao_id", id).in("tipo_documento", ["rg", "rg_verso", "comprovante_endereco"]),
   ]);
 
   const dp = (dadosPessoais ?? {}) as Partial<AdmissaoDadosPessoais>;
   const docs = (documentos ?? []) as AdmissaoDocumento[];
   const docRg = docs.find((d) => d.tipo_documento === "rg");
+  // rg_verso é opcional (upload manual do RH, ver AdmissaoDetalheClient "+ Adicionar
+  // verso do RG") — ao contrário do RG e do comprovante, não bloqueia a carta se não
+  // existir ou não estiver aprovado; só entra na carta quando tem arquivo de fato.
+  const docRgVerso = docs.find((d) => d.tipo_documento === "rg_verso");
   const docComprovante = docs.find((d) => d.tipo_documento === "comprovante_endereco");
 
   if (!docRg || docRg.status !== "aprovado" || !docRg.storage_path) {
@@ -191,7 +195,8 @@ export async function POST(request: NextRequest, { params }: Params) {
     bancoParceiroNome = banco.nome;
   }
 
-  // ── Gera o PDF de 3 páginas: carta + RG + comprovante de endereço ─────────
+  // ── Gera o PDF de 3 páginas (carta + RG + comprovante de endereço), ou 4 se houver
+  // rg_verso (carta + RG + RG verso + comprovante de endereço) ─────────────
   const pdfDoc = await PDFDocument.create();
   // criarPaginaInicial=false: desenharCartaAberturaContaSalario já chama w.newPage()
   // sozinha (mesmo padrão de desenharFichaCadastral/etc.) — evitaria uma página 1 em branco.
@@ -227,6 +232,18 @@ export async function POST(request: NextRequest, { params }: Params) {
       { error: "Não foi possível anexar o RG ao PDF. Verifique o arquivo no painel e tente novamente." },
       { status: 500 }
     );
+  }
+
+  // Página extra só quando o RH fez esse upload manual — caso normal (candidato mandou
+  // frente e verso na mesma foto) não tem rg_verso e a carta continua com 3 páginas.
+  if (docRgVerso?.storage_path) {
+    const rgVersoAnexado = await anexarDocumentoPaginaCheia(svc, pdfDoc, w, docRgVerso.storage_path, "RG (verso)");
+    if (!rgVersoAnexado) {
+      return NextResponse.json(
+        { error: "Não foi possível anexar o verso do RG ao PDF. Verifique o arquivo no painel e tente novamente." },
+        { status: 500 }
+      );
+    }
   }
 
   const comprovanteAnexado = await anexarDocumentoPaginaCheia(svc, pdfDoc, w, docComprovante.storage_path, "comprovante de endereço");

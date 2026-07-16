@@ -61,6 +61,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const def = DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === tipo)!;
   const aceitaMultiplos = def.condicional === "dependente";
+  // Tipos apenasPainel (ex.: rg_verso) não têm linha pré-criada na criação da admissão —
+  // reaproveita a mesma lógica de "cria a linha se ainda não existir" do multi-arquivo,
+  // já que o primeiro upload é exatamente o que faz a linha passar a existir.
+  const criaLinhaSobDemanda = aceitaMultiplos || def.apenasPainel === true;
 
   let data;
   if (docId) {
@@ -76,7 +80,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     data = updated;
-  } else if (aceitaMultiplos) {
+  } else if (criaLinhaSobDemanda) {
     // Sem doc_id num tipo multi-arquivo = "adicionar mais um": reaproveita a linha vazia
     // semeada na criação da admissão se existir, senão cria uma linha nova.
     const { data: slotVazio } = await svc
