@@ -1120,6 +1120,62 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
         </span>
       </div>
 
+      {/* Ações principais */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div className="card">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Pacote para contabilidade</p>
+          <button
+            onClick={handleGerarPdf}
+            disabled={!podeGerarPdf || gerandoPdf}
+            title={tituloBotaoPdf}
+            className="btn-primary w-full"
+            style={{ opacity: !podeGerarPdf || gerandoPdf ? 0.5 : 1 }}
+          >
+            {gerandoPdf ? "Gerando PDF..." : "Gerar pacote para contabilidade"}
+          </button>
+          {nomesDocsPendentes.length > 0 && (
+            <p style={{ fontSize: 12, color: "#DC2626", marginTop: 8 }}>
+              ⚠️ Aprove antes: {nomesDocsPendentes.join(", ")}
+            </p>
+          )}
+          {!podeGerarPdf && !forcandoPacote && (
+            <button
+              onClick={() => setForcandoPacote(true)}
+              className="text-xs font-semibold mt-2"
+              style={{ color: "#DC2626" }}
+            >
+              Forçar geração do pacote
+            </button>
+          )}
+        </div>
+
+        {podeAbrirContaSalario && (
+          <div className="card">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Carta de abertura de conta</p>
+            <button
+              onClick={() => setModalContaSalarioAberto(true)}
+              disabled={cartaBancoDesabilitada}
+              title={tituloBotaoCartaBanco}
+              className="w-full font-semibold px-6 py-2.5 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#FFB800]/30 bg-[#1F2937] hover:bg-[#374151] text-[#FDE68A]"
+            >
+              🏦 Gerar e enviar carta de abertura de conta
+            </button>
+          </div>
+        )}
+
+        {admissao.pdf_pacote_path && !assinaturaConcluida && !assinaturaEmAndamento && (
+          <div className="card">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Assinatura eletrônica</p>
+            <button
+              onClick={() => setModalAssinaturaAberto(true)}
+              className="w-full font-semibold px-6 py-2.5 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#FFB800]/30 bg-[#292524] hover:bg-[#44403C] text-[#FCD34D]"
+            >
+              Enviar para assinatura eletrônica
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Tabs */}
       <div className="flex gap-1 border-b-2 border-gray-100 mb-5">
         {[{ id: "dados" as Tab, label: "Dados do Candidato" }, { id: "documentos" as Tab, label: "Documentos" }, { id: "notas" as Tab, label: "Anotações Internas" }].map((t) => (
@@ -1845,56 +1901,16 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       )}
 
       {/* Ações */}
-      <div className="card mt-6 flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Status</label>
-          <select
-            value={status}
-            onChange={(e) => handleStatusChange(e.target.value)}
-            disabled={salvandoStatus}
-            className="input-field"
-          >
-            {ADMISSAO_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-        <div>
-          <div className="flex items-center gap-2 justify-end flex-wrap">
-            {podeAbrirContaSalario && (
-              <button
-                onClick={() => setModalContaSalarioAberto(true)}
-                disabled={cartaBancoDesabilitada}
-                title={tituloBotaoCartaBanco}
-                className="btn-outline"
-                style={{ opacity: cartaBancoDesabilitada ? 0.5 : 1 }}
-              >
-                🏦 Gerar e enviar carta de abertura de conta
-              </button>
-            )}
-            <button
-              onClick={handleGerarPdf}
-              disabled={!podeGerarPdf || gerandoPdf}
-              title={tituloBotaoPdf}
-              className="btn-primary"
-              style={{ opacity: !podeGerarPdf || gerandoPdf ? 0.5 : 1 }}
-            >
-              {gerandoPdf ? "Gerando PDF..." : "Gerar pacote para contabilidade"}
-            </button>
-          </div>
-          {nomesDocsPendentes.length > 0 && (
-            <p style={{ fontSize: 12, color: "#DC2626", marginTop: 6, maxWidth: 320, textAlign: "right" }}>
-              ⚠️ Aprove antes: {nomesDocsPendentes.join(", ")}
-            </p>
-          )}
-          {!podeGerarPdf && !forcandoPacote && (
-            <button
-              onClick={() => setForcandoPacote(true)}
-              className="text-xs font-semibold mt-2"
-              style={{ color: "#DC2626", display: "block", marginLeft: "auto" }}
-            >
-              Forçar geração do pacote
-            </button>
-          )}
-        </div>
+      <div className="card mt-6">
+        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Status</label>
+        <select
+          value={status}
+          onChange={(e) => handleStatusChange(e.target.value)}
+          disabled={salvandoStatus}
+          className="input-field"
+        >
+          {ADMISSAO_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
       </div>
 
       {!podeGerarPdf && forcandoPacote && (
@@ -2022,14 +2038,9 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
               {logAssinaturaCriada?.usuario_nome ? ` por ${logAssinaturaCriada.usuario_nome}` : ""}
             </p>
           ) : (
-            <>
-              <p className="text-sm text-gray-600 mb-2">
-                Envie o pacote gerado para assinatura eletrônica do candidato via Clicksign.
-              </p>
-              <button onClick={() => setModalAssinaturaAberto(true)} className="btn-outline">
-                Enviar para assinatura eletrônica
-              </button>
-            </>
+            <p className="text-sm text-gray-600 mb-0">
+              Envie o pacote gerado para assinatura eletrônica do candidato via Clicksign.
+            </p>
           )}
         </div>
       )}
