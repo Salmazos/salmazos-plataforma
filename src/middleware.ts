@@ -15,9 +15,6 @@ const PUBLIC_API_PREFIXES = [
   // usuário logado. A segurança vem da validação HMAC feita dentro de cada rota, não
   // de sessão (ver validarAssinaturaWebhook em lib/clicksign.ts).
   "/api/webhooks/",
-  // TEMPORÁRIO — investigação do 503 na Clicksign (ver /api/debug/clicksign-isolamento).
-  // A rota tem seu próprio gate por chave de uso único. Remover junto com a rota.
-  "/api/debug/",
 ];
 
 const PUBLIC_API_POST_ONLY = [
