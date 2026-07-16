@@ -220,6 +220,13 @@ const CAMPOS_BANCARIOS: CampoDef[] = [
   { key: "conta", label: "Conta", tipo: "text" },
   { key: "tipo_conta", label: "Tipo de conta", tipo: "select", options: [{ value: "corrente", label: "Conta Corrente" }, { value: "poupanca", label: "Conta Poupança" }] },
   { key: "pix", label: "Chave PIX", tipo: "text" },
+  // Portabilidade de salário — conceito separado do cadastro bancário geral acima (o
+  // candidato pode ter conta em outro banco e querer portar o salário só pra ela).
+  { key: "deseja_portabilidade_salario", label: "Deseja portabilidade de salário?", tipo: "simnao" },
+  { key: "banco_portabilidade", label: "Banco (portabilidade)", tipo: "text" },
+  { key: "agencia_portabilidade", label: "Agência (portabilidade)", tipo: "text" },
+  { key: "conta_portabilidade", label: "Conta (portabilidade)", tipo: "text" },
+  { key: "tipo_conta_portabilidade", label: "Tipo de conta (portabilidade)", tipo: "select", options: [{ value: "corrente", label: "Conta Corrente" }, { value: "poupanca", label: "Conta Poupança" }] },
 ];
 
 const CAMPOS_SITUACAO_TRABALHISTA: CampoDef[] = [
@@ -233,7 +240,7 @@ const CAMPOS_SITUACAO_TRABALHISTA: CampoDef[] = [
 ];
 
 const CAMPOS_BOOLEANOS_DP = new Set(
-  [...CAMPOS_DOCUMENTOS_PROFISSIONAIS, ...CAMPOS_SITUACAO_TRABALHISTA]
+  [...CAMPOS_DOCUMENTOS_PROFISSIONAIS, ...CAMPOS_SITUACAO_TRABALHISTA, ...CAMPOS_BANCARIOS]
     .filter((c) => c.tipo === "simnao")
     .map((c) => c.key)
 );
@@ -1384,6 +1391,28 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
             <Linha label="Conta" value={dp?.conta} />
             <Linha label="Tipo de conta" value={dp?.tipo_conta === "corrente" ? "Conta Corrente" : dp?.tipo_conta === "poupanca" ? "Conta Poupança" : ""} />
             <Linha label="Chave PIX" value={dp?.pix} />
+
+            {/* Bloco visualmente separado: portabilidade é um conceito diferente do
+                cadastro bancário geral acima — pode ser um banco diferente. */}
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed #E5E7EB" }}>
+              <div className="flex justify-between py-1.5 text-sm">
+                <span className="text-gray-500">Portabilidade de salário</span>
+                <span className="text-gray-900 font-medium text-right">
+                  {dp?.deseja_portabilidade_salario ? "Sim" : "Não"}
+                </span>
+              </div>
+              {dp?.deseja_portabilidade_salario && (
+                <>
+                  <Linha label="Banco de destino" value={dp?.banco_portabilidade} />
+                  <Linha label="Agência de destino" value={dp?.agencia_portabilidade} />
+                  <Linha label="Conta de destino" value={dp?.conta_portabilidade} />
+                  <Linha
+                    label="Tipo de conta de destino"
+                    value={dp?.tipo_conta_portabilidade === "corrente" ? "Conta Corrente" : dp?.tipo_conta_portabilidade === "poupanca" ? "Conta Poupança" : ""}
+                  />
+                </>
+              )}
+            </div>
           </SecaoEditavelDP>
 
           <SecaoEditavelDP

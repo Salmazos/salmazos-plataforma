@@ -21,6 +21,9 @@ export default function PassoDadosBancarios({ form, setCampo, errosVisiveis }: P
   const [bancoModo, setBancoModo] = useState<"lista" | "outro">(() =>
     form.banco && !BANCOS.includes(form.banco) ? "outro" : "lista"
   );
+  const [bancoPortabilidadeModo, setBancoPortabilidadeModo] = useState<"lista" | "outro">(() =>
+    form.banco_portabilidade && !BANCOS.includes(form.banco_portabilidade) ? "outro" : "lista"
+  );
 
   return (
     <div style={cardStyle}>
@@ -80,6 +83,88 @@ export default function PassoDadosBancarios({ form, setCampo, errosVisiveis }: P
       <Campo label="Chave PIX">
         <input type="text" value={form.pix} onChange={(e) => setCampo("pix", e.target.value)} style={campoErroStyle(false)} />
       </Campo>
+
+      {/* Portabilidade de salário — conceito separado do cadastro bancário geral acima:
+          o candidato pode ter conta em outro banco e querer portar o salário só pra ela. */}
+      <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 20, paddingTop: 16 }}>
+        <Campo label="Deseja portar seu salário para uma conta bancária que você já possui?">
+          <div style={{ display: "flex", gap: 20 }}>
+            {[{ v: true, l: "Sim" }, { v: false, l: "Não" }].map((opt) => (
+              <label key={String(opt.v)} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, minHeight: 44 }}>
+                <input
+                  type="radio" name="deseja_portabilidade_salario"
+                  checked={form.deseja_portabilidade_salario === opt.v}
+                  onChange={() => setCampo("deseja_portabilidade_salario", opt.v)}
+                  style={{ width: 20, height: 20 }}
+                />
+                {opt.l}
+              </label>
+            ))}
+          </div>
+        </Campo>
+
+        {form.deseja_portabilidade_salario && (
+          <div style={{ background: "#F5F4FF", border: "1px solid #DDD6FE", borderRadius: 10, padding: "12px 14px", marginTop: 4 }}>
+            <p style={{ fontSize: 13, color: "#5B21B6", margin: "0 0 12px", lineHeight: 1.5 }}>
+              Essa é a conta para onde seu salário será portado. Pode ser diferente da conta informada acima.
+            </p>
+
+            <Campo label="Banco (portabilidade)" required erro={erro("banco_portabilidade")}>
+              <select
+                value={bancoPortabilidadeModo === "outro" ? "outro" : form.banco_portabilidade}
+                onChange={(e) => {
+                  if (e.target.value === "outro") { setBancoPortabilidadeModo("outro"); setCampo("banco_portabilidade", ""); }
+                  else { setBancoPortabilidadeModo("lista"); setCampo("banco_portabilidade", e.target.value); }
+                }}
+                style={campoErroStyle(erro("banco_portabilidade"))}
+              >
+                <option value="" disabled>Selecione...</option>
+                {BANCOS.map((b) => <option key={b} value={b}>{b}</option>)}
+                <option value="outro">Outro (não está na lista)</option>
+              </select>
+              {bancoPortabilidadeModo === "outro" && (
+                <input
+                  type="text" value={form.banco_portabilidade}
+                  onChange={(e) => setCampo("banco_portabilidade", e.target.value)}
+                  placeholder="Digite o nome do banco"
+                  style={{ ...campoErroStyle(erro("banco_portabilidade")), marginTop: 8 }}
+                />
+              )}
+            </Campo>
+
+            <Campo label="Agência (portabilidade)" required erro={erro("agencia_portabilidade")}>
+              <input
+                type="text" inputMode="numeric" value={form.agencia_portabilidade}
+                onChange={(e) => setCampo("agencia_portabilidade", e.target.value)}
+                style={campoErroStyle(erro("agencia_portabilidade"))}
+              />
+            </Campo>
+
+            <Campo label="Conta (portabilidade, com dígito)" required erro={erro("conta_portabilidade")}>
+              <input
+                type="text" value={form.conta_portabilidade}
+                onChange={(e) => setCampo("conta_portabilidade", e.target.value)}
+                style={campoErroStyle(erro("conta_portabilidade"))}
+              />
+            </Campo>
+
+            <Campo label="Tipo de conta (portabilidade)" required erro={erro("tipo_conta_portabilidade")}>
+              <div style={{ display: "flex", gap: 20 }}>
+                {[{ v: "corrente", l: "Conta Corrente" }, { v: "poupanca", l: "Conta Poupança" }].map((opt) => (
+                  <label key={opt.v} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, minHeight: 44 }}>
+                    <input
+                      type="radio" name="tipo_conta_portabilidade" checked={form.tipo_conta_portabilidade === opt.v}
+                      onChange={() => setCampo("tipo_conta_portabilidade", opt.v)}
+                      style={{ width: 20, height: 20 }}
+                    />
+                    {opt.l}
+                  </label>
+                ))}
+              </div>
+            </Campo>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

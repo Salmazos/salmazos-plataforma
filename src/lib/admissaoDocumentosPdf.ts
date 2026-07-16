@@ -521,9 +521,14 @@ export interface CartaContaSalarioDados {
   // @/lib/admissaoConstants (mesma fonte do rodapé de todo PDF gerado pelo PdfWriter).
   endereco_fiscal: string;
   salario: number;
-  banco?: string | null;
-  agencia?: string | null;
-  conta?: string | null;
+  // Dados de PORTABILIDADE de salário (admissao_dados_pessoais.banco_portabilidade/etc,
+  // resolvidos pelo chamador só quando deseja_portabilidade_salario é true) — não o
+  // cadastro bancário geral do candidato (banco/agencia/conta), que é um conceito
+  // diferente e nunca aparece nesta carta.
+  banco_portabilidade?: string | null;
+  agencia_portabilidade?: string | null;
+  conta_portabilidade?: string | null;
+  tipo_conta_portabilidade?: "corrente" | "poupanca" | null;
   // Assinatura do responsável pelo RH (designado em Configurações), já embutida no
   // PDFDocument pelo chamador — desenhada acima da linha de assinatura. Opcional: se
   // ninguém tiver assinatura cadastrada, a carta sai igual, só sem a imagem.
@@ -570,12 +575,14 @@ export function desenharCartaAberturaContaSalario(w: PdfWriter, d: CartaContaSal
     DARK
   );
 
-  if (d.banco || d.agencia || d.conta) {
+  if (d.banco_portabilidade || d.agencia_portabilidade || d.conta_portabilidade) {
+    const tipoContaLabel =
+      d.tipo_conta_portabilidade === "corrente" ? "Conta Corrente" : d.tipo_conta_portabilidade === "poupanca" ? "Conta Poupança" : "—";
     w.y -= 10;
     w.drawText("Dados para portabilidade:", w.bold, 10, DARK);
     w.y -= 4;
-    w.drawText(d.banco || "—", w.regular, 10, DARK);
-    w.drawText(`ag: ${d.agencia || "—"} cc: ${d.conta || "—"}`, w.regular, 10, DARK);
+    w.drawText(d.banco_portabilidade || "—", w.regular, 10, DARK);
+    w.drawText(`ag: ${d.agencia_portabilidade || "—"} cc: ${d.conta_portabilidade || "—"} — ${tipoContaLabel}`, w.regular, 10, DARK);
   }
 
   w.y -= 20;

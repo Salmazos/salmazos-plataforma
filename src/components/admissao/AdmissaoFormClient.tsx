@@ -68,6 +68,11 @@ export interface FormState {
   conta: string;
   tipo_conta: string;
   pix: string;
+  deseja_portabilidade_salario: boolean;
+  banco_portabilidade: string;
+  agencia_portabilidade: string;
+  conta_portabilidade: string;
+  tipo_conta_portabilidade: string;
 }
 
 const FORM_VAZIO: FormState = {
@@ -82,6 +87,8 @@ const FORM_VAZIO: FormState = {
   endereco_cep: "", endereco_logradouro: "", endereco_numero: "", endereco_complemento: "",
   endereco_bairro: "", endereco_cidade: "", endereco_uf: "", telefone: "", email: "",
   banco: "", agencia: "", conta: "", tipo_conta: "", pix: "",
+  deseja_portabilidade_salario: false,
+  banco_portabilidade: "", agencia_portabilidade: "", conta_portabilidade: "", tipo_conta_portabilidade: "",
 };
 
 export interface SituacaoTrabalhistaState {
@@ -210,6 +217,9 @@ function validarPasso(
     req("telefone"); req("email");
   } else if (passo === 4) {
     req("banco"); req("agencia"); req("conta"); req("tipo_conta");
+    if (form.deseja_portabilidade_salario) {
+      req("banco_portabilidade"); req("agencia_portabilidade"); req("conta_portabilidade"); req("tipo_conta_portabilidade");
+    }
   } else if (passo === 5) {
     const reqSt = (campo: keyof SituacaoTrabalhistaState) => { if (!situacaoTrabalhista[campo]) faltando.push(campo); };
     reqSt("recebendo_seguro_desemprego"); reqSt("primeiro_emprego"); reqSt("trabalhou_empresa_antes");

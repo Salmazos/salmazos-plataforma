@@ -95,6 +95,14 @@ export interface AdmissaoDadosPessoais {
   conta: string | null;
   tipo_conta: "corrente" | "poupanca" | null;
   pix: string | null;
+  // Portabilidade de salário — conceito diferente de banco/agencia/conta/tipo_conta
+  // acima (o cadastro bancário geral, usado desde a Ficha Cadastral). O candidato pode
+  // ter conta em outro banco e querer portar o salário só pra ela.
+  deseja_portabilidade_salario: boolean;
+  banco_portabilidade: string | null;
+  agencia_portabilidade: string | null;
+  conta_portabilidade: string | null;
+  tipo_conta_portabilidade: "corrente" | "poupanca" | null;
   data_exame_admissional: string | null;
   recebendo_seguro_desemprego: boolean | null;
   primeiro_emprego: boolean | null;

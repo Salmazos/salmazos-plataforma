@@ -207,9 +207,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     entidade_cnpj: entidade?.cnpj ?? null,
     endereco_fiscal: ENDERECO_FISCAL_SALMAZOS,
     salario: admissao.salario,
-    banco: dp.banco,
-    agencia: dp.agencia,
-    conta: dp.conta,
+    // Dados de PORTABILIDADE (não o cadastro bancário geral banco/agencia/conta) — só
+    // entram na carta se o candidato explicitamente optou por portar o salário; senão o
+    // bloco "Dados para portabilidade:" simplesmente não aparece.
+    banco_portabilidade: dp.deseja_portabilidade_salario ? dp.banco_portabilidade : null,
+    agencia_portabilidade: dp.deseja_portabilidade_salario ? dp.agencia_portabilidade : null,
+    conta_portabilidade: dp.deseja_portabilidade_salario ? dp.conta_portabilidade : null,
+    tipo_conta_portabilidade: dp.deseja_portabilidade_salario ? dp.tipo_conta_portabilidade : null,
     assinaturaImg,
   });
 

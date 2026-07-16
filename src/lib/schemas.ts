@@ -418,6 +418,14 @@ export const admissaoDadosPessoaisSchema = z.object({
   conta: optStr,
   tipo_conta: z.enum(["corrente", "poupanca"]).optional().nullable(),
   pix: optStr,
+  // Portabilidade de salário — separado do cadastro bancário geral acima (banco/agencia/
+  // conta/tipo_conta): o candidato pode ter conta em outro banco e querer portar o
+  // salário só pra ela, não necessariamente a mesma da Ficha Cadastral.
+  deseja_portabilidade_salario: z.boolean().optional().nullable(),
+  banco_portabilidade: optStr,
+  agencia_portabilidade: optStr,
+  conta_portabilidade: optStr,
+  tipo_conta_portabilidade: z.enum(["corrente", "poupanca"]).optional().nullable(),
   // Preenchido pelo RH depois que o exame médico admissional acontece — o candidato não
   // tem esse dado no momento do preenchimento do formulário (ver PassoSituacaoTrabalhista).
   data_exame_admissional: optStr,
