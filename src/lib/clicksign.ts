@@ -61,23 +61,8 @@ async function clicksignFetch<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
 
-  // Lê como texto primeiro (não dá pra chamar res.json() e res.text() no mesmo Response —
-  // o corpo só pode ser lido uma vez) pra conseguir logar o corpo bruto abaixo mesmo
-  // quando ele não for um JSON válido no formato esperado (ex.: página de erro de gateway
-  // num 503, que faria res.json() falhar e engolir o conteúdo silenciosamente).
-  const rawBody = await res.text();
-  let json: unknown = null;
-  try {
-    json = rawBody ? JSON.parse(rawBody) : null;
-  } catch {
-    json = null;
-  }
-
+  const json = await res.json().catch(() => null);
   if (!res.ok) {
-    // TEMPORÁRIO — diagnóstico do 503 recorrente em POST /envelopes (investigação de
-    // 2026-07-15, ocorrências às 01:25 e 01:55). Remover depois de identificada a causa raiz.
-    console.error(`[clicksign] ${path} falhou com HTTP ${res.status} — corpo completo da resposta:`, rawBody);
-
     const detail =
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (json as any)?.errors?.map((e: { detail?: string; title?: string }) => e.detail ?? e.title).join("; ") ??
