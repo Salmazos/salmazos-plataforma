@@ -88,6 +88,8 @@ export const NOTA_HEIC_IPHONE =
   "📱 Se você usa iPhone: vá em Ajustes → Câmera → Formatos → selecione \"Mais Compatível\" para enviar fotos em JPEG e evitar problemas de compatibilidade.";
 
 export const NOTAS_DOCUMENTO: Record<string, string> = {
+  rg:
+    "Tire a foto com o documento aberto, capturando frente e verso na mesma imagem. Garanta que a foto fique nítida e bem iluminada, sem cortes.",
   foto_3x4:
     "Tire uma foto com boa iluminação, fundo neutro (parede branca ou clara) e olhando diretamente para a câmera. Evite usar filtros.",
   ctps_todas_paginas:
