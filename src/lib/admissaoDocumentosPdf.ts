@@ -597,7 +597,9 @@ export function desenharCartaAberturaContaSalario(w: PdfWriter, d: CartaContaSal
     w.drawText("Dados para portabilidade:", w.bold, 10, DARK);
     w.y -= 4;
     w.drawText(d.banco_portabilidade || "—", w.regular, 10, DARK);
-    w.drawText(`ag: ${d.agencia_portabilidade || "—"} cc: ${d.conta_portabilidade || "—"} — ${tipoContaLabel}`, w.regular, 10, DARK);
+    w.drawText(`Ag: ${d.agencia_portabilidade || "—"}`, w.regular, 10, DARK);
+    w.drawText(`Cc: ${d.conta_portabilidade || "—"}`, w.regular, 10, DARK);
+    w.drawText(tipoContaLabel, w.regular, 10, DARK);
   }
 
   w.y -= 20;
