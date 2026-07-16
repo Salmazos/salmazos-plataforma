@@ -13,6 +13,7 @@ import {
 } from "@/lib/admissaoConstants";
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import ModalContaSalario from "@/components/ModalContaSalario";
+import ModalAssinaturaEletronica from "@/components/ModalAssinaturaEletronica";
 import type { AdmissaoAdicional, AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
 
 type Tab = "dados" | "documentos" | "notas";
@@ -422,7 +423,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [justificativaForcar, setJustificativaForcar] = useState("");
   const [gerandoPdfForcado, setGerandoPdfForcado] = useState(false);
   const [modalContaSalarioAberto, setModalContaSalarioAberto] = useState(false);
-  const [enviandoAssinatura, setEnviandoAssinatura] = useState(false);
+  const [modalAssinaturaAberto, setModalAssinaturaAberto] = useState(false);
   const [abrindoAssinatura, setAbrindoAssinatura] = useState(false);
 
   // ── Edição total pelo analista ──────────────────────────────────────────
@@ -1045,34 +1046,6 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
     }
   };
 
-  const handleEnviarAssinatura = async () => {
-    if (!admissao.pdf_pacote_path || faltaDadosAssinatura) return;
-    setEnviandoAssinatura(true);
-    try {
-      const res = await fetch("/api/admissoes/assinatura-clicksign/criar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          admissaoId: admissao.id,
-          pdfPath: admissao.pdf_pacote_path,
-          nomeCandidato: dp?.nome_completo?.trim(),
-          emailCandidato: dp?.email?.trim(),
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        showToast(json.error || "Erro ao enviar para assinatura eletrônica.");
-        return;
-      }
-      showToast("Enviado para assinatura eletrônica com sucesso.");
-      router.refresh();
-    } catch {
-      showToast("Erro de conexão ao enviar para assinatura eletrônica.");
-    } finally {
-      setEnviandoAssinatura(false);
-    }
-  };
-
   const handleVerAssinatura = async () => {
     setAbrindoAssinatura(true);
     try {
@@ -1118,15 +1091,12 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
 
   // Assinatura eletrônica: só faz sentido depois que o pacote de contabilidade (o PDF
   // enviado pra assinar) já existe — mesmo pré-requisito de pdf_pacote_path das outras
-  // ações desta tela. Nome/e-mail do candidato SEMPRE de admissao_dados_pessoais, nunca
-  // de candidatos (mesma razão da carta de conta salário: candidatos pode vir de
-  // extração automática de currículo, não confiável pra um envio formal a terceiros).
+  // ações desta tela. Nome/e-mail default pra pré-preencher o modal de confirmação vêm
+  // de admissao_dados_pessoais, nunca de candidatos (mesma razão da carta de conta
+  // salário: candidatos pode vir de extração automática de currículo, não confiável pra
+  // um envio formal a terceiros) — mas ficam editáveis só naquela tela antes de enviar.
   const assinaturaConcluida = Boolean(admissao.assinatura_em);
   const assinaturaEmAndamento = Boolean(admissao.assinatura_documento_externo_id) && !assinaturaConcluida;
-  const faltaDadosAssinatura = !dp?.nome_completo?.trim() || !dp?.email?.trim();
-  const tituloBotaoAssinatura = faltaDadosAssinatura
-    ? "Preencha nome e e-mail do candidato (Dados Pessoais) antes de enviar."
-    : undefined;
   const logAssinaturaCriada = auditLogs.find((l) => l.acao === "admissao_assinatura_clicksign_criada");
 
   return (
@@ -2027,14 +1997,8 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
               <p className="text-sm text-gray-600 mb-2">
                 Envie o pacote gerado para assinatura eletrônica do candidato via Clicksign.
               </p>
-              <button
-                onClick={handleEnviarAssinatura}
-                disabled={enviandoAssinatura || faltaDadosAssinatura}
-                title={tituloBotaoAssinatura}
-                className="btn-outline"
-                style={{ opacity: enviandoAssinatura || faltaDadosAssinatura ? 0.5 : 1 }}
-              >
-                {enviandoAssinatura ? "Enviando..." : "Enviar para assinatura eletrônica"}
+              <button onClick={() => setModalAssinaturaAberto(true)} className="btn-outline">
+                Enviar para assinatura eletrônica
               </button>
             </>
           )}
@@ -2057,6 +2021,21 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           jaEnviadaBancoNome={admissao.carta_banco_nome}
           onEnviado={() => {
             showToast("Carta de abertura de conta salário enviada com sucesso.");
+            router.refresh();
+          }}
+        />
+      )}
+
+      {admissao.pdf_pacote_path && (
+        <ModalAssinaturaEletronica
+          isOpen={modalAssinaturaAberto}
+          onClose={() => setModalAssinaturaAberto(false)}
+          admissaoId={admissao.id}
+          pdfPath={admissao.pdf_pacote_path}
+          nomeInicial={dp?.nome_completo ?? ""}
+          emailInicial={dp?.email ?? ""}
+          onEnviado={() => {
+            showToast("Enviado para assinatura eletrônica com sucesso.");
             router.refresh();
           }}
         />
