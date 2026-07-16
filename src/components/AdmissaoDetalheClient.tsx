@@ -220,9 +220,20 @@ const CAMPOS_BANCARIOS: CampoDef[] = [
   { key: "conta", label: "Conta", tipo: "text" },
   { key: "tipo_conta", label: "Tipo de conta", tipo: "select", options: [{ value: "corrente", label: "Conta Corrente" }, { value: "poupanca", label: "Conta Poupança" }] },
   { key: "pix", label: "Chave PIX", tipo: "text" },
-  // Portabilidade de salário — conceito separado do cadastro bancário geral acima (o
-  // candidato pode ter conta em outro banco e querer portar o salário só pra ela).
-  { key: "deseja_portabilidade_salario", label: "Deseja portabilidade de salário?", tipo: "simnao" },
+];
+
+// Portabilidade de salário — conceito separado do cadastro bancário geral acima (o
+// candidato pode ter conta em outro banco e querer portar o salário só pra ela).
+// Renderizados à parte (não no campos.map() genérico de CAMPOS_BANCARIOS) porque os 4
+// campos de destino só devem aparecer no formulário de edição quando o toggle estiver
+// em "Sim" — igual ao modo leitura logo abaixo. Antes os 5 campos ficavam misturados
+// numa lista plana de 10 campos sem nenhuma separação visual em modo edição (diferente
+// do modo leitura, que já isolava o bloco), o que tornava fácil mexer sem querer no
+// toggle ou nos campos de destino sem perceber — foi exatamente o que reverteu
+// deseja_portabilidade_salario de volta pra false minutos depois de ter sido salvo como
+// true na admissão da Adriele (ver audit_logs).
+const CAMPO_DESEJA_PORTABILIDADE: CampoDef = { key: "deseja_portabilidade_salario", label: "Deseja portabilidade de salário?", tipo: "simnao" };
+const CAMPOS_PORTABILIDADE: CampoDef[] = [
   { key: "banco_portabilidade", label: "Banco (portabilidade)", tipo: "text" },
   { key: "agencia_portabilidade", label: "Agência (portabilidade)", tipo: "text" },
   { key: "conta_portabilidade", label: "Conta (portabilidade)", tipo: "text" },
@@ -240,7 +251,7 @@ const CAMPOS_SITUACAO_TRABALHISTA: CampoDef[] = [
 ];
 
 const CAMPOS_BOOLEANOS_DP = new Set(
-  [...CAMPOS_DOCUMENTOS_PROFISSIONAIS, ...CAMPOS_SITUACAO_TRABALHISTA, ...CAMPOS_BANCARIOS]
+  [...CAMPOS_DOCUMENTOS_PROFISSIONAIS, ...CAMPOS_SITUACAO_TRABALHISTA, ...CAMPOS_BANCARIOS, CAMPO_DESEJA_PORTABILIDADE, ...CAMPOS_PORTABILIDADE]
     .filter((c) => c.tipo === "simnao")
     .map((c) => c.key)
 );
@@ -286,7 +297,7 @@ function CampoValor({ def, valor, onChange }: { def: CampoDef; valor: string; on
 }
 
 function SecaoEditavelDP({
-  titulo, campos, editando, formDP, salvando, onIniciarEdicao, onCampo, onSalvar, onCancelar, children,
+  titulo, campos, editando, formDP, salvando, onIniciarEdicao, onCampo, onSalvar, onCancelar, children, edicaoExtra,
 }: {
   titulo: string;
   campos: CampoDef[];
@@ -298,6 +309,11 @@ function SecaoEditavelDP({
   onSalvar: () => void;
   onCancelar: () => void;
   children: React.ReactNode;
+  // Conteúdo extra mostrado só em modo edição, depois dos `campos` genéricos — usado
+  // pelo bloco de portabilidade em "Dados Bancários", que precisa de exibição
+  // condicional (só mostra os 4 campos de destino quando o toggle está em "Sim"), algo
+  // que o campos.map() genérico não suporta.
+  edicaoExtra?: React.ReactNode;
 }) {
   return (
     <Secao titulo={titulo}>
@@ -316,6 +332,7 @@ function SecaoEditavelDP({
               <CampoValor def={c} valor={formDP[c.key] ?? ""} onChange={(v) => onCampo(c.key, v)} />
             </div>
           ))}
+          {edicaoExtra}
           <div className="flex gap-2 justify-end mt-2">
             <button onClick={onCancelar} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }} disabled={salvando}>
               Cancelar
@@ -1441,6 +1458,24 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
             editando={secaoDPEditando === "bancarios"} formDP={formDP} salvando={salvandoDP}
             onIniciarEdicao={() => iniciarEdicaoDP("bancarios")} onCampo={atualizarCampoDP}
             onSalvar={handleSalvarDP} onCancelar={cancelarEdicaoDP}
+            edicaoExtra={
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed #E5E7EB" }}>
+                <div className="mb-2">
+                  <label className="block text-xs text-gray-500 mb-1">{CAMPO_DESEJA_PORTABILIDADE.label}</label>
+                  <CampoValor
+                    def={CAMPO_DESEJA_PORTABILIDADE}
+                    valor={formDP[CAMPO_DESEJA_PORTABILIDADE.key] ?? ""}
+                    onChange={(v) => atualizarCampoDP(CAMPO_DESEJA_PORTABILIDADE.key, v)}
+                  />
+                </div>
+                {formDP[CAMPO_DESEJA_PORTABILIDADE.key] === "sim" && CAMPOS_PORTABILIDADE.map((c) => (
+                  <div key={c.key} className="mb-2">
+                    <label className="block text-xs text-gray-500 mb-1">{c.label}</label>
+                    <CampoValor def={c} valor={formDP[c.key] ?? ""} onChange={(v) => atualizarCampoDP(c.key, v)} />
+                  </div>
+                ))}
+              </div>
+            }
           >
             <Linha label="Banco" value={dp?.banco} />
             <Linha label="Agência" value={dp?.agencia} />
