@@ -1285,15 +1285,19 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           </div>
         )}
 
-        {admissao.pdf_pacote_path && !assinaturaConcluida && !assinaturaEmAndamento && (
+        {admissao.pdf_pacote_path && !assinaturaConcluida && (
           <div className="card">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Assinatura eletrônica</p>
-            <button
-              onClick={() => setModalAssinaturaAberto(true)}
-              className="w-full font-semibold px-6 py-2.5 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#FFB800]/30 bg-[#292524] hover:bg-[#44403C] text-[#FCD34D]"
-            >
-              Enviar para assinatura eletrônica
-            </button>
+            {assinaturaEmAndamento ? (
+              <p className="text-sm text-gray-600">⏳ Aguardando assinatura eletrônica</p>
+            ) : (
+              <button
+                onClick={() => setModalAssinaturaAberto(true)}
+                className="w-full font-semibold px-6 py-2.5 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#FFB800]/30 bg-[#292524] hover:bg-[#44403C] text-[#FCD34D]"
+              >
+                Enviar para assinatura eletrônica
+              </button>
+            )}
           </div>
         )}
       </div>
