@@ -151,7 +151,21 @@
       "Bash(NODE_PATH=\"C:\\\\Users\\\\Olver\\\\Desktop\\\\salmazos-plataforma\\\\node_modules\" node \"C:\\\\Users\\\\Olver\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Olver-Desktop-salmazos-plataforma\\\\c4fe2c3b-b1d4-4645-8f8e-969c61cc688b\\\\scratchpad\\\\limpar-teste-clicksign.js\")",
       "Bash(git -C \"C:\\\\Users\\\\Olver\\\\Desktop\\\\salmazos-plataforma\" status --short)",
       "Bash(git -C \"C:\\\\Users\\\\Olver\\\\Desktop\\\\salmazos-plataforma\" status)",
-      "Bash(git -C \"C:\\\\Users\\\\Olver\\\\Desktop\\\\salmazos-plataforma\" log --oneline -5)"
+      "Bash(git -C \"C:\\\\Users\\\\Olver\\\\Desktop\\\\salmazos-plataforma\" log --oneline -5)",
+      "Bash(where pdftoppm *)",
+      "Bash(where magick *)",
+      "Bash(where gs *)",
+      "Bash(where convert *)",
+      "Bash(awk -F= '/^CLICKSIGN_API_TOKEN=/{print \"total line length:\", length\\($0\\)}' .env.production.local)",
+      "Bash(awk -F= '/^ANTHROPIC_API_KEY=/{print \"ANTHROPIC_API_KEY total line length:\", length\\($0\\)}' .env.production.local)",
+      "Bash(awk -F= '/^CRON_SECRET=/{print \"CRON_SECRET total line length:\", length\\($0\\)}' .env.production.local)",
+      "Bash(awk -F= '/^NEXT_PUBLIC_SUPABASE_URL=/{print \"NEXT_PUBLIC_SUPABASE_URL total line length:\", length\\($0\\)}' .env.production.local)",
+      "Bash(awk -F= '/^NEXT_PUBLIC_SUPABASE_URL=/{print \"local .env.local total line length:\", length\\($0\\)}' .env.local)",
+      "Bash(rm -f _gerar_formulario_branco_teste.mjs _gerar_ficha_preenchida_teste.mjs)",
+      "Bash(rm -f \"C:\\\\Users\\\\Olver\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Olver-Desktop-salmazos-plataforma\\\\8894ceee-92b8-492e-9b68-750c9562b67c\\\\scratchpad\\\\formulario_em_branco_teste.pdf\" \"C:\\\\Users\\\\Olver\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Olver-Desktop-salmazos-plataforma\\\\8894ceee-92b8-492e-9b68-750c9562b67c\\\\scratchpad\\\\ficha_preenchida_teste.pdf\")",
+      "Bash(npx --yes tsx --version)",
+      "WebFetch(domain:www.clicksign.com)",
+      "WebFetch(domain:ajuda.clicksign.com)"
     ]
   }
 }

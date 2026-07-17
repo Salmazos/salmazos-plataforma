@@ -26,7 +26,7 @@ import crypto from "crypto";
 // na prática até agora) de vir um path relativo.
 
 const SANDBOX_BASE_URL = "https://sandbox.clicksign.com/api/v3";
-const PRODUCTION_BASE_URL = "https://api.clicksign.com/api/v3";
+const PRODUCTION_BASE_URL = "https://app.clicksign.com/api/v3";
 
 function isSandbox(): boolean {
   return process.env.CLICKSIGN_SANDBOX === "true";
@@ -41,7 +41,7 @@ function baseUrl(): string {
 // sandbox.clicksign.com/api/v3/...). Em produção não há confirmação equivalente na doc;
 // mantemos o host da API como melhor palpite documentável, mas ver aviso acima.
 function fileHost(): string {
-  return isSandbox() ? "https://sandbox.clicksign.com" : "https://api.clicksign.com";
+  return isSandbox() ? "https://sandbox.clicksign.com" : "https://app.clicksign.com";
 }
 
 function apiToken(): string {
