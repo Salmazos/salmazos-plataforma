@@ -124,7 +124,7 @@ export async function PATCH(_request: NextRequest, { params }: Params) {
 </div>
 </body></html>`;
 
-    void notifyAllAnalysts({
+    const resultadoNotify = await notifyAllAnalysts({
       subject: `🔄 Garantia R&S Acionada — ${candidatoNome} — ${clienteNome}`,
       html,
       tipo: "garantia_acionada",
@@ -132,13 +132,26 @@ export async function PATCH(_request: NextRequest, { params }: Params) {
       vaga_id: cv.vaga_id,
     });
 
+    if (resultadoNotify.attempted === 0) {
+      console.error(
+        `[acionar-garantia] Notificação por e-mail NÃO enviada — nenhuma tentativa registrada (cv_id=${id}).`
+      );
+    }
+
     // Create bell notification
-    void supabase.from("notificacoes_analista").insert({
+    const { error: errInsertNotificacao } = await supabase.from("notificacoes_analista").insert({
       tipo: "garantia_acionada",
       titulo: `🔄 Garantia acionada: ${candidatoNome}`,
       mensagem: `Reposição gratuita iniciada para ${vo?.titulo ?? "vaga"} (${clienteNome}). Nova vaga aberta.`,
       candidato_id: cv.candidato_id,
     });
+
+    if (errInsertNotificacao) {
+      console.error(
+        `[acionar-garantia] Erro ao registrar notificação de sino (cv_id=${id}):`,
+        errInsertNotificacao.message
+      );
+    }
 
     return NextResponse.json({ success: true, nova_vaga_id: novaVagaId });
   } catch (err) {
