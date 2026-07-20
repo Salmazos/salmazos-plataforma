@@ -936,6 +936,34 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
     else showToast(json.error || "Erro ao gerar visualização.");
   };
 
+  // storage_path segue o padrão "<admissaoId>/<tipo>/<timestamp>-<nomeSanitizado>" (ver
+  // rotas de upload) — extrai só o nome original pra dar ao arquivo baixado.
+  const nomeArquivoDoc = (storagePath: string): string => {
+    const ultimoSegmento = storagePath.split("/").pop() ?? storagePath;
+    return ultimoSegmento.replace(/^\d+-/, "");
+  };
+
+  const handleBaixar = async (doc: AdmissaoDocumento) => {
+    if (!doc.storage_path) return;
+    const res = await fetch(`/api/admissoes/${admissao.id}/documentos/${doc.id}`);
+    const json = await res.json();
+    if (!res.ok || !json.signedUrl) { showToast(json.error || "Erro ao gerar download."); return; }
+    try {
+      const arquivoRes = await fetch(json.signedUrl);
+      const blob = await arquivoRes.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = nomeArquivoDoc(doc.storage_path);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      showToast("Erro ao baixar o documento.");
+    }
+  };
+
   const handleAprovar = async (doc: AdmissaoDocumento) => {
     setProcessandoDocId(doc.id);
     try {
@@ -1008,6 +1036,11 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           {doc.storage_path && (
             <button onClick={() => handleVisualizar(doc)} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }}>
               Visualizar
+            </button>
+          )}
+          {doc.storage_path && (
+            <button onClick={() => handleBaixar(doc)} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }}>
+              Baixar
             </button>
           )}
           <button
