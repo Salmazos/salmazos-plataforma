@@ -109,7 +109,11 @@ export async function POST(request: NextRequest) {
       cargo: candidato.cargo_pretendido,
       admissaoUrl: url,
     });
-    sendEmail({ to: candidato.email, subject, html, tipo: "admissao_link", candidato_id, vaga_id: vaga_id ?? undefined });
+    try {
+      await sendEmail({ to: candidato.email, subject, html, tipo: "admissao_link", candidato_id, vaga_id: vaga_id ?? undefined });
+    } catch (emailErr) {
+      console.error(`[admissoes] Erro ao enviar e-mail de link de admissão (candidato_id=${candidato_id}):`, emailErr);
+    }
   }
 
   return NextResponse.json({ data: admissao, url, whatsappUrl });

@@ -89,13 +89,17 @@ export async function POST(request: NextRequest) {
           numPosicoes: sol.num_posicoes ?? 1,
           cidade: sol.cidade ?? undefined,
         });
-        sendEmail({
-          to: cliente.contato_email,
-          subject,
-          html,
-          tipo: "vaga_aprovada_cliente",
-          vaga_id: vaga.id,
-        });
+        try {
+          await sendEmail({
+            to: cliente.contato_email,
+            subject,
+            html,
+            tipo: "vaga_aprovada_cliente",
+            vaga_id: vaga.id,
+          });
+        } catch (emailErr) {
+          console.error(`[from-solicitacao] Erro ao enviar e-mail de vaga aprovada ao cliente (vaga_id=${vaga.id}, cliente=${sol.cliente_nome ?? "?"}):`, emailErr);
+        }
       }
     }
 

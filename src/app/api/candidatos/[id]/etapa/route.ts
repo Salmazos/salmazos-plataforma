@@ -102,7 +102,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       nome: data.nome_completo,
       cargo: data.cargo_pretendido,
     });
-    sendEmail({ to: data.email, subject, html, tipo: "notificacao_analista", candidato_id: id });
+    try {
+      await sendEmail({ to: data.email, subject, html, tipo: "notificacao_analista", candidato_id: id });
+    } catch (emailErr) {
+      console.error(`[etapa] Erro ao enviar e-mail de notificação ao candidato (candidato_id=${id}, etapa=${dbEtapa}):`, emailErr);
+    }
   }
 
   if (dbEtapa === "entrevista_cliente") {
@@ -122,13 +126,17 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         nomeCandidato: data.nome_completo,
         empresa: cliente.nome ?? "",
       });
-      sendEmail({
-        to: cliente.contato_email,
-        subject,
-        html,
-        tipo: "candidato_entrevista_cliente",
-        candidato_id: id,
-      });
+      try {
+        await sendEmail({
+          to: cliente.contato_email,
+          subject,
+          html,
+          tipo: "candidato_entrevista_cliente",
+          candidato_id: id,
+        });
+      } catch (emailErr) {
+        console.error(`[etapa] Erro ao enviar e-mail de entrevista ao cliente (candidato_id=${id}, cliente=${cliente.nome ?? "?"}):`, emailErr);
+      }
     }
   }
 
