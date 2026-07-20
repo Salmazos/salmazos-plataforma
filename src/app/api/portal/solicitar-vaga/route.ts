@@ -183,11 +183,17 @@ export async function POST(request: NextRequest) {
 </div>
 </body></html>`;
 
-    void notifyAllAnalysts({
+    const resultado = await notifyAllAnalysts({
       subject: `🔔 Nova Solicitação de Vaga — ${clienteNome}`,
       html,
       tipo: "solicitacao_vaga",
     });
+
+    if (resultado.attempted === 0) {
+      console.error(
+        `[POST /api/portal/solicitar-vaga] Notificação NÃO enviada para solicitacao_id=${solicitacao.id} — nenhuma tentativa de e-mail foi registrada.`
+      );
+    }
 
     return NextResponse.json({ success: true, id: solicitacao.id }, { status: 201 });
   } catch (err) {

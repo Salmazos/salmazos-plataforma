@@ -86,7 +86,7 @@ export async function GET(request: Request) {
 </div>
 </body></html>`;
 
-      void notifyAllAnalysts({
+      const resultado = await notifyAllAnalysts({
         subject: `⚠️ Garantia R&S vence em ${diasRestantes} dia${diasRestantes !== 1 ? "s" : ""} — ${candidatoNome} — ${clienteNome}`,
         html,
         tipo: "alerta_garantia_rs",
@@ -94,7 +94,13 @@ export async function GET(request: Request) {
         vaga_id: r.vaga_id,
       });
 
-      alertasEnviados++;
+      if (resultado.attempted > 0) {
+        alertasEnviados++;
+      } else {
+        console.error(
+          `[cron/garantia-rs] Alerta NÃO enviado para ${candidatoNome} (candidato_id=${r.candidato_id}) — nenhuma tentativa de e-mail foi registrada.`
+        );
+      }
     }
 
     return NextResponse.json({

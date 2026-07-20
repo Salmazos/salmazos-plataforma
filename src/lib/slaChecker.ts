@@ -116,18 +116,7 @@ export async function verificarSLA(): Promise<void> {
     const nomeCandidato = cv.candidatos?.nome_completo ?? "Candidato";
     const tituloVaga    = cv.vagas?.titulo ?? "Vaga";
 
-    // a) Register the alert
-    const { error: insertErr } = await supabase.from("sla_alertas_enviados").insert({
-      candidato_vaga_id: cv.id,
-      etapa: cv.etapa,
-    });
-
-    if (insertErr) {
-      console.error("[verificarSLA] Erro ao inserir sla_alertas_enviados:", insertErr.message);
-      continue;
-    }
-
-    // b) Create notification for analysts
+    // a) Create notification for analysts
     const { error: notifErr } = await supabase.from("notificacoes_analista").insert({
       tipo: "alerta_sla",
       titulo: `⚠️ SLA excedido: ${nomeCandidato}`,
@@ -171,7 +160,7 @@ export async function verificarSLA(): Promise<void> {
 </div>
 </body></html>`;
 
-    void notifyAllAnalysts({
+    const resultado = await notifyAllAnalysts({
       subject: `⚠️ Salmazos RH - Alerta de SLA — ${nomeCandidato} — ${tituloVaga}`,
       html,
       tipo: "alerta_sla",
@@ -179,7 +168,23 @@ export async function verificarSLA(): Promise<void> {
       vaga_id: cv.vagas?.id,
     });
 
-    // Mark as sent in local set to avoid double-insert within the same run
-    alertasSet.add(key);
+    if (resultado.attempted > 0) {
+      // b) Register the alert — só depois de confirmar que houve tentativa de envio
+      const { error: insertErr } = await supabase.from("sla_alertas_enviados").insert({
+        candidato_vaga_id: cv.id,
+        etapa: cv.etapa,
+      });
+
+      if (!insertErr) {
+        // Mark as sent in local set to avoid double-insert within the same run
+        alertasSet.add(key);
+      } else if (insertErr.code !== "23505") {
+        console.error("[verificarSLA] Erro ao inserir sla_alertas_enviados:", insertErr.message);
+      }
+    } else {
+      console.error(
+        `[verificarSLA] Alerta NÃO enviado para ${nomeCandidato} (candidato_vaga_id=${cv.id}) — nenhuma tentativa de e-mail foi registrada; dedup não gravado.`
+      );
+    }
   }
 }
