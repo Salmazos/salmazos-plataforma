@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { formatarCPF, formatarTelefone, validarCPF } from "@/lib/utils";
 import { ESTADOS, HABILIDADES, TEMPO_EXPERIENCIA, TURNOS } from "@/lib/constants";
+import CampoMoeda from "@/components/ui/CampoMoeda";
 
 interface Props {
   vagaId: string;
@@ -114,13 +115,6 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
         ? f.habilidades.filter((x) => x !== h)
         : [...f.habilidades, h],
     }));
-
-  const formatarMoeda = (value: string) => {
-    const nums = value.replace(/\D/g, "");
-    if (!nums) return "";
-    const n = parseInt(nums, 10) / 100;
-    return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  };
 
   const validar = (): boolean => {
     const e: Record<string, string> = {};
@@ -441,8 +435,8 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
           </div>
           <div className="sm:col-span-2">
             <label style={LABEL}>Pretensão salarial</label>
-            <input type="text" inputMode="numeric" style={INPUT} placeholder="R$ 0,00"
-              value={form.pretensao_salarial} onChange={(e) => set("pretensao_salarial", formatarMoeda(e.target.value))} />
+            <CampoMoeda style={INPUT} placeholder="R$ 0,00"
+              value={form.pretensao_salarial} onChange={(v) => set("pretensao_salarial", v > 0 ? String(v) : "")} />
           </div>
         </div>
       </div>

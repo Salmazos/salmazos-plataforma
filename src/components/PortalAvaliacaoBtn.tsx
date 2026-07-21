@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MOTIVOS_REPROVACAO_CLIENTE, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
+import CampoMoeda from "@/components/ui/CampoMoeda";
 
 interface Props {
   encaminhamentoId: string;
@@ -311,8 +312,8 @@ export default function PortalAvaliacaoBtn({
                           style={missing(admCargo) ? inv : undefined} />
                       </Field>
                       <Field label="Salário Acordado R$" required>
-                        <input type="number" min="0" step="0.01" value={admSalario}
-                          onChange={(e) => setAdmSalario(e.target.value)} placeholder="Ex: 3500.00"
+                        <CampoMoeda value={admSalario}
+                          onChange={(v) => setAdmSalario(v > 0 ? String(v) : "")} placeholder="Ex: 3.500,00"
                           className="input-field" style={missing(admSalario) ? inv : undefined} />
                       </Field>
                       {feePercentual != null && (
@@ -372,8 +373,8 @@ export default function PortalAvaliacaoBtn({
                             style={missing(admCentroCusto) ? inv : undefined} />
                         </Field>
                         <Field label="Salário R$/hora" required>
-                          <input type="number" min="0" step="0.01" value={admSalarioHora}
-                            onChange={(e) => setAdmSalarioHora(e.target.value)} placeholder="Ex: 18.50"
+                          <CampoMoeda value={admSalarioHora}
+                            onChange={(v) => setAdmSalarioHora(v > 0 ? String(v) : "")} placeholder="Ex: 18,50"
                             className="input-field" style={missing(admSalarioHora) ? inv : undefined} />
                         </Field>
                       </div>
@@ -443,8 +444,8 @@ export default function PortalAvaliacaoBtn({
                             style={missing(admCentroCusto) ? inv : undefined} />
                         </Field>
                         <Field label="Salário R$" required>
-                          <input type="number" min="0" step="0.01" value={admSalario}
-                            onChange={(e) => setAdmSalario(e.target.value)} placeholder="Ex: 1800.00"
+                          <CampoMoeda value={admSalario}
+                            onChange={(v) => setAdmSalario(v > 0 ? String(v) : "")} placeholder="Ex: 1.800,00"
                             className="input-field" style={missing(admSalario) ? inv : undefined} />
                         </Field>
                       </div>

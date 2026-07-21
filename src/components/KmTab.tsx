@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
+import CampoMoeda from "@/components/ui/CampoMoeda";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -507,13 +508,11 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                   {tipo.label} (R$/km)
                 </label>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    type="number"
-                    step="0.01"
+                  <CampoMoeda
                     style={inputStyle}
                     value={configValues[tipo.id] ?? ""}
-                    onChange={(e) => setConfigValues((prev) => ({ ...prev, [tipo.id]: e.target.value }))}
-                    placeholder="0.00"
+                    onChange={(v) => setConfigValues((prev) => ({ ...prev, [tipo.id]: v > 0 ? String(v) : "" }))}
+                    placeholder="0,00"
                   />
                   <button
                     onClick={() => saveConfig(tipo.id)}
@@ -786,7 +785,7 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                   </div>
                   <div>
                     <label style={labelStyle}>Valor (R$)</label>
-                    <input type="number" step="0.01" style={inputStyle} placeholder="0,00" value={c.valor} onChange={(e) => updateCusto(idx, "valor", e.target.value)} />
+                    <CampoMoeda style={inputStyle} placeholder="0,00" value={c.valor} onChange={(v) => updateCusto(idx, "valor", v > 0 ? String(v) : "")} />
                   </div>
                 </div>
                 <div style={{ marginTop: 8 }}>

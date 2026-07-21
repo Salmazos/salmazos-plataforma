@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
+import CampoMoeda from "@/components/ui/CampoMoeda";
 
 interface CandidatoElegivel {
   id: string;
@@ -37,14 +38,6 @@ function modalidadeDefault(tipoServico: string | null | undefined): string {
   if (tipoServico === "mao_obra_temporaria") return "MOT";
   if (tipoServico === "terceirizacao") return "terceirizacao";
   return "MOT";
-}
-
-function formatSalarioBR(value: string): string {
-  if (!value.trim()) return value;
-  const digits = value.replace(/\s/g, "").replace(/^R\$/, "").replace(/\./g, "").replace(",", ".").trim();
-  const num = parseFloat(digits);
-  if (isNaN(num)) return value;
-  return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function parseSalario(value: string): number {
@@ -292,11 +285,10 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
 
             <div className="mb-3">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Salário *</label>
-              <input
-                type="text" value={salario}
-                onChange={(e) => setSalario(e.target.value)}
-                onBlur={() => setSalario(formatSalarioBR(salario))}
-                placeholder="Ex: R$ 2.500,00"
+              <CampoMoeda
+                value={salario}
+                onChange={(v) => setSalario(v > 0 ? String(v) : "")}
+                placeholder="Ex: 2.500,00"
                 className="input-field"
               />
             </div>
@@ -337,14 +329,26 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
                       onChange={(e) => atualizarLinhaAdicional(idx, "tipo", e.target.value)}
                       className="input-field flex-1 text-sm"
                     />
-                    <input
-                      type="text" inputMode="decimal" placeholder="Valor" value={a.valor}
-                      onChange={(e) => atualizarLinhaAdicional(idx, "valor", e.target.value)}
-                      className="input-field text-sm" style={{ width: 90 }}
-                    />
+                    {a.formato_valor === "fixo" ? (
+                      <CampoMoeda
+                        value={a.valor}
+                        onChange={(v) => atualizarLinhaAdicional(idx, "valor", v > 0 ? String(v) : "")}
+                        placeholder="Valor"
+                        className="input-field text-sm" style={{ width: 90 }}
+                      />
+                    ) : (
+                      <input
+                        type="text" inputMode="decimal" placeholder="Valor" value={a.valor}
+                        onChange={(e) => atualizarLinhaAdicional(idx, "valor", e.target.value)}
+                        className="input-field text-sm" style={{ width: 90 }}
+                      />
+                    )}
                     <select
                       value={a.formato_valor}
-                      onChange={(e) => atualizarLinhaAdicional(idx, "formato_valor", e.target.value as "percentual" | "fixo")}
+                      onChange={(e) => {
+                        atualizarLinhaAdicional(idx, "formato_valor", e.target.value as "percentual" | "fixo");
+                        atualizarLinhaAdicional(idx, "valor", "");
+                      }}
                       className="input-field text-sm" style={{ width: 70 }}
                     >
                       <option value="percentual">%</option>

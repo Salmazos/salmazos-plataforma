@@ -7,6 +7,7 @@ import { ETAPAS_KANBAN, ORIGEM_LABELS } from "@/lib/constants";
 import { TEMPLATE_OPTIONS } from "@/lib/emailTemplates";
 import type { EmailTemplateName } from "@/lib/emailTemplates";
 import PerfilEtapaSelector from "@/components/PerfilEtapaSelector";
+import CampoMoeda from "@/components/ui/CampoMoeda";
 import PerfilAnotacoes from "@/components/PerfilAnotacoes";
 import { BotaoCurriculo } from "@/components/BotaoCurriculo";
 import TriagemBadge from "@/components/TriagemBadge";
@@ -1056,7 +1057,11 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, 
                   </select>
                 </Campo>
                 <Campo label="Pretensão salarial">
-                  <input type="text" value={form.pretensao_salarial} onChange={set("pretensao_salarial")} className="input-field" />
+                  <CampoMoeda
+                    value={form.pretensao_salarial}
+                    onChange={(v) => setForm((f) => ({ ...f, pretensao_salarial: v > 0 ? String(v) : "" }))}
+                    className="input-field"
+                  />
                 </Campo>
                 <Campo label="Formação acadêmica">
                   <input type="text" value={form.formacao_academica} onChange={set("formacao_academica")} className="input-field" />

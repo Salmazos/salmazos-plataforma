@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatarCPF, formatarTelefone, validarCPF } from "@/lib/utils";
 import { ESTADOS, HABILIDADES, TEMPO_EXPERIENCIA, TURNOS } from "@/lib/constants";
 import BotaoVoltarSite from "@/components/BotaoVoltarSite";
+import CampoMoeda from "@/components/ui/CampoMoeda";
 
 interface FormData {
   nome_completo: string;
@@ -59,13 +60,6 @@ const INPUT: React.CSSProperties = {
   outline: "none",
   boxSizing: "border-box",
 };
-
-function formatarMoeda(value: string) {
-  const nums = value.replace(/\D/g, "");
-  if (!nums) return "";
-  const n = parseInt(nums, 10) / 100;
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
 
 export default function BancoTalentosPage() {
   const [form, setForm] = useState<FormData>({
@@ -372,9 +366,9 @@ export default function BancoTalentosPage() {
                 </div>
                 <div className="sm:col-span-2">
                   <label style={LABEL}>Pretensão salarial</label>
-                  <input type="text" inputMode="numeric" style={INPUT} placeholder="R$ 0,00"
+                  <CampoMoeda style={INPUT} placeholder="R$ 0,00"
                     value={form.pretensao_salarial}
-                    onChange={(e) => set("pretensao_salarial", formatarMoeda(e.target.value))} />
+                    onChange={(v) => set("pretensao_salarial", v > 0 ? String(v) : "")} />
                 </div>
               </div>
             </div>

@@ -5,6 +5,7 @@ import type { ValeTransporteState, ValeTransporteLinha } from "./AdmissaoFormCli
 import Campo from "./Campo";
 import { campoErroStyle, cardStyle, botaoSecundarioStyle, erroTextStyle } from "./styles";
 import { TERMOS_VALE_TRANSPORTE_TEXTO } from "@/lib/admissaoConstants";
+import CampoMoeda from "@/components/ui/CampoMoeda";
 
 interface Props {
   valeTransporte: ValeTransporteState;
@@ -145,10 +146,10 @@ export default function PassoValeTransporte({ valeTransporte, setCampo, errosVis
                 <input type="text" value={linha.percurso} onChange={(e) => atualizarLinha(idx, "percurso", e.target.value)} placeholder="Ex: Terminal Centro - Bairro X" style={campoErroStyle(false)} />
               </Campo>
               <Campo label="Valor unitário (R$)">
-                <input type="number" inputMode="decimal" step="0.01" min="0" value={linha.valor_unitario} onChange={(e) => atualizarLinha(idx, "valor_unitario", e.target.value)} style={campoErroStyle(false)} />
+                <CampoMoeda value={linha.valor_unitario} onChange={(v) => atualizarLinha(idx, "valor_unitario", v > 0 ? String(v) : "")} style={campoErroStyle(false)} />
               </Campo>
               <Campo label="Valor total diário (R$)">
-                <input type="number" inputMode="decimal" step="0.01" min="0" value={linha.valor_total_diario} onChange={(e) => atualizarLinha(idx, "valor_total_diario", e.target.value)} style={campoErroStyle(false)} />
+                <CampoMoeda value={linha.valor_total_diario} onChange={(v) => atualizarLinha(idx, "valor_total_diario", v > 0 ? String(v) : "")} style={campoErroStyle(false)} />
               </Campo>
             </div>
           ))}

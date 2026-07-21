@@ -14,6 +14,7 @@ import {
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import ModalContaSalario from "@/components/ModalContaSalario";
 import ModalAssinaturaEletronica from "@/components/ModalAssinaturaEletronica";
+import CampoMoeda from "@/components/ui/CampoMoeda";
 import type { AdmissaoAdicional, AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
 
 type Tab = "dados" | "documentos" | "notas";
@@ -1420,7 +1421,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                 </div>
                 <div className="mb-2">
                   <label className="block text-xs text-gray-500 mb-1">Salário</label>
-                  <input type="text" inputMode="decimal" value={formDadosAdmissao.salario} onChange={(e) => atualizarCampoDadosAdmissao("salario", e.target.value)} className="input-field text-sm" />
+                  <CampoMoeda value={formDadosAdmissao.salario} onChange={(v) => atualizarCampoDadosAdmissao("salario", v > 0 ? String(v) : "")} className="input-field text-sm" />
                 </div>
                 <div className="mb-2">
                   <label className="block text-xs text-gray-500 mb-1">Horário de trabalho</label>
@@ -1493,14 +1494,26 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                         onChange={(e) => atualizarLinhaAdicional(idx, "tipo", e.target.value)}
                         className="input-field flex-1 text-sm"
                       />
-                      <input
-                        type="text" inputMode="decimal" placeholder="Valor" value={a.valor}
-                        onChange={(e) => atualizarLinhaAdicional(idx, "valor", e.target.value)}
-                        className="input-field text-sm" style={{ width: 90 }}
-                      />
+                      {a.formato_valor === "fixo" ? (
+                        <CampoMoeda
+                          value={a.valor}
+                          onChange={(v) => atualizarLinhaAdicional(idx, "valor", v > 0 ? String(v) : "")}
+                          placeholder="Valor"
+                          className="input-field text-sm" style={{ width: 90 }}
+                        />
+                      ) : (
+                        <input
+                          type="text" inputMode="decimal" placeholder="Valor" value={a.valor}
+                          onChange={(e) => atualizarLinhaAdicional(idx, "valor", e.target.value)}
+                          className="input-field text-sm" style={{ width: 90 }}
+                        />
+                      )}
                       <select
                         value={a.formato_valor}
-                        onChange={(e) => atualizarLinhaAdicional(idx, "formato_valor", e.target.value as "percentual" | "fixo")}
+                        onChange={(e) => {
+                          atualizarLinhaAdicional(idx, "formato_valor", e.target.value as "percentual" | "fixo");
+                          atualizarLinhaAdicional(idx, "valor", "");
+                        }}
                         className="input-field text-sm" style={{ width: 70 }}
                       >
                         <option value="percentual">%</option>

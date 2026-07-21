@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import CampoMoeda from "@/components/ui/CampoMoeda";
 
 const ESTADOS = [
   "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG",
@@ -503,7 +504,7 @@ export default function SolicitarVagaPage() {
               </div>
               <div>
                 <label style={labelStyle}>Salário</label>
-                <input value={salario} onChange={(e) => setSalario(e.target.value)} placeholder="Ex: R$ 2.000,00" style={inputStyle} />
+                <CampoMoeda value={salario} onChange={(v) => setSalario(v > 0 ? String(v) : "")} placeholder="Ex: 2.000,00" style={inputStyle} />
               </div>
             </div>
             {usandoTemplate.horario_texto && (
@@ -560,7 +561,7 @@ export default function SolicitarVagaPage() {
             </div>
             <div>
               <label style={labelStyle}>Salário</label>
-              <input value={salario} onChange={(e) => setSalario(e.target.value)} placeholder="Ex: R$ 2.000,00" style={inputStyle} />
+              <CampoMoeda value={salario} onChange={(v) => setSalario(v > 0 ? String(v) : "")} placeholder="Ex: 2.000,00" style={inputStyle} />
             </div>
           </div>
 

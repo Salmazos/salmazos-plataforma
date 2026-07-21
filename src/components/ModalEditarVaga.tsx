@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { ANALISTAS, TIPOS_SERVICO, HABILIDADES, ESTADOS } from "@/lib/constants";
 import type { Vaga } from "@/types";
+import CampoMoeda from "@/components/ui/CampoMoeda";
 
 const IMPACTO_TIPO: Record<string, string> = {
   recrutamento_selecao: "Fee será aplicado conforme contrato. Garantia de 30 dias.",
@@ -117,14 +118,14 @@ function maskHora(raw: string): string {
   return `${digits.slice(0, 2)}h${digits.slice(2)}`;
 }
 
-function formatSalarioBR(value: string): string {
-  if (!value.trim()) return value;
-  const cleaned = value.replace(/\s/g, "").replace(/^R\$/, "").trim();
-  if (/[a-zA-ZÀ-ú]/.test(cleaned)) return value;
-  const digits = cleaned.replace(/\./g, "").replace(",", ".");
-  const num = parseFloat(digits);
-  if (isNaN(num)) return value;
-  return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const SALARIO_A_COMBINAR = "À combinar";
+const SALARIO_ENVIAR_PRETENSAO = "Enviar Pretensão Salarial";
+type SalarioModo = "fixo" | "a_combinar" | "pretensao";
+
+function detectarModoSalario(raw: string): SalarioModo {
+  if (raw === SALARIO_A_COMBINAR) return "a_combinar";
+  if (raw === SALARIO_ENVIAR_PRETENSAO) return "pretensao";
+  return "fixo";
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
@@ -149,6 +150,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
   const [clientes, setClientes]       = useState<ClienteOpcao[]>([]);
   const [salvando, setSalvando]       = useState(false);
   const [erro, setErro]               = useState("");
+  const [salarioModo, setSalarioModo] = useState<SalarioModo>("fixo");
 
   // benefícios
   const [benChips, setBenChips]     = useState<string[]>([]);
@@ -187,12 +189,13 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
       status:       vaga.status,
       cidade:       vaga.cidade ?? "",
       estado:       vaga.estado ?? "",
-      salario:      formatSalarioBR(vaga.salario ?? ""),
+      salario:      vaga.salario ?? "",
       observacoes:  vaga.observacoes ?? "",
       responsavel:  vaga.responsavel,
       fee_rs_percentual: vaga.fee_rs_percentual != null ? String(vaga.fee_rs_percentual) : "",
       fee_rs_prazo_cobranca: vaga.fee_rs_prazo_cobranca ?? "",
     });
+    setSalarioModo(detectarModoSalario(vaga.salario ?? ""));
     setHabilidades(vaga.habilidades_desejadas ?? []);
 
     const ben = parseBeneficios(vaga.beneficios ?? "");
@@ -220,6 +223,13 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
 
   const set = (field: string, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
+
+  const handleSalarioModoChange = (modo: SalarioModo) => {
+    setSalarioModo(modo);
+    if (modo === "a_combinar") set("salario", SALARIO_A_COMBINAR);
+    else if (modo === "pretensao") set("salario", SALARIO_ENVIAR_PRETENSAO);
+    else set("salario", "");
+  };
 
   const toggleHabilidade = (h: string) =>
     setHabilidades((prev) => prev.includes(h) ? prev.filter((x) => x !== h) : [...prev, h]);
@@ -426,9 +436,31 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
           {/* Salário */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Salário</label>
-            <input value={form.salario} onChange={(e) => set("salario", e.target.value)}
-              onBlur={() => set("salario", formatSalarioBR(form.salario))}
-              placeholder="Ex: R$ 2.500,00 ou À combinar ou Enviar Pretensão Salarial" className="input-field" />
+            <div className="flex flex-wrap gap-2 mb-2">
+              {([
+                ["fixo", "Valor fixo"],
+                ["a_combinar", "À combinar"],
+                ["pretensao", "Enviar Pretensão Salarial"],
+              ] as const).map(([modo, label]) => (
+                <button
+                  key={modo}
+                  type="button"
+                  onClick={() => handleSalarioModoChange(modo)}
+                  className="text-xs px-3 py-1.5 rounded-full font-medium transition-all"
+                  style={salarioModo === modo ? CHIP_ON : CHIP_OFF}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {salarioModo === "fixo" && (
+              <CampoMoeda
+                value={form.salario}
+                onChange={(v) => set("salario", v > 0 ? String(v) : "")}
+                placeholder="Ex: 2.500,00"
+                className="input-field"
+              />
+            )}
           </div>
 
           {/* Fee R&S (only for recrutamento_selecao) */}
