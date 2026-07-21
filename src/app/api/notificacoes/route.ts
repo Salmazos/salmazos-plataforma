@@ -12,6 +12,9 @@ export async function GET() {
   const { data, error } = await svc
     .from("notificacoes_analista")
     .select("*")
+    // user_id nulo = notificação de broadcast (ex: atualização de currículo), visível a todos;
+    // as demais (ex: nova solicitação de vaga) são direcionadas e só devem aparecer pro destinatário.
+    .or(`user_id.eq.${user.id},user_id.is.null`)
     .order("created_at", { ascending: false })
     .limit(20);
 

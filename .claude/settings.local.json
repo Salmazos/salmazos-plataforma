@@ -175,7 +175,15 @@
       "Bash(git --no-pager diff src/components/ModalNovaVaga.tsx src/components/ModalEditarVaga.tsx)",
       "mcp__541ea0a1-f9ae-43e1-b67e-8aacbdad08c1__list_projects",
       "mcp__541ea0a1-f9ae-43e1-b67e-8aacbdad08c1__execute_sql",
-      "Bash(npx --yes tsx tmp-test-schema.ts)"
+      "Bash(npx --yes tsx tmp-test-schema.ts)",
+      "Bash(xargs grep -l \"tipo\")",
+      "Bash(xargs grep -l \"SentMessageInfo\")",
+      "Bash(xargs grep -ln \"accepted\")",
+      "Bash(git --no-pager diff src/app/api/portal/solicitar-vaga/route.ts src/lib/sendEmail.ts)",
+      "PowerShell(nslookup -type=TXT salmazos.com.br)",
+      "PowerShell(nslookup -type=TXT _dmarc.salmazos.com.br)",
+      "PowerShell(nslookup -type=MX salmazos.com.br)",
+      "Bash(npx --yes tsx tmp-test-notif-query.ts)"
     ]
   }
 }

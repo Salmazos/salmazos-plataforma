@@ -18,7 +18,10 @@ export async function PATCH(_req: NextRequest, { params }: Params) {
   const { error } = await svc
     .from("notificacoes_analista")
     .update({ lida: true })
-    .eq("id", id);
+    .eq("id", id)
+    // só marca como lida se for uma notificação direcionada ao próprio usuário
+    // ou uma notificação de broadcast (user_id nulo) — não deixa marcar a de outro analista.
+    .or(`user_id.eq.${user.id},user_id.is.null`);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

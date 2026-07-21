@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import NotificacoesBell from "@/components/NotificacoesBell";
 import {
   User,
   Users,
@@ -185,20 +186,23 @@ export default function SidebarMenu({
             />
           </Link>
         )}
-        <button
-          onClick={() => {
-            if (mobileOpen) {
-              setMobileOpen(false);
-            } else {
-              toggleCollapse();
-            }
-          }}
-          className="flex items-center justify-center rounded-lg transition-colors hover:bg-[#1a1a1a]"
-          style={{ width: 36, height: 36, color: "#fff", background: "transparent", border: "none", cursor: "pointer" }}
-          title={collapsed ? "Expandir menu" : "Recolher menu"}
-        >
-          <Menu size={20} />
-        </button>
+        <div className="flex items-center" style={{ gap: 4 }}>
+          <NotificacoesBell />
+          <button
+            onClick={() => {
+              if (mobileOpen) {
+                setMobileOpen(false);
+              } else {
+                toggleCollapse();
+              }
+            }}
+            className="flex items-center justify-center rounded-lg transition-colors hover:bg-[#1a1a1a]"
+            style={{ width: 36, height: 36, color: "#fff", background: "transparent", border: "none", cursor: "pointer" }}
+            title={collapsed ? "Expandir menu" : "Recolher menu"}
+          >
+            <Menu size={20} />
+          </button>
+        </div>
       </div>
 
       {/* Profile section */}
