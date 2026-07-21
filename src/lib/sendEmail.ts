@@ -42,7 +42,7 @@ export async function sendEmail({
       },
     });
 
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: process.env.SMTP_FROM || `"Salmazos RH" <${process.env.SMTP_USER}>`,
       to,
       cc,
@@ -50,6 +50,18 @@ export async function sendEmail({
       html,
       attachments,
     });
+
+    // O SMTP pode resolver a promise sem lançar exceção mesmo quando nenhum
+    // destinatário foi de fato aceito (ex: "to" aceito mas "cc" rejeitado, ou
+    // um relay que só reporta a rejeição na resposta em vez de um erro) — sem
+    // checar accepted/rejected aqui, isso vira "enviado" mesmo sem entrega real.
+    if (!info.accepted || info.accepted.length === 0) {
+      const rejeitados = (info.rejected ?? []).map((r) => (typeof r === "string" ? r : r.address)).join(", ");
+      const msg = `SMTP não aceitou nenhum destinatário (rejeitados: ${rejeitados || "desconhecido"}) — resposta: ${info.response ?? "sem resposta"}`;
+      console.error("[sendEmail] E-mail rejeitado pelo servidor SMTP:", msg);
+      await registrarLogEmail({ destinatario: to, assunto: subject, tipo, status: "erro", erro_mensagem: msg, candidato_id, vaga_id });
+      return { success: false, error: msg };
+    }
 
     await registrarLogEmail({ destinatario: to, assunto: subject, tipo, status: "enviado", candidato_id, vaga_id });
     return { success: true };

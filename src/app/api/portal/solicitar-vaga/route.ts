@@ -188,10 +188,32 @@ export async function POST(request: NextRequest) {
       tipo: "solicitacao_vaga",
     });
 
-    if (resultado.attempted === 0) {
+    // E-mail e sino são canais independentes (o sino já foi inserido acima antes
+    // deste ponto), mas se NENHUM e-mail chegou a ser entregue, isso é invisível
+    // pra qualquer um além de quem lê logs de servidor — por isso, além do console.error,
+    // registramos um alerta no próprio sino (mesmos destinatários da notificação normal)
+    // pra garantir que a falha apareça em algum lugar que alguém realmente vê.
+    if (resultado.succeeded === 0) {
+      const motivo = resultado.attempted === 0
+        ? "nenhum analista com e-mail cadastrado para notificar"
+        : `${resultado.failed}/${resultado.attempted} envio(s) de e-mail falharam`;
       console.error(
-        `[POST /api/portal/solicitar-vaga] Notificação NÃO enviada para solicitacao_id=${solicitacao.id} — nenhuma tentativa de e-mail foi registrada.`
+        `[POST /api/portal/solicitar-vaga] Notificação por e-mail NÃO foi entregue a ninguém para solicitacao_id=${solicitacao.id} (${motivo}).`
       );
+      if (analistas && analistas.length > 0) {
+        const alertas = analistas
+          .filter((a) => a.user_id)
+          .map((a) => ({
+            tipo: "email_falhou",
+            titulo: "⚠️ Falha ao notificar por e-mail",
+            mensagem: `O e-mail da solicitação de vaga de ${clienteNome} (${body.cargo}) não foi entregue (${motivo}). A solicitação já está no painel de Vagas.`,
+            user_id: a.user_id,
+            candidato_id: null,
+          }));
+        if (alertas.length > 0) {
+          await service.from("notificacoes_analista").insert(alertas);
+        }
+      }
     }
 
     return NextResponse.json({ success: true, id: solicitacao.id }, { status: 201 });
