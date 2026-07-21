@@ -613,22 +613,34 @@ export const vagaNotificarEncerramentoSchema = z.object({
 
 // ── Portal ───────────────────────────────────────────────────────────────────
 
+const horarioPadraoSchema = z.object({
+  modelo: z.string().optional().nullable(),
+  entrada: z.string().optional().nullable(),
+  saida: z.string().optional().nullable(),
+  intervalo: z.string().optional().nullable(),
+  intervalo_inicio: z.string().optional().nullable(),
+  intervalo_fim: z.string().optional().nullable(),
+  diurno_noturno: z.string().optional().nullable(),
+  turno: z.string().optional().nullable(),
+  texto: z.string().optional().nullable(),
+});
+
 export const portalSolicitarVagaSchema = z.object({
   cargo: z.string().min(1),
   tipo_servico: z.string().min(1),
   cidade: z.string().min(1),
   estado: z.string().max(2),
   num_posicoes: coerceNumberOptional,
-  salario: z.string().optional(),
-  horario_tipo: z.string().optional(),
-  horario_texto: z.string().optional(),
-  previsao_inicio: z.string().optional(),
-  requisitos: z.string().optional(),
-  requisitos_chips: z.array(z.string()).optional(),
-  beneficios: z.string().optional(),
-  beneficios_chips: z.array(z.string()).optional(),
-  observacoes: z.string().optional(),
-  horario_padrao: z.string().optional(),
+  salario: z.string().optional().nullable(),
+  horario_tipo: z.string().optional().nullable(),
+  horario_texto: z.string().optional().nullable(),
+  previsao_inicio: z.string().optional().nullable(),
+  requisitos: z.string().optional().nullable(),
+  requisitos_chips: z.array(z.string()).optional().nullable(),
+  beneficios: z.string().optional().nullable(),
+  beneficios_chips: z.record(z.string(), z.boolean()).optional().nullable(),
+  observacoes: z.string().optional().nullable(),
+  horario_padrao: horarioPadraoSchema.optional().nullable(),
 });
 
 export const portalAvaliarSchema = z.object({

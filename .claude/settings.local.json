@@ -172,7 +172,10 @@
       "PowerShell($logPath = \"$env:APPDATA\\\\Claude\\\\logs\"; if \\(Test-Path $logPath\\) { Get-ChildItem $logPath | Sort-Object LastWriteTime -Descending | Select-Object -First 10 Name, LastWriteTime, Length } else { \"No logs folder at $logPath\" })",
       "PowerShell(Select-String -Path \"$env:APPDATA\\\\Claude\\\\logs\\\\main.log\" -Pattern 'error|unavailable|fail|ENOTFOUND|ECONNRESET|timeout|429|503|proxy|overloaded' -CaseSensitive:$false | Select-Object -Last 60 | ForEach-Object { $_.Line })",
       "Bash(grep -n 'input value={salario} onChange={\\(e\\) => setSalario\\(e.target.value\\)} placeholder=\"Ex: R\\\\$ 2.000,00\" style={inputStyle} />' \"src/app/portal/\\(app\\)/solicitar-vaga/page.tsx\")",
-      "Bash(git --no-pager diff src/components/ModalNovaVaga.tsx src/components/ModalEditarVaga.tsx)"
+      "Bash(git --no-pager diff src/components/ModalNovaVaga.tsx src/components/ModalEditarVaga.tsx)",
+      "mcp__541ea0a1-f9ae-43e1-b67e-8aacbdad08c1__list_projects",
+      "mcp__541ea0a1-f9ae-43e1-b67e-8aacbdad08c1__execute_sql",
+      "Bash(npx --yes tsx tmp-test-schema.ts)"
     ]
   }
 }
