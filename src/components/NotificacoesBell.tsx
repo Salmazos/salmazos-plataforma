@@ -1,17 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
-
-interface Notificacao {
-  id: string;
-  tipo: string;
-  titulo: string;
-  mensagem: string;
-  candidato_id: string | null;
-  lida: boolean;
-  created_at: string;
-}
+import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
+import { useNotificacoes, type Notificacao } from "@/components/NotificacoesProvider";
 
 function tempoAtras(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime();
@@ -23,48 +14,52 @@ function tempoAtras(isoString: string): string {
   return `${Math.floor(h / 24)}d atrás`;
 }
 
+const PANEL_WIDTH = 340;
+const VIEWPORT_MARGIN = 8;
+
 export default function NotificacoesBell() {
-  const router = useRouter();
-  const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
+  const { notificacoes, naoLidas, abrirNotificacao } = useNotificacoes();
   const [aberto, setAberto] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
-  const fetchNotificacoes = useCallback(async () => {
-    try {
-      const res = await fetch("/api/notificacoes");
-      if (!res.ok) return;
-      const json = await res.json();
-      setNotificacoes(json.data ?? []);
-    } catch {
-      // silently ignore — bell is non-critical
-    }
-  }, []);
+  // Ancora pela borda esquerda do botão (não pela direita): o sino agora mora
+  // na sidebar, perto da borda ESQUERDA da tela, então ancorar pela direita
+  // (como fazia sentido pra um navbar antigo, com o sino perto da direita)
+  // jogava o painel pra fora da viewport à esquerda. Sempre garante que o
+  // painel de 340px caiba dentro da tela, não importa onde o sino esteja.
+  const atualizarPosicao = () => {
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const maxLeft = window.innerWidth - VIEWPORT_MARGIN - PANEL_WIDTH;
+    const left = Math.max(VIEWPORT_MARGIN, Math.min(rect.left, maxLeft));
+    setPos({ top: rect.bottom + 8, left });
+  };
 
+  const toggle = () => {
+    if (!aberto) atualizarPosicao();
+    setAberto((o) => !o);
+  };
+
+  // Recalcula a posição do painel enquanto ele está aberto — evita ficar
+  // desalinhado do sino se a janela for redimensionada.
   useEffect(() => {
-    fetchNotificacoes();
-    const id = setInterval(fetchNotificacoes, 30000);
-    return () => clearInterval(id);
-  }, [fetchNotificacoes]);
+    if (!aberto) return;
+    window.addEventListener("resize", atualizarPosicao);
+    return () => window.removeEventListener("resize", atualizarPosicao);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aberto]);
 
-  const naoLidas = notificacoes.filter((n) => !n.lida).length;
-
-  const handleClick = async (n: Notificacao) => {
+  const handleClick = (n: Notificacao) => {
     setAberto(false);
-    if (!n.lida) {
-      // optimistic update
-      setNotificacoes((prev) =>
-        prev.map((x) => (x.id === n.id ? { ...x, lida: true } : x))
-      );
-      fetch(`/api/notificacoes/${n.id}`, { method: "PATCH" }).catch(() => {});
-    }
-    if (n.candidato_id) {
-      router.push(`/painel/candidato/${n.candidato_id}`);
-    }
+    abrirNotificacao(n);
   };
 
   return (
     <div style={{ position: "relative" }}>
       <button
-        onClick={() => setAberto((o) => !o)}
+        ref={btnRef}
+        onClick={toggle}
         style={{
           position: "relative",
           background: "none",
@@ -115,23 +110,24 @@ export default function NotificacoesBell() {
         )}
       </button>
 
-      {aberto && (
+      {aberto && pos && typeof document !== "undefined" && createPortal(
         <>
           <div
-            style={{ position: "fixed", inset: 0, zIndex: 40 }}
+            style={{ position: "fixed", inset: 0, zIndex: 9998 }}
             onClick={() => setAberto(false)}
           />
           <div
             style={{
-              position: "absolute",
-              right: 0,
-              top: "calc(100% + 8px)",
-              width: "340px",
+              position: "fixed",
+              top: pos.top,
+              left: pos.left,
+              width: `${PANEL_WIDTH}px`,
+              maxWidth: "calc(100vw - 16px)",
               background: "#fff",
               borderRadius: "12px",
               boxShadow: "0 12px 32px rgba(0,0,0,0.2)",
               border: "1px solid #e5e7eb",
-              zIndex: 50,
+              zIndex: 9999,
               overflow: "hidden",
             }}
           >
@@ -250,7 +246,8 @@ export default function NotificacoesBell() {
               )}
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );

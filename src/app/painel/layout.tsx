@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import SidebarMenu from "@/components/SidebarMenu";
 import PopupAniversariosHoje from "@/components/PopupAniversariosHoje";
+import NotificacoesProvider from "@/components/NotificacoesProvider";
 
 export const dynamic = "force-dynamic";
 
@@ -28,18 +29,20 @@ export default async function PainelLayout({
     .single();
 
   return (
-    <div className="min-h-screen bg-gray-100 flex">
-      <SidebarMenu
-        userEmail={user.email ?? ""}
-        userName={perfil?.nome_completo ?? null}
-        userCargo={perfil?.cargo ?? null}
-        userAvatar={perfil?.avatar_url ?? null}
-        role={role}
-        isFullAccess={isFullAccess}
-        isSupervisorOrAbove={isSupervisorOrAbove}
-      />
-      <main className="flex-1 min-w-0 px-6 py-6">{children}</main>
-      <PopupAniversariosHoje />
-    </div>
+    <NotificacoesProvider>
+      <div className="min-h-screen bg-gray-100 flex">
+        <SidebarMenu
+          userEmail={user.email ?? ""}
+          userName={perfil?.nome_completo ?? null}
+          userCargo={perfil?.cargo ?? null}
+          userAvatar={perfil?.avatar_url ?? null}
+          role={role}
+          isFullAccess={isFullAccess}
+          isSupervisorOrAbove={isSupervisorOrAbove}
+        />
+        <main className="flex-1 min-w-0 px-6 py-6">{children}</main>
+        <PopupAniversariosHoje />
+      </div>
+    </NotificacoesProvider>
   );
 }
