@@ -55,7 +55,7 @@ interface VagaTemplate {
   salario: string | null;
   horario_tipo: string | null;
   horario_texto: string | null;
-  horario_padrao: { modelo?: string; entrada?: string; saida?: string; intervalo?: string; diurno_noturno?: string; turno?: string } | null;
+  horario_padrao: { modelo?: string; entrada?: string; saida?: string; intervalo?: string; intervalo_inicio?: string; intervalo_fim?: string; diurno_noturno?: string; turno?: string } | null;
   requisitos: string | null;
   requisitos_chips: string[] | null;
   beneficios: string | null;
@@ -101,6 +101,8 @@ export default function SolicitarVagaPage() {
   const [horEntrada, setHorEntrada] = useState("");
   const [horSaida, setHorSaida] = useState("");
   const [horIntervalo, setHorIntervalo] = useState("");
+  const [horIntervaloInicio, setHorIntervaloInicio] = useState("");
+  const [horIntervaloFim, setHorIntervaloFim] = useState("");
   const [hor1236, setHor1236] = useState<"diurno" | "noturno">("diurno");
   const [horTurnoNome, setHorTurnoNome] = useState("");
   const [horCustom, setHorCustom] = useState("");
@@ -132,6 +134,8 @@ export default function SolicitarVagaPage() {
       if (hp.entrada) setHorEntrada(hp.entrada);
       if (hp.saida) setHorSaida(hp.saida);
       if (hp.intervalo) setHorIntervalo(hp.intervalo);
+      if (hp.intervalo_inicio) setHorIntervaloInicio(hp.intervalo_inicio);
+      if (hp.intervalo_fim) setHorIntervaloFim(hp.intervalo_fim);
       if (hp.diurno_noturno) setHor1236(hp.diurno_noturno as "diurno" | "noturno");
       if (hp.turno) setHorTurnoNome(hp.turno);
       setHorPadraoLoaded(true);
@@ -151,6 +155,8 @@ export default function SolicitarVagaPage() {
       if (hp.entrada) setHorEntrada(hp.entrada);
       if (hp.saida) setHorSaida(hp.saida);
       if (hp.intervalo) setHorIntervalo(hp.intervalo);
+      if (hp.intervalo_inicio) setHorIntervaloInicio(hp.intervalo_inicio);
+      if (hp.intervalo_fim) setHorIntervaloFim(hp.intervalo_fim);
       if (hp.diurno_noturno) setHor1236(hp.diurno_noturno as "diurno" | "noturno");
       if (hp.turno) setHorTurnoNome(hp.turno);
     } else if (tpl.horario_tipo) {
@@ -234,23 +240,33 @@ export default function SolicitarVagaPage() {
     return `${h}h${m}`;
   };
 
+  const intervaloSufixo = (): string => {
+    if (horIntervalo === "personalizado") {
+      if (!horIntervaloInicio || !horIntervaloFim) return "";
+      return `intervalo de ${fmtTime(horIntervaloInicio)} às ${fmtTime(horIntervaloFim)}`;
+    }
+    if (!horIntervalo) return "";
+    if (horIntervalo === "sem intervalo") return "sem intervalo";
+    return `intervalo de ${horIntervalo}`;
+  };
+
   const gerarHorarioTexto = (): string => {
     if (!horarioTipo) return "";
     if (horarioTipo === "a_combinar") return "A combinar";
     if (horarioTipo === "personalizado") return horCustom.trim();
     const times = `${fmtTime(horEntrada)} às ${fmtTime(horSaida)}`;
-    if (horarioTipo === "seg_sex") {
-      const base = `Segunda a Sexta, ${times}`;
-      return horIntervalo ? `${base} (intervalo: ${horIntervalo})` : base;
-    }
-    if (horarioTipo === "6x1") return `Escala 6x1, ${times}`;
+    const intervalo = intervaloSufixo();
+    const comIntervalo = (base: string) => intervalo ? `${base} (${intervalo})` : base;
+    if (horarioTipo === "seg_sex") return comIntervalo(`Segunda a Sexta, ${times}`);
+    if (horarioTipo === "6x1") return comIntervalo(`Escala 6x1, ${times}`);
     if (horarioTipo === "12x36") {
-      const label = hor1236 === "diurno" ? "Diurno" : "Noturno";
-      return horEntrada || horSaida ? `Escala 12x36, ${times} (${label})` : `Escala 12x36 (${label})`;
+      const label = hor1236 === "diurno" ? "Turno Diurno" : "Turno Noturno";
+      const base = horEntrada || horSaida ? `Escala 12x36 — ${label}, ${times}` : `Escala 12x36 — ${label}`;
+      return comIntervalo(base);
     }
     if (horarioTipo === "turno_fixo") {
       const nome = horTurnoNome.trim() || "Turno Fixo";
-      return `${nome}, ${times}`;
+      return comIntervalo(`${nome}, ${times}`);
     }
     return "";
   };
@@ -289,7 +305,19 @@ export default function SolicitarVagaPage() {
     return result;
   };
 
-  const horarioTexto = useMemo(gerarHorarioTexto, [horarioTipo, horEntrada, horSaida, horIntervalo, hor1236, horTurnoNome, horCustom]);
+  const horarioTexto = useMemo(gerarHorarioTexto, [horarioTipo, horEntrada, horSaida, horIntervalo, horIntervaloInicio, horIntervaloFim, hor1236, horTurnoNome, horCustom]);
+
+  const montarHorarioPadrao = () => horarioTipo ? {
+    modelo: horarioTipo,
+    entrada: horEntrada || null,
+    saida: horSaida || null,
+    intervalo: horIntervalo || null,
+    intervalo_inicio: horIntervalo === "personalizado" ? (horIntervaloInicio || null) : null,
+    intervalo_fim: horIntervalo === "personalizado" ? (horIntervaloFim || null) : null,
+    diurno_noturno: horarioTipo === "12x36" ? hor1236 : null,
+    turno: horarioTipo === "turno_fixo" ? horTurnoNome || null : null,
+    texto: horarioTexto,
+  } : null;
   const requisitosTexto = useMemo(gerarRequisitosTexto, [reqChips, reqCursos, reqCondicoes, reqCustom]);
   const beneficiosTexto = useMemo(gerarBeneficiosTexto, [benChips, benCustom]);
 
@@ -333,30 +361,14 @@ export default function SolicitarVagaPage() {
           beneficios: beneficiosTexto || null,
           beneficios_chips: gerarBeneficiosChips(),
           observacoes: observacoes.trim() || null,
-          horario_padrao: horarioTipo ? {
-            modelo: horarioTipo,
-            entrada: horEntrada || null,
-            saida: horSaida || null,
-            intervalo: horIntervalo || null,
-            diurno_noturno: horarioTipo === "12x36" ? hor1236 : null,
-            turno: horarioTipo === "turno_fixo" ? horTurnoNome || null : null,
-            texto: horarioTexto,
-          } : null,
+          horario_padrao: montarHorarioPadrao(),
         }),
       });
       const json = await res.json();
       if (!res.ok) { setError(json.error ?? "Erro ao enviar."); return; }
 
       if (salvarComoTemplate && nomeTemplate.trim()) {
-        const horPadrao = horarioTipo ? {
-          modelo: horarioTipo,
-          entrada: horEntrada || null,
-          saida: horSaida || null,
-          intervalo: horIntervalo || null,
-          diurno_noturno: horarioTipo === "12x36" ? hor1236 : null,
-          turno: horarioTipo === "turno_fixo" ? horTurnoNome || null : null,
-          texto: horarioTexto,
-        } : null;
+        const horPadrao = montarHorarioPadrao();
         void fetch("/api/portal/templates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -601,29 +613,18 @@ export default function SolicitarVagaPage() {
           </div>
 
           {horarioTipo === "seg_sex" && (
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-start gap-3 flex-wrap">
               <div><label style={labelStyle}>Entrada</label><input type="time" value={horEntrada} onChange={(e) => setHorEntrada(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
               <div><label style={labelStyle}>Saída</label><input type="time" value={horSaida} onChange={(e) => setHorSaida(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
-              <div>
-                <label style={labelStyle}>Intervalo</label>
-                <select value={horIntervalo} onChange={(e) => setHorIntervalo(e.target.value)} style={{ ...inputStyle, width: 160, background: "#fff", cursor: "pointer" }}>
-                  <option value="">Selecione...</option>
-                  <option value="sem intervalo">Sem intervalo</option>
-                  <option value="15min">15 minutos</option>
-                  <option value="30min">30 minutos</option>
-                  <option value="45min">45 minutos</option>
-                  <option value="1h">1 hora</option>
-                  <option value="1h15">1h15</option>
-                  <option value="1h30">1h30</option>
-                </select>
-              </div>
+              <IntervaloField value={horIntervalo} onChange={setHorIntervalo} inicio={horIntervaloInicio} fim={horIntervaloFim} onInicioChange={setHorIntervaloInicio} onFimChange={setHorIntervaloFim} />
             </div>
           )}
 
           {horarioTipo === "6x1" && (
-            <div className="flex items-center gap-3">
+            <div className="flex items-start gap-3 flex-wrap">
               <div><label style={labelStyle}>Entrada</label><input type="time" value={horEntrada} onChange={(e) => setHorEntrada(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
               <div><label style={labelStyle}>Saída</label><input type="time" value={horSaida} onChange={(e) => setHorSaida(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
+              <IntervaloField value={horIntervalo} onChange={setHorIntervalo} inicio={horIntervaloInicio} fim={horIntervaloFim} onInicioChange={setHorIntervaloInicio} onFimChange={setHorIntervaloFim} />
             </div>
           )}
 
@@ -638,18 +639,20 @@ export default function SolicitarVagaPage() {
                   </button>
                 ))}
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-start gap-3 flex-wrap">
                 <div><label style={labelStyle}>Entrada</label><input type="time" value={horEntrada} onChange={(e) => setHorEntrada(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
                 <div><label style={labelStyle}>Saída</label><input type="time" value={horSaida} onChange={(e) => setHorSaida(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
+                <IntervaloField value={horIntervalo} onChange={setHorIntervalo} inicio={horIntervaloInicio} fim={horIntervaloFim} onInicioChange={setHorIntervaloInicio} onFimChange={setHorIntervaloFim} />
               </div>
             </div>
           )}
 
           {horarioTipo === "turno_fixo" && (
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-start gap-3 flex-wrap">
               <div><label style={labelStyle}>Nome do Turno</label><input value={horTurnoNome} onChange={(e) => setHorTurnoNome(e.target.value)} placeholder="Ex: Turno A, Turno B..." style={{ ...inputStyle, width: 160 }} /></div>
               <div><label style={labelStyle}>Entrada</label><input type="time" value={horEntrada} onChange={(e) => setHorEntrada(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
               <div><label style={labelStyle}>Saída</label><input type="time" value={horSaida} onChange={(e) => setHorSaida(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
+              <IntervaloField value={horIntervalo} onChange={setHorIntervalo} inicio={horIntervaloInicio} fim={horIntervaloFim} onInicioChange={setHorIntervaloInicio} onFimChange={setHorIntervaloFim} />
             </div>
           )}
 
@@ -788,6 +791,47 @@ export default function SolicitarVagaPage() {
 const CONDICOES_TECNICO = ["Completo", "Cursando", "Completo ou Cursando"];
 const CONDICOES_SUPERIOR = ["Completo", "Cursando", "Completo ou Cursando", "A partir do 6º semestre", "A partir do 3º semestre"];
 const CONDICOES_SIMPLES = ["Completo", "Cursando"];
+
+function IntervaloField({
+  value,
+  onChange,
+  inicio,
+  fim,
+  onInicioChange,
+  onFimChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  inicio: string;
+  fim: string;
+  onInicioChange: (value: string) => void;
+  onFimChange: (value: string) => void;
+}) {
+  return (
+    <>
+      <div>
+        <label style={labelStyle}>Intervalo</label>
+        <select value={value} onChange={(e) => onChange(e.target.value)} style={{ ...inputStyle, width: 160, background: "#fff", cursor: "pointer" }}>
+          <option value="">Selecione...</option>
+          <option value="sem intervalo">Sem intervalo</option>
+          <option value="15min">15 minutos</option>
+          <option value="30min">30 minutos</option>
+          <option value="45min">45 minutos</option>
+          <option value="1h">1 hora</option>
+          <option value="1h15">1h15</option>
+          <option value="1h30">1h30</option>
+          <option value="personalizado">Personalizado</option>
+        </select>
+      </div>
+      {value === "personalizado" && (
+        <>
+          <div><label style={labelStyle}>Intervalo de:</label><input type="time" value={inicio} onChange={(e) => onInicioChange(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
+          <div><label style={labelStyle}>até:</label><input type="time" value={fim} onChange={(e) => onFimChange(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
+        </>
+      )}
+    </>
+  );
+}
 
 function ChipGroup({
   label,
