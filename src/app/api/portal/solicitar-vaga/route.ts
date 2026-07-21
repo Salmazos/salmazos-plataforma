@@ -102,19 +102,18 @@ export async function POST(request: NextRequest) {
       .in("nivel_acesso", ["superuser", "diretoria"])
       .eq("ativo", true);
 
+    // Uma única linha de broadcast (user_id nulo) em vez de uma por analista —
+    // leitura é rastreada por pessoa em notificacao_leituras (ver GET/PATCH
+    // /api/notificacoes), então isso não corre o risco de "sumir" pra quem
+    // ainda não viu só porque outro analista já marcou como lida.
     if (analistas && analistas.length > 0) {
-      const notifs = analistas
-        .filter((a) => a.user_id)
-        .map((a) => ({
-          tipo: "nova_solicitacao_vaga",
-          titulo: "Nova solicitação de vaga",
-          mensagem: `${clienteNome} solicitou ${body.num_posicoes || 1}x ${body.cargo}`,
-          user_id: a.user_id,
-          candidato_id: null,
-        }));
-      if (notifs.length > 0) {
-        await service.from("notificacoes_analista").insert(notifs);
-      }
+      await service.from("notificacoes_analista").insert({
+        tipo: "nova_solicitacao_vaga",
+        titulo: "Nova solicitação de vaga",
+        mensagem: `${clienteNome} solicitou ${body.num_posicoes || 1}x ${body.cargo}`,
+        user_id: null,
+        candidato_id: null,
+      });
     }
 
     const numPos = body.num_posicoes || 1;

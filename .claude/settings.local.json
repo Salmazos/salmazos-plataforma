@@ -185,7 +185,10 @@
       "PowerShell(nslookup -type=MX salmazos.com.br)",
       "Bash(npx --yes tsx tmp-test-notif-query.ts)",
       "mcp__541ea0a1-f9ae-43e1-b67e-8aacbdad08c1__apply_migration",
-      "Bash(git --no-pager diff src/app/painel/layout.tsx)"
+      "Bash(git --no-pager diff src/app/painel/layout.tsx)",
+      "Bash(git --no-pager diff src/app/api/notificacoes/route.ts src/app/api/notificacoes/[id]/route.ts src/app/api/portal/solicitar-vaga/route.ts)",
+      "Bash(npx --yes tsx tmp-test-leitura.ts)",
+      "Bash(git --no-pager diff src/app/api/portal/solicitar-vaga/route.ts)"
     ]
   }
 }
