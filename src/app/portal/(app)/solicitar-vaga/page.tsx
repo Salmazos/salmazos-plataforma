@@ -23,8 +23,9 @@ const HORARIO_TIPOS = [
   { id: "personalizado", label: "Personalizado" },
 ] as const;
 
-const REQ_ESCOLARIDADE = ["Ensino Fundamental Completo", "Ensino Médio Completo", "Ensino Técnico", "Ensino Superior"];
+const REQ_ESCOLARIDADE = ["Ensino Fundamental", "Ensino Médio", "Ensino Técnico", "Ensino Superior"];
 const REQ_COM_CURSO = new Set(["Ensino Técnico", "Ensino Superior"]);
+const REQ_COM_CONDICAO_SIMPLES = new Set(["Ensino Fundamental", "Ensino Médio"]);
 const REQ_EXPERIENCIA = ["Experiência na função", "Experiência em atendimento ao público", "Experiência em liderança/gestão", "Experiência em vendas"];
 const REQ_CNH = ["CNH B", "CNH C", "CNH D", "CNH E"];
 const REQ_NR = ["NR-6", "NR-10", "NR-11", "NR-12", "NR-35"];
@@ -668,7 +669,7 @@ export default function SolicitarVagaPage() {
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Requisitos</p>
           <p className="text-xs text-gray-400">Clique para adicionar requisitos</p>
 
-          <ChipGroup label="Escolaridade" chips={REQ_ESCOLARIDADE} selected={reqChips} onToggle={toggleReq} cursos={reqCursos} onCursoChange={(k, v) => setReqCursos((p) => ({ ...p, [k]: v }))} condicoes={reqCondicoes} onCondicaoChange={(k, v) => setReqCondicoes((p) => ({ ...p, [k]: v }))} comCurso={REQ_COM_CURSO} />
+          <ChipGroup label="Escolaridade" chips={REQ_ESCOLARIDADE} selected={reqChips} onToggle={toggleReq} cursos={reqCursos} onCursoChange={(k, v) => setReqCursos((p) => ({ ...p, [k]: v }))} condicoes={reqCondicoes} onCondicaoChange={(k, v) => setReqCondicoes((p) => ({ ...p, [k]: v }))} comCurso={REQ_COM_CURSO} comCondicaoSimples={REQ_COM_CONDICAO_SIMPLES} />
           <ChipGroup label="Experiência" chips={REQ_EXPERIENCIA} selected={reqChips} onToggle={toggleReq} />
           <ChipGroup label="Habilitação" chips={REQ_CNH} selected={reqChips} onToggle={toggleReq} />
           <ChipGroup label="Normas Regulamentadoras" chips={REQ_NR} selected={reqChips} onToggle={toggleReq} />
@@ -785,6 +786,7 @@ export default function SolicitarVagaPage() {
 
 const CONDICOES_TECNICO = ["Completo", "Cursando", "Completo ou Cursando"];
 const CONDICOES_SUPERIOR = ["Completo", "Cursando", "Completo ou Cursando", "A partir do 6º semestre", "A partir do 3º semestre"];
+const CONDICOES_SIMPLES = ["Completo", "Cursando"];
 
 function ChipGroup({
   label,
@@ -796,6 +798,7 @@ function ChipGroup({
   condicoes,
   onCondicaoChange,
   comCurso,
+  comCondicaoSimples,
 }: {
   label: string;
   chips: string[];
@@ -806,6 +809,7 @@ function ChipGroup({
   condicoes?: Record<string, string>;
   onCondicaoChange?: (chip: string, value: string) => void;
   comCurso?: Set<string>;
+  comCondicaoSimples?: Set<string>;
 }) {
   return (
     <div>
@@ -813,8 +817,9 @@ function ChipGroup({
       <div className="flex flex-wrap gap-2">
         {chips.map((chip) => {
           const ativo = !!selected[chip];
-          const showExtras = ativo && comCurso?.has(chip);
-          const condicaoOpts = chip === "Ensino Superior" ? CONDICOES_SUPERIOR : CONDICOES_TECNICO;
+          const showCursoECondicao = ativo && comCurso?.has(chip);
+          const showCondicaoSimples = ativo && comCondicaoSimples?.has(chip);
+          const condicaoOpts = showCondicaoSimples ? CONDICOES_SIMPLES : chip === "Ensino Superior" ? CONDICOES_SUPERIOR : CONDICOES_TECNICO;
           return (
             <div key={chip} className="flex items-center gap-1.5 flex-wrap">
               <button type="button" onClick={() => onToggle(chip)}
@@ -822,7 +827,7 @@ function ChipGroup({
                 style={ativo ? CHIP_ON : CHIP_OFF}>
                 {chip}
               </button>
-              {showExtras && onCursoChange && (
+              {showCursoECondicao && onCursoChange && (
                 <div className="flex items-center gap-1">
                   <span className="text-xs text-gray-400">em</span>
                   <input
@@ -833,7 +838,7 @@ function ChipGroup({
                   />
                 </div>
               )}
-              {showExtras && onCondicaoChange && (
+              {(showCursoECondicao || showCondicaoSimples) && onCondicaoChange && (
                 <select
                   value={condicoes?.[chip] ?? ""}
                   onChange={(e) => onCondicaoChange(chip, e.target.value)}

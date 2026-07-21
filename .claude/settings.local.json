@@ -165,7 +165,12 @@
       "Bash(rm -f \"C:\\\\Users\\\\Olver\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Olver-Desktop-salmazos-plataforma\\\\8894ceee-92b8-492e-9b68-750c9562b67c\\\\scratchpad\\\\formulario_em_branco_teste.pdf\" \"C:\\\\Users\\\\Olver\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Olver-Desktop-salmazos-plataforma\\\\8894ceee-92b8-492e-9b68-750c9562b67c\\\\scratchpad\\\\ficha_preenchida_teste.pdf\")",
       "Bash(npx --yes tsx --version)",
       "WebFetch(domain:www.clicksign.com)",
-      "WebFetch(domain:ajuda.clicksign.com)"
+      "WebFetch(domain:ajuda.clicksign.com)",
+      "WebFetch(domain:status.anthropic.com)",
+      "WebFetch(domain:status.claude.com)",
+      "PowerShell(Test-NetConnection -ComputerName api.anthropic.com -Port 443)",
+      "PowerShell($logPath = \"$env:APPDATA\\\\Claude\\\\logs\"; if \\(Test-Path $logPath\\) { Get-ChildItem $logPath | Sort-Object LastWriteTime -Descending | Select-Object -First 10 Name, LastWriteTime, Length } else { \"No logs folder at $logPath\" })",
+      "PowerShell(Select-String -Path \"$env:APPDATA\\\\Claude\\\\logs\\\\main.log\" -Pattern 'error|unavailable|fail|ENOTFOUND|ECONNRESET|timeout|429|503|proxy|overloaded' -CaseSensitive:$false | Select-Object -Last 60 | ForEach-Object { $_.Line })"
     ]
   }
 }
