@@ -1144,7 +1144,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, 
                     if (!txt) return null;
                     try {
                       const p = JSON.parse(txt);
-                      if (p?.empresa) {
+                      if (p && typeof p === "object" && (p.empresa || p.cargo || p.setor || p.descricao)) {
                         return (
                           <div
                             key={i}
@@ -1156,16 +1156,20 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, 
                               borderRadius: "8px",
                             }}
                           >
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px", flexWrap: "wrap" }}>
-                              <span style={{ fontWeight: 600, color: "#1f2937", fontSize: "14px" }}>
-                                {p.empresa}
-                              </span>
-                              {p.periodo && (
-                                <span style={{ fontSize: "11px", color: "#6b7280", flexShrink: 0 }}>
-                                  {p.periodo}
-                                </span>
-                              )}
-                            </div>
+                            {(p.empresa || p.periodo) && (
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px", flexWrap: "wrap" }}>
+                                {p.empresa && (
+                                  <span style={{ fontWeight: 600, color: "#1f2937", fontSize: "14px" }}>
+                                    {p.empresa}
+                                  </span>
+                                )}
+                                {p.periodo && (
+                                  <span style={{ fontSize: "11px", color: "#6b7280", flexShrink: 0 }}>
+                                    {p.periodo}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                             {p.cargo && (
                               <div style={{ color: "#FFD700", fontWeight: 600, fontSize: "13px", marginTop: "2px" }}>
                                 {p.cargo}
