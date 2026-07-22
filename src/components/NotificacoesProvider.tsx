@@ -58,21 +58,40 @@ export default function NotificacoesProvider({ children }: { children: React.Rea
   // do postgres_changes não suporta OR) repetir esse filtro na subscription.
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
-      .channel("notificacoes-analista-realtime")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notificacoes_analista" },
-        (payload) => {
-          const nova = payload.new as Notificacao;
-          setNotificacoes((prev) => (prev.some((n) => n.id === nova.id) ? prev : [nova, ...prev]));
-          setToasts((prev) => [...prev, nova]);
-        }
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelado = false;
+
+    (async () => {
+      // createClient() (cliente @supabase/ssr) hidrata a sessão dos cookies de
+      // forma assíncrona. Se o canal se inscrever ANTES disso, ele entra no
+      // socket do Realtime sem o JWT — e o Realtime não reautoriza um canal já
+      // conectado quando a sessão chega depois, então ele fica "surdo" pro
+      // resto da vida da página (postgres_changes nunca dispara, silenciosamente,
+      // sem nenhum erro visível). Esperar a sessão aqui evita essa corrida.
+      await supabase.auth.getSession();
+      if (cancelado) return;
+
+      channel = supabase
+        .channel("notificacoes-analista-realtime")
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "notificacoes_analista" },
+          (payload) => {
+            const nova = payload.new as Notificacao;
+            setNotificacoes((prev) => (prev.some((n) => n.id === nova.id) ? prev : [nova, ...prev]));
+            setToasts((prev) => [...prev, nova]);
+          }
+        )
+        .subscribe((status, err) => {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.error("[NotificacoesProvider] Falha na subscription de realtime:", status, err);
+          }
+        });
+    })();
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelado = true;
+      if (channel) supabase.removeChannel(channel);
     };
   }, []);
 

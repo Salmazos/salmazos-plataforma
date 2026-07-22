@@ -189,7 +189,10 @@
       "Bash(git --no-pager diff src/app/api/notificacoes/route.ts src/app/api/notificacoes/[id]/route.ts src/app/api/portal/solicitar-vaga/route.ts)",
       "Bash(npx --yes tsx tmp-test-leitura.ts)",
       "Bash(git --no-pager diff src/app/api/portal/solicitar-vaga/route.ts)",
-      "Bash(vercel env *)"
+      "Bash(vercel env *)",
+      "Bash(npx --yes tsx tmp-test-realtime.ts)",
+      "Bash(npx --yes tsx tmp-create-test-user.ts)",
+      "Bash(npx --yes tsx tmp-delete-test-user.ts)"
     ]
   }
 }
