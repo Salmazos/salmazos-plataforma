@@ -5,6 +5,7 @@ export type EmailTemplateName =
   | "reprovado"
   | "solicitar_documentos"
   | "vaga_aprovada_cliente"
+  | "solicitacao_recusada"
   | "candidato_entrevista_cliente"
   | "nova_vaga_criada"
   | "vaga_encerrada"
@@ -29,6 +30,7 @@ interface TemplateData {
   vagaUrl?: string;
   statusEncerramento?: string;
   admissaoUrl?: string;
+  motivoRecusa?: string;
 }
 
 export interface EmailTemplate {
@@ -44,6 +46,7 @@ export const TEMPLATE_OPTIONS: { value: EmailTemplateName; label: string }[] = [
   { value: "reprovado", label: "Reprovação no Processo Seletivo" },
   { value: "solicitar_documentos", label: "Solicitar Documentos" },
   { value: "vaga_aprovada_cliente", label: "Vaga Aprovada (para Cliente)" },
+  { value: "solicitacao_recusada", label: "Solicitação de Vaga Recusada (para Cliente)" },
   { value: "candidato_entrevista_cliente", label: "Candidato Agendado para Entrevista (para Cliente)" },
   { value: "nova_vaga_criada", label: "Nova Vaga Cadastrada (notificação equipe)" },
   { value: "vaga_encerrada", label: "Vaga Encerrada (notificação equipe)" },
@@ -77,7 +80,7 @@ function layout(subtitle: string, body: string): string {
 
 export function getEmailTemplate(
   name: EmailTemplateName,
-  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl }: TemplateData
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa }: TemplateData
 ): EmailTemplate {
   switch (name) {
     case "entrevista_salmazos":
@@ -255,6 +258,29 @@ export function getEmailTemplate(
           </p>
           <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
             Em caso de dúvidas ou necessidade de ajustes, estamos à disposição. Conte com a Salmazos RH! 😊
+          </p>`
+        ),
+      };
+
+    case "solicitacao_recusada":
+      return {
+        subject: `Atualização sobre sua solicitação de vaga — ${cargo}`,
+        descricao: `Comunicado de recusa da solicitação de vaga de ${cargo} para o cliente.`,
+        html: layout(
+          "Atualização sobre sua Solicitação de Vaga",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Prezado(a), <strong>${nomeCliente}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Agradecemos o contato e o interesse em abrir uma nova vaga de <strong>${cargo}</strong> conosco.
+            Após análise da nossa equipe, no momento não conseguimos dar seguimento a essa solicitação
+            da forma como foi enviada.
+          </p>
+          ${motivoRecusa ? `<div style="background:#f9fafb;border-left:4px solid #d1d5db;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 8px;color:#374151;font-weight:700;font-size:14px;">Motivo:</p>
+            <p style="margin:0;color:#374151;font-size:14px;line-height:1.7;">${motivoRecusa}</p>
+          </div>` : ""}
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+            Ficamos à disposição para esclarecer qualquer dúvida ou para reenviar a solicitação com os
+            ajustes necessários — é só entrar em contato ou acessar o portal novamente. Contamos com você! 😊
           </p>`
         ),
       };

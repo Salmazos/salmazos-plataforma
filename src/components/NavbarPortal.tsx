@@ -38,6 +38,12 @@ export default function NavbarPortal({ userEmail }: Props) {
         <div className="flex items-center gap-3">
           <span className="text-white/50 text-sm hidden sm:block">{userEmail}</span>
           <Link
+            href="/portal/solicitacoes"
+            className="text-white/70 hover:text-white text-sm transition-colors hidden sm:block"
+          >
+            Minhas Solicitações
+          </Link>
+          <Link
             href="/portal/solicitar-vaga"
             style={{
               backgroundColor: "#FFD700",

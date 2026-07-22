@@ -194,7 +194,14 @@
       "Bash(npx --yes tsx tmp-create-test-user.ts)",
       "Bash(npx --yes tsx tmp-delete-test-user.ts)",
       "Bash(npx --yes tsx tmp-create-test-user2.ts)",
-      "Bash(npx --yes tsx tmp-delete-test-user2.ts)"
+      "Bash(npx --yes tsx tmp-delete-test-user2.ts)",
+      "Bash(npx --yes tsx tmp-create-test-user3.ts)",
+      "Bash(npx --yes tsx tmp-delete-test-user3.ts)",
+      "Bash(npx --yes tsx tmp-create-test-user4.ts)",
+      "Bash(npx --yes tsx tmp-delete-test-user4.ts)",
+      "Bash(npx --yes tsx tmp-setup-portal-test.ts)",
+      "Bash(npx --yes tsx tmp-create-analista-test.ts)",
+      "Bash(npx --yes tsx tmp-cleanup-users.ts)"
     ]
   }
 }
