@@ -201,7 +201,9 @@
       "Bash(npx --yes tsx tmp-delete-test-user4.ts)",
       "Bash(npx --yes tsx tmp-setup-portal-test.ts)",
       "Bash(npx --yes tsx tmp-create-analista-test.ts)",
-      "Bash(npx --yes tsx tmp-cleanup-users.ts)"
+      "Bash(npx --yes tsx tmp-cleanup-users.ts)",
+      "Bash(npx --yes tsx tmp-setup-multiuser-test.ts)",
+      "Bash(npx --yes tsx tmp-cleanup-multiuser.ts)"
     ]
   }
 }

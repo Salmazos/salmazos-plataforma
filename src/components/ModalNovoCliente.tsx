@@ -12,6 +12,16 @@ interface Props {
   onSalvo: (cliente: Cliente) => void;
 }
 
+interface UsuarioPortal {
+  id: string;
+  user_id: string;
+  email: string;
+  nome: string | null;
+  created_at: string;
+}
+
+const MAX_USUARIOS_PORTAL = 3;
+
 const FORM_VAZIO = {
   nome: "",
   contato_nome: "",
@@ -29,12 +39,16 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [confirmandoInativar, setConfirmandoInativar] = useState(false);
-  const [senhaPortal, setSenhaPortal] = useState("");
-  const [mostrarSenha, setMostrarSenha] = useState(false);
-  const [criandoAcesso, setCriandoAcesso] = useState(false);
-  const [acessoCriado, setAcessoCriado] = useState(false);
-  const [erroAcesso, setErroAcesso] = useState("");
-  const [temAcesso, setTemAcesso] = useState<boolean | null>(null);
+
+  const [usuariosPortal, setUsuariosPortal] = useState<UsuarioPortal[]>([]);
+  const [carregandoUsuariosPortal, setCarregandoUsuariosPortal] = useState(false);
+  const [mostrarFormNovoUsuario, setMostrarFormNovoUsuario] = useState(false);
+  const [novoNome, setNovoNome] = useState("");
+  const [novoEmail, setNovoEmail] = useState("");
+  const [novaSenha, setNovaSenha] = useState("");
+  const [mostrarNovaSenha, setMostrarNovaSenha] = useState(false);
+  const [adicionandoUsuario, setAdicionandoUsuario] = useState(false);
+  const [erroNovoUsuario, setErroNovoUsuario] = useState("");
 
   const editando = !!cliente;
 
@@ -57,25 +71,36 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
       setServicos(cliente?.servicos ?? []);
       setErro("");
       setConfirmandoInativar(false);
-      setSenhaPortal("");
-      setMostrarSenha(false);
-      setCriandoAcesso(false);
-      setAcessoCriado(false);
-      setErroAcesso("");
-      setTemAcesso(null);
+      setUsuariosPortal([]);
+      setMostrarFormNovoUsuario(false);
+      setNovoNome("");
+      setNovoEmail("");
+      setNovaSenha("");
+      setMostrarNovaSenha(false);
+      setErroNovoUsuario("");
 
       if (cliente) {
         let active = true;
+        setCarregandoUsuariosPortal(true);
         fetch(`/api/clientes/portal-acesso?cliente_id=${cliente.id}`)
           .then((r) => r.json())
-          .then((json) => { if (active) setTemAcesso(json.temAcesso ?? false); })
-          .catch(() => { if (active) setTemAcesso(false); });
+          .then((json) => { if (active) setUsuariosPortal(json.data ?? []); })
+          .catch(() => { if (active) setUsuariosPortal([]); })
+          .finally(() => { if (active) setCarregandoUsuariosPortal(false); });
         return () => { active = false; };
       }
     }
   }, [isOpen, cliente]);
 
   if (!isOpen) return null;
+
+  const recarregarUsuariosPortal = () => {
+    if (!cliente) return;
+    fetch(`/api/clientes/portal-acesso?cliente_id=${cliente.id}`)
+      .then((r) => r.json())
+      .then((json) => setUsuariosPortal(json.data ?? []))
+      .catch(() => {});
+  };
 
   const set = (field: string, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
@@ -105,27 +130,77 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
     }
   };
 
-  const handleCriarAcesso = async () => {
-    setCriandoAcesso(true);
-    setErroAcesso("");
+  const handleAdicionarUsuario = async () => {
+    setAdicionandoUsuario(true);
+    setErroNovoUsuario("");
     try {
-      const atualizando = temAcesso === true;
       const res = await fetch("/api/clientes/portal-acesso", {
-        method: atualizando ? "PATCH" : "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          atualizando
-            ? { cliente_id: cliente!.id, senha: senhaPortal }
-            : { cliente_id: cliente!.id, email: form.contato_email, senha: senhaPortal }
-        ),
+        body: JSON.stringify({
+          cliente_id: cliente!.id,
+          nome: novoNome.trim() || undefined,
+          email: novoEmail.trim(),
+          senha: novaSenha,
+        }),
       });
       const json = await res.json();
-      if (!res.ok) { setErroAcesso(json.error ?? "Erro."); return; }
-      setAcessoCriado(true);
+      if (!res.ok) { setErroNovoUsuario(json.error ?? "Erro."); return; }
+      setNovoNome("");
+      setNovoEmail("");
+      setNovaSenha("");
+      setMostrarFormNovoUsuario(false);
+      recarregarUsuariosPortal();
     } catch {
-      setErroAcesso("Erro de conexão.");
+      setErroNovoUsuario("Erro de conexão.");
     } finally {
-      setCriandoAcesso(false);
+      setAdicionandoUsuario(false);
+    }
+  };
+
+  const handleSalvarEmailUsuario = async (userId: string, email: string): Promise<string | null> => {
+    try {
+      const res = await fetch("/api/clientes/portal-acesso", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cliente_id: cliente!.id, user_id: userId, email }),
+      });
+      const json = await res.json();
+      if (!res.ok) return json.error ?? "Erro ao salvar e-mail.";
+      recarregarUsuariosPortal();
+      return null;
+    } catch {
+      return "Erro de conexão.";
+    }
+  };
+
+  const handleSalvarSenhaUsuario = async (userId: string, senha: string): Promise<string | null> => {
+    try {
+      const res = await fetch("/api/clientes/portal-acesso", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cliente_id: cliente!.id, user_id: userId, senha }),
+      });
+      const json = await res.json();
+      if (!res.ok) return json.error ?? "Erro ao redefinir senha.";
+      return null;
+    } catch {
+      return "Erro de conexão.";
+    }
+  };
+
+  const handleRemoverUsuario = async (userId: string): Promise<string | null> => {
+    try {
+      const res = await fetch(
+        `/api/clientes/portal-acesso?cliente_id=${cliente!.id}&user_id=${userId}`,
+        { method: "DELETE" }
+      );
+      const json = await res.json();
+      if (!res.ok) return json.error ?? "Erro ao remover.";
+      recarregarUsuariosPortal();
+      return null;
+    } catch {
+      return "Erro de conexão.";
     }
   };
 
@@ -320,7 +395,7 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">E-mail *</label>
+                  <label className="block text-xs text-gray-500 mb-1">E-mail (comunicação) *</label>
                   <input
                     type="email"
                     value={form.contato_email}
@@ -328,72 +403,115 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
                     placeholder="contato@empresa.com"
                     className="input-field"
                   />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Usado só para o envio de e-mails de comunicação (aprovação/recusa de solicitações etc.) —
+                    não é o e-mail de login do portal. O login é gerenciado abaixo, em Usuários do Portal.
+                  </p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Acesso ao Portal */}
+          {/* Usuários do Portal */}
           {editando && (
             <div className="border-t pt-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                Acesso ao Portal do Cliente
-              </p>
-              {acessoCriado ? (
-                <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                  {temAcesso ? "Senha atualizada com sucesso!" : "Acesso criado com sucesso!"}
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Usuários do Portal ({usuariosPortal.length}/{MAX_USUARIOS_PORTAL})
                 </p>
+                {!mostrarFormNovoUsuario && usuariosPortal.length < MAX_USUARIOS_PORTAL && !carregandoUsuariosPortal && (
+                  <button
+                    type="button"
+                    onClick={() => setMostrarFormNovoUsuario(true)}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+                  >
+                    + Adicionar usuário
+                  </button>
+                )}
+              </div>
+
+              {carregandoUsuariosPortal ? (
+                <p className="text-sm text-gray-400">Carregando...</p>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2">
+                  {usuariosPortal.length === 0 && !mostrarFormNovoUsuario && (
+                    <p className="text-sm text-gray-400">Nenhum usuário de portal cadastrado ainda.</p>
+                  )}
+                  {usuariosPortal.map((usuario) => (
+                    <UsuarioPortalRow
+                      key={usuario.id}
+                      usuario={usuario}
+                      onSalvarEmail={handleSalvarEmailUsuario}
+                      onSalvarSenha={handleSalvarSenhaUsuario}
+                      onRemover={handleRemoverUsuario}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {mostrarFormNovoUsuario && (
+                <div className="mt-3 border border-gray-200 rounded-lg p-3 space-y-2">
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">E-mail</label>
+                    <label className="block text-xs text-gray-500 mb-1">Nome</label>
                     <input
-                      value={form.contato_email}
-                      readOnly
-                      className="input-field bg-gray-50 text-gray-500 cursor-not-allowed"
+                      value={novoNome}
+                      onChange={(e) => setNovoNome(e.target.value)}
+                      placeholder="Ex: João Souza"
+                      className="input-field text-sm"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">
-                      {temAcesso ? "Nova senha do portal" : "Senha do portal"}
-                    </label>
+                    <label className="block text-xs text-gray-500 mb-1">E-mail de login *</label>
+                    <input
+                      type="email"
+                      value={novoEmail}
+                      onChange={(e) => setNovoEmail(e.target.value)}
+                      placeholder="usuario@empresa.com"
+                      className="input-field text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Senha inicial *</label>
                     <div className="relative">
                       <input
-                        type={mostrarSenha ? "text" : "password"}
-                        value={senhaPortal}
-                        onChange={(e) => setSenhaPortal(e.target.value)}
-                        placeholder="Digite a senha de acesso"
-                        className="input-field pr-10"
+                        type={mostrarNovaSenha ? "text" : "password"}
+                        value={novaSenha}
+                        onChange={(e) => setNovaSenha(e.target.value)}
+                        placeholder="Mínimo 6 caracteres"
+                        className="input-field text-sm pr-9"
                       />
                       <button
                         type="button"
-                        onClick={() => setMostrarSenha((v) => !v)}
-                        aria-label={mostrarSenha ? "Ocultar senha" : "Mostrar senha"}
-                        className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600"
+                        onClick={() => setMostrarNovaSenha((v) => !v)}
+                        aria-label={mostrarNovaSenha ? "Ocultar senha" : "Mostrar senha"}
+                        className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600"
                       >
-                        {mostrarSenha ? <EyeOff size={16} /> : <Eye size={16} />}
+                        {mostrarNovaSenha ? <EyeOff size={14} /> : <Eye size={14} />}
                       </button>
                     </div>
                   </div>
-                  {erroAcesso && (
-                    <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                      {erroAcesso}
+                  {erroNovoUsuario && (
+                    <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                      {erroNovoUsuario}
                     </p>
                   )}
-                  <button
-                    type="button"
-                    onClick={handleCriarAcesso}
-                    disabled={criandoAcesso || !senhaPortal || temAcesso === null}
-                    className="text-sm px-4 py-2 rounded-lg bg-black text-[#FFD700] font-medium transition-colors hover:bg-gray-800 disabled:opacity-50"
-                  >
-                    {criandoAcesso
-                      ? (temAcesso ? "Atualizando..." : "Criando...")
-                      : temAcesso === null
-                      ? "Verificando..."
-                      : temAcesso
-                      ? "Atualizar senha do portal"
-                      : "Criar acesso ao portal"}
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAdicionarUsuario}
+                      disabled={adicionandoUsuario || !novoEmail.trim() || novaSenha.length < 6}
+                      className="text-sm px-4 py-2 rounded-lg bg-black text-[#FFD700] font-medium transition-colors hover:bg-gray-800 disabled:opacity-50"
+                    >
+                      {adicionandoUsuario ? "Criando..." : "Criar usuário"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setMostrarFormNovoUsuario(false); setErroNovoUsuario(""); }}
+                      className="text-sm px-4 py-2 rounded-lg border border-gray-200 text-gray-600"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -441,6 +559,159 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function UsuarioPortalRow({
+  usuario,
+  onSalvarEmail,
+  onSalvarSenha,
+  onRemover,
+}: {
+  usuario: UsuarioPortal;
+  onSalvarEmail: (userId: string, email: string) => Promise<string | null>;
+  onSalvarSenha: (userId: string, senha: string) => Promise<string | null>;
+  onRemover: (userId: string) => Promise<string | null>;
+}) {
+  const [email, setEmail] = useState(usuario.email);
+  const [salvandoEmail, setSalvandoEmail] = useState(false);
+  const [erroEmail, setErroEmail] = useState("");
+  const [emailSalvo, setEmailSalvo] = useState(false);
+
+  const [redefinindoSenha, setRedefinindoSenha] = useState(false);
+  const [senha, setSenha] = useState("");
+  const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [salvandoSenha, setSalvandoSenha] = useState(false);
+  const [erroSenha, setErroSenha] = useState("");
+  const [senhaSalva, setSenhaSalva] = useState(false);
+
+  const [confirmandoRemover, setConfirmandoRemover] = useState(false);
+  const [removendo, setRemovendo] = useState(false);
+  const [erroRemover, setErroRemover] = useState("");
+
+  const emailAlterado = email.trim() !== usuario.email && email.trim().length > 0;
+
+  const handleSalvarEmail = async () => {
+    setSalvandoEmail(true);
+    setErroEmail("");
+    setEmailSalvo(false);
+    const erroMsg = await onSalvarEmail(usuario.user_id, email.trim());
+    if (erroMsg) setErroEmail(erroMsg);
+    else setEmailSalvo(true);
+    setSalvandoEmail(false);
+  };
+
+  const handleSalvarSenha = async () => {
+    setSalvandoSenha(true);
+    setErroSenha("");
+    const erroMsg = await onSalvarSenha(usuario.user_id, senha);
+    if (erroMsg) {
+      setErroSenha(erroMsg);
+    } else {
+      setSenhaSalva(true);
+      setSenha("");
+    }
+    setSalvandoSenha(false);
+  };
+
+  const handleRemover = async () => {
+    if (!confirmandoRemover) { setConfirmandoRemover(true); return; }
+    setRemovendo(true);
+    setErroRemover("");
+    const erroMsg = await onRemover(usuario.user_id);
+    if (erroMsg) { setErroRemover(erroMsg); setRemovendo(false); }
+    // se deu certo, o pai remove esta linha da lista ao recarregar — não precisa resetar estado local
+  };
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+      <p className="text-xs font-medium text-gray-500">{usuario.nome || "Usuário do portal"}</p>
+
+      <div className="flex gap-2">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => { setEmail(e.target.value); setErroEmail(""); setEmailSalvo(false); }}
+          className="input-field text-sm flex-1"
+        />
+        {emailAlterado && (
+          <button
+            type="button"
+            onClick={handleSalvarEmail}
+            disabled={salvandoEmail}
+            className="text-xs px-3 py-1.5 rounded-lg bg-black text-[#FFD700] font-medium disabled:opacity-50 shrink-0"
+          >
+            {salvandoEmail ? "Salvando..." : "Salvar e-mail"}
+          </button>
+        )}
+      </div>
+      {erroEmail && <p className="text-xs text-red-600">{erroEmail}</p>}
+      {emailSalvo && !erroEmail && <p className="text-xs text-green-700">E-mail de login atualizado!</p>}
+
+      {redefinindoSenha ? (
+        <div className="space-y-1.5">
+          <div className="relative">
+            <input
+              type={mostrarSenha ? "text" : "password"}
+              value={senha}
+              onChange={(e) => { setSenha(e.target.value); setErroSenha(""); }}
+              placeholder="Nova senha (mínimo 6 caracteres)"
+              className="input-field text-sm pr-9"
+            />
+            <button
+              type="button"
+              onClick={() => setMostrarSenha((v) => !v)}
+              aria-label={mostrarSenha ? "Ocultar senha" : "Mostrar senha"}
+              className="absolute inset-y-0 right-2 flex items-center text-gray-400 hover:text-gray-600"
+            >
+              {mostrarSenha ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+          {erroSenha && <p className="text-xs text-red-600">{erroSenha}</p>}
+          {senhaSalva && <p className="text-xs text-green-700">Senha atualizada!</p>}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleSalvarSenha}
+              disabled={salvandoSenha || senha.length < 6}
+              className="text-xs px-3 py-1.5 rounded-lg bg-black text-[#FFD700] font-medium disabled:opacity-50"
+            >
+              {salvandoSenha ? "Salvando..." : "Confirmar nova senha"}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setRedefinindoSenha(false); setSenha(""); setErroSenha(""); }}
+              className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => { setRedefinindoSenha(true); setSenhaSalva(false); }}
+            className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:border-black hover:text-black transition-colors"
+          >
+            Redefinir senha
+          </button>
+          <button
+            type="button"
+            onClick={handleRemover}
+            disabled={removendo}
+            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+              confirmandoRemover
+                ? "bg-red-600 text-white border-red-600 hover:bg-red-700"
+                : "text-red-600 border-red-200 hover:bg-red-50"
+            }`}
+          >
+            {removendo ? "Removendo..." : confirmandoRemover ? "Confirmar remoção?" : "Remover acesso"}
+          </button>
+        </div>
+      )}
+      {erroRemover && <p className="text-xs text-red-600">{erroRemover}</p>}
     </div>
   );
 }

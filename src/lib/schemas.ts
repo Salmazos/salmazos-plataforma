@@ -233,13 +233,22 @@ export const emailSendSchema = z.object({
 
 export const portalAcessoSchema = z.object({
   cliente_id: z.string().uuid(),
+  nome: z.string().optional(),
   email: z.string().email(),
   senha: z.string().min(6),
 });
 
-export const portalSenhaSchema = z.object({
+export const portalAcessoUpdateSchema = z.object({
   cliente_id: z.string().uuid(),
-  senha: z.string().min(6),
+  user_id: z.string().uuid(),
+  nome: z.string().optional(),
+  email: z.string().email().optional(),
+  senha: z.string().min(6).optional(),
+});
+
+export const portalAcessoDeleteSchema = z.object({
+  cliente_id: z.string().uuid(),
+  user_id: z.string().uuid(),
 });
 
 // ── SLA ──────────────────────────────────────────────────────────────────────
