@@ -192,7 +192,9 @@
       "Bash(vercel env *)",
       "Bash(npx --yes tsx tmp-test-realtime.ts)",
       "Bash(npx --yes tsx tmp-create-test-user.ts)",
-      "Bash(npx --yes tsx tmp-delete-test-user.ts)"
+      "Bash(npx --yes tsx tmp-delete-test-user.ts)",
+      "Bash(npx --yes tsx tmp-create-test-user2.ts)",
+      "Bash(npx --yes tsx tmp-delete-test-user2.ts)"
     ]
   }
 }
