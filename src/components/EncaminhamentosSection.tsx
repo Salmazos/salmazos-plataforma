@@ -130,7 +130,9 @@ function EncaminhamentoItem({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-xs text-gray-500">
             {enc.cliente?.cidade && <span>{enc.cliente.cidade}</span>}
             {enc.cliente?.segmento && <span>· {enc.cliente.segmento}</span>}
-            <span>· Entrevista: {formatarData(enc.data_entrevista)}</span>
+            {enc.data_entrevista && (
+              <span>· Entrevista: {formatarData(enc.data_entrevista)}</span>
+            )}
           </div>
           {enc.tipo_servico && (() => {
             const t = TIPOS_SERVICO.find((ts) => ts.id === enc.tipo_servico);

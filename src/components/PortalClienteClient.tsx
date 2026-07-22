@@ -16,7 +16,7 @@ interface CandidatoResumo {
 export interface EncaminhamentoPortal {
   id: string;
   status: string;
-  data_entrevista: string;
+  data_entrevista: string | null;
   feedback_cliente?: string;
   avaliado_em?: string;
   match_score?: number;
@@ -195,7 +195,7 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos, emAv
                     )}
                     {enc.data_entrevista && (
                       <span className="text-xs text-gray-500">
-                        {"📅"} {new Date(enc.data_entrevista + "T12:00:00").toLocaleDateString("pt-BR")}
+                        {"📅"} {new Date(enc.data_entrevista).toLocaleDateString("pt-BR")}
                       </span>
                     )}
                     <span

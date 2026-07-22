@@ -2,7 +2,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import PainelLayout from "@/components/PainelLayout";
 import type { KanbanCard } from "@/types";
 import { ETAPAS_KANBAN_VISIVEIS } from "@/lib/constants";
-import { mapTipoServicoPorCandidatura } from "@/lib/tipoServicoVigente";
+import { mapTipoServicoPorCandidatura, mapEncaminhamentoAgendamentoPorCandidatura } from "@/lib/tipoServicoVigente";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +41,7 @@ export default async function PainelPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const candidatoIds = Array.from(new Set((cvData ?? []).map((cv: any) => cv.candidatos.id)));
   const tipoServicoPorCandidatura = await mapTipoServicoPorCandidatura(supabase, candidatoIds);
+  const agendamentoPorCandidatura = await mapEncaminhamentoAgendamentoPorCandidatura(supabase, candidatoIds);
 
   const cards: KanbanCard[] = ((cvData ?? []) as unknown as {
     id: string;
@@ -74,6 +75,8 @@ export default async function PainelPage() {
     vaga_titulo: cv.vagas.titulo,
     vaga_tipo_servico: cv.vagas.tipo_servico,
     encaminhamento_tipo_servico: tipoServicoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`) ?? null,
+    encaminhamento_status: agendamentoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`)?.status ?? null,
+    encaminhamento_data_entrevista: agendamentoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`)?.data_entrevista ?? null,
     // candidatos_vagas.cliente_id é exceção manual (renegociação para outro cliente);
     // na ausência, o padrão é o cliente já vinculado à vaga.
     cliente_id: cv.cliente_id ?? cv.vagas.cliente_id ?? null,

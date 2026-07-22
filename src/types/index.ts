@@ -10,7 +10,8 @@ export type StatusEncaminhamento =
   | "aguardando"
   | "aprovado"
   | "reprovado"
-  | "desistiu";
+  | "desistiu"
+  | "aguardando_agendamento_cliente";
 
 // ── Admissão Digital ─────────────────────────────────────────────────────────
 
@@ -218,6 +219,8 @@ export interface KanbanCard {
   vaga_titulo: string;
   vaga_tipo_servico: string | null;
   encaminhamento_tipo_servico: string | null;
+  encaminhamento_status: string | null;
+  encaminhamento_data_entrevista: string | null;
   cliente_id: string | null;
   cliente_nome: string | null;
   observacoes: string | null;
@@ -341,7 +344,7 @@ export interface Encaminhamento {
   id: string;
   candidato_id: string;
   cliente_id: string;
-  data_entrevista: string;
+  data_entrevista: string | null;
   status: StatusEncaminhamento;
   tipo_servico?: string;
   observacoes?: string;

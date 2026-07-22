@@ -193,6 +193,19 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
                 <TriagemBadge score={card.triagem_score} label={card.triagem_label} size="sm" />
               </div>
             )}
+            {card.etapa === "entrevista_cliente" && (
+              <div className="mt-0.5">
+                {card.encaminhamento_data_entrevista ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                    {"📅"} {formatarData(card.encaminhamento_data_entrevista)}
+                  </span>
+                ) : card.encaminhamento_status === "aguardando_agendamento_cliente" ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                    {"⏳"} Aguardando agendamento do cliente
+                  </span>
+                ) : null}
+              </div>
+            )}
           </div>
         </div>
 

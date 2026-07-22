@@ -244,7 +244,8 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
 
   const handleConfirmarEncaminhamento = async (dados: {
     cliente_id: string;
-    data_entrevista: string;
+    data_entrevista: string | null;
+    status: "aguardando" | "aguardando_agendamento_cliente";
     tipo_servico: string;
     observacoes: string;
     vaga_id?: string;
@@ -272,7 +273,11 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
         throw new Error(json.error || "Não foi possível mover o candidato para entrevista com cliente.");
       }
       router.refresh();
-      showToast("Entrevista agendada e candidato enviado para o painel do cliente");
+      showToast(
+        dados.status === "aguardando_agendamento_cliente"
+          ? "Candidato enviado — aguardando o cliente definir a data da entrevista"
+          : "Entrevista agendada e candidato enviado para o painel do cliente"
+      );
     } finally {
       setMovendo(null);
     }

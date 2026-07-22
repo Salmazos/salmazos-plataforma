@@ -15,7 +15,8 @@ interface Props {
   onClose: () => void;
   onConfirmar: (dados: {
     cliente_id: string;
-    data_entrevista: string;
+    data_entrevista: string | null;
+    status: "aguardando" | "aguardando_agendamento_cliente";
     tipo_servico: string;
     observacoes: string;
     vaga_id?: string;
@@ -46,6 +47,7 @@ export default function ModalEncaminhamento({
   const [erro, setErro] = useState("");
 
   const [clienteId, setClienteId] = useState("");
+  const [modoEnvio, setModoEnvio] = useState<"direto" | "agendamento">("direto");
   const [dataEntrevista, setDataEntrevista] = useState("");
   const [tipoServico, setTipoServico] = useState("");
   const [observacoes, setObservacoes] = useState("");
@@ -77,6 +79,7 @@ export default function ModalEncaminhamento({
   useEffect(() => {
     if (!isOpen) return;
     setClienteId(clienteIdInicial ?? "");
+    setModoEnvio("direto");
     setDataEntrevista("");
     setTipoServico("");
     setObservacoes("");
@@ -113,10 +116,16 @@ export default function ModalEncaminhamento({
   // pôde ser resolvido nem por candidatos_vagas.cliente_id nem por vagas.cliente_id.
   const vagaSemClienteVinculado = Boolean(vagaIdProp) && !clienteIdInicial;
 
+  const precisaData = modoEnvio === "direto";
+
   const handleConfirmar = async () => {
     setTentouEnviar(true);
-    if (!clienteId || !dataEntrevista || !tipoServico) {
-      setErro("Selecione o cliente, o tipo de serviço e a data da entrevista.");
+    if (!clienteId || !tipoServico || (precisaData && !dataEntrevista)) {
+      setErro(
+        precisaData
+          ? "Selecione o cliente, o tipo de serviço e a data da entrevista."
+          : "Selecione o cliente e o tipo de serviço."
+      );
       return;
     }
     if (duplicata && !forcarEnvio) {
@@ -134,7 +143,14 @@ export default function ModalEncaminhamento({
     setEnviando(true);
     setErro("");
     try {
-      await onConfirmar({ cliente_id: clienteId, data_entrevista: dataEntrevista, tipo_servico: tipoServico, observacoes: obsCompleta, vaga_id: vagaIdFinal || undefined });
+      await onConfirmar({
+        cliente_id: clienteId,
+        data_entrevista: precisaData ? dataEntrevista : null,
+        status: precisaData ? "aguardando" : "aguardando_agendamento_cliente",
+        tipo_servico: tipoServico,
+        observacoes: obsCompleta,
+        vaga_id: vagaIdFinal || undefined,
+      });
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Erro ao salvar encaminhamento.");
       setEnviando(false);
@@ -252,7 +268,7 @@ export default function ModalEncaminhamento({
                       >
                         <strong>{candidatoNome}</strong>{" → "}
                         <strong>{clienteSelecionado.nome}</strong>
-                        {" em "}{formatarData(duplicata.data_entrevista)}
+                        {duplicata.data_entrevista && <>{" em "}{formatarData(duplicata.data_entrevista)}</>}
                         {" · resultado: "}
                         <strong>{STATUS_ENCAMINHAMENTO[duplicata.status]?.label ?? duplicata.status}</strong>
                         {" ↗"}
@@ -350,22 +366,64 @@ export default function ModalEncaminhamento({
                 </div>
               )}
 
+              {/* Modo de envio */}
+              {clienteId && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    Como enviar *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setModoEnvio("direto")}
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left transition-all text-sm font-semibold"
+                      style={
+                        modoEnvio === "direto"
+                          ? { backgroundColor: "#111827", color: "#FFD700", borderColor: "#111827" }
+                          : { backgroundColor: "#ffffff", color: "#6b7280", borderColor: "#e5e7eb" }
+                      }
+                    >
+                      {"📤"} Mover e enviar direto
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModoEnvio("agendamento")}
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-left transition-all text-sm font-semibold"
+                      style={
+                        modoEnvio === "agendamento"
+                          ? { backgroundColor: "#111827", color: "#FFD700", borderColor: "#111827" }
+                          : { backgroundColor: "#ffffff", color: "#6b7280", borderColor: "#e5e7eb" }
+                      }
+                    >
+                      {"📅"} Pedir agendamento ao cliente
+                    </button>
+                  </div>
+                  {modoEnvio === "agendamento" && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      O candidato será enviado sem data de entrevista definida — o cliente poderá marcar a data depois.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {/* Data */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                  Data da entrevista *
-                </label>
-                <input
-                  type="date"
-                  value={dataEntrevista}
-                  onChange={(e) => setDataEntrevista(e.target.value)}
-                  className="input-field"
-                  style={tentouEnviar && !dataEntrevista ? { borderColor: "#EF4444", boxShadow: "0 0 0 1px #EF4444" } : undefined}
-                />
-                {tentouEnviar && !dataEntrevista && (
-                  <p className="text-red-500 text-xs mt-1">Informe a data da entrevista.</p>
-                )}
-              </div>
+              {precisaData && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    Data da entrevista *
+                  </label>
+                  <input
+                    type="date"
+                    value={dataEntrevista}
+                    onChange={(e) => setDataEntrevista(e.target.value)}
+                    className="input-field"
+                    style={tentouEnviar && !dataEntrevista ? { borderColor: "#EF4444", boxShadow: "0 0 0 1px #EF4444" } : undefined}
+                  />
+                  {tentouEnviar && !dataEntrevista && (
+                    <p className="text-red-500 text-xs mt-1">Informe a data da entrevista.</p>
+                  )}
+                </div>
+              )}
 
               {/* Observações */}
               <div>
@@ -382,13 +440,18 @@ export default function ModalEncaminhamento({
               </div>
 
               {/* Resumo */}
-              {clienteId && dataEntrevista && tipoServico && (
+              {clienteId && tipoServico && (!precisaData || dataEntrevista) && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Resumo</p>
                   <p className="text-sm text-gray-700">
-                    <strong>{candidatoNome}</strong> será agendado para entrevista com{" "}
-                    <strong>{clienteSelecionado?.nome ?? "—"}</strong>{" "}
-                    em <strong>{dataEntrevista.split("-").reverse().join("/")}</strong>
+                    <strong>{candidatoNome}</strong>{" "}
+                    {precisaData
+                      ? "será agendado para entrevista com"
+                      : "será enviado, aguardando o cliente definir a data da entrevista, para"}{" "}
+                    <strong>{clienteSelecionado?.nome ?? "—"}</strong>
+                    {precisaData && (
+                      <> em <strong>{dataEntrevista.split("-").reverse().join("/")}</strong></>
+                    )}
                     {(vagaTituloProp || vagas.find((v) => v.id === vagaId)?.titulo) && (
                       <> para a vaga <strong>{vagaTituloProp || vagas.find((v) => v.id === vagaId)?.titulo}</strong></>
                     )}
@@ -410,10 +473,10 @@ export default function ModalEncaminhamento({
                 </button>
                 <button
                   onClick={handleConfirmar}
-                  disabled={enviando || !clienteId || !dataEntrevista || !tipoServico}
+                  disabled={enviando || !clienteId || !tipoServico || (precisaData && !dataEntrevista)}
                   className="btn-primary flex-1 disabled:opacity-50"
                 >
-                  {enviando ? "Salvando..." : "Confirmar encaminhamento"}
+                  {enviando ? "Salvando..." : precisaData ? "Confirmar encaminhamento" : "Enviar e pedir agendamento"}
                 </button>
               </div>
             </>

@@ -148,7 +148,9 @@ export default function AgendaPage() {
       .then((r) => r.json())
       .then(({ data, error: e }) => {
         if (e) { setErro(e); return; }
-        setItems(data ?? []);
+        // Encaminhamentos "aguardando agendamento do cliente" ainda não têm data —
+        // não entram na agenda (não há onde plotar), até essa etapa ganhar tela própria.
+        setItems((data ?? []).filter((item: AgendaItem) => item.data_entrevista != null));
       })
       .catch(() => setErro("Erro ao carregar entrevistas."))
       .finally(() => setCarregando(false));

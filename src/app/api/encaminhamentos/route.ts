@@ -3,6 +3,16 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { parseBody, encaminhamentoCreateSchema } from "@/lib/schemas";
 
+// Se vier só a data (YYYY-MM-DD, do <input type="date">), fixa meio-dia em
+// Brasília antes de gravar — mesma convenção usada pros registros já existentes
+// na migração date -> timestamptz, evitando que a data exibida mude de dia
+// dependendo do fuso de quem lê depois.
+function normalizarDataEntrevista(valor: string | null | undefined): string | null {
+  if (!valor) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(valor)) return `${valor}T12:00:00-03:00`;
+  return valor;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const candidato_id = searchParams.get("candidato_id");
@@ -48,10 +58,10 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from("encaminhamentos")
       .insert({
-        candidato_id: body.candidato_id,
-        cliente_id: body.cliente_id,
-        data_entrevista: body.data_entrevista,
-        status: "aguardando",
+        candidato_id: parsed.data.candidato_id,
+        cliente_id: parsed.data.cliente_id,
+        data_entrevista: normalizarDataEntrevista(parsed.data.data_entrevista),
+        status: parsed.data.status,
         tipo_servico: body.tipo_servico || null,
         observacoes: body.observacoes || null,
         vaga_id: body.vaga_id || null,

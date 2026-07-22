@@ -150,6 +150,7 @@ export const STATUS_ENCAMINHAMENTO: Record<string, { label: string; bg: string; 
   aprovado:   { label: "Aprovado",   bg: "bg-green-100",  text: "text-green-800"  },
   reprovado:  { label: "Reprovado",  bg: "bg-red-100",    text: "text-red-800"    },
   desistiu:   { label: "Desistiu",   bg: "bg-gray-100",   text: "text-gray-600"   },
+  aguardando_agendamento_cliente: { label: "Aguardando agendamento", bg: "bg-blue-100", text: "text-blue-800" },
 };
 
 export const ETAPAS_KANBAN = [

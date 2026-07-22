@@ -162,14 +162,18 @@ export const resetSenhaSchema = z.object({
 export const encaminhamentoCreateSchema = z.object({
   candidato_id: z.string().uuid(),
   cliente_id: z.string().uuid(),
-  data_entrevista: z.string().min(1),
+  data_entrevista: z.string().min(1).optional().nullable(),
+  status: z.enum(["aguardando", "aguardando_agendamento_cliente"]).optional().default("aguardando"),
   tipo_servico: z.string().optional(),
   observacoes: z.string().optional(),
   vaga_id: z.string().uuid().optional().nullable(),
-});
+}).refine(
+  (data) => data.status === "aguardando_agendamento_cliente" || !!data.data_entrevista,
+  { message: "Informe a data da entrevista.", path: ["data_entrevista"] }
+);
 
 export const encaminhamentoUpdateSchema = z.object({
-  status: z.enum(["aguardando", "aprovado", "reprovado", "desistiu"]).optional(),
+  status: z.enum(["aguardando", "aprovado", "reprovado", "desistiu", "aguardando_agendamento_cliente"]).optional(),
   observacoes: z.string().optional(),
 });
 
