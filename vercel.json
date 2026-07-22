@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/aniversarios",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/lembrete-agendamento",
+      "schedule": "0 9 * * *"
     }
   ]
 }
