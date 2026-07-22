@@ -90,6 +90,11 @@ export default function ModalEncaminhamento({
     setVagaId(vagaIdProp ?? "");
     setVagas([]);
     setTentouEnviar(false);
+    // O componente nunca desmonta de verdade entre um envio e o próximo (fica
+    // sempre no JSX, só alterna isOpen) — sem isso, "enviando" ficava travado em
+    // true depois do primeiro encaminhamento bem-sucedido, prendendo o botão em
+    // "Salvando..." pro resto da sessão.
+    setEnviando(false);
 
     const carregar = async () => {
       setCarregando(true);
