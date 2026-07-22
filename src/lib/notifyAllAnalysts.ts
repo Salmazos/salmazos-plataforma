@@ -50,3 +50,80 @@ export async function notifyAllAnalysts({ subject, html, tipo, candidato_id, vag
 
   return { attempted: resultados.length, succeeded, failed };
 }
+
+interface NotifyResponsibleOpts {
+  responsavelNome: string | null;
+  subject: string;
+  html: string;
+  tipo: string;
+  titulo: string;
+  mensagem: string;
+  candidato_id?: string;
+  vaga_id?: string;
+}
+
+interface NotifyResponsibleResult extends NotifyResult {
+  targeted: boolean;
+}
+
+// Notifica só o analista responsável pelo candidato (sino direcionado + e-mail
+// individual) quando dá pra resolver candidatos.responsavel (nome) pra um
+// analistas_perfil.user_id ativo. Sem responsável definido, ou responsável não
+// encontrado/inativo, cai pro mesmo padrão de broadcast já usado em
+// notificações gerais (sino sem user_id + e-mail pra todos os analistas ativos).
+export async function notifyResponsibleOrAll(opts: NotifyResponsibleOpts): Promise<NotifyResponsibleResult> {
+  const supabase = createServiceClient();
+
+  if (opts.responsavelNome) {
+    const { data: analista } = await supabase
+      .from("analistas_perfil")
+      .select("user_id, email")
+      .eq("nome_completo", opts.responsavelNome)
+      .eq("ativo", true)
+      .maybeSingle();
+
+    if (analista?.user_id && analista.email) {
+      await supabase.from("notificacoes_analista").insert({
+        tipo: opts.tipo,
+        titulo: opts.titulo,
+        mensagem: opts.mensagem,
+        user_id: analista.user_id,
+        candidato_id: opts.candidato_id ?? null,
+      });
+
+      const resultado = await sendEmail({
+        to: analista.email,
+        subject: opts.subject,
+        html: opts.html,
+        tipo: opts.tipo,
+        candidato_id: opts.candidato_id,
+        vaga_id: opts.vaga_id,
+      });
+
+      return {
+        targeted: true,
+        attempted: 1,
+        succeeded: resultado.success ? 1 : 0,
+        failed: resultado.success ? 0 : 1,
+      };
+    }
+  }
+
+  await supabase.from("notificacoes_analista").insert({
+    tipo: opts.tipo,
+    titulo: opts.titulo,
+    mensagem: opts.mensagem,
+    user_id: null,
+    candidato_id: opts.candidato_id ?? null,
+  });
+
+  const resultado = await notifyAllAnalysts({
+    subject: opts.subject,
+    html: opts.html,
+    tipo: opts.tipo,
+    candidato_id: opts.candidato_id,
+    vaga_id: opts.vaga_id,
+  });
+
+  return { targeted: false, ...resultado };
+}

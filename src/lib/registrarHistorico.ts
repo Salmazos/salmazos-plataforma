@@ -6,6 +6,7 @@ export type TipoHistorico =
   | "encaminhamento"
   | "aprovacao_cliente"
   | "reprovacao_cliente"
+  | "agendamento_cliente"
   | "email_enviado"
   | "whatsapp"
   | "curriculo_atualizado"

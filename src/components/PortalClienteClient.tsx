@@ -52,7 +52,9 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; color: string }
 export default function PortalClienteClient({ nomeCliente, encaminhamentos, emAvaliacao }: Props) {
   const [secaoHistorico, setSecaoHistorico] = useState(false);
 
-  const aguardandoList = encaminhamentos.filter((e) => e.status === "aguardando");
+  const aguardandoList = encaminhamentos.filter(
+    (e) => e.status === "aguardando" || e.status === "aguardando_agendamento_cliente"
+  );
   const aprovadosList  = encaminhamentos.filter((e) => e.status === "aprovado");
   const reprovadosList = encaminhamentos.filter((e) => e.status === "reprovado");
   const historicoList  = [...aprovadosList, ...reprovadosList];
@@ -198,12 +200,21 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos, emAv
                         {"📅"} {new Date(enc.data_entrevista).toLocaleDateString("pt-BR")}
                       </span>
                     )}
-                    <span
-                      className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                      style={{ backgroundColor: "#FEF9C3", color: "#854D0E" }}
-                    >
-                      Aguardando
-                    </span>
+                    {enc.status === "aguardando_agendamento_cliente" ? (
+                      <span
+                        className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                        style={{ backgroundColor: "#DBEAFE", color: "#1D4ED8" }}
+                      >
+                        Aguardando seu agendamento
+                      </span>
+                    ) : (
+                      <span
+                        className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                        style={{ backgroundColor: "#FEF9C3", color: "#854D0E" }}
+                      >
+                        Aguardando
+                      </span>
+                    )}
                     <Link
                       href={`/portal/candidato/${enc.id}`}
                       className="text-sm px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 hover:border-black hover:text-black transition-colors"

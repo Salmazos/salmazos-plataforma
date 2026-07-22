@@ -23,6 +23,7 @@ const TIPO_CFG: Record<string, { label: string; cor: string; icone: string }> = 
   encaminhamento:       { label: "Encaminhamento",     cor: "#8B5CF6", icone: "↑"  },
   aprovacao_cliente:    { label: "Aprovado",           cor: "#059669", icone: "✓"  },
   reprovacao_cliente:   { label: "Reprovado",          cor: "#EF4444", icone: "✕"  },
+  agendamento_cliente:  { label: "Entrevista agendada", cor: "#8B5CF6", icone: "📅" },
   email_enviado:        { label: "E-mail enviado",     cor: "#0EA5E9", icone: "@"  },
   whatsapp:             { label: "WhatsApp",           cor: "#22C55E", icone: "W"  },
   curriculo_atualizado: { label: "Currículo",          cor: "#F59E0B", icone: "CV" },
@@ -34,7 +35,7 @@ const TIPO_CFG: Record<string, { label: string; cor: string; icone: string }> = 
 const FILTER_TIPOS: Record<FilterGroup, string[] | null> = {
   todos:            null,
   etapas:           ["cadastro", "etapa_alterada", "aprovacao_cliente", "reprovacao_cliente"],
-  encaminhamentos:  ["encaminhamento"],
+  encaminhamentos:  ["encaminhamento", "agendamento_cliente"],
   comunicacao:      ["email_enviado", "whatsapp"],
   ia:               ["triagem_ia", "match_ia", "curriculo_atualizado"],
   comentarios:      ["comentario_interno"],

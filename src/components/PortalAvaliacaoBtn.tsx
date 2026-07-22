@@ -48,6 +48,15 @@ export default function PortalAvaliacaoBtn({
   const [erro, setErro] = useState("");
   const [tentouEnviar, setTentouEnviar] = useState(false);
 
+  // Agendamento (fluxo leve e separado — só define a data/hora da entrevista,
+  // não é uma avaliação de verdade ainda)
+  const [agendarAberto, setAgendarAberto] = useState(false);
+  const [agendarData, setAgendarData] = useState("");
+  const [agendarHora, setAgendarHora] = useState("");
+  const [agendarSalvando, setAgendarSalvando] = useState(false);
+  const [agendarErro, setAgendarErro] = useState("");
+  const [agendarTentou, setAgendarTentou] = useState(false);
+
   // Admission fields
   const [admDataInicio, setAdmDataInicio] = useState("");
   const [admCargo, setAdmCargo] = useState("");
@@ -86,9 +95,19 @@ export default function PortalAvaliacaoBtn({
     );
   }
 
-  if (statusAtual !== "aguardando") return null;
+  if (statusAtual !== "aguardando" && statusAtual !== "aguardando_agendamento_cliente") return null;
+
+  const precisaAgendar = statusAtual === "aguardando_agendamento_cliente";
 
   const handleAbrir = (acao: "aprovado" | "reprovado") => {
+    if (acao === "aprovado" && precisaAgendar) {
+      setAgendarData("");
+      setAgendarHora("");
+      setAgendarErro("");
+      setAgendarTentou(false);
+      setAgendarAberto(true);
+      return;
+    }
     setAcaoPendente(acao);
     setFeedback("");
     setMotivoSelecionado("");
@@ -96,6 +115,39 @@ export default function PortalAvaliacaoBtn({
     setErro("");
     setTentouEnviar(false);
     setModalAberto(true);
+  };
+
+  const handleConfirmarAgendamento = async () => {
+    setAgendarTentou(true);
+    if (!agendarData || !agendarHora) {
+      setAgendarErro("Informe a data e o horário.");
+      return;
+    }
+    const dataHora = new Date(`${agendarData}T${agendarHora}:00`);
+    if (Number.isNaN(dataHora.getTime()) || dataHora.getTime() <= Date.now()) {
+      setAgendarErro("Escolha uma data e horário no futuro.");
+      return;
+    }
+    setAgendarSalvando(true);
+    setAgendarErro("");
+    try {
+      const res = await fetch("/api/portal/agendar", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ encaminhamento_id: encaminhamentoId, data_entrevista: dataHora.toISOString() }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setAgendarErro(json.error ?? "Erro ao salvar.");
+        return;
+      }
+      setAgendarAberto(false);
+      router.refresh();
+    } catch {
+      setAgendarErro("Erro ao salvar. Tente novamente.");
+    } finally {
+      setAgendarSalvando(false);
+    }
   };
 
   const isRS = tipoServico === "recrutamento_selecao";
@@ -210,7 +262,9 @@ export default function PortalAvaliacaoBtn({
       <div className="bg-white rounded-2xl p-6 mb-6 shadow-sm">
         <p className="section-title">Sua avaliação</p>
         <p className="text-sm text-gray-500 mb-4">
-          Avalie este candidato para nos ajudar a encontrar o perfil ideal para sua empresa.
+          {precisaAgendar
+            ? "Escolha quando podemos enviar este candidato para entrevista com sua empresa."
+            : "Avalie este candidato para nos ajudar a encontrar o perfil ideal para sua empresa."}
         </p>
         <div className="flex gap-3">
           <button
@@ -218,7 +272,7 @@ export default function PortalAvaliacaoBtn({
             className="flex-1 py-3 rounded-xl font-semibold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: "#16A34A" }}
           >
-            Aprovar candidato
+            {precisaAgendar ? "Confirmar Data da Entrevista" : "Aprovar candidato"}
           </button>
           <button
             onClick={() => handleAbrir("reprovado")}
@@ -508,6 +562,63 @@ export default function PortalAvaliacaoBtn({
                   style={{ backgroundColor: isAprovacao ? "#16A34A" : "#DC2626" }}
                 >
                   {salvando ? "Salvando..." : "Confirmar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {agendarAberto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl">
+            <div className="px-6 py-4 rounded-t-2xl text-white" style={{ background: "#065F46" }}>
+              <h3 className="text-lg font-bold">Confirmar Data da Entrevista</h3>
+              <p className="text-sm mt-0.5 opacity-75">Escolha uma data e horário futuros para receber o candidato.</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <Field label="Data" required>
+                <input
+                  type="date"
+                  value={agendarData}
+                  onChange={(e) => setAgendarData(e.target.value)}
+                  min={new Date().toISOString().split("T")[0]}
+                  className="input-field w-full"
+                  style={agendarTentou && !agendarData ? inv : undefined}
+                  autoFocus
+                />
+              </Field>
+              <Field label="Horário" required>
+                <input
+                  type="time"
+                  value={agendarHora}
+                  onChange={(e) => setAgendarHora(e.target.value)}
+                  className="input-field w-full"
+                  style={agendarTentou && !agendarHora ? inv : undefined}
+                />
+              </Field>
+
+              {agendarErro && (
+                <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  {agendarErro}
+                </p>
+              )}
+
+              <div className="flex gap-3 pt-2 border-t">
+                <button
+                  onClick={() => setAgendarAberto(false)}
+                  className="flex-1 btn-outline py-2.5"
+                  disabled={agendarSalvando}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmarAgendamento}
+                  disabled={agendarSalvando}
+                  className="flex-1 py-2.5 rounded-xl font-semibold text-white transition-opacity disabled:opacity-50"
+                  style={{ backgroundColor: "#16A34A" }}
+                >
+                  {agendarSalvando ? "Salvando..." : "Confirmar"}
                 </button>
               </div>
             </div>

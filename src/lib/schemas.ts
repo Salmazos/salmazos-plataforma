@@ -681,6 +681,11 @@ export const portalAvaliarSchema = z.object({
   admissao_telefone_candidato: z.string().optional(),
 });
 
+export const portalAgendarSchema = z.object({
+  encaminhamento_id: z.string().uuid(),
+  data_entrevista: z.string().min(1),
+});
+
 // ── From solicitação ─────────────────────────────────────────────────────────
 
 export const fromSolicitacaoSchema = z.object({

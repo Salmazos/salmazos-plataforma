@@ -44,6 +44,12 @@ export default function NavbarPortal({ userEmail }: Props) {
             Minhas Solicitações
           </Link>
           <Link
+            href="/portal/agenda"
+            className="text-white/70 hover:text-white text-sm transition-colors hidden sm:block"
+          >
+            Agenda
+          </Link>
+          <Link
             href="/portal/solicitar-vaga"
             style={{
               backgroundColor: "#FFD700",
