@@ -19,9 +19,10 @@ export default function BotaoVoltarPainel() {
     <button
       type="button"
       onClick={handleClick}
-      className="hover:text-[#FFB800] transition-colors"
+      className="flex items-center gap-2 rounded-lg border border-gray-200 px-4 py-2 text-gray-600 transition-colors hover:bg-gray-50"
     >
-      ← Voltar ao painel
+      <span className="text-base font-bold">←</span>
+      Voltar
     </button>
   );
 }
