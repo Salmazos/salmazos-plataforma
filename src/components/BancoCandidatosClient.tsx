@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ORIGEM_LABELS } from "@/lib/constants";
 import ModalCadastroRapido from "./ModalCadastroRapido";
 import BarraScrollFlutuante from "./BarraScrollFlutuante";
@@ -448,16 +448,17 @@ export default function BancoCandidatosClient({
   analista: string;
   idsEmProcesso: string[];
 }) {
-  const [filtroAlocacao, setFiltroAlocacao] = useState("disponivel");
-  const [nome, setNome] = useState("");
-  const [cargo, setCargo] = useState("");
-  const [cidade, setCidade] = useState("");
-  const [idadeMin, setIdadeMin] = useState("");
-  const [idadeMax, setIdadeMax] = useState("");
-  const [notaIaMin, setNotaIaMin] = useState("");
-  const [matchMin, setMatchMin] = useState("");
-  const [keyword, setKeyword] = useState("");
-  const [filtroOrigem, setFiltroOrigem] = useState("");
+  const searchParams = useSearchParams();
+  const [filtroAlocacao, setFiltroAlocacao] = useState(() => searchParams.get("alocacao") ?? "disponivel");
+  const [nome, setNome] = useState(() => searchParams.get("nome") ?? "");
+  const [cargo, setCargo] = useState(() => searchParams.get("cargo") ?? "");
+  const [cidade, setCidade] = useState(() => searchParams.get("cidade") ?? "");
+  const [idadeMin, setIdadeMin] = useState(() => searchParams.get("idadeMin") ?? "");
+  const [idadeMax, setIdadeMax] = useState(() => searchParams.get("idadeMax") ?? "");
+  const [notaIaMin, setNotaIaMin] = useState(() => searchParams.get("score") ?? "");
+  const [matchMin, setMatchMin] = useState(() => searchParams.get("match") ?? "");
+  const [keyword, setKeyword] = useState(() => searchParams.get("kw") ?? "");
+  const [filtroOrigem, setFiltroOrigem] = useState(() => searchParams.get("origem") ?? "");
 
   const [matchMap, setMatchMap] = useState<Record<string, MatchEntry[]>>({});
 
@@ -476,6 +477,35 @@ export default function BancoCandidatosClient({
   const router = useRouter();
 
   const { scrollRef: tableScrollRef, floatScrollRef, floatBar, handleScroll: handleTableScroll, handleFloatScroll } = useScrollHorizontalSincronizado();
+
+  // Sincroniza os filtros com a URL (debounced) pra sobreviver a navegação
+  // (ex: abrir um perfil e voltar) sem precisar guardar estado em outro lugar.
+  // Pula a primeira execução pra não disparar um replace redundante no mount,
+  // já que os valores iniciais vêm da própria URL.
+  const primeiraSincronizacao = useRef(true);
+  useEffect(() => {
+    if (primeiraSincronizacao.current) {
+      primeiraSincronizacao.current = false;
+      return;
+    }
+    const params = new URLSearchParams();
+    if (filtroAlocacao !== "disponivel") params.set("alocacao", filtroAlocacao);
+    if (nome) params.set("nome", nome);
+    if (cargo) params.set("cargo", cargo);
+    if (cidade) params.set("cidade", cidade);
+    if (idadeMin) params.set("idadeMin", idadeMin);
+    if (idadeMax) params.set("idadeMax", idadeMax);
+    if (notaIaMin) params.set("score", notaIaMin);
+    if (matchMin) params.set("match", matchMin);
+    if (keyword) params.set("kw", keyword);
+    if (filtroOrigem) params.set("origem", filtroOrigem);
+
+    const qs = params.toString();
+    const timeout = setTimeout(() => {
+      router.replace(`/painel/banco-candidatos${qs ? `?${qs}` : ""}`, { scroll: false });
+    }, 400);
+    return () => clearTimeout(timeout);
+  }, [filtroAlocacao, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, keyword, filtroOrigem, router]);
 
   useEffect(() => {
     const pending = candidatos.some(
