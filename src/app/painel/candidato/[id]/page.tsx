@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import CandidatoPerfilTabs from "@/components/CandidatoPerfilTabs";
+import BotaoVoltarPainel from "@/components/BotaoVoltarPainel";
 import type { Candidato } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -82,9 +82,7 @@ export default async function CandidatoPerfilPage({ params }: Props) {
   return (
     <div className="max-w-5xl mx-auto">
       <div className="flex items-center gap-2 mb-6 text-sm text-gray-500">
-        <Link href="/painel" className="hover:text-[#FFB800] transition-colors">
-          ← Voltar ao painel
-        </Link>
+        <BotaoVoltarPainel />
       </div>
 
       <CandidatoPerfilTabs candidato={candidato} garantiaInfo={garantiaInfo} melhorRetencao={melhorRetencao} role={role} />
