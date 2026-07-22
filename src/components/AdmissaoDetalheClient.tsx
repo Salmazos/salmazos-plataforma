@@ -136,6 +136,7 @@ function formatarAdicionalValor(formatoValor: "percentual" | "fixo", valor: numb
     : valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// Só usada pro campo "%" (texto livre digitado em formato brasileiro, ex: "12,5").
 function parseValorAdicional(value: string): number {
   const digits = value.replace(/\s/g, "").replace(/^R\$/, "").replace(/\./g, "").replace(",", ".").trim();
   const num = parseFloat(digits);
@@ -146,6 +147,19 @@ interface AdicionalLinha {
   tipo: string;
   valor: string;
   formato_valor: "percentual" | "fixo";
+}
+
+// O campo "R$" usa CampoMoeda, que já emite um número em reais (ex: 1837.4) — o valor
+// chega aqui como String(numero), sem separador de milhar. Passar isso por
+// parseValorAdicional (que assume formato brasileiro e remove todo ponto) corrompia o
+// valor: "1837.4" virava "18374" após remover o ponto. Só o "%" precisa daquele parser,
+// já que ali o usuário digita direto em formato brasileiro (ex: "12,5").
+function valorAdicionalParaNumero(a: Pick<AdicionalLinha, "valor" | "formato_valor">): number {
+  if (a.formato_valor === "fixo") {
+    const num = Number(a.valor);
+    return isNaN(num) ? 0 : num;
+  }
+  return parseValorAdicional(a.valor);
 }
 
 // ── Edição total pelo analista: infraestrutura genérica para os campos de
@@ -551,7 +565,9 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       const payload: Record<string, unknown> = {};
       if (formDadosAdmissao.vagaId && formDadosAdmissao.vagaId !== (vagaAtual.id ?? "")) payload.vaga_id = formDadosAdmissao.vagaId;
       if (formDadosAdmissao.funcao.trim()) payload.funcao = formDadosAdmissao.funcao.trim();
-      const salarioNum = parseValorAdicional(formDadosAdmissao.salario);
+      // Vem do CampoMoeda (String(numero), sem separador de milhar) — não usa
+      // parseValorAdicional aqui, que corromperia o valor (ver comentário acima).
+      const salarioNum = Number(formDadosAdmissao.salario) || 0;
       if (salarioNum > 0) payload.salario = salarioNum;
       if (formDadosAdmissao.horario.trim()) payload.horario_trabalho = formDadosAdmissao.horario.trim();
       if (formDadosAdmissao.entidade) payload.entidade_contratante = formDadosAdmissao.entidade;
@@ -824,8 +840,8 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
     setSalvandoAdicionais(true);
     try {
       const payload = linhasAdicionais
-        .filter((a) => a.tipo.trim() && parseValorAdicional(a.valor) > 0)
-        .map((a) => ({ tipo: a.tipo.trim(), formato_valor: a.formato_valor, valor: parseValorAdicional(a.valor) }));
+        .filter((a) => a.tipo.trim() && valorAdicionalParaNumero(a) > 0)
+        .map((a) => ({ tipo: a.tipo.trim(), formato_valor: a.formato_valor, valor: valorAdicionalParaNumero(a) }));
       const res = await fetch(`/api/admissoes/${admissao.id}/adicionais`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

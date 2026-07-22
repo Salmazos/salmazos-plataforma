@@ -40,10 +40,24 @@ function modalidadeDefault(tipoServico: string | null | undefined): string {
   return "MOT";
 }
 
+// Só usada pro campo "%" do adicional (texto livre digitado em formato brasileiro,
+// ex: "12,5"). NÃO usar em valores vindos do CampoMoeda (ver valorAdicionalParaNumero).
 function parseSalario(value: string): number {
   const digits = value.replace(/\s/g, "").replace(/^R\$/, "").replace(/\./g, "").replace(",", ".").trim();
   const num = parseFloat(digits);
   return isNaN(num) ? 0 : num;
+}
+
+// O campo "R$" do adicional (e o Salário) usam CampoMoeda, que já emite um número em
+// reais (ex: 1837.4) — chega aqui como String(numero), sem separador de milhar. Passar
+// isso por parseSalario (que assume formato brasileiro e remove todo ponto) corrompia o
+// valor: "1837.4" virava "18374" após remover o ponto.
+function valorAdicionalParaNumero(a: Pick<AdicionalForm, "valor" | "formato_valor">): number {
+  if (a.formato_valor === "fixo") {
+    const num = Number(a.valor);
+    return isNaN(num) ? 0 : num;
+  }
+  return parseSalario(a.valor);
 }
 
 export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Props) {
@@ -104,8 +118,11 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
     setEntidadeContratante(c.vagas?.clientes?.entidade_contratante ?? "");
   };
 
+  // Salário vem do CampoMoeda (String(numero)) — não usa parseSalario aqui.
+  const salarioNumero = Number(salario) || 0;
+
   const dadosValidos = Boolean(
-    funcao.trim() && parseSalario(salario) > 0 && horarioTrabalho.trim() && dataAdmissao && entidadeContratante
+    funcao.trim() && salarioNumero > 0 && horarioTrabalho.trim() && dataAdmissao && entidadeContratante
       && autorizaAssistencial && autorizaSindical
   );
 
@@ -145,13 +162,13 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
           vaga_id: selecionado.vaga_id,
           modalidade,
           funcao: funcao.trim(),
-          salario: parseSalario(salario),
+          salario: salarioNumero,
           horario_trabalho: horarioTrabalho.trim(),
           data_admissao: dataAdmissao,
           entidade_contratante: entidadeContratante,
           adicionais: adicionais
-            .filter((a) => a.tipo.trim() && parseSalario(a.valor) > 0)
-            .map((a) => ({ tipo: a.tipo.trim(), formato_valor: a.formato_valor, valor: parseSalario(a.valor) })),
+            .filter((a) => a.tipo.trim() && valorAdicionalParaNumero(a) > 0)
+            .map((a) => ({ tipo: a.tipo.trim(), formato_valor: a.formato_valor, valor: valorAdicionalParaNumero(a) })),
           autorizacao_sindical: {
             nome_sindicato: nomeSindicato.trim() || null,
             autoriza_assistencial_confederativa: autorizaAssistencial === "sim",
