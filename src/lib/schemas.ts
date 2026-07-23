@@ -656,29 +656,38 @@ export const portalSolicitarVagaSchema = z.object({
   horario_padrao: horarioPadraoSchema.optional().nullable(),
 });
 
+// admissao_salario/admissao_salario_hora são numeric no banco (candidatos_vagas) e
+// admissao_vt é boolean — o schema antigo pedia string pros três, e nenhum campo
+// aceitava null, embora o formulário (PortalAvaliacaoBtn) sempre mande null pros
+// campos que não se aplicam ao tipo_servico da vaga (ex: campos de R&S numa vaga
+// MOT). Nunca dava erro porque esse fluxo nunca tinha sido usado de verdade em
+// produção antes — só veio à tona no primeiro uso real. O "obrigatório por tipo de
+// serviço" continua sendo aplicado no cliente (validateRequired em
+// PortalAvaliacaoBtn.tsx), igual o padrão já usado em admissaoDadosAdmissaoUpdateSchema
+// (schema permissivo, obrigatoriedade por tipo é regra de negócio, não de schema).
 export const portalAvaliarSchema = z.object({
   encaminhamento_id: z.string().uuid(),
   status: z.enum(["aprovado", "reprovado"]),
   feedback_cliente: z.string().min(1),
   cv_id: z.string().uuid().optional(),
   tipo_servico: z.string().optional(),
-  admissao_data_inicio: z.string().optional(),
-  admissao_cargo: z.string().optional(),
-  admissao_salario: z.string().optional(),
-  admissao_setor: z.string().optional(),
-  admissao_centro_custo: z.string().optional(),
-  admissao_horario: z.string().optional(),
-  admissao_gestor: z.string().optional(),
-  admissao_periodo_experiencia: z.string().optional(),
-  admissao_observacoes: z.string().optional(),
-  admissao_funcao: z.string().optional(),
-  admissao_salario_hora: z.string().optional(),
-  admissao_turno: z.string().optional(),
-  admissao_tempo_contrato: z.string().optional(),
-  admissao_vt: z.string().optional(),
-  admissao_exame_responsavel: z.string().optional(),
-  admissao_local_integracao: z.string().optional(),
-  admissao_telefone_candidato: z.string().optional(),
+  admissao_data_inicio: z.string().optional().nullable(),
+  admissao_cargo: z.string().optional().nullable(),
+  admissao_salario: coerceNumberOptional,
+  admissao_setor: z.string().optional().nullable(),
+  admissao_centro_custo: z.string().optional().nullable(),
+  admissao_horario: z.string().optional().nullable(),
+  admissao_gestor: z.string().optional().nullable(),
+  admissao_periodo_experiencia: z.string().optional().nullable(),
+  admissao_observacoes: z.string().optional().nullable(),
+  admissao_funcao: z.string().optional().nullable(),
+  admissao_salario_hora: coerceNumberOptional,
+  admissao_turno: z.string().optional().nullable(),
+  admissao_tempo_contrato: z.string().optional().nullable(),
+  admissao_vt: z.boolean().optional().nullable(),
+  admissao_exame_responsavel: z.string().optional().nullable(),
+  admissao_local_integracao: z.string().optional().nullable(),
+  admissao_telefone_candidato: z.string().optional().nullable(),
 });
 
 export const portalAgendarSchema = z.object({
