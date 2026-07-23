@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
       .insert({
         cliente_id: cu.cliente_id,
         cliente_nome: clienteNome,
+        solicitado_por_user_id: user.id,
         cargo: body.cargo.trim(),
         tipo_servico: body.tipo_servico,
         num_posicoes: Number(body.num_posicoes) || 1,

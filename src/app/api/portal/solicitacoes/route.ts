@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = await createPortalClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
@@ -15,11 +15,16 @@ export async function GET() {
     .single();
   if (!cu) return NextResponse.json({ error: "Acesso não autorizado." }, { status: 403 });
 
-  const { data: solicitacoes, error } = await service
+  const apenasMinhas = request.nextUrl.searchParams.get("filtro") === "minhas";
+
+  let query = service
     .from("solicitacoes_vagas")
-    .select("id, cargo, tipo_servico, num_posicoes, cidade, estado, status, motivo_recusa, vaga_id, created_at")
-    .eq("cliente_id", cu.cliente_id)
-    .order("created_at", { ascending: false });
+    .select("id, cargo, tipo_servico, num_posicoes, cidade, estado, status, motivo_recusa, vaga_id, solicitado_por_user_id, created_at")
+    .eq("cliente_id", cu.cliente_id);
+
+  if (apenasMinhas) query = query.eq("solicitado_por_user_id", user.id);
+
+  const { data: solicitacoes, error } = await query.order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

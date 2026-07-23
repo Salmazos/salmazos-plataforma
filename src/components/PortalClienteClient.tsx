@@ -36,10 +36,17 @@ export interface CandidatoEmAvaliacao {
   cargo_pretendido: string | null;
 }
 
+export interface EntrevistaHojeResumo {
+  id: string;
+  candidato_nome: string;
+  hora: string;
+}
+
 interface Props {
   nomeCliente: string;
   encaminhamentos: EncaminhamentoPortal[];
   emAvaliacao: CandidatoEmAvaliacao[];
+  entrevistasHoje: EntrevistaHojeResumo[];
 }
 
 const STATUS_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
@@ -49,7 +56,7 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; color: string }
   desistiu:   { label: "Desistiu",   bg: "#F3F4F6", color: "#4B5563" },
 };
 
-export default function PortalClienteClient({ nomeCliente, encaminhamentos, emAvaliacao }: Props) {
+export default function PortalClienteClient({ nomeCliente, encaminhamentos, emAvaliacao, entrevistasHoje }: Props) {
   const [secaoHistorico, setSecaoHistorico] = useState(false);
 
   const aguardandoList = encaminhamentos.filter(
@@ -67,6 +74,29 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos, emAv
 
   return (
     <div>
+      {/* Banner de entrevista hoje */}
+      {entrevistasHoje.length > 0 && (
+        <div className="mb-6 rounded-2xl p-5 shadow-sm" style={{ backgroundColor: "#000" }}>
+          <div className="flex items-start gap-3">
+            <span className="text-2xl leading-none">📅</span>
+            <div className="min-w-0">
+              <p className="font-bold text-sm" style={{ color: "#FFD700" }}>
+                {entrevistasHoje.length === 1
+                  ? "Você tem entrevista hoje"
+                  : `Você tem ${entrevistasHoje.length} entrevistas hoje`}
+              </p>
+              <div className="mt-1.5 space-y-1">
+                {entrevistasHoje.map((e) => (
+                  <p key={e.id} className="text-sm" style={{ color: "#FDE68A" }}>
+                    {e.candidato_nome} às {e.hora}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Olá, {nomeCliente}!</h1>

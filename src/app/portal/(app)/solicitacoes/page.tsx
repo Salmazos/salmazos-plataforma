@@ -33,9 +33,11 @@ export default function MinhasSolicitacoesPage() {
   const [loading, setLoading] = useState(true);
   const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
   const [erro, setErro] = useState("");
+  const [filtro, setFiltro] = useState<"todas" | "minhas">("todas");
 
   useEffect(() => {
-    fetch("/api/portal/solicitacoes")
+    setLoading(true);
+    fetch(`/api/portal/solicitacoes?filtro=${filtro}`)
       .then((r) => r.json())
       .then((json) => {
         if (json.error) { setErro(json.error); return; }
@@ -43,7 +45,7 @@ export default function MinhasSolicitacoesPage() {
       })
       .catch(() => setErro("Erro ao carregar solicitações."))
       .finally(() => setLoading(false));
-  }, []);
+  }, [filtro]);
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -55,7 +57,27 @@ export default function MinhasSolicitacoesPage() {
       </Link>
 
       <h1 className="text-2xl font-bold text-gray-900 mb-1">Minhas Solicitações</h1>
-      <p className="text-xs text-gray-400 mb-6">Acompanhe o status das vagas que você solicitou</p>
+      <p className="text-xs text-gray-400 mb-4">Acompanhe o status das vagas que você solicitou</p>
+
+      <div className="inline-flex bg-gray-100 rounded-full p-1 mb-6">
+        {([
+          { value: "todas", label: "Todas" },
+          { value: "minhas", label: "Minhas solicitações" },
+        ] as const).map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => setFiltro(opt.value)}
+            className="text-sm font-semibold px-4 py-1.5 rounded-full transition-colors"
+            style={
+              filtro === opt.value
+                ? { backgroundColor: "#000", color: "#FFD700" }
+                : { color: "#6B7280" }
+            }
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
 
       {loading ? (
         <p className="text-gray-400 text-sm">Carregando...</p>
@@ -65,7 +87,11 @@ export default function MinhasSolicitacoesPage() {
         </div>
       ) : solicitacoes.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm p-8 text-center">
-          <p className="text-sm text-gray-400">Você ainda não solicitou nenhuma vaga.</p>
+          <p className="text-sm text-gray-400">
+            {filtro === "minhas"
+              ? "Você ainda não enviou nenhuma solicitação de vaga."
+              : "Nenhuma solicitação de vaga foi enviada pela sua empresa ainda."}
+          </p>
           <Link
             href="/portal/solicitar-vaga"
             className="inline-block mt-4 px-6 py-2.5 bg-black text-[#FFD700] rounded-xl font-semibold text-sm"

@@ -119,11 +119,28 @@ export default async function PortalPage() {
 
   const nomeCliente = cliente?.contato_nome || cliente?.nome || "Cliente";
 
+  // Brasil não observa horário de verão desde 2019 — comparar a data em
+  // America/Sao_Paulo com toLocaleDateString é suficiente, sem precisar de lib de timezone.
+  const hojeSP = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+  const entrevistasHoje = encaminhamentos
+    .filter((e) => e.status === "aguardando" && e.data_entrevista)
+    .filter((e) => new Date(e.data_entrevista as string).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }) === hojeSP)
+    .map((e) => ({
+      id: e.id,
+      candidato_nome: e.candidato?.nome_completo ?? "Candidato",
+      hora: new Date(e.data_entrevista as string).toLocaleTimeString("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    }));
+
   return (
     <PortalClienteClient
       nomeCliente={nomeCliente}
       encaminhamentos={encaminhamentos}
       emAvaliacao={emAvaliacao}
+      entrevistasHoje={entrevistasHoje}
     />
   );
 }
