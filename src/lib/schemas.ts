@@ -672,7 +672,6 @@ export const portalAvaliarSchema = z.object({
   cv_id: z.string().uuid().optional(),
   tipo_servico: z.string().optional(),
   admissao_data_inicio: z.string().optional().nullable(),
-  admissao_cargo: z.string().optional().nullable(),
   admissao_salario: coerceNumberOptional,
   admissao_setor: z.string().optional().nullable(),
   admissao_centro_custo: z.string().optional().nullable(),

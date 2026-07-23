@@ -19,6 +19,22 @@ interface Props {
 
 const PERIODOS_EXP = ["30 dias", "45 dias", "90 dias"];
 
+const TURNO_OPCOES = [
+  "Turno A", "Turno B", "Turno C", "Turno D",
+  "Horário Administrativo", "Escala 6x1", "Escala 6x2", "Escala Fixa", "Outro",
+];
+
+// "06:00" (input type=time) -> "06h00", pro texto final salvo em admissao_horario
+function formatarHoraTexto(hhmm: string): string {
+  const [h, m] = hhmm.split(":");
+  return `${h}h${m}`;
+}
+
+// "2026-07-27" (input type=date) -> "27/07/2026"
+function formatarDataTexto(iso: string): string {
+  return iso.split("-").reverse().join("/");
+}
+
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div>
@@ -60,22 +76,30 @@ export default function PortalAvaliacaoBtn({
 
   // Admission fields
   const [admDataInicio, setAdmDataInicio] = useState("");
-  const [admCargo, setAdmCargo] = useState("");
   const [admSalario, setAdmSalario] = useState("");
   const [admSetor, setAdmSetor] = useState("");
   const [admCentroCusto, setAdmCentroCusto] = useState("");
-  const [admHorario, setAdmHorario] = useState("");
   const [admGestor, setAdmGestor] = useState("");
   const [admPeriodoExp, setAdmPeriodoExp] = useState("");
   const [admObservacoes, setAdmObservacoes] = useState("");
   const [admFuncao, setAdmFuncao] = useState("");
+  const [admSalarioTipo, setAdmSalarioTipo] = useState<"horista" | "mensalista">("horista");
   const [admSalarioHora, setAdmSalarioHora] = useState("");
-  const [admTurno, setAdmTurno] = useState("");
   const [admTempoContrato, setAdmTempoContrato] = useState("180 dias, prorrogável por mais 90 dias");
   const [admVt, setAdmVt] = useState<boolean | null>(null);
   const [admExameResp, setAdmExameResp] = useState("");
-  const [admLocalIntegracao, setAdmLocalIntegracao] = useState("");
   const [admTelefone, setAdmTelefone] = useState("");
+
+  // Horário/Turno estruturados (substituem o texto livre antigo)
+  const [admHorarioEntrada, setAdmHorarioEntrada] = useState("");
+  const [admHorarioSaida, setAdmHorarioSaida] = useState("");
+  const [admTurnoSelecionado, setAdmTurnoSelecionado] = useState("");
+  const [admTurnoOutro, setAdmTurnoOutro] = useState("");
+
+  // Local/Data/Hora da Integração estruturados (substituem o texto livre antigo)
+  const [admIntegracaoLocal, setAdmIntegracaoLocal] = useState("");
+  const [admIntegracaoData, setAdmIntegracaoData] = useState("");
+  const [admIntegracaoHora, setAdmIntegracaoHora] = useState("");
 
   if (statusAtual === "aprovado" || statusAtual === "reprovado") {
     return (
@@ -163,6 +187,23 @@ export default function PortalAvaliacaoBtn({
     ? (parseFloat(admSalario) * feePercentual / 100)
     : null;
 
+  // Horário/Turno e Local de Integração são montados a partir dos campos
+  // estruturados só na hora de validar/enviar — evita salvar texto pela metade
+  // (ex: "Portaria às 08:00h dia" sem o dia, que já aconteceu de verdade).
+  const precisaHorarioEstruturado = isMOT || isTerc;
+  const turnoFinal = admTurnoSelecionado === "Outro" ? admTurnoOutro.trim() : admTurnoSelecionado;
+  const horarioComposto = admHorarioEntrada && admHorarioSaida && turnoFinal
+    ? `${turnoFinal}, ${formatarHoraTexto(admHorarioEntrada)} às ${formatarHoraTexto(admHorarioSaida)}`
+    : "";
+
+  const integracaoPreenchidaParcialmente = Boolean(
+    (admIntegracaoLocal.trim() || admIntegracaoData || admIntegracaoHora) &&
+    !(admIntegracaoLocal.trim() && admIntegracaoData && admIntegracaoHora)
+  );
+  const integracaoComposta = admIntegracaoLocal.trim() && admIntegracaoData && admIntegracaoHora
+    ? `${admIntegracaoLocal.trim()}, ${formatarDataTexto(admIntegracaoData)} às ${admIntegracaoHora}`
+    : "";
+
   const validateRequired = (): string | null => {
     if (!isAprovacao) {
       if (!motivoValido) return isOutroMotivo ? "Descreva o motivo." : "Selecione o motivo da reprovação.";
@@ -173,15 +214,17 @@ export default function PortalAvaliacaoBtn({
 
     if (isRS) {
       if (!admDataInicio) return "Informe a data de início.";
-      if (!admCargo.trim()) return "Informe o cargo/função confirmada.";
+      if (!admFuncao.trim()) return "Informe a função confirmada.";
       if (!admSalario) return "Informe o salário acordado.";
     } else if (isMOT) {
       if (!admDataInicio) return "Informe a data de início.";
       if (!admFuncao.trim()) return "Informe a função.";
       if (!admSetor.trim()) return "Informe o setor.";
       if (!admCentroCusto.trim()) return "Informe o centro de custo.";
-      if (!admSalarioHora) return "Informe o salário por hora.";
-      if (!admHorario.trim()) return "Informe o horário/turno.";
+      if (admSalarioTipo === "horista" ? !admSalarioHora : !admSalario) return "Informe o salário.";
+      if (!admHorarioEntrada || !admHorarioSaida) return "Informe o horário de entrada e saída.";
+      if (!admTurnoSelecionado) return "Selecione o turno.";
+      if (admTurnoSelecionado === "Outro" && !admTurnoOutro.trim()) return "Especifique o turno.";
       if (!admTempoContrato.trim()) return "Informe o tempo de contrato.";
       if (!admTelefone.trim()) return "Informe o telefone do candidato.";
       if (admVt === null) return "Informe se utiliza Vale Transporte.";
@@ -192,10 +235,16 @@ export default function PortalAvaliacaoBtn({
       if (!admSetor.trim()) return "Informe o setor.";
       if (!admCentroCusto.trim()) return "Informe o centro de custo.";
       if (!admSalario) return "Informe o salário.";
-      if (!admHorario.trim()) return "Informe o horário/turno.";
+      if (!admHorarioEntrada || !admHorarioSaida) return "Informe o horário de entrada e saída.";
+      if (!admTurnoSelecionado) return "Selecione o turno.";
+      if (admTurnoSelecionado === "Outro" && !admTurnoOutro.trim()) return "Especifique o turno.";
       if (!admTelefone.trim()) return "Informe o telefone do candidato.";
       if (admVt === null) return "Informe se utiliza Vale Transporte.";
       if (!admExameResp.trim()) return "Informe o responsável pelo exame admissional.";
+    }
+
+    if (precisaHorarioEstruturado && integracaoPreenchidaParcialmente) {
+      return "Preencha local, data e hora da integração, ou deixe os três em branco.";
     }
     return null;
   };
@@ -222,21 +271,20 @@ export default function PortalAvaliacaoBtn({
             cv_id: cvId,
             tipo_servico: tipoServico,
             admissao_data_inicio: admDataInicio || null,
-            admissao_cargo: admCargo || null,
             admissao_salario: admSalario ? parseFloat(admSalario) : null,
             admissao_setor: admSetor || null,
             admissao_centro_custo: admCentroCusto || null,
-            admissao_horario: admHorario || null,
+            admissao_horario: precisaHorarioEstruturado ? (horarioComposto || null) : null,
             admissao_gestor: admGestor || null,
             admissao_periodo_experiencia: admPeriodoExp || null,
             admissao_observacoes: admObservacoes || null,
             admissao_funcao: admFuncao || null,
             admissao_salario_hora: admSalarioHora ? parseFloat(admSalarioHora) : null,
-            admissao_turno: admTurno || null,
+            admissao_turno: precisaHorarioEstruturado ? (turnoFinal || null) : null,
             admissao_tempo_contrato: admTempoContrato || null,
             admissao_vt: admVt,
             admissao_exame_responsavel: admExameResp || null,
-            admissao_local_integracao: admLocalIntegracao || null,
+            admissao_local_integracao: integracaoComposta || null,
             admissao_telefone_candidato: admTelefone || null,
           } : {}),
         }),
@@ -361,10 +409,10 @@ export default function PortalAvaliacaoBtn({
                         <input type="date" value={admDataInicio} onChange={(e) => setAdmDataInicio(e.target.value)}
                           className="input-field" style={missing(admDataInicio) ? inv : undefined} />
                       </Field>
-                      <Field label="Cargo/Função Confirmada" required>
-                        <input value={admCargo} onChange={(e) => setAdmCargo(e.target.value)}
+                      <Field label="Função" required>
+                        <input value={admFuncao} onChange={(e) => setAdmFuncao(e.target.value)}
                           placeholder="Ex: Analista de RH" className="input-field"
-                          style={missing(admCargo) ? inv : undefined} />
+                          style={missing(admFuncao) ? inv : undefined} />
                       </Field>
                       <Field label="Salário Acordado R$" required>
                         <CampoMoeda value={admSalario}
@@ -410,7 +458,7 @@ export default function PortalAvaliacaoBtn({
                           className="input-field" style={missing(admDataInicio) ? inv : undefined} />
                       </Field>
                       <div className="grid grid-cols-2 gap-4">
-                        <Field label="Função no Cliente" required>
+                        <Field label="Função" required>
                           <input value={admFuncao} onChange={(e) => setAdmFuncao(e.target.value)}
                             placeholder="Ex: Auxiliar de Produção" className="input-field"
                             style={missing(admFuncao) ? inv : undefined} />
@@ -421,29 +469,74 @@ export default function PortalAvaliacaoBtn({
                             style={missing(admSetor) ? inv : undefined} />
                         </Field>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <Field label="Centro de Custo" required>
-                          <input value={admCentroCusto} onChange={(e) => setAdmCentroCusto(e.target.value)}
-                            placeholder="Ex: CC-0042" className="input-field"
-                            style={missing(admCentroCusto) ? inv : undefined} />
-                        </Field>
+                      <Field label="Centro de Custo" required>
+                        <input value={admCentroCusto} onChange={(e) => setAdmCentroCusto(e.target.value)}
+                          placeholder="Ex: CC-0042" className="input-field"
+                          style={missing(admCentroCusto) ? inv : undefined} />
+                      </Field>
+                      <Field label="Tipo de Salário" required>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button type="button"
+                            onClick={() => { setAdmSalarioTipo("horista"); setAdmSalario(""); }}
+                            className="px-3 py-2 rounded-lg border-2 text-sm font-semibold transition-all"
+                            style={admSalarioTipo === "horista"
+                              ? { backgroundColor: "#111827", color: "#FFD700", borderColor: "#111827" }
+                              : { backgroundColor: "#ffffff", color: "#6b7280", borderColor: "#e5e7eb" }}
+                          >
+                            Horista
+                          </button>
+                          <button type="button"
+                            onClick={() => { setAdmSalarioTipo("mensalista"); setAdmSalarioHora(""); }}
+                            className="px-3 py-2 rounded-lg border-2 text-sm font-semibold transition-all"
+                            style={admSalarioTipo === "mensalista"
+                              ? { backgroundColor: "#111827", color: "#FFD700", borderColor: "#111827" }
+                              : { backgroundColor: "#ffffff", color: "#6b7280", borderColor: "#e5e7eb" }}
+                          >
+                            Mensalista
+                          </button>
+                        </div>
+                      </Field>
+                      {admSalarioTipo === "horista" ? (
                         <Field label="Salário R$/hora" required>
                           <CampoMoeda value={admSalarioHora}
                             onChange={(v) => setAdmSalarioHora(v > 0 ? String(v) : "")} placeholder="Ex: 18,50"
                             className="input-field" style={missing(admSalarioHora) ? inv : undefined} />
                         </Field>
-                      </div>
+                      ) : (
+                        <Field label="Salário mensal" required>
+                          <CampoMoeda value={admSalario}
+                            onChange={(v) => setAdmSalario(v > 0 ? String(v) : "")} placeholder="Ex: 1.800,00"
+                            className="input-field" style={missing(admSalario) ? inv : undefined} />
+                        </Field>
+                      )}
                       <div className="grid grid-cols-2 gap-4">
-                        <Field label="Horário/Turno" required>
-                          <input value={admHorario} onChange={(e) => setAdmHorario(e.target.value)}
-                            placeholder="Ex: 06h às 14h20" className="input-field"
-                            style={missing(admHorario) ? inv : undefined} />
+                        <Field label="Entrada" required>
+                          <input type="time" value={admHorarioEntrada} onChange={(e) => setAdmHorarioEntrada(e.target.value)}
+                            className="input-field" style={missing(admHorarioEntrada) ? inv : undefined} />
                         </Field>
-                        <Field label="Tempo de Contrato" required>
-                          <input value={admTempoContrato} onChange={(e) => setAdmTempoContrato(e.target.value)}
-                            className="input-field" style={missing(admTempoContrato) ? inv : undefined} />
+                        <Field label="Saída" required>
+                          <input type="time" value={admHorarioSaida} onChange={(e) => setAdmHorarioSaida(e.target.value)}
+                            className="input-field" style={missing(admHorarioSaida) ? inv : undefined} />
                         </Field>
                       </div>
+                      <Field label="Turno" required>
+                        <select value={admTurnoSelecionado} onChange={(e) => setAdmTurnoSelecionado(e.target.value)}
+                          className="input-field" style={missing(admTurnoSelecionado) ? inv : undefined}>
+                          <option value="" disabled>Selecione...</option>
+                          {TURNO_OPCOES.map((t) => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </Field>
+                      {admTurnoSelecionado === "Outro" && (
+                        <Field label="Especifique o turno" required>
+                          <input value={admTurnoOutro} onChange={(e) => setAdmTurnoOutro(e.target.value)}
+                            placeholder="Ex: Turno E" className="input-field"
+                            style={tentouEnviar && !admTurnoOutro.trim() ? inv : undefined} />
+                        </Field>
+                      )}
+                      <Field label="Tempo de Contrato" required>
+                        <input value={admTempoContrato} onChange={(e) => setAdmTempoContrato(e.target.value)}
+                          className="input-field" style={missing(admTempoContrato) ? inv : undefined} />
+                      </Field>
                       <Field label="Telefone do Candidato" required>
                         <CampoTelefone value={admTelefone} onChange={setAdmTelefone}
                           placeholder="(11) 99999-9999" className="input-field"
@@ -467,8 +560,15 @@ export default function PortalAvaliacaoBtn({
                           style={missing(admExameResp) ? inv : undefined} />
                       </Field>
                       <Field label="Local/Data/Hora da Integração">
-                        <input value={admLocalIntegracao} onChange={(e) => setAdmLocalIntegracao(e.target.value)}
-                          placeholder="Ex: Portaria principal, 23/06 às 07h" className="input-field" />
+                        <div className="grid grid-cols-3 gap-2">
+                          <input value={admIntegracaoLocal} onChange={(e) => setAdmIntegracaoLocal(e.target.value)}
+                            placeholder="Ex: Portaria" className="input-field" />
+                          <input type="date" value={admIntegracaoData} onChange={(e) => setAdmIntegracaoData(e.target.value)}
+                            className="input-field" />
+                          <input type="time" value={admIntegracaoHora} onChange={(e) => setAdmIntegracaoHora(e.target.value)}
+                            className="input-field" />
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-1">Preencha os três campos, ou deixe todos em branco.</p>
                       </Field>
                     </>
                   )}
@@ -481,7 +581,7 @@ export default function PortalAvaliacaoBtn({
                           className="input-field" style={missing(admDataInicio) ? inv : undefined} />
                       </Field>
                       <div className="grid grid-cols-2 gap-4">
-                        <Field label="Função/Cargo" required>
+                        <Field label="Função" required>
                           <input value={admFuncao} onChange={(e) => setAdmFuncao(e.target.value)}
                             placeholder="Ex: Auxiliar de Limpeza" className="input-field"
                             style={missing(admFuncao) ? inv : undefined} />
@@ -504,11 +604,30 @@ export default function PortalAvaliacaoBtn({
                             className="input-field" style={missing(admSalario) ? inv : undefined} />
                         </Field>
                       </div>
-                      <Field label="Horário/Turno" required>
-                        <input value={admHorario} onChange={(e) => setAdmHorario(e.target.value)}
-                          placeholder="Ex: 06h às 14h20" className="input-field"
-                          style={missing(admHorario) ? inv : undefined} />
+                      <div className="grid grid-cols-2 gap-4">
+                        <Field label="Entrada" required>
+                          <input type="time" value={admHorarioEntrada} onChange={(e) => setAdmHorarioEntrada(e.target.value)}
+                            className="input-field" style={missing(admHorarioEntrada) ? inv : undefined} />
+                        </Field>
+                        <Field label="Saída" required>
+                          <input type="time" value={admHorarioSaida} onChange={(e) => setAdmHorarioSaida(e.target.value)}
+                            className="input-field" style={missing(admHorarioSaida) ? inv : undefined} />
+                        </Field>
+                      </div>
+                      <Field label="Turno" required>
+                        <select value={admTurnoSelecionado} onChange={(e) => setAdmTurnoSelecionado(e.target.value)}
+                          className="input-field" style={missing(admTurnoSelecionado) ? inv : undefined}>
+                          <option value="" disabled>Selecione...</option>
+                          {TURNO_OPCOES.map((t) => <option key={t} value={t}>{t}</option>)}
+                        </select>
                       </Field>
+                      {admTurnoSelecionado === "Outro" && (
+                        <Field label="Especifique o turno" required>
+                          <input value={admTurnoOutro} onChange={(e) => setAdmTurnoOutro(e.target.value)}
+                            placeholder="Ex: Turno E" className="input-field"
+                            style={tentouEnviar && !admTurnoOutro.trim() ? inv : undefined} />
+                        </Field>
+                      )}
                       <Field label="Telefone do Candidato" required>
                         <CampoTelefone value={admTelefone} onChange={setAdmTelefone}
                           placeholder="(11) 99999-9999" className="input-field"
@@ -532,8 +651,15 @@ export default function PortalAvaliacaoBtn({
                           style={missing(admExameResp) ? inv : undefined} />
                       </Field>
                       <Field label="Local/Data/Hora da Integração">
-                        <input value={admLocalIntegracao} onChange={(e) => setAdmLocalIntegracao(e.target.value)}
-                          placeholder="Ex: Portaria principal, 23/06 às 07h" className="input-field" />
+                        <div className="grid grid-cols-3 gap-2">
+                          <input value={admIntegracaoLocal} onChange={(e) => setAdmIntegracaoLocal(e.target.value)}
+                            placeholder="Ex: Portaria" className="input-field" />
+                          <input type="date" value={admIntegracaoData} onChange={(e) => setAdmIntegracaoData(e.target.value)}
+                            className="input-field" />
+                          <input type="time" value={admIntegracaoHora} onChange={(e) => setAdmIntegracaoHora(e.target.value)}
+                            className="input-field" />
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-1">Preencha os três campos, ou deixe todos em branco.</p>
                       </Field>
                     </>
                   )}

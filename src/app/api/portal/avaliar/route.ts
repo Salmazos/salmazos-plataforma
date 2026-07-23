@@ -73,7 +73,7 @@ export async function PATCH(request: NextRequest) {
       if (cvId) {
         const admFields: Record<string, unknown> = {};
         const admKeys = [
-          "admissao_data_inicio", "admissao_cargo", "admissao_salario",
+          "admissao_data_inicio", "admissao_salario",
           "admissao_setor", "admissao_centro_custo", "admissao_horario",
           "admissao_gestor", "admissao_periodo_experiencia", "admissao_observacoes",
           "admissao_funcao", "admissao_salario_hora", "admissao_turno",
@@ -171,15 +171,12 @@ export async function PATCH(request: NextRequest) {
 
         const admLabels: Record<string, string> = {
           admissao_data_inicio: "Data de Início",
-          admissao_cargo: "Cargo/Função",
-          admissao_salario: "Salário R$",
           admissao_setor: "Setor",
           admissao_centro_custo: "Centro de Custo",
           admissao_horario: "Horário",
           admissao_gestor: "Gestor Direto",
           admissao_periodo_experiencia: "Período de Experiência",
           admissao_funcao: "Função",
-          admissao_salario_hora: "Salário R$/hora",
           admissao_turno: "Turno",
           admissao_tempo_contrato: "Tempo de Contrato",
           admissao_vt: "Vale Transporte",
@@ -189,7 +186,24 @@ export async function PATCH(request: NextRequest) {
           admissao_observacoes: "Observações",
         };
 
+        const linhaTabela = (label: string, display: string) =>
+          `<tr><td style="padding:6px 12px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">${label}</td><td style="padding:6px 12px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${display}</td></tr>`;
+
         let admRows = "";
+
+        // Salário tem rótulo dedicado (em vez do loop genérico abaixo) porque MOT
+        // pode ser Horista OU Mensalista — sem deixar isso explícito, quem lê o
+        // e-mail (usado pra passar os dados pra contabilidade) não sabe qual dos
+        // dois valores é o real nem em que unidade ele está.
+        if (body.admissao_salario_hora != null && body.admissao_salario_hora !== "") {
+          const valorHora = Number(body.admissao_salario_hora).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+          admRows += linhaTabela("Salário", `R$ ${valorHora}/hora (Horista)`);
+        } else if (body.admissao_salario != null && body.admissao_salario !== "") {
+          const valorMensal = Number(body.admissao_salario).toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+          const sufixo = body.tipo_servico === "mao_obra_temporaria" ? " (Mensalista)" : "";
+          admRows += linhaTabela("Salário", `R$ ${valorMensal}/mês${sufixo}`);
+        }
+
         for (const [key, label] of Object.entries(admLabels)) {
           const val = body[key];
           if (val != null && val !== "" && val !== false) {
@@ -197,7 +211,7 @@ export async function PATCH(request: NextRequest) {
               : typeof val === "number" ? val.toLocaleString("pt-BR", { minimumFractionDigits: 2 })
               : key === "admissao_data_inicio" ? String(val).split("-").reverse().join("/")
               : String(val);
-            admRows += `<tr><td style="padding:6px 12px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">${label}</td><td style="padding:6px 12px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${display}</td></tr>`;
+            admRows += linhaTabela(label, display);
           }
         }
 
