@@ -15,6 +15,7 @@ import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import ModalContaSalario from "@/components/ModalContaSalario";
 import ModalAssinaturaEletronica from "@/components/ModalAssinaturaEletronica";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import CampoTelefone from "@/components/ui/CampoTelefone";
 import type { AdmissaoAdicional, AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
 
 type Tab = "dados" | "documentos" | "notas";
@@ -166,7 +167,7 @@ function valorAdicionalParaNumero(a: Pick<AdicionalLinha, "valor" | "formato_val
 // admissao_dados_pessoais, organizados nas mesmas seções que já existiam como somente
 // leitura. Cada seção compartilha o mesmo formDP/handleSalvarDP (uma linha só na tabela),
 // só muda qual subconjunto de campos é mostrado no formulário de edição.
-type TipoCampo = "text" | "date" | "select" | "simnao";
+type TipoCampo = "text" | "date" | "select" | "simnao" | "telefone";
 
 interface CampoDef {
   key: string;
@@ -225,7 +226,7 @@ const CAMPOS_ENDERECO: CampoDef[] = [
   { key: "endereco_bairro", label: "Bairro", tipo: "text" },
   { key: "endereco_cidade", label: "Cidade", tipo: "text" },
   { key: "endereco_uf", label: "UF", tipo: "text" },
-  { key: "telefone", label: "Telefone", tipo: "text" },
+  { key: "telefone", label: "Telefone", tipo: "telefone" },
   { key: "email", label: "E-mail", tipo: "text" },
 ];
 
@@ -300,6 +301,9 @@ function CampoValor({ def, valor, onChange }: { def: CampoDef; valor: string; on
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     );
+  }
+  if (def.tipo === "telefone") {
+    return <CampoTelefone value={valor} onChange={onChange} className="input-field text-sm" />;
   }
   return (
     <input

@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ETAPAS_KANBAN } from "@/lib/constants";
+import { formatarTelefone } from "@/lib/utils";
+import CampoTelefone from "@/components/ui/CampoTelefone";
 
 interface Props {
   isOpen: boolean;
@@ -106,13 +108,6 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
   const handleFechar = () => {
     resetar();
     onClose();
-  };
-
-  const formatarTelefone = (v: string) => {
-    const nums = v.replace(/\D/g, "").slice(0, 11);
-    if (nums.length <= 2) return nums;
-    if (nums.length <= 7) return `(${nums.slice(0, 2)}) ${nums.slice(2)}`;
-    return `(${nums.slice(0, 2)}) ${nums.slice(2, 7)}-${nums.slice(7)}`;
   };
 
   const formatarCpf = (v: string) => {
@@ -386,10 +381,9 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
               Telefone *
             </label>
-            <input
-              type="text"
+            <CampoTelefone
               value={telefone}
-              onChange={(e) => setTelefone(formatarTelefone(e.target.value))}
+              onChange={setTelefone}
               placeholder="(00) 00000-0000"
               className="input-field"
             />

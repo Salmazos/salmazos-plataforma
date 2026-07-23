@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { AniversarianteContato, Cliente } from "@/types";
 import { obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
+import CampoTelefone from "@/components/ui/CampoTelefone";
 
 const MESES = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -469,7 +470,7 @@ export default function AniversariantesPageClient() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Telefone</label>
-                  <input type="text" value={form.telefone} onChange={(e) => setForm((f) => ({ ...f, telefone: e.target.value }))} className="input-field" />
+                  <CampoTelefone value={form.telefone} onChange={(v) => setForm((f) => ({ ...f, telefone: v }))} className="input-field" />
                 </div>
               </div>
 

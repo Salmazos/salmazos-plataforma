@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { SEGMENTOS_CLIENTE, TIPOS_SERVICO, ANALISTAS, ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import type { Cliente } from "@/types";
+import CampoTelefone from "@/components/ui/CampoTelefone";
 
 interface Props {
   isOpen: boolean;
@@ -387,9 +388,9 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Telefone *</label>
-                  <input
+                  <CampoTelefone
                     value={form.contato_telefone}
-                    onChange={(e) => set("contato_telefone", e.target.value)}
+                    onChange={(v) => set("contato_telefone", v)}
                     placeholder="(00) 00000-0000"
                     className="input-field"
                   />

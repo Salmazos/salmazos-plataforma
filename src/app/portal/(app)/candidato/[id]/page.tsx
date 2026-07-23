@@ -290,15 +290,19 @@ export default async function PortalCandidatoPage({ params }: Props) {
               if (!txt) return null;
               try {
                 const p = JSON.parse(txt);
-                if (p?.empresa) {
+                if (p && typeof p === "object" && (p.empresa || p.cargo || p.setor || p.descricao)) {
                   return (
                     <div key={i} style={{ borderLeft: "2px solid #FFD700", paddingLeft: "12px" }} className="space-y-0.5">
-                      <div className="flex flex-wrap items-start justify-between gap-1">
-                        <p className="font-semibold text-gray-800 text-sm">{p.empresa}</p>
-                        {p.periodo && (
-                          <span className="text-[10px] text-gray-400 shrink-0">{p.periodo}</span>
-                        )}
-                      </div>
+                      {(p.empresa || p.periodo) && (
+                        <div className="flex flex-wrap items-start justify-between gap-1">
+                          {p.empresa && (
+                            <p className="font-semibold text-gray-800 text-sm">{p.empresa}</p>
+                          )}
+                          {p.periodo && (
+                            <span className="text-[10px] text-gray-400 shrink-0">{p.periodo}</span>
+                          )}
+                        </div>
+                      )}
                       {p.cargo && (
                         <p className="text-xs font-medium" style={{ color: "#E6A800" }}>{p.cargo}</p>
                       )}

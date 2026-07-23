@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MOTIVOS_REPROVACAO_CLIENTE, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import CampoTelefone from "@/components/ui/CampoTelefone";
 
 interface Props {
   encaminhamentoId: string;
@@ -444,7 +445,7 @@ export default function PortalAvaliacaoBtn({
                         </Field>
                       </div>
                       <Field label="Telefone do Candidato" required>
-                        <input value={admTelefone} onChange={(e) => setAdmTelefone(e.target.value)}
+                        <CampoTelefone value={admTelefone} onChange={setAdmTelefone}
                           placeholder="(11) 99999-9999" className="input-field"
                           style={missing(admTelefone) ? inv : undefined} />
                       </Field>
@@ -509,7 +510,7 @@ export default function PortalAvaliacaoBtn({
                           style={missing(admHorario) ? inv : undefined} />
                       </Field>
                       <Field label="Telefone do Candidato" required>
-                        <input value={admTelefone} onChange={(e) => setAdmTelefone(e.target.value)}
+                        <CampoTelefone value={admTelefone} onChange={setAdmTelefone}
                           placeholder="(11) 99999-9999" className="input-field"
                           style={missing(admTelefone) ? inv : undefined} />
                       </Field>

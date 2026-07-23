@@ -8,6 +8,7 @@ import { TEMPLATE_OPTIONS } from "@/lib/emailTemplates";
 import type { EmailTemplateName } from "@/lib/emailTemplates";
 import PerfilEtapaSelector from "@/components/PerfilEtapaSelector";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import CampoTelefone from "@/components/ui/CampoTelefone";
 import PerfilAnotacoes from "@/components/PerfilAnotacoes";
 import { BotaoCurriculo } from "@/components/BotaoCurriculo";
 import TriagemBadge from "@/components/TriagemBadge";
@@ -1014,7 +1015,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, 
                   <input type="text" value={form.cpf} onChange={(e) => setForm((prev) => ({ ...prev, cpf: formatarCpf(e.target.value) }))} placeholder="000.000.000-00" className="input-field" />
                 </Campo>
                 <Campo label="Telefone">
-                  <input type="text" value={form.telefone} onChange={set("telefone")} className="input-field" />
+                  <CampoTelefone value={form.telefone} onChange={(v) => setForm((prev) => ({ ...prev, telefone: v }))} className="input-field" />
                 </Campo>
                 <Campo label="E-mail">
                   <input type="text" value={form.email} onChange={set("email")} className="input-field" />

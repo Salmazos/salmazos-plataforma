@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import CampoTelefone from "@/components/ui/CampoTelefone";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -51,13 +52,6 @@ interface Metricas {
 }
 
 // ── Masks ─────────────────────────────────────────────────────────────────────
-
-function maskTelefone(v: string): string {
-  const d = v.replace(/\D/g, "").slice(0, 11);
-  if (d.length <= 2) return d;
-  if (d.length <= 7) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
-  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
-}
 
 function maskCpf(v: string): string {
   const d = v.replace(/\D/g, "").slice(0, 11);
@@ -673,10 +667,10 @@ export default function MeuPerfilClient({ perfil, userEmail, userId }: Props) {
                   </div>
                   <div>
                     <label style={labelStyle}>Telefone</label>
-                    <input
+                    <CampoTelefone
                       style={inputStyle}
                       value={form.telefone}
-                      onChange={(e) => setForm((f) => ({ ...f, telefone: maskTelefone(e.target.value) }))}
+                      onChange={(v) => setForm((f) => ({ ...f, telefone: v }))}
                       placeholder="(00) 00000-0000"
                     />
                   </div>
@@ -756,10 +750,10 @@ export default function MeuPerfilClient({ perfil, userEmail, userId }: Props) {
                   </div>
                   <div>
                     <label style={labelStyle}>Telefone</label>
-                    <input
+                    <CampoTelefone
                       style={inputStyle}
                       value={form.contato_emergencia_telefone}
-                      onChange={(e) => setForm((f) => ({ ...f, contato_emergencia_telefone: maskTelefone(e.target.value) }))}
+                      onChange={(v) => setForm((f) => ({ ...f, contato_emergencia_telefone: v }))}
                       placeholder="(00) 00000-0000"
                     />
                   </div>

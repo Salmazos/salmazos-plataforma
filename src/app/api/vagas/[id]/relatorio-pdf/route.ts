@@ -233,9 +233,9 @@ export async function GET(_req: NextRequest, { params }: Params) {
         if (!txt) continue;
         try {
           const exp = JSON.parse(txt);
-          if (exp?.empresa) {
+          if (exp && typeof exp === "object" && (exp.empresa || exp.cargo || exp.setor || exp.descricao)) {
             const header = [exp.empresa, exp.cargo].filter(Boolean).join(" - ");
-            drawText(header, bold, 9, DARK);
+            if (header) drawText(header, bold, 9, DARK);
             if (exp.periodo) {
               drawText(safe(validarPeriodo(exp.periodo)), regular, 8, GRAY);
             }

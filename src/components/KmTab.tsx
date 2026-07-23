@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import CampoTelefone from "@/components/ui/CampoTelefone";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -705,7 +706,7 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                     {/* Telefone + E-mail */}
                     <div>
                       <label style={labelStyle}>Telefone do contato</label>
-                      <input style={inputStyle} type="tel" placeholder="(00) 00000-0000" value={v.contato_telefone} onChange={(e) => updateVisita(idx, "contato_telefone", e.target.value)} />
+                      <CampoTelefone style={inputStyle} placeholder="(00) 00000-0000" value={v.contato_telefone} onChange={(valor) => updateVisita(idx, "contato_telefone", valor)} />
                     </div>
                     <div>
                       <label style={labelStyle}>E-mail do contato</label>
