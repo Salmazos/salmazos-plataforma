@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ANALISTAS, TIPOS_SERVICO, HABILIDADES, ESTADOS } from "@/lib/constants";
+import { ANALISTAS, TIPOS_SERVICO, HABILIDADES, ESTADOS, SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, detectarModoSalario, type SalarioModo } from "@/lib/constants";
 import type { Vaga } from "@/types";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 
@@ -117,16 +117,6 @@ function maskHora(raw: string): string {
   const digits = raw.replace(/\D/g, "").slice(0, 4);
   if (digits.length <= 2) return digits;
   return `${digits.slice(0, 2)}h${digits.slice(2)}`;
-}
-
-const SALARIO_A_COMBINAR = "À combinar";
-const SALARIO_ENVIAR_PRETENSAO = "Enviar Pretensão Salarial";
-type SalarioModo = "fixo" | "a_combinar" | "pretensao";
-
-function detectarModoSalario(raw: string): SalarioModo {
-  if (raw === SALARIO_A_COMBINAR) return "a_combinar";
-  if (raw === SALARIO_ENVIAR_PRETENSAO) return "pretensao";
-  return "fixo";
 }
 
 // ── component ─────────────────────────────────────────────────────────────────

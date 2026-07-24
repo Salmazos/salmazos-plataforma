@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import { SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, detectarModoSalario, type SalarioModo } from "@/lib/constants";
 
 const ESTADOS = [
   "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG",
@@ -94,6 +95,7 @@ export default function SolicitarVagaPage() {
   const [cidade, setCidade] = useState("");
   const [estado, setEstado] = useState("");
   const [salario, setSalario] = useState("");
+  const [salarioModo, setSalarioModo] = useState<SalarioModo>("fixo");
   const [previsaoInicio, setPrevisaoInicio] = useState("");
   const [observacoes, setObservacoes] = useState("");
 
@@ -148,6 +150,7 @@ export default function SolicitarVagaPage() {
     setCidade(tpl.cidade ?? "");
     setEstado(tpl.estado ?? "");
     setSalario(tpl.salario ?? "");
+    setSalarioModo(detectarModoSalario(tpl.salario ?? ""));
     setObservacoes(tpl.observacoes ?? "");
     if (tpl.horario_padrao) {
       const hp = tpl.horario_padrao;
@@ -213,6 +216,13 @@ export default function SolicitarVagaPage() {
     }).catch(() => setView("form"));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleSalarioModoChange = (modo: SalarioModo) => {
+    setSalarioModo(modo);
+    if (modo === "a_combinar") setSalario(SALARIO_A_COMBINAR);
+    else if (modo === "pretensao") setSalario(SALARIO_ENVIAR_PRETENSAO);
+    else setSalario("");
+  };
 
   const toggleReq = (chip: string) =>
     setReqChips((prev) => ({ ...prev, [chip]: !prev[chip] }));
@@ -516,7 +526,11 @@ export default function SolicitarVagaPage() {
               </div>
               <div>
                 <label style={labelStyle}>Salário</label>
-                <CampoMoeda value={salario} onChange={(v) => setSalario(v > 0 ? String(v) : "")} placeholder="Ex: 2.000,00" style={inputStyle} />
+                {salarioModo === "fixo" ? (
+                  <CampoMoeda value={salario} onChange={(v) => setSalario(v > 0 ? String(v) : "")} placeholder="Ex: 2.000,00" style={inputStyle} />
+                ) : (
+                  <p className="text-sm text-gray-500 pt-1.5">{salario || "—"} <span className="text-xs text-gray-400">(ajustável abaixo)</span></p>
+                )}
               </div>
             </div>
             {usandoTemplate.horario_texto && (
@@ -562,7 +576,7 @@ export default function SolicitarVagaPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label style={labelStyle}>Nº de Posições</label>
               <input type="number" min="1" value={numPosicoes} onChange={(e) => setNumPosicoes(e.target.value)} placeholder="1" style={inputStyle} />
@@ -571,10 +585,30 @@ export default function SolicitarVagaPage() {
               <label style={labelStyle}>Previsão de Início</label>
               <input type="date" value={previsaoInicio} onChange={(e) => setPrevisaoInicio(e.target.value)} style={inputStyle} />
             </div>
-            <div>
-              <label style={labelStyle}>Salário</label>
-              <CampoMoeda value={salario} onChange={(v) => setSalario(v > 0 ? String(v) : "")} placeholder="Ex: 2.000,00" style={inputStyle} />
+          </div>
+
+          <div>
+            <label style={labelStyle}>Salário</label>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {([
+                ["fixo", "Valor fixo"],
+                ["a_combinar", "À combinar"],
+                ["pretensao", "Enviar Pretensão Salarial"],
+              ] as const).map(([modo, label]) => (
+                <button
+                  key={modo}
+                  type="button"
+                  onClick={() => handleSalarioModoChange(modo)}
+                  className="text-xs px-3 py-1.5 rounded-full font-medium transition-all"
+                  style={salarioModo === modo ? CHIP_ON : CHIP_OFF}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
+            {salarioModo === "fixo" && (
+              <CampoMoeda value={salario} onChange={(v) => setSalario(v > 0 ? String(v) : "")} placeholder="Ex: 2.000,00" style={{ ...inputStyle, maxWidth: 240 }} />
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">

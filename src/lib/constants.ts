@@ -221,3 +221,16 @@ export const ORIGEM_LABELS: Record<string, string> = {
   vaga_especifica: "Vaga Específica",
   banco_talentos: "Banco de Talentos",
 };
+
+// Valores-sentinela salvos no campo salario (texto livre) quando o modo não é "valor fixo".
+// Usado no painel interno (ModalNovaVaga) e no portal do cliente (solicitar-vaga) para
+// renderizar o mesmo seletor de 3 opções sem duplicar as strings mágicas.
+export const SALARIO_A_COMBINAR = "À combinar";
+export const SALARIO_ENVIAR_PRETENSAO = "Enviar Pretensão Salarial";
+export type SalarioModo = "fixo" | "a_combinar" | "pretensao";
+
+export function detectarModoSalario(raw: string): SalarioModo {
+  if (raw === SALARIO_A_COMBINAR) return "a_combinar";
+  if (raw === SALARIO_ENVIAR_PRETENSAO) return "pretensao";
+  return "fixo";
+}

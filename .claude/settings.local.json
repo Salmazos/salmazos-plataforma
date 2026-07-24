@@ -203,7 +203,10 @@
       "Bash(npx --yes tsx tmp-create-analista-test.ts)",
       "Bash(npx --yes tsx tmp-cleanup-users.ts)",
       "Bash(npx --yes tsx tmp-setup-multiuser-test.ts)",
-      "Bash(npx --yes tsx tmp-cleanup-multiuser.ts)"
+      "Bash(npx --yes tsx tmp-cleanup-multiuser.ts)",
+      "mcp__541ea0a1-f9ae-43e1-b67e-8aacbdad08c1__list_migrations",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(echo \"curl exit: $?\")"
     ]
   }
 }
