@@ -68,7 +68,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
   const { scrollRef: colunasScrollRef, floatScrollRef, floatBar, handleScroll: handleColunasScroll, handleFloatScroll } = useScrollHorizontalSincronizado();
 
   const [filtroCargo, setFiltroCargo] = useState("");
-  const [filtroMeus, setFiltroMeus] = useState(false);
+  const [filtroMeus, setFiltroMeus] = useState(!!analistaLogado);
   const [filtroResponsavel, setFiltroResponsavel] = useState("");
   const [movendo, setMovendo] = useState<string | null>(null);
   const [pendingEncaminhamento, setPendingEncaminhamento] =
