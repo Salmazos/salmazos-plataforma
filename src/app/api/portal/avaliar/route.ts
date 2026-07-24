@@ -145,6 +145,50 @@ export async function PATCH(request: NextRequest) {
       criado_por: user.email ?? null,
     });
 
+    // Sino para o responsável pelo candidato — mesmo padrão de destinatário do
+    // agendamento_cliente (responsavel → analistas_perfil.user_id, com fallback
+    // broadcast). Não reaproveita notifyResponsibleOrAll porque aquele helper
+    // também dispara e-mail, e o e-mail deste fluxo já é tratado à parte abaixo.
+    try {
+      const [{ data: candNotif }, { data: cliNotif }, vagaNotif] = await Promise.all([
+        service.from("candidatos").select("nome_completo, responsavel").eq("id", enc.candidato_id).single(),
+        service.from("clientes").select("nome").eq("id", clienteUsuario.cliente_id).single(),
+        enc.vaga_id
+          ? service.from("vagas").select("titulo").eq("id", enc.vaga_id).single()
+          : Promise.resolve({ data: null as { titulo: string } | null }),
+      ]);
+
+      const candidatoNomeNotif = candNotif?.nome_completo ?? "Candidato";
+      const clienteNomeNotif = cliNotif?.nome ?? "Cliente";
+      const vagaTitulo = vagaNotif.data?.titulo;
+
+      const acaoVerbo = status === "aprovado" ? "aprovou" : "reprovou";
+      const mensagemNotif = vagaTitulo
+        ? `${clienteNomeNotif} ${acaoVerbo} a candidatura de ${candidatoNomeNotif} para a vaga ${vagaTitulo}`
+        : `${clienteNomeNotif} ${acaoVerbo} a candidatura de ${candidatoNomeNotif}`;
+
+      let userIdDestino: string | null = null;
+      if (candNotif?.responsavel) {
+        const { data: analistaNotif } = await service
+          .from("analistas_perfil")
+          .select("user_id")
+          .eq("nome_completo", candNotif.responsavel)
+          .eq("ativo", true)
+          .maybeSingle();
+        userIdDestino = analistaNotif?.user_id ?? null;
+      }
+
+      await service.from("notificacoes_analista").insert({
+        tipo: status === "aprovado" ? "aprovacao_cliente" : "reprovacao_cliente",
+        titulo: status === "aprovado" ? "Candidato aprovado pelo cliente" : "Candidato reprovado pelo cliente",
+        mensagem: mensagemNotif,
+        user_id: userIdDestino,
+        candidato_id: enc.candidato_id,
+      });
+    } catch (notifErr) {
+      console.error("[avaliar] Erro ao criar notificação:", notifErr);
+    }
+
     // Send approval notification email to Salmazos
     if (status === "aprovado") {
       try {
