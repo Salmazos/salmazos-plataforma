@@ -29,7 +29,7 @@ export default async function AdmissaoDetalhePage({ params }: Props) {
 
   if (!admissao) notFound();
 
-  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: adicionais }, { data: auditLogs }, { data: valeTransporte }, { data: autorizacaoSindical }] = await Promise.all([
+  const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: adicionais }, { data: auditLogs }, { data: valeTransporte }, { data: autorizacaoSindical }, { data: envelopeInterno }, { data: envelopeContabilidade }, { data: documentosContabilidade }] = await Promise.all([
     svc.from("admissao_dados_pessoais").select("*").eq("admissao_id", id).maybeSingle(),
     svc.from("admissao_dependentes").select("*").eq("admissao_id", id).order("created_at", { ascending: true }),
     svc.from("admissao_documentos").select("*").eq("admissao_id", id).order("created_at", { ascending: true }),
@@ -37,6 +37,9 @@ export default async function AdmissaoDetalhePage({ params }: Props) {
     svc.from("audit_logs").select("id, created_at, usuario_nome, acao, detalhes").eq("entidade", "admissoes").eq("entidade_id", id).order("created_at", { ascending: false }),
     svc.from("admissao_vale_transporte").select("*, admissao_vt_linhas(*)").eq("admissao_id", id).order("ordem", { referencedTable: "admissao_vt_linhas", ascending: true }).maybeSingle(),
     svc.from("admissao_autorizacao_sindical").select("*").eq("admissao_id", id).maybeSingle(),
+    svc.from("admissao_envelopes_assinatura").select("*").eq("admissao_id", id).eq("tipo_pacote", "interno").maybeSingle(),
+    svc.from("admissao_envelopes_assinatura").select("*").eq("admissao_id", id).eq("tipo_pacote", "contabilidade").maybeSingle(),
+    svc.from("admissao_documentos_contabilidade").select("*").eq("admissao_id", id).order("criado_em", { ascending: true }),
   ]);
 
   return (
@@ -56,6 +59,9 @@ export default async function AdmissaoDetalhePage({ params }: Props) {
         auditLogs={auditLogs ?? []}
         valeTransporte={valeTransporte ?? null}
         autorizacaoSindical={autorizacaoSindical ?? null}
+        envelopeInterno={envelopeInterno ?? null}
+        envelopeContabilidade={envelopeContabilidade ?? null}
+        documentosContabilidade={documentosContabilidade ?? []}
       />
     </div>
   );

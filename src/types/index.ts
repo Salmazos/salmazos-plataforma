@@ -156,6 +156,36 @@ export interface AdmissaoDocumento {
   updated_at: string;
 }
 
+// Um envelope de assinatura Clicksign por (admissao_id, tipo_pacote) — substitui o
+// modelo antigo, singular, de admissoes.assinatura_* (que só suportava 1 envelope por
+// admissão). 'interno' é o pacote já existente (Ficha Cadastral + Autorização Sindical +
+// Solicitação de VT); 'contabilidade' é o pacote montado a partir dos documentos
+// enviados pela contabilidade.
+export type TipoPacoteAssinatura = "interno" | "contabilidade";
+export type StatusEnvelopeAssinatura = "pendente" | "assinado" | "cancelado";
+
+export interface AdmissaoEnvelopeAssinatura {
+  id: string;
+  admissao_id: string;
+  tipo_pacote: TipoPacoteAssinatura;
+  documento_externo_id: string | null;
+  status: StatusEnvelopeAssinatura;
+  assinado_em: string | null;
+  path: string | null;
+  provedor: string;
+  criado_em: string;
+}
+
+// Um PDF individual enviado pela contabilidade — no máximo 1 por tipo_documento por
+// admissão (ver lib/contabilidadeDocumentosMatch.ts para os 7 tipos possíveis).
+export interface AdmissaoDocumentoContabilidade {
+  id: string;
+  admissao_id: string;
+  tipo_documento: string;
+  storage_path: string;
+  criado_em: string;
+}
+
 export interface Candidato {
   id: string;
   nome_completo: string;

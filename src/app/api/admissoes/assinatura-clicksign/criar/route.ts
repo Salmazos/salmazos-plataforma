@@ -20,18 +20,29 @@ export async function POST(request: NextRequest) {
   const parsed = parseBody(assinaturaClicksignCriarSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
   const { admissaoId, pdfPath, nomeCandidato, emailCandidato } = parsed.data;
+  // Fixo aqui — esta rota só serve o pacote interno (Ficha Cadastral + Autorização
+  // Sindical + Solicitação de VT). O pacote da contabilidade cria sua própria linha
+  // (tipo_pacote='contabilidade') na mesma tabela, por outra rota.
+  const tipoPacote = "interno" as const;
 
   const svc = createServiceClient();
 
   const { data: admissao, error: admError } = await svc
     .from("admissoes")
-    .select("id, metodo_assinatura, assinatura_documento_externo_id, assinatura_em")
+    .select("id")
     .eq("id", admissaoId)
     .single();
   if (admError || !admissao) {
     return NextResponse.json({ error: "Admissão não encontrada." }, { status: 404 });
   }
-  if (admissao.assinatura_documento_externo_id && !admissao.assinatura_em) {
+
+  const { data: envelopeExistente } = await svc
+    .from("admissao_envelopes_assinatura")
+    .select("id, status")
+    .eq("admissao_id", admissaoId)
+    .eq("tipo_pacote", tipoPacote)
+    .maybeSingle();
+  if (envelopeExistente?.status === "pendente") {
     return NextResponse.json(
       { error: "Já existe uma solicitação de assinatura eletrônica em andamento para esta admissão." },
       { status: 409 }
@@ -59,7 +70,9 @@ export async function POST(request: NextRequest) {
       contentBase64,
       nomeSignatario: nomeCandidato,
       emailSignatario: emailCandidato,
-      metadata: { admissao_id: admissaoId },
+      // tipo_pacote ecoado de volta pela Clicksign no metadata do webhook — usado como
+      // reforço de roteamento além do documento_externo_id (ver webhooks/clicksign/route.ts).
+      metadata: { admissao_id: admissaoId, tipo_pacote: tipoPacote },
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro ao criar envelope na Clicksign.";
@@ -67,16 +80,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 502 });
   }
 
-  const { error: updateError } = await svc
-    .from("admissoes")
-    .update({
-      metodo_assinatura: "eletronica",
-      assinatura_provedor: "clicksign",
-      assinatura_documento_externo_id: resultado.envelopeId,
-    })
-    .eq("id", admissaoId);
-  if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  // documento_externo_id guarda o DOCUMENT id (não o envelope id) — é o que volta em
+  // payload.document.key no webhook de conclusão, então é o que precisa estar aqui pro
+  // roteamento por ID funcionar (ver nota em webhooks/clicksign/route.ts).
+  const { error: upsertError } = await svc
+    .from("admissao_envelopes_assinatura")
+    .upsert(
+      {
+        admissao_id: admissaoId,
+        tipo_pacote: tipoPacote,
+        documento_externo_id: resultado.documentId,
+        status: "pendente",
+        assinado_em: null,
+        path: null,
+        provedor: "clicksign",
+      },
+      { onConflict: "admissao_id,tipo_pacote" }
+    );
+  if (upsertError) {
+    return NextResponse.json({ error: upsertError.message }, { status: 500 });
   }
 
   registrarAuditoria({

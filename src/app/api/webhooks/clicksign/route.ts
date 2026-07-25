@@ -67,30 +67,64 @@ export async function POST(request: NextRequest) {
 
   for (const doc of documentos) {
     let admissaoId: string | undefined;
+    let tipoPacote: string | undefined;
     try {
       // metadata pode vir como objeto ou como string JSON — ver nota no tipo
       // ClicksignWebhookDocumento em lib/clicksign.ts.
       const metadata = typeof doc.metadata === "string" ? JSON.parse(doc.metadata) : doc.metadata;
       admissaoId = (metadata as { admissao_id?: string } | null | undefined)?.admissao_id;
+      tipoPacote = (metadata as { tipo_pacote?: string } | null | undefined)?.tipo_pacote;
     } catch {
       admissaoId = undefined;
     }
 
-    if (!admissaoId) {
-      console.error("[POST /api/webhooks/clicksign] Documento sem admissao_id em metadata", { documentKey: doc.key });
-      resultados.push({ admissaoId: "desconhecida", ok: false, erro: "metadata.admissao_id ausente ou inválido" });
-      continue;
-    }
-
     const signedFileUrl = doc.downloads?.signed_file_url;
     if (!signedFileUrl) {
-      resultados.push({ admissaoId, ok: false, erro: "downloads.signed_file_url ausente no payload" });
+      resultados.push({ admissaoId: admissaoId ?? "desconhecida", ok: false, erro: "downloads.signed_file_url ausente no payload" });
       continue;
     }
 
     try {
+      // Roteamento primário: documento_externo_id = doc.key (o DOCUMENT id da Clicksign,
+      // gravado na criação do envelope — ver assinatura-clicksign/criar/route.ts).
+      // Fallback: admissao_id + tipo_pacote ecoados em metadata, para o caso raro de uma
+      // linha sem documento_externo_id confiável (ex.: envelope 'interno' migrado do
+      // modelo antigo, onde só o envelope id — não o document id — havia sido guardado;
+      // ver nota na migration_admissao_envelopes_assinatura.sql). tipo_pacote não
+      // informado (webhooks de envelopes criados antes desta mudança) cai em 'interno',
+      // único tipo que existia até então.
+      const { data: porId } = await svc
+        .from("admissao_envelopes_assinatura")
+        .select("id, admissao_id, tipo_pacote, status")
+        .eq("documento_externo_id", doc.key)
+        .maybeSingle();
+
+      let envelope = porId ?? null;
+      if (!envelope && admissaoId) {
+        const { data: porMetadata } = await svc
+          .from("admissao_envelopes_assinatura")
+          .select("id, admissao_id, tipo_pacote, status")
+          .eq("admissao_id", admissaoId)
+          .eq("tipo_pacote", tipoPacote ?? "interno")
+          .maybeSingle();
+        envelope = porMetadata ?? null;
+      }
+
+      if (!envelope) {
+        throw new Error(
+          `Nenhum envelope encontrado para document_key=${doc.key} (metadata: admissao_id=${admissaoId ?? "?"}, tipo_pacote=${tipoPacote ?? "?"})`
+        );
+      }
+
+      // Entrega duplicada do webhook (a Clicksign pode reentregar) — já processado, não
+      // repete download/upload nem audita de novo.
+      if (envelope.status === "assinado") {
+        resultados.push({ admissaoId: envelope.admissao_id, ok: true });
+        continue;
+      }
+
       const pdfBuffer = await baixarDocumentoAssinado(signedFileUrl);
-      const uploadPath = `assinaturas/${admissaoId}/assinado-${Date.now()}.pdf`;
+      const uploadPath = `assinaturas/${envelope.admissao_id}/assinado-${Date.now()}.pdf`;
 
       const { error: uploadError } = await svc.storage
         .from(BUCKET)
@@ -99,23 +133,23 @@ export async function POST(request: NextRequest) {
 
       const assinadoEm = new Date().toISOString();
       const { error: updateError } = await svc
-        .from("admissoes")
-        .update({ assinatura_em: assinadoEm, assinatura_path: uploadPath })
-        .eq("id", admissaoId);
+        .from("admissao_envelopes_assinatura")
+        .update({ status: "assinado", assinado_em: assinadoEm, path: uploadPath })
+        .eq("id", envelope.id);
       if (updateError) throw new Error(updateError.message);
 
       registrarAuditoria({
         acao: "admissao_assinatura_clicksign_concluida",
         entidade: "admissoes",
-        entidade_id: admissaoId,
-        detalhes: { document_key: doc.key, storage_path: uploadPath },
+        entidade_id: envelope.admissao_id,
+        detalhes: { document_key: doc.key, tipo_pacote: envelope.tipo_pacote, storage_path: uploadPath },
       });
 
-      resultados.push({ admissaoId, ok: true });
+      resultados.push({ admissaoId: envelope.admissao_id, ok: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro desconhecido";
       console.error("[POST /api/webhooks/clicksign] Falha ao processar documento", { admissaoId, erro: msg });
-      resultados.push({ admissaoId, ok: false, erro: msg });
+      resultados.push({ admissaoId: admissaoId ?? "desconhecida", ok: false, erro: msg });
     }
   }
 

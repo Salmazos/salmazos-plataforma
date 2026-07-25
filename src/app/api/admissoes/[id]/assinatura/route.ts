@@ -10,8 +10,9 @@ interface Params {
 // mesmo padrão de /api/admissoes/[id]/pacote.
 const SIGNED_URL_TTL_SECONDS = 900;
 
-// Signed URL para reabrir o PDF assinado eletronicamente (assinatura_path, preenchido
-// pelo webhook da Clicksign quando o candidato conclui a assinatura).
+// Signed URL para reabrir o PDF assinado eletronicamente (admissao_envelopes_assinatura.path,
+// preenchido pelo webhook da Clicksign quando o candidato conclui a assinatura do pacote
+// interno — Ficha Cadastral + Autorização Sindical + Solicitação de VT).
 export async function GET(_request: NextRequest, { params }: Params) {
   const { id } = await params;
 
@@ -25,18 +26,19 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
   const svc = createServiceClient();
 
-  const { data: admissao, error } = await svc
-    .from("admissoes")
-    .select("assinatura_path")
-    .eq("id", id)
-    .single();
+  const { data: envelope, error } = await svc
+    .from("admissao_envelopes_assinatura")
+    .select("path")
+    .eq("admissao_id", id)
+    .eq("tipo_pacote", "interno")
+    .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });
-  if (!admissao.assinatura_path) return NextResponse.json({ error: "Esta admissão ainda não tem documento assinado." }, { status: 400 });
+  if (!envelope?.path) return NextResponse.json({ error: "Esta admissão ainda não tem documento assinado." }, { status: 400 });
 
   const { data, error: signError } = await svc.storage
     .from("admissao-docs")
-    .createSignedUrl(admissao.assinatura_path, SIGNED_URL_TTL_SECONDS);
+    .createSignedUrl(envelope.path, SIGNED_URL_TTL_SECONDS);
 
   if (signError) return NextResponse.json({ error: signError.message }, { status: 500 });
 

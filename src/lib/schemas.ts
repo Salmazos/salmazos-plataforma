@@ -566,6 +566,15 @@ export const bancoParceiroUpdateSchema = z.object({
   ativo: z.boolean().optional(),
 });
 
+export const admissaoDocumentoContabilidadeConfirmarSchema = z.object({
+  storage_path: z.string().min(1),
+});
+
+export const admissaoContabilidadeMontarEnviarSchema = z.object({
+  nomeCandidato: z.string().trim().min(1),
+  emailCandidato: z.string().email(),
+});
+
 export const admissaoDocumentoConfirmarSchema = z.object({
   storage_path: z.string().min(1),
   // Só usado pra reenvio de uma linha específica em tipos que aceitam múltiplos arquivos

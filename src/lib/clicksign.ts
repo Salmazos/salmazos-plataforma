@@ -8,6 +8,7 @@ import crypto from "crypto";
 //   - Criar signatário:          reference/api-criar-signatario
 //   - Requisito de assinatura:   reference/criar-requisito-qualificacao   (action=agree, role=sign)
 //   - Requisito de autenticação: reference/criar-requisito-de-autenticacao (action=provide_evidence, auth=email)
+//   - Requisito de rubrica:      reference/criar-requisito-de-rubrica     (action=rubricate, pages="all"|"1,2,3")
 //   - Ativar envelope:           reference/api-editar-envelope            (PATCH status=running)
 //   - Notificar signatário:      reference/api-notificar-signatario
 //   - Evento de webhook de conclusão: docs/evento-document-closed → "document_closed"
@@ -223,6 +224,32 @@ export async function adicionarRequisitoAutenticacaoEmail(
   });
 }
 
+// action=rubricate, pages="all"|"1,2,3" — confirmado em reference/criar-requisito-de-rubrica.
+// Reforço página-a-página: não existe endpoint pra posicionar a assinatura PRINCIPAL em
+// coordenadas específicas do PDF (ver nota no topo do arquivo e no lib/clicksign.ts
+// original), só rubrica por página. Usado no pacote da contabilidade, onde os PDFs
+// individuais já vêm com o espaço de assinatura correto em cada página.
+export async function adicionarRequisitoRubrica(
+  envelopeId: string,
+  documentId: string,
+  signerId: string,
+  paginas: string
+): Promise<void> {
+  await clicksignFetch(`/envelopes/${envelopeId}/requirements`, {
+    method: "POST",
+    body: JSON.stringify({
+      data: {
+        type: "requirements",
+        attributes: { action: "rubricate", pages: paginas },
+        relationships: {
+          document: { data: { type: "documents", id: documentId } },
+          signer: { data: { type: "signers", id: signerId } },
+        },
+      },
+    }),
+  });
+}
+
 // ── Notificação ──────────────────────────────────────────────────────────────
 
 // Confirmado em reference/api-notificar-signatario.
@@ -251,6 +278,11 @@ export interface CriarEnvelopeAssinaturaParams {
   // Clicksign, que podem divergir entre o schema da API v3 e o schema do webhook
   // (ver aviso no topo do arquivo).
   metadata?: Record<string, unknown>;
+  // "all", "1,2,3", etc. — omitido = sem requisito de rubrica (comportamento atual do
+  // pacote interno). Passado pelo pacote da contabilidade como reforço página-a-página
+  // (ver adicionarRequisitoRubrica). Falha ao aplicar rubrica NUNCA derruba a criação do
+  // envelope — é reforço, não pré-requisito pra assinatura funcionar.
+  rubricaPaginas?: string;
 }
 
 export interface CriarEnvelopeAssinaturaResult {
@@ -271,6 +303,14 @@ export async function criarEnvelopeDeAssinatura(
 
   await adicionarRequisitoAssinatura(envelope.id, documento.id, signatario.id);
   await adicionarRequisitoAutenticacaoEmail(envelope.id, documento.id, signatario.id);
+
+  if (params.rubricaPaginas) {
+    try {
+      await adicionarRequisitoRubrica(envelope.id, documento.id, signatario.id, params.rubricaPaginas);
+    } catch (err) {
+      console.error("[clicksign] Falha ao aplicar requisito de rubrica (não bloqueia o envelope)", err);
+    }
+  }
 
   await ativarEnvelope(envelope.id);
   await notificarSignatario(envelope.id, signatario.id);

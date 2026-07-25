@@ -14,9 +14,10 @@ import {
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import ModalContaSalario from "@/components/ModalContaSalario";
 import ModalAssinaturaEletronica from "@/components/ModalAssinaturaEletronica";
+import ModalUploadDocumentosContabilidade from "@/components/ModalUploadDocumentosContabilidade";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import CampoTelefone from "@/components/ui/CampoTelefone";
-import type { AdmissaoAdicional, AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
+import type { AdmissaoAdicional, AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento, AdmissaoEnvelopeAssinatura, AdmissaoDocumentoContabilidade } from "@/types";
 
 type Tab = "dados" | "documentos" | "notas";
 
@@ -66,11 +67,6 @@ interface AdmissaoFull {
   carta_banco_enviada_por: string | null;
   carta_banco_id: string | null;
   carta_banco_nome: string | null;
-  metodo_assinatura: string | null;
-  assinatura_provedor: string | null;
-  assinatura_documento_externo_id: string | null;
-  assinatura_em: string | null;
-  assinatura_path: string | null;
   lgpd_aceite_em: string | null;
   lgpd_aceite_ip: string | null;
   candidatos: { id: string; nome_completo: string; cargo_pretendido: string; telefone: string | null; email: string | null } | null;
@@ -94,6 +90,9 @@ interface Props {
   auditLogs: AuditLogEntry[];
   valeTransporte: AdmissaoValeTransporte | null;
   autorizacaoSindical: AdmissaoAutorizacaoSindical | null;
+  envelopeInterno: AdmissaoEnvelopeAssinatura | null;
+  envelopeContabilidade: AdmissaoEnvelopeAssinatura | null;
+  documentosContabilidade: AdmissaoDocumentoContabilidade[];
 }
 
 const ACAO_LABEL: Record<string, string> = {
@@ -427,7 +426,7 @@ interface VagaOpcao {
   clientes: { id: string; nome: string } | null;
 }
 
-export default function AdmissaoDetalheClient({ admissao, dadosPessoais, dependentes, documentos: documentosIniciais, adicionais: adicionaisIniciais, auditLogs, valeTransporte, autorizacaoSindical }: Props) {
+export default function AdmissaoDetalheClient({ admissao, dadosPessoais, dependentes, documentos: documentosIniciais, adicionais: adicionaisIniciais, auditLogs, valeTransporte, autorizacaoSindical, envelopeInterno, envelopeContabilidade, documentosContabilidade }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("dados");
   const [status, setStatus] = useState(admissao.status);
@@ -468,6 +467,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [modalContaSalarioAberto, setModalContaSalarioAberto] = useState(false);
   const [modalAssinaturaAberto, setModalAssinaturaAberto] = useState(false);
   const [abrindoAssinatura, setAbrindoAssinatura] = useState(false);
+  const [modalContabilidadeAberto, setModalContabilidadeAberto] = useState(false);
 
   // ── Edição total pelo analista ──────────────────────────────────────────
   const [dp, setDp] = useState(dadosPessoais);
@@ -1278,9 +1278,13 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   // de admissao_dados_pessoais, nunca de candidatos (mesma razão da carta de conta
   // salário: candidatos pode vir de extração automática de currículo, não confiável pra
   // um envio formal a terceiros) — mas ficam editáveis só naquela tela antes de enviar.
-  const assinaturaConcluida = Boolean(admissao.assinatura_em);
-  const assinaturaEmAndamento = Boolean(admissao.assinatura_documento_externo_id) && !assinaturaConcluida;
+  const assinaturaConcluida = envelopeInterno?.status === "assinado";
+  const assinaturaEmAndamento = envelopeInterno?.status === "pendente";
+
+  const contabilidadeAssinaturaConcluida = envelopeContabilidade?.status === "assinado";
+  const contabilidadeAssinaturaEmAndamento = envelopeContabilidade?.status === "pendente";
   const logAssinaturaCriada = auditLogs.find((l) => l.acao === "admissao_assinatura_clicksign_criada");
+  const logContabilidadeEnviado = auditLogs.find((l) => l.acao === "admissao_documentos_contabilidade_montado_e_enviado");
 
   return (
     <div>
@@ -1350,6 +1354,22 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                 className="w-full font-semibold px-6 py-2.5 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#FFB800]/30 bg-[#292524] hover:bg-[#44403C] text-[#FCD34D]"
               >
                 Enviar para assinatura eletrônica
+              </button>
+            )}
+          </div>
+        )}
+
+        {admissao.pdf_pacote_path && !contabilidadeAssinaturaConcluida && (
+          <div className="card">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Documentos da Contabilidade</p>
+            {contabilidadeAssinaturaEmAndamento ? (
+              <p className="text-sm text-gray-600">⏳ Aguardando assinatura eletrônica</p>
+            ) : (
+              <button
+                onClick={() => setModalContabilidadeAberto(true)}
+                className="w-full font-semibold px-6 py-2.5 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#FFB800]/30 bg-[#292524] hover:bg-[#44403C] text-[#FCD34D]"
+              >
+                📑 Enviar documentos da contabilidade
               </button>
             )}
           </div>
@@ -2160,7 +2180,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           {assinaturaConcluida ? (
             <>
               <p className="text-sm text-gray-600 mb-2">
-                ✅ Documento assinado eletronicamente em {admissao.assinatura_em ? formatarData(admissao.assinatura_em) : "—"}
+                ✅ Documento assinado eletronicamente em {envelopeInterno?.assinado_em ? formatarData(envelopeInterno.assinado_em) : "—"}
               </p>
               <button onClick={handleVerAssinatura} disabled={abrindoAssinatura} className="btn-outline">
                 {abrindoAssinatura ? "Abrindo..." : "Ver documento assinado"}
@@ -2175,6 +2195,29 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           ) : (
             <p className="text-sm text-gray-600 mb-0">
               Envie o pacote gerado para assinatura eletrônica do candidato via Clicksign.
+            </p>
+          )}
+        </div>
+      )}
+
+      {admissao.pdf_pacote_path && (
+        <div className="card mt-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Documentos da Contabilidade</p>
+          {contabilidadeAssinaturaConcluida ? (
+            <p className="text-sm text-gray-600 mb-0">
+              ✅ Pacote da contabilidade assinado eletronicamente em{" "}
+              {envelopeContabilidade?.assinado_em ? formatarData(envelopeContabilidade.assinado_em) : "—"}
+            </p>
+          ) : contabilidadeAssinaturaEmAndamento ? (
+            <p className="text-sm text-gray-600 mb-0">
+              ⏳ Aguardando assinatura eletrônica
+              {logContabilidadeEnviado?.created_at ? ` — enviado em ${formatarData(logContabilidadeEnviado.created_at)}` : ""}
+              {logContabilidadeEnviado?.usuario_nome ? ` por ${logContabilidadeEnviado.usuario_nome}` : ""}
+            </p>
+          ) : (
+            <p className="text-sm text-gray-600 mb-0">
+              {documentosContabilidade.length} de 7 documentos possíveis já confirmados. Use o botão acima para enviar
+              os PDFs da contabilidade, conferir a identificação automática e montar o pacote final para assinatura.
             </p>
           )}
         </div>
@@ -2211,6 +2254,21 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           emailInicial={dp?.email ?? ""}
           onEnviado={() => {
             showToast("Enviado para assinatura eletrônica com sucesso.");
+            router.refresh();
+          }}
+        />
+      )}
+
+      {admissao.pdf_pacote_path && (
+        <ModalUploadDocumentosContabilidade
+          isOpen={modalContabilidadeAberto}
+          onClose={() => setModalContabilidadeAberto(false)}
+          admissaoId={admissao.id}
+          documentosIniciais={documentosContabilidade}
+          nomeInicial={dp?.nome_completo ?? ""}
+          emailInicial={dp?.email ?? ""}
+          onEnviado={() => {
+            showToast("Documentos da contabilidade montados e enviados para assinatura com sucesso.");
             router.refresh();
           }}
         />
