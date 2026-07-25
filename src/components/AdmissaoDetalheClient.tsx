@@ -1353,7 +1353,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                 onClick={() => setModalAssinaturaAberto(true)}
                 className="w-full font-semibold px-6 py-2.5 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#FFB800]/30 bg-[#292524] hover:bg-[#44403C] text-[#FCD34D]"
               >
-                Enviar para assinatura eletrônica
+                Enviar para Assinatura Admissão
               </button>
             )}
           </div>
@@ -1369,7 +1369,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                 onClick={() => setModalContabilidadeAberto(true)}
                 className="w-full font-semibold px-6 py-2.5 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#FFB800]/30 bg-[#292524] hover:bg-[#44403C] text-[#FCD34D]"
               >
-                📑 Enviar documentos da contabilidade
+                📑 Enviar para Assinatura Contrato
               </button>
             )}
           </div>
