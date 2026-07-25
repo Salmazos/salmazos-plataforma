@@ -1345,7 +1345,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
 
         {admissao.pdf_pacote_path && !assinaturaConcluida && (
           <div className="card">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Assinatura eletrônica</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Assinatura Admissão</p>
             {assinaturaEmAndamento ? (
               <p className="text-sm text-gray-600">⏳ Aguardando assinatura eletrônica</p>
             ) : (
@@ -1361,7 +1361,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
 
         {admissao.pdf_pacote_path && !contabilidadeAssinaturaConcluida && (
           <div className="card">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Documentos da Contabilidade</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Assinatura Contrato</p>
             {contabilidadeAssinaturaEmAndamento ? (
               <p className="text-sm text-gray-600">⏳ Aguardando assinatura eletrônica</p>
             ) : (
@@ -2176,7 +2176,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
 
       {admissao.pdf_pacote_path && (
         <div className="card mt-3">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Assinatura eletrônica</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Assinatura Admissão</p>
           {assinaturaConcluida ? (
             <>
               <p className="text-sm text-gray-600 mb-2">
@@ -2202,7 +2202,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
 
       {admissao.pdf_pacote_path && (
         <div className="card mt-3">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Documentos da Contabilidade</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Assinatura Contrato</p>
           {contabilidadeAssinaturaConcluida ? (
             <p className="text-sm text-gray-600 mb-0">
               ✅ Pacote da contabilidade assinado eletronicamente em{" "}

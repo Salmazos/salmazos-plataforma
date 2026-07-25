@@ -691,6 +691,9 @@ export const portalAvaliarSchema = z.object({
   admissao_funcao: z.string().optional().nullable(),
   admissao_salario_hora: coerceNumberOptional,
   admissao_turno: z.string().optional().nullable(),
+  // Só usado no fluxo MOT — Terceirização continua com o valor combinado em
+  // admissao_turno (ver TURNO_OPCOES vs TURNO_OPCOES_MOT em PortalAvaliacaoBtn.tsx).
+  admissao_escala: z.string().optional().nullable(),
   admissao_tempo_contrato: z.string().optional().nullable(),
   admissao_vt: z.boolean().optional().nullable(),
   admissao_exame_responsavel: z.string().optional().nullable(),

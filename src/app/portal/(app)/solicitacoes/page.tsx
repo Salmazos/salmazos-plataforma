@@ -15,6 +15,8 @@ interface Solicitacao {
   vaga_id: string | null;
   vaga_slug: string | null;
   created_at: string;
+  candidatos_aprovados: string[];
+  candidatos_reprovados: string[];
 }
 
 const TIPO_BADGE: Record<string, { label: string; bg: string; color: string }> = {
@@ -132,6 +134,23 @@ export default function MinhasSolicitacoesPage() {
                   <div className="mt-3 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
                     <p className="text-xs font-bold text-red-700 uppercase mb-1">Motivo</p>
                     <p className="text-xs text-red-700">{s.motivo_recusa}</p>
+                  </div>
+                )}
+
+                {s.status === "aprovada" && (s.candidatos_aprovados.length > 0 || s.candidatos_reprovados.length > 0) && (
+                  <div className="mt-3 space-y-1.5">
+                    {s.candidatos_aprovados.length > 0 && (
+                      <p className="text-xs text-gray-600">
+                        <span className="font-bold" style={{ color: "#166534" }}>✓ Aprovado(s):</span>{" "}
+                        {s.candidatos_aprovados.join(", ")}
+                      </p>
+                    )}
+                    {s.candidatos_reprovados.length > 0 && (
+                      <p className="text-xs text-gray-600">
+                        <span className="font-bold" style={{ color: "#991B1B" }}>✗ Reprovado(s):</span>{" "}
+                        {s.candidatos_reprovados.join(", ")}
+                      </p>
+                    )}
                   </div>
                 )}
 

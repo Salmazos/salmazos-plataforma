@@ -76,7 +76,7 @@ export async function PATCH(request: NextRequest) {
           "admissao_data_inicio", "admissao_salario",
           "admissao_setor", "admissao_centro_custo", "admissao_horario",
           "admissao_gestor", "admissao_periodo_experiencia", "admissao_observacoes",
-          "admissao_funcao", "admissao_salario_hora", "admissao_turno",
+          "admissao_funcao", "admissao_salario_hora", "admissao_turno", "admissao_escala",
           "admissao_tempo_contrato", "admissao_vt", "admissao_exame_responsavel",
           "admissao_local_integracao", "admissao_telefone_candidato",
         ];
@@ -222,6 +222,7 @@ export async function PATCH(request: NextRequest) {
           admissao_periodo_experiencia: "Período de Experiência",
           admissao_funcao: "Função",
           admissao_turno: "Turno",
+          admissao_escala: "Escala",
           admissao_tempo_contrato: "Tempo de Contrato",
           admissao_vt: "Vale Transporte",
           admissao_exame_responsavel: "Exame Admissional",

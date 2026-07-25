@@ -19,10 +19,19 @@ interface Props {
 
 const PERIODOS_EXP = ["30 dias", "45 dias", "90 dias"];
 
+// Terceirização continua com o select único combinado (fora de escopo desta mudança).
 const TURNO_OPCOES = [
   "Turno A", "Turno B", "Turno C", "Turno D",
   "Horário Administrativo", "Escala 6x1", "Escala 6x2", "Escala Fixa", "Outro",
 ];
+
+// MOT — Turno e Escala viraram dois campos independentes (admissao_turno +
+// admissao_escala, novos envios apenas; registros antigos ficam com o valor
+// combinado como estava).
+const TURNO_OPCOES_MOT = [
+  "Turno A", "Turno B", "Turno C", "Turno D", "Horário Administrativo", "Outro",
+];
+const ESCALA_OPCOES_MOT = ["6x1", "6x2", "Fixa", "Outro"];
 
 // "06:00" (input type=time) -> "06h00", pro texto final salvo em admissao_horario
 function formatarHoraTexto(hhmm: string): string {
@@ -95,6 +104,9 @@ export default function PortalAvaliacaoBtn({
   const [admHorarioSaida, setAdmHorarioSaida] = useState("");
   const [admTurnoSelecionado, setAdmTurnoSelecionado] = useState("");
   const [admTurnoOutro, setAdmTurnoOutro] = useState("");
+  // Só usados no bloco MOT — ver TURNO_OPCOES_MOT/ESCALA_OPCOES_MOT.
+  const [admEscalaSelecionada, setAdmEscalaSelecionada] = useState("");
+  const [admEscalaOutro, setAdmEscalaOutro] = useState("");
 
   // Local/Data/Hora da Integração estruturados (substituem o texto livre antigo)
   const [admIntegracaoLocal, setAdmIntegracaoLocal] = useState("");
@@ -192,6 +204,7 @@ export default function PortalAvaliacaoBtn({
   // (ex: "Portaria às 08:00h dia" sem o dia, que já aconteceu de verdade).
   const precisaHorarioEstruturado = isMOT || isTerc;
   const turnoFinal = admTurnoSelecionado === "Outro" ? admTurnoOutro.trim() : admTurnoSelecionado;
+  const escalaFinal = admEscalaSelecionada === "Outro" ? admEscalaOutro.trim() : admEscalaSelecionada;
   const horarioComposto = admHorarioEntrada && admHorarioSaida && turnoFinal
     ? `${turnoFinal}, ${formatarHoraTexto(admHorarioEntrada)} às ${formatarHoraTexto(admHorarioSaida)}`
     : "";
@@ -225,6 +238,8 @@ export default function PortalAvaliacaoBtn({
       if (!admHorarioEntrada || !admHorarioSaida) return "Informe o horário de entrada e saída.";
       if (!admTurnoSelecionado) return "Selecione o turno.";
       if (admTurnoSelecionado === "Outro" && !admTurnoOutro.trim()) return "Especifique o turno.";
+      if (!admEscalaSelecionada) return "Selecione a escala.";
+      if (admEscalaSelecionada === "Outro" && !admEscalaOutro.trim()) return "Especifique a escala.";
       if (!admTempoContrato.trim()) return "Informe o tempo de contrato.";
       if (!admTelefone.trim()) return "Informe o telefone do candidato.";
       if (admVt === null) return "Informe se utiliza Vale Transporte.";
@@ -281,6 +296,7 @@ export default function PortalAvaliacaoBtn({
             admissao_funcao: admFuncao || null,
             admissao_salario_hora: admSalarioHora ? parseFloat(admSalarioHora) : null,
             admissao_turno: precisaHorarioEstruturado ? (turnoFinal || null) : null,
+            admissao_escala: isMOT ? (escalaFinal || null) : null,
             admissao_tempo_contrato: admTempoContrato || null,
             admissao_vt: admVt,
             admissao_exame_responsavel: admExameResp || null,
@@ -523,7 +539,7 @@ export default function PortalAvaliacaoBtn({
                         <select value={admTurnoSelecionado} onChange={(e) => setAdmTurnoSelecionado(e.target.value)}
                           className="input-field" style={missing(admTurnoSelecionado) ? inv : undefined}>
                           <option value="" disabled>Selecione...</option>
-                          {TURNO_OPCOES.map((t) => <option key={t} value={t}>{t}</option>)}
+                          {TURNO_OPCOES_MOT.map((t) => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </Field>
                       {admTurnoSelecionado === "Outro" && (
@@ -531,6 +547,20 @@ export default function PortalAvaliacaoBtn({
                           <input value={admTurnoOutro} onChange={(e) => setAdmTurnoOutro(e.target.value)}
                             placeholder="Ex: Turno E" className="input-field"
                             style={tentouEnviar && !admTurnoOutro.trim() ? inv : undefined} />
+                        </Field>
+                      )}
+                      <Field label="Escala" required>
+                        <select value={admEscalaSelecionada} onChange={(e) => setAdmEscalaSelecionada(e.target.value)}
+                          className="input-field" style={missing(admEscalaSelecionada) ? inv : undefined}>
+                          <option value="" disabled>Selecione...</option>
+                          {ESCALA_OPCOES_MOT.map((es) => <option key={es} value={es}>{es}</option>)}
+                        </select>
+                      </Field>
+                      {admEscalaSelecionada === "Outro" && (
+                        <Field label="Especifique a escala" required>
+                          <input value={admEscalaOutro} onChange={(e) => setAdmEscalaOutro(e.target.value)}
+                            placeholder="Ex: 5x2" className="input-field"
+                            style={tentouEnviar && !admEscalaOutro.trim() ? inv : undefined} />
                         </Field>
                       )}
                       <Field label="Tempo de Contrato" required>
