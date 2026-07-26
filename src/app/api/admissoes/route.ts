@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  // apenasPainel (ex.: rg_verso) fica de fora do seed automático — só passa a existir
+  // apenasPainel fica de fora do seed automático — só passa a existir
   // quando o RH decide usá-lo manualmente pela aba Documentos, não como um card sempre
   // presente (e vazio) igual aos demais tipos.
   const documentosRows = DOCUMENTOS_ADMISSAO.filter((doc) => !doc.apenasPainel).map((doc) => ({

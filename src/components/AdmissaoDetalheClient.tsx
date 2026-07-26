@@ -1120,25 +1120,6 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
     );
   };
 
-  // Card de "RG (verso)": documento apenasPainel, sem linha pré-criada — enquanto não
-  // existir, mostra só o botão de opt-in; depois do primeiro upload, vira um card normal
-  // (reaproveita renderDocCard) posicionado logo depois do card de "rg".
-  const renderRgVersoBlock = () => {
-    const docVerso = documentos.find((d) => d.tipo_documento === "rg_verso");
-    if (docVerso) return renderDocCard(docVerso, "RG (verso)");
-
-    const enviandoVerso = enviandoUpload && uploadAlvo?.tipo === "rg_verso";
-    return (
-      <button
-        onClick={() => iniciarUpload("rg_verso", undefined, "RG (verso)")}
-        disabled={enviandoVerso}
-        className="btn-outline mb-3" style={{ padding: "6px 12px", fontSize: 12, opacity: enviandoVerso ? 0.6 : 1 }}
-      >
-        {enviandoVerso ? "Enviando..." : "+ Adicionar verso do RG"}
-      </button>
-    );
-  };
-
   const handleGerarPdf = async () => {
     setGerandoPdf(true);
     setErroPacote("");
@@ -2010,10 +1991,6 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                       : `+ Adicionar novo arquivo (${def.label})`}
                   </button>
                 )}
-
-                {/* RG (verso) fica logo ao lado do card de RG — apenasPainel, sem linha
-                    pré-criada, só aparece quando o RH clica em "+ Adicionar verso do RG". */}
-                {def.tipo_documento === "rg" && renderRgVersoBlock()}
               </div>
             );
           })}

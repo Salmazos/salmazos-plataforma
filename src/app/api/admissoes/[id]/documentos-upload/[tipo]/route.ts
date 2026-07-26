@@ -61,7 +61,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const def = DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === tipo)!;
   const aceitaMultiplos = def.condicional === "dependente";
-  // Tipos apenasPainel (ex.: rg_verso) não têm linha pré-criada na criação da admissão —
+  // Tipos apenasPainel não têm linha pré-criada na criação da admissão —
   // reaproveita a mesma lógica de "cria a linha se ainda não existir" do multi-arquivo,
   // já que o primeiro upload é exatamente o que faz a linha passar a existir.
   const criaLinhaSobDemanda = aceitaMultiplos || def.apenasPainel === true;

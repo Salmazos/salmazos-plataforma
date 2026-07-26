@@ -150,9 +150,9 @@ export async function POST(request: NextRequest, { params }: Params) {
   const dp = (dadosPessoais ?? {}) as Partial<AdmissaoDadosPessoais>;
   const docs = (documentos ?? []) as AdmissaoDocumento[];
   const docRg = docs.find((d) => d.tipo_documento === "rg");
-  // rg_verso é opcional (upload manual do RH, ver AdmissaoDetalheClient "+ Adicionar
-  // verso do RG") — ao contrário do RG e do comprovante, não bloqueia a carta se não
-  // existir ou não estiver aprovado; só entra na carta quando tem arquivo de fato.
+  // rg_verso vem do próprio candidato (upload no formulário público) — não bloqueia a
+  // carta se não existir (nem todo documento tem verso relevante), mas se existir só
+  // entra na carta depois de aprovado pelo RH, igual RG e comprovante.
   const docRgVerso = docs.find((d) => d.tipo_documento === "rg_verso");
   const docComprovante = docs.find((d) => d.tipo_documento === "comprovante_endereco");
 
@@ -234,9 +234,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
-  // Página extra só quando o RH fez esse upload manual — caso normal (candidato mandou
-  // frente e verso na mesma foto) não tem rg_verso e a carta continua com 3 páginas.
-  if (docRgVerso?.storage_path) {
+  // Página extra só quando o verso foi enviado E aprovado — caso normal (candidato
+  // mandou frente e verso na mesma foto) não tem rg_verso e a carta continua com 3 páginas.
+  if (docRgVerso?.storage_path && docRgVerso.status === "aprovado") {
     const rgVersoAnexado = await anexarDocumentoPaginaCheia(svc, pdfDoc, w, docRgVerso.storage_path, "RG (verso)");
     if (!rgVersoAnexado) {
       return NextResponse.json(

@@ -7,6 +7,9 @@ import { cardStyle, infoBoxStyle } from "./styles";
 import { DOCUMENTOS_ADMISSAO, type DocumentoAdmissaoDef } from "@/lib/admissaoDocumentos";
 import { NOTAS_DOCUMENTO, NOTA_HEIC_IPHONE } from "@/lib/admissaoConstants";
 import { comprimirImagem } from "@/lib/comprimirImagemCliente";
+import { validarQualidadeImagem } from "@/lib/validarQualidadeImagem";
+import { ENQUADRAMENTO_CONFIG } from "@/lib/enquadramentoConfig";
+import CapturaComEnquadramento, { detectarMobile } from "./CapturaComEnquadramento";
 
 interface Props {
   token: string;
@@ -33,6 +36,14 @@ function validarArquivo(file: File): string | null {
     return `Formato de "${file.name}" não aceito. Envie JPG, PNG, PDF ou HEIC.`;
   }
   return null;
+}
+
+// Roda nos dois caminhos de upload (câmera com moldura e "escolher da galeria"/arquivo) —
+// bloqueia só casos extremos (muito escuro, muito borrado), com mensagem que convida a
+// tentar de novo em vez de travar o candidato sem explicação.
+async function validarQualidadeOuErro(file: File): Promise<string | null> {
+  const resultado = await validarQualidadeImagem(file);
+  return resultado.ok ? null : resultado.motivo ?? "A foto não ficou boa o suficiente. Tente novamente.";
 }
 
 async function enviarArquivo(
@@ -72,18 +83,28 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
   const def = DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === doc.tipo_documento);
   const nota = NOTAS_DOCUMENTO[doc.tipo_documento];
   const inputRef = useRef<HTMLInputElement>(null);
+  const [isMobile] = useState(detectarMobile);
+  const [capturando, setCapturando] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [verificando, setVerificando] = useState(false);
   const [otimizando, setOtimizando] = useState(false);
   const [erro, setErro] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const enviado = doc.status === "enviado" || doc.status === "aprovado";
   const rejeitado = doc.status === "rejeitado";
+  // Moldura só em mobile — desktop segue exatamente como hoje (input de arquivo comum).
+  const usaEnquadramento = isMobile && !!def?.enquadramento;
 
   const handleFile = async (file: File) => {
     setErro("");
     const erroValidacao = validarArquivo(file);
     if (erroValidacao) { setErro(erroValidacao); return; }
+
+    setVerificando(true);
+    const erroQualidade = await validarQualidadeOuErro(file);
+    setVerificando(false);
+    if (erroQualidade) { setErro(erroQualidade); return; }
 
     setOtimizando(true);
     const arquivoFinal = await comprimirImagem(file);
@@ -97,6 +118,20 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
     onAtualizado(resultado.data);
     setEnviando(false);
   };
+
+  if (usaEnquadramento && capturando) {
+    const cfg = ENQUADRAMENTO_CONFIG[def!.enquadramento!];
+    return (
+      <CapturaComEnquadramento
+        proporcaoLargura={cfg.proporcaoLargura}
+        proporcaoAltura={cfg.proporcaoAltura}
+        orientacao={cfg.orientacao}
+        instrucao={cfg.instrucaoPadrao}
+        onArquivoEscolhido={(file) => { setCapturando(false); handleFile(file); }}
+        onCancelar={() => setCapturando(false)}
+      />
+    );
+  }
 
   return (
     <div style={{ ...cardStyle, marginBottom: 12, border: rejeitado ? "2px solid #DC2626" : cardStyle.border }}>
@@ -134,23 +169,25 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
         )}
 
         <button
-          onClick={() => inputRef.current?.click()}
-          disabled={enviando || otimizando}
+          onClick={() => (usaEnquadramento ? setCapturando(true) : inputRef.current?.click())}
+          disabled={enviando || otimizando || verificando}
           style={{
             flex: 1, minHeight: 44, fontSize: 14, fontWeight: 600, borderRadius: 10, cursor: "pointer",
             border: enviado && !rejeitado ? "1px solid #D1D5DB" : "none",
             background: enviado && !rejeitado ? "#fff" : "#000",
             color: enviado && !rejeitado ? "#374151" : "#FFD700",
-            opacity: enviando || otimizando ? 0.7 : 1,
+            opacity: enviando || otimizando || verificando ? 0.7 : 1,
           }}
         >
-          {otimizando ? "Otimizando imagem..." : enviando ? "Enviando..." : enviado && !rejeitado ? "Reenviar arquivo" : "Enviar arquivo"}
+          {verificando ? "Verificando qualidade..." : otimizando ? "Otimizando imagem..." : enviando ? "Enviando..." : enviado && !rejeitado ? "Reenviar arquivo" : "Enviar arquivo"}
         </button>
 
-        <input
-          ref={inputRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }}
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
-        />
+        {!usaEnquadramento && (
+          <input
+            ref={inputRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+          />
+        )}
       </div>
 
       {erro && <p style={{ color: "#DC2626", fontSize: 12, marginTop: 8 }}>{erro}</p>}
@@ -161,18 +198,27 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
 // Linha compacta pra um arquivo já confirmado dentro de um slot multi-arquivo — mesma
 // lógica de reenvio do DocumentoCard, mas escopada a UMA linha específica (doc_id),
 // senão o backend não sabe qual das várias linhas do tipo deve ser substituída.
-function ArquivoEnviadoLinha({ doc, index, token, onAtualizado }: { doc: DocumentoToken; index: number; token: string; onAtualizado: (doc: DocumentoToken) => void }) {
+function ArquivoEnviadoLinha({ doc, index, token, onAtualizado, enquadramento }: { doc: DocumentoToken; index: number; token: string; onAtualizado: (doc: DocumentoToken) => void; enquadramento?: "cartao" | "retrato_3x4" | "folha" }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [isMobile] = useState(detectarMobile);
+  const [capturando, setCapturando] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [verificando, setVerificando] = useState(false);
   const [otimizando, setOtimizando] = useState(false);
   const [erro, setErro] = useState("");
   const rejeitado = doc.status === "rejeitado";
   const aprovado = doc.status === "aprovado";
+  const usaEnquadramento = isMobile && !!enquadramento;
 
   const handleFile = async (file: File) => {
     setErro("");
     const erroValidacao = validarArquivo(file);
     if (erroValidacao) { setErro(erroValidacao); return; }
+
+    setVerificando(true);
+    const erroQualidade = await validarQualidadeOuErro(file);
+    setVerificando(false);
+    if (erroQualidade) { setErro(erroQualidade); return; }
 
     setOtimizando(true);
     const arquivoFinal = await comprimirImagem(file);
@@ -186,6 +232,20 @@ function ArquivoEnviadoLinha({ doc, index, token, onAtualizado }: { doc: Documen
     setEnviando(false);
   };
 
+  if (usaEnquadramento && capturando) {
+    const cfg = ENQUADRAMENTO_CONFIG[enquadramento!];
+    return (
+      <CapturaComEnquadramento
+        proporcaoLargura={cfg.proporcaoLargura}
+        proporcaoAltura={cfg.proporcaoAltura}
+        orientacao={cfg.orientacao}
+        instrucao={cfg.instrucaoPadrao}
+        onArquivoEscolhido={(file) => { setCapturando(false); handleFile(file); }}
+        onCancelar={() => setCapturando(false)}
+      />
+    );
+  }
+
   return (
     <div style={{ border: rejeitado ? "2px solid #DC2626" : "1px solid #E5E7EB", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -193,16 +253,18 @@ function ArquivoEnviadoLinha({ doc, index, token, onAtualizado }: { doc: Documen
           Arquivo {index + 1} {aprovado ? "✅" : rejeitado ? "❌" : "⏳"}
         </span>
         <button
-          onClick={() => inputRef.current?.click()}
-          disabled={enviando || otimizando}
-          style={{ fontSize: 12, fontWeight: 600, color: "#B45309", background: "none", border: "none", cursor: "pointer", opacity: enviando || otimizando ? 0.6 : 1 }}
+          onClick={() => (usaEnquadramento ? setCapturando(true) : inputRef.current?.click())}
+          disabled={enviando || otimizando || verificando}
+          style={{ fontSize: 12, fontWeight: 600, color: "#B45309", background: "none", border: "none", cursor: "pointer", opacity: enviando || otimizando || verificando ? 0.6 : 1 }}
         >
-          {otimizando ? "Otimizando..." : enviando ? "Enviando..." : "Reenviar"}
+          {verificando ? "Verificando..." : otimizando ? "Otimizando..." : enviando ? "Enviando..." : "Reenviar"}
         </button>
-        <input
-          ref={inputRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }}
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
-        />
+        {!usaEnquadramento && (
+          <input
+            ref={inputRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+          />
+        )}
       </div>
       {rejeitado && (
         <p style={{ fontSize: 12, color: "#991B1B", margin: "4px 0 0" }}>
@@ -224,29 +286,45 @@ function DocumentoMultiCard({
 }) {
   const nota = NOTAS_DOCUMENTO[def.tipo_documento];
   const inputRef = useRef<HTMLInputElement>(null);
+  const [isMobile] = useState(detectarMobile);
+  const [capturando, setCapturando] = useState(false);
   const [staged, setStaged] = useState<File[]>([]);
   const [enviando, setEnviando] = useState(false);
+  const [verificando, setVerificando] = useState(false);
   const [otimizando, setOtimizando] = useState(false);
   const [erro, setErro] = useState("");
+  const usaEnquadramento = isMobile && !!def.enquadramento;
 
   const enviados = rows.filter((r) => r.storage_path);
 
-  const handleSelecionar = async (files: FileList) => {
+  const handleSelecionarArquivos = async (arquivos: File[]) => {
     setErro("");
     const validos: File[] = [];
-    for (const file of Array.from(files)) {
+    for (const file of arquivos) {
       const erroValidacao = validarArquivo(file);
       if (erroValidacao) { setErro(erroValidacao); continue; }
       validos.push(file);
     }
     if (validos.length === 0) return;
 
+    setVerificando(true);
+    const verificados: File[] = [];
+    for (const file of validos) {
+      const erroQualidade = await validarQualidadeOuErro(file);
+      if (erroQualidade) { setErro(erroQualidade); continue; }
+      verificados.push(file);
+    }
+    setVerificando(false);
+    if (verificados.length === 0) return;
+
     setOtimizando(true);
-    const comprimidos = await Promise.all(validos.map((file) => comprimirImagem(file)));
+    const comprimidos = await Promise.all(verificados.map((file) => comprimirImagem(file)));
     setOtimizando(false);
 
     setStaged((prev) => [...prev, ...comprimidos]);
   };
+
+  const handleSelecionar = (files: FileList) => handleSelecionarArquivos(Array.from(files));
 
   const removerStaged = (idx: number) => {
     setStaged((prev) => prev.filter((_, i) => i !== idx));
@@ -271,6 +349,20 @@ function DocumentoMultiCard({
 
   const temRejeitado = rows.some((r) => r.status === "rejeitado");
 
+  if (usaEnquadramento && capturando) {
+    const cfg = ENQUADRAMENTO_CONFIG[def.enquadramento!];
+    return (
+      <CapturaComEnquadramento
+        proporcaoLargura={cfg.proporcaoLargura}
+        proporcaoAltura={cfg.proporcaoAltura}
+        orientacao={cfg.orientacao}
+        instrucao={cfg.instrucaoPadrao}
+        onArquivoEscolhido={(file) => { setCapturando(false); handleSelecionarArquivos([file]); }}
+        onCancelar={() => setCapturando(false)}
+      />
+    );
+  }
+
   return (
     <div style={{ ...cardStyle, marginBottom: 12, border: temRejeitado ? "2px solid #DC2626" : cardStyle.border }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
@@ -289,7 +381,7 @@ function DocumentoMultiCard({
       )}
 
       {enviados.map((doc, idx) => (
-        <ArquivoEnviadoLinha key={doc.id} doc={doc} index={idx} token={token} onAtualizado={onAtualizado} />
+        <ArquivoEnviadoLinha key={doc.id} doc={doc} index={idx} token={token} onAtualizado={onAtualizado} enquadramento={def.enquadramento} />
       ))}
 
       {staged.length > 0 && (
@@ -327,19 +419,21 @@ function DocumentoMultiCard({
       )}
 
       <button
-        onClick={() => inputRef.current?.click()}
-        disabled={enviando || otimizando}
+        onClick={() => (usaEnquadramento ? setCapturando(true) : inputRef.current?.click())}
+        disabled={enviando || otimizando || verificando}
         style={{
           width: "100%", minHeight: 40, fontSize: 13, fontWeight: 600, borderRadius: 10, cursor: "pointer",
-          border: "1px solid #D1D5DB", background: "#fff", color: "#374151", opacity: enviando || otimizando ? 0.7 : 1,
+          border: "1px solid #D1D5DB", background: "#fff", color: "#374151", opacity: enviando || otimizando || verificando ? 0.7 : 1,
         }}
       >
-        {otimizando ? "Otimizando imagem..." : "+ Adicionar outro arquivo"}
+        {verificando ? "Verificando qualidade..." : otimizando ? "Otimizando imagem..." : "+ Adicionar outro arquivo"}
       </button>
-      <input
-        ref={inputRef} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }}
-        onChange={(e) => { if (e.target.files && e.target.files.length > 0) handleSelecionar(e.target.files); e.target.value = ""; }}
-      />
+      {!usaEnquadramento && (
+        <input
+          ref={inputRef} type="file" accept="image/*,application/pdf" multiple style={{ display: "none" }}
+          onChange={(e) => { if (e.target.files && e.target.files.length > 0) handleSelecionar(e.target.files); e.target.value = ""; }}
+        />
+      )}
 
       {erro && <p style={{ color: "#DC2626", fontSize: 12, marginTop: 8 }}>{erro}</p>}
     </div>
@@ -347,9 +441,9 @@ function DocumentoMultiCard({
 }
 
 export default function PassoUploadDocumentos({ token, documentos, setDocumentos, sexo, isMotorista, possuiDependentes }: Props) {
-  // apenasPainel (ex.: rg_verso) é exclusivo do upload manual pela equipe — nunca aparece
-  // aqui, mesmo defensivamente (a linha em admissao_documentos nem chega a existir pra um
-  // tipo assim, já que o seed automático da criação também o exclui).
+  // apenasPainel é exclusivo do upload manual pela equipe — nunca aparece aqui, mesmo
+  // defensivamente (a linha em admissao_documentos nem chega a existir pra um tipo assim,
+  // já que o seed automático da criação também o exclui). Hoje nenhum tipo usa isso.
   const tiposVisiveis = DOCUMENTOS_ADMISSAO.filter((def) => !def.apenasPainel && tipoVisivel(def, sexo, isMotorista, possuiDependentes));
 
   const handleAtualizado = (docAtualizado: DocumentoToken) => {

@@ -8,7 +8,7 @@ interface Params {
   params: Promise<{ token: string; tipo: string }>;
 }
 
-// apenasPainel (ex.: rg_verso) é exclusivo do upload manual da equipe — rejeitado aqui
+// apenasPainel é exclusivo do upload manual da equipe — rejeitado aqui
 // mesmo que alguém chame a API diretamente, não só escondido na UI (ver PassoUploadDocumentos).
 function isTipoValido(tipo: string): boolean {
   return DOCUMENTOS_ADMISSAO.some((d) => d.tipo_documento === tipo && !d.apenasPainel);
