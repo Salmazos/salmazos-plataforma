@@ -289,6 +289,30 @@ export class PdfWriter {
     this.page.drawImage(img, { x, y, width: w2, height: h2 });
   }
 
+  // Duas imagens empilhadas na MESMA página (ex.: frente/verso de um documento) — divide
+  // a área útil em dois slots de altura igual (com um respiro entre eles) e maximiza cada
+  // imagem dentro do seu slot, preservando proporção, centralizada em ambos os eixos.
+  drawDuasImagensEmpilhadas(imgTopo: PDFImage, imgBaixo: PDFImage) {
+    this.newPage();
+    const areaW = PW - ML * 2;
+    const areaTopoY = this.y;
+    const areaH = areaTopoY - FOOTER_RESERVED;
+    const respiro = 14;
+    const slotH = (areaH - respiro) / 2;
+
+    const desenharNoSlot = (img: PDFImage, slotTopoY: number) => {
+      const scale = Math.min(areaW / img.width, slotH / img.height, 1);
+      const w2 = img.width * scale;
+      const h2 = img.height * scale;
+      const x = (PW - w2) / 2;
+      const y = slotTopoY - slotH + (slotH - h2) / 2;
+      this.page.drawImage(img, { x, y, width: w2, height: h2 });
+    };
+
+    desenharNoSlot(imgTopo, areaTopoY);
+    desenharNoSlot(imgBaixo, areaTopoY - slotH - respiro);
+  }
+
   // ( ) ou (X) — pra opções de múltipla escolha (rádio) desenhadas manualmente.
   checkOption(label: string, checked: boolean) {
     this.ensureSpace(16);

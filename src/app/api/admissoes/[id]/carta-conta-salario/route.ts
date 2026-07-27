@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, PDFImage } from "pdf-lib";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/audit";
 import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
@@ -51,31 +51,59 @@ async function resolverAssinaturaResponsavel(
   }
 }
 
-// Baixa um documento da admissão e o anexa como página cheia — imagem comprimida
-// (reaproveitando embutirImagemComprimida) ou páginas de PDF copiadas diretamente.
-async function anexarDocumentoPaginaCheia(
+// Baixa um documento da admissão — resultado bruto (bytes + extensão), sem decidir ainda
+// como desenhar no PDF. Separado de embutirComoImagem/copiarPaginasPdf pra permitir
+// decidir DEPOIS de baixar frente e verso se dá pra empilhar as duas na mesma página
+// (só quando ambas são imagem) ou se cada uma precisa da própria página (quando alguma
+// é um PDF escaneado, que não dá pra posicionar como imagem).
+async function baixarDocumento(
   svc: ReturnType<typeof createServiceClient>,
-  pdfDoc: PDFDocument,
-  w: PdfWriter,
   storagePath: string,
   label: string
-): Promise<boolean> {
+): Promise<{ bytes: Uint8Array; ext: string } | null> {
   const { data: fileBlob, error: dlError } = await svc.storage.from(BUCKET).download(storagePath);
   if (dlError || !fileBlob) {
     console.error(`[carta-conta-salario] Falha ao baixar ${label}:`, dlError?.message);
-    return false;
+    return null;
   }
-
   const bytes = new Uint8Array(await fileBlob.arrayBuffer());
   const ext = storagePath.split(".").pop()?.toLowerCase() ?? "";
+  return { bytes, ext };
+}
 
+const EXTENSOES_IMAGEM = new Set(["jpg", "jpeg", "png"]);
+
+// Embute como imagem (comprimida) se for jpg/jpeg/png — null se for outro formato
+// (ex.: pdf), que precisa ser tratado como página copiada, não como imagem posicionável.
+async function embutirComoImagem(
+  pdfDoc: PDFDocument,
+  arquivo: { bytes: Uint8Array; ext: string },
+  label: string
+): Promise<PDFImage | null> {
+  if (!EXTENSOES_IMAGEM.has(arquivo.ext)) return null;
   try {
-    if (ext === "jpg" || ext === "jpeg" || ext === "png") {
-      const img = await embutirImagemComprimida(pdfDoc, bytes, ext);
+    return await embutirImagemComprimida(pdfDoc, arquivo.bytes, arquivo.ext);
+  } catch (err) {
+    console.error(`[carta-conta-salario] Falha ao embutir ${label}:`, err);
+    return null;
+  }
+}
+
+// Anexa um documento já baixado como página cheia — imagem comprimida ou páginas de PDF
+// copiadas diretamente, dependendo do formato original.
+async function anexarPaginaCheia(
+  pdfDoc: PDFDocument,
+  w: PdfWriter,
+  arquivo: { bytes: Uint8Array; ext: string },
+  label: string
+): Promise<boolean> {
+  try {
+    if (EXTENSOES_IMAGEM.has(arquivo.ext)) {
+      const img = await embutirImagemComprimida(pdfDoc, arquivo.bytes, arquivo.ext);
       w.drawImagemPagina(img);
       return true;
-    } else if (ext === "pdf") {
-      const subDoc = await PDFDocument.load(bytes);
+    } else if (arquivo.ext === "pdf") {
+      const subDoc = await PDFDocument.load(arquivo.bytes);
       const copiedPages = await pdfDoc.copyPages(subDoc, subDoc.getPageIndices());
       copiedPages.forEach((p) => pdfDoc.addPage(p));
       return true;
@@ -195,8 +223,10 @@ export async function POST(request: NextRequest, { params }: Params) {
     bancoParceiroNome = banco.nome;
   }
 
-  // ── Gera o PDF de 3 páginas (carta + RG + comprovante de endereço), ou 4 se houver
-  // rg_verso (carta + RG + RG verso + comprovante de endereço) ─────────────
+  // ── Gera o PDF de 3 páginas (carta + RG + comprovante de endereço). Quando há rg_verso
+  // aprovado, frente e verso são empilhadas na mesma página (continua 3 páginas) — só vira
+  // 4 se algum dos dois lados não for imagem (ex.: PDF escaneado), caso em que cada um
+  // fica na própria página cheia, como antes ──────────────────────────────
   const pdfDoc = await PDFDocument.create();
   // criarPaginaInicial=false: desenharCartaAberturaContaSalario já chama w.newPage()
   // sozinha (mesmo padrão de desenharFichaCadastral/etc.) — evitaria uma página 1 em branco.
@@ -226,8 +256,8 @@ export async function POST(request: NextRequest, { params }: Params) {
     assinaturaImg,
   });
 
-  const rgAnexado = await anexarDocumentoPaginaCheia(svc, pdfDoc, w, docRg.storage_path, "RG");
-  if (!rgAnexado) {
+  const arquivoRg = await baixarDocumento(svc, docRg.storage_path, "RG");
+  if (!arquivoRg) {
     return NextResponse.json(
       { error: "Não foi possível anexar o RG ao PDF. Verifique o arquivo no painel e tente novamente." },
       { status: 500 }
@@ -236,17 +266,53 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   // Página extra só quando o verso foi enviado E aprovado — caso normal (candidato
   // mandou frente e verso na mesma foto) não tem rg_verso e a carta continua com 3 páginas.
-  if (docRgVerso?.storage_path && docRgVerso.status === "aprovado") {
-    const rgVersoAnexado = await anexarDocumentoPaginaCheia(svc, pdfDoc, w, docRgVerso.storage_path, "RG (verso)");
-    if (!rgVersoAnexado) {
+  const temRgVerso = !!docRgVerso?.storage_path && docRgVerso.status === "aprovado";
+  const arquivoRgVerso = temRgVerso ? await baixarDocumento(svc, docRgVerso!.storage_path!, "RG (verso)") : null;
+  if (temRgVerso && !arquivoRgVerso) {
+    return NextResponse.json(
+      { error: "Não foi possível anexar o verso do RG ao PDF. Verifique o arquivo no painel e tente novamente." },
+      { status: 500 }
+    );
+  }
+
+  if (arquivoRgVerso) {
+    // Frente e verso empilhadas na mesma página só quando AMBAS são imagem — um PDF
+    // escaneado não dá pra posicionar como imagem, então nesse caso cai pro comportamento
+    // anterior (cada lado na própria página cheia).
+    const imgRg = await embutirComoImagem(pdfDoc, arquivoRg, "RG");
+    const imgRgVerso = await embutirComoImagem(pdfDoc, arquivoRgVerso, "RG (verso)");
+    if (imgRg && imgRgVerso) {
+      w.drawDuasImagensEmpilhadas(imgRg, imgRgVerso);
+    } else {
+      // Reaproveita a imagem já embutida no lado que deu certo — só reprocessa (via
+      // anexarPaginaCheia) o lado que não é imagem (ex.: um PDF escaneado).
+      if (imgRg) w.drawImagemPagina(imgRg);
+      else if (!(await anexarPaginaCheia(pdfDoc, w, arquivoRg, "RG"))) {
+        return NextResponse.json(
+          { error: "Não foi possível anexar o RG ao PDF. Verifique o arquivo no painel e tente novamente." },
+          { status: 500 }
+        );
+      }
+      if (imgRgVerso) w.drawImagemPagina(imgRgVerso);
+      else if (!(await anexarPaginaCheia(pdfDoc, w, arquivoRgVerso, "RG (verso)"))) {
+        return NextResponse.json(
+          { error: "Não foi possível anexar o verso do RG ao PDF. Verifique o arquivo no painel e tente novamente." },
+          { status: 500 }
+        );
+      }
+    }
+  } else {
+    const rgAnexado = await anexarPaginaCheia(pdfDoc, w, arquivoRg, "RG");
+    if (!rgAnexado) {
       return NextResponse.json(
-        { error: "Não foi possível anexar o verso do RG ao PDF. Verifique o arquivo no painel e tente novamente." },
+        { error: "Não foi possível anexar o RG ao PDF. Verifique o arquivo no painel e tente novamente." },
         { status: 500 }
       );
     }
   }
 
-  const comprovanteAnexado = await anexarDocumentoPaginaCheia(svc, pdfDoc, w, docComprovante.storage_path, "comprovante de endereço");
+  const arquivoComprovante = await baixarDocumento(svc, docComprovante.storage_path, "comprovante de endereço");
+  const comprovanteAnexado = arquivoComprovante && (await anexarPaginaCheia(pdfDoc, w, arquivoComprovante, "comprovante de endereço"));
   if (!comprovanteAnexado) {
     return NextResponse.json(
       { error: "Não foi possível anexar o comprovante de endereço ao PDF. Verifique o arquivo no painel e tente novamente." },
