@@ -110,7 +110,15 @@ export default function CapturaComEnquadramento({
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      // Sem width/height, o navegador escolhe uma resolução "padrão" própria — que varia
+      // por aparelho e costuma ficar bem abaixo da capacidade real da câmera. Como o
+      // recorte pela moldura já é, por natureza, só uma fração do frame, um stream nativo
+      // baixo resulta em arquivo final pequeno mesmo com o recorte matematicamente certo.
+      // "ideal" é um pedido, não uma exigência — nunca falha por um aparelho não suportar,
+      // só usa o máximo que ele tiver disponível.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
       streamRef.current = stream;
       zoomNativoAplicadoRef.current = await tentarZoomNativo(stream);
       setModo("camera");
