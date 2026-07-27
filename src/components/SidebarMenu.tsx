@@ -29,6 +29,7 @@ import {
   AlertTriangle,
   Cake,
   Landmark,
+  IdCard,
 } from "lucide-react";
 
 interface Props {
@@ -39,6 +40,8 @@ interface Props {
   role: string;
   isFullAccess: boolean;
   isSupervisorOrAbove: boolean;
+  canAccessFuncionarios: boolean;
+  canAccessAdmissoes: boolean;
 }
 
 const STORAGE_KEY = "sidebar-collapsed";
@@ -60,6 +63,8 @@ interface MenuItemDef {
   requireFullAccess?: boolean;
   requireSuperuser?: boolean;
   requireSupervisor?: boolean;
+  requireFuncionarios?: boolean;
+  requireAdmissoes?: boolean;
   separator?: boolean;
   submenu?: { label: string; href: string; icon: React.ElementType; requireSuperuser?: boolean }[];
 }
@@ -70,7 +75,8 @@ const menuItems: MenuItemDef[] = [
   { label: "Painel", href: "/painel", icon: LayoutDashboard },
   { label: "Gestão de Clientes", href: "/painel/gestao-clientes", icon: AlertTriangle },
   { label: "Vagas", href: "/painel/vagas", icon: Briefcase },
-  { label: "Admissões", href: "/painel/admissoes", icon: FileCheck, requireSupervisor: true },
+  { label: "Admissões", href: "/painel/admissoes", icon: FileCheck, requireAdmissoes: true },
+  { label: "Funcionários", href: "/painel/funcionarios", icon: IdCard, requireFuncionarios: true },
   { label: "Clientes", href: "/painel/clientes", icon: Building2 },
   { label: "Agenda", href: "/painel/agenda", icon: Calendar },
   { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },
@@ -103,6 +109,8 @@ export default function SidebarMenu({
   role,
   isFullAccess,
   isSupervisorOrAbove,
+  canAccessFuncionarios,
+  canAccessAdmissoes,
   userEmail,
 }: Props) {
   const router = useRouter();
@@ -152,6 +160,8 @@ export default function SidebarMenu({
     if (item.requireFullAccess && !isFullAccess) return false;
     if (item.requireSuperuser && !isSuperuser) return false;
     if (item.requireSupervisor && !isSupervisorOrAbove) return false;
+    if (item.requireFuncionarios && !canAccessFuncionarios) return false;
+    if (item.requireAdmissoes && !canAccessAdmissoes) return false;
     return true;
   }).map((item) => {
     if (item.submenu) {

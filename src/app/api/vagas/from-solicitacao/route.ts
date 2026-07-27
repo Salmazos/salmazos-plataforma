@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { parseBody, fromSolicitacaoSchema } from "@/lib/schemas";
+import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (sol.status !== "pendente") {
-      return NextResponse.json({ error: "Esta solicitação já foi processada." }, { status: 409 });
+      return NextResponse.json({ error: mensagemDecisaoSolicitacao(sol) }, { status: 409 });
     }
 
     const { data: perfil } = await service

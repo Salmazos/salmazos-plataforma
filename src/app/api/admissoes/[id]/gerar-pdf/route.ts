@@ -300,6 +300,35 @@ export async function POST(request: NextRequest, { params }: Params) {
     })
     .eq("id", id);
 
+  // Cria o registro em `funcionarios` automaticamente neste evento — geração do pacote
+  // é hoje o ponto que "libera" a admissão como concluída do lado do DP. Anti-void: a
+  // geração/download do PDF já aconteceu e não deve ser bloqueada por isso; erro vira só
+  // log. `gerar-pdf` pode ser chamado mais de uma vez pra mesma admissão (regeração do
+  // pacote), então checa antes se já existe (índice único em admissao_id também protege).
+  try {
+    const { data: funcionarioExistente } = await svc
+      .from("funcionarios")
+      .select("id")
+      .eq("admissao_id", id)
+      .maybeSingle();
+
+    if (!funcionarioExistente) {
+      const clienteIdVaga = (admissao.vagas as { cliente_id?: string | null } | null)?.cliente_id ?? null;
+      const { error: funcionarioError } = await svc.from("funcionarios").insert({
+        admissao_id: id,
+        cliente_id: clienteIdVaga,
+        nome_completo: dp.nome_completo ?? candidatoNome,
+        cargo: admissao.funcao ?? null,
+        empresa: vagaCliente?.nome ?? null,
+        data_admissao: admissao.data_admissao ?? null,
+        status: "ativo",
+      });
+      if (funcionarioError) throw new Error(funcionarioError.message);
+    }
+  } catch (err) {
+    console.error(`[gerar-pdf] Falha ao criar funcionário automaticamente — admissao_id=${id}`, err);
+  }
+
   registrarAuditoria({
     usuario_id: user.id,
     usuario_nome: user.email ?? null,

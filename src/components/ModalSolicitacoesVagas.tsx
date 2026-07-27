@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
 
 const TIPO_LABEL: Record<string, { label: string; bg: string; color: string }> = {
   recrutamento_selecao: { label: "R&S", bg: "#1D6FA4", color: "#fff" },
@@ -24,15 +25,21 @@ interface Solicitacao {
   beneficios_chips: Record<string, boolean> | null;
   observacoes: string | null;
   created_at: string;
+  status: string;
+  aprovada_por: string | null;
+  aprovada_em: string | null;
+  motivo_recusa: string | null;
 }
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   onVagaCriada: () => void;
+  focoId?: string | null;
+  onVerTodas?: () => void;
 }
 
-export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada }: Props) {
+export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, focoId, onVerTodas }: Props) {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Solicitacao[]>([]);
   const [toast, setToast] = useState("");
@@ -44,12 +51,20 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada }
   useEffect(() => {
     if (!isOpen) return;
     setLoading(true);
+    if (focoId) {
+      fetch(`/api/solicitacoes-vagas/${focoId}`)
+        .then((r) => r.json())
+        .then((json) => setItems(json.data ? [json.data] : []))
+        .catch(() => setItems([]))
+        .finally(() => setLoading(false));
+      return;
+    }
     fetch("/api/solicitacoes-vagas")
       .then((r) => r.json())
       .then((json) => setItems(json.data ?? []))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
-  }, [isOpen]);
+  }, [isOpen, focoId]);
 
   if (!isOpen) return null;
 
@@ -70,6 +85,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada }
         setItems((prev) => prev.filter((s) => s.id !== id));
         showToast("Vaga criada com sucesso!");
         onVagaCriada();
+        if (focoId) onVerTodas?.();
       }
     } finally {
       setActionLoading(null);
@@ -90,6 +106,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada }
         setRecusandoId(null);
         setMotivoRecusa("");
         showToast("Solicitação recusada.");
+        if (focoId) onVerTodas?.();
       }
     } finally {
       setActionLoading(null);
@@ -109,7 +126,9 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada }
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="bg-black text-white px-6 py-4 rounded-t-2xl flex items-center justify-between shrink-0">
-          <h2 className="font-bold text-lg">{"📬"} Solicitações de Vagas Pendentes</h2>
+          <h2 className="font-bold text-lg">
+            {"📬"} {focoId ? "Solicitação de Vaga" : "Solicitações de Vagas Pendentes"}
+          </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -119,14 +138,25 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada }
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6">
+          {focoId && (
+            <button
+              onClick={() => onVerTodas?.()}
+              className="text-xs text-blue-600 underline underline-offset-2 mb-4"
+            >
+              ← ver todas as solicitações pendentes
+            </button>
+          )}
+
           {loading ? (
             <div className="text-center py-12">
               <p className="text-gray-400 text-sm">Carregando...</p>
             </div>
           ) : items.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-3xl mb-3">{"🎉"}</p>
-              <p className="text-gray-500 text-sm font-medium">Nenhuma solicitação pendente!</p>
+              <p className="text-3xl mb-3">{focoId ? "🔍" : "🎉"}</p>
+              <p className="text-gray-500 text-sm font-medium">
+                {focoId ? "Solicitação não encontrada." : "Nenhuma solicitação pendente!"}
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -134,6 +164,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada }
                 const tipo = TIPO_LABEL[s.tipo_servico] ?? { label: s.tipo_servico, bg: "#6B7280", color: "#fff" };
                 const isRecusando = recusandoId === s.id;
                 const isLoading = actionLoading === s.id;
+                const jaDecidida = s.status !== "pendente";
 
                 return (
                   <div key={s.id} className="border border-gray-200 rounded-xl p-5 space-y-3">
@@ -203,8 +234,22 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada }
                       </p>
                     )}
 
+                    {/* Já decidida por outra pessoa */}
+                    {jaDecidida && (
+                      <div
+                        className="rounded-lg p-3 text-xs font-medium"
+                        style={{
+                          backgroundColor: s.status === "aprovada" ? "#F0FDF4" : "#FEF2F2",
+                          color: s.status === "aprovada" ? "#166534" : "#991B1B",
+                          border: `1px solid ${s.status === "aprovada" ? "#BBF7D0" : "#FECACA"}`,
+                        }}
+                      >
+                        {mensagemDecisaoSolicitacao(s)}
+                      </div>
+                    )}
+
                     {/* Recusa inline */}
-                    {isRecusando && (
+                    {!jaDecidida && isRecusando && (
                       <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
                         <label className="block text-xs font-semibold text-red-700">Motivo da recusa *</label>
                         <textarea
@@ -233,7 +278,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada }
                     )}
 
                     {/* Actions */}
-                    {!isRecusando && (
+                    {!jaDecidida && !isRecusando && (
                       <div className="flex gap-2 justify-end pt-1 border-t border-gray-100">
                         <button
                           onClick={() => { setRecusandoId(s.id); setMotivoRecusa(""); }}

@@ -29,6 +29,7 @@ const NIVEL_BADGE: Record<string, { label: string; bg: string; text: string }> =
   diretoria: { label: "Diretoria", bg: "bg-blue-100", text: "text-blue-800" },
   supervisor: { label: "Supervisor", bg: "bg-purple-100", text: "text-purple-800" },
   analista: { label: "Analista", bg: "bg-green-100", text: "text-green-800" },
+  dp: { label: "Departamento Pessoal", bg: "bg-amber-100", text: "text-amber-800" },
 };
 
 const AVATAR_COLORS: Record<string, string> = {
@@ -527,6 +528,7 @@ function ModalNovoUsuario({ onClose, onSuccess }: { onClose: () => void; onSucce
               <option value="analista">Analista</option>
               <option value="supervisor">Supervisor</option>
               <option value="diretoria">Diretoria</option>
+              <option value="dp">Departamento Pessoal</option>
             </select>
           </div>
           <div>
@@ -691,6 +693,7 @@ function ModalEditarUsuario({
               <option value="analista">Analista</option>
               <option value="supervisor">Supervisor</option>
               <option value="diretoria">Diretoria</option>
+              <option value="dp">Departamento Pessoal</option>
             </select>
           </div>
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">

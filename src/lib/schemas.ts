@@ -140,7 +140,7 @@ export const usuarioCreateSchema = z.object({
   email: z.string().email(),
   cargo: z.string().optional(),
   departamento: z.string().optional(),
-  nivel_acesso: z.enum(["analista", "supervisor", "diretoria"]).optional(),
+  nivel_acesso: z.enum(["analista", "supervisor", "diretoria", "dp"]).optional(),
   senha: z.string().min(8),
   confirmar_senha: z.string().optional(),
 });
@@ -149,7 +149,7 @@ export const usuarioUpdateSchema = z.object({
   nome_completo: z.string().min(2).optional(),
   cargo: z.string().optional(),
   departamento: z.string().optional(),
-  nivel_acesso: z.enum(["analista", "supervisor", "diretoria"]).optional(),
+  nivel_acesso: z.enum(["analista", "supervisor", "diretoria", "dp"]).optional(),
   ativo: z.boolean().optional(),
 });
 
@@ -773,4 +773,14 @@ export const assinaturaClicksignCriarSchema = z.object({
   pdfPath: z.string().min(1),
   nomeCandidato: z.string().trim().min(1),
   emailCandidato: z.string().email(),
+});
+
+// ── Funcionários ─────────────────────────────────────────────────────────────
+
+export const funcionarioCreateSchema = z.object({
+  nome_completo: z.string().trim().min(1, "Nome completo é obrigatório"),
+  cliente_id: z.string().uuid().optional().nullable(),
+  empresa: z.string().trim().min(1, "Empresa é obrigatória"),
+  cargo: z.string().trim().optional().nullable(),
+  data_admissao: z.string().optional().nullable(),
 });

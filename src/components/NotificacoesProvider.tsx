@@ -11,6 +11,7 @@ export interface Notificacao {
   titulo: string;
   mensagem: string;
   candidato_id: string | null;
+  solicitacao_vaga_id: string | null;
   lida: boolean;
   created_at: string;
 }
@@ -103,6 +104,7 @@ export default function NotificacoesProvider({ children }: { children: React.Rea
   const abrirNotificacao = useCallback((n: Notificacao) => {
     if (!n.lida) marcarComoLida(n.id);
     if (n.candidato_id) router.push(`/painel/candidato/${n.candidato_id}`);
+    else if (n.solicitacao_vaga_id) router.push(`/painel/vagas?solicitacao=${n.solicitacao_vaga_id}`);
   }, [marcarComoLida, router]);
 
   const dismissToast = useCallback((id: string) => {

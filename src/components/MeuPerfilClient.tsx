@@ -75,6 +75,7 @@ function NivelBadge({ nivel }: { nivel: string }) {
     diretoria: { bg: "#1E3A5F", color: "#93C5FD", label: "👔 Diretoria" },
     supervisor: { bg: "#7C2D12", color: "#FDBA74", label: "🎯 Supervisor" },
     analista: { bg: "#1E40AF", color: "#BFDBFE", label: "👤 Analista" },
+    dp: { bg: "#78350F", color: "#FDE68A", label: "🗂️ Departamento Pessoal" },
   };
   const c = config[nivel] ?? config.analista;
   return (

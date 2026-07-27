@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import ModalNovaVaga from "./ModalNovaVaga";
 import ModalSolicitacoesVagas from "./ModalSolicitacoesVagas";
 import PainelVagasView from "./painel/PainelVagasView";
@@ -34,6 +34,8 @@ interface Props {
 
 export default function VagasPageClient({ vagas: inicial, pendingCount }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const solicitacaoFocoId = searchParams.get("solicitacao");
   const [aba, setAba] = useState<AbaVagas>("lista");
   const [vagas, setVagas] = useState<Vaga[]>(inicial);
   const [modalAberto, setModalAberto] = useState(false);
@@ -47,6 +49,24 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
 
   const handleSalvo = (nova: Vaga) => {
     setVagas((prev) => [nova, ...prev]);
+  };
+
+  // Deep-link do clique na notificação "nova_solicitacao_vaga": abre o modal já
+  // focado naquela solicitação específica em vez da lista geral de pendentes.
+  useEffect(() => {
+    if (solicitacaoFocoId) setModalSolicitacoes(true);
+  }, [solicitacaoFocoId]);
+
+  const limparFocoSolicitacao = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("solicitacao");
+    const qs = params.toString();
+    router.replace(qs ? `/painel/vagas?${qs}` : "/painel/vagas");
+  };
+
+  const handleCloseModalSolicitacoes = () => {
+    setModalSolicitacoes(false);
+    if (solicitacaoFocoId) limparFocoSolicitacao();
   };
 
   const handleImportar = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -350,8 +370,10 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
       />
       <ModalSolicitacoesVagas
         isOpen={modalSolicitacoes}
-        onClose={() => setModalSolicitacoes(false)}
+        onClose={handleCloseModalSolicitacoes}
         onVagaCriada={() => router.refresh()}
+        focoId={solicitacaoFocoId}
+        onVerTodas={limparFocoSolicitacao}
       />
     </div>
   );

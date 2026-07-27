@@ -10,7 +10,7 @@ export default async function AdmissoesPage() {
     data: { user },
   } = await supabaseAuth.auth.getUser();
   const role = user?.app_metadata?.role ?? "analista";
-  if (!["superuser", "diretoria", "supervisor"].includes(role)) redirect("/painel");
+  if (!["superuser", "diretoria", "supervisor", "dp"].includes(role)) redirect("/painel");
 
   const svc = createServiceClient();
 

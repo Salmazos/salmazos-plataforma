@@ -21,6 +21,13 @@ export default async function PainelLayout({
   const role = user.app_metadata?.role ?? "analista";
   const isFullAccess = ["superuser", "diretoria"].includes(role);
   const isSupervisorOrAbove = ["superuser", "diretoria", "supervisor"].includes(role);
+  // 'dp' é um papel dedicado ao Departamento Pessoal — não entra em isSupervisorOrAbove
+  // porque isso liberaria Relatórios e Carteira de Clientes, fora do escopo do DP. Tem
+  // flags próprias só para os módulos que o DP realmente usa: Funcionários (sempre) e
+  // Admissões (mesmo nível de acesso que supervisor — ver PAPEIS_PAINEL_ADMISSOES em
+  // admissaoAuth.ts, a admissão digital alimenta a criação automática de funcionários).
+  const canAccessFuncionarios = ["superuser", "diretoria", "supervisor", "dp"].includes(role);
+  const canAccessAdmissoes = ["superuser", "diretoria", "supervisor", "dp"].includes(role);
 
   const { data: perfil } = await supabase
     .from("analistas_perfil")
@@ -39,6 +46,8 @@ export default async function PainelLayout({
           role={role}
           isFullAccess={isFullAccess}
           isSupervisorOrAbove={isSupervisorOrAbove}
+          canAccessFuncionarios={canAccessFuncionarios}
+          canAccessAdmissoes={canAccessAdmissoes}
         />
         <main className="flex-1 min-w-0 px-6 py-6">{children}</main>
         <PopupAniversariosHoje />

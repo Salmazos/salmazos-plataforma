@@ -114,6 +114,7 @@ export async function POST(request: NextRequest) {
         mensagem: `${clienteNome} solicitou ${body.num_posicoes || 1}x ${body.cargo}`,
         user_id: null,
         candidato_id: null,
+        solicitacao_vaga_id: solicitacao.id,
       });
     }
 

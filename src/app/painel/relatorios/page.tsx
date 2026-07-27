@@ -9,7 +9,11 @@ export default async function RelatoriosPage() {
   const authClient = await createClient();
   const { data: { user } } = await authClient.auth.getUser();
   const role = user?.app_metadata?.role ?? "analista";
-  if (role === "analista") redirect("/painel");
+  // Antes era blocklist (`role === "analista"` redireciona) — deixava passar qualquer
+  // papel novo por padrão (ex: 'dp', que não é escopo de Relatórios) via URL direta,
+  // mesmo com o link escondido no Sidebar (requireSupervisor). Allowlist explícita agora,
+  // consistente com o gate do Sidebar e com o padrão usado em Admissões/Carteira de Clientes.
+  if (!["superuser", "diretoria", "supervisor"].includes(role)) redirect("/painel");
 
   const supabase = createServiceClient();
 
