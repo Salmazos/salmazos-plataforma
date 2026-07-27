@@ -7,6 +7,10 @@ interface Props {
   proporcaoAltura: number;
   orientacao: "paisagem" | "retrato";
   instrucao: string;
+  // Nome do documento sendo enviado (ex.: "Carteira de Habilitação (verso)") — fica
+  // visível o tempo todo, inclusive dentro da tela de câmera, pra evitar que o
+  // candidato perca o contexto de qual documento está fotografando/escolhendo.
+  titulo: string;
   // Chamado tanto pra foto capturada pela câmera quanto pro arquivo escolhido na
   // galeria/"Escolher arquivo" — o chamador (PassoUploadDocumentos) trata os dois
   // caminhos igual a partir daqui (validarQualidadeImagem + comprimirImagem + upload).
@@ -33,6 +37,7 @@ export default function CapturaComEnquadramento({
   proporcaoAltura,
   orientacao,
   instrucao,
+  titulo,
   onArquivoEscolhido,
   onCancelar,
 }: Props) {
@@ -40,6 +45,7 @@ export default function CapturaComEnquadramento({
   const [modo, setModo] = useState<"escolha" | "camera">("escolha");
   const [erroCamera, setErroCamera] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
+  const molduraRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const inputGaleriaRef = useRef<HTMLInputElement>(null);
   const inputFallbackRef = useRef<HTMLInputElement>(null);
@@ -78,13 +84,53 @@ export default function CapturaComEnquadramento({
 
   const capturar = () => {
     const video = videoRef.current;
+    const moldura = molduraRef.current;
     if (!video || !video.videoWidth) return;
+
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
+
+    if (!moldura) {
+      // Sem a moldura pra referência (não deveria acontecer aqui dentro do modo
+      // câmera) — cai pro frame inteiro em vez de travar a captura.
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+    } else {
+      // O <video> usa object-fit:cover, então o que aparece na tela é um recorte
+      // ampliado/centralizado do frame nativo da câmera — sem essa conta, capturar
+      // "o frame inteiro" salva uma área BEM maior do que o candidato viu na moldura,
+      // fazendo o documento (enquadrado certinho na tela) sair minúsculo na foto final.
+      // Aqui traduzimos o retângulo da moldura (em pixels de tela) pra coordenadas do
+      // frame nativo, e recortamos só essa região (+ uma margem de segurança).
+      const videoRect = video.getBoundingClientRect();
+      const molduraRect = moldura.getBoundingClientRect();
+      const escala = Math.max(videoRect.width / video.videoWidth, videoRect.height / video.videoHeight);
+      const larguraRenderizada = video.videoWidth * escala;
+      const alturaRenderizada = video.videoHeight * escala;
+      const offsetX = (videoRect.width - larguraRenderizada) / 2;
+      const offsetY = (videoRect.height - alturaRenderizada) / 2;
+
+      const nativeX = (molduraRect.left - videoRect.left - offsetX) / escala;
+      const nativeY = (molduraRect.top - videoRect.top - offsetY) / escala;
+      const nativeW = molduraRect.width / escala;
+      const nativeH = molduraRect.height / escala;
+
+      // Margem de 6% ao redor pra não cortar a borda do documento por uma pequena
+      // imprecisão no enquadramento do candidato.
+      const margemX = nativeW * 0.06;
+      const margemY = nativeH * 0.06;
+      const sx = Math.max(0, nativeX - margemX);
+      const sy = Math.max(0, nativeY - margemY);
+      const sw = Math.min(video.videoWidth - sx, nativeW + margemX * 2);
+      const sh = Math.min(video.videoHeight - sy, nativeH + margemY * 2);
+
+      canvas.width = sw;
+      canvas.height = sh;
+      ctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+    }
+
     canvas.toBlob(
       (blob) => {
         if (!blob) return;
@@ -103,24 +149,39 @@ export default function CapturaComEnquadramento({
   };
 
   if (modo === "camera") {
-    // Largura da moldura fixa em 78% da tela; altura derivada da proporção — funciona
-    // tanto pra paisagem (mais larga que alta) quanto retrato (mais alta que larga).
-    const larguraMoldura = orientacao === "paisagem" ? "78vw" : `${78 * (proporcaoLargura / proporcaoAltura)}vw`;
+    // Maximiza o guia dentro da área livre da tela (descontando a barra de título em
+    // cima e instrução+botões embaixo) — usa min() pra escolher a largura OU a altura
+    // como fator limitante, o que faz o guia realmente preencher o espaço disponível
+    // em vez de encolher artificialmente em telas de retrato (ver bug relatado: guia
+    // pequeno demais forçava afastar o celular, encolhendo o documento na foto final).
+    const razao = proporcaoLargura / proporcaoAltura;
+    const larguraMoldura = `min(92vw, 60vh * ${razao})`;
     return (
       <div style={{ position: "fixed", inset: 0, zIndex: 60, background: "#000" }} data-testid="camera-view">
         <video ref={videoRef} autoPlay playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         <div
           style={{
+            position: "absolute", top: 0, left: 0, right: 0, zIndex: 1, padding: "14px 16px",
+            background: "linear-gradient(180deg, rgba(0,0,0,0.75), rgba(0,0,0,0))",
+          }}
+        >
+          <p style={{ color: "#fff", margin: 0, fontWeight: 700, fontSize: 15, textAlign: "center", textShadow: "0 1px 3px rgba(0,0,0,0.8)" }}>
+            {titulo}
+          </p>
+        </div>
+        <div
+          style={{
             position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center", pointerEvents: "none", padding: 20,
+            alignItems: "center", justifyContent: "center", pointerEvents: "none", padding: "70px 20px 110px",
           }}
         >
           <div
+            ref={molduraRef}
             data-testid="moldura"
             style={{
               width: larguraMoldura,
-              maxWidth: "90vw",
-              maxHeight: "70vh",
+              maxWidth: "92vw",
+              maxHeight: "60vh",
               aspectRatio: `${proporcaoLargura} / ${proporcaoAltura}`,
               border: "3px solid #FFD700",
               borderRadius: 12,
@@ -151,6 +212,7 @@ export default function CapturaComEnquadramento({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <p style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: 0 }}>{titulo}</p>
       {isMobile && (
         <button
           type="button"

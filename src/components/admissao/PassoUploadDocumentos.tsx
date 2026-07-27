@@ -46,6 +46,20 @@ async function validarQualidadeOuErro(file: File): Promise<string | null> {
   return resultado.ok ? null : resultado.motivo ?? "A foto não ficou boa o suficiente. Tente novamente.";
 }
 
+// Abre a foto já enviada em tamanho real numa nova aba — o candidato precisa conseguir
+// conferir se o enquadramento/nitidez ficaram bons antes de seguir pro próximo passo.
+async function abrirVisualizacao(token: string, docId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/admissoes/token/${token}/documentos/visualizar/${docId}`);
+    const json = await res.json();
+    if (!res.ok || !json.signedUrl) return json.error || "Erro ao abrir a imagem.";
+    window.open(json.signedUrl, "_blank");
+    return null;
+  } catch {
+    return "Erro de conexão ao abrir a imagem.";
+  }
+}
+
 async function enviarArquivo(
   token: string, tipoDocumento: string, file: File, docId?: string
 ): Promise<{ ok: true; data: DocumentoToken } | { ok: false; erro: string }> {
@@ -119,6 +133,15 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
     setEnviando(false);
   };
 
+  const label = def?.label ?? doc.tipo_documento;
+
+  const handleVerImagem = async () => {
+    if (previewUrl) { window.open(previewUrl, "_blank"); return; }
+    if (!doc.storage_path) return;
+    const erroVisualizacao = await abrirVisualizacao(token, doc.id);
+    if (erroVisualizacao) setErro(erroVisualizacao);
+  };
+
   if (usaEnquadramento && capturando) {
     const cfg = ENQUADRAMENTO_CONFIG[def!.enquadramento!];
     return (
@@ -127,6 +150,7 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
         proporcaoAltura={cfg.proporcaoAltura}
         orientacao={cfg.orientacao}
         instrucao={cfg.instrucaoPadrao}
+        titulo={label}
         onArquivoEscolhido={(file) => { setCapturando(false); handleFile(file); }}
         onCancelar={() => setCapturando(false)}
       />
@@ -136,7 +160,7 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
   return (
     <div style={{ ...cardStyle, marginBottom: 12, border: rejeitado ? "2px solid #DC2626" : cardStyle.border }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
-        <p style={{ fontSize: 15, fontWeight: 700, color: "#111827", margin: 0 }}>{def?.label ?? doc.tipo_documento}</p>
+        <p style={{ fontSize: 15, fontWeight: 700, color: "#111827", margin: 0 }}>{label}</p>
         <span
           style={{
             fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, whiteSpace: "nowrap",
@@ -160,10 +184,28 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
       )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        {previewUrl ? (
-          <img src={previewUrl} alt="Pré-visualização" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }} />
-        ) : enviado && !rejeitado ? (
-          <span style={{ fontSize: 22 }}>✅</span>
+        {previewUrl || (enviado && doc.storage_path) ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+            <button
+              type="button"
+              onClick={handleVerImagem}
+              aria-label="Ver imagem em tamanho real"
+              style={{ padding: 0, border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}
+            >
+              {previewUrl ? (
+                <img src={previewUrl} alt="Pré-visualização" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }} />
+              ) : (
+                <span style={{ fontSize: 22 }}>✅</span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={handleVerImagem}
+              style={{ padding: 0, border: "none", background: "none", cursor: "pointer", fontSize: 10, color: "#B45309", fontWeight: 600 }}
+            >
+              🔍 Ver
+            </button>
+          </div>
         ) : (
           <span style={{ fontSize: 22, opacity: 0.4 }}>⬜</span>
         )}
@@ -198,7 +240,7 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
 // Linha compacta pra um arquivo já confirmado dentro de um slot multi-arquivo — mesma
 // lógica de reenvio do DocumentoCard, mas escopada a UMA linha específica (doc_id),
 // senão o backend não sabe qual das várias linhas do tipo deve ser substituída.
-function ArquivoEnviadoLinha({ doc, index, token, onAtualizado, enquadramento }: { doc: DocumentoToken; index: number; token: string; onAtualizado: (doc: DocumentoToken) => void; enquadramento?: "cartao" | "retrato_3x4" | "folha" }) {
+function ArquivoEnviadoLinha({ doc, index, token, onAtualizado, enquadramento, titulo }: { doc: DocumentoToken; index: number; token: string; onAtualizado: (doc: DocumentoToken) => void; enquadramento?: "cartao" | "retrato_3x4" | "folha"; titulo: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isMobile] = useState(detectarMobile);
   const [capturando, setCapturando] = useState(false);
@@ -240,11 +282,18 @@ function ArquivoEnviadoLinha({ doc, index, token, onAtualizado, enquadramento }:
         proporcaoAltura={cfg.proporcaoAltura}
         orientacao={cfg.orientacao}
         instrucao={cfg.instrucaoPadrao}
+        titulo={titulo}
         onArquivoEscolhido={(file) => { setCapturando(false); handleFile(file); }}
         onCancelar={() => setCapturando(false)}
       />
     );
   }
+
+  const handleVerImagem = async () => {
+    if (!doc.storage_path) return;
+    const erroVisualizacao = await abrirVisualizacao(token, doc.id);
+    if (erroVisualizacao) setErro(erroVisualizacao);
+  };
 
   return (
     <div style={{ border: rejeitado ? "2px solid #DC2626" : "1px solid #E5E7EB", borderRadius: 8, padding: "8px 10px", marginBottom: 8 }}>
@@ -252,6 +301,15 @@ function ArquivoEnviadoLinha({ doc, index, token, onAtualizado, enquadramento }:
         <span style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
           Arquivo {index + 1} {aprovado ? "✅" : rejeitado ? "❌" : "⏳"}
         </span>
+        {doc.storage_path && (
+          <button
+            type="button"
+            onClick={handleVerImagem}
+            style={{ fontSize: 12, fontWeight: 600, color: "#374151", background: "none", border: "none", cursor: "pointer" }}
+          >
+            🔍 Ver
+          </button>
+        )}
         <button
           onClick={() => (usaEnquadramento ? setCapturando(true) : inputRef.current?.click())}
           disabled={enviando || otimizando || verificando}
@@ -357,6 +415,7 @@ function DocumentoMultiCard({
         proporcaoAltura={cfg.proporcaoAltura}
         orientacao={cfg.orientacao}
         instrucao={cfg.instrucaoPadrao}
+        titulo={def.label}
         onArquivoEscolhido={(file) => { setCapturando(false); handleSelecionarArquivos([file]); }}
         onCancelar={() => setCapturando(false)}
       />
@@ -381,7 +440,7 @@ function DocumentoMultiCard({
       )}
 
       {enviados.map((doc, idx) => (
-        <ArquivoEnviadoLinha key={doc.id} doc={doc} index={idx} token={token} onAtualizado={onAtualizado} enquadramento={def.enquadramento} />
+        <ArquivoEnviadoLinha key={doc.id} doc={doc} index={idx} token={token} onAtualizado={onAtualizado} enquadramento={def.enquadramento} titulo={def.label} />
       ))}
 
       {staged.length > 0 && (
