@@ -426,8 +426,14 @@ function DocumentoMultiCard({
     <div style={{ ...cardStyle, marginBottom: 12, border: temRejeitado ? "2px solid #DC2626" : cardStyle.border }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
         <p style={{ fontSize: 15, fontWeight: 700, color: "#111827", margin: 0 }}>{def.label}</p>
-        <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, whiteSpace: "nowrap", background: "#F3F4F6", color: "#6B7280" }}>
-          Opcional
+        <span
+          style={{
+            fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, whiteSpace: "nowrap",
+            background: def.obrigatorio ? "#FEE2E2" : "#F3F4F6",
+            color: def.obrigatorio ? "#991B1B" : "#6B7280",
+          }}
+        >
+          {def.obrigatorio ? "Obrigatório" : "Opcional"}
         </span>
       </div>
 
@@ -516,13 +522,13 @@ export default function PassoUploadDocumentos({ token, documentos, setDocumentos
     <div>
       <div style={cardStyle}>
         <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>Upload de Documentos</h2>
-        <p style={{ fontSize: 13, color: "#9CA3AF", margin: 0 }}>Envie fotos ou PDFs dos documentos abaixo (até 10MB cada).</p>
+        <p style={{ fontSize: 13, color: "#9CA3AF", margin: 0 }}>Envie os arquivos dos documentos abaixo (imagem ou PDF, até 10MB cada).</p>
       </div>
 
       <div style={{ marginTop: 12 }}>
         {tiposVisiveis.map((def) => {
           const rows = documentos.filter((d) => d.tipo_documento === def.tipo_documento);
-          if (def.condicional === "dependente") {
+          if (def.multiArquivo) {
             return <DocumentoMultiCard key={def.tipo_documento} def={def} rows={rows} token={token} onAtualizado={handleAtualizado} />;
           }
           const doc = rows[0];

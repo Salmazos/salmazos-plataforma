@@ -60,7 +60,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
 
   const def = DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === tipo)!;
-  const aceitaMultiplos = def.condicional === "dependente";
+  const aceitaMultiplos = def.multiArquivo === true;
   // Tipos apenasPainel não têm linha pré-criada na criação da admissão —
   // reaproveita a mesma lógica de "cria a linha se ainda não existir" do multi-arquivo,
   // já que o primeiro upload é exatamente o que faz a linha passar a existir.

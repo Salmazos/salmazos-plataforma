@@ -53,7 +53,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const def = DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === tipo)!;
-  const aceitaMultiplos = def.condicional === "dependente";
+  const aceitaMultiplos = def.multiArquivo === true;
 
   let data;
   if (parsed.data.doc_id) {

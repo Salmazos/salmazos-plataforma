@@ -1971,7 +1971,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           {DOCUMENTOS_ADMISSAO.filter((def) => !def.apenasPainel).map((def) => {
             const rows = documentos.filter((d) => d.tipo_documento === def.tipo_documento);
             if (rows.length === 0) return null;
-            const aceitaMultiplos = def.condicional === "dependente";
+            const aceitaMultiplos = def.multiArquivo === true;
 
             return (
               <div key={def.tipo_documento}>

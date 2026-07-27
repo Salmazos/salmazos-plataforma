@@ -23,10 +23,15 @@ export interface DocumentoAdmissaoDef {
   // mas o mecanismo continua disponível pra um caso futuro que precise dele.
   apenasPainel?: boolean;
   enquadramento?: TipoEnquadramento;
+  // Aceita vários arquivos no mesmo slot (um PDF único OU várias imagens) — desacoplado
+  // de `condicional === "dependente"` porque nem todo tipo multi-arquivo é condicional a
+  // dependente (ex.: ctps_todas_paginas, que qualquer candidato pode ter em PDF único ou
+  // várias fotos de página, e nunca teve moldura de câmera por isso mesmo).
+  multiArquivo?: boolean;
 }
 
 export const DOCUMENTOS_ADMISSAO: DocumentoAdmissaoDef[] = [
-  { tipo_documento: "ctps_todas_paginas", label: "Carteira de Trabalho Digital (todas as páginas)", obrigatorio: true, condicional: null },
+  { tipo_documento: "ctps_todas_paginas", label: "Carteira de Trabalho Digital (todas as páginas)", obrigatorio: true, condicional: null, multiArquivo: true },
   { tipo_documento: "foto_3x4", label: "Foto 3x4", obrigatorio: true, condicional: null, enquadramento: "retrato_3x4" },
   { tipo_documento: "cpf", label: "CPF/CIC", obrigatorio: true, condicional: null, enquadramento: "folha" },
   { tipo_documento: "titulo_eleitor", label: "Título de Eleitor", obrigatorio: true, condicional: null, enquadramento: "folha" },
@@ -40,8 +45,8 @@ export const DOCUMENTOS_ADMISSAO: DocumentoAdmissaoDef[] = [
   { tipo_documento: "comprovante_endereco", label: "Comprovante de Endereço", obrigatorio: true, condicional: null, enquadramento: "folha" },
   { tipo_documento: "cnh", label: "Carteira de Habilitação (frente)", obrigatorio: true, condicional: "motorista", enquadramento: "cartao" },
   { tipo_documento: "cnh_verso", label: "Carteira de Habilitação (verso)", obrigatorio: true, condicional: "motorista", enquadramento: "cartao" },
-  { tipo_documento: "certidao_nascimento_filho", label: "Certidão de Nascimento do(s) filho(s)", obrigatorio: false, condicional: "dependente", enquadramento: "folha" },
-  { tipo_documento: "cpf_dependentes", label: "CPF dos dependentes", obrigatorio: false, condicional: "dependente", enquadramento: "folha" },
-  { tipo_documento: "caderneta_vacinacao", label: "Caderneta de Vacinação (filhos < 7 anos)", obrigatorio: false, condicional: "dependente", enquadramento: "folha" },
-  { tipo_documento: "frequencia_escolar", label: "Comprovante de Frequência Escolar (filhos > 7 anos)", obrigatorio: false, condicional: "dependente", enquadramento: "folha" },
+  { tipo_documento: "certidao_nascimento_filho", label: "Certidão de Nascimento do(s) filho(s)", obrigatorio: false, condicional: "dependente", enquadramento: "folha", multiArquivo: true },
+  { tipo_documento: "cpf_dependentes", label: "CPF dos dependentes", obrigatorio: false, condicional: "dependente", enquadramento: "folha", multiArquivo: true },
+  { tipo_documento: "caderneta_vacinacao", label: "Caderneta de Vacinação (filhos < 7 anos)", obrigatorio: false, condicional: "dependente", enquadramento: "folha", multiArquivo: true },
+  { tipo_documento: "frequencia_escolar", label: "Comprovante de Frequência Escolar (filhos > 7 anos)", obrigatorio: false, condicional: "dependente", enquadramento: "folha", multiArquivo: true },
 ];

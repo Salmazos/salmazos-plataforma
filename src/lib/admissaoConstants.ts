@@ -89,11 +89,11 @@ export const NOTA_HEIC_IPHONE =
 
 export const NOTAS_DOCUMENTO: Record<string, string> = {
   rg:
-    "Tire a foto com o documento aberto, capturando frente e verso na mesma imagem. Garanta que a foto fique nítida e bem iluminada, sem cortes.",
+    "Envie uma imagem nítida e bem iluminada, com o documento inteiro visível, sem cortes.",
   foto_3x4:
-    "Tire uma foto com boa iluminação, fundo neutro (parede branca ou clara) e olhando diretamente para a câmera. Evite usar filtros.",
+    "Envie uma foto com boa iluminação, fundo neutro (parede branca ou clara) e olhando diretamente para a câmera. Evite usar filtros.",
   ctps_todas_paginas:
-    "Fotografe TODAS as páginas da sua Carteira de Trabalho Digital, incluindo páginas em branco com carimbo.",
+    "Envie TODAS as páginas da sua Carteira de Trabalho Digital, incluindo páginas em branco com carimbo.",
   comprovante_endereco:
     "Preferencialmente conta de energia elétrica com data dos últimos 3 meses.",
 };

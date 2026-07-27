@@ -26,6 +26,40 @@ export function detectarMobile(): boolean {
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
+// "zoom" é um constraint não-padrão (rascunho antigo da Image Capture API) — o Chrome/
+// Android costuma expor via track.getCapabilities().zoom quando o hardware suporta, mas
+// o Safari/iOS não implementa isso via getUserMedia (nenhuma versão até hoje). lib.dom
+// não declara esse campo, por isso a extensão de tipo manual abaixo.
+interface MediaTrackCapabilitiesComZoom extends MediaTrackCapabilities {
+  zoom?: { min: number; max: number; step: number };
+}
+interface MediaTrackConstraintSetComZoom extends MediaTrackConstraintSet {
+  zoom?: number;
+}
+
+// Zoom alvo pra compensar a distância "segura" que o candidato naturalmente mantém do
+// documento ao enquadrar (relatado em teste real: mesmo com o recorte pela moldura,
+// documento ainda saía longe/pequeno demais pra leitura). 1.3 = 30% de aumento.
+const ZOOM_ALVO = 1.3;
+
+// Tenta aplicar zoom ótico/nativo via applyConstraints — só funciona quando o hardware
+// expõe a capability (Chrome/Android, variando por aparelho; Safari/iOS não suporta essa
+// constraint até hoje). Retorna true só se de fato aplicou, pra capturar() saber se ainda
+// precisa apertar o recorte digitalmente ou se o frame já chega ampliado.
+async function tentarZoomNativo(stream: MediaStream): Promise<boolean> {
+  const track = stream.getVideoTracks()[0];
+  if (!track?.getCapabilities) return false;
+  try {
+    const caps = track.getCapabilities() as MediaTrackCapabilitiesComZoom;
+    if (!caps.zoom) return false;
+    const alvo = Math.min(caps.zoom.max, Math.max(caps.zoom.min, ZOOM_ALVO));
+    await track.applyConstraints({ advanced: [{ zoom: alvo } as MediaTrackConstraintSetComZoom] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Câmera com moldura semitransparente guiando o enquadramento — reutilizável por
 // qualquer tipo de documento, configurado via proporção/orientação/instrução (ver
 // lib/enquadramentoConfig.ts). Sempre oferece "Escolher da galeria" como alternativa,
@@ -49,6 +83,11 @@ export default function CapturaComEnquadramento({
   const streamRef = useRef<MediaStream | null>(null);
   const inputGaleriaRef = useRef<HTMLInputElement>(null);
   const inputFallbackRef = useRef<HTMLInputElement>(null);
+  // true quando o zoom ótico/nativo da câmera foi aplicado com sucesso — nesse caso o
+  // frame que chega no <video> já vem ampliado, então capturar() NÃO deve apertar o
+  // recorte de novo (evita dobrar o zoom). Só reflete o resultado real do dispositivo,
+  // por isso é ref (não precisa re-renderizar nada quando muda).
+  const zoomNativoAplicadoRef = useRef(false);
 
   const pararStream = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -73,6 +112,7 @@ export default function CapturaComEnquadramento({
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       streamRef.current = stream;
+      zoomNativoAplicadoRef.current = await tentarZoomNativo(stream);
       setModo("camera");
     } catch {
       // Permissão negada, sem câmera disponível, etc. — cai pro input nativo, que no
@@ -121,10 +161,24 @@ export default function CapturaComEnquadramento({
       // imprecisão no enquadramento do candidato.
       const margemX = nativeW * 0.06;
       const margemY = nativeH * 0.06;
-      const sx = Math.max(0, nativeX - margemX);
-      const sy = Math.max(0, nativeY - margemY);
-      const sw = Math.min(video.videoWidth - sx, nativeW + margemX * 2);
-      const sh = Math.min(video.videoHeight - sy, nativeH + margemY * 2);
+      let sx = Math.max(0, nativeX - margemX);
+      let sy = Math.max(0, nativeY - margemY);
+      let sw = Math.min(video.videoWidth - sx, nativeW + margemX * 2);
+      let sh = Math.min(video.videoHeight - sy, nativeH + margemY * 2);
+
+      // Zoom nativo já aplicado (ver abrirCamera/tentarZoomNativo) → o frame que chega
+      // aqui já está ampliado, então o recorte pela moldura sozinho já basta. Sem zoom
+      // nativo (iPhone, ou Android sem suporte) → aperta o recorte mais um pouco pra
+      // chegar no mesmo resultado por outro caminho, já que o documento ainda saía
+      // pequeno/longe demais na foto final mesmo com o recorte básico pela moldura.
+      if (!zoomNativoAplicadoRef.current) {
+        const centroX = sx + sw / 2;
+        const centroY = sy + sh / 2;
+        sw = sw / ZOOM_ALVO;
+        sh = sh / ZOOM_ALVO;
+        sx = centroX - sw / 2;
+        sy = centroY - sh / 2;
+      }
 
       canvas.width = sw;
       canvas.height = sh;
