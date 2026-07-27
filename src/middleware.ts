@@ -251,8 +251,22 @@ export async function middleware(request: NextRequest) {
   const responseRef = { value: NextResponse.next({ request }) };
   const { pathname } = request.nextUrl;
 
+  // isPortalRoute: só páginas /portal/... — usado pra decidir se falta de sessão deve
+  // REDIRECIONAR (307 pra /portal/login). Rotas de API nunca devem entrar aqui: uma
+  // chamada fetch("/api/portal/...") sem sessão precisa devolver 401 JSON (é isso que os
+  // route handlers já fazem), não um redirect HTML — um fetch que recebe um redirect pra
+  // uma página de login tenta parsear HTML como JSON e quebra de um jeito confuso.
   const isPortalRoute = pathname === "/portal" || pathname.startsWith("/portal/");
   const isApiRoute = pathname.startsWith("/api/");
+  // usaCookiePortal: além das páginas /portal/..., inclui /api/portal/... — só decide QUAL
+  // cookie de sessão o middleware usa pra resolver `user` nesta requisição, nada de
+  // redirecionamento. Sem incluir /api/portal/ aqui, o middleware tentava validar essas
+  // chamadas com o cookie do PAINEL interno (nome padrão) em vez do cookie do portal
+  // (sb-portal-auth-token) — não quebrava nada sozinho (essas rotas já são públicas no
+  // middleware, a autenticação real acontece dentro de cada rota via createPortalClient(),
+  // que já estava configurado certo), mas deixava o middleware resolvendo a sessão errada
+  // nessas chamadas, uma fonte de inconsistência desnecessária na camada de cookies.
+  const usaCookiePortal = isPortalRoute || pathname.startsWith("/api/portal/");
 
   // Rate limiting (runs before auth — applies to both public and authenticated routes)
   if (isApiRoute) {
@@ -263,7 +277,7 @@ export async function middleware(request: NextRequest) {
     if (blocked) return blocked;
   }
 
-  const supabaseConfig = isPortalRoute
+  const supabaseConfig = usaCookiePortal
     ? makeCookieHandlers(request, responseRef, { name: "sb-portal-auth-token" })
     : makeCookieHandlers(request, responseRef);
 

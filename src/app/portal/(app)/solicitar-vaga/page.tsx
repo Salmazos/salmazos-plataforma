@@ -205,15 +205,22 @@ export default function SolicitarVagaPage() {
   };
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/portal/solicitar-vaga").then((r) => r.json()),
-      fetch("/api/portal/templates").then((r) => r.json()),
-    ]).then(([defaults, tplJson]) => {
-      applyDefaults(defaults);
-      const tpls = tplJson.data ?? [];
-      setTemplates(tpls);
-      setView(tpls.length > 0 ? "templates" : "form");
-    }).catch(() => setView("form"));
+    // Sequencial, não Promise.all — duas chamadas simultâneas logo no carregamento da
+    // página caíram numa janela real de sessão inválida em produção (ver investigação do
+    // "deslogando ao clicar em Solicitar Vaga"). Buscar uma de cada vez remove essa janela
+    // de corrida, sem mudar o resultado final pro candidato.
+    (async () => {
+      try {
+        const defaults = await fetch("/api/portal/solicitar-vaga").then((r) => r.json());
+        applyDefaults(defaults);
+        const tplJson = await fetch("/api/portal/templates").then((r) => r.json());
+        const tpls = tplJson.data ?? [];
+        setTemplates(tpls);
+        setView(tpls.length > 0 ? "templates" : "form");
+      } catch {
+        setView("form");
+      }
+    })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
