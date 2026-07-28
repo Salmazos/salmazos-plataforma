@@ -802,9 +802,24 @@ export const rescisaoCreateSchema = z.object({
   farmacia: coerceNumberNullable.optional(),
   faturado: z.boolean().optional().default(false),
   aso_documento_path: z.string().optional().nullable(),
-  // Fase 3 — duas listas independentes de destinatários de aviso, escolhidas no
-  // lançamento (ver rescisao_destinatarios). Vazias por padrão: uma rescisão pode ser
-  // lançada sem nenhum destinatário configurado, simplesmente não dispara nada.
-  destinatarios_email: z.array(z.string().uuid()).optional().default([]),
-  destinatarios_plataforma: z.array(z.string().uuid()).optional().default([]),
+});
+
+// ── Avisos de rescisão — configuração global (Fase 3.1) ───────────────────────
+//
+// Substituiu os destinatários por-rescisão da Fase 3 original: agora é uma lista fixa,
+// configurada uma vez em /painel/rescisoes-avisos-config, valendo para todos os
+// lançamentos. Schema de e-mail espelha slaDestinatarioCreateSchema/UpdateSchema de
+// propósito (mesmo padrão de validação já usado pra listas de destinatário livre).
+
+export const rescisaoAvisoEmailCreateSchema = z.object({
+  nome: z.string().trim().min(1, "Nome é obrigatório"),
+  email: z.string().trim().email("E-mail inválido"),
+});
+
+export const rescisaoAvisoEmailUpdateSchema = z.object({
+  ativo: z.boolean(),
+});
+
+export const rescisaoAvisoPlataformaCreateSchema = z.object({
+  usuario_id: z.string().uuid(),
 });

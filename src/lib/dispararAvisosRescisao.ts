@@ -107,54 +107,39 @@ export async function dispararAvisosRescisao(rescisaoId: string, momento: Moment
       rescisao.valor_rescisao
     );
 
-    const { data: destinatarios, error: destError } = await svc
-      .from("rescisao_destinatarios")
-      .select("usuario_id, canal")
-      .eq("rescisao_id", rescisaoId);
+    // Fase 3.1 — destinatários deixaram de ser por-rescisão: agora é configuração global
+    // (ver /painel/rescisoes-avisos-config), a mesma lista pros 3 momentos de toda rescisão.
+    const [{ data: emailDestinatarios, error: emailDestError }, { data: plataformaDestinatarios, error: plataformaDestError }] =
+      await Promise.all([
+        svc.from("rescisao_avisos_email_destinatarios").select("id, nome, email").eq("ativo", true),
+        svc.from("rescisao_avisos_plataforma_destinatarios").select("usuario_id"),
+      ]);
 
-    if (destError) {
-      console.error(`[dispararAvisosRescisao] Erro ao buscar destinatários (rescisao_id=${rescisaoId}):`, destError.message);
+    if (emailDestError || plataformaDestError) {
+      console.error(
+        `[dispararAvisosRescisao] Erro ao buscar configuração global de destinatários (rescisao_id=${rescisaoId}):`,
+        emailDestError?.message ?? plataformaDestError?.message
+      );
       return { sucesso: false };
     }
-
-    const idsEmail = (destinatarios ?? []).filter((d) => d.canal === "email").map((d) => d.usuario_id);
-    const idsPlataforma = (destinatarios ?? []).filter((d) => d.canal === "plataforma").map((d) => d.usuario_id);
 
     let algumEmailFalhou = false;
 
     // ── Canal 1: e-mail ──────────────────────────────────────────────────────
-    if (idsEmail.length > 0) {
-      const { data: perfisEmail, error: perfisError } = await svc
-        .from("analistas_perfil")
-        .select("user_id, email")
-        .in("user_id", idsEmail);
+    // Endereço já vem direto da configuração global (livre, não depende mais de
+    // analistas_perfil) — sem a indireção por usuario_id que existia na Fase 3 original.
+    if (emailDestinatarios && emailDestinatarios.length > 0) {
+      const html = montarHtmlEmail(tituloEmail, corDestaque, nomeFuncionario, rescisao.empresa, rescisao.valor_rescisao, rescisaoId);
 
-      if (perfisError) {
-        console.error(`[dispararAvisosRescisao] Erro ao buscar e-mails dos destinatários (rescisao_id=${rescisaoId}):`, perfisError.message);
-        algumEmailFalhou = true;
-      } else {
-        const html = montarHtmlEmail(tituloEmail, corDestaque, nomeFuncionario, rescisao.empresa, rescisao.valor_rescisao, rescisaoId);
-        const perfisValidos = (perfisEmail ?? []).filter((p) => p.email);
-
-        // Destinatário configurado mas sem e-mail cadastrado em analistas_perfil: não dá
-        // pra avisar essa pessoa por e-mail — conta como falha (não é "sucesso silencioso"),
-        // porque o critério aqui é "todo destinatário configurado recebeu de verdade".
-        if (perfisValidos.length < idsEmail.length) {
-          console.error(`[dispararAvisosRescisao] ${idsEmail.length - perfisValidos.length} destinatário(s) de e-mail sem endereço cadastrado (rescisao_id=${rescisaoId}).`);
+      const resultados = await Promise.all(
+        emailDestinatarios.map((d) =>
+          sendEmail({ to: d.email, subject: assuntoEmail, html, tipo: `rescisao_${momento}` }).then((r) => ({ email: d.email, ...r }))
+        )
+      );
+      for (const r of resultados) {
+        if (!r.success) {
+          console.error(`[dispararAvisosRescisao] E-mail não enviado (rescisao_id=${rescisaoId}, destinatario=${r.email}):`, r.error);
           algumEmailFalhou = true;
-        }
-
-        const resultados = await Promise.all(
-          perfisValidos.map((p) =>
-            sendEmail({ to: p.email as string, subject: assuntoEmail, html, tipo: `rescisao_${momento}` })
-              .then((r) => ({ userId: p.user_id, ...r }))
-          )
-        );
-        for (const r of resultados) {
-          if (!r.success) {
-            console.error(`[dispararAvisosRescisao] E-mail não enviado (rescisao_id=${rescisaoId}, user_id=${r.userId}):`, r.error);
-            algumEmailFalhou = true;
-          }
         }
       }
     }
@@ -162,12 +147,12 @@ export async function dispararAvisosRescisao(rescisaoId: string, momento: Moment
     let plataformaFalhou = false;
 
     // ── Canal 2 e 3: sino + popup (mesma linha em notificacoes_analista alimenta os dois — ver /api/rescisoes/avisos-hoje) ──
-    if (idsPlataforma.length > 0) {
-      const rows = idsPlataforma.map((userId) => ({
+    if (plataformaDestinatarios && plataformaDestinatarios.length > 0) {
+      const rows = plataformaDestinatarios.map((d) => ({
         tipo: `rescisao_${momento}`,
         titulo,
         mensagem,
-        user_id: userId,
+        user_id: d.usuario_id,
         candidato_id: null,
         rescisao_id: rescisaoId,
       }));

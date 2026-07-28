@@ -31,6 +31,7 @@ import {
   Landmark,
   IdCard,
   UserMinus,
+  Megaphone,
 } from "lucide-react";
 
 interface Props {
@@ -79,6 +80,7 @@ const menuItems: MenuItemDef[] = [
   { label: "Admissões", href: "/painel/admissoes", icon: FileCheck, requireAdmissoes: true },
   { label: "Funcionários", href: "/painel/funcionarios", icon: IdCard, requireFuncionarios: true },
   { label: "Rescisões", href: "/painel/rescisoes", icon: UserMinus, requireFuncionarios: true },
+  { label: "Avisos de Rescisão", href: "/painel/rescisoes-avisos-config", icon: Megaphone, requireFuncionarios: true },
   { label: "Clientes", href: "/painel/clientes", icon: Building2 },
   { label: "Agenda", href: "/painel/agenda", icon: Calendar },
   { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },

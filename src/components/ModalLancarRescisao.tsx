@@ -2,12 +2,11 @@
 
 import { useEffect, useState } from "react";
 import CampoMoeda from "@/components/ui/CampoMoeda";
-import type { FuncionarioRow, UsuarioOption } from "./FuncionariosPageClient";
+import type { FuncionarioRow } from "./FuncionariosPageClient";
 
 interface Props {
   isOpen: boolean;
   funcionario: FuncionarioRow | null;
-  usuarios: UsuarioOption[];
   onClose: () => void;
   onLancado: () => void;
 }
@@ -18,7 +17,7 @@ const MODALIDADE_OPCOES = [
   { value: "efetivado", label: "Efetivado" },
 ];
 
-export default function ModalLancarRescisao({ isOpen, funcionario, usuarios, onClose, onLancado }: Props) {
+export default function ModalLancarRescisao({ isOpen, funcionario, onClose, onLancado }: Props) {
   const [dataDesligamento, setDataDesligamento] = useState("");
   const [modalidade, setModalidade] = useState("");
   const [entrevistaDesligamento, setEntrevistaDesligamento] = useState(false);
@@ -31,8 +30,6 @@ export default function ModalLancarRescisao({ isOpen, funcionario, usuarios, onC
   const [farmacia, setFarmacia] = useState("");
   const [faturado, setFaturado] = useState(false);
   const [asoFile, setAsoFile] = useState<File | null>(null);
-  const [destinatariosEmail, setDestinatariosEmail] = useState<string[]>([]);
-  const [destinatariosPlataforma, setDestinatariosPlataforma] = useState<string[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -50,14 +47,8 @@ export default function ModalLancarRescisao({ isOpen, funcionario, usuarios, onC
     setFarmacia("");
     setFaturado(false);
     setAsoFile(null);
-    setDestinatariosEmail([]);
-    setDestinatariosPlataforma([]);
     setErro("");
   }, [isOpen]);
-
-  const alternarDestinatario = (lista: string[], setLista: (v: string[]) => void, userId: string) => {
-    setLista(lista.includes(userId) ? lista.filter((id) => id !== userId) : [...lista, userId]);
-  };
 
   if (!isOpen || !funcionario) return null;
 
@@ -108,8 +99,6 @@ export default function ModalLancarRescisao({ isOpen, funcionario, usuarios, onC
           farmacia: farmacia ? Number(farmacia) : null,
           faturado,
           aso_documento_path: asoDocumentoPath,
-          destinatarios_email: destinatariosEmail,
-          destinatarios_plataforma: destinatariosPlataforma,
         }),
       });
       const json = await res.json();
@@ -217,45 +206,10 @@ export default function ModalLancarRescisao({ isOpen, funcionario, usuarios, onC
           <p className="text-xs text-gray-400 mt-1">PDF ou imagem. Nunca bloqueia o lançamento da rescisão.</p>
         </div>
 
-        <div className="mb-3">
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Avisar por e-mail</label>
-          <div className="border border-gray-200 rounded-lg max-h-32 overflow-y-auto">
-            {usuarios.length === 0 ? (
-              <p className="text-xs text-gray-400 px-3 py-2">Nenhum usuário cadastrado.</p>
-            ) : (
-              usuarios.map((u) => (
-                <label key={u.user_id} className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 border-b border-gray-100 last:border-0">
-                  <input
-                    type="checkbox"
-                    checked={destinatariosEmail.includes(u.user_id)}
-                    onChange={() => alternarDestinatario(destinatariosEmail, setDestinatariosEmail, u.user_id)}
-                  />
-                  {u.nome_completo}
-                </label>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Avisar na plataforma (sino + pop-up de login)</label>
-          <div className="border border-gray-200 rounded-lg max-h-32 overflow-y-auto">
-            {usuarios.length === 0 ? (
-              <p className="text-xs text-gray-400 px-3 py-2">Nenhum usuário cadastrado.</p>
-            ) : (
-              usuarios.map((u) => (
-                <label key={u.user_id} className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 border-b border-gray-100 last:border-0">
-                  <input
-                    type="checkbox"
-                    checked={destinatariosPlataforma.includes(u.user_id)}
-                    onChange={() => alternarDestinatario(destinatariosPlataforma, setDestinatariosPlataforma, u.user_id)}
-                  />
-                  {u.nome_completo}
-                </label>
-              ))
-            )}
-          </div>
-        </div>
+        <p className="text-xs text-gray-400 mb-4">
+          Os avisos de e-mail e plataforma são enviados automaticamente para a lista configurada em{" "}
+          <span className="font-semibold">Avisos de Rescisão</span> (menu lateral) — não é escolhido aqui.
+        </p>
 
         {erro && <p className="text-red-600 text-sm mb-3">{erro}</p>}
 

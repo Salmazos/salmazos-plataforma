@@ -103,19 +103,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Destinatários de aviso (Fase 3) — duas listas independentes, ambas opcionais. Uma
-  // falha aqui não deve derrubar a criação da rescisão (já commitada); só fica registrada.
-  const linhasDestinatarios = [
-    ...parsed.data.destinatarios_email.map((usuario_id) => ({ rescisao_id: rescisao.id, usuario_id, canal: "email" as const })),
-    ...parsed.data.destinatarios_plataforma.map((usuario_id) => ({ rescisao_id: rescisao.id, usuario_id, canal: "plataforma" as const })),
-  ];
-  if (linhasDestinatarios.length > 0) {
-    const { error: destError } = await svc.from("rescisao_destinatarios").insert(linhasDestinatarios);
-    if (destError) {
-      console.error(`[rescisoes] Rescisão ${rescisao.id} criada mas falha ao salvar destinatários de aviso:`, destError.message);
-    }
-  }
-
   registrarAuditoria({
     usuario_id: user.id,
     usuario_nome: user.email ?? null,
