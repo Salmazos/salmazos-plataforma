@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/lembrete-entrevista-hoje",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/rescisao-avisos",
+      "schedule": "0 9 * * *"
     }
   ]
 }

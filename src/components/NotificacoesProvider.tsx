@@ -12,6 +12,7 @@ export interface Notificacao {
   mensagem: string;
   candidato_id: string | null;
   solicitacao_vaga_id: string | null;
+  rescisao_id: string | null;
   lida: boolean;
   created_at: string;
 }
@@ -105,6 +106,7 @@ export default function NotificacoesProvider({ children }: { children: React.Rea
     if (!n.lida) marcarComoLida(n.id);
     if (n.candidato_id) router.push(`/painel/candidato/${n.candidato_id}`);
     else if (n.solicitacao_vaga_id) router.push(`/painel/vagas?solicitacao=${n.solicitacao_vaga_id}`);
+    else if (n.rescisao_id) router.push(`/painel/rescisoes?rescisao=${n.rescisao_id}`);
   }, [marcarComoLida, router]);
 
   const dismissToast = useCallback((id: string) => {

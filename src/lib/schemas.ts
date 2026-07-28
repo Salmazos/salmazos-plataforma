@@ -802,4 +802,9 @@ export const rescisaoCreateSchema = z.object({
   farmacia: coerceNumberNullable.optional(),
   faturado: z.boolean().optional().default(false),
   aso_documento_path: z.string().optional().nullable(),
+  // Fase 3 — duas listas independentes de destinatários de aviso, escolhidas no
+  // lançamento (ver rescisao_destinatarios). Vazias por padrão: uma rescisão pode ser
+  // lançada sem nenhum destinatário configurado, simplesmente não dispara nada.
+  destinatarios_email: z.array(z.string().uuid()).optional().default([]),
+  destinatarios_plataforma: z.array(z.string().uuid()).optional().default([]),
 });

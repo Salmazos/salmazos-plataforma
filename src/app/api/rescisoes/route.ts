@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, rescisaoCreateSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
+import { dispararAvisosRescisao } from "@/lib/dispararAvisosRescisao";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -102,6 +103,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Destinatários de aviso (Fase 3) — duas listas independentes, ambas opcionais. Uma
+  // falha aqui não deve derrubar a criação da rescisão (já commitada); só fica registrada.
+  const linhasDestinatarios = [
+    ...parsed.data.destinatarios_email.map((usuario_id) => ({ rescisao_id: rescisao.id, usuario_id, canal: "email" as const })),
+    ...parsed.data.destinatarios_plataforma.map((usuario_id) => ({ rescisao_id: rescisao.id, usuario_id, canal: "plataforma" as const })),
+  ];
+  if (linhasDestinatarios.length > 0) {
+    const { error: destError } = await svc.from("rescisao_destinatarios").insert(linhasDestinatarios);
+    if (destError) {
+      console.error(`[rescisoes] Rescisão ${rescisao.id} criada mas falha ao salvar destinatários de aviso:`, destError.message);
+    }
+  }
+
   registrarAuditoria({
     usuario_id: user.id,
     usuario_nome: user.email ?? null,
@@ -110,6 +124,10 @@ export async function POST(request: NextRequest) {
     entidade_id: rescisao.id,
     detalhes: { funcionario_id: parsed.data.funcionario_id, empresa: parsed.data.empresa, modalidade: parsed.data.modalidade },
   });
+
+  // Disparo síncrono do momento "lançamento" — anti-void: aguardado, mas
+  // dispararAvisosRescisao nunca lança exceção, então nunca bloqueia esta resposta.
+  await dispararAvisosRescisao(rescisao.id, "lancamento");
 
   return NextResponse.json({ data: rescisao });
 }

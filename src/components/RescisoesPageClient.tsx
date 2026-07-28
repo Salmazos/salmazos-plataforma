@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { formatarDataSemFuso } from "@/lib/utils";
 
 export interface RescisaoRow {
@@ -44,10 +45,30 @@ function moeda(v: number | null): string {
 }
 
 export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Props) {
+  const searchParams = useSearchParams();
+  const rescisaoFocoId = searchParams.get("rescisao");
+  const linhaRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [filtroFaturado, setFiltroFaturado] = useState("todos");
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
+
+  // Deep-link do sino/popup/e-mail: limpa os filtros (que poderiam esconder a linha) e
+  // rola até a rescisão referenciada assim que a lista estiver na tela.
+  useEffect(() => {
+    if (!rescisaoFocoId) return;
+    setFiltroEmpresa("");
+    setFiltroFaturado("todos");
+    setDataInicio("");
+    setDataFim("");
+  }, [rescisaoFocoId]);
+
+  useEffect(() => {
+    if (!rescisaoFocoId) return;
+    const el = linhaRefs.current[rescisaoFocoId];
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [rescisaoFocoId, rescisoesIniciais]);
 
   const filtradas = useMemo(() => {
     return rescisoesIniciais.filter((r) => {
@@ -117,7 +138,14 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
               </tr>
             ) : (
               filtradas.map((r) => (
-                <tr key={r.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
+                <tr
+                  key={r.id}
+                  ref={(el) => { linhaRefs.current[r.id] = el; }}
+                  style={{
+                    borderBottom: "1px solid #F3F4F6",
+                    background: r.id === rescisaoFocoId ? "#FFFBEB" : undefined,
+                  }}
+                >
                   <td style={{ padding: "10px 12px", fontWeight: 600, color: "#111827" }}>{r.funcionarios?.nome_completo ?? "—"}</td>
                   <td style={{ padding: "10px 12px", color: "#374151" }}>{r.empresa}</td>
                   <td style={{ padding: "10px 12px", color: "#6B7280" }}>{formatarDataSemFuso(r.data_desligamento)}</td>

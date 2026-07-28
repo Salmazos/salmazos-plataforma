@@ -24,9 +24,16 @@ interface ClienteOption {
   nome: string;
 }
 
+export interface UsuarioOption {
+  user_id: string;
+  nome_completo: string;
+  email: string;
+}
+
 interface Props {
   funcionariosIniciais: FuncionarioRow[];
   clientes: ClienteOption[];
+  usuarios: UsuarioOption[];
 }
 
 const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
@@ -34,7 +41,7 @@ const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> 
   desligado: { label: "Desligado", bg: "#FEE2E2", text: "#991B1B" },
 };
 
-export default function FuncionariosPageClient({ funcionariosIniciais, clientes }: Props) {
+export default function FuncionariosPageClient({ funcionariosIniciais, clientes, usuarios }: Props) {
   const router = useRouter();
   const [filtroStatus, setFiltroStatus] = useState<string>("ativo");
   const [filtroClienteId, setFiltroClienteId] = useState<string>("");
@@ -132,6 +139,7 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes 
       <ModalLancarRescisao
         isOpen={funcionarioRescisao !== null}
         funcionario={funcionarioRescisao}
+        usuarios={usuarios}
         onClose={() => setFuncionarioRescisao(null)}
         onLancado={() => { setFuncionarioRescisao(null); router.refresh(); }}
       />
