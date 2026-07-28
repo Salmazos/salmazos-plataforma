@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatarDataSemFuso } from "@/lib/utils";
 import ModalAdicionarFuncionario from "./ModalAdicionarFuncionario";
+import ModalLancarRescisao from "./ModalLancarRescisao";
 
 export interface FuncionarioRow {
   id: string;
@@ -38,6 +39,7 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes 
   const [filtroStatus, setFiltroStatus] = useState<string>("ativo");
   const [filtroClienteId, setFiltroClienteId] = useState<string>("");
   const [modalAberto, setModalAberto] = useState(false);
+  const [funcionarioRescisao, setFuncionarioRescisao] = useState<FuncionarioRow | null>(null);
 
   const filtrados = useMemo(() => {
     return funcionariosIniciais.filter((f) => {
@@ -74,7 +76,7 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes 
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-              {["Nome", "Empresa", "Cargo", "Data de admissão", "Status", "Origem"].map((h) => (
+              {["Nome", "Empresa", "Cargo", "Data de admissão", "Status", "Origem", "Ações"].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>
                   {h}
                 </th>
@@ -84,7 +86,7 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes 
           <tbody>
             {filtrados.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF" }}>
+                <td colSpan={7} style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF" }}>
                   Nenhum funcionário encontrado.
                 </td>
               </tr>
@@ -105,6 +107,13 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes 
                     <td style={{ padding: "10px 12px", color: "#9CA3AF", fontSize: 12 }}>
                       {f.admissao_id ? "Admissão digital" : "Cadastro manual"}
                     </td>
+                    <td style={{ padding: "10px 12px" }}>
+                      {f.status === "ativo" && (
+                        <button onClick={() => setFuncionarioRescisao(f)} className="btn-outline" style={{ padding: "4px 10px", fontSize: 12 }}>
+                          Lançar rescisão
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })
@@ -118,6 +127,13 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes 
         clientes={clientes}
         onClose={() => setModalAberto(false)}
         onCriado={() => { setModalAberto(false); router.refresh(); }}
+      />
+
+      <ModalLancarRescisao
+        isOpen={funcionarioRescisao !== null}
+        funcionario={funcionarioRescisao}
+        onClose={() => setFuncionarioRescisao(null)}
+        onLancado={() => { setFuncionarioRescisao(null); router.refresh(); }}
       />
     </div>
   );

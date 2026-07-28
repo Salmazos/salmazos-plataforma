@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import SidebarMenu from "@/components/SidebarMenu";
 import PopupAniversariosHoje from "@/components/PopupAniversariosHoje";
 import NotificacoesProvider from "@/components/NotificacoesProvider";
+import { PAPEIS_PAINEL_FUNCIONARIOS } from "@/lib/funcionariosAuth";
+import { PAPEIS_PAINEL_ADMISSOES } from "@/lib/admissaoAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +25,13 @@ export default async function PainelLayout({
   const isSupervisorOrAbove = ["superuser", "diretoria", "supervisor"].includes(role);
   // 'dp' é um papel dedicado ao Departamento Pessoal — não entra em isSupervisorOrAbove
   // porque isso liberaria Relatórios e Carteira de Clientes, fora do escopo do DP. Tem
-  // flags próprias só para os módulos que o DP realmente usa: Funcionários (sempre) e
-  // Admissões (mesmo nível de acesso que supervisor — ver PAPEIS_PAINEL_ADMISSOES em
-  // admissaoAuth.ts, a admissão digital alimenta a criação automática de funcionários).
-  const canAccessFuncionarios = ["superuser", "diretoria", "supervisor", "dp"].includes(role);
-  const canAccessAdmissoes = ["superuser", "diretoria", "supervisor", "dp"].includes(role);
+  // flags próprias só para os módulos que o DP realmente usa: Funcionários/Rescisões
+  // (sempre) e Admissões (mesmo nível de acesso que supervisor — a admissão digital
+  // alimenta a criação automática de funcionários). Importadas de funcionariosAuth.ts/
+  // admissaoAuth.ts em vez de reescritas aqui — mesma fonte usada pelos gates reais de
+  // página/API, pra nunca divergir do que o Sidebar mostra.
+  const canAccessFuncionarios = PAPEIS_PAINEL_FUNCIONARIOS.includes(role);
+  const canAccessAdmissoes = PAPEIS_PAINEL_ADMISSOES.includes(role);
 
   const { data: perfil } = await supabase
     .from("analistas_perfil")

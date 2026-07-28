@@ -12,7 +12,11 @@ import { NextResponse } from "next/server";
 // 'dp' foi incluído no mesmo nível de supervisor: a admissão digital alimenta a criação
 // automática de `funcionarios` (ver gerar-pdf/route.ts), então quem cuida do Departamento
 // Pessoal precisa poder acompanhar/gerenciar admissões, não só a lista de funcionários.
-const PAPEIS_PAINEL_ADMISSOES = ["superuser", "diretoria", "supervisor", "dp"];
+// Exportado (não só privado a este arquivo) pelo mesmo motivo do gêmeo em
+// funcionariosAuth.ts: painel/layout.tsx precisa desta MESMA lista pra computar
+// canAccessAdmissoes (flag que decide se o link "Admissões" aparece no Sidebar) — uma
+// cópia solta ali divergiria silenciosamente do gate real desta função algum dia.
+export const PAPEIS_PAINEL_ADMISSOES = ["superuser", "diretoria", "supervisor", "dp"];
 
 export function checarPapelAdmissoes(user: User): NextResponse | null {
   const role = user.app_metadata?.role ?? "analista";

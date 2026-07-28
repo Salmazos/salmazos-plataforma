@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import FuncionariosPageClient from "@/components/FuncionariosPageClient";
+import RescisoesPageClient from "@/components/RescisoesPageClient";
 import { PAPEIS_PAINEL_FUNCIONARIOS } from "@/lib/funcionariosAuth";
 
 export const dynamic = "force-dynamic";
 
-export default async function FuncionariosPage() {
+export default async function RescisoesPage() {
   const supabaseAuth = await createClient();
   const {
     data: { user },
@@ -17,14 +17,17 @@ export default async function FuncionariosPage() {
 
   const svc = createServiceClient();
 
-  const [{ data: funcionarios }, { data: clientes }] = await Promise.all([
-    svc.from("funcionarios").select("*, clientes(nome)").order("criado_em", { ascending: false }),
+  const [{ data: rescisoes }, { data: clientes }] = await Promise.all([
+    svc
+      .from("rescisoes")
+      .select("*, funcionarios(nome_completo, cargo)")
+      .order("data_desligamento", { ascending: false }),
     svc.from("clientes").select("id, nome").eq("ativo", true).order("nome"),
   ]);
 
   return (
-    <FuncionariosPageClient
-      funcionariosIniciais={funcionarios ?? []}
+    <RescisoesPageClient
+      rescisoesIniciais={rescisoes ?? []}
       clientes={clientes ?? []}
     />
   );

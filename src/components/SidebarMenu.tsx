@@ -30,6 +30,7 @@ import {
   Cake,
   Landmark,
   IdCard,
+  UserMinus,
 } from "lucide-react";
 
 interface Props {
@@ -77,6 +78,7 @@ const menuItems: MenuItemDef[] = [
   { label: "Vagas", href: "/painel/vagas", icon: Briefcase },
   { label: "Admissões", href: "/painel/admissoes", icon: FileCheck, requireAdmissoes: true },
   { label: "Funcionários", href: "/painel/funcionarios", icon: IdCard, requireFuncionarios: true },
+  { label: "Rescisões", href: "/painel/rescisoes", icon: UserMinus, requireFuncionarios: true },
   { label: "Clientes", href: "/painel/clientes", icon: Building2 },
   { label: "Agenda", href: "/painel/agenda", icon: Calendar },
   { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },

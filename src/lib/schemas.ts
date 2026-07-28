@@ -784,3 +784,22 @@ export const funcionarioCreateSchema = z.object({
   cargo: z.string().trim().optional().nullable(),
   data_admissao: z.string().optional().nullable(),
 });
+
+// ── Rescisões (Fase 2) ───────────────────────────────────────────────────────
+
+export const rescisaoCreateSchema = z.object({
+  funcionario_id: z.string().uuid(),
+  empresa: z.string().trim().min(1, "Empresa é obrigatória"),
+  data_desligamento: z.string().min(1, "Data de desligamento é obrigatória"),
+  modalidade: z.enum(["pedido_demissao", "desligamento_pela_empresa", "efetivado"]),
+  entrevista_desligamento: z.boolean().optional().default(false),
+  funcionario_assinou: z.boolean().optional().default(false),
+  valor_rescisao: coerceNumber,
+  data_pagamento_rescisao: z.string().min(1, "Data de pagamento da rescisão é obrigatória"),
+  valor_guia: coerceNumberNullable.optional(),
+  data_pagamento_guia: z.string().optional().nullable(),
+  pensao: coerceNumberNullable.optional(),
+  farmacia: coerceNumberNullable.optional(),
+  faturado: z.boolean().optional().default(false),
+  aso_documento_path: z.string().optional().nullable(),
+});
