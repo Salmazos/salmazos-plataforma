@@ -35,7 +35,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const { data: admissao, error: admError } = await svc
     .from("admissoes")
-    .select("*, candidatos(nome_completo, cargo_pretendido), vagas(titulo, cliente_id, clientes(nome, entidade_contratante))")
+    .select("*, candidatos(nome_completo, cargo_pretendido), vagas(titulo, cliente_id, tipo_servico, clientes(nome, entidade_contratante))")
     .eq("id", id)
     .single();
   if (admError) return NextResponse.json({ error: admError.message }, { status: 404 });
@@ -314,6 +314,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     if (!funcionarioExistente) {
       const clienteIdVaga = (admissao.vagas as { cliente_id?: string | null } | null)?.cliente_id ?? null;
+      const tipoServicoVaga = (admissao.vagas as { tipo_servico?: string | null } | null)?.tipo_servico ?? null;
       const { error: funcionarioError } = await svc.from("funcionarios").insert({
         admissao_id: id,
         cliente_id: clienteIdVaga,
@@ -321,6 +322,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         cargo: admissao.funcao ?? null,
         empresa: vagaCliente?.nome ?? null,
         data_admissao: admissao.data_admissao ?? null,
+        tipo_servico: tipoServicoVaga,
         status: "ativo",
       });
       if (funcionarioError) throw new Error(funcionarioError.message);

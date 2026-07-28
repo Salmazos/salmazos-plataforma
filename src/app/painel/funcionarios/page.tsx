@@ -22,10 +22,18 @@ export default async function FuncionariosPage() {
     svc.from("clientes").select("id, nome").eq("ativo", true).order("nome"),
   ]);
 
+  // Filtro da listagem só deve oferecer empresas com funcionário cadastrado (evita uma
+  // lista de 100+ clientes da carteira quando só um punhado tem gente de fato alocada).
+  // O select de empresa do modal "Adicionar manualmente" continua usando a lista cheia —
+  // lá o objetivo é justamente cadastrar o primeiro funcionário de uma empresa nova.
+  const clienteIdsComFuncionario = new Set((funcionarios ?? []).map((f) => f.cliente_id).filter(Boolean));
+  const clientesComFuncionario = (clientes ?? []).filter((c) => clienteIdsComFuncionario.has(c.id));
+
   return (
     <FuncionariosPageClient
       funcionariosIniciais={funcionarios ?? []}
       clientes={clientes ?? []}
+      clientesFiltro={clientesComFuncionario}
     />
   );
 }

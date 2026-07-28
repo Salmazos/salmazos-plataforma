@@ -27,6 +27,7 @@ interface ClienteOption {
 interface Props {
   funcionariosIniciais: FuncionarioRow[];
   clientes: ClienteOption[];
+  clientesFiltro: ClienteOption[];
 }
 
 const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
@@ -34,7 +35,7 @@ const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> 
   desligado: { label: "Desligado", bg: "#FEE2E2", text: "#991B1B" },
 };
 
-export default function FuncionariosPageClient({ funcionariosIniciais, clientes }: Props) {
+export default function FuncionariosPageClient({ funcionariosIniciais, clientes, clientesFiltro }: Props) {
   const router = useRouter();
   const [filtroStatus, setFiltroStatus] = useState<string>("ativo");
   const [filtroClienteId, setFiltroClienteId] = useState<string>("");
@@ -66,7 +67,7 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes 
         </select>
         <select value={filtroClienteId} onChange={(e) => setFiltroClienteId(e.target.value)} className="input-field" style={{ maxWidth: 260 }}>
           <option value="">Todas as empresas</option>
-          {clientes.map((c) => (
+          {clientesFiltro.map((c) => (
             <option key={c.id} value={c.id}>{c.nome}</option>
           ))}
         </select>

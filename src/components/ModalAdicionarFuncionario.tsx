@@ -14,12 +14,19 @@ interface Props {
   onCriado: () => void;
 }
 
+const TIPOS_SERVICO_FUNCIONARIO = [
+  { id: "mao_obra_temporaria", label: "Mão de Obra Temporária" },
+  { id: "terceirizacao", label: "Terceirização de Serviços" },
+  { id: "recrutamento_selecao", label: "Recrutamento e Seleção" },
+];
+
 export default function ModalAdicionarFuncionario({ isOpen, clientes, onClose, onCriado }: Props) {
   const [nomeCompleto, setNomeCompleto] = useState("");
   const [clienteId, setClienteId] = useState("");
   const [empresaLivre, setEmpresaLivre] = useState("");
   const [cargo, setCargo] = useState("");
   const [dataAdmissao, setDataAdmissao] = useState("");
+  const [tipoServico, setTipoServico] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -30,6 +37,7 @@ export default function ModalAdicionarFuncionario({ isOpen, clientes, onClose, o
     setEmpresaLivre("");
     setCargo("");
     setDataAdmissao("");
+    setTipoServico("");
     setErro("");
   }, [isOpen]);
 
@@ -37,7 +45,7 @@ export default function ModalAdicionarFuncionario({ isOpen, clientes, onClose, o
 
   const clienteSelecionado = clientes.find((c) => c.id === clienteId);
   const empresaValida = clienteSelecionado?.nome ?? empresaLivre.trim();
-  const valido = Boolean(nomeCompleto.trim() && empresaValida);
+  const valido = Boolean(nomeCompleto.trim() && empresaValida && tipoServico);
 
   const handleSalvar = async () => {
     if (!valido) return;
@@ -53,6 +61,7 @@ export default function ModalAdicionarFuncionario({ isOpen, clientes, onClose, o
           empresa: empresaValida,
           cargo: cargo.trim() || null,
           data_admissao: dataAdmissao || null,
+          tipo_servico: tipoServico,
         }),
       });
       const json = await res.json();
@@ -123,13 +132,23 @@ export default function ModalAdicionarFuncionario({ isOpen, clientes, onClose, o
           />
         </div>
 
-        <div className="mb-4">
+        <div className="mb-3">
           <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data de admissão</label>
           <input
             type="date" value={dataAdmissao}
             onChange={(e) => setDataAdmissao(e.target.value)}
             className="input-field"
           />
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tipo de serviço *</label>
+          <select value={tipoServico} onChange={(e) => setTipoServico(e.target.value)} className="input-field">
+            <option value="">Selecione...</option>
+            {TIPOS_SERVICO_FUNCIONARIO.map((t) => (
+              <option key={t.id} value={t.id}>{t.label}</option>
+            ))}
+          </select>
         </div>
 
         {erro && <p className="text-red-600 text-sm mb-3">{erro}</p>}

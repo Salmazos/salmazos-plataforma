@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
       empresa: parsed.data.empresa,
       cargo: parsed.data.cargo ?? null,
       data_admissao: parsed.data.data_admissao ?? null,
+      tipo_servico: parsed.data.tipo_servico,
       status: "ativo",
     })
     .select()

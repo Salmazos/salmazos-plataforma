@@ -783,6 +783,9 @@ export const funcionarioCreateSchema = z.object({
   empresa: z.string().trim().min(1, "Empresa é obrigatória"),
   cargo: z.string().trim().optional().nullable(),
   data_admissao: z.string().optional().nullable(),
+  tipo_servico: z.enum(["mao_obra_temporaria", "terceirizacao", "recrutamento_selecao"], {
+    message: "Tipo de serviço é obrigatório",
+  }),
 });
 
 // ── Rescisões (Fase 2) ───────────────────────────────────────────────────────
