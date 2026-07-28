@@ -312,9 +312,12 @@ export async function POST(request: NextRequest, { params }: Params) {
       .eq("admissao_id", id)
       .maybeSingle();
 
-    if (!funcionarioExistente) {
+    const tipoServicoVaga = (admissao.vagas as { tipo_servico?: string | null } | null)?.tipo_servico ?? null;
+    // R&S nunca gera funcionário nosso — o cliente é o empregador direto desde o início,
+    // então não existe ASO/rescisão/contrato pra gerenciarmos aqui. Pular é o
+    // comportamento esperado, não uma falha.
+    if (!funcionarioExistente && tipoServicoVaga !== "recrutamento_selecao") {
       const clienteIdVaga = (admissao.vagas as { cliente_id?: string | null } | null)?.cliente_id ?? null;
-      const tipoServicoVaga = (admissao.vagas as { tipo_servico?: string | null } | null)?.tipo_servico ?? null;
       const { error: funcionarioError } = await svc.from("funcionarios").insert({
         admissao_id: id,
         cliente_id: clienteIdVaga,

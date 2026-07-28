@@ -14,10 +14,11 @@ interface Props {
   onCriado: () => void;
 }
 
+// R&S fica de fora de propósito — quem é R&S nunca é funcionário nosso (o cliente é o
+// empregador direto desde o início), então não faz sentido cadastrar aqui.
 const TIPOS_SERVICO_FUNCIONARIO = [
   { id: "mao_obra_temporaria", label: "Mão de Obra Temporária" },
   { id: "terceirizacao", label: "Terceirização de Serviços" },
-  { id: "recrutamento_selecao", label: "Recrutamento e Seleção" },
 ];
 
 export default function ModalAdicionarFuncionario({ isOpen, clientes, onClose, onCriado }: Props) {
