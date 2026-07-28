@@ -154,13 +154,13 @@ export function desenharFichaCadastral(
   w.formFieldRow([
     { label: "Salário", value: salarioComAdicionais(d.salario, d.adicionais) },
     { label: "Horário de trabalho", value: d.horario_trabalho },
-    { label: "Data de admissão", value: d.data_admissao },
+    { label: "Data de admissão", value: d.data_admissao && dataBR(d.data_admissao) },
   ]);
 
   w.sectionTitle("Dados Pessoais");
   w.formField("Nome completo", d.nome_completo);
   w.formFieldRow([
-    { label: "Data de nascimento", value: d.data_nascimento },
+    { label: "Data de nascimento", value: d.data_nascimento && dataBR(d.data_nascimento) },
     { label: "Sexo", value: d.sexo === "M" ? "Masculino" : d.sexo === "F" ? "Feminino" : "" },
     { label: "Estado civil", value: optLabel(ESTADO_CIVIL_OPTIONS, d.estado_civil) },
   ]);
@@ -192,7 +192,7 @@ export function desenharFichaCadastral(
   w.formFieldRow([
     { label: "RG órgão emissor", value: d.rg_orgao_emissor },
     { label: "RG UF", value: d.rg_uf },
-    { label: "RG data de emissão", value: d.rg_data_emissao },
+    { label: "RG data de emissão", value: d.rg_data_emissao && dataBR(d.rg_data_emissao) },
   ]);
   w.formFieldRow([
     { label: "Título de eleitor", value: d.titulo_eleitor },
@@ -201,7 +201,7 @@ export function desenharFichaCadastral(
   ]);
   w.formFieldRow([
     { label: "PIS/PASEP", value: d.pis_pasep },
-    { label: "Data de cadastramento do PIS", value: d.pis_data_cadastramento },
+    { label: "Data de cadastramento do PIS", value: d.pis_data_cadastramento && dataBR(d.pis_data_cadastramento) },
   ]);
   w.formFieldRow([
     { label: "Possui CTPS Digital?", value: simNao(d.possui_ctps_digital) },
@@ -212,16 +212,16 @@ export function desenharFichaCadastral(
     { label: "CTPS Física - UF", value: d.carteira_trabalho_uf },
   ]);
   w.formFieldRow([
-    { label: "CTPS Física - data de emissão", value: d.ctps_data_emissao },
+    { label: "CTPS Física - data de emissão", value: d.ctps_data_emissao && dataBR(d.ctps_data_emissao) },
     { label: "Reservista", value: d.reservista },
   ]);
   w.formFieldRow([
     { label: "CNH número", value: d.cnh_numero },
     { label: "CNH categoria", value: d.cnh_categoria },
-    { label: "CNH validade", value: d.cnh_validade },
+    { label: "CNH validade", value: d.cnh_validade && dataBR(d.cnh_validade) },
   ]);
   w.formFieldRow([
-    { label: "CNH data de emissão", value: d.cnh_data_emissao },
+    { label: "CNH data de emissão", value: d.cnh_data_emissao && dataBR(d.cnh_data_emissao) },
     { label: "CNH UF", value: d.cnh_uf },
   ]);
 
@@ -279,7 +279,7 @@ export function desenharFichaCadastral(
   ]);
   w.formFieldRow([
     { label: "Terá adiantamento salarial?", value: simNao(d.tera_adiantamento) },
-    { label: "Data do exame admissional", value: d.data_exame_admissional },
+    { label: "Data do exame admissional", value: d.data_exame_admissional && dataBR(d.data_exame_admissional) },
   ]);
   w.formFieldRow([
     { label: "Opta pelo Vale Transporte?", value: optaValeTransporte(d.opta_vale_transporte) },
@@ -295,7 +295,7 @@ export function desenharFichaCadastral(
         { label: "Parentesco", value: dep.parentesco },
       ]);
       w.formFieldRow([
-        { label: "Data de nascimento", value: dep.data_nascimento },
+        { label: "Data de nascimento", value: dep.data_nascimento && dataBR(dep.data_nascimento) },
         { label: "CPF", value: dep.cpf },
       ]);
       w.formFieldRow([

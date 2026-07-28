@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatarData } from "@/lib/utils";
+import { formatarData, formatarDataSemFuso } from "@/lib/utils";
 import { ADMISSAO_STATUS_BADGE, ADMISSAO_STATUS_OPTIONS, MODALIDADE_LABEL, STATUS_JA_ENVIADO } from "@/lib/admissaoStatus";
 import { MOTIVOS_REJEICAO_DOCUMENTO } from "@/lib/admissaoConstants";
 import { OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
@@ -1478,7 +1478,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
               </>
             )}
 
-            <Linha label="Data de admissão" value={admissao.data_admissao} />
+            <Linha label="Data de admissão" value={admissao.data_admissao && formatarDataSemFuso(admissao.data_admissao)} />
             <div className="flex justify-between items-center py-1.5 border-b border-gray-50 text-sm">
               <span className="text-gray-500">Data do exame admissional</span>
               <div className="flex items-center gap-2">

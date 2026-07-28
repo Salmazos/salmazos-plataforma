@@ -36,3 +36,14 @@ export function formatarData(iso: string): string {
     year: "numeric",
   });
 }
+
+// Para colunas `date` puras vindas do banco (sem hora, ex: data_admissao) — nunca usar
+// formatarData()/`new Date(iso)` aqui: "YYYY-MM-DD" é interpretado como meia-noite UTC, e
+// formatar isso em timezone local (BRT, UTC-3) desloca a exibição pro dia anterior. Mesmo
+// mecanismo de bug já corrigido no cron de lembrete de agendamento (fuso UTC vs Brasília).
+// Reformata por split de string, sem nunca passar por um objeto Date — mesmo padrão já
+// usado em dataBR() (lib/admissaoDocumentosPdf.ts), só que exportado para uso em telas.
+export function formatarDataSemFuso(iso: string): string {
+  const [ano, mes, dia] = iso.split("-");
+  return `${dia}/${mes}/${ano}`;
+}

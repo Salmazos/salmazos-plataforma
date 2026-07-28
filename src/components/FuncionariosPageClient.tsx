@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatarData } from "@/lib/utils";
+import { formatarDataSemFuso } from "@/lib/utils";
 import ModalAdicionarFuncionario from "./ModalAdicionarFuncionario";
 
 export interface FuncionarioRow {
@@ -96,7 +96,7 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes 
                     <td style={{ padding: "10px 12px", fontWeight: 600, color: "#111827" }}>{f.nome_completo}</td>
                     <td style={{ padding: "10px 12px", color: "#374151" }}>{f.clientes?.nome ?? f.empresa ?? "—"}</td>
                     <td style={{ padding: "10px 12px", color: "#374151" }}>{f.cargo ?? "—"}</td>
-                    <td style={{ padding: "10px 12px", color: "#6B7280" }}>{f.data_admissao ? formatarData(f.data_admissao) : "—"}</td>
+                    <td style={{ padding: "10px 12px", color: "#6B7280" }}>{f.data_admissao ? formatarDataSemFuso(f.data_admissao) : "—"}</td>
                     <td style={{ padding: "10px 12px" }}>
                       <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: badge.bg, color: badge.text }}>
                         {badge.label}
