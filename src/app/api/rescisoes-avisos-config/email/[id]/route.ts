@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, rescisaoAvisoEmailUpdateSchema } from "@/lib/schemas";
-import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
+import { checarPapelFullAccess } from "@/lib/fullAccessAuth";
 import { registrarAuditoria } from "@/lib/audit";
 import type { User } from "@supabase/supabase-js";
 
@@ -15,7 +15,7 @@ async function autenticar(): Promise<User | null> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return null;
-  const acessoNegado = checarPapelFuncionarios(user);
+  const acessoNegado = checarPapelFullAccess(user);
   return acessoNegado ? null : user;
 }
 

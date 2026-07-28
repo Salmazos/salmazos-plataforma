@@ -6,6 +6,7 @@ import PopupRescisoesHoje from "@/components/PopupRescisoesHoje";
 import NotificacoesProvider from "@/components/NotificacoesProvider";
 import { PAPEIS_PAINEL_FUNCIONARIOS } from "@/lib/funcionariosAuth";
 import { PAPEIS_PAINEL_ADMISSOES } from "@/lib/admissaoAuth";
+import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export default async function PainelLayout({
   if (!user) redirect("/login");
 
   const role = user.app_metadata?.role ?? "analista";
-  const isFullAccess = ["superuser", "diretoria"].includes(role);
+  const isFullAccess = PAPEIS_FULL_ACCESS.includes(role);
   const isSupervisorOrAbove = ["superuser", "diretoria", "supervisor"].includes(role);
   // 'dp' é um papel dedicado ao Departamento Pessoal — não entra em isSupervisorOrAbove
   // porque isso liberaria Relatórios e Carteira de Clientes, fora do escopo do DP. Tem

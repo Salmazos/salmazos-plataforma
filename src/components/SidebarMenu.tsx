@@ -80,7 +80,6 @@ const menuItems: MenuItemDef[] = [
   { label: "Admissões", href: "/painel/admissoes", icon: FileCheck, requireAdmissoes: true },
   { label: "Funcionários", href: "/painel/funcionarios", icon: IdCard, requireFuncionarios: true },
   { label: "Rescisões", href: "/painel/rescisoes", icon: UserMinus, requireFuncionarios: true },
-  { label: "Avisos de Rescisão", href: "/painel/rescisoes-avisos-config", icon: Megaphone, requireFuncionarios: true },
   { label: "Clientes", href: "/painel/clientes", icon: Building2 },
   { label: "Agenda", href: "/painel/agenda", icon: Calendar },
   { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },
@@ -99,6 +98,7 @@ const menuItems: MenuItemDef[] = [
     submenu: [
       { label: "Config. SLA", href: "/painel/sla-config", icon: Clock },
       { label: "Log de E-mails", href: "/painel/email-logs", icon: Mail },
+      { label: "Avisos de Rescisão", href: "/painel/rescisoes-avisos-config", icon: Megaphone },
       { label: "Usuários", href: "/painel/usuarios", icon: Users, requireSuperuser: true },
       { label: "Audit Logs", href: "/painel/audit-logs", icon: ShieldCheck, requireSuperuser: true },
       { label: "Carta de Abertura de Conta", href: "/painel/carta-conta-salario-config", icon: Landmark, requireSuperuser: true },

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
+import { checarPapelFullAccess } from "@/lib/fullAccessAuth";
 import { registrarAuditoria } from "@/lib/audit";
 
 interface Params {
@@ -13,7 +13,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const acessoNegado = checarPapelFuncionarios(user);
+  const acessoNegado = checarPapelFullAccess(user);
   if (acessoNegado) return acessoNegado;
 
   const { id } = await params;
