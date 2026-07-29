@@ -30,16 +30,18 @@ export default async function FuncionarioDetalhePage({ params }: Params) {
 
   if (!funcionario) notFound();
 
-  const { data: asos } = await svc
-    .from("funcionario_asos")
-    .select("*")
-    .eq("funcionario_id", id)
-    .order("data_exame", { ascending: false });
+  const [{ data: asos }, { data: contratos }] = await Promise.all([
+    svc.from("funcionario_asos").select("*").eq("funcionario_id", id).order("data_exame", { ascending: false }),
+    svc.from("funcionario_contratos").select("*").eq("funcionario_id", id).order("criado_em", { ascending: false }),
+  ]);
 
-  // Sem FK direta entre funcionario_asos.criado_por e analistas_perfil (mesmo caso já
-  // resolvido em rescisao_avisos_plataforma_destinatarios) — resolve o nome com uma
-  // segunda consulta em vez de um embed do PostgREST, que não existe pra esse relacionamento.
-  const userIds = [...new Set((asos ?? []).map((a) => a.criado_por).filter(Boolean))];
+  // Sem FK direta entre criado_por (em funcionario_asos/funcionario_contratos) e
+  // analistas_perfil (mesmo caso já resolvido em rescisao_avisos_plataforma_destinatarios) —
+  // resolve o nome com uma segunda consulta em vez de um embed do PostgREST, que não existe
+  // pra esse relacionamento. Uma única consulta cobre os dois históricos.
+  const userIds = [
+    ...new Set([...(asos ?? []).map((a) => a.criado_por), ...(contratos ?? []).map((c) => c.criado_por)].filter(Boolean)),
+  ];
   const { data: perfis } = userIds.length
     ? await svc.from("analistas_perfil").select("user_id, nome_completo").in("user_id", userIds)
     : { data: [] };
@@ -49,6 +51,16 @@ export default async function FuncionarioDetalhePage({ params }: Params) {
     ...a,
     criado_por_nome: a.criado_por ? nomePorUserId.get(a.criado_por) ?? "Usuário removido" : null,
   }));
+  const contratosComNome = (contratos ?? []).map((c) => ({
+    ...c,
+    criado_por_nome: c.criado_por ? nomePorUserId.get(c.criado_por) ?? "Usuário removido" : null,
+  }));
 
-  return <FuncionarioDetalheClient funcionario={funcionario} asosIniciais={asosComNome} />;
+  return (
+    <FuncionarioDetalheClient
+      funcionario={funcionario}
+      asosIniciais={asosComNome}
+      contratosIniciais={contratosComNome}
+    />
+  );
 }

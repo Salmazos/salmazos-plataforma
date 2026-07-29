@@ -799,6 +799,16 @@ export const funcionarioAsoCreateSchema = z.object({
   arquivo_path: z.string().optional().nullable(),
 });
 
+// ── Contrato (funcionario_contratos) ───────────────────────────────────────────
+// Só histórico de versões — sem vencimento, sem cron, sem avisos. Diferente do ASO,
+// arquivo_path é obrigatório aqui: não faz sentido um registro de "contrato" sem documento.
+
+export const funcionarioContratoCreateSchema = z.object({
+  arquivo_path: z.string().min(1, "Arquivo é obrigatório"),
+  nome_arquivo_original: z.string().optional().nullable(),
+  observacoes: z.string().trim().optional().nullable(),
+});
+
 // ── Avisos de ASO periódico — configuração global (Fase 3) ────────────────────
 // Lista própria e separada dos avisos de rescisão (público de compliance/segurança
 // ocupacional, não financeiro) — espelha rescisaoAvisoEmail/PlataformaCreateSchema.
