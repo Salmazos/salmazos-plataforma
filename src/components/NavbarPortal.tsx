@@ -6,9 +6,10 @@ import { createPortalBrowserClient } from "@/lib/supabase/client";
 
 interface Props {
   userEmail: string;
+  mostrarFuncionarios?: boolean;
 }
 
-export default function NavbarPortal({ userEmail }: Props) {
+export default function NavbarPortal({ userEmail, mostrarFuncionarios }: Props) {
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -49,6 +50,14 @@ export default function NavbarPortal({ userEmail }: Props) {
           >
             Agenda
           </Link>
+          {mostrarFuncionarios && (
+            <Link
+              href="/portal/funcionarios"
+              className="text-white/70 hover:text-white text-sm transition-colors hidden sm:block"
+            >
+              Funcionários
+            </Link>
+          )}
           <Link
             href="/portal/solicitar-vaga"
             style={{

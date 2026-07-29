@@ -31,9 +31,19 @@ export default async function PortalAppLayout({
 
   if (!cliente?.ativo) redirect("/portal/login?suspenso=1");
 
+  // Item "Funcionários" só aparece pra quem tem pelo menos 1 funcionário ativo — não faz
+  // sentido mostrar uma lista vazia pra cliente que nunca teve alocação via MOT/Terceirização.
+  const { data: funcionarioAtivo } = await service
+    .from("funcionarios")
+    .select("id")
+    .eq("cliente_id", clienteUsuario.cliente_id)
+    .eq("status", "ativo")
+    .limit(1)
+    .maybeSingle();
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <NavbarPortal userEmail={user.email ?? ""} />
+      <NavbarPortal userEmail={user.email ?? ""} mostrarFuncionarios={!!funcionarioAtivo} />
       <main className="max-w-5xl mx-auto px-4 py-8">{children}</main>
     </div>
   );
