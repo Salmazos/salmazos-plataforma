@@ -1322,6 +1322,66 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
         </span>
       </div>
 
+      {/* Cancelamento — sempre visível (não depende da aba selecionada), disponível em
+          qualquer status atual, inclusive depois de enviado_contabilidade. */}
+      {status === "cancelada" ? (
+        <div className="card mb-6" style={{ borderColor: "#FECACA", background: "#FEF2F2" }}>
+          <p className="text-sm font-bold" style={{ color: "#991B1B" }}>🚫 Admissão cancelada</p>
+          {canceladaInfo && (
+            <p className="text-xs mt-1" style={{ color: "#991B1B" }}>
+              Em {formatarData(canceladaInfo.em)} — Motivo: {canceladaInfo.motivo}
+            </p>
+          )}
+        </div>
+      ) : !cancelando ? (
+        <div className="mb-6">
+          <button
+            onClick={() => setCancelando(true)}
+            className="text-xs font-semibold"
+            style={{ color: "#DC2626" }}
+          >
+            Cancelar admissão
+          </button>
+        </div>
+      ) : (
+        <div className="card mb-6" style={{ borderColor: "#FECACA", background: "#FEF2F2" }}>
+          <p className="text-sm font-bold mb-1" style={{ color: "#991B1B" }}>⚠️ Cancelar esta admissão</p>
+          <p className="text-xs mb-2" style={{ color: "#991B1B" }}>
+            Marca esta admissão como cancelada permanentemente. Documentos e dados preenchidos continuam intactos — isso é só uma mudança de status.
+          </p>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            Motivo (obrigatório) *
+          </label>
+          <textarea
+            value={motivoCancelamento}
+            onChange={(e) => setMotivoCancelamento(e.target.value)}
+            rows={2}
+            placeholder="Ex: Candidato desistiu antes de assinar"
+            className="input-field resize-none"
+          />
+          {erroCancelamento && <p className="text-xs text-red-600 mt-1">{erroCancelamento}</p>}
+          <div className="flex gap-2 mt-2">
+            <button onClick={() => { setCancelando(false); setErroCancelamento(""); }} className="btn-outline text-sm">
+              Voltar
+            </button>
+            <button
+              onClick={handleCancelarAdmissao}
+              disabled={!motivoCancelamento.trim() || enviandoCancelamento}
+              className="text-sm font-semibold text-white px-4 py-2 rounded-lg disabled:opacity-50"
+              style={{ background: "#DC2626" }}
+            >
+              {enviandoCancelamento ? "Cancelando..." : "Confirmar cancelamento"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {avisoCancelamento && (
+        <div className="card mb-6" style={{ borderColor: "#FCD34D", background: "#FFFBEB" }}>
+          <p className="text-xs font-semibold" style={{ color: "#92400E" }}>⚠️ {avisoCancelamento}</p>
+        </div>
+      )}
+
       {/* Ações principais */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="card">
@@ -2084,61 +2144,6 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
         >
           {ADMISSAO_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-
-        {status === "cancelada" ? (
-          <div className="mt-3 pt-3 border-t border-gray-100">
-            <p className="text-sm font-bold" style={{ color: "#991B1B" }}>🚫 Admissão cancelada</p>
-            {canceladaInfo && (
-              <p className="text-xs mt-1" style={{ color: "#991B1B" }}>
-                Em {formatarData(canceladaInfo.em)} — Motivo: {canceladaInfo.motivo}
-              </p>
-            )}
-          </div>
-        ) : !cancelando ? (
-          <button
-            onClick={() => setCancelando(true)}
-            className="text-xs font-semibold mt-3"
-            style={{ color: "#DC2626" }}
-          >
-            Cancelar admissão
-          </button>
-        ) : (
-          <div className="mt-3 pt-3 border-t border-gray-100">
-            <p className="text-xs mb-2" style={{ color: "#991B1B" }}>
-              Marca esta admissão como cancelada permanentemente. Documentos e dados preenchidos continuam intactos — isso é só uma mudança de status.
-            </p>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-              Motivo (obrigatório) *
-            </label>
-            <textarea
-              value={motivoCancelamento}
-              onChange={(e) => setMotivoCancelamento(e.target.value)}
-              rows={2}
-              placeholder="Ex: Candidato desistiu antes de assinar"
-              className="input-field resize-none"
-            />
-            {erroCancelamento && <p className="text-xs text-red-600 mt-1">{erroCancelamento}</p>}
-            <div className="flex gap-2 mt-2">
-              <button onClick={() => { setCancelando(false); setErroCancelamento(""); }} className="btn-outline text-sm">
-                Voltar
-              </button>
-              <button
-                onClick={handleCancelarAdmissao}
-                disabled={!motivoCancelamento.trim() || enviandoCancelamento}
-                className="text-sm font-semibold text-white px-4 py-2 rounded-lg disabled:opacity-50"
-                style={{ background: "#DC2626" }}
-              >
-                {enviandoCancelamento ? "Cancelando..." : "Confirmar cancelamento"}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {avisoCancelamento && (
-          <div className="mt-3 pt-3 border-t border-gray-100">
-            <p className="text-xs font-semibold" style={{ color: "#92400E" }}>⚠️ {avisoCancelamento}</p>
-          </div>
-        )}
       </div>
 
       {!podeGerarPdf && forcandoPacote && (
