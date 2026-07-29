@@ -376,6 +376,13 @@ export const admissaoUpdateSchema = z.object({
   observacoes_internas: z.string().optional().nullable(),
 });
 
+// "cancelada" fica de fora do enum acima de propósito — só chega nesse status via
+// POST /api/admissoes/[id]/cancelar (que exige motivo e faz a limpeza de funcionário
+// órfão), nunca pelo dropdown genérico de status.
+export const admissaoCancelarSchema = z.object({
+  motivo: z.string().trim().min(1, "Motivo é obrigatório"),
+});
+
 const optStr = z.string().optional().nullable();
 
 export const admissaoDadosPessoaisSchema = z.object({

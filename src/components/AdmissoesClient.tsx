@@ -30,6 +30,7 @@ const CARDS_RESUMO: { status: string; label: string; bg: string; text: string }[
   { status: "aguardando_analise", label: "Aguardando análise", bg: "#FEF3C7", text: "#92400E" },
   { status: "em_analise", label: "Em análise", bg: "#FFEDD5", text: "#C2410C" },
   { status: "enviado_contabilidade", label: "Enviadas à contabilidade este mês", bg: "#D1FAE5", text: "#166534" },
+  { status: "cancelada", label: "Canceladas", bg: "#FEE2E2", text: "#991B1B" },
 ];
 
 export default function AdmissoesClient({ admissoesIniciais }: Props) {
@@ -58,7 +59,12 @@ export default function AdmissoesClient({ admissoesIniciais }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [admissoes]);
 
-  const filtradas = filtroStatus ? admissoes.filter((a) => a.status === filtroStatus) : admissoes;
+  // Sem filtro explícito, "cancelada" fica fora da lista padrão — não deve poluir o
+  // caminho normal de trabalho. Só aparece quando alguém clica no card "Canceladas"
+  // (mesmo mecanismo de toggle já usado pelos outros cards), nunca escondida de vez.
+  const filtradas = filtroStatus
+    ? admissoes.filter((a) => a.status === filtroStatus)
+    : admissoes.filter((a) => a.status !== "cancelada");
 
   const showToast = (msg: string) => {
     setToast(msg);

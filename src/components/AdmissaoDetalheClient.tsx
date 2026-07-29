@@ -69,6 +69,9 @@ interface AdmissaoFull {
   carta_banco_nome: string | null;
   lgpd_aceite_em: string | null;
   lgpd_aceite_ip: string | null;
+  cancelada_em: string | null;
+  cancelada_por: string | null;
+  cancelada_motivo: string | null;
   candidatos: { id: string; nome_completo: string; cargo_pretendido: string; telefone: string | null; email: string | null } | null;
   vagas: { id: string; titulo: string; cliente_id: string | null; clientes: { id: string; nome: string } | null } | null;
 }
@@ -109,6 +112,7 @@ const ACAO_LABEL: Record<string, string> = {
   admissao_dados_admissao_editados_pelo_analista: "Vaga/dados da admissão editados pelo analista",
   admissao_adicionais_atualizados: "Adicionais atualizados",
   admissao_autorizacao_sindical_atualizada: "Autorização Sindical atualizada",
+  admissao_cancelada: "Admissão cancelada",
 };
 
 function Linha({ label, value }: { label: string; value: string | null | undefined }) {
@@ -464,6 +468,14 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [forcandoPacote, setForcandoPacote] = useState(false);
   const [justificativaForcar, setJustificativaForcar] = useState("");
   const [gerandoPdfForcado, setGerandoPdfForcado] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  const [motivoCancelamento, setMotivoCancelamento] = useState("");
+  const [enviandoCancelamento, setEnviandoCancelamento] = useState(false);
+  const [erroCancelamento, setErroCancelamento] = useState("");
+  const [avisoCancelamento, setAvisoCancelamento] = useState("");
+  const [canceladaInfo, setCanceladaInfo] = useState(
+    admissao.cancelada_em ? { em: admissao.cancelada_em, motivo: admissao.cancelada_motivo ?? "" } : null
+  );
   const [modalContaSalarioAberto, setModalContaSalarioAberto] = useState(false);
   const [modalAssinaturaAberto, setModalAssinaturaAberto] = useState(false);
   const [abrindoAssinatura, setAbrindoAssinatura] = useState(false);
@@ -1151,6 +1163,35 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       showToast(msg);
     } finally {
       setGerandoPdf(false);
+    }
+  };
+
+  // Disponível em qualquer status — inclusive depois de enviado_contabilidade, quando o
+  // candidato desiste depois do pacote já ter sido gerado (já aconteceu). A rota decide
+  // sozinha se um funcionário órfão criado pelo gatilho automático pode ser removido, ou
+  // se precisa de revisão manual (ver aviso).
+  const handleCancelarAdmissao = async () => {
+    if (!motivoCancelamento.trim()) return;
+    setEnviandoCancelamento(true);
+    setErroCancelamento("");
+    try {
+      const res = await fetch(`/api/admissoes/${admissao.id}/cancelar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo: motivoCancelamento.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setErroCancelamento(json.error || "Erro ao cancelar admissão."); return; }
+      setStatus("cancelada");
+      setCanceladaInfo({ em: json.data.cancelada_em, motivo: json.data.cancelada_motivo });
+      setCancelando(false);
+      if (json.aviso) setAvisoCancelamento(json.aviso);
+      showToast("Admissão cancelada.");
+      router.refresh();
+    } catch {
+      setErroCancelamento("Erro de conexão. Tente novamente.");
+    } finally {
+      setEnviandoCancelamento(false);
     }
   };
 
@@ -2043,6 +2084,61 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
         >
           {ADMISSAO_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+
+        {status === "cancelada" ? (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <p className="text-sm font-bold" style={{ color: "#991B1B" }}>🚫 Admissão cancelada</p>
+            {canceladaInfo && (
+              <p className="text-xs mt-1" style={{ color: "#991B1B" }}>
+                Em {formatarData(canceladaInfo.em)} — Motivo: {canceladaInfo.motivo}
+              </p>
+            )}
+          </div>
+        ) : !cancelando ? (
+          <button
+            onClick={() => setCancelando(true)}
+            className="text-xs font-semibold mt-3"
+            style={{ color: "#DC2626" }}
+          >
+            Cancelar admissão
+          </button>
+        ) : (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <p className="text-xs mb-2" style={{ color: "#991B1B" }}>
+              Marca esta admissão como cancelada permanentemente. Documentos e dados preenchidos continuam intactos — isso é só uma mudança de status.
+            </p>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Motivo (obrigatório) *
+            </label>
+            <textarea
+              value={motivoCancelamento}
+              onChange={(e) => setMotivoCancelamento(e.target.value)}
+              rows={2}
+              placeholder="Ex: Candidato desistiu antes de assinar"
+              className="input-field resize-none"
+            />
+            {erroCancelamento && <p className="text-xs text-red-600 mt-1">{erroCancelamento}</p>}
+            <div className="flex gap-2 mt-2">
+              <button onClick={() => { setCancelando(false); setErroCancelamento(""); }} className="btn-outline text-sm">
+                Voltar
+              </button>
+              <button
+                onClick={handleCancelarAdmissao}
+                disabled={!motivoCancelamento.trim() || enviandoCancelamento}
+                className="text-sm font-semibold text-white px-4 py-2 rounded-lg disabled:opacity-50"
+                style={{ background: "#DC2626" }}
+              >
+                {enviandoCancelamento ? "Cancelando..." : "Confirmar cancelamento"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {avisoCancelamento && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <p className="text-xs font-semibold" style={{ color: "#92400E" }}>⚠️ {avisoCancelamento}</p>
+          </div>
+        )}
       </div>
 
       {!podeGerarPdf && forcandoPacote && (

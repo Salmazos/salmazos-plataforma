@@ -14,6 +14,9 @@ export const ADMISSAO_STATUS_BADGE: Record<string, { label: string; bg: string; 
   em_analise: { label: "Em análise", bg: "#FFEDD5", text: "#C2410C" },
   aprovado: { label: "Aprovado", bg: "#DCFCE7", text: "#15803D" },
   enviado_contabilidade: { label: "Enviado à contabilidade", bg: "#D1FAE5", text: "#166534" },
+  // Fora de ADMISSAO_STATUS_OPTIONS de propósito — só chega aqui via
+  // POST /api/admissoes/[id]/cancelar, nunca pelo dropdown genérico de status.
+  cancelada: { label: "Cancelada", bg: "#FEE2E2", text: "#991B1B" },
 };
 
 export const MODALIDADE_LABEL: Record<string, string> = {
