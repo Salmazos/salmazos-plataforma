@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const parsed = parseBody(admissaoCreateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
-  const { candidato_id, vaga_id, modalidade, funcao, salario, horario_trabalho, data_admissao, entidade_contratante, adicionais, autorizacao_sindical } = parsed.data;
+  const { candidato_id, vaga_id, modalidade, funcao, salario, tipo_salario, horario_trabalho, data_admissao, entidade_contratante, adicionais, autorizacao_sindical } = parsed.data;
 
   const svc = createServiceClient();
 
@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
       modalidade,
       funcao,
       salario,
+      tipo_salario,
       horario_trabalho,
       data_admissao,
       entidade_contratante,
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest) {
     acao: "admissao_criada",
     entidade: "admissoes",
     entidade_id: admissao.id,
-    detalhes: { candidato_id, vaga_id: vaga_id ?? null, modalidade, funcao, salario, horario_trabalho, data_admissao },
+    detalhes: { candidato_id, vaga_id: vaga_id ?? null, modalidade, funcao, salario, tipo_salario, horario_trabalho, data_admissao },
   });
 
   const url = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/admissao/${admissao.token}`;

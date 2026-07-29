@@ -249,6 +249,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     entidade_cnpj: entidade?.cnpj ?? null,
     endereco_fiscal: ENDERECO_FISCAL_SALMAZOS,
     salario: admissao.salario,
+    tipo_salario: admissao.tipo_salario,
     banco_portabilidade: temExcecaoPortabilidade ? dp.banco_portabilidade : dp.banco,
     agencia_portabilidade: temExcecaoPortabilidade ? dp.agencia_portabilidade : dp.agencia,
     conta_portabilidade: temExcecaoPortabilidade ? dp.conta_portabilidade : dp.conta,

@@ -18,10 +18,15 @@ function moeda(v: number | null | undefined): string {
   return v != null ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "";
 }
 
-// "R$ 1.837,40 + 20% de Insalubridade, R$ 150,00 de Periculosidade" — concatena os
+// "R$ 1.837,40 /mês + 20% de Insalubridade, R$ 150,00 de Periculosidade" — concatena os
 // adicionais salariais ao lado do salário base, cada um no formato do seu formato_valor.
-function salarioComAdicionais(salario: number | null | undefined, adicionais: FichaCadastralAdicional[] | undefined): string {
-  const base = moeda(salario);
+function salarioComAdicionais(
+  salario: number | null | undefined,
+  adicionais: FichaCadastralAdicional[] | undefined,
+  tipoSalario: "mensal" | "hora" | null | undefined
+): string {
+  const sufixo = salario != null ? (tipoSalario === "hora" ? " /hora" : " /mês") : "";
+  const base = `${moeda(salario)}${sufixo}`;
   if (!adicionais || adicionais.length === 0) return base;
   const partes = adicionais.map((ad) =>
     ad.formato_valor === "percentual"
@@ -50,6 +55,7 @@ export interface FichaCadastralAdicional {
 export interface FichaCadastralDados {
   funcao?: string | null;
   salario?: number | null;
+  tipo_salario?: "mensal" | "hora" | null;
   horario_trabalho?: string | null;
   data_admissao?: string | null;
   nome_completo?: string | null;
@@ -152,7 +158,7 @@ export function desenharFichaCadastral(
     { label: "Função", value: d.funcao },
   ]);
   w.formFieldRow([
-    { label: "Salário", value: salarioComAdicionais(d.salario, d.adicionais) },
+    { label: "Salário", value: salarioComAdicionais(d.salario, d.adicionais, d.tipo_salario) },
     { label: "Horário de trabalho", value: d.horario_trabalho },
     { label: "Data de admissão", value: d.data_admissao && dataBR(d.data_admissao) },
   ]);
@@ -536,6 +542,7 @@ export interface CartaContaSalarioDados {
   // @/lib/admissaoConstants (mesma fonte do rodapé de todo PDF gerado pelo PdfWriter).
   endereco_fiscal: string;
   salario: number;
+  tipo_salario: "mensal" | "hora";
   // Dados bancários a exibir no bloco "Dados para portabilidade:" — o chamador resolve
   // a prioridade: exceção manual do RH (admissao_dados_pessoais.banco_portabilidade/etc,
   // quando deseja_portabilidade_salario está ligado e os 4 campos estão preenchidos) ou,
@@ -583,7 +590,7 @@ export function desenharCartaAberturaContaSalario(w: PdfWriter, d: CartaContaSal
   w.richParagraph(
     [
       {
-        text: `O(a) colaborador(a) foi contratado(a) pela empresa ${d.entidade_razao_social ?? "—"}, inscrita no CNPJ nº ${d.entidade_cnpj ?? "—"}, sediada à ${d.endereco_fiscal}, com salário de ${moeda(d.salario)} por mês.`,
+        text: `O(a) colaborador(a) foi contratado(a) pela empresa ${d.entidade_razao_social ?? "—"}, inscrita no CNPJ nº ${d.entidade_cnpj ?? "—"}, sediada à ${d.endereco_fiscal}, com salário de ${moeda(d.salario)} por ${d.tipo_salario === "hora" ? "hora" : "mês"}.`,
       },
     ],
     10,

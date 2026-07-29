@@ -38,7 +38,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const { data: antes } = await svc
     .from("admissoes")
-    .select("vaga_id, funcao, salario, horario_trabalho, entidade_contratante, vagas(id, titulo, clientes(nome))")
+    .select("vaga_id, funcao, salario, tipo_salario, horario_trabalho, entidade_contratante, vagas(id, titulo, clientes(nome))")
     .eq("id", id)
     .single();
 

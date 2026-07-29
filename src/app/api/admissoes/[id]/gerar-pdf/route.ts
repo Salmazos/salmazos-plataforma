@@ -177,6 +177,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     {
       funcao: admissao.funcao,
       salario: admissao.salario,
+      tipo_salario: admissao.tipo_salario,
       horario_trabalho: admissao.horario_trabalho,
       data_admissao: admissao.data_admissao,
       ...dp,

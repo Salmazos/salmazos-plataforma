@@ -53,6 +53,7 @@ interface AdmissaoFull {
   vaga_id: string | null;
   funcao: string | null;
   salario: number | null;
+  tipo_salario: "mensal" | "hora";
   horario_trabalho: string | null;
   data_admissao: string | null;
   entidade_contratante: string | null;
@@ -494,10 +495,11 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   });
   const [funcaoAtual, setFuncaoAtual] = useState(admissao.funcao);
   const [salarioAtual, setSalarioAtual] = useState(admissao.salario);
+  const [tipoSalarioAtual, setTipoSalarioAtual] = useState(admissao.tipo_salario);
   const [horarioAtual, setHorarioAtual] = useState(admissao.horario_trabalho);
   const [entidadeAtual, setEntidadeAtual] = useState(admissao.entidade_contratante);
   const [editandoDadosAdmissao, setEditandoDadosAdmissao] = useState(false);
-  const [formDadosAdmissao, setFormDadosAdmissao] = useState({ vagaId: "", funcao: "", salario: "", horario: "", entidade: "" });
+  const [formDadosAdmissao, setFormDadosAdmissao] = useState({ vagaId: "", funcao: "", salario: "", tipoSalario: "mensal" as "mensal" | "hora", horario: "", entidade: "" });
   const [vagasDisponiveis, setVagasDisponiveis] = useState<VagaOpcao[]>([]);
   const [carregandoVagas, setCarregandoVagas] = useState(false);
   const [buscaVaga, setBuscaVaga] = useState("");
@@ -552,6 +554,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       vagaId: vagaAtual.id ?? "",
       funcao: funcaoAtual ?? "",
       salario: salarioAtual != null ? String(salarioAtual) : "",
+      tipoSalario: tipoSalarioAtual,
       horario: horarioAtual ?? "",
       entidade: entidadeAtual ?? "",
     });
@@ -585,6 +588,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       // parseValorAdicional aqui, que corromperia o valor (ver comentário acima).
       const salarioNum = Number(formDadosAdmissao.salario) || 0;
       if (salarioNum > 0) payload.salario = salarioNum;
+      payload.tipo_salario = formDadosAdmissao.tipoSalario;
       if (formDadosAdmissao.horario.trim()) payload.horario_trabalho = formDadosAdmissao.horario.trim();
       if (formDadosAdmissao.entidade) payload.entidade_contratante = formDadosAdmissao.entidade;
 
@@ -600,6 +604,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       setVagaAtual({ id: json.data.vaga_id, titulo: novaVaga?.titulo ?? null, clienteNome: novaVaga?.clientes?.nome ?? null });
       setFuncaoAtual(json.data.funcao);
       setSalarioAtual(json.data.salario);
+      setTipoSalarioAtual(json.data.tipo_salario);
       setHorarioAtual(json.data.horario_trabalho);
       setEntidadeAtual(json.data.entidade_contratante);
       setEditandoDadosAdmissao(false);
@@ -1543,7 +1548,29 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                 </div>
                 <div className="mb-2">
                   <label className="block text-xs text-gray-500 mb-1">Salário</label>
-                  <CampoMoeda value={formDadosAdmissao.salario} onChange={(v) => atualizarCampoDadosAdmissao("salario", v > 0 ? String(v) : "")} className="input-field text-sm" />
+                  <div className="flex gap-2">
+                    <CampoMoeda value={formDadosAdmissao.salario} onChange={(v) => atualizarCampoDadosAdmissao("salario", v > 0 ? String(v) : "")} className="input-field text-sm" />
+                    <div className="grid grid-cols-2 gap-1" style={{ flexShrink: 0 }}>
+                      <button type="button"
+                        onClick={() => atualizarCampoDadosAdmissao("tipoSalario", "mensal")}
+                        className="px-3 py-1 rounded-lg border-2 text-xs font-semibold transition-all"
+                        style={formDadosAdmissao.tipoSalario === "mensal"
+                          ? { backgroundColor: "#111827", color: "#FFD700", borderColor: "#111827" }
+                          : { backgroundColor: "#ffffff", color: "#6b7280", borderColor: "#e5e7eb" }}
+                      >
+                        Mensal
+                      </button>
+                      <button type="button"
+                        onClick={() => atualizarCampoDadosAdmissao("tipoSalario", "hora")}
+                        className="px-3 py-1 rounded-lg border-2 text-xs font-semibold transition-all"
+                        style={formDadosAdmissao.tipoSalario === "hora"
+                          ? { backgroundColor: "#111827", color: "#FFD700", borderColor: "#111827" }
+                          : { backgroundColor: "#ffffff", color: "#6b7280", borderColor: "#e5e7eb" }}
+                      >
+                        Hora
+                      </button>
+                    </div>
+                  </div>
                 </div>
                 <div className="mb-2">
                   <label className="block text-xs text-gray-500 mb-1">Horário de trabalho</label>
@@ -1573,7 +1600,12 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                 <Linha label="Vaga" value={vagaAtual.titulo} />
                 <Linha label="Cliente" value={vagaAtual.clienteNome} />
                 <Linha label="Função" value={funcaoAtual} />
-                <Linha label="Salário" value={salarioAtual != null ? salarioAtual.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : null} />
+                <Linha
+                  label="Salário"
+                  value={salarioAtual != null
+                    ? `${salarioAtual.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} ${tipoSalarioAtual === "hora" ? "/hora" : "/mês"}`
+                    : null}
+                />
                 <Linha label="Horário de trabalho" value={horarioAtual} />
                 <Linha label="Entidade Contratante" value={ENTIDADES_CONTRATANTES.find((e) => e.value === entidadeAtual)?.razaoSocial ?? entidadeAtual} />
               </>
