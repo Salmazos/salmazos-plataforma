@@ -8,6 +8,7 @@ import { calcularStatusAso, ASO_STATUS_INFO } from "@/lib/asoStatus";
 import { TIPOS_SERVICO } from "@/lib/constants";
 import ModalRegistrarAso from "./ModalRegistrarAso";
 import ModalRegistrarContrato from "./ModalRegistrarContrato";
+import ModalEditarFuncionario from "./ModalEditarFuncionario";
 
 export interface FuncionarioDetalhe {
   id: string;
@@ -40,10 +41,16 @@ export interface ContratoRow {
   criado_por_nome: string | null;
 }
 
+interface ClienteOption {
+  id: string;
+  nome: string;
+}
+
 interface Props {
   funcionario: FuncionarioDetalhe;
   asosIniciais: AsoRow[];
   contratosIniciais: ContratoRow[];
+  clientes: ClienteOption[];
 }
 
 const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
@@ -51,8 +58,10 @@ const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> 
   desligado: { label: "Desligado", bg: "#FEE2E2", text: "#991B1B" },
 };
 
-export default function FuncionarioDetalheClient({ funcionario, asosIniciais, contratosIniciais }: Props) {
+export default function FuncionarioDetalheClient({ funcionario: funcionarioInicial, asosIniciais, contratosIniciais, clientes }: Props) {
   const router = useRouter();
+  const [funcionario, setFuncionario] = useState(funcionarioInicial);
+  const [modalEditarAberto, setModalEditarAberto] = useState(false);
   const [asos, setAsos] = useState(asosIniciais);
   const [modalAberto, setModalAberto] = useState(false);
   const [carregandoArquivoId, setCarregandoArquivoId] = useState<string | null>(null);
@@ -117,9 +126,14 @@ export default function FuncionarioDetalheClient({ funcionario, asosIniciais, co
             <h1 className="text-xl font-bold text-gray-900">{funcionario.nome_completo}</h1>
             <p className="text-sm text-gray-500 mt-1">{empresaNome}</p>
           </div>
-          <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: statusFuncionario.bg, color: statusFuncionario.text }}>
-            {statusFuncionario.label}
-          </span>
+          <div className="flex items-center gap-2">
+            <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: statusFuncionario.bg, color: statusFuncionario.text }}>
+              {statusFuncionario.label}
+            </span>
+            <button onClick={() => setModalEditarAberto(true)} className="btn-outline text-sm">
+              Editar
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4" style={{ fontSize: 13 }}>
@@ -279,6 +293,18 @@ export default function FuncionarioDetalheClient({ funcionario, asosIniciais, co
           </>
         )}
       </div>
+
+      <ModalEditarFuncionario
+        isOpen={modalEditarAberto}
+        funcionario={funcionario}
+        clientes={clientes}
+        onClose={() => setModalEditarAberto(false)}
+        onSalvo={(atualizado) => {
+          setFuncionario(atualizado);
+          setModalEditarAberto(false);
+          router.refresh();
+        }}
+      />
 
       <ModalRegistrarAso
         isOpen={modalAberto}

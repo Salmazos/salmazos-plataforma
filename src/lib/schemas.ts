@@ -790,6 +790,11 @@ export const funcionarioCreateSchema = z.object({
   }),
 });
 
+// Edição — mesmo padrão de vagaUpdateSchema (.partial() sobre o schema de criação): cada
+// campo enviado é validado com a mesma regra do cadastro, mas nenhum é obrigatório aqui —
+// a rota só aplica os campos presentes no body.
+export const funcionarioUpdateSchema = funcionarioCreateSchema.partial();
+
 // ── ASO Periódico (funcionario_asos) ──────────────────────────────────────────
 // Admissional/periódico, renovação a cada 12 meses, para funcionários ativos —
 // completamente separado do ASO demissional (rescisoes.aso_documento_path).
