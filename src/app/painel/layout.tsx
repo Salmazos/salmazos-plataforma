@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import SidebarMenu from "@/components/SidebarMenu";
 import PopupAniversariosHoje from "@/components/PopupAniversariosHoje";
 import PopupRescisoesHoje from "@/components/PopupRescisoesHoje";
+import PopupAsoPeriodicoHoje from "@/components/PopupAsoPeriodicoHoje";
 import NotificacoesProvider from "@/components/NotificacoesProvider";
 import { PAPEIS_PAINEL_FUNCIONARIOS } from "@/lib/funcionariosAuth";
 import { PAPEIS_PAINEL_ADMISSOES } from "@/lib/admissaoAuth";
@@ -58,6 +59,7 @@ export default async function PainelLayout({
         <main className="flex-1 min-w-0 px-6 py-6">{children}</main>
         <PopupAniversariosHoje />
         <PopupRescisoesHoje />
+        <PopupAsoPeriodicoHoje />
       </div>
     </NotificacoesProvider>
   );

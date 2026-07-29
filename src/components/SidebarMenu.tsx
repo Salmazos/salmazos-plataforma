@@ -32,6 +32,7 @@ import {
   IdCard,
   UserMinus,
   Megaphone,
+  Stethoscope,
 } from "lucide-react";
 
 interface Props {
@@ -99,6 +100,7 @@ const menuItems: MenuItemDef[] = [
       { label: "Config. SLA", href: "/painel/sla-config", icon: Clock },
       { label: "Log de E-mails", href: "/painel/email-logs", icon: Mail },
       { label: "Avisos de Rescisão", href: "/painel/rescisoes-avisos-config", icon: Megaphone },
+      { label: "Avisos de ASO Periódico", href: "/painel/funcionario-aso-avisos-config", icon: Stethoscope },
       { label: "Usuários", href: "/painel/usuarios", icon: Users, requireSuperuser: true },
       { label: "Audit Logs", href: "/painel/audit-logs", icon: ShieldCheck, requireSuperuser: true },
       { label: "Carta de Abertura de Conta", href: "/painel/carta-conta-salario-config", icon: Landmark, requireSuperuser: true },

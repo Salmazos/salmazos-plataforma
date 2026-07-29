@@ -799,6 +799,23 @@ export const funcionarioAsoCreateSchema = z.object({
   arquivo_path: z.string().optional().nullable(),
 });
 
+// ── Avisos de ASO periódico — configuração global (Fase 3) ────────────────────
+// Lista própria e separada dos avisos de rescisão (público de compliance/segurança
+// ocupacional, não financeiro) — espelha rescisaoAvisoEmail/PlataformaCreateSchema.
+
+export const funcionarioAsoAvisoEmailCreateSchema = z.object({
+  nome: z.string().trim().min(1, "Nome é obrigatório"),
+  email: z.string().trim().email("E-mail inválido"),
+});
+
+export const funcionarioAsoAvisoEmailUpdateSchema = z.object({
+  ativo: z.boolean(),
+});
+
+export const funcionarioAsoAvisoPlataformaCreateSchema = z.object({
+  usuario_id: z.string().uuid(),
+});
+
 // ── Rescisões (Fase 2) ───────────────────────────────────────────────────────
 
 export const rescisaoCreateSchema = z.object({

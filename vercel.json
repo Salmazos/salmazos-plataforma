@@ -19,6 +19,10 @@
     {
       "path": "/api/cron/rescisao-avisos",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/lembrete-vencimento-aso",
+      "schedule": "0 9 * * *"
     }
   ]
 }
