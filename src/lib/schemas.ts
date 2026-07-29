@@ -790,6 +790,15 @@ export const funcionarioCreateSchema = z.object({
   }),
 });
 
+// ── ASO Periódico (funcionario_asos) ──────────────────────────────────────────
+// Admissional/periódico, renovação a cada 12 meses, para funcionários ativos —
+// completamente separado do ASO demissional (rescisoes.aso_documento_path).
+
+export const funcionarioAsoCreateSchema = z.object({
+  data_exame: z.string().min(1, "Data do exame é obrigatória"),
+  arquivo_path: z.string().optional().nullable(),
+});
+
 // ── Rescisões (Fase 2) ───────────────────────────────────────────────────────
 
 export const rescisaoCreateSchema = z.object({

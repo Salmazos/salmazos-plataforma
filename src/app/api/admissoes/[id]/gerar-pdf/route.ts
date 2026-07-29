@@ -318,17 +318,33 @@ export async function POST(request: NextRequest, { params }: Params) {
     // comportamento esperado, não uma falha.
     if (!funcionarioExistente && tipoServicoVaga !== "recrutamento_selecao") {
       const clienteIdVaga = (admissao.vagas as { cliente_id?: string | null } | null)?.cliente_id ?? null;
-      const { error: funcionarioError } = await svc.from("funcionarios").insert({
-        admissao_id: id,
-        cliente_id: clienteIdVaga,
-        nome_completo: dp.nome_completo ?? candidatoNome,
-        cargo: admissao.funcao ?? null,
-        empresa: vagaCliente?.nome ?? null,
-        data_admissao: admissao.data_admissao ?? null,
-        tipo_servico: tipoServicoVaga,
-        status: "ativo",
-      });
+      const { data: funcionarioCriado, error: funcionarioError } = await svc
+        .from("funcionarios")
+        .insert({
+          admissao_id: id,
+          cliente_id: clienteIdVaga,
+          nome_completo: dp.nome_completo ?? candidatoNome,
+          cargo: admissao.funcao ?? null,
+          empresa: vagaCliente?.nome ?? null,
+          data_admissao: admissao.data_admissao ?? null,
+          tipo_servico: tipoServicoVaga,
+          status: "ativo",
+        })
+        .select("id")
+        .single();
       if (funcionarioError) throw new Error(funcionarioError.message);
+
+      // Seed do 1º exame do ASO periódico — o RH preenche data_exame_admissional depois
+      // que o exame já aconteceu (ver PassoSituacaoTrabalhista), então nesse ponto o dado
+      // já existe na maioria dos casos. Sem arquivo: quem cadastrou pode anexar depois.
+      if (dp.data_exame_admissional) {
+        const { error: asoError } = await svc.from("funcionario_asos").insert({
+          funcionario_id: funcionarioCriado.id,
+          data_exame: dp.data_exame_admissional,
+          criado_por: user.id,
+        });
+        if (asoError) console.error(`[gerar-pdf] Falha ao criar ASO inicial — admissao_id=${id}`, asoError.message);
+      }
     }
   } catch (err) {
     console.error(`[gerar-pdf] Falha ao criar funcionário automaticamente — admissao_id=${id}`, err);

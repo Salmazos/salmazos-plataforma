@@ -1,0 +1,54 @@
+import { redirect, notFound } from "next/navigation";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import FuncionarioDetalheClient from "@/components/FuncionarioDetalheClient";
+import { PAPEIS_PAINEL_FUNCIONARIOS } from "@/lib/funcionariosAuth";
+
+export const dynamic = "force-dynamic";
+
+interface Params {
+  params: Promise<{ id: string }>;
+}
+
+export default async function FuncionarioDetalhePage({ params }: Params) {
+  const supabaseAuth = await createClient();
+  const {
+    data: { user },
+  } = await supabaseAuth.auth.getUser();
+  if (!user) redirect("/login");
+
+  const role = user.app_metadata?.role ?? "analista";
+  if (!PAPEIS_PAINEL_FUNCIONARIOS.includes(role)) redirect("/painel");
+
+  const { id } = await params;
+  const svc = createServiceClient();
+
+  const { data: funcionario } = await svc
+    .from("funcionarios")
+    .select("*, clientes(nome)")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (!funcionario) notFound();
+
+  const { data: asos } = await svc
+    .from("funcionario_asos")
+    .select("*")
+    .eq("funcionario_id", id)
+    .order("data_exame", { ascending: false });
+
+  // Sem FK direta entre funcionario_asos.criado_por e analistas_perfil (mesmo caso já
+  // resolvido em rescisao_avisos_plataforma_destinatarios) — resolve o nome com uma
+  // segunda consulta em vez de um embed do PostgREST, que não existe pra esse relacionamento.
+  const userIds = [...new Set((asos ?? []).map((a) => a.criado_por).filter(Boolean))];
+  const { data: perfis } = userIds.length
+    ? await svc.from("analistas_perfil").select("user_id, nome_completo").in("user_id", userIds)
+    : { data: [] };
+  const nomePorUserId = new Map((perfis ?? []).map((p) => [p.user_id, p.nome_completo]));
+
+  const asosComNome = (asos ?? []).map((a) => ({
+    ...a,
+    criado_por_nome: a.criado_por ? nomePorUserId.get(a.criado_por) ?? "Usuário removido" : null,
+  }));
+
+  return <FuncionarioDetalheClient funcionario={funcionario} asosIniciais={asosComNome} />;
+}

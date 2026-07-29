@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { formatarDataSemFuso } from "@/lib/utils";
+import { calcularStatusAso, ASO_STATUS_INFO } from "@/lib/asoStatus";
 import ModalAdicionarFuncionario from "./ModalAdicionarFuncionario";
 import ModalLancarRescisao from "./ModalLancarRescisao";
 
@@ -17,6 +19,7 @@ export interface FuncionarioRow {
   status: string;
   criado_em: string;
   clientes: { nome: string } | null;
+  aso_data_exame_mais_recente: string | null;
 }
 
 interface ClienteOption {
@@ -77,7 +80,7 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-              {["Nome", "Empresa", "Cargo", "Data de admissão", "Status", "Origem", "Ações"].map((h) => (
+              {["Nome", "Empresa", "Cargo", "Data de admissão", "Status", "ASO", "Origem", "Ações"].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>
                   {h}
                 </th>
@@ -87,13 +90,14 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
           <tbody>
             {filtrados.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF" }}>
+                <td colSpan={8} style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF" }}>
                   Nenhum funcionário encontrado.
                 </td>
               </tr>
             ) : (
               filtrados.map((f) => {
                 const badge = STATUS_BADGE[f.status] ?? { label: f.status, bg: "#F3F4F6", text: "#374151" };
+                const badgeAso = ASO_STATUS_INFO[calcularStatusAso(f.aso_data_exame_mais_recente)];
                 return (
                   <tr key={f.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
                     <td style={{ padding: "10px 12px", fontWeight: 600, color: "#111827" }}>{f.nome_completo}</td>
@@ -105,15 +109,25 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
                         {badge.label}
                       </span>
                     </td>
+                    <td style={{ padding: "10px 12px" }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: badgeAso.bg, color: badgeAso.text }}>
+                        {badgeAso.label}
+                      </span>
+                    </td>
                     <td style={{ padding: "10px 12px", color: "#9CA3AF", fontSize: 12 }}>
                       {f.admissao_id ? "Admissão digital" : "Cadastro manual"}
                     </td>
                     <td style={{ padding: "10px 12px" }}>
-                      {f.status === "ativo" && (
-                        <button onClick={() => setFuncionarioRescisao(f)} className="btn-outline" style={{ padding: "4px 10px", fontSize: 12 }}>
-                          Lançar rescisão
-                        </button>
-                      )}
+                      <div className="flex gap-2">
+                        <Link href={`/painel/funcionarios/${f.id}`} className="btn-outline" style={{ padding: "4px 10px", fontSize: 12 }}>
+                          Ver detalhes
+                        </Link>
+                        {f.status === "ativo" && (
+                          <button onClick={() => setFuncionarioRescisao(f)} className="btn-outline" style={{ padding: "4px 10px", fontSize: 12 }}>
+                            Lançar rescisão
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

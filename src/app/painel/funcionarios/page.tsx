@@ -17,9 +17,10 @@ export default async function FuncionariosPage() {
 
   const svc = createServiceClient();
 
-  const [{ data: funcionarios }, { data: clientes }] = await Promise.all([
+  const [{ data: funcionarios }, { data: clientes }, { data: asos }] = await Promise.all([
     svc.from("funcionarios").select("*, clientes(nome)").order("criado_em", { ascending: false }),
     svc.from("clientes").select("id, nome").eq("ativo", true).order("nome"),
+    svc.from("funcionario_asos").select("funcionario_id, data_exame").order("data_exame", { ascending: false }),
   ]);
 
   // Filtro da listagem só deve oferecer empresas com funcionário cadastrado (evita uma
@@ -29,9 +30,22 @@ export default async function FuncionariosPage() {
   const clienteIdsComFuncionario = new Set((funcionarios ?? []).map((f) => f.cliente_id).filter(Boolean));
   const clientesComFuncionario = (clientes ?? []).filter((c) => clienteIdsComFuncionario.has(c.id));
 
+  // Já ordenado por data_exame desc, então o primeiro encontro de cada funcionario_id é o
+  // exame mais recente — status do ASO é sempre calculado sobre essa linha (ver lib/asoStatus.ts).
+  const asoMaisRecentePorFuncionario = new Map<string, string>();
+  for (const a of asos ?? []) {
+    if (!asoMaisRecentePorFuncionario.has(a.funcionario_id)) {
+      asoMaisRecentePorFuncionario.set(a.funcionario_id, a.data_exame);
+    }
+  }
+  const funcionariosComAso = (funcionarios ?? []).map((f) => ({
+    ...f,
+    aso_data_exame_mais_recente: asoMaisRecentePorFuncionario.get(f.id) ?? null,
+  }));
+
   return (
     <FuncionariosPageClient
-      funcionariosIniciais={funcionarios ?? []}
+      funcionariosIniciais={funcionariosComAso}
       clientes={clientes ?? []}
       clientesFiltro={clientesComFuncionario}
     />
