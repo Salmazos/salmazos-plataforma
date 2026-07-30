@@ -136,6 +136,8 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
     fee_rs_percentual: "",
     fee_rs_prazo_cobranca: "",
     confidencial: false,
+    taxa_cancelamento: false,
+    taxa_cancelamento_percentual: "",
   });
   const [habilidades, setHabilidades] = useState<string[]>([]);
   const [clientes, setClientes]       = useState<ClienteOpcao[]>([]);
@@ -186,6 +188,8 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
       fee_rs_percentual: vaga.fee_rs_percentual != null ? String(vaga.fee_rs_percentual) : "",
       fee_rs_prazo_cobranca: vaga.fee_rs_prazo_cobranca ?? "",
       confidencial: vaga.confidencial ?? false,
+      taxa_cancelamento: vaga.taxa_cancelamento ?? false,
+      taxa_cancelamento_percentual: vaga.taxa_cancelamento_percentual != null ? String(vaga.taxa_cancelamento_percentual) : "",
     });
     setSalarioModo(detectarModoSalario(vaga.salario ?? ""));
     setHabilidades(vaga.habilidades_desejadas ?? []);
@@ -483,11 +487,11 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
           {/* Fee R&S (only for recrutamento_selecao) */}
           {form.tipo_servico === "recrutamento_selecao" && (
             <div className="border-t pt-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Fee Salmazos (R&S)</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Taxa Negociada (R&S)</p>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                    Fee Salmazos (%)
+                    Taxa Negociada (%)
                   </label>
                   <input
                     type="number"
@@ -512,6 +516,38 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
                   />
                   <p className="text-gray-400 text-xs mt-1">Prazo acordado com o cliente para pagamento do fee</p>
                 </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.taxa_cancelamento}
+                    onChange={(e) => setForm((f) => ({ ...f, taxa_cancelamento: e.target.checked }))}
+                    className="accent-black"
+                  />
+                  <span className="text-sm text-gray-700 font-medium">Foi negociada taxa de cancelamento?</span>
+                </label>
+                {form.taxa_cancelamento && (
+                  <div className="grid grid-cols-2 gap-4 mt-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Taxa de Cancelamento (%)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={form.taxa_cancelamento_percentual}
+                        onChange={(e) => set("taxa_cancelamento_percentual", e.target.value)}
+                        placeholder="Ex: 50"
+                        className="input-field"
+                      />
+                      <p className="text-gray-400 text-xs mt-1">Percentual cobrado do cliente em caso de cancelamento</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

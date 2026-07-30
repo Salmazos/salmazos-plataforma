@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MOTIVOS_REPROVACAO_INTERNA, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
+import CampoMoeda from "@/components/ui/CampoMoeda";
 
 interface Props {
   isOpen: boolean;
@@ -10,8 +11,16 @@ interface Props {
   vagaTitulo: string;
   tipoServico?: string | null;
   cvId: string;
+  clienteId?: string | null;
   onClose: () => void;
   onConfirmar: (res: FinalizarResult) => void;
+}
+
+interface FeeInfo {
+  feeRsPercentual: number | null;
+  admissaoFeeValor: number | null;
+  admissaoFeePercentual: number | null;
+  admissaoFeeOrigem: string | null;
 }
 
 export interface FinalizarResult {
@@ -133,6 +142,7 @@ export default function ModalFinalizarProcesso({
   vagaTitulo,
   tipoServico,
   cvId,
+  clienteId,
   onClose,
   onConfirmar,
 }: Props) {
@@ -148,10 +158,52 @@ export default function ModalFinalizarProcesso({
   const [erro, setErro] = useState("");
   const [tentouEnviar, setTentouEnviar] = useState(false);
 
+  // Salário Acordado R&S
+  const [admSalario, setAdmSalario] = useState("");
+  const [feeInfo, setFeeInfo] = useState<FeeInfo | null>(null);
+  const [temPortal, setTemPortal] = useState<boolean | null>(null);
+  const [carregandoFee, setCarregandoFee] = useState(false);
+
+  // Só busca fee/portal no fluxo R&S "Contratado" — os outros tipos de serviço
+  // nunca usam esses dados, e a maioria dos cards do Kanban nunca chega aqui.
+  useEffect(() => {
+    const precisaFee = isOpen && resultado === "contratado" && tipoServico === "recrutamento_selecao" && !!cvId;
+    if (!precisaFee) {
+      setFeeInfo(null);
+      setTemPortal(null);
+      setAdmSalario("");
+      return;
+    }
+    let cancelado = false;
+    setCarregandoFee(true);
+    Promise.all([
+      fetch(`/api/candidatos-vagas/${cvId}/fee-info`).then((r) => (r.ok ? r.json() : null)),
+      clienteId
+        ? fetch(`/api/clientes/${clienteId}/tem-portal`).then((r) => (r.ok ? r.json() : null))
+        : Promise.resolve({ temPortal: false }),
+    ])
+      .then(([fee, portal]) => {
+        if (cancelado) return;
+        setFeeInfo(fee);
+        setTemPortal(portal?.temPortal ?? false);
+      })
+      .catch(() => {
+        if (cancelado) return;
+        setFeeInfo(null);
+        setTemPortal(false);
+      })
+      .finally(() => {
+        if (!cancelado) setCarregandoFee(false);
+      });
+    return () => { cancelado = true; };
+  }, [isOpen, resultado, tipoServico, cvId, clienteId]);
+
   if (!isOpen) return null;
 
   const isContratado = resultado === "contratado";
   const cfg = getContratadoConfig(tipoServico ?? null);
+  const feeJaLancado = feeInfo?.admissaoFeeValor != null;
+  const salarioObrigatorio = isContratado && tipoServico === "recrutamento_selecao" && !feeJaLancado && temPortal === false;
   const invalidStyle = { borderColor: "#EF4444", boxShadow: "0 0 0 1px #EF4444" };
   const isOutroMotivo = motivoReprovacao === OUTRO_MOTIVO_REPROVACAO;
   // MOT e terceirização: contrato inicial obrigatoriamente limitado a 180 dias — a
@@ -170,6 +222,7 @@ export default function ModalFinalizarProcesso({
         setErro(`Data de término não pode ultrapassar 180 dias da data de início (máx. ${dataFimMax.split("-").reverse().join("/")}).`);
         return;
       }
+      if (salarioObrigatorio && !admSalario) { setErro("Informe o salário acordado."); return; }
     } else {
       if (!motivoReprovacao) { setErro("Selecione o motivo do encerramento."); return; }
       if (isOutroMotivo && !motivoOutro.trim()) { setErro("Descreva o motivo."); return; }
@@ -191,6 +244,7 @@ export default function ModalFinalizarProcesso({
                 data_fim: dataFim || null,
                 renovavel: tipoServico === "terceirizacao" ? renovavel : undefined,
                 tipo_servico: tipoServico,
+                admissao_salario: admSalario ? parseFloat(admSalario) : undefined,
               }
             : {
                 motivo_reprovacao: motivoFinal,
@@ -299,6 +353,49 @@ export default function ModalFinalizarProcesso({
                   </p>
                 )}
               </div>
+
+              {/* Salário Acordado (R&S only) */}
+              {tipoServico === "recrutamento_selecao" && (
+                <div>
+                  {feeJaLancado ? (
+                    <div style={{ background: "#F0FDF4", border: "1px solid #86EFAC", borderRadius: 8, padding: "10px 14px" }}>
+                      <p style={{ fontSize: 13, color: "#166534", margin: 0 }}>
+                        <strong>Já lançado:</strong> R$ {feeInfo!.admissaoFeeValor!.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        {" — "}
+                        {feeInfo?.admissaoFeeOrigem === "cliente_portal" ? "via portal do cliente" : "via analista"}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Salário Acordado R$ {salarioObrigatorio && "*"}
+                      </label>
+                      <CampoMoeda
+                        value={admSalario}
+                        onChange={(v) => setAdmSalario(v > 0 ? String(v) : "")}
+                        placeholder="Ex: 3.500,00"
+                        className="input-field"
+                        style={tentouEnviar && salarioObrigatorio && !admSalario ? invalidStyle : undefined}
+                      />
+                      {carregandoFee ? (
+                        <p className="text-gray-400 text-xs mt-1">Verificando...</p>
+                      ) : temPortal === true ? (
+                        <p className="text-gray-400 text-xs mt-1">Deixe em branco se o cliente for confirmar isso pelo portal dele.</p>
+                      ) : temPortal === false ? (
+                        <p className="text-gray-400 text-xs mt-1">Cliente não tem acesso ao portal — este campo é obrigatório.</p>
+                      ) : null}
+                      {feeInfo?.feeRsPercentual != null && admSalario && (
+                        <p style={{ fontSize: 12, color: "#92400E", marginTop: 6 }}>
+                          <strong>Taxa Salmazos ({feeInfo.feeRsPercentual}%):</strong> R$ {(parseFloat(admSalario) * feeInfo.feeRsPercentual / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </p>
+                      )}
+                      {tentouEnviar && salarioObrigatorio && !admSalario && (
+                        <p className="text-red-500 text-xs mt-1">Informe o salário acordado.</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* Renovável (terceirização only) */}
               {cfg.showRenovavel && (

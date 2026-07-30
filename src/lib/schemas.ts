@@ -99,6 +99,8 @@ export const vagaCreateSchema = z.object({
   fee_rs_percentual: coerceNumberNullable,
   fee_rs_prazo_cobranca: z.string().optional().nullable(),
   confidencial: z.boolean().default(false),
+  taxa_cancelamento: z.boolean().default(false),
+  taxa_cancelamento_percentual: coerceNumberOptional.pipe(z.number().min(0).max(100).optional()),
 });
 
 export const vagaUpdateSchema = vagaCreateSchema.partial().extend({
@@ -327,6 +329,21 @@ export const candidatoVagaUpdateSchema = z.object({
 
 export const feeStatusSchema = z.object({
   fee_status: z.enum(["pendente", "cobrado", "recebido"]),
+});
+
+// Schema permissivo (mesmo padrão de portalAvaliarSchema): obrigatoriedade por
+// resultado/tipo_servico é regra de negócio, validada no próprio route.ts.
+export const candidatoVagaFinalizarSchema = z.object({
+  resultado: z.enum(["contratado", "reprovado_final"]),
+  data_inicio: z.string().optional().nullable(),
+  data_fim: z.string().optional().nullable(),
+  renovavel: z.boolean().optional(),
+  tipo_servico: z.string().optional().nullable(),
+  motivo_reprovacao: z.string().optional().nullable(),
+  responsavel_encerramento: z.string().optional().nullable(),
+  vaga_cancelada_cliente: z.boolean().optional(),
+  observacoes: z.string().optional().nullable(),
+  admissao_salario: coerceNumberOptional,
 });
 
 // ── Admissão Digital ─────────────────────────────────────────────────────────

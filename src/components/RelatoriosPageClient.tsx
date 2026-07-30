@@ -70,6 +70,34 @@ interface VagaData {
   clientes: { nome: string } | { nome: string }[] | null;
 }
 
+interface FluxoFinanceiroRow {
+  id: string;
+  admissao_salario: number | null;
+  admissao_fee_percentual: number | null;
+  admissao_fee_valor: number | null;
+  admissao_fee_prazo: string | null;
+  admissao_fee_origem: string | null;
+  fee_status: string | null;
+  candidatos: { nome_completo: string } | { nome_completo: string }[] | null;
+  vagas: {
+    titulo: string;
+    tipo_servico: string | null;
+    fee_rs_percentual: number | null;
+    taxa_cancelamento: boolean;
+    taxa_cancelamento_percentual: number | null;
+    cliente_id: string | null;
+    clientes: { nome: string } | { nome: string }[] | null;
+  } | {
+    titulo: string;
+    tipo_servico: string | null;
+    fee_rs_percentual: number | null;
+    taxa_cancelamento: boolean;
+    taxa_cancelamento_percentual: number | null;
+    cliente_id: string | null;
+    clientes: { nome: string } | { nome: string }[] | null;
+  }[] | null;
+}
+
 interface Props {
   candidatos: CandidatoData[];
   encaminhamentos: EncaminhamentoData[];
@@ -79,6 +107,7 @@ interface Props {
   // Nomes completos vindos de analistas_perfil — candidatos.responsavel guarda o
   // nome completo, não o primeiro nome de ANALISTAS (usado só para responsavel_comercial).
   analistas: string[];
+  fluxoFinanceiroRS: FluxoFinanceiroRow[];
 }
 
 function calcularMetricasAnalista(
@@ -225,7 +254,7 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-export default function RelatoriosPageClient({ candidatos, encaminhamentos, clientes, vagas, candidatosVagas, analistas }: Props) {
+export default function RelatoriosPageClient({ candidatos, encaminhamentos, clientes, vagas, candidatosVagas, analistas, fluxoFinanceiroRS }: Props) {
   const hoje = new Date();
   const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
     .toISOString()
@@ -241,6 +270,7 @@ export default function RelatoriosPageClient({ candidatos, encaminhamentos, clie
   const [showCarteira, setShowCarteira] = useState(false);
   const [showTempoVagas, setShowTempoVagas] = useState(false);
   const [showAgingVagas, setShowAgingVagas] = useState(false);
+  const [showFluxoFinanceiro, setShowFluxoFinanceiro] = useState(false);
   const [selectedResponsavel, setSelectedResponsavel] = useState<string | null>(null);
 
   const candidatoMap = useMemo(() => {
@@ -404,6 +434,32 @@ export default function RelatoriosPageClient({ candidatos, encaminhamentos, clie
       })
       .sort((a, b) => b.diasAberta - a.diasAberta);
   }, [vagas]);
+
+  const fluxoFinanceiro = useMemo(() => {
+    return fluxoFinanceiroRS
+      .map((row) => {
+        const vaga = Array.isArray(row.vagas) ? row.vagas[0] : row.vagas;
+        if (!vaga || vaga.tipo_servico !== "recrutamento_selecao") return null;
+        const candidato = Array.isArray(row.candidatos) ? row.candidatos[0] : row.candidatos;
+        const clienteNome = vaga.clientes
+          ? Array.isArray(vaga.clientes) ? vaga.clientes[0]?.nome ?? "—" : vaga.clientes.nome
+          : "—";
+        const taxaNegociada = row.admissao_fee_percentual ?? vaga.fee_rs_percentual ?? null;
+        return {
+          id: row.id,
+          candidatoNome: candidato?.nome_completo ?? "—",
+          clienteNome,
+          vagaTitulo: vaga.titulo,
+          taxaNegociada,
+          taxaCancelamento: vaga.taxa_cancelamento ? vaga.taxa_cancelamento_percentual : null,
+          salarioAcordado: row.admissao_salario,
+          valorLiquido: row.admissao_fee_valor,
+          origem: row.admissao_fee_origem,
+          feeStatus: row.fee_status ?? "pendente",
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+  }, [fluxoFinanceiroRS]);
 
   return (
     <div className="space-y-6">
@@ -932,6 +988,102 @@ export default function RelatoriosPageClient({ candidatos, encaminhamentos, clie
               </div>
             )}
           </div>
+        )}
+      </div>
+
+      {/* Fluxo Financeiro R&S — colapsável */}
+      <div className="card !p-0 overflow-hidden">
+        <button
+          onClick={() => setShowFluxoFinanceiro((v) => !v)}
+          className={`w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left ${showFluxoFinanceiro ? "border-b border-gray-100" : ""}`}
+        >
+          <div>
+            <span className="section-title !mb-0">{"💰"} Fluxo Financeiro R&S</span>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {fluxoFinanceiro.length} contrataç{fluxoFinanceiro.length !== 1 ? "ões" : "ão"}
+            </p>
+          </div>
+          <Chevron open={showFluxoFinanceiro} />
+        </button>
+        {showFluxoFinanceiro && (
+          <>
+            {fluxoFinanceiro.length === 0 ? (
+              <div className="text-center py-10 text-gray-400 text-sm">
+                Nenhuma contratação R&amp;S registrada.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="text-left px-4 py-2 font-semibold text-gray-600">Candidato</th>
+                      <th className="text-left px-4 py-2 font-semibold text-gray-600">Cliente</th>
+                      <th className="text-left px-4 py-2 font-semibold text-gray-600">Vaga</th>
+                      <th className="text-center px-4 py-2 font-semibold text-gray-600">Taxa Negociada %</th>
+                      <th className="text-center px-4 py-2 font-semibold text-gray-600">Taxa Cancelamento %</th>
+                      <th className="text-right px-4 py-2 font-semibold text-gray-600">Salário Acordado</th>
+                      <th className="text-right px-4 py-2 font-semibold text-gray-600">Valor Líquido a Cobrar</th>
+                      <th className="text-center px-4 py-2 font-semibold text-gray-600">Origem</th>
+                      <th className="text-center px-4 py-2 font-semibold text-gray-600">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {fluxoFinanceiro.map((r) => (
+                      <tr key={r.id} className="hover:bg-gray-50/60 transition-colors">
+                        <td className="px-4 py-2 font-medium text-gray-900">{r.candidatoNome}</td>
+                        <td className="px-4 py-2 text-gray-500">{r.clienteNome}</td>
+                        <td className="px-4 py-2 text-gray-500">{r.vagaTitulo}</td>
+                        <td className="px-4 py-2 text-center text-gray-500">
+                          {r.taxaNegociada != null ? `${r.taxaNegociada}%` : "—"}
+                        </td>
+                        <td className="px-4 py-2 text-center text-gray-500">
+                          {r.taxaCancelamento != null ? `${r.taxaCancelamento}%` : "—"}
+                        </td>
+                        <td className="px-4 py-2 text-right text-gray-500">
+                          {r.salarioAcordado != null
+                            ? `R$ ${r.salarioAcordado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-2 text-right font-bold text-gray-900">
+                          {r.valorLiquido != null
+                            ? `R$ ${r.valorLiquido.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          {r.origem ? (
+                            <span style={{
+                              display: "inline-block",
+                              padding: "2px 10px",
+                              borderRadius: 6,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              backgroundColor: r.origem === "cliente_portal" ? "#DBEAFE" : "#EDE9FE",
+                              color: r.origem === "cliente_portal" ? "#1E40AF" : "#5B21B6",
+                            }}>
+                              {r.origem === "cliente_portal" ? "Cliente" : "Analista"}
+                            </span>
+                          ) : "—"}
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          <span style={{
+                            display: "inline-block",
+                            padding: "2px 10px",
+                            borderRadius: 6,
+                            fontSize: 11,
+                            fontWeight: 700,
+                            backgroundColor: r.feeStatus === "recebido" ? "#D1FAE5" : r.feeStatus === "cobrado" ? "#DBEAFE" : "#FEF3C7",
+                            color: r.feeStatus === "recebido" ? "#065F46" : r.feeStatus === "cobrado" ? "#1E40AF" : "#92400E",
+                          }}>
+                            {r.feeStatus === "recebido" ? "Recebido" : r.feeStatus === "cobrado" ? "Cobrado" : "Pendente"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { registrarAuditoria } from "@/lib/audit";
+import { parseBody, candidatoVagaFinalizarSchema } from "@/lib/schemas";
 
 interface Params {
   params: Promise<{ id: string }>;
 }
-
-const RESULTADOS_VALIDOS = ["contratado", "reprovado_final"] as const;
 
 function statusAlocacao(tipoServico: string | null): string {
   switch (tipoServico) {
@@ -22,20 +21,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
     const body = await request.json();
+    const parsed = parseBody(candidatoVagaFinalizarSchema, body);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const {
       resultado, data_inicio, data_fim, renovavel,
       tipo_servico, motivo_reprovacao, responsavel_encerramento, observacoes,
-      vaga_cancelada_cliente,
-    } = body;
-
-    if (!resultado || !RESULTADOS_VALIDOS.includes(resultado))
-      return NextResponse.json({ error: "Resultado inválido." }, { status: 400 });
+      vaga_cancelada_cliente, admissao_salario,
+    } = parsed.data;
 
     const supabase = createServiceClient();
 
     const { data: cv, error: cvErr } = await supabase
       .from("candidatos_vagas")
-      .select("id, candidato_id, vaga_id, vagas(id, titulo, tipo_servico, num_posicoes_abertas, num_posicoes, cliente_id, clientes(nome))")
+      .select("id, candidato_id, vaga_id, admissao_fee_valor, vagas(id, titulo, tipo_servico, num_posicoes_abertas, num_posicoes, cliente_id, fee_rs_percentual, fee_rs_prazo_cobranca, clientes(nome))")
       .eq("id", id)
       .single();
 
@@ -46,6 +44,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const vaga = (cv as any).vagas as {
       id: string; titulo: string; tipo_servico: string; num_posicoes_abertas: number | null;
       num_posicoes: number; cliente_id: string | null; clientes: { nome: string } | null;
+      fee_rs_percentual: number | null; fee_rs_prazo_cobranca: string | null;
     } | null;
     const vagaTitulo = vaga?.titulo ?? "vaga";
     const clienteNome = vaga?.clientes?.nome ?? null;
@@ -55,15 +54,36 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       if (!data_inicio)
         return NextResponse.json({ error: "Data de início é obrigatória." }, { status: 400 });
 
-      // Update candidatos_vagas
+      const cvFields: Record<string, unknown> = {
+        etapa: "contratado",
+        data_inicio,
+        data_fim: data_fim || null,
+        observacoes: observacoes || null,
+      };
+
+      // Fee R&S — mesma regra de portal/avaliar/route.ts, mas com proteção contra
+      // sobrescrita: essa rota pode ser chamada depois de o cliente já ter aprovado
+      // (e lançado o fee) pelo portal dele, então só grava se ainda não existir nada.
+      const feeRsPercentual = vaga?.fee_rs_percentual ?? null;
+      if (
+        tipoServicoFinal === "recrutamento_selecao" &&
+        admissao_salario != null &&
+        cv.admissao_fee_valor == null &&
+        feeRsPercentual != null
+      ) {
+        cvFields.admissao_fee_percentual = feeRsPercentual;
+        cvFields.admissao_fee_valor = admissao_salario * feeRsPercentual / 100;
+        cvFields.admissao_fee_prazo = vaga?.fee_rs_prazo_cobranca ?? null;
+        cvFields.admissao_fee_origem = "analista_interno";
+
+        const inicioGarantia = new Date(data_inicio + "T00:00:00");
+        inicioGarantia.setDate(inicioGarantia.getDate() + 30);
+        cvFields.garantia_data_fim = inicioGarantia.toISOString().split("T")[0];
+      }
+
       await supabase
         .from("candidatos_vagas")
-        .update({
-          etapa: "contratado",
-          data_inicio,
-          data_fim: data_fim || null,
-          observacoes: observacoes || null,
-        })
+        .update(cvFields)
         .eq("id", id);
 
       // Update candidatos allocation

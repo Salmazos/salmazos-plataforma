@@ -55,6 +55,8 @@ export async function POST(request: NextRequest) {
         fee_rs_percentual: body.fee_rs_percentual ? Number(body.fee_rs_percentual) : null,
         fee_rs_prazo_cobranca: body.fee_rs_prazo_cobranca || null,
         confidencial: body.confidencial === true,
+        taxa_cancelamento: body.taxa_cancelamento === true,
+        taxa_cancelamento_percentual: body.taxa_cancelamento_percentual !== "" && body.taxa_cancelamento_percentual != null ? Number(body.taxa_cancelamento_percentual) : null,
         data_abertura: new Date().toISOString(),
       })
       .select("*, clientes(id, nome)")

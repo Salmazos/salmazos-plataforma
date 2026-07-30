@@ -34,6 +34,7 @@ interface PendingFinalizar {
   vagaTitulo: string;
   tipoServico: string | null;
   resultado: "contratado" | "reprovado_final";
+  clienteId: string | null;
 }
 
 const FORMACOES = [
@@ -203,6 +204,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
         // candidato nunca passou por um encaminhamento vinculado a essa vaga.
         tipoServico: card?.encaminhamento_tipo_servico ?? card?.vaga_tipo_servico ?? null,
         resultado: novaEtapa as "contratado" | "reprovado_final",
+        clienteId: card?.cliente_id ?? null,
       });
       return;
     }
@@ -483,6 +485,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
         vagaTitulo={pendingFinalizar?.vagaTitulo ?? ""}
         tipoServico={pendingFinalizar?.tipoServico ?? null}
         cvId={pendingFinalizar?.cvId ?? ""}
+        clienteId={pendingFinalizar?.clienteId ?? null}
         onClose={() => setPendingFinalizar(null)}
         onConfirmar={(res: FinalizarResult) => {
           setPendingFinalizar(null);

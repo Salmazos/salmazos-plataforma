@@ -335,6 +335,8 @@ export interface Vaga {
   fee_rs_percentual?: number | null;
   fee_rs_prazo_cobranca?: string | null;
   confidencial?: boolean;
+  taxa_cancelamento?: boolean;
+  taxa_cancelamento_percentual?: number | null;
   tipo_servico_original?: string | null;
   tipo_servico_alterado_em?: string | null;
   tipo_servico_alterado_por?: string | null;

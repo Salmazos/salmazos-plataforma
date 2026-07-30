@@ -17,7 +17,7 @@ export default async function RelatoriosPage() {
 
   const supabase = createServiceClient();
 
-  const [{ data: candidatos }, { data: encaminhamentos }, { data: clientes }, { data: vagas }, { data: candidatosVagas }, { data: analistasPerfil }] =
+  const [{ data: candidatos }, { data: encaminhamentos }, { data: clientes }, { data: vagas }, { data: candidatosVagas }, { data: analistasPerfil }, { data: fluxoFinanceiroRS }] =
     await Promise.all([
       supabase
         .from("candidatos")
@@ -47,6 +47,14 @@ export default async function RelatoriosPage() {
         .select("nome_completo")
         .eq("ativo", true)
         .order("nome_completo"),
+      // Filtro por tipo_servico é feito no client (RelatoriosPageClient) — mais simples
+      // e seguro do que filtrar por coluna de relação embutida via PostgREST aqui.
+      supabase
+        .from("candidatos_vagas")
+        .select(
+          "id, admissao_salario, admissao_fee_percentual, admissao_fee_valor, admissao_fee_prazo, admissao_fee_origem, fee_status, candidatos(nome_completo), vagas!inner(titulo, tipo_servico, fee_rs_percentual, taxa_cancelamento, taxa_cancelamento_percentual, cliente_id, clientes(nome))"
+        )
+        .eq("etapa", "contratado"),
     ]);
 
   return (
@@ -57,6 +65,7 @@ export default async function RelatoriosPage() {
       vagas={vagas ?? []}
       candidatosVagas={candidatosVagas ?? []}
       analistas={(analistasPerfil ?? []).map((a) => a.nome_completo)}
+      fluxoFinanceiroRS={fluxoFinanceiroRS ?? []}
     />
   );
 }

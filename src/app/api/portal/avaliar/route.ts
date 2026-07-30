@@ -100,6 +100,7 @@ export async function PATCH(request: NextRequest) {
               admFields.admissao_fee_percentual = pct;
               admFields.admissao_fee_valor = Number(body.admissao_salario) * pct / 100;
               admFields.admissao_fee_prazo = v.fee_rs_prazo_cobranca ?? null;
+              admFields.admissao_fee_origem = "cliente_portal";
             }
             if (body.admissao_data_inicio) {
               const inicio = new Date(body.admissao_data_inicio + "T00:00:00");

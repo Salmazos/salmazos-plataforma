@@ -54,6 +54,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (body.fee_rs_percentual !== undefined)  campos.fee_rs_percentual = body.fee_rs_percentual !== "" ? Number(body.fee_rs_percentual) : null;
     if (body.fee_rs_prazo_cobranca !== undefined) campos.fee_rs_prazo_cobranca = body.fee_rs_prazo_cobranca || null;
     if (body.confidencial !== undefined)        campos.confidencial = body.confidencial === true;
+    if (body.taxa_cancelamento !== undefined)   campos.taxa_cancelamento = body.taxa_cancelamento === true;
+    if (body.taxa_cancelamento_percentual !== undefined) campos.taxa_cancelamento_percentual = body.taxa_cancelamento_percentual !== "" ? Number(body.taxa_cancelamento_percentual) : null;
 
     let statusAlterado = false;
     let statusAnterior: string | null = null;
