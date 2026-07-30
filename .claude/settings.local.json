@@ -251,7 +251,8 @@
       "Bash(mkdir -p \"src/app/api/funcionarios/[id]/contratos\" \"src/app/api/funcionarios/[id]/contrato-upload-url\" \"src/app/api/funcionarios/contratos/[contratoId]/arquivo-url\")",
       "Bash(grep -E \"funcionarios/\\\\[id\\\\]$|painel/funcionarios/\\\\[id\\\\]|Failed to compile|Error\")",
       "Bash(mkdir -p \"src/app/api/admissoes/[id]/cancelar\")",
-      "Bash(grep -E \"admissoes/\\\\[id\\\\]$|Failed to compile|Error\")"
+      "Bash(grep -E \"admissoes/\\\\[id\\\\]$|Failed to compile|Error\")",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }
