@@ -470,7 +470,7 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props)
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                    Taxa Negociada (%)
+                    Percentual (%)
                   </label>
                   <input
                     type="number"
