@@ -31,6 +31,7 @@ interface TemplateData {
   statusEncerramento?: string;
   admissaoUrl?: string;
   motivoRecusa?: string;
+  confidencial?: boolean;
 }
 
 export interface EmailTemplate {
@@ -78,9 +79,13 @@ function layout(subtitle: string, body: string): string {
 </html>`;
 }
 
+const BANNER_CONFIDENCIAL = `<div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:6px;padding:14px 18px;margin:0 0 20px;text-align:center;">
+  <p style="margin:0;color:#dc2626;font-weight:700;font-size:14px;">🔴 ESTA VAGA É CONFIDENCIAL — trate a divulgação com cuidado</p>
+</div>`;
+
 export function getEmailTemplate(
   name: EmailTemplateName,
-  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa }: TemplateData
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial }: TemplateData
 ): EmailTemplate {
   switch (name) {
     case "entrevista_salmazos":
@@ -328,7 +333,8 @@ export function getEmailTemplate(
         descricao: `Notificação de nova vaga cadastrada: ${cargo}.`,
         html: layout(
           "Nova Vaga Disponível",
-          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Uma nova vaga foi cadastrada na plataforma!</p>
+          `${confidencial ? BANNER_CONFIDENCIAL : ""}
+          <p style="font-size:16px;color:#111827;margin:0 0 16px;">Uma nova vaga foi cadastrada na plataforma!</p>
           <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
             <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Detalhes da vaga:</p>
             <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
@@ -378,7 +384,8 @@ export function getEmailTemplate(
         descricao: `Notificação de vaga ${badgeLabel.toLowerCase()}: ${cargo}.`,
         html: layout(
           headerText,
-          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">
+          `${confidencial ? BANNER_CONFIDENCIAL : ""}
+          <p style="font-size:16px;color:#111827;margin:0 0 16px;">
             A seguinte vaga foi encerrada na plataforma:
           </p>
           <div style="text-align:center;margin:0 0 20px;">

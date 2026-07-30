@@ -240,6 +240,7 @@ export async function POST(request: NextRequest) {
         curriculo_url: body.curriculo_url || null,
         idade: body.idade || null,
         formacao_academica: body.formacao_academica || null,
+        genero: body.genero || null,
         origem: body.origem || "cadastro_rapido",
         etapa_kanban: "triagem",
         lgpd_consentimento: body.lgpd_consentimento === true,

@@ -51,6 +51,9 @@ export const candidatoCreateSchema = z.object({
   curriculo_url: z.string().optional().nullable(),
   idade: z.preprocess((v) => (v === "" || v === null || v === undefined ? null : Number(v)), z.number().min(14).max(100).nullable()).optional(),
   formacao_academica: z.string().optional().nullable(),
+  // Sem enum de banco de propósito — validação só aqui, pra facilitar adicionar opções no
+  // futuro sem precisar de migration.
+  genero: z.enum(["Masculino", "Feminino", "Outro", "Prefiro não informar"]).optional(),
   origem: z.string().optional(),
   vaga_id: z.string().uuid().optional(),
   vaga_ids: z.array(z.string().uuid()).optional(),
@@ -95,6 +98,7 @@ export const vagaCreateSchema = z.object({
   observacoes: z.string().optional().nullable(),
   fee_rs_percentual: coerceNumberNullable,
   fee_rs_prazo_cobranca: z.string().optional().nullable(),
+  confidencial: z.boolean().default(false),
 });
 
 export const vagaUpdateSchema = vagaCreateSchema.partial().extend({

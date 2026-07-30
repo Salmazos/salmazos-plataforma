@@ -24,6 +24,8 @@ const AREAS = [
   "Outros",
 ];
 
+const GENERO_OPCOES = ["Masculino", "Feminino", "Outro", "Prefiro não informar"];
+
 const MAPA_AREAS: Record<string, string> = {
   "rh": "Recursos Humanos",
   "recursos humanos": "Recursos Humanos",
@@ -64,6 +66,7 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
   const [habilidades, setHabilidades] = useState<string[]>([]);
   const [idade, setIdade] = useState<string>("");
   const [formacao, setFormacao] = useState<string>("");
+  const [genero, setGenero] = useState("");
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [extraindo, setExtraindo] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -97,6 +100,7 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
     setHabilidades([]);
     setIdade("");
     setFormacao("");
+    setGenero("");
     setArquivo(null);
     setErro("");
     setExtraindo(false);
@@ -210,6 +214,7 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
           experiencias_profissionais: experiencias || null,
           idade: idade ? parseInt(idade) : null,
           formacao_academica: formacao || null,
+          genero: genero || undefined,
           etapa_kanban: "triagem",
           origem: "cadastro_rapido",
           curriculo_url,
@@ -414,6 +419,22 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
               <option value="">Selecione a area...</option>
               {AREAS.map((a) => (
                 <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Gênero
+            </label>
+            <select
+              value={genero}
+              onChange={(e) => setGenero(e.target.value)}
+              className="input-field"
+            >
+              <option value="">Selecione...</option>
+              {GENERO_OPCOES.map((g) => (
+                <option key={g} value={g}>{g}</option>
               ))}
             </select>
           </div>

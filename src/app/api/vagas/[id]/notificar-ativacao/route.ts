@@ -23,7 +23,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
 
     const { data: vaga } = await supabase
       .from("vagas")
-      .select("id, titulo, tipo_servico, cidade, estado, responsavel, num_posicoes, salario, horario, requisitos, beneficios")
+      .select("id, titulo, tipo_servico, cidade, estado, responsavel, num_posicoes, salario, horario, requisitos, beneficios, confidencial")
       .eq("id", id)
       .single();
 
@@ -49,6 +49,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       horario: vaga.horario ?? undefined,
       requisitos: vaga.requisitos ?? undefined,
       beneficios: vaga.beneficios ?? undefined,
+      confidencial: vaga.confidencial === true,
       vagaUrl,
     });
 
@@ -67,6 +68,14 @@ export async function POST(_request: NextRequest, { params }: Params) {
         })
       )
     ).catch((err) => console.error("[notificar-ativacao] Erro:", err));
+
+    const vagaConfidencial = vaga.confidencial === true;
+    const { error: errNotifSino } = await supabase.from("notificacoes_analista").insert({
+      tipo: "vaga_ativada",
+      titulo: `${vagaConfidencial ? "🔴 [CONFIDENCIAL] " : ""}Vaga reativada: ${vaga.titulo}`,
+      mensagem: `Vaga "${vaga.titulo}" (${TIPO_LABELS[vaga.tipo_servico] ?? vaga.tipo_servico}) foi reativada.`,
+    });
+    if (errNotifSino) console.error("[notificar-ativacao] Erro ao registrar notificação de sino:", errNotifSino.message);
   });
 
   return NextResponse.json({ ok: true });

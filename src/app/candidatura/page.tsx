@@ -22,8 +22,11 @@ interface FormData {
   pretensao_salarial: string;
   habilidades: string[];
   resumo_candidato: string;
+  genero: string;
   website: string;
 }
+
+const GENERO_OPCOES = ["Masculino", "Feminino", "Outro", "Prefiro não informar"];
 
 const CARD: React.CSSProperties = {
   backgroundColor: "#ffffff",
@@ -77,6 +80,7 @@ export default function BancoTalentosPage() {
     pretensao_salarial: "",
     habilidades: [],
     resumo_candidato: "",
+    genero: "",
     website: "",
   });
   const [curriculo, setCurriculo] = useState<File | null>(null);
@@ -176,6 +180,7 @@ export default function BancoTalentosPage() {
           pretensao_salarial: form.pretensao_salarial || null,
           habilidades: form.habilidades,
           resumo_candidato: form.resumo_candidato || null,
+          genero: form.genero || undefined,
           curriculo_url,
           origem: "banco_talentos",
           lgpd_consentimento: lgpdConsentimento,
@@ -334,6 +339,13 @@ export default function BancoTalentosPage() {
                   <label style={LABEL}>Formação acadêmica</label>
                   <input type="text" style={INPUT} placeholder="Ex: Ensino Médio Completo"
                     value={form.formacao_academica} onChange={(e) => set("formacao_academica", e.target.value)} />
+                </div>
+                <div>
+                  <label style={LABEL}>Gênero</label>
+                  <select style={INPUT} value={form.genero} onChange={(e) => set("genero", e.target.value)}>
+                    <option value="">Selecione</option>
+                    {GENERO_OPCOES.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
                 </div>
               </div>
             </div>

@@ -182,6 +182,9 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
             </p>
             <p className="text-gray-400 text-[10px] truncate">
               Vaga: {card.vaga_titulo}
+              {card.vaga_confidencial && (
+                <span className="ml-1 font-bold" style={{ color: "#DC2626" }}>🔴 CONFIDENCIAL</span>
+              )}
             </p>
             {card.cliente_nome && (
               <p className="text-gray-400 text-[10px] truncate">
@@ -341,6 +344,9 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
             </p>
             <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 16px" }}>
               Vaga: {card.vaga_titulo}
+              {card.vaga_confidencial && (
+                <span style={{ marginLeft: 4, fontWeight: 700, color: "#DC2626" }}>🔴 CONFIDENCIAL</span>
+              )}
             </p>
 
             {isRejection ? (

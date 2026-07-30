@@ -232,7 +232,26 @@
       "Bash(mkdir -p \"C:\\\\Users\\\\Olver\\\\Desktop\\\\salmazos-plataforma\\\\src\\\\app\\\\api\\\\admissoes\\\\token\\\\[token]\\\\documentos\\\\visualizar\\\\[docId]\")",
       "mcp__541ea0a1-f9ae-43e1-b67e-8aacbdad08c1__list_organizations",
       "mcp__541ea0a1-f9ae-43e1-b67e-8aacbdad08c1__get_organization",
-      "mcp__5a86def1-99e8-4cbd-b77d-19a7e4356885__list_teams"
+      "mcp__5a86def1-99e8-4cbd-b77d-19a7e4356885__list_teams",
+      "Bash(python -c ' *)",
+      "Bash(pdftotext -layout _teste-ficha-cadastral-apagar.pdf -)",
+      "Bash(find \"C:/Users/Olver\" -iname \"*rescis*\" -not -path \"*/node_modules/*\" -not -path \"*/.git/*\" 2>/dev/null | head -50)",
+      "Bash(markitdown \"C:/Users/Olver/Desktop/Planilha de Rescisões - 2026.xlsx\")",
+      "Bash(where python.exe)",
+      "Bash(where py.exe)",
+      "Bash(ls -la /c/Python*)",
+      "mcp__541ea0a1-f9ae-43e1-b67e-8aacbdad08c1__get_advisors",
+      "Bash(xargs grep -l \"process.env.CRON_SECRET\")",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(32\\).toString\\('hex'\\)\\)\" > /tmp/new_cron_secret.txt *)",
+      "mcp__541ea0a1-f9ae-43e1-b67e-8aacbdad08c1__get_project_url",
+      "mcp__541ea0a1-f9ae-43e1-b67e-8aacbdad08c1__get_publishable_keys",
+      "Bash(mkdir -p \"src/app/api/funcionarios/[id]/asos\" \"src/app/api/funcionarios/[id]/aso-upload-url\" \"src/app/api/funcionarios/asos/[asoId]/arquivo-url\")",
+      "Bash(mkdir -p \"src/app/painel/funcionarios/[id]\")",
+      "Bash(mkdir -p \"src/app/api/funcionario-aso-avisos-config/email/[id]\" \"src/app/api/funcionario-aso-avisos-config/plataforma/[id]\")",
+      "Bash(mkdir -p \"src/app/api/funcionarios/[id]/contratos\" \"src/app/api/funcionarios/[id]/contrato-upload-url\" \"src/app/api/funcionarios/contratos/[contratoId]/arquivo-url\")",
+      "Bash(grep -E \"funcionarios/\\\\[id\\\\]$|painel/funcionarios/\\\\[id\\\\]|Failed to compile|Error\")",
+      "Bash(mkdir -p \"src/app/api/admissoes/[id]/cancelar\")",
+      "Bash(grep -E \"admissoes/\\\\[id\\\\]$|Failed to compile|Error\")"
     ]
   }
 }

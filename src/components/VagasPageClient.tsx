@@ -423,6 +423,14 @@ function VagaCard({ vaga }: { vaga: Vaga }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <p className="font-semibold text-gray-900">{vaga.titulo}</p>
+          {vaga.confidencial && (
+            <span
+              className="text-xs font-bold px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: "#FEE2E2", color: "#DC2626", border: "1px solid #FCA5A5" }}
+            >
+              🔴 CONFIDENCIAL
+            </span>
+          )}
           <span
             className="text-xs font-medium px-2 py-0.5 rounded-full"
             style={{ backgroundColor: statusInfo.bg, color: statusInfo.color }}

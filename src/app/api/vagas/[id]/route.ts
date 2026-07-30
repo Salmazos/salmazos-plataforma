@@ -53,6 +53,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (body.observacoes !== undefined)         campos.observacoes = body.observacoes || null;
     if (body.fee_rs_percentual !== undefined)  campos.fee_rs_percentual = body.fee_rs_percentual !== "" ? Number(body.fee_rs_percentual) : null;
     if (body.fee_rs_prazo_cobranca !== undefined) campos.fee_rs_prazo_cobranca = body.fee_rs_prazo_cobranca || null;
+    if (body.confidencial !== undefined)        campos.confidencial = body.confidencial === true;
 
     let statusAlterado = false;
     let statusAnterior: string | null = null;

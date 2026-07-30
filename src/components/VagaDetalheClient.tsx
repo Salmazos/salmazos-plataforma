@@ -272,7 +272,17 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
       <div className="card mb-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{vaga.titulo}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-bold text-gray-900">{vaga.titulo}</h1>
+              {vaga.confidencial && (
+                <span
+                  className="text-xs font-bold px-2.5 py-1 rounded-full"
+                  style={{ backgroundColor: "#FEE2E2", color: "#DC2626", border: "1px solid #FCA5A5" }}
+                >
+                  🔴 CONFIDENCIAL
+                </span>
+              )}
+            </div>
             <div className="flex flex-wrap items-center gap-2 mt-2">
               <span
                 className="text-xs font-semibold px-2.5 py-1 rounded-full"

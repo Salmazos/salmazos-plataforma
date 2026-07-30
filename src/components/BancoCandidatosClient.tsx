@@ -8,11 +8,14 @@ import ModalCadastroRapido from "./ModalCadastroRapido";
 import BarraScrollFlutuante from "./BarraScrollFlutuante";
 import { useScrollHorizontalSincronizado } from "@/hooks/useScrollHorizontalSincronizado";
 
+const GENERO_OPCOES = ["Masculino", "Feminino", "Outro", "Prefiro não informar"];
+
 export type CandidatoRow = {
   id: string;
   nome_completo: string;
   cpf: string | null;
   idade: number | null;
+  genero: string | null;
   cargo_pretendido: string | null;
   cidade: string | null;
   origem: string | null;
@@ -459,6 +462,7 @@ export default function BancoCandidatosClient({
   const [matchMin, setMatchMin] = useState(() => searchParams.get("match") ?? "");
   const [keyword, setKeyword] = useState(() => searchParams.get("kw") ?? "");
   const [filtroOrigem, setFiltroOrigem] = useState(() => searchParams.get("origem") ?? "");
+  const [filtroGenero, setFiltroGenero] = useState(() => searchParams.get("genero") ?? "");
 
   const [matchMap, setMatchMap] = useState<Record<string, MatchEntry[]>>({});
 
@@ -499,13 +503,14 @@ export default function BancoCandidatosClient({
     if (matchMin) params.set("match", matchMin);
     if (keyword) params.set("kw", keyword);
     if (filtroOrigem) params.set("origem", filtroOrigem);
+    if (filtroGenero) params.set("genero", filtroGenero);
 
     const qs = params.toString();
     const timeout = setTimeout(() => {
       router.replace(`/painel/banco-candidatos${qs ? `?${qs}` : ""}`, { scroll: false });
     }, 400);
     return () => clearTimeout(timeout);
-  }, [filtroAlocacao, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, keyword, filtroOrigem, router]);
+  }, [filtroAlocacao, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, keyword, filtroOrigem, filtroGenero, router]);
 
   useEffect(() => {
     const pending = candidatos.some(
@@ -691,6 +696,7 @@ export default function BancoCandidatosClient({
         if (bestMatch === null || bestMatch === undefined || bestMatch < matchThreshold) return false;
       }
       if (filtroOrigem && (c.origem ?? "cadastro_rapido") !== filtroOrigem) return false;
+      if (filtroGenero && c.genero !== filtroGenero) return false;
       if (kwQ) {
         const haystack = [
           c.nome_completo,
@@ -705,7 +711,7 @@ export default function BancoCandidatosClient({
       }
       return true;
     });
-  }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, matchMap, filtroAlocacao, keyword, filtroOrigem]);
+  }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, matchMap, filtroAlocacao, keyword, filtroOrigem, filtroGenero]);
 
 
   return (
@@ -941,6 +947,21 @@ export default function BancoCandidatosClient({
               ))}
             </select>
           </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
+              Gênero
+            </label>
+            <select
+              style={inputStyle({ background: "#fff", cursor: "pointer" })}
+              value={filtroGenero}
+              onChange={(e) => setFiltroGenero(e.target.value)}
+            >
+              <option value="">Todos</option>
+              {GENERO_OPCOES.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div style={{ marginTop: 12 }}>
@@ -955,14 +976,14 @@ export default function BancoCandidatosClient({
           />
         </div>
 
-        {(nome || cargo || cidade || idadeMin || idadeMax || notaIaMin || matchMin || keyword || filtroOrigem) && (
+        {(nome || cargo || cidade || idadeMin || idadeMax || notaIaMin || matchMin || keyword || filtroOrigem || filtroGenero) && (
           <div style={{ marginTop: 10, fontSize: 13, color: "#6B7280" }}>
             Exibindo{" "}
             <strong style={{ color: "#111827" }}>{filtered.length}</strong> de{" "}
             {candidatos.length} candidatos
             {" · "}
             <button
-              onClick={() => { setNome(""); setCargo(""); setCidade(""); setIdadeMin(""); setIdadeMax(""); setNotaIaMin(""); setMatchMin(""); setKeyword(""); setFiltroOrigem(""); }}
+              onClick={() => { setNome(""); setCargo(""); setCidade(""); setIdadeMin(""); setIdadeMax(""); setNotaIaMin(""); setMatchMin(""); setKeyword(""); setFiltroOrigem(""); setFiltroGenero(""); }}
               style={{ background: "none", border: "none", color: "#FFB800", cursor: "pointer", fontSize: 13, fontWeight: 600, padding: 0 }}
             >
               Limpar filtros

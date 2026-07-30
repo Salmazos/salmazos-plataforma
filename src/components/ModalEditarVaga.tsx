@@ -135,6 +135,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
     responsavel: "",
     fee_rs_percentual: "",
     fee_rs_prazo_cobranca: "",
+    confidencial: false,
   });
   const [habilidades, setHabilidades] = useState<string[]>([]);
   const [clientes, setClientes]       = useState<ClienteOpcao[]>([]);
@@ -184,6 +185,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
       responsavel:  vaga.responsavel,
       fee_rs_percentual: vaga.fee_rs_percentual != null ? String(vaga.fee_rs_percentual) : "",
       fee_rs_prazo_cobranca: vaga.fee_rs_prazo_cobranca ?? "",
+      confidencial: vaga.confidencial ?? false,
     });
     setSalarioModo(detectarModoSalario(vaga.salario ?? ""));
     setHabilidades(vaga.habilidades_desejadas ?? []);
@@ -384,6 +386,31 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
                 );
               })}
             </div>
+          </div>
+
+          {/* Confidencial */}
+          <div
+            style={{
+              border: "2px solid #FCA5A5",
+              borderRadius: 10,
+              padding: "12px 14px",
+              backgroundColor: form.confidencial ? "#FEF2F2" : "#FFFFFF",
+            }}
+          >
+            <label className="flex items-start gap-3" style={{ cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={form.confidencial}
+                onChange={(e) => setForm((f) => ({ ...f, confidencial: e.target.checked }))}
+                style={{ marginTop: 2, width: 18, height: 18, accentColor: "#DC2626", flexShrink: 0 }}
+              />
+              <span>
+                <span style={{ fontWeight: 700, color: "#DC2626", fontSize: 14 }}>🔴 Vaga Confidencial</span>
+                <p style={{ fontSize: 12, color: "#7F1D1D", marginTop: 2 }}>
+                  Vagas confidenciais possuem dados sensíveis do cliente e devem ser tratadas com cuidado na divulgação.
+                </p>
+              </span>
+            </label>
           </div>
 
           {/* Posições + Prazo + Status */}

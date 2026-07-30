@@ -25,8 +25,11 @@ interface FormData {
   resumo_candidato: string;
   formacao_academica: string;
   idade: string;
+  genero: string;
   website: string;
 }
+
+const GENERO_OPCOES = ["Masculino", "Feminino", "Outro", "Prefiro não informar"];
 
 // Shared inline style tokens
 const CARD: React.CSSProperties = {
@@ -79,6 +82,7 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
     resumo_candidato: "",
     formacao_academica: "",
     idade: "",
+    genero: "",
     website: "",
   });
   const [curriculo, setCurriculo] = useState<File | null>(null);
@@ -189,6 +193,9 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
           vaga_ids,
           formacao_academica: form.formacao_academica || null,
           idade: form.idade ? parseInt(form.idade) : null,
+          // Schema não aceita "" (só undefined ou uma das 4 opções) — spread de ...form
+          // mandaria string vazia quando o campo é deixado em branco.
+          genero: form.genero || undefined,
           lgpd_consentimento: lgpdConsentimento,
           honeypot: form.website,
         }),
@@ -409,6 +416,13 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
             <label style={LABEL}>Formação acadêmica</label>
             <input type="text" style={INPUT} placeholder="Ex: Ensino Médio Completo"
               value={form.formacao_academica} onChange={(e) => set("formacao_academica", e.target.value)} />
+          </div>
+          <div>
+            <label style={LABEL}>Gênero</label>
+            <select style={INPUT} value={form.genero} onChange={(e) => set("genero", e.target.value)}>
+              <option value="">Selecione</option>
+              {GENERO_OPCOES.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
           </div>
         </div>
       </div>

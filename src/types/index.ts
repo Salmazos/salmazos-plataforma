@@ -248,6 +248,7 @@ export interface KanbanCard {
   vaga_id: string;
   vaga_titulo: string;
   vaga_tipo_servico: string | null;
+  vaga_confidencial: boolean;
   encaminhamento_tipo_servico: string | null;
   encaminhamento_status: string | null;
   encaminhamento_data_entrevista: string | null;
@@ -333,6 +334,7 @@ export interface Vaga {
   observacoes: string | null;
   fee_rs_percentual?: number | null;
   fee_rs_prazo_cobranca?: string | null;
+  confidencial?: boolean;
   tipo_servico_original?: string | null;
   tipo_servico_alterado_em?: string | null;
   tipo_servico_alterado_por?: string | null;

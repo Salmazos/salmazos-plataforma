@@ -28,7 +28,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const { data: vaga } = await supabase
       .from("vagas")
-      .select("id, titulo, tipo_servico, cidade, estado, responsavel")
+      .select("id, titulo, tipo_servico, cidade, estado, responsavel, confidencial")
       .eq("id", id)
       .single();
 
@@ -50,6 +50,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       estado: vaga.estado ?? undefined,
       responsavel: vaga.responsavel,
       statusEncerramento: status,
+      confidencial: vaga.confidencial === true,
       vagaUrl,
     });
 
@@ -67,6 +68,14 @@ export async function POST(request: NextRequest, { params }: Params) {
         })
       )
     ).catch((err) => console.error("[notificar-encerramento] Erro:", err));
+
+    const vagaConfidencial = vaga.confidencial === true;
+    const { error: errNotifSino } = await supabase.from("notificacoes_analista").insert({
+      tipo: "vaga_encerrada",
+      titulo: `${vagaConfidencial ? "🔴 [CONFIDENCIAL] " : ""}Vaga encerrada: ${vaga.titulo}`,
+      mensagem: `Vaga "${vaga.titulo}" (${TIPO_LABELS[vaga.tipo_servico] ?? vaga.tipo_servico}) foi encerrada (${status}).`,
+    });
+    if (errNotifSino) console.error("[notificar-encerramento] Erro ao registrar notificação de sino:", errNotifSino.message);
   });
 
   return NextResponse.json({ ok: true });

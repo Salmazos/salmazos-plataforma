@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
         observacoes: body.observacoes || null,
         fee_rs_percentual: body.fee_rs_percentual ? Number(body.fee_rs_percentual) : null,
         fee_rs_prazo_cobranca: body.fee_rs_prazo_cobranca || null,
+        confidencial: body.confidencial === true,
         data_abertura: new Date().toISOString(),
       })
       .select("*, clientes(id, nome)")
@@ -79,6 +80,7 @@ export async function POST(request: NextRequest) {
     const vagaRequisitos = data.requisitos;
     const vagaBeneficios = data.beneficios;
     const vagaObservacoes = data.observacoes;
+    const vagaConfidencial = data.confidencial === true;
 
     after(async () => {
       console.log(`[POST /api/vagas] Notificando analistas sobre nova vaga ${vagaId}`);
@@ -110,6 +112,7 @@ export async function POST(request: NextRequest) {
         requisitos: vagaRequisitos ?? undefined,
         beneficios: vagaBeneficios ?? undefined,
         observacoes: vagaObservacoes ?? undefined,
+        confidencial: vagaConfidencial,
         vagaUrl,
       });
 
@@ -126,6 +129,13 @@ export async function POST(request: NextRequest) {
           })
         )
       ).catch((err) => console.error("[POST /api/vagas] Erro ao notificar analistas:", err));
+
+      const { error: errNotifSino } = await svcAfter.from("notificacoes_analista").insert({
+        tipo: "vaga_criada",
+        titulo: `${vagaConfidencial ? "🔴 [CONFIDENCIAL] " : ""}Nova vaga criada: ${vagaTitulo}`,
+        mensagem: `Vaga "${vagaTitulo}" (${TIPO_LABELS[vagaTipo] ?? vagaTipo}) foi criada e está aberta.`,
+      });
+      if (errNotifSino) console.error("[POST /api/vagas] Erro ao registrar notificação de sino:", errNotifSino.message);
     });
 
     return NextResponse.json({ data }, { status: 201 });
