@@ -428,6 +428,55 @@ function OrigemBadge({ origem }: { origem: string | null }) {
   );
 }
 
+function GeneroCell({
+  genero,
+  saving,
+  justSaved,
+  onSelecionar,
+}: {
+  genero: string | null;
+  saving: boolean;
+  justSaved: boolean;
+  onSelecionar: (valor: "Masculino" | "Feminino") => void;
+}) {
+  if (genero === "Outro" || genero === "Prefiro não informar") {
+    return (
+      <span style={{ fontSize: 11, color: "#9CA3AF", fontStyle: "italic" }}>
+        Outro valor: {genero} — editar aqui não disponível
+      </span>
+    );
+  }
+
+  const pillStyle = (ativo: boolean): React.CSSProperties => ({
+    padding: "4px 12px",
+    borderRadius: 14,
+    border: `1.5px solid ${ativo ? "#111827" : "#E5E7EB"}`,
+    background: ativo ? "#111827" : "#fff",
+    color: ativo ? "#FFD700" : "#6B7280",
+    fontSize: 12,
+    fontWeight: ativo ? 700 : 400,
+    cursor: saving ? "wait" : "pointer",
+    opacity: saving ? 0.6 : 1,
+    whiteSpace: "nowrap",
+  });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+      <div style={{ display: "flex", gap: 6 }}>
+        <button disabled={saving} onClick={() => onSelecionar("Masculino")} style={pillStyle(genero === "Masculino")}>
+          Masculino
+        </button>
+        <button disabled={saving} onClick={() => onSelecionar("Feminino")} style={pillStyle(genero === "Feminino")}>
+          Feminino
+        </button>
+      </div>
+      {justSaved && (
+        <span style={{ fontSize: 11, color: "#16A34A", fontWeight: 700 }}>{"✓"} Salvo</span>
+      )}
+    </div>
+  );
+}
+
 function inputStyle(extra?: React.CSSProperties): React.CSSProperties {
   return {
     border: "1px solid #E5E7EB",
@@ -463,6 +512,8 @@ export default function BancoCandidatosClient({
   const [keyword, setKeyword] = useState(() => searchParams.get("kw") ?? "");
   const [filtroOrigem, setFiltroOrigem] = useState(() => searchParams.get("origem") ?? "");
   const [filtroGenero, setFiltroGenero] = useState(() => searchParams.get("genero") ?? "");
+  const [filtroSemGenero, setFiltroSemGenero] = useState(() => searchParams.get("semGenero") === "1");
+  const [ordemNome, setOrdemNome] = useState<"asc" | "desc" | null>(null);
 
   const [matchMap, setMatchMap] = useState<Record<string, MatchEntry[]>>({});
 
@@ -478,6 +529,9 @@ export default function BancoCandidatosClient({
   const [escavadorMap, setEscavadorMap] = useState<Record<string, string | null>>({});
   const [escavadorSaving, setEscavadorSaving] = useState<Record<string, boolean>>({});
   const [scoreOverrides, setScoreOverrides] = useState<Record<string, { score: number; label: string }>>({});
+  const [generoOverrides, setGeneroOverrides] = useState<Record<string, string>>({});
+  const [generoSaving, setGeneroSaving] = useState<Record<string, boolean>>({});
+  const [generoJustSaved, setGeneroJustSaved] = useState<Record<string, boolean>>({});
   const router = useRouter();
 
   const { scrollRef: tableScrollRef, floatScrollRef, floatBar, handleScroll: handleTableScroll, handleFloatScroll } = useScrollHorizontalSincronizado();
@@ -504,13 +558,14 @@ export default function BancoCandidatosClient({
     if (keyword) params.set("kw", keyword);
     if (filtroOrigem) params.set("origem", filtroOrigem);
     if (filtroGenero) params.set("genero", filtroGenero);
+    if (filtroSemGenero) params.set("semGenero", "1");
 
     const qs = params.toString();
     const timeout = setTimeout(() => {
       router.replace(`/painel/banco-candidatos${qs ? `?${qs}` : ""}`, { scroll: false });
     }, 400);
     return () => clearTimeout(timeout);
-  }, [filtroAlocacao, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, keyword, filtroOrigem, filtroGenero, router]);
+  }, [filtroAlocacao, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, keyword, filtroOrigem, filtroGenero, filtroSemGenero, router]);
 
   useEffect(() => {
     const pending = candidatos.some(
@@ -669,6 +724,26 @@ export default function BancoCandidatosClient({
     }
   }, []);
 
+  const handleGeneroChange = useCallback(async (candidatoId: string, novoValor: "Masculino" | "Feminino") => {
+    setGeneroSaving((prev) => ({ ...prev, [candidatoId]: true }));
+    try {
+      const res = await fetch(`/api/candidatos/${candidatoId}/genero`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ genero: novoValor }),
+      });
+      if (res.ok) {
+        setGeneroOverrides((prev) => ({ ...prev, [candidatoId]: novoValor }));
+        setGeneroJustSaved((prev) => ({ ...prev, [candidatoId]: true }));
+        setTimeout(() => setGeneroJustSaved((prev) => ({ ...prev, [candidatoId]: false })), 1800);
+      }
+    } catch {
+      // silencioso — mesmo padrão do handleEscavadorChange, não trava a tela
+    } finally {
+      setGeneroSaving((prev) => ({ ...prev, [candidatoId]: false }));
+    }
+  }, []);
+
   const filtered = useMemo(() => {
     const nomeQ = nome.trim().toLowerCase();
     const cargoQ = cargo.trim().toLowerCase();
@@ -697,6 +772,7 @@ export default function BancoCandidatosClient({
       }
       if (filtroOrigem && (c.origem ?? "cadastro_rapido") !== filtroOrigem) return false;
       if (filtroGenero && c.genero !== filtroGenero) return false;
+      if (filtroSemGenero && c.genero !== null) return false;
       if (kwQ) {
         const haystack = [
           c.nome_completo,
@@ -711,8 +787,20 @@ export default function BancoCandidatosClient({
       }
       return true;
     });
-  }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, matchMap, filtroAlocacao, keyword, filtroOrigem, filtroGenero]);
+  }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, matchMap, filtroAlocacao, keyword, filtroOrigem, filtroGenero, filtroSemGenero]);
 
+  const comGeneroPreenchido = useMemo(
+    () => candidatos.filter((c) => c.genero !== null).length,
+    [candidatos]
+  );
+
+  const sorted = useMemo(() => {
+    if (!ordemNome) return filtered;
+    const copia = [...filtered];
+    copia.sort((a, b) => a.nome_completo.localeCompare(b.nome_completo, "pt-BR"));
+    if (ordemNome === "desc") copia.reverse();
+    return copia;
+  }, [filtered, ordemNome]);
 
   return (
     <div>
@@ -779,6 +867,18 @@ export default function BancoCandidatosClient({
         </span>
         <span style={{ fontSize: 14, color: "#6B7280" }}>
           {candidatos.length === 1 ? "currículo cadastrado" : "currículos cadastrados"}
+        </span>
+      </div>
+
+      <div
+        className="card"
+        style={{ marginBottom: 20, marginLeft: 12, display: "inline-flex", alignItems: "center", gap: 10 }}
+      >
+        <span style={{ fontSize: 36, fontWeight: 800, color: "#111827", lineHeight: 1 }}>
+          {comGeneroPreenchido}
+        </span>
+        <span style={{ fontSize: 14, color: "#6B7280" }}>
+          de {candidatos.length} candidatos com gênero preenchido
         </span>
       </div>
 
@@ -965,6 +1065,25 @@ export default function BancoCandidatosClient({
         </div>
 
         <div style={{ marginTop: 12 }}>
+          <button
+            onClick={() => setFiltroSemGenero((v) => !v)}
+            style={{
+              padding: "6px 14px",
+              borderRadius: 20,
+              border: `1.5px solid ${filtroSemGenero ? "#111827" : "#E5E7EB"}`,
+              background: filtroSemGenero ? "#111827" : "#fff",
+              color: filtroSemGenero ? "#FFD700" : "#6B7280",
+              fontSize: 13,
+              fontWeight: filtroSemGenero ? 700 : 400,
+              cursor: "pointer",
+              transition: "all 0.15s",
+            }}
+          >
+            {"🚻"} Sem gênero cadastrado
+          </button>
+        </div>
+
+        <div style={{ marginTop: 12 }}>
           <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
             {"🔍"} Palavra-chave
           </label>
@@ -976,14 +1095,14 @@ export default function BancoCandidatosClient({
           />
         </div>
 
-        {(nome || cargo || cidade || idadeMin || idadeMax || notaIaMin || matchMin || keyword || filtroOrigem || filtroGenero) && (
+        {(nome || cargo || cidade || idadeMin || idadeMax || notaIaMin || matchMin || keyword || filtroOrigem || filtroGenero || filtroSemGenero) && (
           <div style={{ marginTop: 10, fontSize: 13, color: "#6B7280" }}>
             Exibindo{" "}
             <strong style={{ color: "#111827" }}>{filtered.length}</strong> de{" "}
             {candidatos.length} candidatos
             {" · "}
             <button
-              onClick={() => { setNome(""); setCargo(""); setCidade(""); setIdadeMin(""); setIdadeMax(""); setNotaIaMin(""); setMatchMin(""); setKeyword(""); setFiltroOrigem(""); setFiltroGenero(""); }}
+              onClick={() => { setNome(""); setCargo(""); setCidade(""); setIdadeMin(""); setIdadeMax(""); setNotaIaMin(""); setMatchMin(""); setKeyword(""); setFiltroOrigem(""); setFiltroGenero(""); setFiltroSemGenero(false); }}
               style={{ background: "none", border: "none", color: "#FFB800", cursor: "pointer", fontSize: 13, fontWeight: 600, padding: 0 }}
             >
               Limpar filtros
@@ -998,10 +1117,16 @@ export default function BancoCandidatosClient({
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
-                <th style={thStyle}>Nome</th>
+                <th
+                  style={{ ...thStyle, cursor: "pointer", userSelect: "none" }}
+                  onClick={() => setOrdemNome((o) => (o === "asc" ? "desc" : "asc"))}
+                >
+                  Nome {ordemNome === "asc" ? "▲" : ordemNome === "desc" ? "▼" : ""}
+                </th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Idade</th>
                 <th style={thStyle}>Cargo Pretendido</th>
                 <th style={thStyle}>Cidade</th>
+                <th style={{ ...thStyle, textAlign: "center" }}>Gênero</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Score</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Processos</th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Match com Vagas</th>
@@ -1010,10 +1135,10 @@ export default function BancoCandidatosClient({
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {sorted.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     style={{ padding: "48px 24px", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}
                   >
                     {candidatos.length === 0
@@ -1022,7 +1147,7 @@ export default function BancoCandidatosClient({
                   </td>
                 </tr>
               ) : (
-                filtered.map((c) => (
+                sorted.map((c) => (
                   <tr
                     key={c.id}
                     style={{
@@ -1124,6 +1249,14 @@ export default function BancoCandidatosClient({
                     </td>
                     <td style={{ padding: "10px 12px", fontSize: 14, color: "#374151" }}>
                       {c.cidade ?? "—"}
+                    </td>
+                    <td style={{ padding: "10px 12px", textAlign: "center" }}>
+                      <GeneroCell
+                        genero={generoOverrides[c.id] ?? c.genero}
+                        saving={!!generoSaving[c.id]}
+                        justSaved={!!generoJustSaved[c.id]}
+                        onSelecionar={(valor) => handleGeneroChange(c.id, valor)}
+                      />
                     </td>
                     <td style={{ padding: "10px 12px", textAlign: "center" }}>
                       <ScoreBadge
