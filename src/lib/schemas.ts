@@ -283,6 +283,13 @@ export const slaDestinatarioUpdateSchema = z.object({
 export const meuPerfilUpdateSchema = z.object({
   nome_completo: z.string().min(2).optional(),
   telefone: z.string().optional(),
+  // Bug corrigido: o campo já existia na tela (MeuPerfilClient.tsx, travado após o
+  // primeiro preenchimento) mas nunca foi aceito por este schema nem enviado no payload
+  // de salvarDados() — o analista digitava, via "salvo com sucesso", e o CPF nunca era
+  // gravado. Achado ao implementar o bloqueio de envio ZapSign por CPF ausente (ver
+  // montar-enviar/route.ts) — sem isso, a mensagem de bloqueio mandava o analista pra uma
+  // tela que não persistia o dado.
+  cpf: z.string().optional(),
   data_nascimento: z.string().optional().nullable(),
   endereco: z.string().optional(),
   cidade: z.string().optional(),
@@ -603,6 +610,16 @@ export const admissaoDocumentoContabilidadeConfirmarSchema = z.object({
 export const admissaoContabilidadeMontarEnviarSchema = z.object({
   nomeCandidato: z.string().trim().min(1),
   emailCandidato: z.string().email(),
+  // Ver bloqueio de segurança em montar-enviar/route.ts: quando o pacote inclui Ficha de
+  // IR, Salário Família ou Termo de Responsabilidade (estrutura de página não mapeada
+  // pra ZapSign), o envio automático é recusado a menos que o analista confirme
+  // explicitamente o fallback manual pra Clicksign marcando essa flag.
+  forcarClicksign: z.boolean().optional().default(false),
+  // id (analistas_perfil.id) do diretor escolhido pra assinar como Contratante, quando
+  // quem está processando a admissão não tem cargo de diretoria (ver ehCargoDiretoria em
+  // lib/admissaoAuth.ts). Ignorado quando o próprio operador já é diretor. Sempre
+  // revalidado no servidor (cargo + ativo) — nunca confia no id vindo do cliente.
+  contratanteSelecionadoId: z.string().uuid().optional(),
 });
 
 export const admissaoDocumentoConfirmarSchema = z.object({

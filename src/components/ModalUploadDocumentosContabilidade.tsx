@@ -94,6 +94,14 @@ export default function ModalUploadDocumentosContabilidade({
   const [enviandoFinal, setEnviandoFinal] = useState(false);
   const [erroFinal, setErroFinal] = useState("");
 
+  // Ver bloqueio de segurança em montar-enviar/route.ts: só quem tem cargo de diretoria
+  // pode assinar pela empresa via ZapSign — quem não é diretor precisa escolher um
+  // diretor ativo aqui antes de conseguir enviar.
+  const [carregandoAssinantes, setCarregandoAssinantes] = useState(false);
+  const [souDiretor, setSouDiretor] = useState<boolean | null>(null);
+  const [diretores, setDiretores] = useState<{ id: string; nome_completo: string; cargo: string }[]>([]);
+  const [diretorSelecionadoId, setDiretorSelecionadoId] = useState("");
+
   useEffect(() => {
     if (!isOpen) return;
     setEtapa(1);
@@ -103,7 +111,23 @@ export default function ModalUploadDocumentosContabilidade({
     setNome(nomeInicial);
     setEmail(emailInicial);
     setErroFinal("");
+    setSouDiretor(null);
+    setDiretores([]);
+    setDiretorSelecionadoId("");
   }, [isOpen, documentosIniciais, nomeInicial, emailInicial]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setCarregandoAssinantes(true);
+    fetch("/api/admissoes/documentos-contabilidade/diretores-disponiveis")
+      .then((res) => res.json())
+      .then((json) => {
+        setSouDiretor(!!json.souDiretor);
+        setDiretores(Array.isArray(json.diretores) ? json.diretores : []);
+      })
+      .catch(() => setSouDiretor(false))
+      .finally(() => setCarregandoAssinantes(false));
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -114,6 +138,25 @@ export default function ModalUploadDocumentosContabilidade({
   const faltando = listaCompleta.filter((d) => d.obrigatorio && !documentos.some((doc) => doc.tipo_documento === d.tipo_documento));
   const labelsFaltando = faltando.map((d) => d.label);
   const podeEnviarFinal = faltando.length === 0 && nome.trim().length > 0 && email.trim().length > 0;
+
+  // Ver bloqueio de segurança em montar-enviar/route.ts: Ficha de IR, Salário Família e
+  // Termo de Responsabilidade nunca tiveram a estrutura de página confirmada pra ZapSign
+  // (diferente dos 4 fixos, mapeados com um caso real assinado) — se algum desses 3 está
+  // no pacote, o backend recusa o envio automático e só aceita via Clicksign manual.
+  const opcionaisPresentes = listaCompleta.filter(
+    (d) => !d.obrigatorio && documentos.some((doc) => doc.tipo_documento === d.tipo_documento)
+  );
+  const labelsOpcionaisPresentes = opcionaisPresentes.map((d) => d.label);
+
+  // Seletor de "quem assina pela empresa" só importa no caminho ZapSign (o fallback
+  // Clicksign não tem signatário pela empresa) e só quando o operador não é diretor.
+  const usaZapSign = opcionaisPresentes.length === 0;
+  const precisaSelecionarContratante = usaZapSign && souDiretor === false;
+  const semDiretorDisponivel = precisaSelecionarContratante && diretores.length === 0;
+  const podeEnviarFinalComContratante =
+    podeEnviarFinal &&
+    souDiretor !== null &&
+    (!precisaSelecionarContratante || (!semDiretorDisponivel && diretorSelecionadoId !== ""));
 
   const handleSelecionar = (files: FileList) => {
     setErroStaged("");
@@ -162,15 +205,20 @@ export default function ModalUploadDocumentosContabilidade({
     if (restantes.some((r) => r.erro)) setErroStaged("Alguns arquivos não puderam ser enviados — veja o erro em cada linha.");
   };
 
-  const handleMontarEnviar = async () => {
-    if (!podeEnviarFinal) return;
+  const handleMontarEnviar = async (forcarClicksign: boolean) => {
+    if (!podeEnviarFinalComContratante) return;
     setEnviandoFinal(true);
     setErroFinal("");
     try {
       const res = await fetch(`/api/admissoes/${admissaoId}/documentos-contabilidade/montar-enviar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nomeCandidato: nome.trim(), emailCandidato: email.trim() }),
+        body: JSON.stringify({
+          nomeCandidato: nome.trim(),
+          emailCandidato: email.trim(),
+          forcarClicksign,
+          ...(precisaSelecionarContratante ? { contratanteSelecionadoId: diretorSelecionadoId } : {}),
+        }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -302,10 +350,48 @@ export default function ModalUploadDocumentosContabilidade({
               </div>
             )}
 
-            <div className="rounded-lg p-3 text-xs font-semibold" style={{ background: "#FEF3C7", color: "#92400E" }}>
-              ⚠️ O candidato receberá um e-mail da Clicksign com o link para assinar o pacote da contabilidade.
-              Confirme os dados antes de continuar.
-            </div>
+            {opcionaisPresentes.length > 0 ? (
+              <div className="rounded-lg p-3 text-xs font-semibold" style={{ background: "#FEF3C7", color: "#92400E" }}>
+                ⚠️ Este pacote inclui {labelsOpcionaisPresentes.join(", ")} — o posicionamento automático desses
+                documentos ainda não foi validado. Use o fluxo manual (Clicksign) para este caso até a estrutura ser
+                mapeada.
+              </div>
+            ) : (
+              <div className="rounded-lg p-3 text-xs font-semibold" style={{ background: "#FEF3C7", color: "#92400E" }}>
+                ⚠️ O candidato receberá um e-mail da ZapSign com o link para assinar o pacote da contabilidade.
+                Confirme os dados antes de continuar.
+              </div>
+            )}
+
+            {usaZapSign && carregandoAssinantes && (
+              <div className="rounded-lg p-3 text-xs" style={{ background: "#F3F4F6", color: "#374151" }}>
+                Verificando quem pode assinar pela empresa...
+              </div>
+            )}
+
+            {usaZapSign && !carregandoAssinantes && semDiretorDisponivel && (
+              <div className="rounded-lg p-3 text-xs font-semibold" style={{ background: "#FEF2F2", color: "#991B1B" }}>
+                ⚠️ Nenhum diretor disponível para assinatura — contate o administrador.
+              </div>
+            )}
+
+            {usaZapSign && !carregandoAssinantes && precisaSelecionarContratante && !semDiretorDisponivel && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                  Quem vai assinar pela empresa?
+                </label>
+                <select
+                  value={diretorSelecionadoId}
+                  onChange={(e) => setDiretorSelecionadoId(e.target.value)}
+                  className="input-field"
+                >
+                  <option value="">Selecione um diretor...</option>
+                  {diretores.map((d) => (
+                    <option key={d.id} value={d.id}>{d.nome_completo} — {d.cargo}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nome do candidato</label>
@@ -320,14 +406,25 @@ export default function ModalUploadDocumentosContabilidade({
 
             <div className="flex justify-between gap-2 pt-2 border-t border-gray-100">
               <button onClick={() => setEtapa(1)} className="btn-outline">Voltar</button>
-              <button
-                onClick={handleMontarEnviar}
-                disabled={!podeEnviarFinal || enviandoFinal}
-                className="btn-primary"
-                style={{ opacity: !podeEnviarFinal || enviandoFinal ? 0.5 : 1 }}
-              >
-                {enviandoFinal ? "Montando e enviando..." : "Montar e enviar para assinatura"}
-              </button>
+              {opcionaisPresentes.length > 0 ? (
+                <button
+                  onClick={() => handleMontarEnviar(true)}
+                  disabled={!podeEnviarFinal || enviandoFinal}
+                  className="btn-primary"
+                  style={{ opacity: !podeEnviarFinal || enviandoFinal ? 0.5 : 1 }}
+                >
+                  {enviandoFinal ? "Montando e enviando..." : "Montar e enviar via Clicksign (manual)"}
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleMontarEnviar(false)}
+                  disabled={!podeEnviarFinalComContratante || enviandoFinal}
+                  className="btn-primary"
+                  style={{ opacity: !podeEnviarFinalComContratante || enviandoFinal ? 0.5 : 1 }}
+                >
+                  {enviandoFinal ? "Montando e enviando..." : "Montar e enviar para assinatura"}
+                </button>
+              )}
             </div>
           </div>
         )}

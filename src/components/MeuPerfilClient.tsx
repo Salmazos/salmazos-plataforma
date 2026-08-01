@@ -347,6 +347,7 @@ export default function MeuPerfilClient({ perfil, userEmail, userId }: Props) {
       const payload: Record<string, string> = {
         nome_completo: form.nome_completo,
         telefone: form.telefone,
+        cpf: form.cpf,
         data_nascimento: form.data_nascimento || "",
         cep: form.cep,
         endereco: form.endereco,

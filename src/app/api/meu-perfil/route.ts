@@ -26,6 +26,7 @@ export async function GET() {
 const CAMPOS_EDITAVEIS = [
   "nome_completo",
   "telefone",
+  "cpf",
   "data_nascimento",
   "endereco",
   "cidade",

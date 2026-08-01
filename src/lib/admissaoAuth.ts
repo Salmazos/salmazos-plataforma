@@ -25,3 +25,17 @@ export function checarPapelAdmissoes(user: User): NextResponse | null {
   }
   return null;
 }
+
+// Restrição decidida com o negócio: só quem tem um desses cargos em
+// analistas_perfil.cargo pode ser o signatário "Contratante" (pela empresa) no pacote de
+// assinatura eletrônica da contabilidade via ZapSign (ver montar-enviar/route.ts). Quem
+// processa a admissão mas não tem esse cargo precisa delegar pra um diretor ativo (ver
+// diretores-disponiveis/route.ts). `cargo` é texto livre no banco (sem enum/CHECK) — esta
+// comparação é exata e sensível a variação de grafia futura (ex.: "Diretor(a)", cargo
+// composto) — se alguém cadastrar um diretor com um texto de cargo diferente destes dois,
+// essa pessoa não vai aparecer na lista de signatários disponíveis.
+export const CARGOS_DIRETORIA = ["Diretor", "Diretora"];
+
+export function ehCargoDiretoria(cargo: string | null | undefined): boolean {
+  return !!cargo && CARGOS_DIRETORIA.includes(cargo);
+}
