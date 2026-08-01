@@ -9,6 +9,7 @@ import { TIPOS_SERVICO } from "@/lib/constants";
 import ModalRegistrarAso from "./ModalRegistrarAso";
 import ModalRegistrarContrato from "./ModalRegistrarContrato";
 import ModalEditarFuncionario from "./ModalEditarFuncionario";
+import ModalExcluirDocumento from "./ModalExcluirDocumento";
 
 export interface FuncionarioDetalhe {
   id: string;
@@ -51,6 +52,10 @@ interface Props {
   asosIniciais: AsoRow[];
   contratosIniciais: ContratoRow[];
   clientes: ClienteOption[];
+  // Só superuser/diretoria (ver PAPEIS_FULL_ACCESS em lib/fullAccessAuth.ts) — mais
+  // restrito que o acesso geral à tela (supervisor/dp também acessam Funcionários, mas
+  // não podem apagar um registro já lançado).
+  podeExcluirDocumento: boolean;
 }
 
 const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
@@ -58,7 +63,7 @@ const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> 
   desligado: { label: "Desligado", bg: "#FEE2E2", text: "#991B1B" },
 };
 
-export default function FuncionarioDetalheClient({ funcionario: funcionarioInicial, asosIniciais, contratosIniciais, clientes }: Props) {
+export default function FuncionarioDetalheClient({ funcionario: funcionarioInicial, asosIniciais, contratosIniciais, clientes, podeExcluirDocumento }: Props) {
   const router = useRouter();
   const [funcionario, setFuncionario] = useState(funcionarioInicial);
   const [modalEditarAberto, setModalEditarAberto] = useState(false);
@@ -71,6 +76,9 @@ export default function FuncionarioDetalheClient({ funcionario: funcionarioInici
   const [modalContratoAberto, setModalContratoAberto] = useState(false);
   const [carregandoContratoId, setCarregandoContratoId] = useState<string | null>(null);
   const [erroArquivoContrato, setErroArquivoContrato] = useState("");
+
+  const [asoParaExcluir, setAsoParaExcluir] = useState<string | null>(null);
+  const [contratoParaExcluir, setContratoParaExcluir] = useState<string | null>(null);
 
   const statusFuncionario = STATUS_BADGE[funcionario.status] ?? { label: funcionario.status, bg: "#F3F4F6", text: "#374151" };
   const tipoServicoLabel = TIPOS_SERVICO.find((t) => t.id === funcionario.tipo_servico)?.label ?? "—";
@@ -178,7 +186,7 @@ export default function FuncionarioDetalheClient({ funcionario: funcionarioInici
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-                  {["Data do exame", "Registrado por", "Registrado em", "Arquivo"].map((h) => (
+                  {["Data do exame", "Registrado por", "Registrado em", "Arquivo", ...(podeExcluirDocumento ? ["Ações"] : [])].map((h) => (
                     <th key={h} style={{ textAlign: "left", padding: "8px 12px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>
                       {h}
                     </th>
@@ -205,6 +213,17 @@ export default function FuncionarioDetalheClient({ funcionario: funcionarioInici
                         <span className="text-gray-400">—</span>
                       )}
                     </td>
+                    {podeExcluirDocumento && (
+                      <td style={{ padding: "8px 12px" }}>
+                        <button
+                          onClick={() => setAsoParaExcluir(a.id)}
+                          className="text-xs font-semibold"
+                          style={{ color: "#DC2626" }}
+                        >
+                          Excluir
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -241,14 +260,25 @@ export default function FuncionarioDetalheClient({ funcionario: funcionarioInici
                     Registrado por {contratoAtual.criado_por_nome ?? "—"} em {new Date(contratoAtual.criado_em).toLocaleDateString("pt-BR")}
                   </p>
                 </div>
-                <button
-                  onClick={() => handleVerArquivoContrato(contratoAtual.id)}
-                  disabled={carregandoContratoId === contratoAtual.id}
-                  className="btn-outline"
-                  style={{ padding: "4px 12px", fontSize: 12, flexShrink: 0 }}
-                >
-                  {carregandoContratoId === contratoAtual.id ? "Abrindo..." : "Ver arquivo"}
-                </button>
+                <div className="flex items-center gap-2" style={{ flexShrink: 0 }}>
+                  <button
+                    onClick={() => handleVerArquivoContrato(contratoAtual.id)}
+                    disabled={carregandoContratoId === contratoAtual.id}
+                    className="btn-outline"
+                    style={{ padding: "4px 12px", fontSize: 12 }}
+                  >
+                    {carregandoContratoId === contratoAtual.id ? "Abrindo..." : "Ver arquivo"}
+                  </button>
+                  {podeExcluirDocumento && (
+                    <button
+                      onClick={() => setContratoParaExcluir(contratoAtual.id)}
+                      className="text-xs font-semibold"
+                      style={{ color: "#DC2626" }}
+                    >
+                      Excluir
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -274,14 +304,25 @@ export default function FuncionarioDetalheClient({ funcionario: funcionarioInici
                           <td style={{ padding: "8px 12px", color: "#374151" }}>{c.criado_por_nome ?? "—"}</td>
                           <td style={{ padding: "8px 12px", color: "#6B7280" }}>{new Date(c.criado_em).toLocaleDateString("pt-BR")}</td>
                           <td style={{ padding: "8px 12px" }}>
-                            <button
-                              onClick={() => handleVerArquivoContrato(c.id)}
-                              disabled={carregandoContratoId === c.id}
-                              className="btn-outline"
-                              style={{ padding: "3px 10px", fontSize: 12 }}
-                            >
-                              {carregandoContratoId === c.id ? "Abrindo..." : "Ver arquivo"}
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleVerArquivoContrato(c.id)}
+                                disabled={carregandoContratoId === c.id}
+                                className="btn-outline"
+                                style={{ padding: "3px 10px", fontSize: 12 }}
+                              >
+                                {carregandoContratoId === c.id ? "Abrindo..." : "Ver arquivo"}
+                              </button>
+                              {podeExcluirDocumento && (
+                                <button
+                                  onClick={() => setContratoParaExcluir(c.id)}
+                                  className="text-xs font-semibold"
+                                  style={{ color: "#DC2626" }}
+                                >
+                                  Excluir
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -324,6 +365,32 @@ export default function FuncionarioDetalheClient({ funcionario: funcionarioInici
         onRegistrado={(novoContrato) => {
           setContratos((prev) => [novoContrato, ...prev]);
           setModalContratoAberto(false);
+          router.refresh();
+        }}
+      />
+
+      <ModalExcluirDocumento
+        isOpen={asoParaExcluir !== null}
+        titulo="Excluir exame de ASO"
+        descricao="O registro não é apagado de verdade — fica marcado como excluído, com motivo e responsável, e some das telas normais. Um administrador pode recuperar o histórico se precisar."
+        endpoint={asoParaExcluir ? `/api/funcionarios/asos/${asoParaExcluir}` : ""}
+        onClose={() => setAsoParaExcluir(null)}
+        onExcluido={() => {
+          setAsos((prev) => prev.filter((a) => a.id !== asoParaExcluir));
+          setAsoParaExcluir(null);
+          router.refresh();
+        }}
+      />
+
+      <ModalExcluirDocumento
+        isOpen={contratoParaExcluir !== null}
+        titulo="Excluir contrato"
+        descricao="O registro não é apagado de verdade — fica marcado como excluído, com motivo e responsável, e some das telas normais. Um administrador pode recuperar o histórico se precisar."
+        endpoint={contratoParaExcluir ? `/api/funcionarios/contratos/${contratoParaExcluir}` : ""}
+        onClose={() => setContratoParaExcluir(null)}
+        onExcluido={() => {
+          setContratos((prev) => prev.filter((c) => c.id !== contratoParaExcluir));
+          setContratoParaExcluir(null);
           router.refresh();
         }}
       />

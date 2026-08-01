@@ -264,7 +264,8 @@
       "Bash(mkdir -p \"C:/Users/Olver/Desktop/salmazos-plataforma/.tmp-debug-rubrica\")",
       "Bash(cp \"C:/Users/Olver/AppData/Local/Temp/claude/C--Users-Olver-Desktop-salmazos-plataforma/0cc5e0ed-2ff7-4247-9223-b14483c40417/scratchpad/gerar-pdf-teste-8-paginas.mjs\" \"C:/Users/Olver/Desktop/salmazos-plataforma/.tmp-debug-rubrica/\")",
       "Bash(sed 's/estado-fixo\\\\.json/estado-fixo.json/; s/assinado-fixo\\\\.pdf/assinado-fixo-r2.pdf/; s/render-fixo-pagina/render-fixo-r2-pagina/' 10-baixar-e-checar-fixo.mjs)",
-      "Bash(sed -i 's/estado-fixo\\\\.json/estado-fixo-r2.json/' 11-baixar-e-checar-fixo-r2.mjs)"
+      "Bash(sed -i 's/estado-fixo\\\\.json/estado-fixo-r2.json/' 11-baixar-e-checar-fixo-r2.mjs)",
+      "Bash(xargs cat)"
     ]
   }
 }

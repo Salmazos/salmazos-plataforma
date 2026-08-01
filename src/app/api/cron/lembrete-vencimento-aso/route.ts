@@ -65,6 +65,7 @@ export async function GET(request: Request) {
         .from("funcionario_asos")
         .select("id, funcionario_id, data_exame, ultimo_aviso_vencendo_enviado_em, ultimo_aviso_vencido_enviado_em")
         .in("funcionario_id", idsAtivos)
+        .is("excluido_em", null)
         .order("data_exame", { ascending: false });
 
       if (errAsos) {

@@ -43,10 +43,10 @@ export default async function PortalFuncionariosPage() {
 
   const [{ data: asos }, { data: contratos }] = await Promise.all([
     funcionarioIds.length
-      ? service.from("funcionario_asos").select("funcionario_id, data_exame").in("funcionario_id", funcionarioIds).order("data_exame", { ascending: false })
+      ? service.from("funcionario_asos").select("funcionario_id, data_exame").in("funcionario_id", funcionarioIds).is("excluido_em", null).order("data_exame", { ascending: false })
       : Promise.resolve({ data: [] as { funcionario_id: string; data_exame: string }[] }),
     funcionarioIds.length
-      ? service.from("funcionario_contratos").select("funcionario_id").in("funcionario_id", funcionarioIds)
+      ? service.from("funcionario_contratos").select("funcionario_id").in("funcionario_id", funcionarioIds).is("excluido_em", null)
       : Promise.resolve({ data: [] as { funcionario_id: string }[] }),
   ]);
 

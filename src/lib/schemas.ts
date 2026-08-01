@@ -861,6 +861,14 @@ export const funcionarioContratoCreateSchema = z.object({
   observacoes: z.string().trim().optional().nullable(),
 });
 
+// Soft-delete de ASO/Contrato (corrige upload errado sem apagar de verdade — documento
+// trabalhista precisa manter rastro de auditoria). Mesmo shape pros dois, reaproveitado
+// pelas duas rotas de exclusão (ver api/funcionarios/asos/[asoId] e
+// api/funcionarios/contratos/[contratoId]).
+export const funcionarioDocumentoExcluirSchema = z.object({
+  motivo: z.string().trim().min(1, "Motivo é obrigatório"),
+});
+
 // ── Avisos de ASO periódico — configuração global (Fase 3) ────────────────────
 // Lista própria e separada dos avisos de rescisão (público de compliance/segurança
 // ocupacional, não financeiro) — espelha rescisaoAvisoEmail/PlataformaCreateSchema.

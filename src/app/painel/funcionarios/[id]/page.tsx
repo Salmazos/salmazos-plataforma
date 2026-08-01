@@ -2,6 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import FuncionarioDetalheClient from "@/components/FuncionarioDetalheClient";
 import { PAPEIS_PAINEL_FUNCIONARIOS } from "@/lib/funcionariosAuth";
+import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,7 @@ export default async function FuncionarioDetalhePage({ params }: Params) {
 
   const role = user.app_metadata?.role ?? "analista";
   if (!PAPEIS_PAINEL_FUNCIONARIOS.includes(role)) redirect("/painel");
+  const podeExcluirDocumento = PAPEIS_FULL_ACCESS.includes(role);
 
   const { id } = await params;
   const svc = createServiceClient();
@@ -31,8 +33,8 @@ export default async function FuncionarioDetalhePage({ params }: Params) {
   if (!funcionario) notFound();
 
   const [{ data: asos }, { data: contratos }, { data: clientes }] = await Promise.all([
-    svc.from("funcionario_asos").select("*").eq("funcionario_id", id).order("data_exame", { ascending: false }),
-    svc.from("funcionario_contratos").select("*").eq("funcionario_id", id).order("criado_em", { ascending: false }),
+    svc.from("funcionario_asos").select("*").eq("funcionario_id", id).is("excluido_em", null).order("data_exame", { ascending: false }),
+    svc.from("funcionario_contratos").select("*").eq("funcionario_id", id).is("excluido_em", null).order("criado_em", { ascending: false }),
     svc.from("clientes").select("id, nome").eq("ativo", true).order("nome"),
   ]);
 
@@ -63,6 +65,7 @@ export default async function FuncionarioDetalhePage({ params }: Params) {
       asosIniciais={asosComNome}
       contratosIniciais={contratosComNome}
       clientes={clientes ?? []}
+      podeExcluirDocumento={podeExcluirDocumento}
     />
   );
 }

@@ -20,7 +20,7 @@ export default async function FuncionariosPage() {
   const [{ data: funcionarios }, { data: clientes }, { data: asos }] = await Promise.all([
     svc.from("funcionarios").select("*, clientes(nome)").order("criado_em", { ascending: false }),
     svc.from("clientes").select("id, nome").eq("ativo", true).order("nome"),
-    svc.from("funcionario_asos").select("funcionario_id, data_exame").order("data_exame", { ascending: false }),
+    svc.from("funcionario_asos").select("funcionario_id, data_exame").is("excluido_em", null).order("data_exame", { ascending: false }),
   ]);
 
   // Filtro da listagem só deve oferecer empresas com funcionário cadastrado (evita uma

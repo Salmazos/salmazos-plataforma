@@ -24,6 +24,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     .from("funcionario_asos")
     .select("*")
     .eq("funcionario_id", id)
+    .is("excluido_em", null)
     .order("data_exame", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
