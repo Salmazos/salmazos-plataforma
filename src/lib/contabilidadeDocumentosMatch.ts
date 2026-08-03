@@ -44,7 +44,13 @@ export function normalizar(texto: string): string {
   return texto
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
-    .toUpperCase();
+    .toUpperCase()
+    // Nomes reais da contabilidade variam o separador entre palavras (espaço, "_", "-")
+    // sem padrão — ex.: "TERMO_DE_RESPONSABILIDADE_POLIANA.pdf" não batia com a chave
+    // "TERMO DE RESPONSABILIDADE" antes desta normalização (confirmado com nome de
+    // arquivo real). Trata os três como equivalentes antes de comparar.
+    .replace(/[_-]/g, " ")
+    .replace(/\s+/g, " ");
 }
 
 // Retorna o tipo sugerido pelo nome do arquivo, OU null quando a sugestão não é confiável

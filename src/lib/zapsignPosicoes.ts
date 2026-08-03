@@ -21,10 +21,11 @@ import type { TipoDocumentoContabilidade } from "./contabilidadeDocumentosMatch"
 // aqui". Reversível: se um caso real futuro não bater com essas posições, remedir contra o
 // novo caso e atualizar esta tabela — não há fallback automático de recalibração.
 //
-// Os 3 documentos opcionais (Ficha de IR, Salário Família, Termo de Responsabilidade)
-// nunca chegam a consultar esta tabela — são bloqueados antes, no ponto de entrega (ver
-// bloqueio de segurança em api/admissoes/[id]/documentos-contabilidade/montar-enviar/
-// route.ts), porque sua estrutura de página nunca foi mapeada com um caso real.
+// Ficha de IR, Salário Família e Termo de Responsabilidade — calibrados contra um segundo
+// caso real (candidata POLIANA PATRICIA GONCALVES DOS SANTOS, sandbox ZapSign, 2026-08),
+// já que o caso da Eliane não tinha nenhum dos 3 (opcionais, dependem do que a
+// contabilidade efetivamente manda). Estrutura mais simples que os 4 obrigatórios: 1
+// página cada, só o candidato assina (a empresa não tem nada a assinar nesses 3).
 
 export type TipoMarcaPagina = "assinatura" | "rubrica";
 
@@ -48,22 +49,22 @@ export interface PosicaoPagina {
 // página absoluta é o chamador (ver montar-enviar/route.ts).
 export const POSICOES_POR_TIPO_DOCUMENTO: Partial<Record<TipoDocumentoContabilidade, PosicaoPagina[]>> = {
   ficha_registro: [
-    { tipo: "assinatura", contratado: { relative_position_left: 39.0, relative_position_bottom: 19.4 } },
+    { tipo: "assinatura", contratado: { relative_position_left: 39.0, relative_position_bottom: 21.9 } },
   ],
   modelo_contrato: [
     { tipo: "rubrica" },
     { tipo: "rubrica" },
     {
       tipo: "assinatura",
-      contratante: { relative_position_left: 39.94, relative_position_bottom: 61.88 },
-      contratado: { relative_position_left: 44.96, relative_position_bottom: 52.13 },
+      contratante: { relative_position_left: 39.94, relative_position_bottom: 64.38 },
+      contratado: { relative_position_left: 44.96, relative_position_bottom: 54.63 },
     },
   ],
   acordo_hs_vt: [
     {
       tipo: "assinatura",
-      contratante: { relative_position_left: 5.06, relative_position_bottom: 28.8 },
-      contratado: { relative_position_left: 5.06, relative_position_bottom: 40.1 },
+      contratante: { relative_position_left: 5.06, relative_position_bottom: 31.3 },
+      contratado: { relative_position_left: 5.06, relative_position_bottom: 42.6 },
     },
     {
       tipo: "assinatura",
@@ -75,8 +76,17 @@ export const POSICOES_POR_TIPO_DOCUMENTO: Partial<Record<TipoDocumentoContabilid
     { tipo: "rubrica" },
     {
       tipo: "assinatura",
-      contratante: { relative_position_left: 5.0, relative_position_bottom: 25.04 },
-      contratado: { relative_position_left: 50.24, relative_position_bottom: 31.78 },
+      contratante: { relative_position_left: 5.0, relative_position_bottom: 27.54 },
+      contratado: { relative_position_left: 50.24, relative_position_bottom: 34.28 },
     },
+  ],
+  ficha_ir: [
+    { tipo: "assinatura", contratado: { relative_position_left: 25.0, relative_position_bottom: 56.0 } },
+  ],
+  salario_familia: [
+    { tipo: "assinatura", contratado: { relative_position_left: 40.0, relative_position_bottom: 73.5 } },
+  ],
+  termo_responsabilidade: [
+    { tipo: "assinatura", contratado: { relative_position_left: 27.0, relative_position_bottom: 24.0 } },
   ],
 };

@@ -68,38 +68,15 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
-  // ── Bloqueio de segurança: Ficha de IR, Salário Família e Termo de Responsabilidade ──
-  // Diferente dos 4 documentos fixos (mapeados com um caso real assinado pela Eliane, ver
-  // lib/pdfAnchors.ts), a estrutura de página desses 3 opcionais nunca foi confirmada —
-  // não se sabe se têm linha de assinatura própria, em que página, nem se o texto-âncora
-  // usado hoje ("CEDENTE OU CONTRATADA"/"SALMAZOS" pro contratante, nome do candidato/
-  // "CONTRATADO" pro contratado) aparece neles. Sem confirmação, uma página desses
-  // documentos pode: (a) não ter âncora nenhuma e cair no fallback de rubrica genérica
-  // (posição pode não fazer sentido no layout real do documento), ou pior, (b) ter algum
-  // texto que bata por acidente com os padrões acima e receba uma assinatura posicionada
-  // errado. Por isso o envio automático via ZapSign é recusado sempre que o pacote
-  // detectado incluir qualquer um dos 3 — a contabilidade continua podendo enviar por
-  // aqui, só que via Clicksign (fluxo manual, rubrica em todas as páginas, sem
-  // posicionamento por coordenada — ver lib/clicksign.ts, mantido intacto desde antes da
-  // migração pra ZapSign). Remover este bloqueio exige mapear a estrutura real desses 3
-  // tipos com um caso real assinado, do mesmo jeito que foi feito pros outros 4.
+  // Ficha de IR, Salário Família e Termo de Responsabilidade agora têm posição calibrada
+  // igual aos 4 obrigatórios (ver lib/zapsignPosicoes.ts, caso real da Poliana) — não
+  // bloqueiam mais o envio automático via ZapSign. `tiposOpcionaisPresentes` só serve pra
+  // registrar na auditoria quais opcionais entraram no pacote (usado também no fallback
+  // manual pra Clicksign, que continua disponível via `forcarClicksign` como opção geral,
+  // não mais como gatilho automático desses 3 tipos).
   const tiposOpcionaisPresentes = DOCUMENTOS_CONTABILIDADE.filter(
     (d) => !d.obrigatorio && docsPorTipo.has(d.tipo_documento)
   );
-  if (tiposOpcionaisPresentes.length > 0 && !forcarClicksign) {
-    const labelsOpcionais = tiposOpcionaisPresentes.map((d) => d.label);
-    return NextResponse.json(
-      {
-        error:
-          `Este pacote inclui ${labelsOpcionais.join(", ")} — o posicionamento automático desses ` +
-          `documentos ainda não foi validado. Use o fluxo manual (Clicksign) para este caso até a ` +
-          `estrutura ser mapeada.`,
-        bloqueadoEstruturaNaoMapeada: true,
-        documentosOpcionaisPresentes: labelsOpcionais,
-      },
-      { status: 409 }
-    );
-  }
 
   // ── Contratante: analista logado (se diretor) ou diretor delegado ───────────────────
   // ASSUNÇÃO DE NEGÓCIO CONFIRMADA COM O NEGÓCIO: só quem tem cargo de diretoria

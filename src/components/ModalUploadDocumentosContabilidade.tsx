@@ -5,8 +5,8 @@ import {
   DOCUMENTOS_CONTABILIDADE,
   documentosObrigatorios,
   inferirTipoDocumentoContabilidade,
-  detectarConflitosDeTipo,
   type TipoDocumentoContabilidade,
+  type DocumentoObrigatoriedade,
 } from "@/lib/contabilidadeDocumentosMatch";
 import type { AdmissaoDocumentoContabilidade } from "@/types";
 
@@ -20,14 +20,22 @@ interface Props {
   onEnviado: () => void;
 }
 
-interface StagedItem {
-  id: string;
+// Linha de confirmação exibida quando o keyword-matching (contabilidadeDocumentosMatch.ts)
+// diverge do tipo esperado pela linha em que o arquivo foi solto, ou não reconhece o
+// arquivo — nunca decide "no escuro", sempre pede confirmação explícita antes de subir.
+interface ConfirmacaoPendente {
+  tipoLinha: TipoDocumentoContabilidade;
+  tipoDetectado: TipoDocumentoContabilidade | null;
   file: File;
-  tipo: TipoDocumentoContabilidade | "";
-  erro?: string;
 }
 
+type StatusLinha = "locked" | "pending" | "uploading" | "done" | "pulado";
+
 const TAMANHO_MAX = 15 * 1024 * 1024; // 15MB
+
+function labelDoTipo(tipo: TipoDocumentoContabilidade): string {
+  return DOCUMENTOS_CONTABILIDADE.find((d) => d.tipo_documento === tipo)?.label ?? tipo;
+}
 
 async function enviarArquivoContabilidade(
   admissaoId: string,
@@ -64,14 +72,18 @@ async function enviarArquivoContabilidade(
   }
 }
 
-// Upload em lote + conferência dos 7 documentos que a contabilidade prepara (Ficha de
-// Registro, Modelo Contrato, Acordo de HS/Decl VT, Termo LGPD, Ficha de IR, Salário
-// Família, Termo de Responsabilidade) — identificação automática por nome do arquivo,
-// sempre editável antes de enviar (nunca decide "no escuro": arquivo não identificado ou
-// duplicado força escolha manual). A lista SEMPRE mostra os 7 tipos; só os 4 primeiros
-// (Ficha de Registro, Modelo Contrato, Acordo de HS/Decl VT, Termo LGPD) são obrigatórios
-// — os outros 3 são opcionais em qualquer cenário, dependem só do que a contabilidade
-// efetivamente mandar (não há gate por dependente_ir/dependente_salario_familia aqui).
+// Upload SEQUENCIAL, uma linha por vez, dos 7 documentos que a contabilidade prepara
+// (Ficha de Registro, Modelo Contrato, Acordo de HS/Decl VT, Termo LGPD, Ficha de IR,
+// Salário Família, Termo de Responsabilidade) — substituiu o antigo botão único de
+// seleção múltipla (risco de upload errado/fora de ordem com lotes grandes). Os 4
+// primeiros (obrigatórios) só destravam um de cada vez, na ordem fixa da lista; os 3
+// últimos (opcionais) destravam todos juntos assim que os 4 obrigatórios estiverem
+// prontos, e cada um pode ser enviado ou explicitamente "pulado" (sem gate por
+// dependente_ir/dependente_salario_familia — depende só do que a contabilidade mandar).
+// O keyword-matching (contabilidadeDocumentosMatch.ts) deixou de ser detecção em lote e
+// virou CONFIRMAÇÃO por linha: ao soltar um arquivo numa linha específica, comparamos o
+// tipo detectado pelo nome com o tipo esperado da linha — só pedimos confirmação extra
+// quando diverge ou não reconhece; nunca decide "no escuro".
 // Etapa 1 = upload/conferência; etapa 2 = validação de completude dos 4 fixos + confirmação
 // de nome/e-mail antes de montar o PDF final e enviar pra assinatura eletrônica — mesmo
 // padrão de revisão-antes-de-disparar-algo-irreversível do ModalAssinaturaEletronica.
@@ -86,13 +98,18 @@ export default function ModalUploadDocumentosContabilidade({
 }: Props) {
   const [etapa, setEtapa] = useState<1 | 2>(1);
   const [documentos, setDocumentos] = useState<AdmissaoDocumentoContabilidade[]>(documentosIniciais);
-  const [staged, setStaged] = useState<StagedItem[]>([]);
-  const [enviandoStaged, setEnviandoStaged] = useState(false);
-  const [erroStaged, setErroStaged] = useState("");
+  const [puladas, setPuladas] = useState<Set<TipoDocumentoContabilidade>>(new Set());
+  const [enviandoTipo, setEnviandoTipo] = useState<TipoDocumentoContabilidade | null>(null);
+  const [erroPorTipo, setErroPorTipo] = useState<Partial<Record<TipoDocumentoContabilidade, string>>>({});
+  const [confirmacaoPendente, setConfirmacaoPendente] = useState<ConfirmacaoPendente | null>(null);
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [enviandoFinal, setEnviandoFinal] = useState(false);
   const [erroFinal, setErroFinal] = useState("");
+  // Fallback manual — opção geral, não mais amarrada aos 3 opcionais (que já têm posição
+  // calibrada, ver lib/zapsignPosicoes.ts). Continua disponível pra qualquer pacote, caso
+  // algum problema pontual com a ZapSign exija o fluxo antigo.
+  const [usarClicksignManual, setUsarClicksignManual] = useState(false);
 
   // Ver bloqueio de segurança em montar-enviar/route.ts: só quem tem cargo de diretoria
   // pode assinar pela empresa via ZapSign — quem não é diretor precisa escolher um
@@ -106,14 +123,17 @@ export default function ModalUploadDocumentosContabilidade({
     if (!isOpen) return;
     setEtapa(1);
     setDocumentos(documentosIniciais);
-    setStaged([]);
-    setErroStaged("");
+    setPuladas(new Set());
+    setEnviandoTipo(null);
+    setErroPorTipo({});
+    setConfirmacaoPendente(null);
     setNome(nomeInicial);
     setEmail(emailInicial);
     setErroFinal("");
     setSouDiretor(null);
     setDiretores([]);
     setDiretorSelecionadoId("");
+    setUsarClicksignManual(false);
   }, [isOpen, documentosIniciais, nomeInicial, emailInicial]);
 
   useEffect(() => {
@@ -131,18 +151,35 @@ export default function ModalUploadDocumentosContabilidade({
 
   if (!isOpen) return null;
 
-  const conflitosStaged = detectarConflitosDeTipo(staged.map((s) => ({ id: s.id, tipo: s.tipo || null })));
-  const podeEnviarStaged = staged.length > 0 && staged.every((s) => s.tipo !== "" && !conflitosStaged.has(s.id));
-
   const listaCompleta = documentosObrigatorios();
   const faltando = listaCompleta.filter((d) => d.obrigatorio && !documentos.some((doc) => doc.tipo_documento === d.tipo_documento));
   const labelsFaltando = faltando.map((d) => d.label);
   const podeEnviarFinal = faltando.length === 0 && nome.trim().length > 0 && email.trim().length > 0;
 
-  // Ver bloqueio de segurança em montar-enviar/route.ts: Ficha de IR, Salário Família e
-  // Termo de Responsabilidade nunca tiveram a estrutura de página confirmada pra ZapSign
-  // (diferente dos 4 fixos, mapeados com um caso real assinado) — se algum desses 3 está
-  // no pacote, o backend recusa o envio automático e só aceita via Clicksign manual.
+  const estaConfirmado = (tipo: TipoDocumentoContabilidade) => documentos.some((doc) => doc.tipo_documento === tipo);
+  const obrigatoriosOk = listaCompleta.filter((d) => d.obrigatorio).every((d) => estaConfirmado(d.tipo_documento));
+  const opcionaisResolvidos = listaCompleta
+    .filter((d) => !d.obrigatorio)
+    .every((d) => estaConfirmado(d.tipo_documento) || puladas.has(d.tipo_documento));
+  const podeAvancarEtapa1 = obrigatoriosOk && opcionaisResolvidos;
+
+  // Trava sequencial: obrigatório só destrava depois do obrigatório anterior confirmado;
+  // opcional só destrava depois que TODOS os obrigatórios estiverem prontos (os 3 opcionais
+  // entre si não têm ordem entre si — "liberados em bloco").
+  function statusLinha(def: DocumentoObrigatoriedade, index: number): StatusLinha {
+    if (estaConfirmado(def.tipo_documento)) return "done";
+    if (puladas.has(def.tipo_documento)) return "pulado";
+    if (enviandoTipo === def.tipo_documento) return "uploading";
+    if (def.obrigatorio) {
+      const anteriores = listaCompleta.slice(0, index).filter((d) => d.obrigatorio);
+      const anterioresOk = anteriores.every((d) => estaConfirmado(d.tipo_documento));
+      return anterioresOk ? "pending" : "locked";
+    }
+    return obrigatoriosOk ? "pending" : "locked";
+  }
+
+  // Os 7 tipos já têm posição calibrada na tabela fixa (ver lib/zapsignPosicoes.ts) — só
+  // informativo agora, não bloqueia mais nada.
   const opcionaisPresentes = listaCompleta.filter(
     (d) => !d.obrigatorio && documentos.some((doc) => doc.tipo_documento === d.tipo_documento)
   );
@@ -150,7 +187,7 @@ export default function ModalUploadDocumentosContabilidade({
 
   // Seletor de "quem assina pela empresa" só importa no caminho ZapSign (o fallback
   // Clicksign não tem signatário pela empresa) e só quando o operador não é diretor.
-  const usaZapSign = opcionaisPresentes.length === 0;
+  const usaZapSign = !usarClicksignManual;
   const precisaSelecionarContratante = usaZapSign && souDiretor === false;
   const semDiretorDisponivel = precisaSelecionarContratante && diretores.length === 0;
   const podeEnviarFinalComContratante =
@@ -158,52 +195,54 @@ export default function ModalUploadDocumentosContabilidade({
     souDiretor !== null &&
     (!precisaSelecionarContratante || (!semDiretorDisponivel && diretorSelecionadoId !== ""));
 
-  const handleSelecionar = (files: FileList) => {
-    setErroStaged("");
-    const novos: StagedItem[] = [];
-    for (const file of Array.from(files)) {
-      if (file.size > TAMANHO_MAX) {
-        setErroStaged(`"${file.name}" é maior que 15MB.`);
-        continue;
-      }
-      novos.push({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        file,
-        tipo: inferirTipoDocumentoContabilidade(file.name) ?? "",
-      });
-    }
-    setStaged((prev) => [...prev, ...novos]);
-  };
-
-  const handleRemoverStaged = (id: string) => setStaged((prev) => prev.filter((s) => s.id !== id));
-
-  const handleTipoChange = (id: string, novoTipo: TipoDocumentoContabilidade | "") =>
-    setStaged((prev) => prev.map((s) => (s.id === id ? { ...s, tipo: novoTipo } : s)));
-
-  const handleEnviarStaged = async () => {
-    setErroStaged("");
-    setEnviandoStaged(true);
-    const restantes: StagedItem[] = [];
-    for (const item of staged) {
-      if (!item.tipo) { restantes.push(item); continue; }
-      const resultado = await enviarArquivoContabilidade(admissaoId, item.tipo, item.file);
-      if (!resultado.ok) {
-        restantes.push({ ...item, erro: resultado.erro });
-        continue;
-      }
-      const tipoEnviado = item.tipo;
+  const processarUploadLinha = async (tipo: TipoDocumentoContabilidade, file: File) => {
+    setErroPorTipo((prev) => {
+      const next = { ...prev };
+      delete next[tipo];
+      return next;
+    });
+    setEnviandoTipo(tipo);
+    const resultado = await enviarArquivoContabilidade(admissaoId, tipo, file);
+    if (!resultado.ok) {
+      setErroPorTipo((prev) => ({ ...prev, [tipo]: resultado.erro }));
+    } else {
       setDocumentos((prev) => {
-        const semEsseTipo = prev.filter((d) => d.tipo_documento !== tipoEnviado);
+        const semEsseTipo = prev.filter((d) => d.tipo_documento !== tipo);
         return [
           ...semEsseTipo,
-          { id: `local-${tipoEnviado}`, admissao_id: admissaoId, tipo_documento: tipoEnviado, storage_path: "", criado_em: new Date().toISOString() },
+          { id: `local-${tipo}`, admissao_id: admissaoId, tipo_documento: tipo, storage_path: "", criado_em: new Date().toISOString() },
         ];
       });
+      setPuladas((prev) => {
+        if (!prev.has(tipo)) return prev;
+        const next = new Set(prev);
+        next.delete(tipo);
+        return next;
+      });
     }
-    setStaged(restantes);
-    setEnviandoStaged(false);
-    if (restantes.some((r) => r.erro)) setErroStaged("Alguns arquivos não puderam ser enviados — veja o erro em cada linha.");
+    setEnviandoTipo(null);
   };
+
+  // Keyword-matching agora só CONFIRMA — roda contra o único arquivo desta linha e compara
+  // com o tipo esperado dela. Bateu = segue direto; não bateu ou não reconheceu = pede
+  // confirmação explícita antes de subir (ver modal de confirmação no JSX).
+  const handleSelecionarParaLinha = (def: DocumentoObrigatoriedade, files: FileList) => {
+    const file = files[0];
+    if (!file) return;
+    if (file.size > TAMANHO_MAX) {
+      setErroPorTipo((prev) => ({ ...prev, [def.tipo_documento]: `"${file.name}" é maior que 15MB.` }));
+      return;
+    }
+    const detectado = inferirTipoDocumentoContabilidade(file.name);
+    if (detectado === def.tipo_documento) {
+      processarUploadLinha(def.tipo_documento, file);
+    } else {
+      setConfirmacaoPendente({ tipoLinha: def.tipo_documento, tipoDetectado: detectado, file });
+    }
+  };
+
+  const handlePular = (tipo: TipoDocumentoContabilidade) =>
+    setPuladas((prev) => new Set(prev).add(tipo));
 
   const handleMontarEnviar = async (forcarClicksign: boolean) => {
     if (!podeEnviarFinalComContratante) return;
@@ -250,90 +289,123 @@ export default function ModalUploadDocumentosContabilidade({
         {etapa === 1 && (
           <div className="p-6 space-y-4">
             <div className="rounded-lg p-3 text-xs" style={{ background: "#F3F4F6", color: "#374151" }}>
-              Envie aqui os PDFs individuais que a contabilidade preparou (Ficha de Registro, Modelo Contrato, etc). O
-              tipo de cada arquivo é sugerido automaticamente pelo nome — confira e corrija antes de enviar.
+              Envie um PDF por vez, na ordem das linhas abaixo. Os 4 primeiros são obrigatórios e destravam em
+              sequência; os 3 últimos liberam juntos depois e podem ser enviados ou pulados.
             </div>
 
-            <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Os 7 documentos possíveis</p>
-              <div className="space-y-1">
-                {listaCompleta.map((d, index) => {
-                  const confirmado = documentos.some((doc) => doc.tipo_documento === d.tipo_documento);
-                  const status = confirmado
-                    ? { texto: "✅ Enviado", cor: "#16A34A" }
-                    : d.obrigatorio
+            <div className="space-y-2">
+              {listaCompleta.map((d, index) => {
+                const status = statusLinha(d, index);
+                const statusInfo: Record<StatusLinha, { texto: string; cor: string }> = {
+                  locked: {
+                    texto: d.obrigatorio ? "⏳ Aguardando documento anterior" : "⏳ Aguardando obrigatórios",
+                    cor: "#9CA3AF",
+                  },
+                  pending: d.obrigatorio
                     ? { texto: "⚠️ Pendente", cor: "#DC2626" }
-                    : { texto: "— Opcional (não enviado)", cor: "#9CA3AF" };
-                  return (
-                    <div key={d.tipo_documento} className="flex items-center justify-between gap-2 text-sm py-1 border-b border-gray-50">
+                    : { texto: "— Opcional (envie ou pule)", cor: "#B45309" },
+                  uploading: { texto: "Enviando...", cor: "#2563EB" },
+                  done: { texto: "✅ Enviado", cor: "#16A34A" },
+                  pulado: { texto: "— Pulado", cor: "#9CA3AF" },
+                };
+                const info = statusInfo[status];
+                return (
+                  <div
+                    key={d.tipo_documento}
+                    className="border border-gray-200 rounded-lg p-3"
+                    style={status === "locked" ? { opacity: 0.6 } : undefined}
+                  >
+                    <div className="flex items-center justify-between gap-2 text-sm">
                       <span className="text-gray-700">
                         <span className="text-gray-400">{index + 1}.</span> {d.label}
                         {!d.obrigatorio && <span className="text-gray-400"> (opcional)</span>}
                       </span>
-                      <span style={{ color: status.cor, fontWeight: 600, whiteSpace: "nowrap" }}>{status.texto}</span>
+                      <span style={{ color: info.cor, fontWeight: 600, whiteSpace: "nowrap" }}>{info.texto}</span>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
 
-            <div>
-              <label className="btn-outline inline-block cursor-pointer text-center w-full">
-                + Selecionar arquivos PDF
-                <input
-                  type="file" accept="application/pdf" multiple className="hidden"
-                  onChange={(e) => { if (e.target.files && e.target.files.length > 0) handleSelecionar(e.target.files); e.target.value = ""; }}
-                />
-              </label>
-            </div>
+                    {(status === "pending" || status === "pulado") && (
+                      <div className="flex items-center gap-3 mt-2">
+                        <label className="btn-outline text-xs cursor-pointer inline-block px-3 py-1.5">
+                          {status === "pulado" ? "Enviar arquivo" : "Selecionar arquivo PDF"}
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files.length > 0) handleSelecionarParaLinha(d, e.target.files);
+                              e.target.value = "";
+                            }}
+                          />
+                        </label>
+                        {!d.obrigatorio && status === "pending" && (
+                          <button
+                            onClick={() => handlePular(d.tipo_documento)}
+                            className="text-xs"
+                            style={{ color: "#9CA3AF" }}
+                          >
+                            Pular
+                          </button>
+                        )}
+                      </div>
+                    )}
 
-            {staged.length > 0 && (
-              <div className="space-y-2">
-                {staged.map((item) => (
-                  <div key={item.id} className="border border-gray-200 rounded-lg p-3" style={conflitosStaged.has(item.id) ? { borderColor: "#FCA5A5", background: "#FEF2F2" } : undefined}>
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="text-xs text-gray-600 truncate flex-1" title={item.file.name}>{item.file.name}</span>
-                      <button onClick={() => handleRemoverStaged(item.id)} className="text-xs" style={{ color: "#DC2626" }}>Remover</button>
-                    </div>
-                    <select
-                      value={item.tipo}
-                      onChange={(e) => handleTipoChange(item.id, e.target.value as TipoDocumentoContabilidade | "")}
-                      className="input-field text-sm"
-                    >
-                      <option value="">Selecione o tipo do documento...</option>
-                      {DOCUMENTOS_CONTABILIDADE.map((def) => (
-                        <option key={def.tipo_documento} value={def.tipo_documento}>{def.label}</option>
-                      ))}
-                    </select>
-                    {conflitosStaged.has(item.id) && (
-                      <p className="text-xs mt-1" style={{ color: "#DC2626" }}>
-                        ⚠️ Mais de um arquivo deste lote está marcado com o mesmo tipo — corrija antes de enviar.
-                      </p>
+                    {erroPorTipo[d.tipo_documento] && (
+                      <p className="text-xs mt-2" style={{ color: "#DC2626" }}>{erroPorTipo[d.tipo_documento]}</p>
                     )}
-                    {!item.tipo && !conflitosStaged.has(item.id) && (
-                      <p className="text-xs mt-1" style={{ color: "#B45309" }}>
-                        Não foi possível identificar o tipo pelo nome do arquivo — selecione manualmente.
-                      </p>
-                    )}
-                    {item.erro && <p className="text-xs mt-1" style={{ color: "#DC2626" }}>{item.erro}</p>}
                   </div>
-                ))}
-                <button
-                  onClick={handleEnviarStaged}
-                  disabled={!podeEnviarStaged || enviandoStaged}
-                  className="btn-primary w-full"
-                  style={{ opacity: !podeEnviarStaged || enviandoStaged ? 0.5 : 1 }}
-                >
-                  {enviandoStaged ? "Enviando..." : `Enviar ${staged.length} arquivo${staged.length > 1 ? "s" : ""}`}
-                </button>
-              </div>
-            )}
-
-            {erroStaged && <p className="text-xs" style={{ color: "#DC2626" }}>{erroStaged}</p>}
+                );
+              })}
+            </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
               <button onClick={onClose} className="btn-outline">Cancelar</button>
-              <button onClick={() => setEtapa(2)} className="btn-primary">Avançar</button>
+              <button
+                onClick={() => setEtapa(2)}
+                disabled={!podeAvancarEtapa1}
+                className="btn-primary"
+                style={{ opacity: !podeAvancarEtapa1 ? 0.5 : 1 }}
+              >
+                Avançar
+              </button>
+            </div>
+          </div>
+        )}
+
+        {confirmacaoPendente && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+            onClick={() => setConfirmacaoPendente(null)}
+          >
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+              <p className="text-sm text-gray-800 mb-2">
+                {confirmacaoPendente.tipoDetectado ? (
+                  <>
+                    Este arquivo parece ser <strong>&quot;{labelDoTipo(confirmacaoPendente.tipoDetectado)}&quot;</strong>, mas
+                    você está enviando como <strong>&quot;{labelDoTipo(confirmacaoPendente.tipoLinha)}&quot;</strong>. Confirma
+                    mesmo assim?
+                  </>
+                ) : (
+                  <>
+                    Não conseguimos identificar que tipo de documento é este arquivo. Confirma que é o{" "}
+                    <strong>&quot;{labelDoTipo(confirmacaoPendente.tipoLinha)}&quot;</strong>?
+                  </>
+                )}
+              </p>
+              <p className="text-xs text-gray-500 mb-4 truncate" title={confirmacaoPendente.file.name}>
+                Arquivo: {confirmacaoPendente.file.name}
+              </p>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setConfirmacaoPendente(null)} className="btn-outline">Cancelar</button>
+                <button
+                  onClick={() => {
+                    processarUploadLinha(confirmacaoPendente.tipoLinha, confirmacaoPendente.file);
+                    setConfirmacaoPendente(null);
+                  }}
+                  className="btn-primary"
+                >
+                  Confirmar mesmo assim
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -350,11 +422,17 @@ export default function ModalUploadDocumentosContabilidade({
               </div>
             )}
 
-            {opcionaisPresentes.length > 0 ? (
+            {opcionaisPresentes.length > 0 && (
+              <div className="rounded-lg p-3 text-xs font-semibold" style={{ background: "#EFF6FF", color: "#1E40AF" }}>
+                ℹ️ Este pacote inclui {labelsOpcionaisPresentes.join(", ")} — posição já calibrada, será assinado
+                normalmente junto com o resto.
+              </div>
+            )}
+
+            {usarClicksignManual ? (
               <div className="rounded-lg p-3 text-xs font-semibold" style={{ background: "#FEF3C7", color: "#92400E" }}>
-                ⚠️ Este pacote inclui {labelsOpcionaisPresentes.join(", ")} — o posicionamento automático desses
-                documentos ainda não foi validado. Use o fluxo manual (Clicksign) para este caso até a estrutura ser
-                mapeada.
+                ⚠️ Fluxo manual selecionado — o candidato receberá um e-mail da Clicksign, com rubrica em todas as
+                páginas (sem posicionamento por coordenada).
               </div>
             ) : (
               <div className="rounded-lg p-3 text-xs font-semibold" style={{ background: "#FEF3C7", color: "#92400E" }}>
@@ -362,6 +440,15 @@ export default function ModalUploadDocumentosContabilidade({
                 Confirme os dados antes de continuar.
               </div>
             )}
+
+            <label className="flex items-center gap-2 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                checked={usarClicksignManual}
+                onChange={(e) => setUsarClicksignManual(e.target.checked)}
+              />
+              Usar o fluxo manual (Clicksign) em vez da ZapSign
+            </label>
 
             {usaZapSign && carregandoAssinantes && (
               <div className="rounded-lg p-3 text-xs" style={{ background: "#F3F4F6", color: "#374151" }}>
@@ -406,7 +493,7 @@ export default function ModalUploadDocumentosContabilidade({
 
             <div className="flex justify-between gap-2 pt-2 border-t border-gray-100">
               <button onClick={() => setEtapa(1)} className="btn-outline">Voltar</button>
-              {opcionaisPresentes.length > 0 ? (
+              {usarClicksignManual ? (
                 <button
                   onClick={() => handleMontarEnviar(true)}
                   disabled={!podeEnviarFinal || enviandoFinal}
