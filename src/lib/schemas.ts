@@ -610,11 +610,6 @@ export const admissaoDocumentoContabilidadeConfirmarSchema = z.object({
 export const admissaoContabilidadeMontarEnviarSchema = z.object({
   nomeCandidato: z.string().trim().min(1),
   emailCandidato: z.string().email(),
-  // Ver bloqueio de segurança em montar-enviar/route.ts: quando o pacote inclui Ficha de
-  // IR, Salário Família ou Termo de Responsabilidade (estrutura de página não mapeada
-  // pra ZapSign), o envio automático é recusado a menos que o analista confirme
-  // explicitamente o fallback manual pra Clicksign marcando essa flag.
-  forcarClicksign: z.boolean().optional().default(false),
   // id (analistas_perfil.id) do diretor escolhido pra assinar como Contratante, quando
   // quem está processando a admissão não tem cargo de diretoria (ver ehCargoDiretoria em
   // lib/admissaoAuth.ts). Ignorado quando o próprio operador já é diretor. Sempre
