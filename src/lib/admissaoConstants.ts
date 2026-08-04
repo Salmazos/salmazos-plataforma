@@ -87,12 +87,22 @@ export const ENDERECO_FISCAL_SALMAZOS = "Rua Paineira, nº209 – Parque Figueir
 export const NOTA_HEIC_IPHONE =
   "📱 Se você usa iPhone: vá em Ajustes → Câmera → Formatos → selecione \"Mais Compatível\" para enviar fotos em JPEG e evitar problemas de compatibilidade.";
 
-// Orientação de enquadramento pra foto 3x4 — texto único reaproveitado tanto na tela de
-// captura mobile (CapturaComEnquadramento) quanto no fallback de upload comum do desktop
-// (PassoUploadDocumentos), pra quem envia pelo caminho sem câmera guiada não perder o
-// mesmo alerta de "não reenvie uma 3x4 impressa antiga".
-export const ORIENTACAO_FOTO_3X4 =
-  "📸 Tire uma selfie com fundo neutro, ou peça para alguém tirar uma foto sua. Enquadramento de rosto e ombros (padrão 3x4) — do peito para cima.";
+// Orientação de enquadramento pra foto 3x4 — partida em frase principal/complemento pra
+// permitir hierarquia visual (negrito vs. discreto) no bloco de destaque do card desktop
+// (PassoUploadDocumentos), sem duplicar o texto. ORIENTACAO_FOTO_3X4 é a junção das duas,
+// reaproveitada como parágrafo único na tela de captura mobile (CapturaComEnquadramento),
+// que não tem essa distinção visual.
+export const ORIENTACAO_FOTO_3X4_PRINCIPAL =
+  "Tire uma selfie com fundo neutro, ou peça para alguém tirar uma foto sua.";
+export const ORIENTACAO_FOTO_3X4_COMPLEMENTO =
+  "Enquadramento de rosto e ombros (padrão 3x4) — do peito para cima.";
+export const ORIENTACAO_FOTO_3X4 = `📸 ${ORIENTACAO_FOTO_3X4_PRINCIPAL} ${ORIENTACAO_FOTO_3X4_COMPLEMENTO}`;
+
+// Dica extra (iluminação/filtro) exibida só no bloco de destaque do card desktop, menor e
+// mais discreta que o par principal/complemento acima — não repete "fundo neutro" (já
+// coberto ali).
+export const ORIENTACAO_FOTO_3X4_DICA_EXTRA =
+  "Boa iluminação, olhando diretamente para a câmera. Evite usar filtros.";
 
 export const NOTAS_DOCUMENTO: Record<string, string> = {
   rg:

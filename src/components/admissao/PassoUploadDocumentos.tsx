@@ -6,7 +6,10 @@ import { QRCodeSVG } from "qrcode.react";
 import type { DocumentoToken } from "./AdmissaoFormClient";
 import { cardStyle, infoBoxStyle } from "./styles";
 import { DOCUMENTOS_ADMISSAO, type DocumentoAdmissaoDef } from "@/lib/admissaoDocumentos";
-import { NOTAS_DOCUMENTO, NOTA_HEIC_IPHONE, ORIENTACAO_FOTO_3X4 } from "@/lib/admissaoConstants";
+import {
+  NOTAS_DOCUMENTO, NOTA_HEIC_IPHONE,
+  ORIENTACAO_FOTO_3X4_PRINCIPAL, ORIENTACAO_FOTO_3X4_COMPLEMENTO, ORIENTACAO_FOTO_3X4_DICA_EXTRA,
+} from "@/lib/admissaoConstants";
 import { comprimirImagem } from "@/lib/comprimirImagemCliente";
 import { validarQualidadeImagem } from "@/lib/validarQualidadeImagem";
 import { ENQUADRAMENTO_CONFIG } from "@/lib/enquadramentoConfig";
@@ -182,7 +185,20 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
         </span>
       </div>
 
-      {nota && <p style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.5, margin: "0 0 8px" }}>{nota}</p>}
+      {ofereceHandoffQr ? (
+        <>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "#FFFBEA", border: "1px solid #FDE68A", borderRadius: 10, padding: "10px 12px", marginBottom: 4 }}>
+            <span style={{ fontSize: 22, lineHeight: 1 }}>📸</span>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#92400E", margin: 0, lineHeight: 1.4 }}>{ORIENTACAO_FOTO_3X4_PRINCIPAL}</p>
+              <p style={{ fontSize: 12, fontWeight: 500, color: "#B45309", margin: "2px 0 0", lineHeight: 1.4 }}>{ORIENTACAO_FOTO_3X4_COMPLEMENTO}</p>
+            </div>
+          </div>
+          <p style={{ fontSize: 11, color: "#9CA3AF", margin: "4px 0 10px" }}>{ORIENTACAO_FOTO_3X4_DICA_EXTRA}</p>
+        </>
+      ) : (
+        nota && <p style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.5, margin: "0 0 8px" }}>{nota}</p>
+      )}
 
       <div style={{ ...infoBoxStyle, fontSize: 11, padding: "8px 10px", marginBottom: 10 }}>{NOTA_HEIC_IPHONE}</div>
 
@@ -205,10 +221,7 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
       )}
 
       {ofereceHandoffQr && (
-        <>
-          <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 6px" }}>Sem celular à mão? Você ainda pode enviar um arquivo por aqui:</p>
-          <p style={{ fontSize: 11, color: "#6B7280", lineHeight: 1.5, margin: "0 0 8px" }}>{ORIENTACAO_FOTO_3X4}</p>
-        </>
+        <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 6px" }}>Sem celular à mão? Você ainda pode enviar um arquivo:</p>
       )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
