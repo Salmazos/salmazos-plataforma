@@ -16,6 +16,13 @@ interface Props {
   // caminhos igual a partir daqui (validarQualidadeImagem + comprimirImagem + upload).
   onArquivoEscolhido: (file: File) => void;
   onCancelar: () => void;
+  // true só pra foto 3x4 (retrato_3x4) — some com o botão "Escolher da galeria" na tela
+  // de escolha (evita candidato fotografar uma 3x4 impressa antiga em vez de tirar uma
+  // selfie nova) e mostra a orientação extra abaixo. Os demais tipos (cartão, folha)
+  // continuam com as duas opções normalmente. O fallback pra falha de câmera (input
+  // nativo com capture="environment", ver abrirCamera) NÃO é afetado por essa flag —
+  // continua disponível mesmo pra foto 3x4, só nunca aparece lado a lado em condição normal.
+  ehFoto3x4?: boolean;
 }
 
 // Detecção simples de mobile — decide só se a opção "Usar câmera" aparece. Em desktop
@@ -62,10 +69,13 @@ async function tentarZoomNativo(stream: MediaStream): Promise<boolean> {
 
 // Câmera com moldura semitransparente guiando o enquadramento — reutilizável por
 // qualquer tipo de documento, configurado via proporção/orientação/instrução (ver
-// lib/enquadramentoConfig.ts). Sempre oferece "Escolher da galeria" como alternativa,
-// mesmo quando a câmera funciona normalmente. Se getUserMedia falhar por qualquer
-// motivo (permissão negada, navegador sem suporte, contexto não seguro), cai
-// automaticamente pro <input capture="environment"> nativo, sem travar o candidato.
+// lib/enquadramentoConfig.ts). Oferece "Escolher da galeria" como alternativa em
+// condição normal, mesmo quando a câmera funciona — EXCETO pra foto 3x4 (ehFoto3x4),
+// onde só "Usar câmera" aparece, pra evitar o candidato reenviar uma 3x4 impressa
+// antiga em vez de tirar uma selfie nova. Se getUserMedia falhar por qualquer motivo
+// (permissão negada, navegador sem suporte, contexto não seguro), cai automaticamente
+// pro <input capture="environment"> nativo — esse fallback vale pra TODOS os tipos,
+// inclusive foto 3x4, e nunca trava o candidato.
 export default function CapturaComEnquadramento({
   proporcaoLargura,
   proporcaoAltura,
@@ -74,6 +84,7 @@ export default function CapturaComEnquadramento({
   titulo,
   onArquivoEscolhido,
   onCancelar,
+  ehFoto3x4 = false,
 }: Props) {
   const [isMobile] = useState(detectarMobile);
   const [modo, setModo] = useState<"escolha" | "camera">("escolha");
@@ -253,6 +264,11 @@ export default function CapturaComEnquadramento({
           <p style={{ color: "#fff", marginTop: 16, textAlign: "center", fontWeight: 700, fontSize: 15, textShadow: "0 1px 3px rgba(0,0,0,0.8)" }}>
             {instrucao}
           </p>
+          {ehFoto3x4 && (
+            <p style={{ color: "#fff", marginTop: 4, textAlign: "center", fontWeight: 500, fontSize: 13, textShadow: "0 1px 3px rgba(0,0,0,0.8)" }}>
+              Enquadre rosto e ombros dentro da moldura
+            </p>
+          )}
         </div>
         <div style={{ position: "absolute", bottom: 28, left: 0, right: 0, display: "flex", justifyContent: "center", gap: 16 }}>
           <button
@@ -275,6 +291,13 @@ export default function CapturaComEnquadramento({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <p style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: 0 }}>{titulo}</p>
+      {ehFoto3x4 && isMobile && (
+        <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.5, margin: 0 }}>
+          📸 Tire uma selfie com fundo neutro, ou peça para alguém tirar uma foto sua.
+          <br />
+          Enquadramento de rosto e ombros (padrão 3x4) — do peito para cima.
+        </p>
+      )}
       {isMobile && (
         <button
           type="button"
@@ -285,14 +308,16 @@ export default function CapturaComEnquadramento({
           📷 Usar câmera
         </button>
       )}
-      <button
-        type="button"
-        onClick={() => inputGaleriaRef.current?.click()}
-        data-testid="btn-galeria"
-        className="btn-outline"
-      >
-        {isMobile ? "Escolher da galeria" : "Escolher arquivo"}
-      </button>
+      {!(ehFoto3x4 && isMobile) && (
+        <button
+          type="button"
+          onClick={() => inputGaleriaRef.current?.click()}
+          data-testid="btn-galeria"
+          className="btn-outline"
+        >
+          {isMobile ? "Escolher da galeria" : "Escolher arquivo"}
+        </button>
+      )}
       {erroCamera && <p style={{ fontSize: 12, color: "#B45309" }}>{erroCamera}</p>}
       <button type="button" onClick={onCancelar} style={{ fontSize: 12, color: "#6B7280", background: "none", border: "none" }}>
         Cancelar

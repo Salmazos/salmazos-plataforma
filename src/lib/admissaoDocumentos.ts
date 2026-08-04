@@ -32,7 +32,6 @@ export interface DocumentoAdmissaoDef {
 
 export const DOCUMENTOS_ADMISSAO: DocumentoAdmissaoDef[] = [
   { tipo_documento: "ctps_todas_paginas", label: "Carteira de Trabalho Digital (todas as páginas)", obrigatorio: true, condicional: null, multiArquivo: true },
-  { tipo_documento: "foto_3x4", label: "Foto 3x4", obrigatorio: true, condicional: null, enquadramento: "retrato_3x4" },
   { tipo_documento: "cpf", label: "CPF/CIC", obrigatorio: true, condicional: null, enquadramento: "folha" },
   { tipo_documento: "titulo_eleitor", label: "Título de Eleitor", obrigatorio: true, condicional: null, enquadramento: "folha" },
   { tipo_documento: "cartao_sus", label: "Cartão do SUS", obrigatorio: true, condicional: null, enquadramento: "cartao" },
@@ -49,4 +48,8 @@ export const DOCUMENTOS_ADMISSAO: DocumentoAdmissaoDef[] = [
   { tipo_documento: "cpf_dependentes", label: "CPF dos dependentes", obrigatorio: false, condicional: "dependente", enquadramento: "folha", multiArquivo: true },
   { tipo_documento: "caderneta_vacinacao", label: "Caderneta de Vacinação (filhos < 7 anos)", obrigatorio: false, condicional: "dependente", enquadramento: "folha", multiArquivo: true },
   { tipo_documento: "frequencia_escolar", label: "Comprovante de Frequência Escolar (filhos > 7 anos)", obrigatorio: false, condicional: "dependente", enquadramento: "folha", multiArquivo: true },
+  // Por último de propósito — candidato no desktop só chega na foto (que exige câmera/QR
+  // pro celular, ver PassoUploadDocumentos) depois de já ter enviado os demais documentos
+  // via seletor de arquivo comum, em vez de esbarrar nela logo de cara.
+  { tipo_documento: "foto_3x4", label: "Foto 3x4", obrigatorio: true, condicional: null, enquadramento: "retrato_3x4" },
 ];

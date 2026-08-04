@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import type { DocumentoToken } from "./AdmissaoFormClient";
 import { cardStyle, infoBoxStyle } from "./styles";
 import { DOCUMENTOS_ADMISSAO, type DocumentoAdmissaoDef } from "@/lib/admissaoDocumentos";
@@ -109,6 +110,14 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
   const rejeitado = doc.status === "rejeitado";
   // Moldura só em mobile — desktop segue exatamente como hoje (input de arquivo comum).
   const usaEnquadramento = isMobile && !!def?.enquadramento;
+  // Foto 3x4 pelo desktop não tem câmera guiada disponível (usaEnquadramento é sempre
+  // false aqui) — em vez do seletor de arquivo comum como opção principal (que convida o
+  // candidato a reenviar uma 3x4 impressa antiga), mostra um QR pro mesmo link da
+  // admissão, pro candidato continuar a etapa pelo celular. O link já retoma sozinho
+  // nesta mesma etapa ao reabrir (ver calcularPassoInicial em AdmissaoFormClient) — não
+  // precisa gerar token novo nem sincronizar nada em tempo real.
+  const ofereceHandoffQr = !isMobile && def?.enquadramento === "retrato_3x4";
+  const urlAdmissao = typeof window !== "undefined" ? `${window.location.origin}/admissao/${token}` : "";
 
   const handleFile = async (file: File) => {
     setErro("");
@@ -151,6 +160,7 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
         orientacao={cfg.orientacao}
         instrucao={cfg.instrucaoPadrao}
         titulo={label}
+        ehFoto3x4={def!.enquadramento === "retrato_3x4"}
         onArquivoEscolhido={(file) => { setCapturando(false); handleFile(file); }}
         onCancelar={() => setCapturando(false)}
       />
@@ -181,6 +191,21 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
           <p style={{ fontSize: 12, color: "#991B1B", margin: 0, fontWeight: 600 }}>⚠️ Reenvio necessário</p>
           {doc.motivo_rejeicao && <p style={{ fontSize: 12, color: "#991B1B", margin: "2px 0 0" }}>{doc.motivo_rejeicao}</p>}
         </div>
+      )}
+
+      {ofereceHandoffQr && urlAdmissao && (
+        <div style={{ display: "flex", alignItems: "center", gap: 14, background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10, padding: 12, marginBottom: 10 }}>
+          <QRCodeSVG value={urlAdmissao} size={88} />
+          <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.5, margin: 0 }}>
+            📱 Escaneie este código com a câmera do seu celular para tirar a foto com a
+            qualidade certa. Seu progresso já está salvo — ao abrir no celular, você
+            continuará direto nesta etapa.
+          </p>
+        </div>
+      )}
+
+      {ofereceHandoffQr && (
+        <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 6px" }}>Sem celular à mão? Você ainda pode enviar um arquivo por aqui:</p>
       )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -215,9 +240,9 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
           disabled={enviando || otimizando || verificando}
           style={{
             flex: 1, minHeight: 44, fontSize: 14, fontWeight: 600, borderRadius: 10, cursor: "pointer",
-            border: enviado && !rejeitado ? "1px solid #D1D5DB" : "none",
-            background: enviado && !rejeitado ? "#fff" : "#000",
-            color: enviado && !rejeitado ? "#374151" : "#FFD700",
+            border: ofereceHandoffQr || (enviado && !rejeitado) ? "1px solid #D1D5DB" : "none",
+            background: ofereceHandoffQr || (enviado && !rejeitado) ? "#fff" : "#000",
+            color: ofereceHandoffQr || (enviado && !rejeitado) ? "#374151" : "#FFD700",
             opacity: enviando || otimizando || verificando ? 0.7 : 1,
           }}
         >
@@ -283,6 +308,7 @@ function ArquivoEnviadoLinha({ doc, index, token, onAtualizado, enquadramento, t
         orientacao={cfg.orientacao}
         instrucao={cfg.instrucaoPadrao}
         titulo={titulo}
+        ehFoto3x4={enquadramento === "retrato_3x4"}
         onArquivoEscolhido={(file) => { setCapturando(false); handleFile(file); }}
         onCancelar={() => setCapturando(false)}
       />
@@ -416,6 +442,7 @@ function DocumentoMultiCard({
         orientacao={cfg.orientacao}
         instrucao={cfg.instrucaoPadrao}
         titulo={def.label}
+        ehFoto3x4={def.enquadramento === "retrato_3x4"}
         onArquivoEscolhido={(file) => { setCapturando(false); handleSelecionarArquivos([file]); }}
         onCancelar={() => setCapturando(false)}
       />
