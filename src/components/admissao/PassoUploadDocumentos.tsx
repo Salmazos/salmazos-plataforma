@@ -6,7 +6,7 @@ import { QRCodeSVG } from "qrcode.react";
 import type { DocumentoToken } from "./AdmissaoFormClient";
 import { cardStyle, infoBoxStyle } from "./styles";
 import { DOCUMENTOS_ADMISSAO, type DocumentoAdmissaoDef } from "@/lib/admissaoDocumentos";
-import { NOTAS_DOCUMENTO, NOTA_HEIC_IPHONE } from "@/lib/admissaoConstants";
+import { NOTAS_DOCUMENTO, NOTA_HEIC_IPHONE, ORIENTACAO_FOTO_3X4 } from "@/lib/admissaoConstants";
 import { comprimirImagem } from "@/lib/comprimirImagemCliente";
 import { validarQualidadeImagem } from "@/lib/validarQualidadeImagem";
 import { ENQUADRAMENTO_CONFIG } from "@/lib/enquadramentoConfig";
@@ -194,9 +194,9 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
       )}
 
       {ofereceHandoffQr && urlAdmissao && (
-        <div style={{ display: "flex", alignItems: "center", gap: 14, background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10, padding: 12, marginBottom: 10 }}>
-          <QRCodeSVG value={urlAdmissao} size={88} />
-          <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.5, margin: 0 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14, background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10, padding: 12, marginBottom: 10 }}>
+          <QRCodeSVG value={urlAdmissao} size={200} style={{ flexShrink: 0 }} />
+          <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.5, margin: 0, flex: 1, minWidth: 160 }}>
             📱 Escaneie este código com a câmera do seu celular para tirar a foto com a
             qualidade certa. Seu progresso já está salvo — ao abrir no celular, você
             continuará direto nesta etapa.
@@ -205,7 +205,10 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
       )}
 
       {ofereceHandoffQr && (
-        <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 6px" }}>Sem celular à mão? Você ainda pode enviar um arquivo por aqui:</p>
+        <>
+          <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 6px" }}>Sem celular à mão? Você ainda pode enviar um arquivo por aqui:</p>
+          <p style={{ fontSize: 11, color: "#6B7280", lineHeight: 1.5, margin: "0 0 8px" }}>{ORIENTACAO_FOTO_3X4}</p>
+        </>
       )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

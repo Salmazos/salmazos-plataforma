@@ -87,6 +87,13 @@ export const ENDERECO_FISCAL_SALMAZOS = "Rua Paineira, nº209 – Parque Figueir
 export const NOTA_HEIC_IPHONE =
   "📱 Se você usa iPhone: vá em Ajustes → Câmera → Formatos → selecione \"Mais Compatível\" para enviar fotos em JPEG e evitar problemas de compatibilidade.";
 
+// Orientação de enquadramento pra foto 3x4 — texto único reaproveitado tanto na tela de
+// captura mobile (CapturaComEnquadramento) quanto no fallback de upload comum do desktop
+// (PassoUploadDocumentos), pra quem envia pelo caminho sem câmera guiada não perder o
+// mesmo alerta de "não reenvie uma 3x4 impressa antiga".
+export const ORIENTACAO_FOTO_3X4 =
+  "📸 Tire uma selfie com fundo neutro, ou peça para alguém tirar uma foto sua. Enquadramento de rosto e ombros (padrão 3x4) — do peito para cima.";
+
 export const NOTAS_DOCUMENTO: Record<string, string> = {
   rg:
     "Envie uma imagem nítida e bem iluminada, com o documento inteiro visível, sem cortes.",

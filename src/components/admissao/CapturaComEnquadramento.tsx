@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ORIENTACAO_FOTO_3X4 } from "@/lib/admissaoConstants";
 
 interface Props {
   proporcaoLargura: number;
@@ -89,6 +90,10 @@ export default function CapturaComEnquadramento({
   const [isMobile] = useState(detectarMobile);
   const [modo, setModo] = useState<"escolha" | "camera">("escolha");
   const [erroCamera, setErroCamera] = useState("");
+  // Foto 3x4 é selfie — abre na câmera frontal por padrão. Os demais tipos (RG, CNH,
+  // comprovante) continuam na traseira, que é a que realmente fotografa um documento em
+  // mãos. O botão de alternar (ver JSX do modo "camera") troca isso em qualquer tipo.
+  const [facingMode, setFacingMode] = useState<"user" | "environment">(ehFoto3x4 ? "user" : "environment");
   const videoRef = useRef<HTMLVideoElement>(null);
   const molduraRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -128,7 +133,7 @@ export default function CapturaComEnquadramento({
       // "ideal" é um pedido, não uma exigência — nunca falha por um aparelho não suportar,
       // só usa o máximo que ele tiver disponível.
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
       });
       streamRef.current = stream;
       zoomNativoAplicadoRef.current = await tentarZoomNativo(stream);
@@ -138,6 +143,32 @@ export default function CapturaComEnquadramento({
       // mobile abre a câmera do próprio sistema (sem moldura, mas nunca trava o envio).
       setErroCamera("Não foi possível acessar a câmera — abrindo o seletor do dispositivo.");
       inputFallbackRef.current?.click();
+    }
+  };
+
+  // Botão de "trocar câmera" dentro do modo captura (ver JSX abaixo) — útil tanto pra
+  // foto 3x4 (candidato prefere pedir pra alguém tirar a foto com a câmera traseira, de
+  // melhor qualidade) quanto pros documentos (raro, mas mantém consistência). Diferente
+  // de abrirCamera(): busca o stream novo ANTES de parar o atual, então se o aparelho só
+  // tiver uma câmera (ou a troca falhar por qualquer motivo), a sessão em andamento
+  // continua intacta em vez de jogar o candidato pro seletor nativo no meio da captura.
+  const alternarCamera = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) return;
+    const novoFacing = facingMode === "user" ? "environment" : "user";
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: novoFacing, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
+      pararStream();
+      streamRef.current = stream;
+      zoomNativoAplicadoRef.current = await tentarZoomNativo(stream);
+      setFacingMode(novoFacing);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
+    } catch {
+      setErroCamera("Não foi possível trocar de câmera neste aparelho.");
     }
   };
 
@@ -242,6 +273,20 @@ export default function CapturaComEnquadramento({
             {titulo}
           </p>
         </div>
+        <button
+          type="button"
+          onClick={alternarCamera}
+          aria-label="Trocar câmera"
+          style={{
+            position: "absolute", top: 14, right: 16, zIndex: 2,
+            width: 40, height: 40, borderRadius: "50%",
+            border: "1px solid rgba(255,255,255,0.6)", background: "rgba(0,0,0,0.45)",
+            color: "#fff", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer",
+          }}
+        >
+          🔄
+        </button>
         <div
           style={{
             position: "absolute", inset: 0, display: "flex", flexDirection: "column",
@@ -292,11 +337,7 @@ export default function CapturaComEnquadramento({
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <p style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: 0 }}>{titulo}</p>
       {ehFoto3x4 && isMobile && (
-        <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.5, margin: 0 }}>
-          📸 Tire uma selfie com fundo neutro, ou peça para alguém tirar uma foto sua.
-          <br />
-          Enquadramento de rosto e ombros (padrão 3x4) — do peito para cima.
-        </p>
+        <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.5, margin: 0 }}>{ORIENTACAO_FOTO_3X4}</p>
       )}
       {isMobile && (
         <button
