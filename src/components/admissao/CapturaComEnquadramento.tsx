@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ORIENTACAO_FOTO_3X4 } from "@/lib/admissaoConstants";
+import OrientacaoFoto3x4 from "./OrientacaoFoto3x4";
 
 interface Props {
   proporcaoLargura: number;
@@ -336,9 +336,7 @@ export default function CapturaComEnquadramento({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <p style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: 0 }}>{titulo}</p>
-      {ehFoto3x4 && isMobile && (
-        <p style={{ fontSize: 12, color: "#374151", lineHeight: 1.5, margin: 0 }}>{ORIENTACAO_FOTO_3X4}</p>
-      )}
+      {ehFoto3x4 && isMobile && <OrientacaoFoto3x4 />}
       {isMobile && (
         <button
           type="button"

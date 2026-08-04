@@ -88,15 +88,13 @@ export const NOTA_HEIC_IPHONE =
   "📱 Se você usa iPhone: vá em Ajustes → Câmera → Formatos → selecione \"Mais Compatível\" para enviar fotos em JPEG e evitar problemas de compatibilidade.";
 
 // Orientação de enquadramento pra foto 3x4 — partida em frase principal/complemento pra
-// permitir hierarquia visual (negrito vs. discreto) no bloco de destaque do card desktop
-// (PassoUploadDocumentos), sem duplicar o texto. ORIENTACAO_FOTO_3X4 é a junção das duas,
-// reaproveitada como parágrafo único na tela de captura mobile (CapturaComEnquadramento),
-// que não tem essa distinção visual.
+// permitir hierarquia visual (negrito vs. discreto) no bloco de destaque compartilhado
+// (ver components/admissao/OrientacaoFoto3x4.tsx), usado tanto no card desktop
+// (PassoUploadDocumentos) quanto na tela de escolha mobile (CapturaComEnquadramento).
 export const ORIENTACAO_FOTO_3X4_PRINCIPAL =
   "Tire uma selfie com fundo neutro, ou peça para alguém tirar uma foto sua.";
 export const ORIENTACAO_FOTO_3X4_COMPLEMENTO =
   "Enquadramento de rosto e ombros (padrão 3x4) — do peito para cima.";
-export const ORIENTACAO_FOTO_3X4 = `📸 ${ORIENTACAO_FOTO_3X4_PRINCIPAL} ${ORIENTACAO_FOTO_3X4_COMPLEMENTO}`;
 
 // Dica extra (iluminação/filtro) exibida só no bloco de destaque do card desktop, menor e
 // mais discreta que o par principal/complemento acima — não repete "fundo neutro" (já
