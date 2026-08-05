@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase/server";
 import VagaDetalheClient from "@/components/VagaDetalheClient";
+import { ETAPAS_SAIDA_VAGA } from "@/lib/constants";
 import type { Vaga, CandidatoVaga } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,7 @@ export default async function VagaDetalhePage({ params }: Props) {
       .from("candidatos_vagas")
       .select("*, candidatos(id, nome_completo, etapa_kanban, responsavel, cargo_pretendido)")
       .eq("vaga_id", id)
+      .not("etapa", "in", `(${ETAPAS_SAIDA_VAGA.join(",")})`)
       .order("match_score", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false }),
   ]);

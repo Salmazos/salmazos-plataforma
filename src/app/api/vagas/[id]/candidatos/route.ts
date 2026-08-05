@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { ETAPAS_SAIDA_VAGA } from "@/lib/constants";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -14,6 +15,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
       .from("candidatos_vagas")
       .select("*, candidatos(id, nome_completo, etapa_kanban, responsavel, cargo_pretendido)")
       .eq("vaga_id", vagaId)
+      .not("etapa", "in", `(${ETAPAS_SAIDA_VAGA.join(",")})`)
       .order("match_score", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false });
 

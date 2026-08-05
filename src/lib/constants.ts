@@ -216,6 +216,12 @@ export const ETAPAS_KANBAN = [
 // montar as colunas do Kanban. Reutilizada em Gestão de Clientes e no Dashboard.
 export const ETAPAS_KANBAN_VISIVEIS = ETAPAS_KANBAN.map((e) => e.id);
 
+// Etapas de "saída" — candidato reprovado/não compareceu/sem interesse/bloqueado some do
+// Kanban (geral ou da vaga) e volta pro Banco de Candidatos. Diferente de
+// ETAPAS_KANBAN_VISIVEIS: aqui "contratado" e "aprovado_cliente" continuam visíveis (não
+// são etapas de saída), então a lista é o oposto — quem sai, não quem fica.
+export const ETAPAS_SAIDA_VAGA = ["nao_compareceu", "reprovado", "reprovado_final", "nao_tem_interesse", "bloqueado"];
+
 export const ORIGEM_LABELS: Record<string, string> = {
   cadastro_rapido: "Cadastro Rápido",
   vaga_especifica: "Vaga Específica",

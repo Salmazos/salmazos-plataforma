@@ -265,7 +265,22 @@
       "Bash(cp \"C:/Users/Olver/AppData/Local/Temp/claude/C--Users-Olver-Desktop-salmazos-plataforma/0cc5e0ed-2ff7-4247-9223-b14483c40417/scratchpad/gerar-pdf-teste-8-paginas.mjs\" \"C:/Users/Olver/Desktop/salmazos-plataforma/.tmp-debug-rubrica/\")",
       "Bash(sed 's/estado-fixo\\\\.json/estado-fixo.json/; s/assinado-fixo\\\\.pdf/assinado-fixo-r2.pdf/; s/render-fixo-pagina/render-fixo-r2-pagina/' 10-baixar-e-checar-fixo.mjs)",
       "Bash(sed -i 's/estado-fixo\\\\.json/estado-fixo-r2.json/' 11-baixar-e-checar-fixo-r2.mjs)",
-      "Bash(xargs cat)"
+      "Bash(xargs cat)",
+      "Bash(echo \"started with pid $!\")",
+      "Bash(tasklist //FI \"IMAGENAME eq node.exe\" //FO CSV)",
+      "Bash(echo \"port free: $?\")",
+      "Bash(rm -f /tmp/nextdev.log)",
+      "Bash(nohup npm run dev)",
+      "Bash(echo \"still listening \\(empty = freed\\): $?\")",
+      "Bash(TOKEN=\"63f11a7a-e1ed-43e1-9e51-9cf404543ff2c7a2160d-785c-4dd9-bb53-d6fcacea534c\" *)",
+      "Bash(env)",
+      "Bash(npx --yes vercel whoami)",
+      "Bash(npx --yes vercel ls --meta githubCommitSha=eefe1be9187e3d1cdb2b2e2ad3d0d4e6bbf49c1c)",
+      "Bash(npx --yes vercel ls)",
+      "Bash(npx --yes vercel ls salmazos-plataforma)",
+      "Bash(npx --yes vercel inspect https://salmazos-plataforma-edvz0krry-salmazos-projects.vercel.app)",
+      "Bash(npx --yes vercel inspect https://salmazos-plataforma-oxjnq551h-salmazos-projects.vercel.app)",
+      "Bash(xargs grep -l \"insert\")"
     ]
   }
 }

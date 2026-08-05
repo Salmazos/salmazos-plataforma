@@ -45,13 +45,25 @@ const STATUS_VAGA: Record<string, { label: string; bg: string; color: string }> 
   cancelada: { label: "Cancelada", bg: "#fee2e2", color: "#ef4444" },
 };
 
+// Lista completa das etapas válidas de candidatos_vagas.etapa — mesmo conjunto do mapa
+// ETAPA_LABEL em api/candidatos-vagas/[id]/route.ts. Precisa cobrir TODAS elas: um id
+// fora dessa lista faz o .find() abaixo cair no fallback ETAPAS_VAGA[0] ("Triagem"),
+// mostrando a etapa errada pra qualquer candidato contratado/reprovado/etc (bug real
+// encontrado com 'contratado' e 'nao_compareceu' aparecendo como "Triagem").
 const ETAPAS_VAGA = [
-  { id: "triagem",             label: "Triagem",             bg: "#1D6FA4", color: "#ffffff" },
-  { id: "entrevista_salmazos", label: "Entrevista Salmazos", bg: "#FFD700", color: "#000000" },
-  { id: "entrevista_cliente",  label: "Entrevista Cliente",   bg: "#F97316", color: "#ffffff" },
-  { id: "aprovado_cliente",    label: "Aprovado pelo Cliente", bg: "#16a34a", color: "#ffffff" },
-  { id: "aprovado",            label: "Aprovado",             bg: "#1D9E75", color: "#ffffff" },
-  { id: "reprovado",           label: "Reprovado",           bg: "#EC4899", color: "#ffffff" },
+  { id: "triagem",             label: "Triagem",               bg: "#1D6FA4", color: "#ffffff" },
+  { id: "entrevista_salmazos", label: "Entrevista Salmazos",   bg: "#FFD700", color: "#000000" },
+  { id: "entrevista_rh",       label: "Entrevista Salmazos",   bg: "#FFD700", color: "#000000" },
+  { id: "entrevista_cliente",  label: "Entrevista Cliente",     bg: "#F97316", color: "#ffffff" },
+  { id: "aprovado_cliente",    label: "Aprovado pelo Cliente",  bg: "#16a34a", color: "#ffffff" },
+  { id: "aprovado",            label: "Aprovado",               bg: "#1D9E75", color: "#ffffff" },
+  { id: "contratado",          label: "Contratado",             bg: "#16A34A", color: "#ffffff" },
+  { id: "reprovado",           label: "Reprovado",              bg: "#EC4899", color: "#ffffff" },
+  { id: "reprovado_cliente",   label: "Reprovado",              bg: "#DB2777", color: "#ffffff" },
+  { id: "reprovado_final",     label: "Processo Encerrado",     bg: "#6B7280", color: "#ffffff" },
+  { id: "nao_tem_interesse",   label: "Não tem Interesse",      bg: "#9CA3AF", color: "#ffffff" },
+  { id: "nao_compareceu",      label: "Não Compareceu",         bg: "#EF4444", color: "#ffffff" },
+  { id: "bloqueado",           label: "Bloqueado",              bg: "#7F1D1D", color: "#ffffff" },
 ] as const;
 
 interface Props {
