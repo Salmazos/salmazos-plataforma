@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 
-interface CandidatoElegivel {
+export interface CandidatoElegivel {
   id: string;
   candidato_id: string;
   vaga_id: string;
@@ -26,6 +26,11 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   onCriado: () => void;
+  // Pulando a etapa de busca/seleção manual — usado pela seção "Disponíveis para
+  // admissão" de AdmissoesClient, que já sabe exatamente qual candidatura abrir. Quando
+  // presente, o modal abre direto na etapa de dados (etapaDados), sem esperar o fetch de
+  // candidatos-elegiveis nem exigir que esse candidato apareça nele.
+  preSelecionado?: CandidatoElegivel | null;
 }
 
 interface AdicionalForm {
@@ -60,7 +65,7 @@ function valorAdicionalParaNumero(a: Pick<AdicionalForm, "valor" | "formato_valo
   return parseSalario(a.valor);
 }
 
-export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Props) {
+export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSelecionado }: Props) {
   const [carregando, setCarregando] = useState(true);
   const [elegiveis, setElegiveis] = useState<CandidatoElegivel[]>([]);
   const [busca, setBusca] = useState("");
@@ -85,26 +90,39 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado }: Prop
 
   useEffect(() => {
     if (!isOpen) return;
-    setSelecionado(null);
     setResultado(null);
     setErro("");
     setBusca("");
-    setEtapaDados(false);
     setFuncao("");
     setSalario("");
     setHorarioTrabalho("");
     setDataAdmissao("");
-    setEntidadeContratante("");
     setAdicionais([]);
     setNomeSindicato("");
     setAutorizaAssistencial("");
     setAutorizaSindical("");
+
+    if (preSelecionado) {
+      // Já sabemos exatamente quem é — pula a tela de busca/seleção e vai direto pros
+      // dados da admissão. Continua buscando candidatos-elegiveis em background (não
+      // bloqueia nada) só pra "Voltar" ainda funcionar caso o usuário queira trocar de
+      // candidato no meio do fluxo.
+      setSelecionado(preSelecionado);
+      setModalidade(modalidadeDefault(preSelecionado.tipo_servico_vigente));
+      setEntidadeContratante(preSelecionado.vagas?.clientes?.entidade_contratante ?? "");
+      setEtapaDados(true);
+    } else {
+      setSelecionado(null);
+      setEntidadeContratante("");
+      setEtapaDados(false);
+    }
+
     setCarregando(true);
     fetch("/api/admissoes/candidatos-elegiveis")
       .then((r) => r.json())
       .then((json) => setElegiveis(json.data ?? []))
       .finally(() => setCarregando(false));
-  }, [isOpen]);
+  }, [isOpen, preSelecionado]);
 
   if (!isOpen) return null;
 

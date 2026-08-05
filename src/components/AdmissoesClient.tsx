@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { formatarData } from "@/lib/utils";
 import { ADMISSAO_STATUS_BADGE, MODALIDADE_LABEL } from "@/lib/admissaoStatus";
 import { linkAdmissaoWhatsapp } from "@/lib/waLinks";
-import ModalIniciarAdmissao from "./ModalIniciarAdmissao";
+import ModalIniciarAdmissao, { type CandidatoElegivel } from "./ModalIniciarAdmissao";
 
 export interface AdmissaoRow {
   id: string;
@@ -21,8 +21,21 @@ export interface AdmissaoRow {
   docsTotal: number;
 }
 
+export interface DisponivelAdmissao extends CandidatoElegivel {
+  data_contratado: string;
+}
+
+// Mesmas chaves de funcionarios.tipo_servico/vagas.tipo_servico ("mao_obra_temporaria"/
+// "terceirizacao") — diferente de MODALIDADE_LABEL (chaves "MOT"/"terceirizacao", usadas
+// só em admissoes.modalidade). Cores e formato do badge espelham MODALIDADE_LABEL.
+const MODALIDADE_TIPO_SERVICO_LABEL: Record<string, string> = {
+  mao_obra_temporaria: "MOT",
+  terceirizacao: "Terc.",
+};
+
 interface Props {
   admissoesIniciais: AdmissaoRow[];
+  disponiveisIniciais: DisponivelAdmissao[];
 }
 
 const CARDS_RESUMO: { status: string; label: string; bg: string; text: string }[] = [
@@ -33,15 +46,28 @@ const CARDS_RESUMO: { status: string; label: string; bg: string; text: string }[
   { status: "cancelada", label: "Canceladas", bg: "#FEE2E2", text: "#991B1B" },
 ];
 
-export default function AdmissoesClient({ admissoesIniciais }: Props) {
+export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais }: Props) {
   const router = useRouter();
   const [admissoes, setAdmissoes] = useState(admissoesIniciais);
+  const [disponiveis, setDisponiveis] = useState(disponiveisIniciais);
   const [filtroStatus, setFiltroStatus] = useState<string | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
+  const [preSelecionado, setPreSelecionado] = useState<DisponivelAdmissao | null>(null);
   const [toast, setToast] = useState("");
   const [gerandoFormularios, setGerandoFormularios] = useState(false);
 
   useEffect(() => setAdmissoes(admissoesIniciais), [admissoesIniciais]);
+  useEffect(() => setDisponiveis(disponiveisIniciais), [disponiveisIniciais]);
+
+  const abrirModalParaCandidato = (c: DisponivelAdmissao) => {
+    setPreSelecionado(c);
+    setModalAberto(true);
+  };
+
+  const abrirModalManual = () => {
+    setPreSelecionado(null);
+    setModalAberto(true);
+  };
 
   const agora = new Date();
   const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
@@ -112,11 +138,64 @@ export default function AdmissoesClient({ admissoesIniciais }: Props) {
           <button onClick={handleImprimirFormularios} disabled={gerandoFormularios} className="btn-outline" style={{ opacity: gerandoFormularios ? 0.6 : 1 }}>
             {gerandoFormularios ? "Gerando..." : "🖨️ Imprimir formulário em branco"}
           </button>
-          <button onClick={() => setModalAberto(true)} className="btn-primary">
+          <button onClick={abrirModalManual} className="btn-primary">
             + Iniciar admissão
           </button>
         </div>
       </div>
+
+      {/* Disponíveis para admissão — contratados (candidatos_vagas.etapa = 'contratado')
+          em vaga MOT/Terceirização que ainda não têm admissão iniciada. Some da lista
+          sozinha assim que a admissão é criada (a query de page.tsx já exclui quem tem
+          admissoes) — não precisa de nenhuma lógica extra de remoção aqui. */}
+      {disponiveis.length > 0 && (
+        <div
+          style={{
+            background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 12,
+            padding: 14, marginBottom: 20,
+          }}
+        >
+          <p style={{ fontSize: 13, fontWeight: 700, color: "#92400E", margin: "0 0 10px" }}>
+            ⏳ Aguardando início de admissão ({disponiveis.length})
+          </p>
+          <div style={{ background: "#fff", borderRadius: 8, overflow: "hidden", border: "1px solid #FDE68A" }}>
+            {disponiveis.map((c, idx) => {
+              const tipoServico = c.vagas?.tipo_servico ?? "";
+              const modalidadeLabel = MODALIDADE_TIPO_SERVICO_LABEL[tipoServico] ?? tipoServico;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => abrirModalParaCandidato(c)}
+                  className="w-full text-left"
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
+                    borderBottom: idx === disponiveis.length - 1 ? "none" : "1px solid #FEF3C7",
+                    background: "none", cursor: "pointer",
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: "#111827", margin: 0 }}>
+                      {c.candidatos?.nome_completo ?? "—"}
+                    </p>
+                    <p style={{ fontSize: 12, color: "#6B7280", margin: "1px 0 0" }}>
+                      {c.vagas?.titulo ?? "—"} · {c.vagas?.clientes?.nome ?? "—"}
+                    </p>
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#EFF6FF", color: "#1D4ED8", whiteSpace: "nowrap" }}>
+                    {modalidadeLabel}
+                  </span>
+                  <span style={{ fontSize: 12, color: "#9CA3AF", whiteSpace: "nowrap" }}>
+                    {formatarData(c.data_contratado)}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#92400E", whiteSpace: "nowrap" }}>
+                    + Iniciar admissão
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Summary cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 20 }}>
@@ -218,8 +297,9 @@ export default function AdmissoesClient({ admissoesIniciais }: Props) {
 
       <ModalIniciarAdmissao
         isOpen={modalAberto}
-        onClose={() => setModalAberto(false)}
-        onCriado={() => { setModalAberto(false); router.refresh(); }}
+        preSelecionado={preSelecionado}
+        onClose={() => { setModalAberto(false); setPreSelecionado(null); }}
+        onCriado={() => { setModalAberto(false); setPreSelecionado(null); router.refresh(); }}
       />
     </div>
   );
