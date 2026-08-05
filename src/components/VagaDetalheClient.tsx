@@ -310,6 +310,15 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
                   {tipoInfo.label}
                 </span>
               )}
+              {vaga.tipo_servico === "recrutamento_selecao" && vaga.fee_rs_percentual == null && (
+                <span
+                  className="text-xs font-bold px-2.5 py-1 rounded-full"
+                  style={{ backgroundColor: "#FEF3C7", color: "#92400E", border: "1px solid #FCD34D" }}
+                  title="Vaga de R&S sem taxa configurada — o fee de contratação não será calculado."
+                >
+                  ⚠ Taxa não configurada
+                </span>
+              )}
               {vaga.clientes && (
                 <span className="text-xs bg-black/5 text-gray-600 px-2.5 py-1 rounded-full font-medium">
                   {vaga.clientes.nome}

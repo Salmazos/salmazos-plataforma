@@ -26,7 +26,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const {
       resultado, data_inicio, data_fim, renovavel,
       tipo_servico, motivo_reprovacao, responsavel_encerramento, observacoes,
-      vaga_cancelada_cliente, admissao_salario,
+      vaga_cancelada_cliente, admissao_salario, fee_ausente_justificativa,
     } = parsed.data;
 
     const supabase = createServiceClient();
@@ -65,6 +65,29 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       // sobrescrita: essa rota pode ser chamada depois de o cliente já ter aprovado
       // (e lançado o fee) pelo portal dele, então só grava se ainda não existir nada.
       const feeRsPercentual = vaga?.fee_rs_percentual ?? null;
+
+      // Trava preventiva: vaga R&S sem taxa configurada não pode ser finalizada em
+      // silêncio (já aconteceu 2x de passar batido, sem fee lançado e sem ninguém
+      // perceber). Só bloqueia quando o fee ainda não foi lançado por nenhum caminho
+      // (aqui ou pelo portal do cliente) — senão travaria reprocessamentos legítimos.
+      // O frontend (ModalFinalizarProcesso) já resolve isso antes de chegar aqui —
+      // essa checagem é o backstop server-side pra chamada direta à API não pular
+      // a trava.
+      const precisaFeeSemTaxaConfigurada =
+        tipoServicoFinal === "recrutamento_selecao" &&
+        feeRsPercentual == null &&
+        cv.admissao_fee_valor == null;
+
+      if (precisaFeeSemTaxaConfigurada && !fee_ausente_justificativa?.trim()) {
+        return NextResponse.json(
+          {
+            error: "Esta vaga é de Recrutamento e Seleção mas não tem taxa (%) configurada. Configure a taxa da vaga ou informe uma justificativa para continuar sem ela.",
+            requiresFeeJustificativa: true,
+          },
+          { status: 400 }
+        );
+      }
+
       if (
         tipoServicoFinal === "recrutamento_selecao" &&
         admissao_salario != null &&
@@ -85,6 +108,20 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         .from("candidatos_vagas")
         .update(cvFields)
         .eq("id", id);
+
+      if (precisaFeeSemTaxaConfigurada) {
+        registrarAuditoria({
+          acao: "admissao_finalizada_sem_fee_rs",
+          entidade: "candidatos_vagas",
+          entidade_id: id,
+          detalhes: {
+            candidato_id: cv.candidato_id,
+            vaga_id: cv.vaga_id,
+            vaga_titulo: vagaTitulo,
+            justificativa: fee_ausente_justificativa!.trim(),
+          },
+        });
+      }
 
       // Update candidatos allocation
       await supabase

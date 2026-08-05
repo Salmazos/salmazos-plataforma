@@ -445,6 +445,15 @@ function VagaCard({ vaga }: { vaga: Vaga }) {
               {tipoInfo.abrev}
             </span>
           )}
+          {vaga.tipo_servico === "recrutamento_selecao" && vaga.fee_rs_percentual == null && (
+            <span
+              className="text-xs font-bold px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: "#FEF3C7", color: "#92400E", border: "1px solid #FCD34D" }}
+              title="Vaga de R&S sem taxa configurada — o fee de contratação não será calculado."
+            >
+              ⚠ Taxa não configurada
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 mt-1 text-xs text-gray-500">
           <span className="flex items-center gap-1">

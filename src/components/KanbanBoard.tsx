@@ -32,6 +32,7 @@ interface PendingFinalizar {
   cvId: string;
   candidatoNome: string;
   vagaTitulo: string;
+  vagaId: string | null;
   tipoServico: string | null;
   resultado: "contratado" | "reprovado_final";
   clienteId: string | null;
@@ -199,6 +200,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
         cvId,
         candidatoNome: card?.nome_completo ?? "",
         vagaTitulo: card?.vaga_titulo ?? "",
+        vagaId: card?.vaga_id ?? null,
         // Prioriza o tipo_servico do encaminhamento mais recente (o que foi de fato
         // combinado com o cliente na entrevista) — cai para o da vaga só quando o
         // candidato nunca passou por um encaminhamento vinculado a essa vaga.
@@ -485,6 +487,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
         vagaTitulo={pendingFinalizar?.vagaTitulo ?? ""}
         tipoServico={pendingFinalizar?.tipoServico ?? null}
         cvId={pendingFinalizar?.cvId ?? ""}
+        vagaId={pendingFinalizar?.vagaId ?? null}
         clienteId={pendingFinalizar?.clienteId ?? null}
         onClose={() => setPendingFinalizar(null)}
         onConfirmar={(res: FinalizarResult) => {

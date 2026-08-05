@@ -14,6 +14,7 @@ export interface Notificacao {
   solicitacao_vaga_id: string | null;
   rescisao_id: string | null;
   funcionario_id: string | null;
+  vaga_id: string | null;
   lida: boolean;
   created_at: string;
 }
@@ -105,7 +106,12 @@ export default function NotificacoesProvider({ children }: { children: React.Rea
 
   const abrirNotificacao = useCallback((n: Notificacao) => {
     if (!n.lida) marcarComoLida(n.id);
-    if (n.candidato_id) router.push(`/painel/candidato/${n.candidato_id}`);
+    // vaga_id checado antes de candidato_id de propósito: hoje só o tipo
+    // "fee_rs_nao_configurado" preenche os dois campos ao mesmo tempo, e pra esse caso
+    // o destino útil é a página da vaga (onde o alerta de taxa ausente também aparece),
+    // não o perfil do candidato.
+    if (n.vaga_id) router.push(`/painel/vagas/${n.vaga_id}`);
+    else if (n.candidato_id) router.push(`/painel/candidato/${n.candidato_id}`);
     else if (n.solicitacao_vaga_id) router.push(`/painel/vagas?solicitacao=${n.solicitacao_vaga_id}`);
     else if (n.rescisao_id) router.push(`/painel/rescisoes?rescisao=${n.rescisao_id}`);
     else if (n.funcionario_id) router.push(`/painel/funcionarios/${n.funcionario_id}`);

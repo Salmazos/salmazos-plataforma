@@ -11,6 +11,7 @@ interface Props {
   vagaTitulo: string;
   tipoServico?: string | null;
   cvId: string;
+  vagaId?: string | null;
   clienteId?: string | null;
   onClose: () => void;
   onConfirmar: (res: FinalizarResult) => void;
@@ -142,6 +143,7 @@ export default function ModalFinalizarProcesso({
   vagaTitulo,
   tipoServico,
   cvId,
+  vagaId,
   clienteId,
   onClose,
   onConfirmar,
@@ -163,6 +165,24 @@ export default function ModalFinalizarProcesso({
   const [feeInfo, setFeeInfo] = useState<FeeInfo | null>(null);
   const [temPortal, setTemPortal] = useState<boolean | null>(null);
   const [carregandoFee, setCarregandoFee] = useState(false);
+
+  // Trava de "taxa R&S não configurada" — ver PROBLEMA 2 da investigação anterior
+  // (fee_rs_percentual null fazia o cálculo do fee ser pulado em silêncio).
+  const [mostrarAvisoFeeAusente, setMostrarAvisoFeeAusente] = useState(false);
+  const [modoResolucaoFee, setModoResolucaoFee] = useState<"configurar" | "sem_taxa" | null>(null);
+  const [novaTaxaPercentual, setNovaTaxaPercentual] = useState("");
+  const [salvandoTaxa, setSalvandoTaxa] = useState(false);
+  const [justificativaSemTaxa, setJustificativaSemTaxa] = useState("");
+  const [erroFee, setErroFee] = useState("");
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setMostrarAvisoFeeAusente(false);
+    setModoResolucaoFee(null);
+    setNovaTaxaPercentual("");
+    setJustificativaSemTaxa("");
+    setErroFee("");
+  }, [isOpen, cvId]);
 
   // Só busca fee/portal no fluxo R&S "Contratado" — os outros tipos de serviço
   // nunca usam esses dados, e a maioria dos cards do Kanban nunca chega aqui.
@@ -204,6 +224,11 @@ export default function ModalFinalizarProcesso({
   const cfg = getContratadoConfig(tipoServico ?? null);
   const feeJaLancado = feeInfo?.admissaoFeeValor != null;
   const salarioObrigatorio = isContratado && tipoServico === "recrutamento_selecao" && !feeJaLancado && temPortal === false;
+  // Vaga de R&S, fee ainda não lançado por nenhum caminho, e a vaga não tem taxa (%)
+  // configurada — sem isso o fee é pulado em silêncio no backend (ver finalizar/route.ts).
+  const feeConfigPendente =
+    isContratado && tipoServico === "recrutamento_selecao" && !feeJaLancado &&
+    !carregandoFee && feeInfo != null && feeInfo.feeRsPercentual == null;
   const invalidStyle = { borderColor: "#EF4444", boxShadow: "0 0 0 1px #EF4444" };
   const isOutroMotivo = motivoReprovacao === OUTRO_MOTIVO_REPROVACAO;
   // MOT e terceirização: contrato inicial obrigatoriamente limitado a 180 dias — a
@@ -212,23 +237,10 @@ export default function ModalFinalizarProcesso({
   const exigeDataFim = tipoServico === "mao_obra_temporaria" || tipoServico === "terceirizacao";
   const dataFimMax = exigeDataFim && dataInicio ? somarDias(dataInicio, 180) : undefined;
 
-  const handleConfirmar = async () => {
-    setTentouEnviar(true);
-
-    if (isContratado) {
-      if (!dataInicio) { setErro("Informe a data de início."); return; }
-      if (cfg.dataFimRequired && !dataFim) { setErro("Informe a data de término."); return; }
-      if (exigeDataFim && dataFim && dataFimMax && dataFim > dataFimMax) {
-        setErro(`Data de término não pode ultrapassar 180 dias da data de início (máx. ${dataFimMax.split("-").reverse().join("/")}).`);
-        return;
-      }
-      if (salarioObrigatorio && !admSalario) { setErro("Informe o salário acordado."); return; }
-    } else {
-      if (!motivoReprovacao) { setErro("Selecione o motivo do encerramento."); return; }
-      if (isOutroMotivo && !motivoOutro.trim()) { setErro("Descreva o motivo."); return; }
-      if (!responsavelEncerramento) { setErro("Selecione o responsável pelo encerramento."); return; }
-    }
-
+  // Faz de fato a chamada de finalização — separado de handleConfirmar pra poder ser
+  // chamado tanto pelo fluxo normal (após passar pela trava de fee) quanto direto por
+  // handleSalvarTaxaESeguir (que já sabe que acabou de resolver a pendência).
+  const submeterFinalizacao = async (feeAusenteJustificativa?: string) => {
     setEnviando(true);
     setErro("");
     try {
@@ -245,6 +257,7 @@ export default function ModalFinalizarProcesso({
                 renovavel: tipoServico === "terceirizacao" ? renovavel : undefined,
                 tipo_servico: tipoServico,
                 admissao_salario: admSalario ? parseFloat(admSalario) : undefined,
+                fee_ausente_justificativa: feeAusenteJustificativa,
               }
             : {
                 motivo_reprovacao: motivoFinal,
@@ -268,6 +281,78 @@ export default function ModalFinalizarProcesso({
     } catch {
       setErro("Erro de conexão.");
       setEnviando(false);
+    }
+  };
+
+  const handleConfirmar = async () => {
+    setTentouEnviar(true);
+
+    if (isContratado) {
+      if (!dataInicio) { setErro("Informe a data de início."); return; }
+      if (cfg.dataFimRequired && !dataFim) { setErro("Informe a data de término."); return; }
+      if (exigeDataFim && dataFim && dataFimMax && dataFim > dataFimMax) {
+        setErro(`Data de término não pode ultrapassar 180 dias da data de início (máx. ${dataFimMax.split("-").reverse().join("/")}).`);
+        return;
+      }
+      if (salarioObrigatorio && !admSalario) { setErro("Informe o salário acordado."); return; }
+
+      // Trava: vaga R&S sem taxa configurada não segue sem uma decisão explícita.
+      if (feeConfigPendente && modoResolucaoFee !== "sem_taxa") {
+        setMostrarAvisoFeeAusente(true);
+        return;
+      }
+      if (modoResolucaoFee === "sem_taxa") {
+        if (!justificativaSemTaxa.trim()) { setErro("Informe a justificativa para continuar sem a taxa configurada."); return; }
+        setErro("");
+        await submeterFinalizacao(justificativaSemTaxa.trim());
+        return;
+      }
+    } else {
+      if (!motivoReprovacao) { setErro("Selecione o motivo do encerramento."); return; }
+      if (isOutroMotivo && !motivoOutro.trim()) { setErro("Descreva o motivo."); return; }
+      if (!responsavelEncerramento) { setErro("Selecione o responsável pelo encerramento."); return; }
+    }
+
+    setErro("");
+    await submeterFinalizacao();
+  };
+
+  // "Configurar taxa agora" — salva o percentual na vaga e, se deu certo, segue
+  // direto pra finalização (sem precisar que o usuário clique em "Confirmar" de novo).
+  const handleSalvarTaxaESeguir = async () => {
+    const pct = parseFloat(novaTaxaPercentual.replace(",", "."));
+    if (!novaTaxaPercentual.trim() || isNaN(pct) || pct <= 0) {
+      setErroFee("Informe um percentual válido.");
+      return;
+    }
+    if (!vagaId) {
+      setErroFee("Vaga não identificada — não foi possível salvar a taxa.");
+      return;
+    }
+    setSalvandoTaxa(true);
+    setErroFee("");
+    try {
+      const res = await fetch(`/api/vagas/${vagaId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fee_rs_percentual: pct }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        setErroFee(json.error || "Erro ao salvar a taxa.");
+        return;
+      }
+      setFeeInfo((prev) => ({
+        feeRsPercentual: pct,
+        admissaoFeeValor: prev?.admissaoFeeValor ?? null,
+        admissaoFeePercentual: prev?.admissaoFeePercentual ?? null,
+        admissaoFeeOrigem: prev?.admissaoFeeOrigem ?? null,
+      }));
+      setMostrarAvisoFeeAusente(false);
+      setModoResolucaoFee(null);
+      await submeterFinalizacao();
+    } finally {
+      setSalvandoTaxa(false);
     }
   };
 
@@ -423,6 +508,109 @@ export default function ModalFinalizarProcesso({
 
               {/* Info box */}
               <ContratadoInfoBox tipoServico={tipoServico ?? null} />
+
+              {/* Trava: taxa R&S não configurada na vaga */}
+              {mostrarAvisoFeeAusente && (
+                <div style={{ background: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 8, padding: "12px 14px" }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: "#92400E", margin: "0 0 4px" }}>
+                    ⚠️ Taxa de R&S não configurada
+                  </p>
+                  <p style={{ fontSize: 12, color: "#92400E", margin: "0 0 10px", lineHeight: 1.5 }}>
+                    Esta vaga é de Recrutamento e Seleção mas não tem taxa (%) configurada. O fee não será calculado se você continuar assim.
+                  </p>
+
+                  {modoResolucaoFee === null && (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setModoResolucaoFee("configurar")}
+                        className="btn-primary" style={{ padding: "6px 12px", fontSize: 12 }}
+                      >
+                        Configurar taxa agora
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setModoResolucaoFee("sem_taxa")}
+                        className="btn-outline" style={{ padding: "6px 12px", fontSize: 12 }}
+                      >
+                        Continuar sem taxa
+                      </button>
+                    </div>
+                  )}
+
+                  {modoResolucaoFee === "configurar" && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Taxa R&S (%)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={novaTaxaPercentual}
+                        onChange={(e) => setNovaTaxaPercentual(e.target.value)}
+                        className="input-field"
+                        placeholder="Ex: 40"
+                        style={erroFee ? invalidStyle : undefined}
+                      />
+                      {erroFee && <p className="text-red-500 text-xs mt-1">{erroFee}</p>}
+                      <div className="flex gap-2 justify-end mt-2">
+                        <button
+                          type="button"
+                          onClick={() => { setModoResolucaoFee(null); setErroFee(""); }}
+                          className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }}
+                          disabled={salvandoTaxa}
+                        >
+                          Voltar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSalvarTaxaESeguir}
+                          disabled={salvandoTaxa || !novaTaxaPercentual.trim()}
+                          className="btn-primary"
+                          style={{ padding: "5px 12px", fontSize: 12, opacity: salvandoTaxa || !novaTaxaPercentual.trim() ? 0.5 : 1 }}
+                        >
+                          {salvandoTaxa ? "Salvando..." : "Salvar taxa e continuar"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {modoResolucaoFee === "sem_taxa" && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        Justificativa (obrigatória) *
+                      </label>
+                      <textarea
+                        value={justificativaSemTaxa}
+                        onChange={(e) => setJustificativaSemTaxa(e.target.value)}
+                        rows={2}
+                        placeholder="Por que está finalizando sem configurar a taxa de R&S?"
+                        className="input-field resize-none"
+                      />
+                      <div className="flex gap-2 justify-end mt-2">
+                        <button
+                          type="button"
+                          onClick={() => setModoResolucaoFee(null)}
+                          className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }}
+                          disabled={enviando}
+                        >
+                          Voltar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleConfirmar}
+                          disabled={!justificativaSemTaxa.trim() || enviando}
+                          className="btn-primary"
+                          style={{ padding: "5px 12px", fontSize: 12, background: "#DC2626", opacity: !justificativaSemTaxa.trim() || enviando ? 0.5 : 1 }}
+                        >
+                          {enviando ? "Salvando..." : "Confirmar sem taxa"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           ) : (
             <>

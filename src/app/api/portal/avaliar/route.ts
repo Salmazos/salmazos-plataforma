@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
+import { registrarAuditoria } from "@/lib/audit";
 import { sendEmail } from "@/lib/sendEmail";
 import { parseBody, portalAvaliarSchema } from "@/lib/schemas";
 
@@ -55,6 +56,12 @@ export async function PATCH(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
+    // true quando a candidatura é R&S e a vaga não tem fee_rs_percentual configurado —
+    // setado dentro do bloco "aprovado" abaixo, lido depois pra disparar notificação +
+    // audit log (ver PROBLEMA 2 da investigação: fee ficava ausente em silêncio).
+    let feeRsAusente = false;
+    const cvIdParaFee = body.cv_id as string | undefined;
+
     // Sync Kanban principal
     if (status === "aprovado") {
       await service
@@ -84,8 +91,10 @@ export async function PATCH(request: NextRequest) {
           if (body[key] !== undefined) admFields[key] = body[key];
         }
 
-        // Fee calculation for R&S
-        if (body.tipo_servico === "recrutamento_selecao" && body.admissao_salario && enc.vaga_id) {
+        // Fee calculation for R&S — verifica mesmo sem admissao_salario ainda
+        // preenchido, pra conseguir detectar "vaga R&S sem taxa configurada" (ver
+        // feeRsAusente abaixo) independente do cliente já ter digitado o salário.
+        if (body.tipo_servico === "recrutamento_selecao" && enc.vaga_id) {
           const { data: vagaRow } = await service
             .from("vagas")
             .select("fee_rs_percentual, fee_rs_prazo_cobranca")
@@ -96,16 +105,19 @@ export async function PATCH(request: NextRequest) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const v = vagaRow as any;
             const pct = v.fee_rs_percentual as number | null;
-            if (pct != null) {
+            if (pct != null && body.admissao_salario) {
               admFields.admissao_fee_percentual = pct;
               admFields.admissao_fee_valor = Number(body.admissao_salario) * pct / 100;
               admFields.admissao_fee_prazo = v.fee_rs_prazo_cobranca ?? null;
               admFields.admissao_fee_origem = "cliente_portal";
-            }
-            if (body.admissao_data_inicio) {
-              const inicio = new Date(body.admissao_data_inicio + "T00:00:00");
-              inicio.setDate(inicio.getDate() + 30);
-              admFields.garantia_data_fim = inicio.toISOString().split("T")[0];
+
+              if (body.admissao_data_inicio) {
+                const inicio = new Date(body.admissao_data_inicio + "T00:00:00");
+                inicio.setDate(inicio.getDate() + 30);
+                admFields.garantia_data_fim = inicio.toISOString().split("T")[0];
+              }
+            } else if (pct == null) {
+              feeRsAusente = true;
             }
           }
         }
@@ -186,6 +198,39 @@ export async function PATCH(request: NextRequest) {
         user_id: userIdDestino,
         candidato_id: enc.candidato_id,
       });
+
+      // Vaga R&S sem fee_rs_percentual configurado — o cliente aprova normalmente (não
+      // trava o processo dele), mas ninguém internamente ficaria sabendo que o fee não
+      // foi calculado se não fosse por isso (mesmo problema que já passou batido 2x).
+      // Broadcast (user_id null) em vez de só o responsável: é uma pendência financeira/
+      // operacional que interessa à diretoria como um todo, não só a quem está com o caso.
+      if (feeRsAusente) {
+        try {
+          await service.from("notificacoes_analista").insert({
+            tipo: "fee_rs_nao_configurado",
+            titulo: "Taxa de R&S não configurada",
+            mensagem: vagaTitulo
+              ? `${candidatoNomeNotif} foi aprovado pelo cliente na vaga "${vagaTitulo}" (Recrutamento e Seleção), mas a vaga não tem taxa (%) configurada — o fee não foi calculado.`
+              : `${candidatoNomeNotif} foi aprovado pelo cliente numa vaga de Recrutamento e Seleção sem taxa (%) configurada — o fee não foi calculado.`,
+            user_id: null,
+            candidato_id: enc.candidato_id,
+            vaga_id: enc.vaga_id,
+          });
+        } catch (feeNotifErr) {
+          console.error("[avaliar] Erro ao criar notificação de fee ausente:", feeNotifErr);
+        }
+
+        registrarAuditoria({
+          acao: "fee_rs_nao_configurado_portal",
+          entidade: "candidatos_vagas",
+          entidade_id: cvIdParaFee ?? null,
+          detalhes: {
+            candidato_id: enc.candidato_id,
+            vaga_id: enc.vaga_id,
+            motivo: "fee_rs_percentual ausente no momento da aprovação via portal",
+          },
+        });
+      }
     } catch (notifErr) {
       console.error("[avaliar] Erro ao criar notificação:", notifErr);
     }

@@ -351,6 +351,10 @@ export const candidatoVagaFinalizarSchema = z.object({
   vaga_cancelada_cliente: z.boolean().optional(),
   observacoes: z.string().optional().nullable(),
   admissao_salario: coerceNumberOptional,
+  // Obrigatória só quando a vaga é R&S e não tem fee_rs_percentual configurado — ver
+  // guard em finalizar/route.ts. Mesmo padrão de justificativa do forçar geração de
+  // pacote (admissaoGerarPdfSchema).
+  fee_ausente_justificativa: z.string().optional().nullable(),
 });
 
 // ── Admissão Digital ─────────────────────────────────────────────────────────
