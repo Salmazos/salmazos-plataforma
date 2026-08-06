@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import SeletorHorarioIniciarAdmissao from "@/components/admissao/SeletorHorarioIniciarAdmissao";
 
 export interface CandidatoElegivel {
   id: string;
@@ -330,12 +331,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
 
             <div className="mb-3">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Horário de trabalho *</label>
-              <input
-                type="text" value={horarioTrabalho}
-                onChange={(e) => setHorarioTrabalho(e.target.value)}
-                placeholder="Ex: 08h às 17h48, seg-sex"
-                className="input-field"
-              />
+              <SeletorHorarioIniciarAdmissao value={horarioTrabalho} onChange={setHorarioTrabalho} />
             </div>
 
             <div className="mb-4">
