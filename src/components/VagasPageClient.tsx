@@ -44,7 +44,11 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
   const [busca, setBusca] = useState("");
   const [ordenacao, setOrdenacao] = useState("recentes");
   const [importando, setImportando] = useState(false);
-  const [msgImport, setMsgImport] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
+  const [msgImport, setMsgImport] = useState<{
+    tipo: "ok" | "erro";
+    texto: string;
+    semVinculo?: { titulo: string; empresa: string }[];
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSalvo = (nova: Vaga) => {
@@ -84,7 +88,14 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
         setMsgImport({ tipo: "erro", texto: json.error ?? "Erro ao importar." });
         return;
       }
-      setMsgImport({ tipo: "ok", texto: `${json.importadas} vaga(s) importada(s) com sucesso.` });
+      const partesResumo = [`${json.importadas} vaga(s) importada(s) com sucesso.`];
+      if (json.vinculadasAutomaticamente > 0) {
+        partesResumo.push(`${json.vinculadasAutomaticamente} vinculada(s) automaticamente a um cliente já cadastrado.`);
+      }
+      if (json.semVinculo?.length > 0) {
+        partesResumo.push(`${json.semVinculo.length} sem cliente vinculado — precisa(m) de correção manual (veja abaixo).`);
+      }
+      setMsgImport({ tipo: "ok", texto: partesResumo.join(" "), semVinculo: json.semVinculo });
       const refreshRes = await fetch("/api/vagas");
       const refreshJson = await refreshRes.json();
       if (refreshRes.ok) setVagas(refreshJson.data ?? []);
@@ -218,14 +229,25 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
 
       {msgImport && (
         <div
-          className={`mb-4 flex items-center justify-between gap-3 px-4 py-3 rounded-xl text-sm font-medium ${
+          className={`mb-4 flex items-start justify-between gap-3 px-4 py-3 rounded-xl text-sm font-medium ${
             msgImport.tipo === "ok"
               ? "bg-green-50 text-green-800 border border-green-200"
               : "bg-red-50 text-red-700 border border-red-200"
           }`}
         >
-          <span>{msgImport.texto}</span>
-          <button onClick={() => setMsgImport(null)} className="opacity-60 hover:opacity-100">
+          <div className="min-w-0">
+            <span>{msgImport.texto}</span>
+            {msgImport.semVinculo && msgImport.semVinculo.length > 0 && (
+              <ul className="mt-2 space-y-0.5 text-xs font-normal text-green-700">
+                {msgImport.semVinculo.map((v, i) => (
+                  <li key={i}>
+                    <strong>{v.titulo}</strong> — empresa da planilha: &quot;{v.empresa}&quot;
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <button onClick={() => setMsgImport(null)} className="opacity-60 hover:opacity-100 shrink-0">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>

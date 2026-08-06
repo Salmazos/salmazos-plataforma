@@ -19,6 +19,14 @@ function mapStatus(s: string): string {
   return "aberta";
 }
 
+// Normalização simples (trim + minúsculas + espaços colapsados) pra casar "Empresa" da
+// planilha com clientes.nome já cadastrado — não é fuzzy matching, só evita falhar por
+// diferença de maiúscula/minúscula ou espaço extra, que já resolve a maioria dos casos
+// reais vistos nos dados.
+function normalizarNome(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 function parseLocal(local: string): { cidade: string | null; estado: string | null } {
   if (!local) return { cidade: null, estado: null };
   const parts = local.split("/").map((s) => s.trim());
@@ -100,6 +108,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Nenhum arquivo enviado." }, { status: 400 });
     }
 
+    // Criado cedo (antes só existia perto do upsert final) pra já poder consultar
+    // clientes existentes e tentar vincular cliente_id durante a leitura da planilha.
+    const supabase = createServiceClient();
+
+    const { data: clientesExistentes } = await supabase.from("clientes").select("id, nome");
+    // Nome normalizado -> lista de ids. Lista com mais de 1 id = ambíguo (dois clientes
+    // com o mesmo nome normalizado) — tratado como "não vinculado" também, igual a não
+    // achar nenhum, pra não arriscar gravar o cliente errado.
+    const clientesPorNome = new Map<string, string[]>();
+    for (const c of clientesExistentes ?? []) {
+      const chave = normalizarNome(c.nome);
+      const lista = clientesPorNome.get(chave) ?? [];
+      lista.push(c.id);
+      clientesPorNome.set(chave, lista);
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
     const workbook = XLSX.read(buffer, { type: "buffer" });
     const lastSheetName = workbook.SheetNames[workbook.SheetNames.length - 1];
@@ -143,6 +167,11 @@ export async function POST(request: NextRequest) {
     };
 
     const vagas: VagaRow[] = [];
+    // Só entra aqui vaga cuja planilha TINHA um nome de empresa preenchido mas que não
+    // deu pra vincular (0 ou >1 clientes com esse nome normalizado) — empresa vazia na
+    // planilha nunca entra nessa lista (ver item d do pedido).
+    const semVinculo: { titulo: string; empresa: string }[] = [];
+    let vinculadasAutomaticamente = 0;
 
     for (const row of dataRows) {
       const r = row as unknown[];
@@ -156,10 +185,24 @@ export async function POST(request: NextRequest) {
       const responsavel = cell(r, "Responsável") || cell(r, "Responsavel") || "Giovanni";
       const salarioRaw = cellRaw(r, "Salário") ?? cellRaw(r, "Salario");
 
+      let clienteId: string | null = null;
+      if (empresa) {
+        const candidatos = clientesPorNome.get(normalizarNome(empresa)) ?? [];
+        if (candidatos.length === 1) {
+          clienteId = candidatos[0];
+          vinculadasAutomaticamente++;
+        } else {
+          // 0 = nenhum cliente com esse nome ainda cadastrado; >1 = ambíguo (dois
+          // clientes com nome igual normalizado) — nos dois casos não arrisca vincular
+          // errado, só registra a pendência pra correção manual depois.
+          semVinculo.push({ titulo, empresa });
+        }
+      }
+
       vagas.push({
         titulo,
         cliente_nome: empresa,
-        cliente_id: null,
+        cliente_id: clienteId,
         tipo_servico: "recrutamento_selecao",
         num_posicoes: 1,
         status,
@@ -205,7 +248,6 @@ export async function POST(request: NextRequest) {
     }
     const deduplicadas = Array.from(seen.values());
 
-    const supabase = createServiceClient();
     const { data, error } = await supabase
       .from("vagas")
       .upsert(deduplicadas, { onConflict: "titulo,cliente_nome" })
@@ -215,7 +257,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json({ importadas: data?.length ?? deduplicadas.length, erros: [] });
+    return NextResponse.json({
+      importadas: data?.length ?? deduplicadas.length,
+      vinculadasAutomaticamente,
+      semVinculo,
+      erros: [],
+    });
   } catch (err) {
     console.error("[POST /api/vagas/importar]", err);
     return NextResponse.json({ error: "Erro ao processar o arquivo." }, { status: 500 });
