@@ -23,7 +23,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
 
     const { data: vaga } = await supabase
       .from("vagas")
-      .select("id, titulo, tipo_servico, cidade, estado, responsavel, num_posicoes, salario, horario, requisitos, beneficios, confidencial")
+      .select("id, titulo, tipo_servico, cidade, estado, responsavel, num_posicoes, salario, horario, requisitos, beneficios, confidencial, fee_rs_percentual, fee_rs_prazo_cobranca, taxa_cancelamento, taxa_cancelamento_percentual")
       .eq("id", id)
       .single();
 
@@ -40,6 +40,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
     const template = getEmailTemplate("nova_vaga_criada", {
       nome: "",
       cargo: vaga.titulo,
+      tipoServico: vaga.tipo_servico,
       tipoServicoLabel: TIPO_LABELS[vaga.tipo_servico] ?? vaga.tipo_servico,
       cidade: vaga.cidade ?? undefined,
       estado: vaga.estado ?? undefined,
@@ -51,6 +52,10 @@ export async function POST(_request: NextRequest, { params }: Params) {
       beneficios: vaga.beneficios ?? undefined,
       confidencial: vaga.confidencial === true,
       vagaUrl,
+      feeRsPercentual: vaga.fee_rs_percentual,
+      feeRsPrazoCobranca: vaga.fee_rs_prazo_cobranca,
+      taxaCancelamento: vaga.taxa_cancelamento === true,
+      taxaCancelamentoPercentual: vaga.taxa_cancelamento_percentual,
     });
 
     const subject = `🔄 Vaga Reativada: ${vaga.titulo}`;

@@ -19,6 +19,10 @@ interface TemplateData {
   numPosicoes?: number;
   cidade?: string;
   empresa?: string;
+  // Valor bruto (ex.: "recrutamento_selecao"), distinto de tipoServicoLabel (rótulo pra
+  // exibição, ex.: "Recrutamento e Seleção") — usado pra decidir se o bloco de condições
+  // negociadas de R&S deve aparecer, sem depender do texto do label.
+  tipoServico?: string;
   tipoServicoLabel?: string;
   estado?: string;
   responsavel?: string;
@@ -32,6 +36,12 @@ interface TemplateData {
   admissaoUrl?: string;
   motivoRecusa?: string;
   confidencial?: boolean;
+  // Condições negociadas de R&S — só usadas (e só renderizadas) quando tipoServico ===
+  // "recrutamento_selecao". Ver nova_vaga_criada abaixo.
+  feeRsPercentual?: number | null;
+  feeRsPrazoCobranca?: string | null;
+  taxaCancelamento?: boolean;
+  taxaCancelamentoPercentual?: number | null;
 }
 
 export interface EmailTemplate {
@@ -85,7 +95,7 @@ const BANNER_CONFIDENCIAL = `<div style="background:#fef2f2;border:2px solid #fc
 
 export function getEmailTemplate(
   name: EmailTemplateName,
-  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial }: TemplateData
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual }: TemplateData
 ): EmailTemplate {
   switch (name) {
     case "entrevista_salmazos":
@@ -328,6 +338,19 @@ export function getEmailTemplate(
         ? beneficios.split(" * ").map((b) => `<li>${b.trim()}</li>`).join("")
         : "";
 
+      // Só pra R&S — MOT/Terceirização não têm fee/taxa de cancelamento negociados
+      // desse jeito, então o bloco nem aparece pra elas (tipoServico decide, não o label).
+      const condicoesItems =
+        tipoServico === "recrutamento_selecao"
+          ? [
+              feeRsPercentual != null ? `<li><strong>Taxa de R&S:</strong> ${feeRsPercentual}%</li>` : "",
+              feeRsPrazoCobranca ? `<li><strong>Prazo de cobrança:</strong> ${feeRsPrazoCobranca}</li>` : "",
+              taxaCancelamento
+                ? `<li><strong>Taxa de cancelamento:</strong> ${taxaCancelamentoPercentual != null ? `${taxaCancelamentoPercentual}%` : "Sim (percentual não informado)"}</li>`
+                : "",
+            ].join("")
+          : "";
+
       return {
         subject: `🆕 Nova Vaga Cadastrada: ${cargo}`,
         descricao: `Notificação de nova vaga cadastrada: ${cargo}.`,
@@ -346,6 +369,10 @@ export function getEmailTemplate(
               <li><strong>Responsável:</strong> ${responsavel ?? "—"}</li>
             </ul>
           </div>
+          ${condicoesItems ? `<div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:4px;padding:14px 18px;margin:0 0 20px;">
+            <p style="font-size:13px;font-weight:700;color:#1e40af;margin:0 0 8px;">Condições Negociadas (R&S):</p>
+            <ul style="margin:0;padding-left:18px;color:#1d4ed8;line-height:2;font-size:14px;">${condicoesItems}</ul>
+          </div>` : ""}
           ${horario ? `<div style="margin:0 0 16px;">
             <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 6px;">Horário:</p>
             <p style="font-size:14px;color:#374151;margin:0;">${horario}</p>

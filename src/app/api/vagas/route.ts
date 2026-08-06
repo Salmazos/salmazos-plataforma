@@ -83,6 +83,10 @@ export async function POST(request: NextRequest) {
     const vagaBeneficios = data.beneficios;
     const vagaObservacoes = data.observacoes;
     const vagaConfidencial = data.confidencial === true;
+    const vagaFeeRsPercentual = data.fee_rs_percentual;
+    const vagaFeeRsPrazoCobranca = data.fee_rs_prazo_cobranca;
+    const vagaTaxaCancelamento = data.taxa_cancelamento === true;
+    const vagaTaxaCancelamentoPercentual = data.taxa_cancelamento_percentual;
 
     after(async () => {
       console.log(`[POST /api/vagas] Notificando analistas sobre nova vaga ${vagaId}`);
@@ -104,6 +108,7 @@ export async function POST(request: NextRequest) {
       const template = getEmailTemplate("nova_vaga_criada", {
         nome: "",
         cargo: vagaTitulo,
+        tipoServico: vagaTipo,
         tipoServicoLabel: TIPO_LABELS[vagaTipo] ?? vagaTipo,
         cidade: vagaCidade ?? undefined,
         estado: vagaEstado ?? undefined,
@@ -116,6 +121,10 @@ export async function POST(request: NextRequest) {
         observacoes: vagaObservacoes ?? undefined,
         confidencial: vagaConfidencial,
         vagaUrl,
+        feeRsPercentual: vagaFeeRsPercentual,
+        feeRsPrazoCobranca: vagaFeeRsPrazoCobranca,
+        taxaCancelamento: vagaTaxaCancelamento,
+        taxaCancelamentoPercentual: vagaTaxaCancelamentoPercentual,
       });
 
       const destinatarios = analistas.filter((a) => a.email);
