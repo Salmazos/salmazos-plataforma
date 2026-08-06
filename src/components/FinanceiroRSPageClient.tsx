@@ -156,10 +156,14 @@ export default function FinanceiroRSPageClient({ rows }: Props) {
                 const aging = r.diasAberta != null ? getAgingLevel("recrutamento_selecao", r.diasAberta) ?? "normal" : null;
                 const agingInfo = aging ? AGING_COLOR[aging] : null;
                 const hover = hoveredId === r.id;
+                // ?origem=financeiro-rs pro botão "Voltar" na tela de detalhe da vaga saber
+                // pra onde retornar (ver ORIGEM_VOLTAR em VagaDetalheClient.tsx) em vez de
+                // sempre cair na lista geral de vagas.
+                const hrefVaga = `/painel/vagas/${r.id}?origem=financeiro-rs`;
                 return (
                   <tr
                     key={r.id}
-                    onClick={() => router.push(`/painel/vagas/${r.id}`)}
+                    onClick={() => router.push(hrefVaga)}
                     onMouseEnter={() => setHoveredId(r.id)}
                     onMouseLeave={() => setHoveredId(null)}
                     style={{
@@ -208,14 +212,14 @@ export default function FinanceiroRSPageClient({ rows }: Props) {
                         <span style={{ color: "#9CA3AF" }}>Sem candidato ativo</span>
                       )}
                     </td>
-                    <td style={tdStyle}>
+                    <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
                       <Link
-                        href={`/painel/vagas/${r.id}`}
+                        href={hrefVaga}
                         className="btn-outline"
-                        style={{ padding: "4px 10px", fontSize: 12 }}
+                        style={{ padding: "4px 8px", fontSize: 12, whiteSpace: "nowrap", display: "inline-block" }}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        Editar vaga
+                        Editar
                       </Link>
                     </td>
                   </tr>

@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import ModalEditarVaga from "./ModalEditarVaga";
 import ModalAdicionarCandidatoVaga from "./ModalAdicionarCandidatoVaga";
@@ -45,6 +46,15 @@ const STATUS_VAGA: Record<string, { label: string; bg: string; color: string }> 
   cancelada: { label: "Cancelada", bg: "#fee2e2", color: "#ef4444" },
 };
 
+// Destino do "Voltar" no topo — por padrão sempre /painel/vagas, mas quando a navegação
+// pra cá veio de outra tela (via ?origem=... na URL, ver FinanceiroRSPageClient), volta
+// pra origem real em vez de sempre cair na lista geral. Mapa em vez de if/else pra
+// facilitar adicionar novas origens sem reescrever a lógica de resolução.
+const ORIGEM_VOLTAR: Record<string, { href: string; label: string }> = {
+  "financeiro-rs": { href: "/painel/financeiro-rs", label: "Voltar ao Financeiro R&S" },
+};
+const VOLTAR_PADRAO = { href: "/painel/vagas", label: "Voltar às vagas" };
+
 // Lista completa das etapas válidas de candidatos_vagas.etapa — mesmo conjunto do mapa
 // ETAPA_LABEL em api/candidatos-vagas/[id]/route.ts. Precisa cobrir TODAS elas: um id
 // fora dessa lista faz o .find() abaixo cair no fallback ETAPAS_VAGA[0] ("Triagem"),
@@ -73,6 +83,9 @@ interface Props {
 
 export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inicialCv }: Props) {
   useAutoRefresh(30000);
+  const searchParams = useSearchParams();
+  const origem = searchParams.get("origem");
+  const voltar = (origem && ORIGEM_VOLTAR[origem]) || VOLTAR_PADRAO;
   const [vaga, setVaga] = useState<Vaga>(inicial);
   const [candidatosVaga, setCandidatosVaga] = useState<CandidatoVaga[]>(inicialCv);
   const [modalEditar, setModalEditar]     = useState(false);
@@ -268,13 +281,13 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
     <div className="max-w-5xl mx-auto">
       {/* Back */}
       <Link
-        href="/painel/vagas"
+        href={voltar.href}
         className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-black transition-colors mb-5"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
-        Voltar às vagas
+        {voltar.label}
       </Link>
 
       {/* Indicadores da vaga */}
