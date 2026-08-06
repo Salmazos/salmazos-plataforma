@@ -187,7 +187,7 @@ export default function FinanceiroRSPageClient({ rows }: Props) {
                       {r.salarioModo === "fixo" ? (
                         r.salarioValor != null ? formatarMoeda(r.salarioValor) : "—"
                       ) : (
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#F3F4F6", color: "#6B7280", whiteSpace: "nowrap" }}>
+                        <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, padding: "4px 8px", borderRadius: 999, background: "#F3F4F6", color: "#6B7280", whiteSpace: "normal", lineHeight: 1.3, textAlign: "center" }}>
                           {r.salarioModo === "a_combinar" ? "À combinar" : "Pretensão Salarial"}
                         </span>
                       )}
