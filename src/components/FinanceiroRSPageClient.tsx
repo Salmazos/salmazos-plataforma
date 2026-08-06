@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { getAgingLevel } from "./VagasPageClient";
 
 export interface VagaFinanceiraRow {
@@ -42,8 +44,10 @@ function SortIcon({ ativo, dir }: { ativo: boolean; dir: SortDir }) {
 }
 
 export default function FinanceiroRSPageClient({ rows }: Props) {
+  const router = useRouter();
   const [sortField, setSortField] = useState<SortField>("diasAberta");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -136,12 +140,13 @@ export default function FinanceiroRSPageClient({ rows }: Props) {
                 Valor se cancelar<SortIcon ativo={sortField === "valorSeCancelar"} dir={sortDir} />
               </th>
               <th style={thStyle}>Funil</th>
+              <th style={thStyle}>Ações</th>
             </tr>
           </thead>
           <tbody>
             {sortedRows.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF" }}>
+                <td colSpan={10} style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF" }}>
                   Nenhuma vaga de R&S em aberto no momento.
                 </td>
               </tr>
@@ -150,8 +155,19 @@ export default function FinanceiroRSPageClient({ rows }: Props) {
                 const semTaxa = r.feeRsPercentual == null;
                 const aging = r.diasAberta != null ? getAgingLevel("recrutamento_selecao", r.diasAberta) ?? "normal" : null;
                 const agingInfo = aging ? AGING_COLOR[aging] : null;
+                const hover = hoveredId === r.id;
                 return (
-                  <tr key={r.id} style={{ borderBottom: "1px solid #F3F4F6", background: semTaxa ? "#FFFBEB" : undefined }}>
+                  <tr
+                    key={r.id}
+                    onClick={() => router.push(`/painel/vagas/${r.id}`)}
+                    onMouseEnter={() => setHoveredId(r.id)}
+                    onMouseLeave={() => setHoveredId(null)}
+                    style={{
+                      borderBottom: "1px solid #F3F4F6",
+                      background: hover ? (semTaxa ? "#FEF3C7" : "#F9FAFB") : semTaxa ? "#FFFBEB" : undefined,
+                      cursor: "pointer",
+                    }}
+                  >
                     <td style={tdStyle}>{r.clienteNome}</td>
                     <td style={{ ...tdStyle, fontWeight: 600, color: "#111827" }}>{r.titulo}</td>
                     <td style={tdStyle}>
@@ -191,6 +207,16 @@ export default function FinanceiroRSPageClient({ rows }: Props) {
                       ) : (
                         <span style={{ color: "#9CA3AF" }}>Sem candidato ativo</span>
                       )}
+                    </td>
+                    <td style={tdStyle}>
+                      <Link
+                        href={`/painel/vagas/${r.id}`}
+                        className="btn-outline"
+                        style={{ padding: "4px 10px", fontSize: 12 }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Editar vaga
+                      </Link>
                     </td>
                   </tr>
                 );
