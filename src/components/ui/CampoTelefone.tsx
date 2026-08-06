@@ -9,12 +9,14 @@ interface CampoTelefoneProps {
   className?: string;
   style?: React.CSSProperties;
   disabled?: boolean;
+  autoComplete?: string;
+  name?: string;
 }
 
 // Formata (xx) xxxxx-xxxx enquanto digita, reusando o mesmo formatarTelefone já usado
 // em outros formulários (FormularioCadastro, candidatura pública, etc.) — aqui embalado
 // como componente, no mesmo espírito do CampoMoeda.
-export default function CampoTelefone({ value, onChange, placeholder, className, style, disabled }: CampoTelefoneProps) {
+export default function CampoTelefone({ value, onChange, placeholder, className, style, disabled, autoComplete, name }: CampoTelefoneProps) {
   return (
     <input
       type="text"
@@ -25,6 +27,8 @@ export default function CampoTelefone({ value, onChange, placeholder, className,
       className={className}
       style={style}
       disabled={disabled}
+      autoComplete={autoComplete}
+      name={name}
     />
   );
 }

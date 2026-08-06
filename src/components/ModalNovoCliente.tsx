@@ -383,6 +383,8 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
                   onChange={(e) => set("contato_nome", e.target.value)}
                   placeholder="Ex: Maria Silva"
                   className="input-field"
+                  autoComplete="off"
+                  name="contato_nome_cliente"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -393,6 +395,8 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
                     onChange={(v) => set("contato_telefone", v)}
                     placeholder="(00) 00000-0000"
                     className="input-field"
+                    autoComplete="off"
+                    name="contato_telefone_cliente"
                   />
                 </div>
                 <div>
@@ -403,6 +407,8 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
                     onChange={(e) => set("contato_email", e.target.value)}
                     placeholder="contato@empresa.com"
                     className="input-field"
+                    autoComplete="off"
+                    name="contato_email_cliente"
                   />
                   <p className="text-xs text-gray-400 mt-1">
                     Usado só para o envio de e-mails de comunicação (aprovação/recusa de solicitações etc.) —
