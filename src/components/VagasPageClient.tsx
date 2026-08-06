@@ -388,7 +388,10 @@ function diffDias(a: string, b: string): number {
   return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
 }
 
-function getAgingLevel(tipoServico: string, diasAberta: number): "critica" | "atencao" | null {
+// Exportado pra ser reaproveitado no painel financeiro de R&S (/painel/financeiro-rs) —
+// mesmos limiares (15/30 dias pra R&S) usados aqui e no relatório de Aging, sem duplicar
+// a regra de negócio numa terceira cópia.
+export function getAgingLevel(tipoServico: string, diasAberta: number): "critica" | "atencao" | null {
   if (tipoServico === "avaliacao_psicologica") return null;
   const [atencao, critica] =
     tipoServico === "recrutamento_selecao" ? [15, 30] : [7, 15];

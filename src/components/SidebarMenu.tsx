@@ -33,6 +33,7 @@ import {
   UserMinus,
   Megaphone,
   Stethoscope,
+  DollarSign,
 } from "lucide-react";
 
 interface Props {
@@ -85,6 +86,7 @@ const menuItems: MenuItemDef[] = [
   { label: "Agenda", href: "/painel/agenda", icon: Calendar },
   { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },
   { label: "Dashboard", href: "/painel/dashboard", icon: TrendingUp, requireFullAccess: true },
+  { label: "Financeiro R&S", href: "/painel/financeiro-rs", icon: DollarSign, requireFullAccess: true },
   { label: "Reembolsos", href: "/painel/reembolsos", icon: Receipt, requireFullAccess: true },
   { label: "Quilometragem", href: "/painel/quilometragem", icon: Car },
   { label: "Carteira de Clientes", href: "/painel/empresas-visitadas", icon: MapPin, requireSupervisor: true },
