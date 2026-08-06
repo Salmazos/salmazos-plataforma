@@ -74,6 +74,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       tipo: "vaga_encerrada",
       titulo: `${vagaConfidencial ? "🔴 [CONFIDENCIAL] " : ""}Vaga encerrada: ${vaga.titulo}`,
       mensagem: `Vaga "${vaga.titulo}" (${TIPO_LABELS[vaga.tipo_servico] ?? vaga.tipo_servico}) foi encerrada (${status}).`,
+      vaga_id: id,
     });
     if (errNotifSino) console.error("[notificar-encerramento] Erro ao registrar notificação de sino:", errNotifSino.message);
   });

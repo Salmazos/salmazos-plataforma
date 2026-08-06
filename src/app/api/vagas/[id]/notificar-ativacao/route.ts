@@ -74,6 +74,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       tipo: "vaga_ativada",
       titulo: `${vagaConfidencial ? "🔴 [CONFIDENCIAL] " : ""}Vaga reativada: ${vaga.titulo}`,
       mensagem: `Vaga "${vaga.titulo}" (${TIPO_LABELS[vaga.tipo_servico] ?? vaga.tipo_servico}) foi reativada.`,
+      vaga_id: id,
     });
     if (errNotifSino) console.error("[notificar-ativacao] Erro ao registrar notificação de sino:", errNotifSino.message);
   });

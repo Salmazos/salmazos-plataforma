@@ -211,6 +211,7 @@ export async function POST(request: NextRequest) {
             mensagem: `O e-mail da solicitação de vaga de ${clienteNome} (${body.cargo}) não foi entregue (${motivo}). A solicitação já está no painel de Vagas.`,
             user_id: a.user_id,
             candidato_id: null,
+            solicitacao_vaga_id: solicitacao.id,
           }));
         if (alertas.length > 0) {
           await service.from("notificacoes_analista").insert(alertas);

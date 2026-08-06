@@ -136,6 +136,7 @@ export async function POST(request: NextRequest) {
         tipo: "vaga_criada",
         titulo: `${vagaConfidencial ? "🔴 [CONFIDENCIAL] " : ""}Nova vaga criada: ${vagaTitulo}`,
         mensagem: `Vaga "${vagaTitulo}" (${TIPO_LABELS[vagaTipo] ?? vagaTipo}) foi criada e está aberta.`,
+        vaga_id: vagaId,
       });
       if (errNotifSino) console.error("[POST /api/vagas] Erro ao registrar notificação de sino:", errNotifSino.message);
     });
