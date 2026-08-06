@@ -126,11 +126,11 @@ export default function FinanceiroRSPageClient({ rows }: Props) {
           <thead>
             <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
               <th style={{ ...thStyle, width: "12%" }}>Cliente</th>
-              <th style={{ ...thStyle, width: "14%" }}>Vaga</th>
+              <th style={{ ...thStyle, width: "12%" }}>Vaga</th>
               <th style={{ ...thStyle, width: "8%", cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("diasAberta")}>
                 Dias em aberto<SortIcon ativo={sortField === "diasAberta"} dir={sortDir} />
               </th>
-              <th style={{ ...thStyle, width: "10%" }}>Salário</th>
+              <th style={{ ...thStyle, width: "12%" }}>Salário</th>
               <th style={{ ...thStyle, width: "8%" }}>Taxa %</th>
               <th style={{ ...thStyle, width: "9%", cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("feeProjetado")}>
                 Receita Projetada<SortIcon ativo={sortField === "feeProjetado"} dir={sortDir} />
@@ -183,7 +183,7 @@ export default function FinanceiroRSPageClient({ rows }: Props) {
                         "—"
                       )}
                     </td>
-                    <td style={tdStyle}>
+                    <td style={{ ...tdStyle, overflow: "hidden", textOverflow: "ellipsis" }}>
                       {r.salarioModo === "fixo" ? (
                         r.salarioValor != null ? formatarMoeda(r.salarioValor) : "—"
                       ) : (
