@@ -135,8 +135,8 @@ export default function FinanceiroRSPageClient({ rows }: Props) {
               <th style={{ ...thStyle, width: "9%", cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("feeProjetado")}>
                 Fee projetado<SortIcon ativo={sortField === "feeProjetado"} dir={sortDir} />
               </th>
-              <th style={{ ...thStyle, width: "9%" }}>Taxa cancelamento %</th>
-              <th style={{ ...thStyle, width: "9%", cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("valorSeCancelar")}>
+              <th style={{ ...thStyle, width: "9%", paddingRight: 20 }}>Taxa cancelamento %</th>
+              <th style={{ ...thStyle, width: "9%", paddingLeft: 20, cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("valorSeCancelar")}>
                 Valor se cancelar<SortIcon ativo={sortField === "valorSeCancelar"} dir={sortDir} />
               </th>
               <th style={{ ...thStyle, width: "15%" }}>Funil</th>
@@ -200,8 +200,8 @@ export default function FinanceiroRSPageClient({ rows }: Props) {
                       )}
                     </td>
                     <td style={tdStyle}>{r.feeProjetado != null ? formatarMoeda(r.feeProjetado) : "—"}</td>
-                    <td style={tdStyle}>{r.taxaCancelamento && r.taxaCancelamentoPercentual != null ? `${r.taxaCancelamentoPercentual}%` : "—"}</td>
-                    <td style={tdStyle}>{r.valorSeCancelar != null ? formatarMoeda(r.valorSeCancelar) : "—"}</td>
+                    <td style={{ ...tdStyle, paddingRight: 20 }}>{r.taxaCancelamento && r.taxaCancelamentoPercentual != null ? `${r.taxaCancelamentoPercentual}%` : "—"}</td>
+                    <td style={{ ...tdStyle, paddingLeft: 20 }}>{r.valorSeCancelar != null ? formatarMoeda(r.valorSeCancelar) : "—"}</td>
                     <td style={tdStyle}>
                       {r.etapaMaisAvancada ? (
                         <>
