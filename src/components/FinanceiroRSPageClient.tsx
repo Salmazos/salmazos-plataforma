@@ -122,25 +122,25 @@ export default function FinanceiroRSPageClient({ rows }: Props) {
 
       {/* Tabela */}
       <div className="card" style={{ padding: 0, overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, tableLayout: "fixed" }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-              <th style={thStyle}>Cliente</th>
-              <th style={thStyle}>Vaga</th>
-              <th style={{ ...thStyle, cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("diasAberta")}>
+              <th style={{ ...thStyle, width: "12%" }}>Cliente</th>
+              <th style={{ ...thStyle, width: "14%" }}>Vaga</th>
+              <th style={{ ...thStyle, width: "8%", cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("diasAberta")}>
                 Dias em aberto<SortIcon ativo={sortField === "diasAberta"} dir={sortDir} />
               </th>
-              <th style={thStyle}>Salário</th>
-              <th style={thStyle}>Taxa %</th>
-              <th style={{ ...thStyle, cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("feeProjetado")}>
+              <th style={{ ...thStyle, width: "10%" }}>Salário</th>
+              <th style={{ ...thStyle, width: "8%" }}>Taxa %</th>
+              <th style={{ ...thStyle, width: "9%", cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("feeProjetado")}>
                 Fee projetado<SortIcon ativo={sortField === "feeProjetado"} dir={sortDir} />
               </th>
-              <th style={thStyle}>Taxa cancelamento %</th>
-              <th style={{ ...thStyle, cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("valorSeCancelar")}>
+              <th style={{ ...thStyle, width: "9%" }}>Taxa cancelamento %</th>
+              <th style={{ ...thStyle, width: "9%", cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("valorSeCancelar")}>
                 Valor se cancelar<SortIcon ativo={sortField === "valorSeCancelar"} dir={sortDir} />
               </th>
-              <th style={thStyle}>Funil</th>
-              <th style={thStyle}>Ações</th>
+              <th style={{ ...thStyle, width: "15%" }}>Funil</th>
+              <th style={{ ...thStyle, width: "6%" }}>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -233,17 +233,21 @@ export default function FinanceiroRSPageClient({ rows }: Props) {
   );
 }
 
+// Sem white-space: nowrap de propósito — cabeçalhos como "Taxa cancelamento %" e "Valor
+// se cancelar" precisam poder quebrar em 2 linhas (ver width por coluna acima, tableLayout:
+// "fixed") pra a tabela inteira caber em ~1440px sem scroll horizontal. lineHeight mais
+// justo compensa a quebra pra não esticar demais a altura do cabeçalho.
 const thStyle: React.CSSProperties = {
   textAlign: "left",
-  padding: "10px 12px",
+  padding: "8px 8px",
   fontSize: 11,
   fontWeight: 700,
   color: "#6B7280",
   textTransform: "uppercase",
-  whiteSpace: "nowrap",
+  lineHeight: 1.3,
 };
 
 const tdStyle: React.CSSProperties = {
-  padding: "10px 12px",
+  padding: "8px 8px",
   color: "#374151",
 };
