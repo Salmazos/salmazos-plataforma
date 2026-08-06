@@ -19,6 +19,7 @@ const TIPOS = [
 const HORARIO_TIPOS = [
   { id: "seg_sex", label: "Segunda a Sexta" },
   { id: "6x1", label: "Escala 6x1" },
+  { id: "6x2", label: "Escala 6x2" },
   { id: "12x36", label: "Escala 12x36" },
   { id: "turno_fixo", label: "Turno Fixo" },
   { id: "a_combinar", label: "A combinar" },
@@ -276,6 +277,7 @@ export default function SolicitarVagaPage() {
     const comIntervalo = (base: string) => intervalo ? `${base} (${intervalo})` : base;
     if (horarioTipo === "seg_sex") return comIntervalo(`Segunda a Sexta, ${times}`);
     if (horarioTipo === "6x1") return comIntervalo(`Escala 6x1, ${times}`);
+    if (horarioTipo === "6x2") return comIntervalo(`Escala 6x2, ${times}`);
     if (horarioTipo === "12x36") {
       const label = hor1236 === "diurno" ? "Turno Diurno" : "Turno Noturno";
       const base = horEntrada || horSaida ? `Escala 12x36 — ${label}, ${times}` : `Escala 12x36 — ${label}`;
@@ -661,7 +663,7 @@ export default function SolicitarVagaPage() {
             </div>
           )}
 
-          {horarioTipo === "6x1" && (
+          {(horarioTipo === "6x1" || horarioTipo === "6x2") && (
             <div className="flex items-start gap-3 flex-wrap">
               <div><label style={labelStyle}>Entrada</label><input type="time" value={horEntrada} onChange={(e) => setHorEntrada(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
               <div><label style={labelStyle}>Saída</label><input type="time" value={horSaida} onChange={(e) => setHorSaida(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>

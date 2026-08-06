@@ -30,6 +30,7 @@ const BENEFICIOS_OPCOES = [
 const HORARIO_TIPOS = [
   "Segunda a Sexta",
   "Escala 6x1",
+  "Escala 6x2",
   "Escala 12x36",
   "Disponibilidade para turnos",
   "Disponibilidade para fins de semana",
