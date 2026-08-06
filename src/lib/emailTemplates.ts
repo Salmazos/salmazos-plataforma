@@ -361,6 +361,7 @@ export function getEmailTemplate(
           <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
             <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Detalhes da vaga:</p>
             <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              ${nomeCliente ? `<li><strong>Cliente:</strong> ${nomeCliente}</li>` : ""}
               <li><strong>Cargo:</strong> ${cargo}</li>
               <li><strong>Tipo:</strong> ${tipoServicoLabel ?? "—"}</li>
               <li><strong>Local:</strong> ${local}</li>
@@ -423,6 +424,7 @@ export function getEmailTemplate(
           <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
             <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Detalhes da vaga:</p>
             <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              ${nomeCliente ? `<li><strong>Cliente:</strong> ${nomeCliente}</li>` : ""}
               <li><strong>Cargo:</strong> ${cargo}</li>
               <li><strong>Tipo:</strong> ${tipoServicoLabel ?? "—"}</li>
               <li><strong>Local:</strong> ${localEnc}</li>

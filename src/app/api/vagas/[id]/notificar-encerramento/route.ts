@@ -28,11 +28,13 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     const { data: vaga } = await supabase
       .from("vagas")
-      .select("id, titulo, tipo_servico, cidade, estado, responsavel, confidencial")
+      .select("id, titulo, tipo_servico, cidade, estado, responsavel, confidencial, cliente_id, clientes(nome)")
       .eq("id", id)
       .single();
 
     if (!vaga) { console.error("[notificar-encerramento] Vaga não encontrada:", id); return; }
+
+    const vagaClienteNome = (vaga.clientes as any)?.nome ?? null;
 
     const { data: analistas } = await supabase
       .from("analistas_perfil")
@@ -52,6 +54,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       statusEncerramento: status,
       confidencial: vaga.confidencial === true,
       vagaUrl,
+      nomeCliente: vagaClienteNome ?? undefined,
     });
 
     const destinatarios = analistas.filter((a) => a.email);

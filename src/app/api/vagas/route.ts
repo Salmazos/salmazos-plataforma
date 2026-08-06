@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
     const vagaFeeRsPrazoCobranca = data.fee_rs_prazo_cobranca;
     const vagaTaxaCancelamento = data.taxa_cancelamento === true;
     const vagaTaxaCancelamentoPercentual = data.taxa_cancelamento_percentual;
+    const vagaClienteNome = (data.clientes as any)?.nome ?? null;
 
     after(async () => {
       console.log(`[POST /api/vagas] Notificando analistas sobre nova vaga ${vagaId}`);
@@ -121,6 +122,7 @@ export async function POST(request: NextRequest) {
         observacoes: vagaObservacoes ?? undefined,
         confidencial: vagaConfidencial,
         vagaUrl,
+        nomeCliente: vagaClienteNome ?? undefined,
         feeRsPercentual: vagaFeeRsPercentual,
         feeRsPrazoCobranca: vagaFeeRsPrazoCobranca,
         taxaCancelamento: vagaTaxaCancelamento,

@@ -23,11 +23,13 @@ export async function POST(_request: NextRequest, { params }: Params) {
 
     const { data: vaga } = await supabase
       .from("vagas")
-      .select("id, titulo, tipo_servico, cidade, estado, responsavel, num_posicoes, salario, horario, requisitos, beneficios, confidencial, fee_rs_percentual, fee_rs_prazo_cobranca, taxa_cancelamento, taxa_cancelamento_percentual")
+      .select("id, titulo, tipo_servico, cidade, estado, responsavel, num_posicoes, salario, horario, requisitos, beneficios, confidencial, fee_rs_percentual, fee_rs_prazo_cobranca, taxa_cancelamento, taxa_cancelamento_percentual, cliente_id, clientes(nome)")
       .eq("id", id)
       .single();
 
     if (!vaga) { console.error("[notificar-ativacao] Vaga não encontrada:", id); return; }
+
+    const vagaClienteNome = (vaga.clientes as any)?.nome ?? null;
 
     const { data: analistas } = await supabase
       .from("analistas_perfil")
@@ -52,6 +54,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       beneficios: vaga.beneficios ?? undefined,
       confidencial: vaga.confidencial === true,
       vagaUrl,
+      nomeCliente: vagaClienteNome ?? undefined,
       feeRsPercentual: vaga.fee_rs_percentual,
       feeRsPrazoCobranca: vaga.fee_rs_prazo_cobranca,
       taxaCancelamento: vaga.taxa_cancelamento === true,
