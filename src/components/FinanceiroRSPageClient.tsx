@@ -133,7 +133,7 @@ export default function FinanceiroRSPageClient({ rows }: Props) {
               <th style={{ ...thStyle, width: "10%" }}>Salário</th>
               <th style={{ ...thStyle, width: "8%" }}>Taxa %</th>
               <th style={{ ...thStyle, width: "9%", cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("feeProjetado")}>
-                Fee projetado<SortIcon ativo={sortField === "feeProjetado"} dir={sortDir} />
+                Receita Projetada<SortIcon ativo={sortField === "feeProjetado"} dir={sortDir} />
               </th>
               <th style={{ ...thStyle, width: "9%", paddingRight: 20 }}>Taxa cancelamento %</th>
               <th style={{ ...thStyle, width: "9%", paddingLeft: 20, cursor: "pointer", userSelect: "none" }} onClick={() => handleSort("valorSeCancelar")}>
