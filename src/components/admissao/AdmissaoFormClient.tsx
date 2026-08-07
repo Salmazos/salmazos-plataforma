@@ -19,6 +19,13 @@ import { STATUS_JA_ENVIADO } from "@/lib/admissaoStatus";
 
 const TOTAL_PASSOS = 9;
 
+// resolveAdmissaoByToken (lib/admissaoToken.ts) só usa 403 pra esse caso específico —
+// os demais erros de token (link inválido/expirado) usam 404/410. Checar a mensagem além
+// do status é só uma segunda trava, caso algum outro guard futuro reuse 403 por outro motivo.
+function isErroJaEnviado(status: number, mensagem?: string | null): boolean {
+  return status === 403 && !!mensagem && mensagem.toLowerCase().includes("já foi enviada");
+}
+
 export interface FormState {
   nome_completo: string;
   data_nascimento: string;
@@ -304,101 +311,127 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
   const [enviando, setEnviando] = useState(false);
   const [erroEnvio, setErroEnvio] = useState("");
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch(`/api/admissoes/token/${token}`);
-        if (!res.ok) {
+  // Busca os dados da admissão pelo token. completo=true (carga inicial) também hidrata
+  // todos os campos do formulário; completo=false (recheck ao focar a aba — ver handoff QR
+  // computador→celular em PassoUploadDocumentos.tsx) só verifica se o status virou
+  // "já enviado" nesse meio tempo, sem reidratar nada — evita sobrescrever algo que o
+  // candidato tenha digitado na aba desde o último autosave.
+  const carregarAdmissao = useCallback(async (completo: boolean) => {
+    try {
+      const res = await fetch(`/api/admissoes/token/${token}`);
+      if (!res.ok) {
+        if (completo) {
           const json = await res.json().catch(() => ({}));
           setErroCarregamento(json.error || "Este link não é válido ou expirou. Entre em contato com a Salmazos pelo WhatsApp.");
-          return;
         }
-        const { data } = await res.json();
-        setAdmissao(data.admissao);
-
-        if (STATUS_JA_ENVIADO.includes(data.admissao.status)) {
-          setJaEnviado(true);
-          return;
-        }
-
-        let formCompleto = FORM_VAZIO;
-        let isMotoristaCalc = false;
-        let situacaoTrabalhistaCalc = SITUACAO_TRABALHISTA_VAZIO;
-        if (data.dados_pessoais) {
-          formCompleto = {
-            ...FORM_VAZIO,
-            ...Object.fromEntries(
-              Object.entries(data.dados_pessoais)
-                .filter(([k, v]) => k in FORM_VAZIO && v != null && k !== "possui_ctps_digital" && k !== "deseja_portabilidade_salario")
-                .map(([k, v]) => [k, String(v)])
-            ),
-            possui_ctps_digital: !!data.dados_pessoais.possui_ctps_digital,
-            // Campo boolean no banco — precisa da mesma exceção de possui_ctps_digital acima,
-            // senão o map genérico de String(v) transforma o boolean numa string "true"/"false"
-            // que o zod rejeita no próximo autosave (era mascarado pelo toggle antigo, que
-            // reescrevia isto com um boolean real a cada clique; sem o toggle, nada corrige
-            // o valor depois do load).
-            deseja_portabilidade_salario: !!data.dados_pessoais.deseja_portabilidade_salario,
-          };
-          setForm(formCompleto);
-          isMotoristaCalc = !!data.dados_pessoais.cnh_numero;
-          setIsMotorista(isMotoristaCalc);
-
-          const simNao = (v: boolean | null | undefined) => (v === true ? "sim" : v === false ? "nao" : "");
-          situacaoTrabalhistaCalc = {
-            recebendo_seguro_desemprego: simNao(data.dados_pessoais.recebendo_seguro_desemprego),
-            primeiro_emprego: simNao(data.dados_pessoais.primeiro_emprego),
-            trabalhou_empresa_antes: simNao(data.dados_pessoais.trabalhou_empresa_antes),
-            aposentado: simNao(data.dados_pessoais.aposentado),
-            dependente_ir: simNao(data.dados_pessoais.dependente_ir),
-            dependente_salario_familia: simNao(data.dados_pessoais.dependente_salario_familia),
-            tera_adiantamento: simNao(data.dados_pessoais.tera_adiantamento),
-          };
-          setSituacaoTrabalhista(situacaoTrabalhistaCalc);
-        }
-        const dependentesCalc: AdmissaoDependente[] = data.dependentes ?? [];
-        const possuiDependentesCalc = dependentesCalc.length > 0;
-        setDependentes(dependentesCalc);
-        setPossuiDependentes(possuiDependentesCalc);
-        const documentosCalc: DocumentoToken[] = data.documentos ?? [];
-        setDocumentos(documentosCalc);
-
-        // Autocomplete: bairro/cidade do local de trabalho sugerido a partir do
-        // endereço residencial, só quando o campo ainda não foi salvo antes.
-        const bairroCidadeResidencial = [data.dados_pessoais?.endereco_bairro, data.dados_pessoais?.endereco_cidade]
-          .filter(Boolean).join(", ");
-        const vt = data.vale_transporte;
-        const valeTransporteCalc: ValeTransporteState = {
-          opcao: vt?.opcao ?? "",
-          dias_semana: vt?.dias_semana ?? "",
-          bairro_cidade_trabalho: sugerirSeVazio(vt?.bairro_cidade_trabalho, bairroCidadeResidencial),
-          linhas: ((vt?.admissao_vt_linhas ?? []) as { onibus_viacao: string | null; percurso: string | null; valor_unitario: number | null; valor_total_diario: number | null }[])
-            .map((l) => ({
-              onibus_viacao: l.onibus_viacao ?? "",
-              percurso: l.percurso ?? "",
-              valor_unitario: l.valor_unitario != null ? String(l.valor_unitario) : "",
-              valor_total_diario: l.valor_total_diario != null ? String(l.valor_total_diario) : "",
-            })),
-          termos_aceitos: vt?.termos_aceitos === true,
-        };
-        setValeTransporte(valeTransporteCalc);
-
-        // Reabrindo o link (status já saiu de "aguardando_candidato" em algum momento):
-        // pula direto pro primeiro passo com pendência real em vez de recomeçar do 1.
-        if (data.admissao.status !== "aguardando_candidato") {
-          setPasso(calcularPassoInicial(
-            formCompleto, isMotoristaCalc, possuiDependentesCalc, dependentesCalc.length,
-            valeTransporteCalc, situacaoTrabalhistaCalc, documentosCalc,
-          ));
-          setIniciado(true);
-        }
-      } catch {
-        setErroCarregamento("Não foi possível carregar seus dados. Verifique sua conexão e tente novamente.");
-      } finally {
-        setCarregando(false);
+        return;
       }
-    })();
+      const { data } = await res.json();
+      if (completo) setAdmissao(data.admissao);
+
+      if (STATUS_JA_ENVIADO.includes(data.admissao.status)) {
+        setJaEnviado(true);
+        return;
+      }
+
+      if (!completo) return;
+
+      let formCompleto = FORM_VAZIO;
+      let isMotoristaCalc = false;
+      let situacaoTrabalhistaCalc = SITUACAO_TRABALHISTA_VAZIO;
+      if (data.dados_pessoais) {
+        formCompleto = {
+          ...FORM_VAZIO,
+          ...Object.fromEntries(
+            Object.entries(data.dados_pessoais)
+              .filter(([k, v]) => k in FORM_VAZIO && v != null && k !== "possui_ctps_digital" && k !== "deseja_portabilidade_salario")
+              .map(([k, v]) => [k, String(v)])
+          ),
+          possui_ctps_digital: !!data.dados_pessoais.possui_ctps_digital,
+          // Campo boolean no banco — precisa da mesma exceção de possui_ctps_digital acima,
+          // senão o map genérico de String(v) transforma o boolean numa string "true"/"false"
+          // que o zod rejeita no próximo autosave (era mascarado pelo toggle antigo, que
+          // reescrevia isto com um boolean real a cada clique; sem o toggle, nada corrige
+          // o valor depois do load).
+          deseja_portabilidade_salario: !!data.dados_pessoais.deseja_portabilidade_salario,
+        };
+        setForm(formCompleto);
+        isMotoristaCalc = !!data.dados_pessoais.cnh_numero;
+        setIsMotorista(isMotoristaCalc);
+
+        const simNao = (v: boolean | null | undefined) => (v === true ? "sim" : v === false ? "nao" : "");
+        situacaoTrabalhistaCalc = {
+          recebendo_seguro_desemprego: simNao(data.dados_pessoais.recebendo_seguro_desemprego),
+          primeiro_emprego: simNao(data.dados_pessoais.primeiro_emprego),
+          trabalhou_empresa_antes: simNao(data.dados_pessoais.trabalhou_empresa_antes),
+          aposentado: simNao(data.dados_pessoais.aposentado),
+          dependente_ir: simNao(data.dados_pessoais.dependente_ir),
+          dependente_salario_familia: simNao(data.dados_pessoais.dependente_salario_familia),
+          tera_adiantamento: simNao(data.dados_pessoais.tera_adiantamento),
+        };
+        setSituacaoTrabalhista(situacaoTrabalhistaCalc);
+      }
+      const dependentesCalc: AdmissaoDependente[] = data.dependentes ?? [];
+      const possuiDependentesCalc = dependentesCalc.length > 0;
+      setDependentes(dependentesCalc);
+      setPossuiDependentes(possuiDependentesCalc);
+      const documentosCalc: DocumentoToken[] = data.documentos ?? [];
+      setDocumentos(documentosCalc);
+
+      // Autocomplete: bairro/cidade do local de trabalho sugerido a partir do
+      // endereço residencial, só quando o campo ainda não foi salvo antes.
+      const bairroCidadeResidencial = [data.dados_pessoais?.endereco_bairro, data.dados_pessoais?.endereco_cidade]
+        .filter(Boolean).join(", ");
+      const vt = data.vale_transporte;
+      const valeTransporteCalc: ValeTransporteState = {
+        opcao: vt?.opcao ?? "",
+        dias_semana: vt?.dias_semana ?? "",
+        bairro_cidade_trabalho: sugerirSeVazio(vt?.bairro_cidade_trabalho, bairroCidadeResidencial),
+        linhas: ((vt?.admissao_vt_linhas ?? []) as { onibus_viacao: string | null; percurso: string | null; valor_unitario: number | null; valor_total_diario: number | null }[])
+          .map((l) => ({
+            onibus_viacao: l.onibus_viacao ?? "",
+            percurso: l.percurso ?? "",
+            valor_unitario: l.valor_unitario != null ? String(l.valor_unitario) : "",
+            valor_total_diario: l.valor_total_diario != null ? String(l.valor_total_diario) : "",
+          })),
+        termos_aceitos: vt?.termos_aceitos === true,
+      };
+      setValeTransporte(valeTransporteCalc);
+
+      // Reabrindo o link (status já saiu de "aguardando_candidato" em algum momento):
+      // pula direto pro primeiro passo com pendência real em vez de recomeçar do 1.
+      if (data.admissao.status !== "aguardando_candidato") {
+        setPasso(calcularPassoInicial(
+          formCompleto, isMotoristaCalc, possuiDependentesCalc, dependentesCalc.length,
+          valeTransporteCalc, situacaoTrabalhistaCalc, documentosCalc,
+        ));
+        setIniciado(true);
+      }
+    } catch {
+      if (completo) setErroCarregamento("Não foi possível carregar seus dados. Verifique sua conexão e tente novamente.");
+    } finally {
+      if (completo) setCarregando(false);
+    }
   }, [token]);
+
+  useEffect(() => {
+    carregarAdmissao(true);
+  }, [carregarAdmissao]);
+
+  // Recheck ao voltar pra aba (não em qualquer foco — só na transição hidden→visible) pra
+  // pegar o caso do handoff QR: candidato termina e envia a admissão pelo celular, e a aba
+  // do computador (parada desde antes disso) nunca ficaria sabendo sozinha. Sem polling
+  // contínuo — só reage ao evento, então não roda em background sem necessidade.
+  useEffect(() => {
+    if (jaEnviado || envioConcluido) return;
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        carregarAdmissao(false);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [carregarAdmissao, jaEnviado, envioConcluido]);
 
   const setCampo = useCallback(<K extends keyof FormState>(campo: K, valor: FormState[K]) => {
     setForm((prev) => ({ ...prev, [campo]: valor }));
@@ -426,6 +459,13 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
+        if (isErroJaEnviado(res.status, json.error)) {
+          // Não é uma falha de verdade — o candidato provavelmente já concluiu e enviou
+          // pelo celular via handoff QR (ver PassoUploadDocumentos.tsx). Mostra a mesma
+          // tela de sucesso em vez de um aviso de erro de salvamento.
+          setJaEnviado(true);
+          return false;
+        }
         console.error("[admissao] Falha ao salvar progresso:", json.error || res.status);
         setAvisoFalhaSalvar(true);
         return false;
@@ -479,6 +519,11 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
         return;
       }
       const json = await res.json().catch(() => ({}));
+      if (isErroJaEnviado(res.status, json.error)) {
+        // Mesmo caso do salvarProgresso acima: já foi enviado pelo celular, não é erro.
+        setJaEnviado(true);
+        return;
+      }
       console.error("[admissao] Falha ao enviar para análise:", json.error || res.status);
       setErroEnvio(json.error || "Não foi possível enviar seus dados agora. Tente novamente em instantes.");
     } catch (err) {
