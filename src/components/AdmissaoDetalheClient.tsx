@@ -492,6 +492,9 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
     id: admissao.vaga_id,
     titulo: admissao.vagas?.titulo ?? null,
     clienteNome: admissao.vagas?.clientes?.nome ?? null,
+    // Usado só pra filtrar documentos condicionais por cliente no pacote da contabilidade
+    // (ver ModalUploadDocumentosContabilidade) — ex: os 2 termos exclusivos da Novacki.
+    clienteId: admissao.vagas?.cliente_id ?? null,
   });
   const [funcaoAtual, setFuncaoAtual] = useState(admissao.funcao);
   const [salarioAtual, setSalarioAtual] = useState(admissao.salario);
@@ -600,8 +603,13 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       const json = await res.json();
       if (!res.ok) { showToast(json.error || "Erro ao salvar dados da admissão."); return; }
 
-      const novaVaga = json.data.vagas as { id: string; titulo: string; clientes: { nome: string } | null } | null;
-      setVagaAtual({ id: json.data.vaga_id, titulo: novaVaga?.titulo ?? null, clienteNome: novaVaga?.clientes?.nome ?? null });
+      const novaVaga = json.data.vagas as { id: string; titulo: string; cliente_id: string | null; clientes: { nome: string } | null } | null;
+      setVagaAtual({
+        id: json.data.vaga_id,
+        titulo: novaVaga?.titulo ?? null,
+        clienteNome: novaVaga?.clientes?.nome ?? null,
+        clienteId: novaVaga?.cliente_id ?? null,
+      });
       setFuncaoAtual(json.data.funcao);
       setSalarioAtual(json.data.salario);
       setTipoSalarioAtual(json.data.tipo_salario);
@@ -2374,6 +2382,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           isOpen={modalContabilidadeAberto}
           onClose={() => setModalContabilidadeAberto(false)}
           admissaoId={admissao.id}
+          clienteId={vagaAtual.clienteId}
           documentosIniciais={documentosContabilidade}
           nomeInicial={dp?.nome_completo ?? ""}
           emailInicial={dp?.email ?? ""}

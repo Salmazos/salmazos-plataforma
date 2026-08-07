@@ -11,7 +11,9 @@ export type TipoDocumentoContabilidade =
   | "termo_lgpd"
   | "ficha_ir"
   | "salario_familia"
-  | "termo_responsabilidade";
+  | "termo_responsabilidade"
+  | "termo_lgpd_novacki"
+  | "termo_confidencialidade_novacki";
 
 export interface DocumentoContabilidadeDef {
   tipo_documento: TipoDocumentoContabilidade;
@@ -25,11 +27,21 @@ export interface DocumentoContabilidadeDef {
   // envio: se o arquivo chegar, ele é identificado e entra no pacote; se não chegar, o
   // pacote sai só com os 4 fixos, sem bloquear nada.
   obrigatorio: boolean;
+  // Ausente/null = documento padrão, aplica a admissões de qualquer cliente (os 7
+  // originais). Preenchido = só entra no pacote quando a vaga da admissão pertence a esse
+  // cliente (ver documentosParaCliente abaixo) — hoje só os 2 termos exclusivos da Novacki.
+  cliente_id?: string | null;
 }
 
 // Ordem fixa — é também a ordem de montagem do PDF final (ver montar-enviar/route.ts) e a
-// ordem de exibição na tela de conferência, que SEMPRE lista os 7 (ver
-// ModalUploadDocumentosContabilidade.tsx).
+// ordem de exibição na tela de conferência (ver ModalUploadDocumentosContabilidade.tsx),
+// que lista os 7 padrão sempre, mais os condicionais por cliente quando aplicável (ver
+// documentosParaCliente).
+// Cliente Novacki Papel e Embalagens S/A — confirmado via `select id, nome from clientes
+// where nome ilike '%novacki%'`. Só os 2 documentos abaixo usam isso; os 7 originais não
+// têm cliente_id (aplicam a todos).
+const CLIENTE_ID_NOVACKI = "7f876c42-fa47-4de8-876f-d2ebe79738c6";
+
 export const DOCUMENTOS_CONTABILIDADE: DocumentoContabilidadeDef[] = [
   { tipo_documento: "ficha_registro", label: "Ficha de Registro", chaves: ["FICHA DE REGISTRO"], obrigatorio: true },
   { tipo_documento: "modelo_contrato", label: "Modelo Contrato Temporário", chaves: ["MODELO CONTRATO"], obrigatorio: true },
@@ -38,7 +50,20 @@ export const DOCUMENTOS_CONTABILIDADE: DocumentoContabilidadeDef[] = [
   { tipo_documento: "ficha_ir", label: "Ficha de IR", chaves: ["FICHA DE IR"], obrigatorio: false },
   { tipo_documento: "salario_familia", label: "Ficha de Salário Família", chaves: ["SALARIO FAMILIA"], obrigatorio: false },
   { tipo_documento: "termo_responsabilidade", label: "Termo de Responsabilidade", chaves: ["TERMO DE RESPONSABILIDADE"], obrigatorio: false },
+  // Exclusivos da Novacki — só entram no pacote quando a vaga da admissão é dessa empresa
+  // (ver documentosParaCliente). Chaves incluem "NOVACKI" de propósito, pra não colidir
+  // com o "termo_lgpd" genérico acima (que também bate em qualquer nome contendo "LGPD").
+  { tipo_documento: "termo_lgpd_novacki", label: "Termo LGPD Novacki", chaves: ["TERMO LGPD NOVACKI", "LGPD NOVACKI"], obrigatorio: true, cliente_id: CLIENTE_ID_NOVACKI },
+  { tipo_documento: "termo_confidencialidade_novacki", label: "Termo de Confidencialidade e Sigilo Novacki", chaves: ["CONFIDENCIALIDADE NOVACKI", "SIGILO NOVACKI"], obrigatorio: true, cliente_id: CLIENTE_ID_NOVACKI },
 ];
+
+// Lista de documentos aplicável a uma admissão específica: os 7 padrão (sem cliente_id)
+// sempre aparecem; os com cliente_id só entram quando bate com o cliente da vaga dessa
+// admissão. clienteId null (vaga sem cliente vinculado, ou contexto sem essa informação)
+// só traz os documentos padrão — nunca os condicionais por cliente.
+export function documentosParaCliente(clienteId: string | null): DocumentoContabilidadeDef[] {
+  return DOCUMENTOS_CONTABILIDADE.filter((d) => !d.cliente_id || d.cliente_id === clienteId);
+}
 
 export function normalizar(texto: string): string {
   return texto
@@ -56,9 +81,13 @@ export function normalizar(texto: string): string {
 // Retorna o tipo sugerido pelo nome do arquivo, OU null quando a sugestão não é confiável
 // (nenhuma chave bateu, ou mais de uma bateu — nomes de arquivo às vezes contêm palavras de
 // dois documentos diferentes por acidente). null sempre significa "escolha manual obrigatória".
-export function inferirTipoDocumentoContabilidade(nomeArquivo: string): TipoDocumentoContabilidade | null {
+// clienteId restringe a busca aos tipos aplicáveis àquela admissão (ver
+// documentosParaCliente) — evita, por exemplo, sugerir os termos exclusivos da Novacki pra
+// uma admissão de outro cliente, e evita a "TERMO LGPD NOVACKI" colidir com o "termo_lgpd"
+// genérico quando o contexto já sabe que não é uma admissão Novacki.
+export function inferirTipoDocumentoContabilidade(nomeArquivo: string, clienteId: string | null = null): TipoDocumentoContabilidade | null {
   const nomeNormalizado = normalizar(nomeArquivo);
-  const candidatos = DOCUMENTOS_CONTABILIDADE.filter((def) =>
+  const candidatos = documentosParaCliente(clienteId).filter((def) =>
     def.chaves.some((chave) => nomeNormalizado.includes(normalizar(chave)))
   );
   if (candidatos.length !== 1) return null;
@@ -92,13 +121,15 @@ export interface DocumentoObrigatoriedade {
   obrigatorio: boolean;
 }
 
-// Sempre os 7 tipos, na ordem fixa de exibição/montagem — cada um já marcado com se é
-// obrigatório ou não. Só os 4 primeiros (Ficha de Registro, Modelo Contrato, Acordo de
-// HS/Decl VT, Termo LGPD) bloqueiam o envio se faltarem; Ficha de IR, Salário Família e
-// Termo de Responsabilidade NUNCA são obrigatórios — entram no pacote final se e só se a
-// contabilidade de fato enviar o arquivo correspondente.
-export function documentosObrigatorios(): DocumentoObrigatoriedade[] {
-  return DOCUMENTOS_CONTABILIDADE.map((def) => ({
+// Os tipos aplicáveis à admissão (os 7 padrão + os condicionais do cliente da vaga, se
+// houver — ver documentosParaCliente), na ordem fixa de exibição/montagem, cada um já
+// marcado com se é obrigatório ou não. Dos 7 originais, só os 4 primeiros (Ficha de
+// Registro, Modelo Contrato, Acordo de HS/Decl VT, Termo LGPD) bloqueiam o envio se
+// faltarem; Ficha de IR, Salário Família e Termo de Responsabilidade NUNCA são
+// obrigatórios — entram no pacote final se e só se a contabilidade de fato enviar o
+// arquivo correspondente. Os 2 termos da Novacki SÃO obrigatórios quando aplicáveis.
+export function documentosObrigatorios(clienteId: string | null = null): DocumentoObrigatoriedade[] {
+  return documentosParaCliente(clienteId).map((def) => ({
     tipo_documento: def.tipo_documento,
     label: def.label,
     obrigatorio: def.obrigatorio,

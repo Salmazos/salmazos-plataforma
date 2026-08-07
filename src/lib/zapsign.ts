@@ -146,6 +146,18 @@ export interface ContratadoDados {
   cpf?: string;
 }
 
+// Override de posição de rubrica pra uma página específica — usado só quando o fallback
+// global (RUBRICA_POSICAO_PADRAO) colide com o layout de um documento específico (ex:
+// termo_lgpd_novacki, um termo denso que não sobra margem no canto superior direito
+// padrão — ver lib/zapsignPosicoes.ts). `pagina` é o índice absoluto (0-indexed) no PDF
+// final combinado, igual a AncoraDetectada.
+export interface RubricaExtra {
+  pagina: number;
+  papel: "contratante" | "contratado";
+  relative_position_left: number;
+  relative_position_bottom: number;
+}
+
 export interface CriarDocumentoComPosicionamentoParams {
   nomeDocumento: string;
   pdfBytes: Uint8Array;
@@ -156,6 +168,10 @@ export interface CriarDocumentoComPosicionamentoParams {
   // execução). `pagina` é o índice absoluto (0-indexed) no PDF final combinado.
   ancoras: AncoraDetectada[];
   totalPaginas: number;
+  // Páginas de rubrica com posição própria (ver RubricaExtra acima) — sobrepõe
+  // RUBRICA_POSICAO_PADRAO só nessas páginas específicas; todas as demais páginas sem
+  // âncora continuam usando o padrão global normalmente.
+  rubricasExtras?: RubricaExtra[];
 }
 
 export interface CriarDocumentoComPosicionamentoResult {
@@ -194,14 +210,37 @@ export async function criarDocumentoComPosicionamento(
   }));
 
   // Páginas sem nenhuma âncora (nem contratante nem contratado) — rubrica de AMBAS as
-  // partes na posição fixa padrão. Decisão explícita: como o mapeamento original não
-  // define quem rubrica as páginas do meio, optamos por incluir os dois (mais seguro
-  // pedir rubrica a mais do que faltar a de uma parte num documento assinado).
+  // partes na posição fixa padrão, OU na posição própria da página quando o chamador
+  // passou um override em rubricasExtras (ver RubricaExtra acima). Decisão explícita:
+  // como o mapeamento original não define quem rubrica as páginas do meio, optamos por
+  // incluir os dois (mais seguro pedir rubrica a mais do que faltar a de uma parte num
+  // documento assinado).
+  const rubricasExtrasPorPagina = new Map<number, RubricaExtra[]>();
+  for (const extra of params.rubricasExtras ?? []) {
+    const lista = rubricasExtrasPorPagina.get(extra.pagina) ?? [];
+    lista.push(extra);
+    rubricasExtrasPorPagina.set(extra.pagina, lista);
+  }
+
   const paginasComAncora = new Set(ancoras.map((a) => a.pagina));
   let paginasComRubrica = 0;
   for (let pagina = 0; pagina < totalPaginas; pagina++) {
     if (paginasComAncora.has(pagina)) continue;
     paginasComRubrica++;
+    const extras = rubricasExtrasPorPagina.get(pagina);
+    if (extras && extras.length > 0) {
+      for (const extra of extras) {
+        rubricas.push({
+          page: pagina,
+          relative_position_left: extra.relative_position_left,
+          relative_position_bottom: extra.relative_position_bottom,
+          ...TAMANHO_CAIXA,
+          signer_token: extra.papel === "contratante" ? signerContratante.token : signerContratado.token,
+          type: "visto",
+        });
+      }
+      continue;
+    }
     rubricas.push(
       { page: pagina, ...RUBRICA_POSICAO_PADRAO.contratante, ...TAMANHO_CAIXA, signer_token: signerContratante.token, type: "visto" },
       { page: pagina, ...RUBRICA_POSICAO_PADRAO.contratado, ...TAMANHO_CAIXA, signer_token: signerContratado.token, type: "visto" }

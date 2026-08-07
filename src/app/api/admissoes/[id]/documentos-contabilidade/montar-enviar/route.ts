@@ -3,8 +3,8 @@ import { PDFDocument } from "pdf-lib";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelAdmissoes, ehCargoDiretoria } from "@/lib/admissaoAuth";
 import { parseBody, admissaoContabilidadeMontarEnviarSchema } from "@/lib/schemas";
-import { DOCUMENTOS_CONTABILIDADE, documentosObrigatorios } from "@/lib/contabilidadeDocumentosMatch";
-import { criarDocumentoComPosicionamento } from "@/lib/zapsign";
+import { documentosParaCliente, documentosObrigatorios } from "@/lib/contabilidadeDocumentosMatch";
+import { criarDocumentoComPosicionamento, type RubricaExtra } from "@/lib/zapsign";
 import { POSICOES_POR_TIPO_DOCUMENTO } from "@/lib/zapsignPosicoes";
 import type { AncoraDetectada } from "@/lib/pdfAnchors";
 import { registrarAuditoria } from "@/lib/audit";
@@ -33,8 +33,15 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const svc = createServiceClient();
 
-  const { data: admissao, error: admError } = await svc.from("admissoes").select("id").eq("id", id).single();
+  const { data: admissao, error: admError } = await svc
+    .from("admissoes")
+    .select("id, vaga_id, vagas(cliente_id)")
+    .eq("id", id)
+    .single();
   if (admError || !admissao) return NextResponse.json({ error: "Admissão não encontrada." }, { status: 404 });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const clienteId: string | null = (admissao as any).vagas?.cliente_id ?? null;
+  const documentosDoCliente = documentosParaCliente(clienteId);
 
   const { data: envelopeExistente } = await svc
     .from("admissao_envelopes_assinatura")
@@ -58,7 +65,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   // revalidada aqui pra nunca montar/enviar um pacote incompleto, mesmo que a UI tenha
   // deixado passar ou a chamada tenha vindo direto da API. Só os 4 fixos são obrigatórios
   // — Ficha de IR, Salário Família e Termo de Responsabilidade nunca bloqueiam o envio.
-  const faltando = documentosObrigatorios().filter((d) => d.obrigatorio && !docsPorTipo.has(d.tipo_documento));
+  const faltando = documentosObrigatorios(clienteId).filter((d) => d.obrigatorio && !docsPorTipo.has(d.tipo_documento));
   if (faltando.length > 0) {
     const labelsFaltando = faltando.map((d) => d.label);
     return NextResponse.json(
@@ -139,10 +146,11 @@ export async function POST(request: NextRequest, { params }: Params) {
   const pdfFinal = await PDFDocument.create();
   const naoAnexados: string[] = [];
   const ancorasZapSign: AncoraDetectada[] = [];
+  const rubricasExtras: RubricaExtra[] = [];
   const avisosPosicionamento: string[] = [];
   let offsetPaginas = 0;
 
-  for (const def of DOCUMENTOS_CONTABILIDADE) {
+  for (const def of documentosDoCliente) {
     const doc = docsPorTipo.get(def.tipo_documento);
     if (!doc) continue;
 
@@ -168,13 +176,24 @@ export async function POST(request: NextRequest, { params }: Params) {
       const posicoesDoTipo = POSICOES_POR_TIPO_DOCUMENTO[def.tipo_documento];
       if (posicoesDoTipo && posicoesDoTipo.length === paginasDoArquivo.length) {
         posicoesDoTipo.forEach((posicao, indiceLocal) => {
-          if (posicao.tipo !== "assinatura") return; // "rubrica" cai no fallback de lib/zapsign.ts
           const paginaAbsoluta = offsetPaginas + indiceLocal;
+          if (posicao.tipo === "assinatura") {
+            if (posicao.contratante) {
+              ancorasZapSign.push({ pagina: paginaAbsoluta, papel: "contratante", ...posicao.contratante });
+            }
+            if (posicao.contratado) {
+              ancorasZapSign.push({ pagina: paginaAbsoluta, papel: "contratado", ...posicao.contratado });
+            }
+            return;
+          }
+          // tipo === "rubrica": só gera override quando a definição traz coordenada
+          // própria (ver lib/zapsignPosicoes.ts) — sem isso, cai no fallback padrão
+          // (RUBRICA_POSICAO_PADRAO) em lib/zapsign.ts, como sempre foi.
           if (posicao.contratante) {
-            ancorasZapSign.push({ pagina: paginaAbsoluta, papel: "contratante", ...posicao.contratante });
+            rubricasExtras.push({ pagina: paginaAbsoluta, papel: "contratante", ...posicao.contratante });
           }
           if (posicao.contratado) {
-            ancorasZapSign.push({ pagina: paginaAbsoluta, papel: "contratado", ...posicao.contratado });
+            rubricasExtras.push({ pagina: paginaAbsoluta, papel: "contratado", ...posicao.contratado });
           }
         });
       } else if (posicoesDoTipo) {
@@ -226,6 +245,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       contratado: { nome: nomeCandidato, email: emailCandidato },
       ancoras: ancorasZapSign,
       totalPaginas: offsetPaginas,
+      rubricasExtras,
     });
     documentoExternoId = resultado.documentToken;
     detalhesAuditoria = {
@@ -275,7 +295,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       storage_path: uploadPath,
       provedor,
       ...detalhesAuditoria,
-      documentos_incluidos: DOCUMENTOS_CONTABILIDADE.filter((d) => docsPorTipo.has(d.tipo_documento)).map((d) => d.label),
+      documentos_incluidos: documentosDoCliente.filter((d) => docsPorTipo.has(d.tipo_documento)).map((d) => d.label),
     },
   });
 

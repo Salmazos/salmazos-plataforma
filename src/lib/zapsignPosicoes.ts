@@ -36,10 +36,13 @@ export interface CoordenadaRelativa {
 
 export interface PosicaoPagina {
   tipo: TipoMarcaPagina;
-  // Ausente = essa parte não assina/rubrica esta página específica (ex: Ficha de Registro,
-  // só o candidato assina — a empresa não tem nada pra assinar nessa página). Ignorado
-  // quando tipo === "rubrica" (rubrica usa sempre RUBRICA_POSICAO_PADRAO pras duas partes,
-  // ver lib/pdfAnchors.ts — não duplicar esse valor aqui).
+  // Quando tipo === "assinatura": ausente = essa parte não assina esta página específica
+  // (ex: Ficha de Registro, só o candidato assina). Quando tipo === "rubrica": ausente
+  // (o normal) = usa RUBRICA_POSICAO_PADRAO (canto superior direito, ver lib/pdfAnchors.ts)
+  // pras duas partes, igual antes. Preenchido = override de posição só pra essa página
+  // específica (ver lib/zapsign.ts, rubricasExtras) — usado quando o padrão global colide
+  // com o layout de um documento em particular (ex: termo_lgpd_novacki abaixo, um termo
+  // denso sem margem livre no canto superior).
   contratante?: CoordenadaRelativa;
   contratado?: CoordenadaRelativa;
 }
@@ -88,5 +91,59 @@ export const POSICOES_POR_TIPO_DOCUMENTO: Partial<Record<TipoDocumentoContabilid
   ],
   termo_responsabilidade: [
     { tipo: "assinatura", contratado: { relative_position_left: 27.0, relative_position_bottom: 24.0 } },
+  ],
+
+  // Calibrado contra os PDFs de referência reais da Novacki (Termo LGPD Novacki e Termo de
+  // Confidencialidade e Sigilo Novacki, fornecidos em doc_test/) — não contra um caso já
+  // assinado, já que ambos são documentos novos sem histórico. Medição por extração de texto
+  // (unpdf, mesma lib de lib/pdfAnchors.ts) da linha "_______" de assinatura na página final
+  // de cada um: span horizontal left 62.24→94.13 (centro ~78.2) em ambos; baseline vertical
+  // bottom 10.86 (LGPD, pág. 4) e 14.11 (Confidencialidade, pág. única) — motivo da diferença
+  // de bottom entre os dois: o bloco de assinatura da Confidencialidade cai um pouco mais alto
+  // na página por ter menos texto de corpo acima dele. Posição final: caixa de 22% de largura
+  // (TAMANHO_CAIXA) centralizada nesse span (left 78.2 - 11 ≈ 67), bottom na baseline da linha
+  // para o traço da assinatura ficar apoiado sobre/acima dela. Verificado assinando os 2
+  // documentos de ponta a ponta no sandbox ZapSign e inspecionando a matriz de
+  // posicionamento (operador "cm") da imagem da assinatura no content stream do PDF final
+  // assinado — não só visualmente: left/bottom extraídos do PDF batem exatos
+  // (67.00%/11.00% e 67.00%/14.00%) com os valores configurados abaixo, confirmando que a
+  // API aplica essas coordenadas sem distorção (ver conversa que introduziu este bloco).
+  //
+  // Rubrica nas páginas 1-3 do LGPD: NÃO usa RUBRICA_POSICAO_PADRAO (o padrão global, canto
+  // superior direito) — 1ª rodada de calibração usou o padrão e o teste em sandbox mostrou
+  // rubrica sobreposta a conteúdo real: o padrão (contratante bottom:90) cai dentro do
+  // banner da Novacki (imagem, não texto — por isso a checagem inicial contra texto não
+  // pegou; banner mede left:0.88-99.25% bottom:89.93-99.91% nas 3 páginas, medido via
+  // XObject/Image9 do PDF), e o padrão do contratado (bottom:78) cai sobre um parágrafo na
+  // pág. 2. Este é um termo denso — texto de corpo ocupa quase toda a página, do fim do
+  // banner (~90%) até perto do rodapé (a pág. 2 tem texto até bottom:8.13%). Uma varredura
+  // exaustiva (grade de 0.5% em left/bottom, margem de segurança 0.6%, contra texto real +
+  // banner das 3 páginas) achou UMA única faixa livre nas 3 simultaneamente: bottom
+  // 2-2.5%, left até ~70.5% (larguras de caixa 22%). Posição final: duas caixas lado a lado
+  // nessa faixa seguindo o pedido de canto inferior direito, sem se sobrepor — contratante
+  // left:46 (caixa 46-68%), contratado left:70 (caixa 70-92%), ambas bottom:2.5%. Isso exige
+  // um override por página (rubricasExtras em lib/zapsign.ts) já que RUBRICA_POSICAO_PADRAO
+  // é compartilhado com modelo_contrato e termo_lgpd (genérico) — não pode ser alterado
+  // globalmente só por causa deste documento.
+  termo_lgpd_novacki: [
+    {
+      tipo: "rubrica",
+      contratante: { relative_position_left: 46, relative_position_bottom: 2.5 },
+      contratado: { relative_position_left: 70, relative_position_bottom: 2.5 },
+    },
+    {
+      tipo: "rubrica",
+      contratante: { relative_position_left: 46, relative_position_bottom: 2.5 },
+      contratado: { relative_position_left: 70, relative_position_bottom: 2.5 },
+    },
+    {
+      tipo: "rubrica",
+      contratante: { relative_position_left: 46, relative_position_bottom: 2.5 },
+      contratado: { relative_position_left: 70, relative_position_bottom: 2.5 },
+    },
+    { tipo: "assinatura", contratado: { relative_position_left: 67, relative_position_bottom: 11 } },
+  ],
+  termo_confidencialidade_novacki: [
+    { tipo: "assinatura", contratado: { relative_position_left: 67, relative_position_bottom: 14 } },
   ],
 };

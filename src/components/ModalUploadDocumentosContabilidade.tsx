@@ -14,6 +14,9 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   admissaoId: string;
+  // Cliente da vaga desta admissão — filtra os documentos condicionais por cliente (ex:
+  // os 2 termos exclusivos da Novacki), sem afetar os 7 padrão. Ver documentosParaCliente.
+  clienteId: string | null;
   documentosIniciais: AdmissaoDocumentoContabilidade[];
   nomeInicial: string;
   emailInicial: string;
@@ -95,6 +98,7 @@ export default function ModalUploadDocumentosContabilidade({
   isOpen,
   onClose,
   admissaoId,
+  clienteId,
   documentosIniciais,
   nomeInicial,
   emailInicial,
@@ -152,7 +156,7 @@ export default function ModalUploadDocumentosContabilidade({
 
   if (!isOpen) return null;
 
-  const listaCompleta = documentosObrigatorios();
+  const listaCompleta = documentosObrigatorios(clienteId);
   const faltando = listaCompleta.filter((d) => d.obrigatorio && !documentos.some((doc) => doc.tipo_documento === d.tipo_documento));
   const labelsFaltando = faltando.map((d) => d.label);
   const podeEnviarFinal = faltando.length === 0 && nome.trim().length > 0 && email.trim().length > 0;
@@ -239,7 +243,7 @@ export default function ModalUploadDocumentosContabilidade({
       setErroPorTipo((prev) => ({ ...prev, [def.tipo_documento]: `"${file.name}" é maior que 15MB.` }));
       return;
     }
-    const detectado = inferirTipoDocumentoContabilidade(file.name);
+    const detectado = inferirTipoDocumentoContabilidade(file.name, clienteId);
     if (detectado === def.tipo_documento) {
       processarUploadLinha(def.tipo_documento, file);
     } else {
