@@ -31,7 +31,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
 
   const { data: cobranca, error: cobrancaErr } = await svc
     .from("cobrancas_rs")
-    .select("*")
+    .select("*, vagas(titulo)")
     .eq("id", id)
     .single();
 
@@ -40,10 +40,16 @@ export async function POST(_request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Esta cobrança já foi revisada." }, { status: 400 });
   }
 
+  const ehCancelamento = cobranca.tipo === "cancelamento";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const vagaTitulo = (cobranca.vagas as any)?.titulo ?? "—";
+
   const faltando: string[] = [];
-  if (!cobranca.cargo?.trim()) faltando.push("Cargo");
-  if (cobranca.salario == null || cobranca.salario <= 0) faltando.push("Salário");
-  if (!cobranca.data_inicio) faltando.push("Data de início");
+  if (!ehCancelamento) {
+    if (!cobranca.cargo?.trim()) faltando.push("Cargo");
+    if (!cobranca.data_inicio) faltando.push("Data de início");
+  }
+  if (cobranca.salario == null || cobranca.salario <= 0) faltando.push(ehCancelamento ? "Salário-base" : "Salário");
   if (!cobranca.cliente_cnpj_snapshot?.trim()) faltando.push("CNPJ do cliente");
   if (!cobranca.cliente_endereco_snapshot?.trim()) faltando.push("Endereço do cliente");
 
@@ -67,17 +73,18 @@ export async function POST(_request: NextRequest, { params }: Params) {
   if (destinatarios && destinatarios.length > 0) {
     const template = getEmailTemplate("cobranca_rs_gerada", {
       nome: "",
-      cargo: cobranca.cargo,
+      cargo: ehCancelamento ? vagaTitulo : cobranca.cargo,
       nomeCliente: cobranca.cliente_nome_snapshot,
-      nomeCandidato: cobranca.candidato_nome_snapshot,
+      nomeCandidato: ehCancelamento ? undefined : cobranca.candidato_nome_snapshot,
       clienteCnpj: cobranca.cliente_cnpj_snapshot,
       clienteEndereco: cobranca.cliente_endereco_snapshot,
       clienteTelefone: cobranca.cliente_telefone_snapshot,
       clienteEmail: cobranca.cliente_email_snapshot,
       salario: formatarMoeda(salario),
-      dataInicio: formatarData(cobranca.data_inicio),
+      dataInicio: ehCancelamento ? undefined : formatarData(cobranca.data_inicio),
       feeRsPercentual: feePercentual,
       feeValor,
+      tipoCobrancaRS: ehCancelamento ? "cancelamento" : "contratacao",
     });
 
     const resultados = await Promise.all(

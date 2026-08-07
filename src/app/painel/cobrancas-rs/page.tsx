@@ -23,6 +23,7 @@ export default async function CobrancasRSPage() {
 
   const rows: CobrancaRSRow[] = (data ?? []).map((c) => ({
     id: c.id,
+    tipo: c.tipo,
     clienteNomeSnapshot: c.cliente_nome_snapshot,
     clienteCnpjSnapshot: c.cliente_cnpj_snapshot,
     clienteEnderecoSnapshot: c.cliente_endereco_snapshot,

@@ -2,26 +2,9 @@ import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import FinanceiroRSPageClient, { type VagaFinanceiraRow } from "@/components/FinanceiroRSPageClient";
 import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
-import { ETAPAS_KANBAN, ETAPAS_KANBAN_VISIVEIS, detectarModoSalario } from "@/lib/constants";
+import { ETAPAS_KANBAN, ETAPAS_KANBAN_VISIVEIS, detectarModoSalario, parseSalarioFixo } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
-
-// vagas.salario mistura dois formatos reais em produção: número puro sem separador de
-// milhar (ex.: "2500.4", vindo do CampoMoeda em ModalNovaVaga/ModalEditarVaga) e moeda
-// formatada em pt-BR com prefixo (ex.: "R$ 3.500,00", vindo de outros fluxos como
-// vagas/from-solicitacao). formatarSalario (usado em VagaDetalheClient etc.) não precisa
-// resolver isso — é só exibição, e no caso "R$..." ele devolve a string como está. Aqui
-// precisamos do valor numérico de verdade pra multiplicar pela taxa, então tratamos os
-// dois formatos: se tiver vírgula, assume pt-BR (ponto = milhar, vírgula = decimal);
-// senão, assume ponto decimal direto.
-function parseSalarioFixo(raw: string): number | null {
-  const semPrefixo = raw.replace(/^R\$\s?/, "").trim();
-  const normalizado = semPrefixo.includes(",")
-    ? semPrefixo.replace(/\./g, "").replace(",", ".")
-    : semPrefixo;
-  const num = parseFloat(normalizado);
-  return isNaN(num) ? null : num;
-}
 
 interface VagaRow {
   id: string;

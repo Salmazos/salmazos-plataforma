@@ -1,10 +1,18 @@
 import { createServiceClient } from "@/lib/supabase/server";
+import { parseSalarioFixo } from "@/lib/constants";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
 interface ResultadoCobranca {
   criada: boolean;
-  motivo?: "ja_existe" | "nao_e_rs" | "sem_fee_configurado" | "sem_cliente_vinculado" | "candidato_vaga_nao_encontrado";
+  motivo?:
+    | "ja_existe"
+    | "nao_e_rs"
+    | "sem_fee_configurado"
+    | "sem_cliente_vinculado"
+    | "candidato_vaga_nao_encontrado"
+    | "sem_taxa_cancelamento_configurada"
+    | "vaga_com_candidato_contratado";
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -134,4 +142,118 @@ export async function gerarCobrancasRSParaVaga(vagaId: string, supabase?: Servic
   for (const cv of contratados ?? []) {
     await gerarCobrancaRSSeAplicavel(vagaId, cv.id, svc);
   }
+}
+
+/**
+ * Gera o rascunho de cobrança de cancelamento (tipo='cancelamento', status
+ * 'pendente_revisao') para uma vaga R&S cancelada com taxa de cancelamento
+ * configurada — chamada em PATCH /api/vagas/[id] quando body.status === 'cancelada'.
+ * Diferente de gerarCobrancaRSSeAplicavel: é uma checagem em nível de vaga, não por
+ * candidato_vaga (cancelamento não tem candidato contratado associado).
+ */
+export async function gerarCobrancaCancelamentoRSSeAplicavel(
+  vagaId: string,
+  supabase?: ServiceClient
+): Promise<ResultadoCobranca> {
+  const svc = supabase ?? createServiceClient();
+
+  const { data: existente } = await svc
+    .from("cobrancas_rs")
+    .select("id")
+    .eq("vaga_id", vagaId)
+    .eq("tipo", "cancelamento")
+    .maybeSingle();
+  if (existente) return { criada: false, motivo: "ja_existe" };
+
+  const { data: vaga } = await svc
+    .from("vagas")
+    .select(
+      "id, titulo, tipo_servico, taxa_cancelamento, taxa_cancelamento_percentual, salario, cliente_id, cliente_nome, clientes(nome, cnpj, endereco, contato_telefone, contato_email)"
+    )
+    .eq("id", vagaId)
+    .single();
+
+  if (!vaga || vaga.tipo_servico !== "recrutamento_selecao") {
+    return { criada: false, motivo: "nao_e_rs" };
+  }
+
+  if (vaga.taxa_cancelamento !== true || vaga.taxa_cancelamento_percentual == null) {
+    // Mesmo padrão de notificação já usado pra "taxa não configurada" no fluxo de
+    // contratação, com mensagem equivalente pra este contexto.
+    try {
+      await svc.from("notificacoes_analista").insert({
+        tipo: "fee_rs_nao_configurado",
+        titulo: "Taxa de cancelamento R&S não configurada",
+        mensagem: `A vaga "${vaga.titulo}" foi cancelada, mas não tem taxa de cancelamento (%) configurada — o rascunho de cobrança de cancelamento não pôde ser gerado automaticamente.`,
+        user_id: null,
+        candidato_id: null,
+        vaga_id: vaga.id,
+      });
+    } catch (err) {
+      console.error("[gerarCobrancaCancelamentoRSSeAplicavel] Erro ao notificar taxa ausente:", err);
+    }
+    return { criada: false, motivo: "sem_taxa_cancelamento_configurada" };
+  }
+
+  // Edge case de contradição: vaga cancelada mas ainda com candidato em etapa
+  // 'contratado' vinculado — situação ambígua (cobra fee de contratação ou multa de
+  // cancelamento?) que não deveria acontecer no fluxo normal. Não trava nada, só não
+  // gera cobrança de cancelamento automaticamente e loga pra investigação manual.
+  const { data: contratadoExistente } = await svc
+    .from("candidatos_vagas")
+    .select("id")
+    .eq("vaga_id", vagaId)
+    .eq("etapa", "contratado")
+    .maybeSingle();
+
+  if (contratadoExistente) {
+    console.error(
+      `[gerarCobrancaCancelamentoRSSeAplicavel] Vaga ${vagaId} ("${vaga.titulo}") cancelada mas ainda tem candidato em etapa 'contratado' — cobrança de cancelamento não gerada automaticamente, requer decisão manual.`
+    );
+    return { criada: false, motivo: "vaga_com_candidato_contratado" };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const clienteRel = vaga.clientes as any;
+  const clienteNome = clienteRel?.nome ?? vaga.cliente_nome ?? null;
+  if (!clienteNome) {
+    console.error(
+      `[gerarCobrancaCancelamentoRSSeAplicavel] Vaga ${vagaId} ("${vaga.titulo}") sem cliente vinculado e sem cliente_nome — cobrança de cancelamento não gerada.`
+    );
+    return { criada: false, motivo: "sem_cliente_vinculado" };
+  }
+
+  const salarioValor = vaga.salario ? parseSalarioFixo(vaga.salario) : null;
+  const feePercentual = vaga.taxa_cancelamento_percentual;
+  const feeValor = salarioValor != null ? Math.round(((salarioValor * feePercentual) / 100) * 100) / 100 : null;
+
+  const { error } = await svc.from("cobrancas_rs").insert({
+    tipo: "cancelamento",
+    vaga_id: vaga.id,
+    candidato_id: null,
+    candidato_vaga_id: null,
+    cliente_id: vaga.cliente_id,
+
+    cliente_nome_snapshot: clienteNome,
+    cliente_cnpj_snapshot: clienteRel?.cnpj ?? null,
+    cliente_endereco_snapshot: clienteRel?.endereco ?? null,
+    cliente_telefone_snapshot: clienteRel?.contato_telefone ?? null,
+    cliente_email_snapshot: clienteRel?.contato_email ?? null,
+
+    candidato_nome_snapshot: null,
+
+    salario: salarioValor,
+    fee_percentual: feePercentual,
+    fee_valor: feeValor,
+
+    status: "pendente_revisao",
+  });
+
+  if (error) {
+    if (error.code === "23505") return { criada: false, motivo: "ja_existe" };
+    console.error("[gerarCobrancaCancelamentoRSSeAplicavel] Erro ao inserir cobrança de cancelamento:", error.message);
+    return { criada: false };
+  }
+
+  return { criada: true };
 }

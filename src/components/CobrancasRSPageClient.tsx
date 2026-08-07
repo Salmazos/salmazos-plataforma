@@ -5,12 +5,13 @@ import ModalRevisaoCobrancaRS from "./ModalRevisaoCobrancaRS";
 
 export interface CobrancaRSRow {
   id: string;
+  tipo: "contratacao" | "cancelamento";
   clienteNomeSnapshot: string;
   clienteCnpjSnapshot: string | null;
   clienteEnderecoSnapshot: string | null;
   clienteTelefoneSnapshot: string | null;
   clienteEmailSnapshot: string | null;
-  candidatoNomeSnapshot: string;
+  candidatoNomeSnapshot: string | null;
   vagaTitulo: string;
   cargo: string | null;
   salario: number | null;
@@ -32,6 +33,11 @@ const STATUS_LABEL: Record<string, { label: string; bg: string; color: string }>
   aprovada_enviada: { label: "Enviada", bg: "#DBEAFE", color: "#1D4ED8" },
   paga: { label: "Paga", bg: "#DCFCE7", color: "#166534" },
   cancelada: { label: "Cancelada", bg: "#F3F4F6", color: "#6B7280" },
+};
+
+const TIPO_LABEL: Record<string, { label: string; bg: string; color: string }> = {
+  contratacao: { label: "Contratação", bg: "#EDE9FE", color: "#5B21B6" },
+  cancelamento: { label: "Cancelamento", bg: "#FEE2E2", color: "#991B1B" },
 };
 
 function formatarData(iso: string): string {
@@ -66,7 +72,7 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais }: Props) {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Cobranças R&S</h1>
         <p className="text-gray-500 text-sm mt-0.5">
-          Rascunhos gerados automaticamente ao fechar vagas de Recrutamento e Seleção com candidato contratado
+          Rascunhos gerados automaticamente ao fechar (com candidato contratado) ou cancelar (com taxa configurada) vagas de Recrutamento e Seleção
         </p>
       </div>
 
@@ -117,7 +123,7 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais }: Props) {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-              {["Cliente", "Candidato", "Vaga", "Fee %", "Status", "Criada em"].map((h) => (
+              {["Cliente", "Candidato", "Vaga", "Tipo", "Fee %", "Status", "Criada em"].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>
                   {h}
                 </th>
@@ -127,13 +133,14 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais }: Props) {
           <tbody>
             {filtradas.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: "24px 12px", textAlign: "center", color: "#9CA3AF" }}>
+                <td colSpan={7} style={{ padding: "24px 12px", textAlign: "center", color: "#9CA3AF" }}>
                   Nenhuma cobrança nessa categoria.
                 </td>
               </tr>
             ) : (
               filtradas.map((r) => {
                 const statusInfo = STATUS_LABEL[r.status] ?? STATUS_LABEL.pendente_revisao;
+                const tipoInfo = TIPO_LABEL[r.tipo] ?? TIPO_LABEL.contratacao;
                 return (
                   <tr
                     key={r.id}
@@ -141,8 +148,13 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais }: Props) {
                     style={{ borderBottom: "1px solid #F3F4F6", cursor: "pointer" }}
                   >
                     <td style={{ padding: "10px 12px", fontWeight: 600, color: "#111827" }}>{r.clienteNomeSnapshot}</td>
-                    <td style={{ padding: "10px 12px", color: "#374151" }}>{r.candidatoNomeSnapshot}</td>
+                    <td style={{ padding: "10px 12px", color: "#374151" }}>{r.candidatoNomeSnapshot ?? "—"}</td>
                     <td style={{ padding: "10px 12px", color: "#374151" }}>{r.vagaTitulo}</td>
+                    <td style={{ padding: "10px 12px" }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: tipoInfo.bg, color: tipoInfo.color }}>
+                        {tipoInfo.label}
+                      </span>
+                    </td>
                     <td style={{ padding: "10px 12px", color: "#374151" }}>{r.feePercentual != null ? `${r.feePercentual}%` : "—"}</td>
                     <td style={{ padding: "10px 12px" }}>
                       <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: statusInfo.bg, color: statusInfo.color }}>

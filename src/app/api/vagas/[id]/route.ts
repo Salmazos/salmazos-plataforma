@@ -3,7 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, vagaUpdateSchema } from "@/lib/schemas";
 import { generateUniqueSlug } from "@/lib/slug";
-import { gerarCobrancasRSParaVaga } from "@/lib/cobrancaRS";
+import { gerarCobrancasRSParaVaga, gerarCobrancaCancelamentoRSSeAplicavel } from "@/lib/cobrancaRS";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -140,6 +140,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       if (body.status === "fechada") {
         await gerarCobrancasRSParaVaga(id, supabase).catch((err) =>
           console.error("[PATCH /api/vagas/[id]] Erro ao gerar cobranças R&S:", err)
+        );
+      }
+
+      // Cancelamento manual (mesmos 2 caminhos: "Encerrar vaga" e edição direta do status)
+      // também pode gerar cobrança, se a vaga tiver taxa de cancelamento configurada.
+      if (body.status === "cancelada") {
+        await gerarCobrancaCancelamentoRSSeAplicavel(id, supabase).catch((err) =>
+          console.error("[PATCH /api/vagas/[id]] Erro ao gerar cobrança de cancelamento R&S:", err)
         );
       }
     }

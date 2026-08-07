@@ -240,3 +240,18 @@ export function detectarModoSalario(raw: string): SalarioModo {
   if (raw === SALARIO_ENVIAR_PRETENSAO) return "pretensao";
   return "fixo";
 }
+
+// vagas.salario mistura dois formatos reais em produção: número puro sem separador de
+// milhar (ex.: "2500.4", vindo do CampoMoeda em ModalNovaVaga/ModalEditarVaga) e moeda
+// formatada em pt-BR com prefixo (ex.: "R$ 3.500,00", vindo de outros fluxos como
+// vagas/from-solicitacao). Usado onde é preciso o valor numérico de verdade (Financeiro
+// R&S, geração de cobrança de cancelamento) — se tiver vírgula, assume pt-BR (ponto =
+// milhar, vírgula = decimal); senão, assume ponto decimal direto.
+export function parseSalarioFixo(raw: string): number | null {
+  const semPrefixo = raw.replace(/^R\$\s?/, "").trim();
+  const normalizado = semPrefixo.includes(",")
+    ? semPrefixo.replace(/\./g, "").replace(",", ".")
+    : semPrefixo;
+  const num = parseFloat(normalizado);
+  return isNaN(num) ? null : num;
+}

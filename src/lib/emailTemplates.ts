@@ -51,6 +51,7 @@ interface TemplateData {
   clienteEmail?: string | null;
   dataInicio?: string;
   feeValor?: number | null;
+  tipoCobrancaRS?: "contratacao" | "cancelamento";
 }
 
 export interface EmailTemplate {
@@ -104,7 +105,7 @@ const BANNER_CONFIDENCIAL = `<div style="background:#fef2f2;border:2px solid #fc
 
 export function getEmailTemplate(
   name: EmailTemplateName,
-  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor }: TemplateData
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor, tipoCobrancaRS }: TemplateData
 ): EmailTemplate {
   switch (name) {
     case "entrevista_salmazos":
@@ -477,18 +478,43 @@ export function getEmailTemplate(
       };
 
     case "cobranca_rs_gerada": {
+      const ehCancelamento = tipoCobrancaRS === "cancelamento";
       const salarioFmt = salario ?? "—";
       const feeValorFmt =
         feeValor != null
           ? feeValor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
           : "—";
 
+      const blocoDetalhes = ehCancelamento
+        ? `<div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#1e40af;font-weight:700;font-size:14px;">Dados do cancelamento:</p>
+            <ul style="margin:0;padding-left:18px;color:#1d4ed8;line-height:2;font-size:14px;">
+              <li><strong>Vaga:</strong> ${cargo || "—"}</li>
+              <li><strong>Salário-base:</strong> ${salarioFmt}</li>
+            </ul>
+          </div>`
+        : `<div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#1e40af;font-weight:700;font-size:14px;">Dados da contratação:</p>
+            <ul style="margin:0;padding-left:18px;color:#1d4ed8;line-height:2;font-size:14px;">
+              <li><strong>Candidato:</strong> ${nomeCandidato ?? "—"}</li>
+              <li><strong>Função:</strong> ${cargo}</li>
+              <li><strong>Salário:</strong> ${salarioFmt}</li>
+              <li><strong>Data de início:</strong> ${dataInicio ?? "—"}</li>
+            </ul>
+          </div>`;
+
       return {
-        subject: `💰 Cobrança R&S: ${nomeCandidato ?? cargo} — ${nomeCliente ?? "Cliente"}`,
-        descricao: `Cobrança de R&S referente à contratação de ${nomeCandidato ?? cargo} para ${nomeCliente ?? "cliente"}.`,
+        subject: ehCancelamento
+          ? `💰 Cobrança de Cancelamento R&S — ${nomeCliente ?? "Cliente"}`
+          : `💰 Cobrança R&S: ${nomeCandidato ?? cargo} — ${nomeCliente ?? "Cliente"}`,
+        descricao: ehCancelamento
+          ? `Cobrança de multa de cancelamento de vaga R&S para ${nomeCliente ?? "cliente"}.`
+          : `Cobrança de R&S referente à contratação de ${nomeCandidato ?? cargo} para ${nomeCliente ?? "cliente"}.`,
         html: layout(
-          "Cobrança de Recrutamento e Seleção",
-          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Segue a cobrança referente à contratação abaixo:</p>
+          ehCancelamento ? "Cobrança de Cancelamento de Vaga (R&S)" : "Cobrança de Recrutamento e Seleção",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">
+            ${ehCancelamento ? "Segue a cobrança referente ao cancelamento da vaga abaixo:" : "Segue a cobrança referente à contratação abaixo:"}
+          </p>
           <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
             <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados do cliente:</p>
             <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
@@ -499,15 +525,7 @@ export function getEmailTemplate(
               <li><strong>E-mail:</strong> ${clienteEmail ?? "—"}</li>
             </ul>
           </div>
-          <div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
-            <p style="margin:0 0 10px;color:#1e40af;font-weight:700;font-size:14px;">Dados da contratação:</p>
-            <ul style="margin:0;padding-left:18px;color:#1d4ed8;line-height:2;font-size:14px;">
-              <li><strong>Candidato:</strong> ${nomeCandidato ?? "—"}</li>
-              <li><strong>Função:</strong> ${cargo}</li>
-              <li><strong>Salário:</strong> ${salarioFmt}</li>
-              <li><strong>Data de início:</strong> ${dataInicio ?? "—"}</li>
-            </ul>
-          </div>
+          ${blocoDetalhes}
           <div style="background:#f0fdf4;border-left:4px solid #22c55e;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
             <p style="margin:0 0 10px;color:#166534;font-weight:700;font-size:14px;">Cobrança:</p>
             <ul style="margin:0;padding-left:18px;color:#15803d;line-height:2;font-size:14px;">

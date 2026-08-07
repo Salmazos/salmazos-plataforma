@@ -6,15 +6,16 @@ import type { CobrancaRSRow } from "./CobrancasRSPageClient";
 
 interface CobrancaDetalhe {
   id: string;
+  tipo: "contratacao" | "cancelamento";
   vaga_id: string;
-  candidato_id: string;
+  candidato_id: string | null;
   cliente_id: string | null;
   cliente_nome_snapshot: string;
   cliente_cnpj_snapshot: string | null;
   cliente_endereco_snapshot: string | null;
   cliente_telefone_snapshot: string | null;
   cliente_email_snapshot: string | null;
-  candidato_nome_snapshot: string;
+  candidato_nome_snapshot: string | null;
   cargo: string | null;
   salario: number | null;
   data_inicio: string | null;
@@ -41,6 +42,7 @@ function formatarMoeda(v: number | null): string {
 function paraLinha(c: CobrancaDetalhe): CobrancaRSRow {
   return {
     id: c.id,
+    tipo: c.tipo,
     clienteNomeSnapshot: c.cliente_nome_snapshot,
     clienteCnpjSnapshot: c.cliente_cnpj_snapshot,
     clienteEnderecoSnapshot: c.cliente_endereco_snapshot,
@@ -83,7 +85,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
       .then((json) => {
         const c = json.data as CobrancaDetalhe;
         setCobranca(c);
-        setCargo(c.cargo ?? c.vagas?.titulo ?? "");
+        setCargo(c.tipo === "cancelamento" ? "" : c.cargo ?? c.vagas?.titulo ?? "");
         setSalario(c.salario ?? 0);
         setDataInicio(c.data_inicio ?? "");
         setClienteCnpj(c.cliente_cnpj_snapshot ?? "");
@@ -96,6 +98,8 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
   const feeValorPreview =
     salario > 0 && cobranca?.fee_percentual != null ? (salario * cobranca.fee_percentual) / 100 : null;
 
+  const ehCancelamento = cobranca?.tipo === "cancelamento";
+
   const salvarRascunho = async (): Promise<boolean> => {
     setSalvando(true);
     setErro("");
@@ -105,9 +109,9 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          cargo,
+          cargo: ehCancelamento ? undefined : cargo,
           salario: salario > 0 ? salario : null,
-          data_inicio: dataInicio || null,
+          data_inicio: ehCancelamento ? undefined : dataInicio || null,
           cliente_cnpj: clienteCnpj || undefined,
           cliente_endereco: clienteEndereco || undefined,
         }),
@@ -219,23 +223,29 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
               )}
 
               <div className="border-t pt-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Candidato / Vaga</p>
-                <p className="text-sm"><strong>{cobranca.candidato_nome_snapshot}</strong></p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  {ehCancelamento ? "Vaga" : "Candidato / Vaga"}
+                </p>
+                {!ehCancelamento && <p className="text-sm"><strong>{cobranca.candidato_nome_snapshot}</strong></p>}
                 <p className="text-sm text-gray-500">{cobranca.vagas?.titulo ?? "—"}</p>
               </div>
 
               <div className="border-t pt-4 space-y-3">
+                {!ehCancelamento && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cargo *</label>
+                    <input
+                      value={cargo}
+                      onChange={(e) => setCargo(e.target.value)}
+                      disabled={cobranca.status !== "pendente_revisao"}
+                      className="input-field"
+                    />
+                  </div>
+                )}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cargo *</label>
-                  <input
-                    value={cargo}
-                    onChange={(e) => setCargo(e.target.value)}
-                    disabled={cobranca.status !== "pendente_revisao"}
-                    className="input-field"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Salário *</label>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    {ehCancelamento ? "Salário da vaga (base de cálculo) *" : "Salário *"}
+                  </label>
                   <CampoMoeda
                     value={salario}
                     onChange={setSalario}
@@ -244,16 +254,18 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                     disabled={cobranca.status !== "pendente_revisao"}
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data de início *</label>
-                  <input
-                    type="date"
-                    value={dataInicio}
-                    onChange={(e) => setDataInicio(e.target.value)}
-                    disabled={cobranca.status !== "pendente_revisao"}
-                    className="input-field"
-                  />
-                </div>
+                {!ehCancelamento && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data de início *</label>
+                    <input
+                      type="date"
+                      value={dataInicio}
+                      onChange={(e) => setDataInicio(e.target.value)}
+                      disabled={cobranca.status !== "pendente_revisao"}
+                      className="input-field"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="rounded-lg p-3" style={{ background: "#F0FDF4", border: "1px solid #BBF7D0" }}>
