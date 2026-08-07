@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, candidatoVagaFinalizarSchema } from "@/lib/schemas";
+import { gerarCobrancasRSParaVaga } from "@/lib/cobrancaRS";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -148,6 +149,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           vagaEncerrada = true;
         }
         await supabase.from("vagas").update(updateFields).eq("id", vaga.id);
+
+        if (vagaEncerrada) {
+          await gerarCobrancasRSParaVaga(vaga.id, supabase).catch((err) =>
+            console.error("[finalizar] Erro ao gerar cobranças R&S:", err)
+          );
+        }
       }
 
       const dataFmt = data_inicio.split("-").reverse().join("/");

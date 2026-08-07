@@ -33,6 +33,8 @@ export async function POST(request: NextRequest) {
         ativo: true,
         responsavel_comercial: body.responsavel_comercial ?? null,
         entidade_contratante: body.entidade_contratante || null,
+        cnpj: body.cnpj || null,
+        endereco: body.endereco || null,
       })
       .select()
       .single();

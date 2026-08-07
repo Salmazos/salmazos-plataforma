@@ -119,6 +119,8 @@ export const clienteCreateSchema = z.object({
   servicos: z.array(z.string()).optional(),
   responsavel_comercial: z.string().optional(),
   entidade_contratante: z.string().optional().nullable(),
+  cnpj: z.string().optional().nullable(),
+  endereco: z.string().optional().nullable(),
 });
 
 export const clienteUpdateSchema = z.object({
@@ -132,6 +134,8 @@ export const clienteUpdateSchema = z.object({
   ativo: z.boolean().optional(),
   responsavel_comercial: z.string().optional().nullable(),
   entidade_contratante: z.string().optional().nullable(),
+  cnpj: z.string().optional().nullable(),
+  endereco: z.string().optional().nullable(),
 });
 
 export const clienteAtencaoEspecialSchema = z.object({
@@ -917,6 +921,18 @@ export const rescisaoAvisoEmailCreateSchema = z.object({
 });
 
 export const rescisaoAvisoEmailUpdateSchema = z.object({
+  ativo: z.boolean(),
+});
+
+// ── Avisos de Cobrança R&S — mesmo padrão de rescisaoAvisoEmail (lista fixa e
+// configurável de destinatários, desacoplada de nivel_acesso/role).
+
+export const cobrancaRsAvisoEmailCreateSchema = z.object({
+  nome: z.string().trim().min(1, "Nome é obrigatório"),
+  email: z.string().trim().email("E-mail inválido"),
+});
+
+export const cobrancaRsAvisoEmailUpdateSchema = z.object({
   ativo: z.boolean(),
 });
 

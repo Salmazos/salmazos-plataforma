@@ -293,6 +293,8 @@ export interface Cliente {
   ativo: boolean;
   responsavel_comercial?: string;
   entidade_contratante?: string | null;
+  cnpj?: string | null;
+  endereco?: string | null;
   created_at: string;
 }
 

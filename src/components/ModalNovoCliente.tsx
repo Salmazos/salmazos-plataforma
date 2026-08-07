@@ -32,6 +32,8 @@ const FORM_VAZIO = {
   segmento: "",
   responsavel_comercial: "",
   entidade_contratante: "",
+  cnpj: "",
+  endereco: "",
 };
 
 export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: Props) {
@@ -66,6 +68,8 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
               segmento: cliente.segmento,
               responsavel_comercial: cliente.responsavel_comercial ?? "",
               entidade_contratante: cliente.entidade_contratante ?? "",
+              cnpj: cliente.cnpj ?? "",
+              endereco: cliente.endereco ?? "",
             }
           : FORM_VAZIO
       );
@@ -316,6 +320,32 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
             <p className="text-xs text-gray-400 mt-1">
               Necessário para gerar a Autorização Sindical na admissão de candidatos deste cliente.
             </p>
+          </div>
+
+          {/* CNPJ e endereço */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                CNPJ
+              </label>
+              <input
+                value={form.cnpj}
+                onChange={(e) => set("cnpj", e.target.value)}
+                placeholder="00.000.000/0000-00"
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                Endereço
+              </label>
+              <input
+                value={form.endereco}
+                onChange={(e) => set("endereco", e.target.value)}
+                placeholder="Rua, número, bairro, cidade/UF"
+                className="input-field"
+              />
+            </div>
           </div>
 
           {/* Tipos de serviço */}

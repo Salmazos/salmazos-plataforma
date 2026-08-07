@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, vagaUpdateSchema } from "@/lib/schemas";
 import { generateUniqueSlug } from "@/lib/slug";
+import { gerarCobrancasRSParaVaga } from "@/lib/cobrancaRS";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -131,6 +132,16 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         entidade_id: id,
         detalhes: { status_anterior: statusAnterior, status_novo: body.status as string },
       });
+
+      // Fechamento manual (botão "Encerrar vaga" ou edição direta do status em
+      // ModalEditarVaga — os dois passam por este mesmo endpoint) também precisa gerar
+      // cobrança R&S pros candidatos já contratados, não só o fechamento automático por
+      // última posição preenchida em finalizar/route.ts.
+      if (body.status === "fechada") {
+        await gerarCobrancasRSParaVaga(id, supabase).catch((err) =>
+          console.error("[PATCH /api/vagas/[id]] Erro ao gerar cobranças R&S:", err)
+        );
+      }
     }
 
     return NextResponse.json({ data });
