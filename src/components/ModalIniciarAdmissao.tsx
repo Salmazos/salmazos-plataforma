@@ -81,6 +81,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
   const [etapaDados, setEtapaDados] = useState(false);
   const [funcao, setFuncao] = useState("");
   const [salario, setSalario] = useState("");
+  const [tipoSalario, setTipoSalario] = useState<"mensal" | "hora">("mensal");
   const [horarioTrabalho, setHorarioTrabalho] = useState("");
   const [dataAdmissao, setDataAdmissao] = useState("");
   const [entidadeContratante, setEntidadeContratante] = useState("");
@@ -96,6 +97,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
     setBusca("");
     setFuncao("");
     setSalario("");
+    setTipoSalario("mensal");
     setHorarioTrabalho("");
     setDataAdmissao("");
     setAdicionais([]);
@@ -182,6 +184,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
           modalidade,
           funcao: funcao.trim(),
           salario: salarioNumero,
+          tipo_salario: tipoSalario,
           horario_trabalho: horarioTrabalho.trim(),
           data_admissao: dataAdmissao,
           entidade_contratante: entidadeContratante,
@@ -321,12 +324,34 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
 
             <div className="mb-3">
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Salário *</label>
-              <CampoMoeda
-                value={salario}
-                onChange={(v) => setSalario(v > 0 ? String(v) : "")}
-                placeholder="Ex: 2.500,00"
-                className="input-field"
-              />
+              <div className="flex gap-2">
+                <CampoMoeda
+                  value={salario}
+                  onChange={(v) => setSalario(v > 0 ? String(v) : "")}
+                  placeholder="Ex: 2.500,00"
+                  className="input-field"
+                />
+                <div className="grid grid-cols-2 gap-1" style={{ flexShrink: 0 }}>
+                  <button type="button"
+                    onClick={() => setTipoSalario("mensal")}
+                    className="px-3 py-1 rounded-lg border-2 text-xs font-semibold transition-all"
+                    style={tipoSalario === "mensal"
+                      ? { backgroundColor: "#111827", color: "#FFD700", borderColor: "#111827" }
+                      : { backgroundColor: "#ffffff", color: "#6b7280", borderColor: "#e5e7eb" }}
+                  >
+                    Mensal
+                  </button>
+                  <button type="button"
+                    onClick={() => setTipoSalario("hora")}
+                    className="px-3 py-1 rounded-lg border-2 text-xs font-semibold transition-all"
+                    style={tipoSalario === "hora"
+                      ? { backgroundColor: "#111827", color: "#FFD700", borderColor: "#111827" }
+                      : { backgroundColor: "#ffffff", color: "#6b7280", borderColor: "#e5e7eb" }}
+                  >
+                    Hora
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="mb-3">
