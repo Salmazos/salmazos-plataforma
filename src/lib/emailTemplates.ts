@@ -9,7 +9,8 @@ export type EmailTemplateName =
   | "candidato_entrevista_cliente"
   | "nova_vaga_criada"
   | "vaga_encerrada"
-  | "admissao_link";
+  | "admissao_link"
+  | "cobranca_rs_gerada";
 
 interface TemplateData {
   nome: string;
@@ -42,6 +43,14 @@ interface TemplateData {
   feeRsPrazoCobranca?: string | null;
   taxaCancelamento?: boolean;
   taxaCancelamentoPercentual?: number | null;
+  // Cobrança R&S (case "cobranca_rs_gerada") — cliente vem do snapshot da cobrança, não
+  // do cadastro atual (ver cobrancas_rs.cliente_*_snapshot).
+  clienteCnpj?: string | null;
+  clienteEndereco?: string | null;
+  clienteTelefone?: string | null;
+  clienteEmail?: string | null;
+  dataInicio?: string;
+  feeValor?: number | null;
 }
 
 export interface EmailTemplate {
@@ -95,7 +104,7 @@ const BANNER_CONFIDENCIAL = `<div style="background:#fef2f2;border:2px solid #fc
 
 export function getEmailTemplate(
   name: EmailTemplateName,
-  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual }: TemplateData
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor }: TemplateData
 ): EmailTemplate {
   switch (name) {
     case "entrevista_salmazos":
@@ -466,5 +475,48 @@ export function getEmailTemplate(
           </div>`
         ),
       };
+
+    case "cobranca_rs_gerada": {
+      const salarioFmt = salario ?? "—";
+      const feeValorFmt =
+        feeValor != null
+          ? feeValor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+          : "—";
+
+      return {
+        subject: `💰 Cobrança R&S: ${nomeCandidato ?? cargo} — ${nomeCliente ?? "Cliente"}`,
+        descricao: `Cobrança de R&S referente à contratação de ${nomeCandidato ?? cargo} para ${nomeCliente ?? "cliente"}.`,
+        html: layout(
+          "Cobrança de Recrutamento e Seleção",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Segue a cobrança referente à contratação abaixo:</p>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados do cliente:</p>
+            <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              <li><strong>Empresa:</strong> ${nomeCliente ?? "—"}</li>
+              <li><strong>CNPJ:</strong> ${clienteCnpj ?? "—"}</li>
+              <li><strong>Endereço:</strong> ${clienteEndereco ?? "—"}</li>
+              <li><strong>Telefone:</strong> ${clienteTelefone ?? "—"}</li>
+              <li><strong>E-mail:</strong> ${clienteEmail ?? "—"}</li>
+            </ul>
+          </div>
+          <div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#1e40af;font-weight:700;font-size:14px;">Dados da contratação:</p>
+            <ul style="margin:0;padding-left:18px;color:#1d4ed8;line-height:2;font-size:14px;">
+              <li><strong>Candidato:</strong> ${nomeCandidato ?? "—"}</li>
+              <li><strong>Função:</strong> ${cargo}</li>
+              <li><strong>Salário:</strong> ${salarioFmt}</li>
+              <li><strong>Data de início:</strong> ${dataInicio ?? "—"}</li>
+            </ul>
+          </div>
+          <div style="background:#f0fdf4;border-left:4px solid #22c55e;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#166534;font-weight:700;font-size:14px;">Cobrança:</p>
+            <ul style="margin:0;padding-left:18px;color:#15803d;line-height:2;font-size:14px;">
+              <li><strong>Taxa:</strong> ${feeRsPercentual != null ? `${feeRsPercentual}%` : "—"}</li>
+              <li><strong>Valor total:</strong> ${feeValorFmt}</li>
+            </ul>
+          </div>`
+        ),
+      };
+    }
   }
 }

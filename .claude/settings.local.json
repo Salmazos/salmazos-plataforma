@@ -281,7 +281,8 @@
       "Bash(npx --yes vercel inspect https://salmazos-plataforma-edvz0krry-salmazos-projects.vercel.app)",
       "Bash(npx --yes vercel inspect https://salmazos-plataforma-oxjnq551h-salmazos-projects.vercel.app)",
       "Bash(xargs grep -l \"insert\")",
-      "Bash(npx --yes vercel --prod)"
+      "Bash(npx --yes vercel --prod)",
+      "Bash(grep -n \"fetch\\(\\\\`/api/vagas\\\\|fetch\\(\\\\\"/api/vagas\" src/components/ModalEditarVaga.tsx)"
     ]
   }
 }

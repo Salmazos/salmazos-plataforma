@@ -1,0 +1,125 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { checarPapelFullAccess } from "@/lib/fullAccessAuth";
+import { registrarAuditoria } from "@/lib/audit";
+import { getEmailTemplate } from "@/lib/emailTemplates";
+import { sendEmail } from "@/lib/sendEmail";
+
+interface Params {
+  params: Promise<{ id: string }>;
+}
+
+function formatarMoeda(v: number): string {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function formatarData(iso: string): string {
+  return iso.split("-").reverse().join("/");
+}
+
+export async function POST(_request: NextRequest, { params }: Params) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const acessoNegado = checarPapelFullAccess(user);
+  if (acessoNegado) return acessoNegado;
+
+  const { id } = await params;
+  const svc = createServiceClient();
+
+  const { data: cobranca, error: cobrancaErr } = await svc
+    .from("cobrancas_rs")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (cobrancaErr || !cobranca) return NextResponse.json({ error: "Cobrança não encontrada." }, { status: 404 });
+  if (cobranca.status !== "pendente_revisao") {
+    return NextResponse.json({ error: "Esta cobrança já foi revisada." }, { status: 400 });
+  }
+
+  const faltando: string[] = [];
+  if (!cobranca.cargo?.trim()) faltando.push("Cargo");
+  if (cobranca.salario == null || cobranca.salario <= 0) faltando.push("Salário");
+  if (!cobranca.data_inicio) faltando.push("Data de início");
+  if (!cobranca.cliente_cnpj_snapshot?.trim()) faltando.push("CNPJ do cliente");
+  if (!cobranca.cliente_endereco_snapshot?.trim()) faltando.push("Endereço do cliente");
+
+  if (faltando.length > 0) {
+    return NextResponse.json(
+      { error: `Preencha antes de aprovar: ${faltando.join(", ")}.` },
+      { status: 400 }
+    );
+  }
+
+  const feePercentual = Number(cobranca.fee_percentual);
+  const salario = Number(cobranca.salario);
+  const feeValor = Math.round(((salario * feePercentual) / 100) * 100) / 100;
+
+  const { data: destinatarios } = await svc
+    .from("cobranca_rs_avisos_destinatarios")
+    .select("email")
+    .eq("ativo", true);
+
+  let emailFalhou = false;
+  if (destinatarios && destinatarios.length > 0) {
+    const template = getEmailTemplate("cobranca_rs_gerada", {
+      nome: "",
+      cargo: cobranca.cargo,
+      nomeCliente: cobranca.cliente_nome_snapshot,
+      nomeCandidato: cobranca.candidato_nome_snapshot,
+      clienteCnpj: cobranca.cliente_cnpj_snapshot,
+      clienteEndereco: cobranca.cliente_endereco_snapshot,
+      clienteTelefone: cobranca.cliente_telefone_snapshot,
+      clienteEmail: cobranca.cliente_email_snapshot,
+      salario: formatarMoeda(salario),
+      dataInicio: formatarData(cobranca.data_inicio),
+      feeRsPercentual: feePercentual,
+      feeValor,
+    });
+
+    const resultados = await Promise.all(
+      destinatarios.map((d) =>
+        sendEmail({ to: d.email, subject: template.subject, html: template.html, tipo: "cobranca_rs_gerada" })
+      )
+    );
+    emailFalhou = resultados.some((r) => !r.success);
+    if (emailFalhou) console.error(`[cobrancas-rs/aprovar] Falha ao enviar para 1+ destinatário(s) (cobranca_id=${id})`);
+  } else {
+    console.error(`[cobrancas-rs/aprovar] Nenhum destinatário de e-mail ativo configurado (cobranca_id=${id}) — cobrança aprovada sem envio.`);
+  }
+
+  const { data, error } = await svc
+    .from("cobrancas_rs")
+    .update({
+      fee_valor: feeValor,
+      status: "aprovada_enviada",
+      enviado_em: new Date().toISOString(),
+      revisado_por: user.id,
+      revisado_em: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  registrarAuditoria({
+    usuario_id: user.id,
+    usuario_nome: user.email ?? null,
+    acao: "cobranca_rs_aprovada_enviada",
+    entidade: "cobrancas_rs",
+    entidade_id: id,
+    detalhes: {
+      cliente: cobranca.cliente_nome_snapshot,
+      candidato: cobranca.candidato_nome_snapshot,
+      fee_valor: feeValor,
+      email_falhou: emailFalhou,
+      destinatarios: destinatarios?.length ?? 0,
+    },
+  });
+
+  return NextResponse.json({ data, emailFalhou, destinatariosCount: destinatarios?.length ?? 0 });
+}

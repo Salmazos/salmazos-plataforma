@@ -936,6 +936,20 @@ export const cobrancaRsAvisoEmailUpdateSchema = z.object({
   ativo: z.boolean(),
 });
 
+// ── Cobrança R&S — revisão do rascunho (Fase 2b) ──────────────────────────────
+// Mesmo payload serve pra "Salvar rascunho" (sem validação obrigatória, salva parcial)
+// e como primeiro passo de "Aprovar e enviar" (o cliente sempre salva antes de aprovar,
+// pra garantir que a validação do lado do servidor em POST /aprovar reflita exatamente
+// o que está persistido).
+
+export const cobrancaRsRascunhoSchema = z.object({
+  cargo: z.string().optional().nullable(),
+  salario: coerceNumberNullable.optional(),
+  data_inicio: z.string().optional().nullable(),
+  cliente_cnpj: z.string().optional().nullable(),
+  cliente_endereco: z.string().optional().nullable(),
+});
+
 export const rescisaoAvisoPlataformaCreateSchema = z.object({
   usuario_id: z.string().uuid(),
 });
