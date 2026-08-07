@@ -14,7 +14,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("vagas")
-    .select("*, clientes(id, nome)")
+    .select("*, clientes(id, nome, processo_simplificado)")
     .eq("id", id)
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 404 });
@@ -120,7 +120,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       .from("vagas")
       .update(campos)
       .eq("id", id)
-      .select("*, clientes(id, nome)")
+      .select("*, clientes(id, nome, processo_simplificado)")
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

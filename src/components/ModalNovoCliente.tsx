@@ -39,6 +39,7 @@ const FORM_VAZIO = {
 export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: Props) {
   const [form, setForm] = useState(FORM_VAZIO);
   const [servicos, setServicos] = useState<string[]>([]);
+  const [processoSimplificado, setProcessoSimplificado] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [confirmandoInativar, setConfirmandoInativar] = useState(false);
@@ -74,6 +75,7 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
           : FORM_VAZIO
       );
       setServicos(cliente?.servicos ?? []);
+      setProcessoSimplificado(cliente?.processo_simplificado ?? false);
       setErro("");
       setConfirmandoInativar(false);
       setUsuariosPortal([]);
@@ -124,7 +126,7 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, servicos }),
+        body: JSON.stringify({ ...form, servicos, processo_simplificado: processoSimplificado }),
       });
       const json = await res.json();
       if (!res.ok) { setErro(json.error ?? "Erro ao salvar."); return; }
@@ -398,6 +400,34 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
                 );
               })}
             </div>
+          </div>
+
+          {/* Processo simplificado */}
+          <div className="border-t pt-4">
+            <div className="flex items-center gap-3">
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={processoSimplificado}
+                  onChange={(e) => setProcessoSimplificado(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div
+                  className="w-9 h-5 rounded-full peer-focus:ring-2 peer-focus:ring-green-300 transition-colors"
+                  style={{ backgroundColor: processoSimplificado ? "#16A34A" : "#D1D5DB" }}
+                >
+                  <div
+                    className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform"
+                    style={{ transform: processoSimplificado ? "translateX(16px)" : "translateX(0)" }}
+                  />
+                </div>
+              </label>
+              <span className="text-sm text-gray-700 font-medium">Processo simplificado</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1.5">
+              Pula a etapa de Entrevista Salmazos, indo direto para Entrevista Cliente — indicado
+              para contratações simples, como empregados domésticos ou pequenos comércios.
+            </p>
           </div>
 
           {/* Contato */}

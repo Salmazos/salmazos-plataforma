@@ -28,6 +28,7 @@ export async function PATCH(
     if (body.entidade_contratante !== undefined) campos.entidade_contratante = body.entidade_contratante || null;
     if (body.cnpj !== undefined) campos.cnpj = body.cnpj || null;
     if (body.endereco !== undefined) campos.endereco = body.endereco || null;
+    if (body.processo_simplificado !== undefined) campos.processo_simplificado = body.processo_simplificado;
 
     const supabase = createServiceClient();
     const { data, error } = await supabase

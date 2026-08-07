@@ -7,11 +7,17 @@ import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import ModalEditarVaga from "./ModalEditarVaga";
 import ModalAdicionarCandidatoVaga from "./ModalAdicionarCandidatoVaga";
 import ModalReprovacao from "./ModalReprovacao";
+import ModalEntrevistaSalmazos from "./ModalEntrevistaSalmazos";
+import ModalEncaminhamento from "./ModalEncaminhamento";
+import ModalFinalizarProcesso, { type FinalizarResult } from "./ModalFinalizarProcesso";
+import ModalMotivoEtapa from "./ModalMotivoEtapa";
 import MatchScoreBadge from "./MatchScoreBadge";
 import RetencaoBadge from "./RetencaoBadge";
 import VagaIndicadoresSection from "./painel/VagaIndicadoresSection";
 import { TIPOS_SERVICO } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
+import { getProximasEtapas, getComportamentoEtapa, getEtapaInfo, getEtapaLabel } from "@/lib/etapasCandidatura";
+import { MOTIVOS_REPROVACAO_CLIENTE } from "@/lib/motivos-reprovacao";
 import type { Vaga, CandidatoVaga, Candidato, MatchDetalhes } from "@/types";
 
 type HistoricoModalidade = {
@@ -55,27 +61,6 @@ const ORIGEM_VOLTAR: Record<string, { href: string; label: string }> = {
 };
 const VOLTAR_PADRAO = { href: "/painel/vagas", label: "Voltar às vagas" };
 
-// Lista completa das etapas válidas de candidatos_vagas.etapa — mesmo conjunto do mapa
-// ETAPA_LABEL em api/candidatos-vagas/[id]/route.ts. Precisa cobrir TODAS elas: um id
-// fora dessa lista faz o .find() abaixo cair no fallback ETAPAS_VAGA[0] ("Triagem"),
-// mostrando a etapa errada pra qualquer candidato contratado/reprovado/etc (bug real
-// encontrado com 'contratado' e 'nao_compareceu' aparecendo como "Triagem").
-const ETAPAS_VAGA = [
-  { id: "triagem",             label: "Triagem",               bg: "#1D6FA4", color: "#ffffff" },
-  { id: "entrevista_salmazos", label: "Entrevista Salmazos",   bg: "#FFD700", color: "#000000" },
-  { id: "entrevista_rh",       label: "Entrevista Salmazos",   bg: "#FFD700", color: "#000000" },
-  { id: "entrevista_cliente",  label: "Entrevista Cliente",     bg: "#F97316", color: "#ffffff" },
-  { id: "aprovado_cliente",    label: "Aprovado pelo Cliente",  bg: "#16a34a", color: "#ffffff" },
-  { id: "aprovado",            label: "Aprovado",               bg: "#1D9E75", color: "#ffffff" },
-  { id: "contratado",          label: "Contratado",             bg: "#16A34A", color: "#ffffff" },
-  { id: "reprovado",           label: "Reprovado",              bg: "#EC4899", color: "#ffffff" },
-  { id: "reprovado_cliente",   label: "Reprovado",              bg: "#DB2777", color: "#ffffff" },
-  { id: "reprovado_final",     label: "Processo Encerrado",     bg: "#6B7280", color: "#ffffff" },
-  { id: "nao_tem_interesse",   label: "Não tem Interesse",      bg: "#9CA3AF", color: "#ffffff" },
-  { id: "nao_compareceu",      label: "Não Compareceu",         bg: "#EF4444", color: "#ffffff" },
-  { id: "bloqueado",           label: "Bloqueado",              bg: "#7F1D1D", color: "#ffffff" },
-] as const;
-
 interface Props {
   vaga: Vaga;
   candidatosVaga: CandidatoVaga[];
@@ -98,6 +83,8 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
   const [clientesLista, setClientesLista] = useState<{ id: string; nome: string }[]>([]);
   const [reprovacaoModal, setReprovacaoModal] = useState<{ open: boolean; candidatoId: string }>({ open: false, candidatoId: "" });
   const [reprovacaoCandidato, setReprovacaoCandidato] = useState<Candidato | null>(null);
+  const [pendingEncaminhamento, setPendingEncaminhamento] = useState<{ cvId: string; candidatoId: string; candidatoNome: string } | null>(null);
+  const [pendingFinalizar, setPendingFinalizar] = useState<{ cvId: string; candidatoNome: string; resultado: "contratado" | "reprovado_final" } | null>(null);
   const [calculandoTodos, setCalculandoTodos] = useState(false);
   const [gerandoPDF, setGerandoPDF] = useState(false);
   const [linkCopiado, setLinkCopiado] = useState(false);
@@ -264,6 +251,72 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
       const json = await res.json();
       setReprovacaoCandidato(json.data);
       setReprovacaoModal({ open: true, candidatoId });
+    }
+  };
+
+  // Etapa efetivamente confirmada (direto, motivo, ou depois que o ModalEncaminhamento /
+  // ModalFinalizarProcesso fecham com sucesso) — fonte única que toda linha lê via cv.etapa,
+  // em vez de cada CandidatoVagaRow guardar sua própria cópia local (o que ficava
+  // dessincronizado de um refresh pro outro).
+  const handleEtapaAtualizada = (cvId: string, novaEtapa: string) => {
+    setCandidatosVaga((prev) => prev.map((cv) => (cv.id === cvId ? { ...cv, etapa: novaEtapa } : cv)));
+  };
+
+  const handleEncaminhamentoNeeded = (payload: { cvId: string; candidatoId: string; candidatoNome: string }) => {
+    setPendingEncaminhamento(payload);
+  };
+
+  const handleFinalizarNeeded = (payload: { cvId: string; candidatoNome: string; resultado: "contratado" | "reprovado_final" }) => {
+    setPendingFinalizar(payload);
+  };
+
+  // Mesma sequência que o Kanban geral já faz (KanbanBoard.handleConfirmarEncaminhamento):
+  // cria o encaminhamento e só depois move a etapa — se a etapa PATCH falhar, o
+  // encaminhamento já criado fica órfão, mas é o mesmo comportamento já aceito no Kanban.
+  const handleConfirmarEncaminhamento = async (dados: {
+    cliente_id: string;
+    data_entrevista: string | null;
+    status: "aguardando" | "aguardando_agendamento_cliente";
+    tipo_servico: string;
+    observacoes: string;
+    vaga_id?: string;
+  }) => {
+    if (!pendingEncaminhamento) return;
+    const { cvId, candidatoId } = pendingEncaminhamento;
+    const resEncaminhamento = await fetch("/api/encaminhamentos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ candidato_id: candidatoId, ...dados }),
+    });
+    if (!resEncaminhamento.ok) {
+      const json = await resEncaminhamento.json().catch(() => ({}));
+      throw new Error(json.error || "Não foi possível registrar o encaminhamento.");
+    }
+    const resEtapa = await fetch(`/api/candidatos-vagas/${cvId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ etapa: "entrevista_cliente" }),
+    });
+    if (!resEtapa.ok) {
+      const json = await resEtapa.json().catch(() => ({}));
+      throw new Error(json.error || "Não foi possível mover o candidato para entrevista com cliente.");
+    }
+    handleEtapaAtualizada(cvId, "entrevista_cliente");
+    setPendingEncaminhamento(null);
+  };
+
+  // Contratado/Processo Encerrado passam a sempre rodar via /finalizar — corrige o bug
+  // que fazia a tela de Vaga pular fee de R&S, baixa de posição, fechamento automático
+  // da vaga e a Cobrança R&S quando o PATCH ia direto na etapa.
+  const handleFinalizarConfirmado = (resultado: FinalizarResult) => {
+    if (!pendingFinalizar) return;
+    handleEtapaAtualizada(pendingFinalizar.cvId, resultado.resultado);
+    setPendingFinalizar(null);
+    if (resultado.vaga_encerrada || resultado.vaga_reaberta) {
+      fetch(`/api/vagas/${vaga.id}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((json) => { if (json?.data) setVaga(json.data); })
+        .catch(() => {});
     }
   };
 
@@ -612,8 +665,15 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
                     key={cv.id}
                     cv={cv}
                     vagaId={vaga.id}
+                    vagaTitulo={vaga.titulo}
+                    vagaConfidencial={vaga.confidencial}
+                    clienteId={vaga.cliente_id}
+                    processoSimplificado={vaga.clientes?.processo_simplificado ?? false}
                     onRemover={() => handleRemoverCandidato(cv.id)}
                     onReprovacaoNeeded={handleReprovacaoNeeded}
+                    onEncaminhamentoNeeded={handleEncaminhamentoNeeded}
+                    onFinalizarNeeded={handleFinalizarNeeded}
+                    onEtapaAtualizada={handleEtapaAtualizada}
                     onMatchCalculado={handleMatchCalculado}
                     onRetencaoCalculada={handleRetencaoCalculada}
                   />
@@ -645,6 +705,40 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
             setReprovacaoModal({ open: false, candidatoId: "" });
             setReprovacaoCandidato(null);
           }}
+        />
+      )}
+
+      {/* Modal encaminhamento (Entrevista Cliente) — pré-preenchido com o cliente e o
+          tipo de serviço da própria vaga, já que aqui (diferente do Kanban geral) já
+          sabemos os dois de antemão. */}
+      <ModalEncaminhamento
+        isOpen={!!pendingEncaminhamento}
+        candidatoId={pendingEncaminhamento?.candidatoId ?? ""}
+        candidatoNome={pendingEncaminhamento?.candidatoNome ?? ""}
+        vagaId={vaga.id}
+        vagaTitulo={vaga.titulo}
+        clienteIdInicial={vaga.cliente_id}
+        tipoServicoInicial={vaga.tipo_servico}
+        onClose={() => setPendingEncaminhamento(null)}
+        onConfirmar={handleConfirmarEncaminhamento}
+      />
+
+      {/* Modal finalizar processo (Contratado / Processo Encerrado) — mesmo modal do
+          Kanban geral, agora também obrigatório pela tela de Vaga (corrige o bypass do
+          /finalizar: fee de R&S, baixa de posição, fechamento automático da vaga e
+          Cobrança R&S). */}
+      {pendingFinalizar && (
+        <ModalFinalizarProcesso
+          isOpen
+          resultado={pendingFinalizar.resultado}
+          candidatoNome={pendingFinalizar.candidatoNome}
+          vagaTitulo={vaga.titulo}
+          tipoServico={vaga.tipo_servico}
+          cvId={pendingFinalizar.cvId}
+          vagaId={vaga.id}
+          clienteId={vaga.cliente_id}
+          onClose={() => setPendingFinalizar(null)}
+          onConfirmar={handleFinalizarConfirmado}
         />
       )}
 
@@ -822,43 +916,105 @@ function DetalheItem({
 function CandidatoVagaRow({
   cv,
   vagaId,
+  vagaTitulo,
+  vagaConfidencial,
+  clienteId,
+  processoSimplificado,
   onRemover,
   onReprovacaoNeeded,
+  onEncaminhamentoNeeded,
+  onFinalizarNeeded,
+  onEtapaAtualizada,
   onMatchCalculado,
   onRetencaoCalculada,
 }: {
   cv: CandidatoVaga;
   vagaId: string;
+  vagaTitulo: string;
+  vagaConfidencial?: boolean;
+  clienteId: string | null;
+  processoSimplificado: boolean;
   onRemover: () => void;
   onReprovacaoNeeded: (candidatoId: string) => void;
+  onEncaminhamentoNeeded: (payload: { cvId: string; candidatoId: string; candidatoNome: string }) => void;
+  onFinalizarNeeded: (payload: { cvId: string; candidatoNome: string; resultado: "contratado" | "reprovado_final" }) => void;
+  onEtapaAtualizada: (cvId: string, novaEtapa: string) => void;
   onMatchCalculado: (cvId: string, score: number, detalhes: MatchDetalhes) => void;
   onRetencaoCalculada: (cvId: string, score: number, label: string, resumo: string) => void;
 }) {
   const c = cv.candidatos;
-  const [etapa, setEtapa] = useState(cv.etapa ?? "triagem");
+  const etapa = cv.etapa ?? "triagem";
   const [salvando, setSalvando] = useState(false);
   const [calculandoMatch, setCalculandoMatch] = useState(false);
   const [tooltipVisivel, setTooltipVisivel] = useState(false);
   const [calculandoRetencao, setCalculandoRetencao] = useState(false);
   const [tooltipRetencaoVisivel, setTooltipRetencaoVisivel] = useState(false);
+  const [modalEntrevistaSalmazos, setModalEntrevistaSalmazos] = useState(false);
+  const [modalMotivoCliente, setModalMotivoCliente] = useState(false);
 
-  const etapaInfo = ETAPAS_VAGA.find((e) => e.id === etapa) ?? ETAPAS_VAGA[0];
+  const etapaInfo = getEtapaInfo(etapa);
+  const opcoes = getProximasEtapas(etapa, processoSimplificado);
 
-  const handleEtapaChange = async (novaEtapa: string) => {
+  // PATCH efetivo em candidatos_vagas.etapa — usado tanto pra transições diretas quanto
+  // depois que um motivo é escolhido. "reprovado" preserva o fluxo próprio já existente
+  // (showReprovacaoModal abre o ModalReprovacao — retornar ao banco/reprovar/negativar).
+  const salvarEtapa = async (novaEtapa: string, comentario?: string, extras?: { cliente_id?: string; data_entrevista_salmazos?: string }) => {
     setSalvando(true);
     const res = await fetch(`/api/candidatos-vagas/${cv.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ etapa: novaEtapa }),
+      body: JSON.stringify({
+        etapa: novaEtapa,
+        ...(comentario ? { observacoes: comentario } : {}),
+        ...extras,
+      }),
     });
     if (res.ok) {
-      setEtapa(novaEtapa);
+      onEtapaAtualizada(cv.id, novaEtapa);
       const json = await res.json();
       if (json.showReprovacaoModal && json.candidatoId) {
         onReprovacaoNeeded(json.candidatoId);
       }
+      if (novaEtapa === "bloqueado" && cv.candidato_id) {
+        // Mesmo segundo PATCH que o Kanban já faz hoje pra bloqueado — mantém
+        // candidatos.etapa_kanban e candidatos.bloqueado alinhados nas duas telas.
+        fetch(`/api/candidatos/${cv.candidato_id}/etapa`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ etapa_kanban: "bloqueado", comentario: comentario || null }),
+        }).catch(() => {});
+      }
     }
     setSalvando(false);
+  };
+
+  // Dispatch único (getComportamentoEtapa), compartilhado com CandidatoCard.tsx —
+  // "reprovado" é a única exceção: mantém o fluxo específico da tela de Vaga (PATCH
+  // direto, sem pedir motivo aqui — showReprovacaoModal já cobre isso via ModalReprovacao).
+  const handleEtapaChange = (novaEtapa: string) => {
+    if (novaEtapa === "" || novaEtapa === etapa) return;
+    if (novaEtapa === "reprovado") {
+      salvarEtapa(novaEtapa);
+      return;
+    }
+    const comportamento = getComportamentoEtapa(novaEtapa);
+    if (comportamento === "entrevista_salmazos") {
+      setModalEntrevistaSalmazos(true);
+      return;
+    }
+    if (comportamento === "encaminhamento") {
+      onEncaminhamentoNeeded({ cvId: cv.id, candidatoId: cv.candidato_id, candidatoNome: c?.nome_completo ?? "" });
+      return;
+    }
+    if (comportamento === "finalizar") {
+      onFinalizarNeeded({ cvId: cv.id, candidatoNome: c?.nome_completo ?? "", resultado: novaEtapa as "contratado" | "reprovado_final" });
+      return;
+    }
+    if (comportamento === "motivo_cliente") {
+      setModalMotivoCliente(true);
+      return;
+    }
+    salvarEtapa(novaEtapa);
   };
 
   const handleCalcularMatch = async () => {
@@ -893,6 +1049,7 @@ function CandidatoVagaRow({
   };
 
   return (
+    <>
     <li className="flex items-start gap-3 py-1">
       <div className="w-8 h-8 rounded-full bg-black text-[#FFD700] flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
         {c ? c.nome_completo.charAt(0).toUpperCase() : "?"}
@@ -902,24 +1059,31 @@ function CandidatoVagaRow({
           {c?.nome_completo ?? "Candidato removido"}
         </p>
         <div className="flex items-center gap-2 mt-1 flex-wrap">
-          <select
-            value={etapa}
-            onChange={(e) => handleEtapaChange(e.target.value)}
-            disabled={salvando}
-            className="text-[10px] font-semibold px-2 py-0.5 rounded-full border-0 cursor-pointer disabled:opacity-60"
-            style={{
-              backgroundColor: etapaInfo.bg,
-              color: etapaInfo.color,
-              appearance: "none",
-              WebkitAppearance: "none",
-            }}
+          {/* Etapa atual — badge estático (cor comunica o estágio); ações de avanço/saída
+              ficam só no "Mover →" ao lado, com as próximas etapas válidas contextuais a
+              partir daqui (mesma árvore usada no Kanban geral). */}
+          <span
+            className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+            style={{ backgroundColor: etapaInfo.bg, color: etapaInfo.color }}
           >
-            {ETAPAS_VAGA.map((e) => (
-              <option key={e.id} value={e.id} style={{ backgroundColor: "#fff", color: "#111" }}>
-                {e.label}
-              </option>
-            ))}
-          </select>
+            {etapaInfo.label}
+          </span>
+          {opcoes.length > 0 && (
+            <select
+              value=""
+              onChange={(e) => handleEtapaChange(e.target.value)}
+              disabled={salvando}
+              className="text-[10px] font-semibold px-2 py-0.5 rounded-full border border-gray-200 bg-white text-gray-500 cursor-pointer disabled:opacity-60"
+              title="Mover para etapa"
+            >
+              <option value="">Mover →</option>
+              {opcoes.map((o) => (
+                <option key={o.value} value={o.value} style={{ backgroundColor: "#fff", color: "#111" }}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          )}
           {c?.responsavel && (
             <span className="text-[10px] text-gray-400">{c.responsavel}</span>
           )}
@@ -1051,5 +1215,37 @@ function CandidatoVagaRow({
         </button>
       </div>
     </li>
+
+    <ModalEntrevistaSalmazos
+      isOpen={modalEntrevistaSalmazos}
+      candidato={{ cliente_id: clienteId, nome_completo: c?.nome_completo ?? "", vaga_titulo: vagaTitulo }}
+      onClose={() => setModalEntrevistaSalmazos(false)}
+      onConfirmar={(dados) => {
+        setModalEntrevistaSalmazos(false);
+        salvarEtapa(
+          "entrevista_salmazos",
+          dados.comentario || undefined,
+          {
+            cliente_id: dados.cliente_id || undefined,
+            data_entrevista_salmazos: dados.data_entrevista_salmazos || undefined,
+          },
+        );
+      }}
+    />
+
+    <ModalMotivoEtapa
+      isOpen={modalMotivoCliente}
+      etapaLabel={getEtapaLabel("reprovado_cliente")}
+      candidatoNome={c?.nome_completo ?? ""}
+      vagaTitulo={vagaTitulo}
+      vagaConfidencial={vagaConfidencial}
+      motivos={MOTIVOS_REPROVACAO_CLIENTE}
+      onClose={() => setModalMotivoCliente(false)}
+      onConfirmar={(motivo) => {
+        setModalMotivoCliente(false);
+        salvarEtapa("reprovado_cliente", motivo);
+      }}
+    />
+    </>
   );
 }

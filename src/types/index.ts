@@ -254,6 +254,7 @@ export interface KanbanCard {
   encaminhamento_data_entrevista: string | null;
   cliente_id: string | null;
   cliente_nome: string | null;
+  processo_simplificado: boolean;
   observacoes: string | null;
   candidato_id: string;
   nome_completo: string;
@@ -295,6 +296,7 @@ export interface Cliente {
   entidade_contratante?: string | null;
   cnpj?: string | null;
   endereco?: string | null;
+  processo_simplificado?: boolean;
   created_at: string;
 }
 
@@ -347,7 +349,7 @@ export interface Vaga {
   data_fechamento?: string | null;
   created_at: string;
   cliente_nome_temp?: string | null;
-  clientes?: { id: string; nome: string } | null;
+  clientes?: { id: string; nome: string; processo_simplificado?: boolean } | null;
 }
 
 export interface MatchDetalhes {

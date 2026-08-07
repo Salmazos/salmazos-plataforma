@@ -1,13 +1,20 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { KanbanCard } from "@/types";
 
 type ClienteOpcao = { id: string; nome: string };
 
+// Shape mínimo reutilizável — o Kanban geral passa o KanbanCard inteiro (superset
+// compatível), a tela de Vaga monta um objeto só com esses 3 campos.
+interface CandidatoParaModal {
+  cliente_id: string | null;
+  nome_completo: string;
+  vaga_titulo: string;
+}
+
 interface Props {
   isOpen: boolean;
-  card: KanbanCard;
+  candidato: CandidatoParaModal;
   onClose: () => void;
   onConfirmar: (dados: {
     cliente_id: string;
@@ -16,7 +23,7 @@ interface Props {
   }) => void;
 }
 
-export default function ModalEntrevistaSalmazos({ isOpen, card, onClose, onConfirmar }: Props) {
+export default function ModalEntrevistaSalmazos({ isOpen, candidato, onClose, onConfirmar }: Props) {
   const [clientes, setClientes] = useState<ClienteOpcao[]>([]);
   const [clienteId, setClienteId] = useState("");
   const [dataEntrevista, setDataEntrevista] = useState("");
@@ -24,14 +31,14 @@ export default function ModalEntrevistaSalmazos({ isOpen, card, onClose, onConfi
 
   useEffect(() => {
     if (!isOpen) return;
-    setClienteId(card.cliente_id ?? "");
+    setClienteId(candidato.cliente_id ?? "");
     setDataEntrevista("");
     setComentario("");
     fetch("/api/clientes")
       .then((r) => r.json())
       .then((j) => setClientes(j.data ?? []))
       .catch(() => {});
-  }, [isOpen, card.cliente_id]);
+  }, [isOpen, candidato.cliente_id]);
 
   if (!isOpen) return null;
 
@@ -70,10 +77,10 @@ export default function ModalEntrevistaSalmazos({ isOpen, card, onClose, onConfi
           {"📋"} Agendar Entrevista Salmazos
         </h2>
         <p style={{ fontSize: 13, color: "#6B7280", margin: "0 0 4px" }}>
-          {card.nome_completo}
+          {candidato.nome_completo}
         </p>
         <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 20px" }}>
-          Vaga: {card.vaga_titulo}
+          Vaga: {candidato.vaga_titulo}
         </p>
 
         <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>

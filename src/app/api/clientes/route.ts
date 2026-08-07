@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
         entidade_contratante: body.entidade_contratante || null,
         cnpj: body.cnpj || null,
         endereco: body.endereco || null,
+        processo_simplificado: body.processo_simplificado ?? false,
       })
       .select()
       .single();

@@ -17,7 +17,7 @@ export default async function VagaDetalhePage({ params }: Props) {
   const [{ data: vaga }, { data: candidatosVaga }] = await Promise.all([
     supabase
       .from("vagas")
-      .select("*, clientes(id, nome)")
+      .select("*, clientes(id, nome, processo_simplificado)")
       .eq("id", id)
       .single(),
     supabase

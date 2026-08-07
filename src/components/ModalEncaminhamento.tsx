@@ -12,6 +12,7 @@ interface Props {
   vagaId?: string;
   vagaTitulo?: string;
   clienteIdInicial?: string | null;
+  tipoServicoInicial?: string | null;
   onClose: () => void;
   onConfirmar: (dados: {
     cliente_id: string;
@@ -37,6 +38,7 @@ export default function ModalEncaminhamento({
   vagaId: vagaIdProp,
   vagaTitulo: vagaTituloProp,
   clienteIdInicial,
+  tipoServicoInicial,
   onClose,
   onConfirmar,
 }: Props) {
@@ -67,21 +69,24 @@ export default function ModalEncaminhamento({
       : TIPOS_SERVICO;
 
   useEffect(() => {
-    setTipoServico("");
+    // Só mantém o tipoServicoInicial (pré-preenchido pela tela de Vaga) enquanto o
+    // cliente continuar sendo o mesmo que veio pré-selecionado — se o analista trocar
+    // de cliente manualmente, volta a pedir o tipo de serviço (pode ser outro).
+    setTipoServico(clienteId && clienteId === clienteIdInicial ? (tipoServicoInicial ?? "") : "");
     setVagaId("");
     setVagas([]);
     if (!clienteId) return;
     fetch(`/api/vagas?cliente_id=${clienteId}`)
       .then((r) => r.json())
       .then(({ data }) => setVagas(data ?? []));
-  }, [clienteId]);
+  }, [clienteId, clienteIdInicial, tipoServicoInicial]);
 
   useEffect(() => {
     if (!isOpen) return;
     setClienteId(clienteIdInicial ?? "");
     setModoEnvio("direto");
     setDataEntrevista("");
-    setTipoServico("");
+    setTipoServico(tipoServicoInicial ?? "");
     setObservacoes("");
     setErro("");
     setForcarEnvio(false);

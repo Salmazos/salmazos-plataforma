@@ -121,6 +121,7 @@ export const clienteCreateSchema = z.object({
   entidade_contratante: z.string().optional().nullable(),
   cnpj: z.string().optional().nullable(),
   endereco: z.string().optional().nullable(),
+  processo_simplificado: z.boolean().optional(),
 });
 
 export const clienteUpdateSchema = z.object({
@@ -136,6 +137,7 @@ export const clienteUpdateSchema = z.object({
   entidade_contratante: z.string().optional().nullable(),
   cnpj: z.string().optional().nullable(),
   endereco: z.string().optional().nullable(),
+  processo_simplificado: z.boolean().optional(),
 });
 
 export const clienteAtencaoEspecialSchema = z.object({

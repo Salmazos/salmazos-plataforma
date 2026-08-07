@@ -7,21 +7,9 @@ import { formatarData } from "@/lib/utils";
 import type { KanbanCard } from "@/types";
 import TriagemBadge from "./TriagemBadge";
 import ModalEntrevistaSalmazos from "./ModalEntrevistaSalmazos";
-import { MOTIVOS_REPROVACAO_INTERNA, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
-
-const ETAPAS_REJEICAO = ["reprovado", "reprovado_cliente"];
-
-const fieldStyle: React.CSSProperties = {
-  width: "100%",
-  border: "1px solid #E5E7EB",
-  borderRadius: 8,
-  padding: "8px 12px",
-  fontSize: 13,
-  color: "#111827",
-  outline: "none",
-  boxSizing: "border-box",
-  marginBottom: 16,
-};
+import ModalMotivoEtapa from "./ModalMotivoEtapa";
+import { MOTIVOS_REPROVACAO_INTERNA, MOTIVOS_REPROVACAO_CLIENTE } from "@/lib/motivos-reprovacao";
+import { getProximasEtapas, getComportamentoEtapa, getEtapaLabel } from "@/lib/etapasCandidatura";
 
 type Analista = { id: string; nome_completo: string; email: string };
 
@@ -41,34 +29,6 @@ function fetchAnalistas(): Promise<Analista[]> {
   return fetchPromise;
 }
 
-type EtapaOption = { value: string; label: string };
-
-const OPCOES_POR_ETAPA: Record<string, EtapaOption[]> = {
-  triagem: [
-    { value: "entrevista_salmazos", label: "Entrevista Salmazos" },
-    { value: "nao_tem_interesse", label: "Não tem Interesse" },
-    { value: "reprovado", label: "Reprovado" },
-    { value: "bloqueado", label: "Bloqueado" },
-  ],
-  entrevista_salmazos: [
-    { value: "entrevista_cliente", label: "Entrevista Cliente" },
-    { value: "nao_tem_interesse", label: "Não tem Interesse" },
-    { value: "reprovado", label: "Reprovado" },
-    { value: "bloqueado", label: "Bloqueado" },
-  ],
-  entrevista_cliente: [
-    { value: "aprovado_cliente", label: "Aprovado pelo Cliente" },
-    { value: "reprovado_cliente", label: "Reprovado pelo Cliente" },
-    { value: "nao_tem_interesse", label: "Não tem Interesse" },
-    { value: "nao_compareceu", label: "Não Compareceu" },
-    { value: "bloqueado", label: "Bloqueado" },
-  ],
-  aprovado_cliente: [
-    { value: "contratado", label: "Contratado" },
-    { value: "reprovado_final", label: "Reprovado" },
-  ],
-};
-
 interface Props {
   card: KanbanCard;
   onMover: (cvId: string, etapa: string, comentario?: string, extras?: { cliente_id?: string; data_entrevista_salmazos?: string }) => Promise<void>;
@@ -79,12 +39,9 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
   const router = useRouter();
   const [responsavel, setResponsavel] = useState(card.responsavel ?? "");
   const [salvando, setSalvando] = useState(false);
-  const [modalEtapa, setModalEtapa] = useState<EtapaOption | null>(null);
-  const [comentario, setComentario] = useState("");
-  const [motivoSelecionado, setMotivoSelecionado] = useState("");
-  const [motivoOutro, setMotivoOutro] = useState("");
   const [analistas, setAnalistas] = useState<Analista[]>([]);
   const [modalEntrevistaSalmazos, setModalEntrevistaSalmazos] = useState(false);
+  const [modalMotivo, setModalMotivo] = useState<{ etapa: string; tipo: "motivo_interno" | "motivo_cliente" } | null>(null);
 
   useEffect(() => {
     fetchAnalistas().then(setAnalistas);
@@ -112,54 +69,35 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
     }
   };
 
+  // Dispatch único (getComportamentoEtapa) compartilhado com VagaDetalheClient.tsx —
+  // entrevista_cliente/contratado/reprovado_final vão direto pro onMover porque
+  // KanbanBoard.moverCard já intercepta essas etapas e abre ModalEncaminhamento /
+  // ModalFinalizarProcesso; não abrir nenhum modal aqui evita o "modal duplo" que
+  // existia antes pra entrevista_cliente.
   const handleSelectChange = (value: string) => {
     if (value === "" || value === card.etapa) return;
-    if (value === "contratado" || value === "reprovado_final") {
-      onMover(card.cv_id, value);
-      return;
-    }
-    if (value === "entrevista_salmazos" && card.etapa === "triagem") {
+    const comportamento = getComportamentoEtapa(value);
+    if (comportamento === "entrevista_salmazos") {
       setModalEntrevistaSalmazos(true);
       return;
     }
-    const opcoes = OPCOES_POR_ETAPA[card.etapa] ?? [];
-    const opcao = opcoes.find((o) => o.value === value);
-    if (opcao) {
-      setComentario("");
-      setMotivoSelecionado("");
-      setMotivoOutro("");
-      setModalEtapa(opcao);
+    if (comportamento === "motivo_interno" || comportamento === "motivo_cliente") {
+      setModalMotivo({ etapa: value, tipo: comportamento });
+      return;
     }
+    onMover(card.cv_id, value);
   };
 
-  const isRejection = modalEtapa ? ETAPAS_REJEICAO.includes(modalEtapa.value) : false;
-  const isOutroMotivo = motivoSelecionado === OUTRO_MOTIVO_REPROVACAO;
-  const motivoValido = isOutroMotivo ? motivoOutro.trim().length > 0 : motivoSelecionado.trim().length > 0;
-
-  const handleConfirmar = async () => {
-    if (!modalEtapa) return;
-    if (isRejection && !motivoValido) return;
-    const motivoFinal = isRejection
-      ? (isOutroMotivo ? `Outro motivo: ${motivoOutro.trim()}` : motivoSelecionado)
-      : (comentario.trim() || undefined);
-    const etapaValue = modalEtapa.value;
-    setModalEtapa(null);
-    await onMover(card.cv_id, etapaValue, motivoFinal);
-    setComentario("");
-    setMotivoSelecionado("");
-    setMotivoOutro("");
-  };
-
-  const handleCancelar = () => {
-    setModalEtapa(null);
-    setComentario("");
-    setMotivoSelecionado("");
-    setMotivoOutro("");
+  const handleConfirmarMotivo = async (motivo: string) => {
+    if (!modalMotivo) return;
+    const etapa = modalMotivo.etapa;
+    setModalMotivo(null);
+    await onMover(card.cv_id, etapa, motivo);
   };
 
   const etapaAtual = ETAPAS_KANBAN.find((e) => e.id === card.etapa) ??
     ETAPAS_KANBAN.find((e) => e.id === "entrevista_salmazos");
-  const opcoes = OPCOES_POR_ETAPA[card.etapa] ?? [];
+  const opcoes = getProximasEtapas(card.etapa, card.processo_simplificado);
 
   return (
     <>
@@ -296,7 +234,7 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
 
       <ModalEntrevistaSalmazos
         isOpen={modalEntrevistaSalmazos}
-        card={card}
+        candidato={card}
         onClose={() => setModalEntrevistaSalmazos(false)}
         onConfirmar={(dados) => {
           setModalEntrevistaSalmazos(false);
@@ -312,126 +250,16 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
         }}
       />
 
-      {/* Comment Modal */}
-      {modalEtapa && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.4)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 100,
-          }}
-          onClick={(e) => { if (e.target === e.currentTarget) handleCancelar(); }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 12,
-              padding: "24px 28px",
-              width: 420,
-              maxWidth: "90vw",
-              boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
-            }}
-          >
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>
-              Mover para {modalEtapa.label}
-            </h2>
-            <p style={{ fontSize: 13, color: "#6B7280", margin: "0 0 4px" }}>
-              {card.nome_completo}
-            </p>
-            <p style={{ fontSize: 11, color: "#9CA3AF", margin: "0 0 16px" }}>
-              Vaga: {card.vaga_titulo}
-              {card.vaga_confidencial && (
-                <span style={{ marginLeft: 4, fontWeight: 700, color: "#DC2626" }}>🔴 CONFIDENCIAL</span>
-              )}
-            </p>
-
-            {isRejection ? (
-              <>
-                <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
-                  Motivo da reprovação *
-                </label>
-                <select
-                  value={motivoSelecionado}
-                  onChange={(e) => setMotivoSelecionado(e.target.value)}
-                  style={fieldStyle}
-                >
-                  <option value="" disabled>Selecione o motivo...</option>
-                  {MOTIVOS_REPROVACAO_INTERNA.map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-
-                {isOutroMotivo && (
-                  <>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
-                      Descreva o motivo:
-                    </label>
-                    <textarea
-                      value={motivoOutro}
-                      onChange={(e) => setMotivoOutro(e.target.value)}
-                      placeholder="Descreva o motivo..."
-                      rows={3}
-                      style={{ ...fieldStyle, resize: "vertical" }}
-                    />
-                  </>
-                )}
-              </>
-            ) : (
-              <>
-                <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
-                  Comentário
-                </label>
-                <textarea
-                  value={comentario}
-                  onChange={(e) => setComentario(e.target.value)}
-                  placeholder="Adicione um comentário sobre esta movimentação..."
-                  rows={3}
-                  style={{ ...fieldStyle, resize: "vertical" }}
-                />
-              </>
-            )}
-
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <button
-                onClick={handleCancelar}
-                style={{
-                  padding: "8px 18px",
-                  borderRadius: 8,
-                  border: "1px solid #E5E7EB",
-                  background: "#fff",
-                  color: "#374151",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleConfirmar}
-                disabled={isRejection && !motivoValido}
-                style={{
-                  padding: "8px 20px",
-                  borderRadius: 8,
-                  border: "none",
-                  background: "#FFB800",
-                  color: "#000",
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: isRejection && !motivoValido ? "not-allowed" : "pointer",
-                  opacity: isRejection && !motivoValido ? 0.6 : 1,
-                }}
-              >
-                Confirmar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalMotivoEtapa
+        isOpen={!!modalMotivo}
+        etapaLabel={modalMotivo ? getEtapaLabel(modalMotivo.etapa) : ""}
+        candidatoNome={card.nome_completo}
+        vagaTitulo={card.vaga_titulo}
+        vagaConfidencial={card.vaga_confidencial}
+        motivos={modalMotivo?.tipo === "motivo_cliente" ? MOTIVOS_REPROVACAO_CLIENTE : MOTIVOS_REPROVACAO_INTERNA}
+        onClose={() => setModalMotivo(null)}
+        onConfirmar={handleConfirmarMotivo}
+      />
     </>
   );
 }
