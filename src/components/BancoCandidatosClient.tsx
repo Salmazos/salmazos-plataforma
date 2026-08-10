@@ -548,11 +548,12 @@ export default function BancoCandidatosClient({
   }, []);
 
   function abrirModalEncaminhamento(c: CandidatoRow) {
-    const bestVagaId = matchMap[c.id]?.[0]?.vaga_id ?? vagasAbertas[0]?.id ?? "";
+    // Sempre abre em branco — nenhuma vaga pré-selecionada, pra não obrigar o usuário a
+    // clicar no "×" antes de poder buscar (ver combobox mais abaixo no JSX).
     setModal({
       candidatoId: c.id,
       candidatoNome: c.nome_completo,
-      selectedVagaId: bestVagaId,
+      selectedVagaId: "",
       buscaVaga: "",
       loading: false,
       error: null,
