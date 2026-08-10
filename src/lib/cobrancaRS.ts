@@ -257,3 +257,61 @@ export async function gerarCobrancaCancelamentoRSSeAplicavel(
 
   return { criada: true };
 }
+
+export interface DestinatarioAtrasoCobranca {
+  user_id: string;
+  email: string;
+  nome_completo: string;
+}
+
+/**
+ * Destinatários do lembrete de cobrança R&S atrasada (cron lembrete-cobranca-atraso):
+ * base fixa (PAPEIS_FULL_ACCESS + analistas com acesso configurável à tela — mesma query
+ * de leitura usada em /painel/cobranca-rs-acesso-config, sem alterar checarAcessoCobrancaRS
+ * em si, que só checa um usuário por vez) + o responsável comercial do cliente (nome livre
+ * em clientes.responsavel_comercial), resolvido por nome contra analistas_perfil.nome_completo.
+ * Diferente de notifyResponsibleOrAll: se o nome do responsável não bater com nenhum
+ * analista ativo, essa fonte não contribui ninguém — não cai para broadcast geral, porque
+ * a base já cobre a diretoria/acesso configurado independentemente disso.
+ */
+export async function obterDestinatariosAtrasoCobranca(
+  responsavelComercialNome: string | null,
+  supabase?: ServiceClient
+): Promise<DestinatarioAtrasoCobranca[]> {
+  const svc = supabase ?? createServiceClient();
+
+  const { data: analistas } = await svc
+    .from("analistas_perfil")
+    .select("id, user_id, email, nome_completo, nivel_acesso")
+    .eq("ativo", true);
+
+  const { data: acessos } = await svc
+    .from("cobranca_rs_analistas_acesso")
+    .select("analista_perfil_id")
+    .eq("ativo", true);
+
+  const acessoIds = new Set((acessos ?? []).map((a) => a.analista_perfil_id));
+  const destinatarios = new Map<string, DestinatarioAtrasoCobranca>();
+
+  for (const a of analistas ?? []) {
+    if (!a.user_id || !a.email) continue;
+    const ehFullAccess = a.nivel_acesso === "diretoria" || a.nivel_acesso === "superuser";
+    if (ehFullAccess || acessoIds.has(a.id)) {
+      destinatarios.set(a.user_id, { user_id: a.user_id, email: a.email, nome_completo: a.nome_completo });
+    }
+  }
+
+  if (responsavelComercialNome) {
+    const alvo = responsavelComercialNome.trim().toLowerCase();
+    const responsavel = (analistas ?? []).find((a) => a.nome_completo.trim().toLowerCase() === alvo);
+    if (responsavel?.user_id && responsavel.email) {
+      destinatarios.set(responsavel.user_id, {
+        user_id: responsavel.user_id,
+        email: responsavel.email,
+        nome_completo: responsavel.nome_completo,
+      });
+    }
+  }
+
+  return Array.from(destinatarios.values());
+}

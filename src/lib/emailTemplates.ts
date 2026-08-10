@@ -10,7 +10,8 @@ export type EmailTemplateName =
   | "nova_vaga_criada"
   | "vaga_encerrada"
   | "admissao_link"
-  | "cobranca_rs_gerada";
+  | "cobranca_rs_gerada"
+  | "cobranca_rs_atrasada";
 
 interface TemplateData {
   nome: string;
@@ -52,6 +53,9 @@ interface TemplateData {
   dataInicio?: string;
   feeValor?: number | null;
   tipoCobrancaRS?: "contratacao" | "cancelamento";
+  // Cobrança R&S atrasada (case "cobranca_rs_atrasada").
+  dataVencimento?: string;
+  diasAtraso?: number;
 }
 
 export interface EmailTemplate {
@@ -105,7 +109,7 @@ const BANNER_CONFIDENCIAL = `<div style="background:#fef2f2;border:2px solid #fc
 
 export function getEmailTemplate(
   name: EmailTemplateName,
-  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor, tipoCobrancaRS }: TemplateData
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor, tipoCobrancaRS, dataVencimento, diasAtraso }: TemplateData
 ): EmailTemplate {
   switch (name) {
     case "entrevista_salmazos":
@@ -531,6 +535,37 @@ export function getEmailTemplate(
             <ul style="margin:0;padding-left:18px;color:#15803d;line-height:2;font-size:14px;">
               <li><strong>Taxa:</strong> ${feeRsPercentual != null ? `${feeRsPercentual}%` : "—"}</li>
               <li><strong>Valor total:</strong> ${feeValorFmt}</li>
+            </ul>
+          </div>`
+        ),
+      };
+    }
+
+    case "cobranca_rs_atrasada": {
+      const ehCancelamento = tipoCobrancaRS === "cancelamento";
+      const feeValorFmt =
+        feeValor != null
+          ? feeValor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+          : "—";
+      const dataVencimentoFmt = dataVencimento ? dataVencimento.split("-").reverse().join("/") : "—";
+      const diasLabel = `${diasAtraso ?? 0} dia${(diasAtraso ?? 0) !== 1 ? "s" : ""}`;
+
+      return {
+        subject: `🔴 Cobrança R&S atrasada há ${diasLabel} — ${nomeCliente ?? "Cliente"}`,
+        descricao: `Lembrete de cobrança R&S vencida e ainda não paga (${nomeCliente ?? "cliente"}).`,
+        html: layout(
+          "Cobrança R&S em Atraso",
+          `<div style="background:#FEF2F2;border-left:4px solid #DC2626;border-radius:4px;padding:14px 16px;margin:0 0 20px;">
+            <p style="margin:0;color:#991B1B;font-size:14px;font-weight:700">Vencida há ${diasLabel} — ainda não marcada como paga</p>
+          </div>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados da cobrança:</p>
+            <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              <li><strong>Empresa:</strong> ${nomeCliente ?? "—"}</li>
+              ${!ehCancelamento ? `<li><strong>Candidato:</strong> ${nomeCandidato ?? "—"}</li>` : ""}
+              <li><strong>Vaga:</strong> ${cargo ?? "—"}</li>
+              <li><strong>Vencimento:</strong> ${dataVencimentoFmt}</li>
+              <li><strong>Valor:</strong> ${feeValorFmt}</li>
             </ul>
           </div>`
         ),

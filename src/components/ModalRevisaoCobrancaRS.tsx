@@ -24,6 +24,7 @@ interface CobrancaDetalhe {
   status: "pendente_revisao" | "aprovada_enviada" | "paga" | "cancelada";
   enviado_em: string | null;
   pago_em: string | null;
+  data_vencimento: string | null;
   created_at: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   vagas: { titulo: string } | any;
@@ -59,6 +60,7 @@ function paraLinha(c: CobrancaDetalhe): CobrancaRSRow {
     createdAt: c.created_at,
     enviadoEm: c.enviado_em,
     pagoEm: c.pago_em,
+    dataVencimento: c.data_vencimento,
   };
 }
 
@@ -72,11 +74,14 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
   const [dataInicio, setDataInicio] = useState("");
   const [clienteCnpj, setClienteCnpj] = useState("");
   const [clienteEndereco, setClienteEndereco] = useState("");
+  const [dataVencimento, setDataVencimento] = useState("");
 
   const [salvando, setSalvando] = useState(false);
   const [salvo, setSalvo] = useState(false);
   const [aprovando, setAprovando] = useState(false);
   const [marcandoPaga, setMarcandoPaga] = useState(false);
+  const [salvandoVencimento, setSalvandoVencimento] = useState(false);
+  const [vencimentoSalvo, setVencimentoSalvo] = useState(false);
 
   useEffect(() => {
     setCarregando(true);
@@ -90,6 +95,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
         setDataInicio(c.data_inicio ?? "");
         setClienteCnpj(c.cliente_cnpj_snapshot ?? "");
         setClienteEndereco(c.cliente_endereco_snapshot ?? "");
+        setDataVencimento(c.data_vencimento ?? "");
       })
       .catch(() => setErro("Erro ao carregar cobrança."))
       .finally(() => setCarregando(false));
@@ -156,6 +162,28 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
       setErro("Erro de conexão. Tente novamente.");
     } finally {
       setAprovando(false);
+    }
+  };
+
+  const handleSalvarVencimento = async () => {
+    setSalvandoVencimento(true);
+    setErro("");
+    setVencimentoSalvo(false);
+    try {
+      const res = await fetch(`/api/cobrancas-rs/${cobrancaId}/vencimento`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data_vencimento: dataVencimento || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setErro(json.error || "Erro ao salvar vencimento."); return; }
+      setCobranca(json.data);
+      setVencimentoSalvo(true);
+      setTimeout(() => setVencimentoSalvo(false), 2500);
+    } catch {
+      setErro("Erro de conexão. Tente novamente.");
+    } finally {
+      setSalvandoVencimento(false);
     }
   };
 
@@ -294,6 +322,28 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
               {cobranca.status === "aprovada_enviada" && (
                 <div className="pt-2 border-t">
                   <p className="text-xs text-gray-400 mb-3">Enviada em {cobranca.enviado_em ? new Date(cobranca.enviado_em).toLocaleString("pt-BR") : "—"}</p>
+
+                  <div className="mb-4">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data de vencimento</label>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="date"
+                        value={dataVencimento}
+                        onChange={(e) => setDataVencimento(e.target.value)}
+                        className="input-field"
+                      />
+                      <button
+                        onClick={handleSalvarVencimento}
+                        disabled={salvandoVencimento}
+                        className="btn-outline disabled:opacity-50"
+                        style={{ whiteSpace: "nowrap" }}
+                      >
+                        {salvandoVencimento ? "Salvando..." : "Salvar"}
+                      </button>
+                    </div>
+                    {vencimentoSalvo && <p className="text-green-700 text-xs mt-1">Vencimento salvo!</p>}
+                  </div>
+
                   <button onClick={handleMarcarPaga} disabled={marcandoPaga} className="btn-primary w-full disabled:opacity-50">
                     {marcandoPaga ? "Marcando..." : "Marcar como paga"}
                   </button>

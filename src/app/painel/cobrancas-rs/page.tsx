@@ -41,6 +41,7 @@ export default async function CobrancasRSPage() {
     createdAt: c.created_at,
     enviadoEm: c.enviado_em,
     pagoEm: c.pago_em,
+    dataVencimento: c.data_vencimento,
   }));
 
   return <CobrancasRSPageClient rows={rows} />;

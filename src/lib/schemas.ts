@@ -958,6 +958,12 @@ export const cobrancaRsRascunhoSchema = z.object({
   cliente_endereco: z.string().optional().nullable(),
 });
 
+// ── Cobrança R&S — data de vencimento (rota dedicada, editável fora de
+// pendente_revisao — ver PATCH /api/cobrancas-rs/[id]/vencimento).
+export const cobrancaRsVencimentoSchema = z.object({
+  data_vencimento: z.string().nullable(),
+});
+
 export const rescisaoAvisoPlataformaCreateSchema = z.object({
   usuario_id: z.string().uuid(),
 });

@@ -22,6 +22,7 @@ export interface CobrancaRSRow {
   createdAt: string;
   enviadoEm: string | null;
   pagoEm: string | null;
+  dataVencimento: string | null;
 }
 
 interface Props {
@@ -42,6 +43,12 @@ const TIPO_LABEL: Record<string, { label: string; bg: string; color: string }> =
 
 function formatarData(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+function estaAtrasada(row: CobrancaRSRow): boolean {
+  if (row.status !== "aprovada_enviada" || !row.dataVencimento) return false;
+  const hojeISO = new Date().toISOString().split("T")[0];
+  return row.dataVencimento < hojeISO;
 }
 
 type FiltroTab = "pendente_revisao" | "aprovada_enviada" | "paga" | "todas";
@@ -160,6 +167,11 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais }: Props) {
                       <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: statusInfo.bg, color: statusInfo.color }}>
                         {statusInfo.label}
                       </span>
+                      {estaAtrasada(r) && (
+                        <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "#FEE2E2", color: "#991B1B" }}>
+                          🔴 Atrasada
+                        </span>
+                      )}
                     </td>
                     <td style={{ padding: "10px 12px", color: "#6B7280" }}>{formatarData(r.createdAt)}</td>
                   </tr>
