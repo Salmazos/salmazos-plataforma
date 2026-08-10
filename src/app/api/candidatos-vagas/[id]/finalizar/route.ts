@@ -4,6 +4,7 @@ import { registrarHistorico } from "@/lib/registrarHistorico";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, candidatoVagaFinalizarSchema } from "@/lib/schemas";
 import { gerarCobrancasRSParaVaga } from "@/lib/cobrancaRS";
+import { notificarVagaEncerrada } from "@/lib/notificarVagaEncerrada";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -34,7 +35,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const { data: cv, error: cvErr } = await supabase
       .from("candidatos_vagas")
-      .select("id, candidato_id, vaga_id, admissao_fee_valor, vagas(id, titulo, tipo_servico, num_posicoes_abertas, num_posicoes, cliente_id, fee_rs_percentual, fee_rs_prazo_cobranca, clientes(nome))")
+      .select("id, candidato_id, vaga_id, admissao_fee_valor, vagas(id, titulo, status, tipo_servico, num_posicoes_abertas, num_posicoes, cliente_id, fee_rs_percentual, fee_rs_prazo_cobranca, clientes(nome))")
       .eq("id", id)
       .single();
 
@@ -43,7 +44,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const vaga = (cv as any).vagas as {
-      id: string; titulo: string; tipo_servico: string; num_posicoes_abertas: number | null;
+      id: string; titulo: string; status: string; tipo_servico: string; num_posicoes_abertas: number | null;
       num_posicoes: number; cliente_id: string | null; clientes: { nome: string } | null;
       fee_rs_percentual: number | null; fee_rs_prazo_cobranca: string | null;
     } | null;
@@ -146,6 +147,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         const updateFields: Record<string, unknown> = { num_posicoes_abertas: novas };
         if (novas === 0) {
           updateFields.status = "fechada";
+          updateFields.data_fechamento = new Date().toISOString();
           vagaEncerrada = true;
         }
         await supabase.from("vagas").update(updateFields).eq("id", vaga.id);
@@ -154,6 +156,23 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           await gerarCobrancasRSParaVaga(vaga.id, supabase).catch((err) =>
             console.error("[finalizar] Erro ao gerar cobranças R&S:", err)
           );
+
+          // Fechamento automático (última posição preenchida) atualiza a tabela `vagas`
+          // direto aqui em vez de passar por PATCH /api/vagas/[id] — por isso precisa
+          // replicar manualmente o e-mail de encerramento e o audit_log que aquele
+          // endpoint registra no fechamento manual (ver route.ts:128-152). `origem`
+          // extra no detalhes só marca a procedência, sem remover os campos que o
+          // fechamento manual já grava (status_anterior/status_novo).
+          await notificarVagaEncerrada(vaga.id, "fechada", supabase).catch((err) =>
+            console.error("[finalizar] Erro ao notificar encerramento de vaga:", err)
+          );
+
+          registrarAuditoria({
+            acao: "vaga_atualizada",
+            entidade: "vagas",
+            entidade_id: vaga.id,
+            detalhes: { status_anterior: vaga.status, status_novo: "fechada", origem: "fechamento_automatico_finalizar" },
+          });
         }
       }
 
