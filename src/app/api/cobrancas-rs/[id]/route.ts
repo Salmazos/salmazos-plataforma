@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, cobrancaRsRascunhoSchema } from "@/lib/schemas";
-import { checarPapelFullAccess } from "@/lib/fullAccessAuth";
+import { checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -13,8 +13,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const acessoNegado = checarPapelFullAccess(user);
-  if (acessoNegado) return acessoNegado;
+  const temAcesso = await checarAcessoCobrancaRS(user);
+  if (!temAcesso) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
 
   const { id } = await params;
   const svc = createServiceClient();
@@ -38,8 +38,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const acessoNegado = checarPapelFullAccess(user);
-  if (acessoNegado) return acessoNegado;
+  const temAcesso = await checarAcessoCobrancaRS(user);
+  if (!temAcesso) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
 
   const { id } = await params;
   const body = await request.json();

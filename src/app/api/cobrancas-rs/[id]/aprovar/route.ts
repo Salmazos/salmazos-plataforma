@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { checarPapelFullAccess } from "@/lib/fullAccessAuth";
+import { checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
 import { registrarAuditoria } from "@/lib/audit";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { sendEmail } from "@/lib/sendEmail";
@@ -23,8 +23,8 @@ export async function POST(_request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const acessoNegado = checarPapelFullAccess(user);
-  if (acessoNegado) return acessoNegado;
+  const temAcesso = await checarAcessoCobrancaRS(user);
+  if (!temAcesso) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
 
   const { id } = await params;
   const svc = createServiceClient();

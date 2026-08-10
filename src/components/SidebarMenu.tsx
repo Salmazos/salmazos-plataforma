@@ -47,6 +47,7 @@ interface Props {
   isSupervisorOrAbove: boolean;
   canAccessFuncionarios: boolean;
   canAccessAdmissoes: boolean;
+  canAccessCobrancasRS: boolean;
 }
 
 const STORAGE_KEY = "sidebar-collapsed";
@@ -70,6 +71,7 @@ interface MenuItemDef {
   requireSupervisor?: boolean;
   requireFuncionarios?: boolean;
   requireAdmissoes?: boolean;
+  requireCobrancasRS?: boolean;
   separator?: boolean;
   submenu?: { label: string; href: string; icon: React.ElementType; requireSuperuser?: boolean }[];
 }
@@ -88,7 +90,7 @@ const menuItems: MenuItemDef[] = [
   { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },
   { label: "Dashboard", href: "/painel/dashboard", icon: TrendingUp, requireFullAccess: true },
   { label: "Financeiro R&S", href: "/painel/financeiro-rs", icon: DollarSign, requireFullAccess: true },
-  { label: "Cobranças R&S", href: "/painel/cobrancas-rs", icon: Banknote, requireFullAccess: true },
+  { label: "Cobranças R&S", href: "/painel/cobrancas-rs", icon: Banknote, requireCobrancasRS: true },
   { label: "Reembolsos", href: "/painel/reembolsos", icon: Receipt, requireFullAccess: true },
   { label: "Quilometragem", href: "/painel/quilometragem", icon: Car },
   { label: "Carteira de Clientes", href: "/painel/empresas-visitadas", icon: MapPin, requireSupervisor: true },
@@ -105,6 +107,7 @@ const menuItems: MenuItemDef[] = [
       { label: "Log de E-mails", href: "/painel/email-logs", icon: Mail },
       { label: "Avisos de Rescisão", href: "/painel/rescisoes-avisos-config", icon: Megaphone },
       { label: "Avisos de Cobrança R&S", href: "/painel/cobranca-rs-avisos-config", icon: Megaphone },
+      { label: "Acesso à Cobrança R&S", href: "/painel/cobranca-rs-acesso-config", icon: Banknote },
       { label: "Avisos de ASO Periódico", href: "/painel/funcionario-aso-avisos-config", icon: Stethoscope },
       { label: "Usuários", href: "/painel/usuarios", icon: Users, requireSuperuser: true },
       { label: "Audit Logs", href: "/painel/audit-logs", icon: ShieldCheck, requireSuperuser: true },
@@ -122,6 +125,7 @@ export default function SidebarMenu({
   isSupervisorOrAbove,
   canAccessFuncionarios,
   canAccessAdmissoes,
+  canAccessCobrancasRS,
   userEmail,
 }: Props) {
   const router = useRouter();
@@ -173,6 +177,7 @@ export default function SidebarMenu({
     if (item.requireSupervisor && !isSupervisorOrAbove) return false;
     if (item.requireFuncionarios && !canAccessFuncionarios) return false;
     if (item.requireAdmissoes && !canAccessAdmissoes) return false;
+    if (item.requireCobrancasRS && !canAccessCobrancasRS) return false;
     return true;
   }).map((item) => {
     if (item.submenu) {

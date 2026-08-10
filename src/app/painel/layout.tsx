@@ -8,7 +8,7 @@ import PopupCobrancasRSPendentes from "@/components/PopupCobrancasRSPendentes";
 import NotificacoesProvider from "@/components/NotificacoesProvider";
 import { PAPEIS_PAINEL_FUNCIONARIOS } from "@/lib/funcionariosAuth";
 import { PAPEIS_PAINEL_ADMISSOES } from "@/lib/admissaoAuth";
-import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
+import { PAPEIS_FULL_ACCESS, checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +36,7 @@ export default async function PainelLayout({
   // página/API, pra nunca divergir do que o Sidebar mostra.
   const canAccessFuncionarios = PAPEIS_PAINEL_FUNCIONARIOS.includes(role);
   const canAccessAdmissoes = PAPEIS_PAINEL_ADMISSOES.includes(role);
+  const canAccessCobrancasRS = await checarAcessoCobrancaRS(user);
 
   const { data: perfil } = await supabase
     .from("analistas_perfil")
@@ -56,6 +57,7 @@ export default async function PainelLayout({
           isSupervisorOrAbove={isSupervisorOrAbove}
           canAccessFuncionarios={canAccessFuncionarios}
           canAccessAdmissoes={canAccessAdmissoes}
+          canAccessCobrancasRS={canAccessCobrancasRS}
         />
         <main className="flex-1 min-w-0 px-6 py-6">{children}</main>
         <PopupAniversariosHoje />

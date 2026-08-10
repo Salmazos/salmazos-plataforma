@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { checarPapelFullAccess } from "@/lib/fullAccessAuth";
+import { checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
 import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
 
 export const dynamic = "force-dynamic";
@@ -29,8 +29,8 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const acessoNegado = checarPapelFullAccess(user);
-  if (acessoNegado) return NextResponse.json({ data: [], ja_visto: true });
+  const temAcesso = await checarAcessoCobrancaRS(user);
+  if (!temAcesso) return NextResponse.json({ data: [], ja_visto: true });
 
   const svc = createServiceClient();
 

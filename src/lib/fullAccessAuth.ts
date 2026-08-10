@@ -1,5 +1,6 @@
 import type { User } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { createServiceClient } from "@/lib/supabase/server";
 
 // Fonte única para o nível de acesso "superuser/diretoria" — usado em telas de
 // Configurações que não são superuser-exclusivas (Config. SLA, Log de E-mails, Avisos de
@@ -17,4 +18,34 @@ export function checarPapelFullAccess(user: User): NextResponse | null {
     return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
   }
   return null;
+}
+
+// Acesso à tela de Cobrança R&S: PAPEIS_FULL_ACCESS sempre tem acesso, mais uma lista
+// configurável de analistas/supervisores liberados individualmente pela diretoria (tabela
+// cobranca_rs_analistas_acesso, gerenciada em /painel/cobranca-rs-acesso-config — essa tela
+// em si continua restrita a PAPEIS_FULL_ACCESS, só quem já tem acesso total pode dar ou
+// tirar o acesso de terceiros). Único helper de acesso do projeto que precisa consultar o
+// banco (os demais resolvem tudo a partir de app_metadata.role) — por isso é assíncrono e
+// devolve boolean puro em vez de NextResponse, pra servir igualmente ao gate de página
+// (redirect), rotas de API (403) e ao cálculo de isFullAccess-like do Sidebar.
+export async function checarAcessoCobrancaRS(user: User): Promise<boolean> {
+  const role = user.app_metadata?.role ?? "analista";
+  if (PAPEIS_FULL_ACCESS.includes(role)) return true;
+
+  const svc = createServiceClient();
+  const { data: perfil } = await svc
+    .from("analistas_perfil")
+    .select("id")
+    .eq("user_id", user.id)
+    .single();
+  if (!perfil) return false;
+
+  const { data: acesso } = await svc
+    .from("cobranca_rs_analistas_acesso")
+    .select("id")
+    .eq("analista_perfil_id", perfil.id)
+    .eq("ativo", true)
+    .maybeSingle();
+
+  return !!acesso;
 }

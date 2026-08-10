@@ -938,6 +938,12 @@ export const cobrancaRsAvisoEmailUpdateSchema = z.object({
   ativo: z.boolean(),
 });
 
+// ── Acesso à tela de Cobrança R&S — lista configurável de analistas/supervisores
+// liberados individualmente (além de PAPEIS_FULL_ACCESS), ver lib/fullAccessAuth.ts.
+export const cobrancaRsAcessoUpdateSchema = z.object({
+  ativo: z.boolean(),
+});
+
 // ── Cobrança R&S — revisão do rascunho (Fase 2b) ──────────────────────────────
 // Mesmo payload serve pra "Salvar rascunho" (sem validação obrigatória, salva parcial)
 // e como primeiro passo de "Aprovar e enviar" (o cliente sempre salva antes de aprovar,
