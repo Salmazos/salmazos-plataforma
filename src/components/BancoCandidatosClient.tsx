@@ -58,10 +58,17 @@ function vagaOptionLabel(v: VagaAberta): string {
   return detalhe ? `${v.titulo} — ${detalhe}` : v.titulo;
 }
 
+// Busca 100% client-side (vagasAbertas já está toda carregada em memória) — sem
+// acento e sem caixa, pra não exigir digitação exata.
+function normalizarBuscaVaga(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
 type ModalState = {
   candidatoId: string;
   candidatoNome: string;
   selectedVagaId: string;
+  buscaVaga: string;
   loading: boolean;
   error: string | null;
 };
@@ -546,6 +553,7 @@ export default function BancoCandidatosClient({
       candidatoId: c.id,
       candidatoNome: c.nome_completo,
       selectedVagaId: bestVagaId,
+      buscaVaga: "",
       loading: false,
       error: null,
     });
@@ -1353,37 +1361,127 @@ export default function BancoCandidatosClient({
             <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 5 }}>
               Vaga
             </label>
-            <select
-              value={modal.selectedVagaId}
-              onChange={(e) => setModal((m) => m ? { ...m, selectedVagaId: e.target.value, error: null } : m)}
-              disabled={modal.loading}
-              style={{
-                width: "100%",
-                border: "1px solid #E5E7EB",
-                borderRadius: 8,
-                padding: "8px 12px",
-                fontSize: 13,
-                color: modal.selectedVagaId ? "#111827" : "#9CA3AF",
-                outline: "none",
-                marginBottom: 16,
-                boxSizing: "border-box",
-                background: "#fff",
-                cursor: modal.loading ? "not-allowed" : "default",
-              }}
-            >
-              {vagasAbertas.length === 0 ? (
-                <option value="">Nenhuma vaga aberta disponível</option>
-              ) : (
+            {(() => {
+              const vagaSelecionadaAtual = vagasAbertas.find((v) => v.id === modal.selectedVagaId);
+
+              if (vagaSelecionadaAtual) {
+                return (
+                  <div
+                    style={{
+                      width: "100%",
+                      border: "1px solid #E5E7EB",
+                      borderRadius: 8,
+                      padding: "8px 12px",
+                      fontSize: 13,
+                      color: "#111827",
+                      marginBottom: 16,
+                      boxSizing: "border-box",
+                      background: "#fff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 8,
+                    }}
+                  >
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {vagaOptionLabel(vagaSelecionadaAtual)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setModal((m) => m ? { ...m, selectedVagaId: "", buscaVaga: "", error: null } : m)}
+                      disabled={modal.loading}
+                      title="Trocar vaga"
+                      style={{
+                        border: "none",
+                        background: "none",
+                        color: "#9CA3AF",
+                        fontSize: 16,
+                        lineHeight: 1,
+                        cursor: modal.loading ? "not-allowed" : "pointer",
+                        padding: 0,
+                        flexShrink: 0,
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              }
+
+              // Busca 100% client-side sobre vagasAbertas (já carregada em memória) — sem
+              // debounce, sem fetch. Vazio = mantém a mesma ordem/agrupamento por cliente
+              // que já vem da API (ver vagas-abertas/route.ts).
+              const termo = normalizarBuscaVaga(modal.buscaVaga);
+              const vagasFiltradas = termo
+                ? vagasAbertas.filter((v) =>
+                    normalizarBuscaVaga(`${v.titulo} ${v.clientes?.nome ?? ""}`).includes(termo)
+                  )
+                : vagasAbertas;
+
+              return (
                 <>
-                  <option value="">Selecione uma vaga...</option>
-                  {vagasAbertas.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {vagaOptionLabel(v)}
-                    </option>
-                  ))}
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Buscar vaga por título ou cliente..."
+                    value={modal.buscaVaga}
+                    onChange={(e) => setModal((m) => m ? { ...m, buscaVaga: e.target.value, error: null } : m)}
+                    disabled={modal.loading || vagasAbertas.length === 0}
+                    style={{
+                      width: "100%",
+                      border: "1px solid #E5E7EB",
+                      borderRadius: 8,
+                      padding: "8px 12px",
+                      fontSize: 13,
+                      color: "#111827",
+                      outline: "none",
+                      boxSizing: "border-box",
+                      background: "#fff",
+                      cursor: modal.loading ? "not-allowed" : "text",
+                    }}
+                  />
+                  <div
+                    style={{
+                      maxHeight: 180,
+                      overflowY: "auto",
+                      border: "1px solid #E5E7EB",
+                      borderRadius: 8,
+                      marginTop: 6,
+                      marginBottom: 16,
+                    }}
+                  >
+                    {vagasAbertas.length === 0 ? (
+                      <div style={{ padding: "10px 12px", fontSize: 13, color: "#9CA3AF" }}>
+                        Nenhuma vaga aberta disponível
+                      </div>
+                    ) : vagasFiltradas.length === 0 ? (
+                      <div style={{ padding: "10px 12px", fontSize: 13, color: "#9CA3AF" }}>
+                        Nenhuma vaga encontrada
+                      </div>
+                    ) : (
+                      vagasFiltradas.map((v) => (
+                        <div
+                          key={v.id}
+                          onClick={() => setModal((m) => m ? { ...m, selectedVagaId: v.id, error: null } : m)}
+                          onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = "#F9FAFB"; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = "#fff"; }}
+                          style={{
+                            padding: "8px 12px",
+                            fontSize: 13,
+                            color: "#111827",
+                            cursor: "pointer",
+                            borderBottom: "1px solid #F3F4F6",
+                            background: "#fff",
+                          }}
+                        >
+                          {vagaOptionLabel(v)}
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </>
-              )}
-            </select>
+              );
+            })()}
 
             {modal.error && (
               <div
