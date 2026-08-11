@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelFullAccess } from "@/lib/fullAccessAuth";
-import { registrarAuditoria } from "@/lib/audit";
+import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { obterDestinatariosCobrancaRS } from "@/lib/cobrancaRS";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { sendEmail } from "@/lib/sendEmail";
@@ -52,6 +52,11 @@ export async function POST(_request: NextRequest, { params }: Params) {
 
   after(async () => {
     try {
+      // Resolvido uma vez e reaproveitado nos dois registrarAuditoria abaixo (early-return
+      // sem destinatário e o caminho normal) — evita 2 consultas a analistas_perfil no mesmo
+      // request.
+      const nomeUsuario = await resolverNomeUsuario(user.id, user.email ?? null, svc);
+
       // Revisor da cobrança original (não necessariamente quem está reenviando agora, que
       // pode ser outra pessoa full-access) — cobranca.revisado_por pode ser null se por
       // algum motivo a cobrança nunca teve revisor setado; nesse caso obterDestinatariosCobrancaRS
@@ -61,7 +66,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
         console.error(`[reenviar] Nenhum destinatário resolvido pro reenvio (cobranca_id=${id}).`);
         registrarAuditoria({
           usuario_id: user.id,
-          usuario_nome: user.email ?? null,
+          usuario_nome: nomeUsuario,
           acao: "cobranca_rs_reenviada",
           entidade: "cobrancas_rs",
           entidade_id: id,
@@ -96,7 +101,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
 
       registrarAuditoria({
         usuario_id: user.id,
-        usuario_nome: user.email ?? null,
+        usuario_nome: nomeUsuario,
         acao: "cobranca_rs_reenviada",
         entidade: "cobrancas_rs",
         entidade_id: id,

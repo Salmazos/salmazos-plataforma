@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
-import { registrarAuditoria } from "@/lib/audit";
+import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { obterDestinatariosCobrancaRS } from "@/lib/cobrancaRS";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { sendEmail } from "@/lib/sendEmail";
@@ -44,7 +44,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
 
   registrarAuditoria({
     usuario_id: user.id,
-    usuario_nome: user.email ?? null,
+    usuario_nome: await resolverNomeUsuario(user.id, user.email ?? null, svc),
     acao: "cobranca_rs_marcada_paga",
     entidade: "cobrancas_rs",
     entidade_id: id,
