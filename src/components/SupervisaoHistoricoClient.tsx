@@ -101,10 +101,11 @@ const baseOptions: ChartOptions<"bar"> = {
   },
 };
 
-// Desenha o valor numérico acima de cada barra do dataset "bar" — só no gráfico de Pareto.
-// Plugin local (via prop `plugins` do react-chartjs-2), não registrado globalmente, pra não
-// afetar os outros níveis do drill-down. Evita adicionar chartjs-plugin-datalabels como
-// dependência nova só pra isso.
+// Desenha o valor numérico acima de cada barra do dataset "bar" — usado nos 4 níveis do
+// drill-down (Pareto, mês, semana, visitas). Plugin local (via prop `plugins` do
+// react-chartjs-2 em cada chart), não registrado globalmente, pra não vazar pra outros
+// gráficos do projeto que não usam esse componente. Evita adicionar chartjs-plugin-datalabels
+// como dependência nova só pra isso.
 const barValueLabelPlugin: Plugin<"bar"> = {
   id: "barValueLabel",
   afterDatasetsDraw(chart) {
@@ -262,13 +263,16 @@ export default function SupervisaoHistoricoClient({ clientes }: Props) {
     labels: [`${MESES[mes - 1]}/${ano}`],
     datasets: [{ label: "Visitas de supervisão", data: [visitas.length], backgroundColor: barColor, borderRadius: 6, maxBarThickness: 90 }],
   };
+  // mesmo maxBarThickness do nível 1 (chartMes) — sem isso, com poucas categorias (ex: 1-2
+  // semanas, 1-2 visitas) o chart.js estica a barra pra ocupar quase toda a largura da
+  // categoria, ficando desproporcional em relação ao nível anterior do drill-down.
   const chartSemana = {
     labels: semanas.map((s) => `${formatCurto(s.segunda)}–${formatCurto(s.domingo)}`),
-    datasets: [{ label: "Visitas na semana", data: semanas.map((s) => s.itens.length), backgroundColor: barColor, borderRadius: 6 }],
+    datasets: [{ label: "Visitas na semana", data: semanas.map((s) => s.itens.length), backgroundColor: barColor, borderRadius: 6, maxBarThickness: 90 }],
   };
   const chartVisitas = {
     labels: visitasDaSemana.map((v) => formatCurto(v.data)),
-    datasets: [{ label: "Visita", data: visitasDaSemana.map(() => 1), backgroundColor: barColor, borderRadius: 6 }],
+    datasets: [{ label: "Visita", data: visitasDaSemana.map(() => 1), backgroundColor: barColor, borderRadius: 6, maxBarThickness: 90 }],
   };
 
   return (
@@ -373,6 +377,7 @@ export default function SupervisaoHistoricoClient({ clientes }: Props) {
               <div style={{ height: 220 }}>
                 <Bar
                   data={chartMes}
+                  plugins={[barValueLabelPlugin]}
                   options={{
                     ...baseOptions,
                     onClick: (_e, elements) => { if (elements.length > 0) setNivel("semana"); },
@@ -391,6 +396,7 @@ export default function SupervisaoHistoricoClient({ clientes }: Props) {
             <div style={{ height: 260 }}>
               <Bar
                 data={chartSemana}
+                plugins={[barValueLabelPlugin]}
                 options={{
                   ...baseOptions,
                   onClick: (_e, elements) => {
@@ -413,6 +419,7 @@ export default function SupervisaoHistoricoClient({ clientes }: Props) {
             <div style={{ height: 260 }}>
               <Bar
                 data={chartVisitas}
+                plugins={[barValueLabelPlugin]}
                 options={{
                   ...baseOptions,
                   plugins: { ...baseOptions.plugins, tooltip: { enabled: true, callbacks: { label: () => "Clique pra ver detalhe" } } },
