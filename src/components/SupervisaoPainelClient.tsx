@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import SupervisaoHistoricoClient from "./SupervisaoHistoricoClient";
 
 export interface ClienteSupervisaoRow {
   metaId: string;
@@ -59,7 +60,15 @@ export default function SupervisaoPainelClient({ rows, ranking, supervisores, fu
   const [filtroStatus, setFiltroStatus] = useState<string>("todos");
   const [filtroSupervisor, setFiltroSupervisor] = useState<string>("todos");
   const [filtroModo, setFiltroModo] = useState<string>("todos");
-  const [abaRanking, setAbaRanking] = useState(false);
+  const [aba, setAba] = useState<"clientes" | "ranking" | "historico">("clientes");
+
+  // Universo de clientes pro seletor da aba Histórico: os mesmos já visíveis nesta tela
+  // (rows já vem filtrado pela regra de acesso no page.tsx — supervisor só vê a própria
+  // carteira), ordenados por nome. Sem fetch extra.
+  const clientesHistorico = useMemo(
+    () => rows.map((r) => ({ id: r.clienteId, nome: r.clienteNome })).sort((a, b) => a.nome.localeCompare(b.nome)),
+    [rows]
+  );
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
@@ -96,21 +105,26 @@ export default function SupervisaoPainelClient({ rows, ranking, supervisores, fu
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, borderBottom: "1px solid #E5E7EB" }}>
-        <button
-          onClick={() => setAbaRanking(false)}
-          style={{ padding: "10px 16px", border: "none", background: "none", borderBottom: !abaRanking ? "2px solid #FFD700" : "2px solid transparent", fontWeight: 700, fontSize: 13, color: !abaRanking ? "#111827" : "#9CA3AF", cursor: "pointer" }}
-        >
-          Clientes
-        </button>
-        <button
-          onClick={() => setAbaRanking(true)}
-          style={{ padding: "10px 16px", border: "none", background: "none", borderBottom: abaRanking ? "2px solid #FFD700" : "2px solid transparent", fontWeight: 700, fontSize: 13, color: abaRanking ? "#111827" : "#9CA3AF", cursor: "pointer" }}
-        >
-          Ranking do Mês
-        </button>
+        {(
+          [
+            { id: "clientes" as const, label: "Clientes" },
+            { id: "ranking" as const, label: "Ranking do Mês" },
+            { id: "historico" as const, label: "Histórico de Visitas" },
+          ]
+        ).map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setAba(t.id)}
+            style={{ padding: "10px 16px", border: "none", background: "none", borderBottom: aba === t.id ? "2px solid #FFD700" : "2px solid transparent", fontWeight: 700, fontSize: 13, color: aba === t.id ? "#111827" : "#9CA3AF", cursor: "pointer" }}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {abaRanking ? (
+      {aba === "historico" ? (
+        <SupervisaoHistoricoClient clientes={clientesHistorico} />
+      ) : aba === "ranking" ? (
         <div style={{ overflowX: "auto", border: "1px solid #E5E7EB", borderRadius: 12 }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>

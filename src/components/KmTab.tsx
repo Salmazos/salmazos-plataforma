@@ -5,6 +5,10 @@ import { createPortal } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import CampoTelefone from "@/components/ui/CampoTelefone";
+import LinkFotoSupervisao from "@/components/LinkFotoSupervisao";
+import {
+  CHECKLIST_EQUIPE, CHECKLIST_EPI, CHECKLIST_SIM_NAO, CHECKLIST_AMBIENTE, CHECKLIST_FEEDBACK,
+} from "@/lib/supervisaoChecklist";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -24,29 +28,6 @@ const TIPOS_VISITA = [
   { id: "supervisao", label: "Supervisão de posto" },
 ] as const;
 
-const CHECKLIST_EQUIPE = [
-  { value: "sim", label: "Sim" },
-  { value: "parcial", label: "Parcial" },
-  { value: "nao", label: "Não" },
-] as const;
-const CHECKLIST_EPI = [
-  { value: "sim", label: "Sim" },
-  { value: "nao", label: "Não" },
-  { value: "na", label: "N/A" },
-] as const;
-const CHECKLIST_SIM_NAO = [
-  { value: "sim", label: "Sim" },
-  { value: "nao", label: "Não" },
-] as const;
-const CHECKLIST_AMBIENTE = [
-  { value: "ok", label: "OK" },
-  { value: "atencao", label: "Atenção" },
-] as const;
-const CHECKLIST_FEEDBACK = [
-  { value: "positivo", label: "Positivo" },
-  { value: "neutro", label: "Neutro" },
-  { value: "negativo", label: "Negativo" },
-] as const;
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -213,30 +194,6 @@ function outrosCustosSum(custos: OutroCustoDB[] | null): number {
 // Bucket 'supervisao-fotos' é privado — evidencias_fotos guarda só o path no storage, nunca
 // URL pública. Abrir a foto sempre passa por uma signed URL gerada sob demanda (mesmo
 // padrão do bucket 'curriculos' / BotaoCurriculo.tsx).
-function LinkFotoSupervisao({ path, label }: { path: string; label: string }) {
-  const [loading, setLoading] = useState(false);
-  const abrir = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/supervisao/foto-signed-url?path=${encodeURIComponent(path)}`);
-      const json = await res.json();
-      if (res.ok && json.url) window.open(json.url, "_blank", "noopener,noreferrer");
-    } catch { /* ignore */ } finally {
-      setLoading(false);
-    }
-  };
-  return (
-    <button
-      type="button"
-      onClick={abrir}
-      disabled={loading}
-      style={{ background: "none", border: "none", padding: 0, fontSize: 12, color: "#3B82F6", fontWeight: 600, cursor: loading ? "wait" : "pointer" }}
-    >
-      {loading ? "Abrindo..." : label}
-    </button>
-  );
-}
-
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function KmTab({ analistaId, isGestor }: Props) {
