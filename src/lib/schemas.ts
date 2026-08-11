@@ -972,6 +972,16 @@ export const faturamentoRsImpostoSchema = z.object({
   percentual: z.number().min(0).max(100),
 });
 
+// ── Faturamento R&S — ajuste manual de receita (positivo ou negativo), imutável
+// (ver POST /api/faturamento-rs/ajustes). Sem edição/exclusão — corrige-se com um novo
+// ajuste de sinal oposto.
+export const faturamentoRsAjusteCreateSchema = z.object({
+  ano: z.number().int().min(2000).max(2100),
+  mes: z.number().int().min(1).max(12),
+  valor: z.number().refine((v) => v !== 0, "Valor não pode ser zero"),
+  descricao: z.string().trim().min(1, "Descrição é obrigatória"),
+});
+
 export const rescisaoAvisoPlataformaCreateSchema = z.object({
   usuario_id: z.string().uuid(),
 });
