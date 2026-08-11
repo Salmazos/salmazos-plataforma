@@ -48,6 +48,7 @@ interface Props {
   canAccessFuncionarios: boolean;
   canAccessAdmissoes: boolean;
   canAccessCobrancasRS: boolean;
+  canAccessSupervisao: boolean;
 }
 
 const STORAGE_KEY = "sidebar-collapsed";
@@ -72,6 +73,7 @@ interface MenuItemDef {
   requireFuncionarios?: boolean;
   requireAdmissoes?: boolean;
   requireCobrancasRS?: boolean;
+  requireSupervisao?: boolean;
   separator?: boolean;
   submenu?: { label: string; href: string; icon: React.ElementType; requireSuperuser?: boolean }[];
 }
@@ -94,6 +96,7 @@ const menuItems: MenuItemDef[] = [
   { label: "Cobranças R&S", href: "/painel/cobrancas-rs", icon: Banknote, requireCobrancasRS: true },
   { label: "Reembolsos", href: "/painel/reembolsos", icon: Receipt, requireFullAccess: true },
   { label: "Quilometragem", href: "/painel/quilometragem", icon: Car },
+  { label: "Supervisão de Postos", href: "/painel/supervisao", icon: ShieldCheck, requireSupervisao: true },
   { label: "Carteira de Clientes", href: "/painel/empresas-visitadas", icon: MapPin, requireSupervisor: true },
   { label: "Aniversários", href: "/painel/aniversarios", icon: Cake },
   { label: "Documentos", href: "/painel/documentos", icon: FolderOpen },
@@ -110,6 +113,7 @@ const menuItems: MenuItemDef[] = [
       { label: "Avisos de Cobrança R&S", href: "/painel/cobranca-rs-avisos-config", icon: Megaphone },
       { label: "Acesso à Cobrança R&S", href: "/painel/cobranca-rs-acesso-config", icon: Banknote },
       { label: "Avisos de ASO Periódico", href: "/painel/funcionario-aso-avisos-config", icon: Stethoscope },
+      { label: "Configuração de Supervisão", href: "/painel/supervisao-config", icon: ShieldCheck },
       { label: "Usuários", href: "/painel/usuarios", icon: Users, requireSuperuser: true },
       { label: "Audit Logs", href: "/painel/audit-logs", icon: ShieldCheck, requireSuperuser: true },
       { label: "Carta de Abertura de Conta", href: "/painel/carta-conta-salario-config", icon: Landmark, requireSuperuser: true },
@@ -127,6 +131,7 @@ export default function SidebarMenu({
   canAccessFuncionarios,
   canAccessAdmissoes,
   canAccessCobrancasRS,
+  canAccessSupervisao,
   userEmail,
 }: Props) {
   const router = useRouter();
@@ -179,6 +184,7 @@ export default function SidebarMenu({
     if (item.requireFuncionarios && !canAccessFuncionarios) return false;
     if (item.requireAdmissoes && !canAccessAdmissoes) return false;
     if (item.requireCobrancasRS && !canAccessCobrancasRS) return false;
+    if (item.requireSupervisao && !canAccessSupervisao) return false;
     return true;
   }).map((item) => {
     if (item.submenu) {

@@ -9,6 +9,7 @@ import NotificacoesProvider from "@/components/NotificacoesProvider";
 import { PAPEIS_PAINEL_FUNCIONARIOS } from "@/lib/funcionariosAuth";
 import { PAPEIS_PAINEL_ADMISSOES } from "@/lib/admissaoAuth";
 import { PAPEIS_FULL_ACCESS, checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
+import { checarAcessoSupervisao } from "@/lib/supervisaoAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,7 @@ export default async function PainelLayout({
   const canAccessFuncionarios = PAPEIS_PAINEL_FUNCIONARIOS.includes(role);
   const canAccessAdmissoes = PAPEIS_PAINEL_ADMISSOES.includes(role);
   const canAccessCobrancasRS = await checarAcessoCobrancaRS(user);
+  const canAccessSupervisao = (await checarAcessoSupervisao(user)).acesso;
 
   const { data: perfil } = await supabase
     .from("analistas_perfil")
@@ -58,6 +60,7 @@ export default async function PainelLayout({
           canAccessFuncionarios={canAccessFuncionarios}
           canAccessAdmissoes={canAccessAdmissoes}
           canAccessCobrancasRS={canAccessCobrancasRS}
+          canAccessSupervisao={canAccessSupervisao}
         />
         <main className="flex-1 min-w-0 px-6 py-6">{children}</main>
         <PopupAniversariosHoje />

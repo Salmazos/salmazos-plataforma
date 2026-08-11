@@ -654,6 +654,45 @@ export const kmVisitaCreateSchema = z.object({
   motivo: z.string().optional(),
   resultado: z.string().optional(),
   ordem: coerceNumberOptional,
+  tipo_visita: z.enum(["supervisao", "comercial"]).optional(),
+  cliente_id: z.string().uuid().optional().nullable(),
+  checklist_equipe_completa: z.enum(["sim", "parcial", "nao"]).optional().nullable(),
+  checklist_epi: z.enum(["sim", "nao", "na"]).optional().nullable(),
+  checklist_uniforme: z.enum(["sim", "nao"]).optional().nullable(),
+  checklist_pontualidade: z.enum(["sim", "nao"]).optional().nullable(),
+  checklist_ambiente: z.enum(["ok", "atencao"]).optional().nullable(),
+  checklist_feedback_cliente: z.enum(["positivo", "neutro", "negativo"]).optional().nullable(),
+  problema_identificado: z.boolean().optional(),
+  plano_acao: z.string().optional().nullable(),
+  evidencias_fotos: z.array(z.string()).optional(),
+}).superRefine((data, ctx) => {
+  if (data.tipo_visita === "supervisao" && !data.cliente_id) {
+    ctx.addIssue({ code: "custom", path: ["cliente_id"], message: "cliente_id é obrigatório para visita de supervisão." });
+  }
+  if (data.problema_identificado && !data.plano_acao?.trim()) {
+    ctx.addIssue({ code: "custom", path: ["plano_acao"], message: "plano_acao é obrigatório quando problema_identificado é true." });
+  }
+});
+
+// ── Supervisão de Postos de Trabalho ────────────────────────────────────────
+
+export const clienteMetaSupervisaoCreateSchema = z.object({
+  cliente_id: z.string().uuid(),
+  frequencia_dias: coerceNumber.pipe(z.number().int().min(1)).optional(),
+  supervisor_responsavel_id: z.string().uuid().optional().nullable(),
+  modo: z.enum(["padrao", "implantacao"]).optional(),
+  data_fim_implantacao: z.string().optional().nullable(),
+}).superRefine((data, ctx) => {
+  if (data.modo === "implantacao" && !data.data_fim_implantacao) {
+    ctx.addIssue({ code: "custom", path: ["data_fim_implantacao"], message: "data_fim_implantacao é obrigatória quando modo é implantação." });
+  }
+});
+
+export const clienteMetaSupervisaoUpdateSchema = z.object({
+  frequencia_dias: coerceNumber.pipe(z.number().int().min(1)).optional(),
+  supervisor_responsavel_id: z.string().uuid().optional().nullable(),
+  modo: z.enum(["padrao", "implantacao"]).optional(),
+  data_fim_implantacao: z.string().optional().nullable(),
 });
 
 export const kmRegistroCreateSchema = z.object({

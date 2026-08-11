@@ -29,7 +29,12 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const parsed = parseBody(kmVisitaCreateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
-  const { registro_id, empresa, contato, contato_telefone, contato_email, motivo, resultado, ordem } = parsed.data;
+  const {
+    registro_id, empresa, contato, contato_telefone, contato_email, motivo, resultado, ordem,
+    tipo_visita, cliente_id, checklist_equipe_completa, checklist_epi, checklist_uniforme,
+    checklist_pontualidade, checklist_ambiente, checklist_feedback_cliente,
+    problema_identificado, plano_acao, evidencias_fotos,
+  } = parsed.data;
 
   const svc = createServiceClient();
   const { data, error } = await svc
@@ -43,6 +48,17 @@ export async function POST(request: NextRequest) {
       motivo: motivo || null,
       resultado: resultado || null,
       ordem: ordem ?? 1,
+      tipo_visita: tipo_visita ?? "comercial",
+      cliente_id: cliente_id || null,
+      checklist_equipe_completa: checklist_equipe_completa || null,
+      checklist_epi: checklist_epi || null,
+      checklist_uniforme: checklist_uniforme || null,
+      checklist_pontualidade: checklist_pontualidade || null,
+      checklist_ambiente: checklist_ambiente || null,
+      checklist_feedback_cliente: checklist_feedback_cliente || null,
+      problema_identificado: problema_identificado ?? false,
+      plano_acao: plano_acao || null,
+      evidencias_fotos: evidencias_fotos ?? [],
     })
     .select()
     .single();
@@ -93,22 +109,25 @@ export async function POST(request: NextRequest) {
         })
         .eq("id", existing.id);
     } else {
-      // Resolve cliente_id if name matches a client
-      let cliente_id: string | null = null;
-      const { data: cliente } = await svc
-        .from("clientes")
-        .select("id")
-        .ilike("nome", empresa)
-        .limit(1)
-        .maybeSingle();
-      if (cliente) cliente_id = cliente.id;
+      // Visita de supervisão já traz cliente_id do combobox — evita adivinhar por nome.
+      // Comercial continua resolvendo por match de nome, como antes.
+      let empresaClienteId: string | null = cliente_id || null;
+      if (!empresaClienteId) {
+        const { data: cliente } = await svc
+          .from("clientes")
+          .select("id")
+          .ilike("nome", empresa)
+          .limit(1)
+          .maybeSingle();
+        if (cliente) empresaClienteId = cliente.id;
+      }
 
       await svc.from("empresas_visitadas").insert({
         nome: empresa,
         contato_nome: contato || null,
         contato_telefone: contato_telefone || null,
         contato_email: contato_email || null,
-        cliente_id,
+        cliente_id: empresaClienteId,
         primeira_visita_em: new Date().toISOString(),
         ultima_visita_em: new Date().toISOString(),
         total_visitas: 1,

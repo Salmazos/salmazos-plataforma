@@ -19,6 +19,35 @@ const TIPOS_CUSTO = ["Alimentação", "Pedágio", "Estacionamento", "Outro"] as 
 
 const MOTIVOS_VISITA = ["Comercial", "Supervisão", "Serviços", "Outros"] as const;
 
+const TIPOS_VISITA = [
+  { id: "comercial", label: "Comercial" },
+  { id: "supervisao", label: "Supervisão de posto" },
+] as const;
+
+const CHECKLIST_EQUIPE = [
+  { value: "sim", label: "Completa" },
+  { value: "parcial", label: "Parcial" },
+  { value: "nao", label: "Incompleta" },
+] as const;
+const CHECKLIST_EPI = [
+  { value: "sim", label: "Sim" },
+  { value: "nao", label: "Não" },
+  { value: "na", label: "N/A" },
+] as const;
+const CHECKLIST_SIM_NAO = [
+  { value: "sim", label: "Sim" },
+  { value: "nao", label: "Não" },
+] as const;
+const CHECKLIST_AMBIENTE = [
+  { value: "ok", label: "OK" },
+  { value: "atencao", label: "Atenção" },
+] as const;
+const CHECKLIST_FEEDBACK = [
+  { value: "positivo", label: "Positivo" },
+  { value: "neutro", label: "Neutro" },
+  { value: "negativo", label: "Negativo" },
+] as const;
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface KmConfig {
@@ -62,6 +91,22 @@ interface KmVisita {
   motivo: string | null;
   resultado: string | null;
   ordem: number;
+  tipo_visita: "supervisao" | "comercial";
+  cliente_id: string | null;
+  checklist_equipe_completa: string | null;
+  checklist_epi: string | null;
+  checklist_uniforme: string | null;
+  checklist_pontualidade: string | null;
+  checklist_ambiente: string | null;
+  checklist_feedback_cliente: string | null;
+  problema_identificado: boolean;
+  plano_acao: string | null;
+  evidencias_fotos: string[] | null;
+}
+
+interface ClienteAtivo {
+  id: string;
+  nome: string;
 }
 
 interface EmpresaSugestao {
@@ -89,6 +134,27 @@ interface VisitaLocal {
   contato_email: string;
   motivo: string;
   resultado: string;
+  tipo_visita: "supervisao" | "comercial";
+  cliente_id: string | null;
+  checklist_equipe_completa: string;
+  checklist_epi: string;
+  checklist_uniforme: string;
+  checklist_pontualidade: string;
+  checklist_ambiente: string;
+  checklist_feedback_cliente: string;
+  problema_identificado: boolean;
+  plano_acao: string;
+  evidenciasExistentes: string[];
+}
+
+function novaVisitaLocal(): VisitaLocal {
+  return {
+    empresa: "", contato: "", contato_telefone: "", contato_email: "", motivo: "", resultado: "",
+    tipo_visita: "comercial", cliente_id: null,
+    checklist_equipe_completa: "", checklist_epi: "", checklist_uniforme: "",
+    checklist_pontualidade: "", checklist_ambiente: "", checklist_feedback_cliente: "",
+    problema_identificado: false, plano_acao: "", evidenciasExistentes: [],
+  };
 }
 
 interface OutroCustoLocal {
@@ -141,6 +207,33 @@ function outrosCustosSum(custos: OutroCustoDB[] | null): number {
   return custos.reduce((s, c) => s + c.valor, 0);
 }
 
+// Bucket 'supervisao-fotos' é privado — evidencias_fotos guarda só o path no storage, nunca
+// URL pública. Abrir a foto sempre passa por uma signed URL gerada sob demanda (mesmo
+// padrão do bucket 'curriculos' / BotaoCurriculo.tsx).
+function LinkFotoSupervisao({ path, label }: { path: string; label: string }) {
+  const [loading, setLoading] = useState(false);
+  const abrir = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/supervisao/foto-signed-url?path=${encodeURIComponent(path)}`);
+      const json = await res.json();
+      if (res.ok && json.url) window.open(json.url, "_blank", "noopener,noreferrer");
+    } catch { /* ignore */ } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={abrir}
+      disabled={loading}
+      style={{ background: "none", border: "none", padding: 0, fontSize: 12, color: "#3B82F6", fontWeight: 600, cursor: loading ? "wait" : "pointer" }}
+    >
+      {loading ? "Abrindo..." : label}
+    </button>
+  );
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function KmTab({ analistaId, isGestor }: Props) {
@@ -177,6 +270,12 @@ export default function KmTab({ analistaId, isGestor }: Props) {
   const [empresaSelecionada, setEmpresaSelecionada] = useState<Record<number, EmpresaSugestao>>({});
   const [visitaHistorico, setVisitaHistorico] = useState<Record<number, HistoricoVisita[]>>({});
 
+  // Supervisão de posto (per-visita)
+  const [clientesAtivos, setClientesAtivos] = useState<ClienteAtivo[]>([]);
+  const [clienteBusca, setClienteBusca] = useState<Record<number, string>>({});
+  const [clienteDropdownAberto, setClienteDropdownAberto] = useState<number | null>(null);
+  const [fotosNovas, setFotosNovas] = useState<Record<number, File[]>>({});
+
   // Toast
   const [toast, setToast] = useState<string | null>(null);
 
@@ -204,6 +303,16 @@ export default function KmTab({ analistaId, isGestor }: Props) {
 
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), toast.length > 60 ? 8000 : 3000); return () => clearTimeout(t); } }, [toast]);
+
+  useEffect(() => {
+    fetch("/api/clientes")
+      .then((r) => r.json())
+      .then((json) => {
+        const lista: { id: string; nome: string; ativo: boolean }[] = json.data ?? [];
+        setClientesAtivos(lista.filter((c) => c.ativo).map((c) => ({ id: c.id, nome: c.nome })));
+      })
+      .catch(() => { /* ignore */ });
+  }, []);
 
   // ── Config ──
 
@@ -243,7 +352,10 @@ export default function KmTab({ analistaId, isGestor }: Props) {
     setDropdownPos(null);
     setEmpresaSelecionada({});
     setVisitaHistorico({});
-    setVisitas([{ empresa: "", contato: "", contato_telefone: "", contato_email: "", motivo: "", resultado: "" }]);
+    setClienteBusca({});
+    setClienteDropdownAberto(null);
+    setFotosNovas({});
+    setVisitas([novaVisitaLocal()]);
     setOutrosCustos([]);
     setModalOpen(true);
   };
@@ -270,14 +382,26 @@ export default function KmTab({ analistaId, isGestor }: Props) {
       setDropdownPos(null);
       setEmpresaSelecionada({});
       setVisitaHistorico({});
+      setClienteBusca({});
+      setClienteDropdownAberto(null);
+      setFotosNovas({});
       setVisitas(
         loaded.length > 0
-          ? loaded.map((v) => ({ empresa: v.empresa, contato: v.contato ?? "", contato_telefone: v.contato_telefone ?? "", contato_email: v.contato_email ?? "", motivo: v.motivo ?? "", resultado: v.resultado ?? "" }))
-          : [{ empresa: "", contato: "", contato_telefone: "", contato_email: "", motivo: "", resultado: "" }]
+          ? loaded.map((v) => ({
+              empresa: v.empresa, contato: v.contato ?? "", contato_telefone: v.contato_telefone ?? "", contato_email: v.contato_email ?? "", motivo: v.motivo ?? "", resultado: v.resultado ?? "",
+              tipo_visita: v.tipo_visita ?? "comercial", cliente_id: v.cliente_id ?? null,
+              checklist_equipe_completa: v.checklist_equipe_completa ?? "", checklist_epi: v.checklist_epi ?? "",
+              checklist_uniforme: v.checklist_uniforme ?? "", checklist_pontualidade: v.checklist_pontualidade ?? "",
+              checklist_ambiente: v.checklist_ambiente ?? "", checklist_feedback_cliente: v.checklist_feedback_cliente ?? "",
+              problema_identificado: v.problema_identificado ?? false, plano_acao: v.plano_acao ?? "",
+              evidenciasExistentes: v.evidencias_fotos ?? [],
+            }))
+          : [novaVisitaLocal()]
       );
     } catch {
       setSugestoes({}); setSugestaoAberta(null); setDropdownPos(null); setEmpresaSelecionada({}); setVisitaHistorico({});
-      setVisitas([{ empresa: "", contato: "", contato_telefone: "", contato_email: "", motivo: "", resultado: "" }]);
+      setClienteBusca({}); setClienteDropdownAberto(null); setFotosNovas({});
+      setVisitas([novaVisitaLocal()]);
     }
     setModalOpen(true);
   };
@@ -289,9 +413,15 @@ export default function KmTab({ analistaId, isGestor }: Props) {
     if (Number(formData.km_final) < Number(formData.km_inicial)) {
       setToast("KM final deve ser maior que KM inicial."); return;
     }
-    const validVisitas = visitas.filter((v) => v.empresa.trim());
+    const validVisitas = visitas
+      .map((v, idx) => ({ v, idx }))
+      .filter(({ v }) => v.tipo_visita === "supervisao" ? !!(v.cliente_id && v.empresa.trim()) : v.empresa.trim());
     if (validVisitas.length === 0) {
       setToast("Adicione pelo menos 1 visita com empresa preenchida."); return;
+    }
+    const visitaSemPlano = validVisitas.find(({ v }) => v.tipo_visita === "supervisao" && v.problema_identificado && !v.plano_acao.trim());
+    if (visitaSemPlano) {
+      setToast(`Informe o plano de ação para o problema identificado em "${visitaSemPlano.v.empresa}".`); return;
     }
     setSubmitting(true);
     try {
@@ -343,8 +473,19 @@ export default function KmTab({ analistaId, isGestor }: Props) {
       if (editingId) {
         await fetch(`/api/km/visitas?registro_id=${registroId}`, { method: "DELETE" });
       }
+      const supabaseStorage = createClient();
       const visitaResults = await Promise.all(
-        validVisitas.map(async (v, idx) => {
+        validVisitas.map(async ({ v, idx: origIdx }, ordemIdx) => {
+          // Bucket 'supervisao-fotos' é privado — guarda só o path no storage (nunca URL
+          // pública), mesmo padrão do bucket 'curriculos'. Exibição sempre via signed URL
+          // gerada sob demanda (ver /api/supervisao/foto-signed-url).
+          const evidenciasFotos = [...v.evidenciasExistentes];
+          const novosArquivos = fotosNovas[origIdx] ?? [];
+          for (const file of novosArquivos) {
+            const path = `${analistaId}/${registroId}/${origIdx}_${Date.now()}_${file.name}`;
+            const { error: upErr } = await supabaseStorage.storage.from("supervisao-fotos").upload(path, file);
+            if (!upErr) evidenciasFotos.push(path);
+          }
           const vRes = await fetch("/api/km/visitas", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -356,7 +497,18 @@ export default function KmTab({ analistaId, isGestor }: Props) {
               contato_email: v.contato_email || null,
               motivo: v.motivo || null,
               resultado: v.resultado || null,
-              ordem: idx + 1,
+              ordem: ordemIdx + 1,
+              tipo_visita: v.tipo_visita,
+              cliente_id: v.tipo_visita === "supervisao" ? v.cliente_id : null,
+              checklist_equipe_completa: v.tipo_visita === "supervisao" ? (v.checklist_equipe_completa || null) : null,
+              checklist_epi: v.tipo_visita === "supervisao" ? (v.checklist_epi || null) : null,
+              checklist_uniforme: v.tipo_visita === "supervisao" ? (v.checklist_uniforme || null) : null,
+              checklist_pontualidade: v.tipo_visita === "supervisao" ? (v.checklist_pontualidade || null) : null,
+              checklist_ambiente: v.tipo_visita === "supervisao" ? (v.checklist_ambiente || null) : null,
+              checklist_feedback_cliente: v.tipo_visita === "supervisao" ? (v.checklist_feedback_cliente || null) : null,
+              problema_identificado: v.tipo_visita === "supervisao" ? v.problema_identificado : false,
+              plano_acao: v.tipo_visita === "supervisao" && v.problema_identificado ? v.plano_acao : null,
+              evidencias_fotos: v.tipo_visita === "supervisao" ? evidenciasFotos : [],
             }),
           });
           if (vRes.ok) return { empresa: v.empresa, ok: true as const };
@@ -409,16 +561,36 @@ export default function KmTab({ analistaId, isGestor }: Props) {
 
   // ── Visitas / Custos helpers ──
 
-  const addVisita = () => setVisitas((prev) => [...prev, { empresa: "", contato: "", contato_telefone: "", contato_email: "", motivo: "", resultado: "" }]);
+  const addVisita = () => setVisitas((prev) => [...prev, novaVisitaLocal()]);
   const removeVisita = (idx: number) => {
     setVisitas((prev) => prev.filter((_, i) => i !== idx));
     setSugestoes((prev) => { const n = { ...prev }; delete n[idx]; return n; });
     if (sugestaoAberta === idx) { setSugestaoAberta(null); setDropdownPos(null); }
     setEmpresaSelecionada((prev) => { const n = { ...prev }; delete n[idx]; return n; });
     setVisitaHistorico((prev) => { const n = { ...prev }; delete n[idx]; return n; });
+    setClienteBusca((prev) => { const n = { ...prev }; delete n[idx]; return n; });
+    if (clienteDropdownAberto === idx) setClienteDropdownAberto(null);
+    setFotosNovas((prev) => { const n = { ...prev }; delete n[idx]; return n; });
   };
-  const updateVisita = (idx: number, field: keyof VisitaLocal, value: string) =>
+  const updateVisita = (idx: number, field: keyof VisitaLocal, value: string | boolean) =>
     setVisitas((prev) => prev.map((v, i) => (i === idx ? { ...v, [field]: value } : v)));
+
+  const selecionarClienteSupervisao = (idx: number, c: ClienteAtivo) => {
+    setVisitas((prev) => prev.map((v, i) => i === idx ? { ...v, cliente_id: c.id, empresa: c.nome } : v));
+    setClienteDropdownAberto(null);
+    setClienteBusca((prev) => ({ ...prev, [idx]: "" }));
+  };
+
+  const trocarTipoVisita = (idx: number, tipo: "supervisao" | "comercial") => {
+    setVisitas((prev) => prev.map((v, i) => i === idx ? {
+      ...v,
+      tipo_visita: tipo,
+      empresa: "",
+      cliente_id: null,
+    } : v));
+    setClienteBusca((prev) => ({ ...prev, [idx]: "" }));
+    setClienteDropdownAberto(null);
+  };
 
   const handleEmpresaChange = (idx: number, value: string) => {
     updateVisita(idx, "empresa", value);
@@ -672,29 +844,104 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                       {"🗑"} Remover
                     </button>
                   )}
+
+                  {/* Tipo de visita */}
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={labelStyle}>Tipo de visita</label>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {TIPOS_VISITA.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => trocarTipoVisita(idx, t.id)}
+                          style={{
+                            padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                            border: v.tipo_visita === t.id ? "1px solid #FFD700" : "1px solid #D1D5DB",
+                            background: v.tipo_visita === t.id ? "#FFF8DC" : "#fff",
+                            color: v.tipo_visita === t.id ? "#92400E" : "#374151",
+                          }}
+                        >
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    {/* Empresa com autocomplete (dropdown via portal) */}
+                    {/* Empresa: texto livre (comercial) ou combobox de clientes ativos (supervisão) */}
                     <div>
-                      <label style={labelStyle}>Empresa visitada *</label>
-                      <input
-                        ref={(el) => { inputRefs.current[idx] = el; }}
-                        style={inputStyle}
-                        placeholder="Nome da empresa"
-                        value={v.empresa}
-                        onChange={(e) => handleEmpresaChange(idx, e.target.value)}
-                        onFocus={() => {
-                          if ((sugestoes[idx] ?? []).length > 0) {
-                            const el = inputRefs.current[idx];
-                            if (el) {
-                              const rect = el.getBoundingClientRect();
-                              setDropdownPos({ top: rect.bottom + 2, left: rect.left, width: rect.width });
+                      <label style={labelStyle}>{v.tipo_visita === "supervisao" ? "Cliente *" : "Empresa visitada *"}</label>
+                      {v.tipo_visita === "supervisao" ? (
+                        v.cliente_id ? (
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, border: "1px solid #E5E7EB", borderRadius: 8, padding: "10px 14px", background: "#fff" }}>
+                            <span style={{ fontSize: 14, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.empresa}</span>
+                            <button
+                              type="button"
+                              onClick={() => setVisitas((prev) => prev.map((vv, i) => i === idx ? { ...vv, cliente_id: null, empresa: "" } : vv))}
+                              title="Trocar cliente"
+                              style={{ border: "none", background: "none", color: "#9CA3AF", fontSize: 16, lineHeight: 1, cursor: "pointer", padding: 0, flexShrink: 0 }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ position: "relative" }}>
+                            <input
+                              style={inputStyle}
+                              placeholder="Buscar cliente..."
+                              value={clienteBusca[idx] ?? ""}
+                              onChange={(e) => { setClienteBusca((prev) => ({ ...prev, [idx]: e.target.value })); setClienteDropdownAberto(idx); }}
+                              onFocus={() => setClienteDropdownAberto(idx)}
+                              onBlur={() => setTimeout(() => setClienteDropdownAberto((cur) => (cur === idx ? null : cur)), 150)}
+                              autoComplete="off"
+                            />
+                            {clienteDropdownAberto === idx && (() => {
+                              const termo = (clienteBusca[idx] ?? "").trim().toLowerCase();
+                              const filtrados = termo
+                                ? clientesAtivos.filter((c) => c.nome.toLowerCase().includes(termo))
+                                : clientesAtivos;
+                              return (
+                                <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20, maxHeight: 180, overflowY: "auto", border: "1px solid #E5E7EB", borderRadius: 8, marginTop: 4, background: "#fff", boxShadow: "0 4px 16px rgba(0,0,0,0.12)" }}>
+                                  {filtrados.length === 0 ? (
+                                    <div style={{ padding: "8px 12px", fontSize: 13, color: "#9CA3AF" }}>Nenhum cliente encontrado</div>
+                                  ) : (
+                                    filtrados.map((c) => (
+                                      <button
+                                        key={c.id}
+                                        type="button"
+                                        onMouseDown={() => selecionarClienteSupervisao(idx, c)}
+                                        style={{ display: "block", width: "100%", padding: "8px 12px", textAlign: "left", background: "none", border: "none", cursor: "pointer", borderBottom: "1px solid #F3F4F6", fontSize: 13, color: "#111827" }}
+                                      >
+                                        {c.nome}
+                                      </button>
+                                    ))
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )
+                      ) : (
+                        <input
+                          ref={(el) => { inputRefs.current[idx] = el; }}
+                          style={inputStyle}
+                          placeholder="Nome da empresa"
+                          value={v.empresa}
+                          onChange={(e) => handleEmpresaChange(idx, e.target.value)}
+                          onFocus={() => {
+                            if ((sugestoes[idx] ?? []).length > 0) {
+                              const el = inputRefs.current[idx];
+                              if (el) {
+                                const rect = el.getBoundingClientRect();
+                                setDropdownPos({ top: rect.bottom + 2, left: rect.left, width: rect.width });
+                              }
+                              setSugestaoAberta(idx);
                             }
-                            setSugestaoAberta(idx);
-                          }
-                        }}
-                        onBlur={() => setTimeout(() => { setSugestaoAberta(null); setDropdownPos(null); }, 150)}
-                        autoComplete="off"
-                      />
+                          }}
+                          onBlur={() => setTimeout(() => { setSugestaoAberta(null); setDropdownPos(null); }, 150)}
+                          autoComplete="off"
+                        />
+                      )}
                     </div>
 
                     {/* Contato nome */}
@@ -740,6 +987,99 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                       />
                     </div>
                   </div>
+
+                  {/* Checklist de supervisão */}
+                  {v.tipo_visita === "supervisao" && (
+                    <div style={{ marginTop: 14, padding: 14, background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 8 }}>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 10px" }}>
+                        Checklist de supervisão
+                      </p>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                        <div>
+                          <label style={labelStyle}>Equipe completa</label>
+                          <select style={{ ...inputStyle, cursor: "pointer" }} value={v.checklist_equipe_completa} onChange={(e) => updateVisita(idx, "checklist_equipe_completa", e.target.value)}>
+                            <option value="">—</option>
+                            {CHECKLIST_EQUIPE.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={labelStyle}>Uso de EPI</label>
+                          <select style={{ ...inputStyle, cursor: "pointer" }} value={v.checklist_epi} onChange={(e) => updateVisita(idx, "checklist_epi", e.target.value)}>
+                            <option value="">—</option>
+                            {CHECKLIST_EPI.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={labelStyle}>Uniforme</label>
+                          <select style={{ ...inputStyle, cursor: "pointer" }} value={v.checklist_uniforme} onChange={(e) => updateVisita(idx, "checklist_uniforme", e.target.value)}>
+                            <option value="">—</option>
+                            {CHECKLIST_SIM_NAO.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={labelStyle}>Pontualidade</label>
+                          <select style={{ ...inputStyle, cursor: "pointer" }} value={v.checklist_pontualidade} onChange={(e) => updateVisita(idx, "checklist_pontualidade", e.target.value)}>
+                            <option value="">—</option>
+                            {CHECKLIST_SIM_NAO.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={labelStyle}>Ambiente</label>
+                          <select style={{ ...inputStyle, cursor: "pointer" }} value={v.checklist_ambiente} onChange={(e) => updateVisita(idx, "checklist_ambiente", e.target.value)}>
+                            <option value="">—</option>
+                            {CHECKLIST_AMBIENTE.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={labelStyle}>Feedback do cliente</label>
+                          <select style={{ ...inputStyle, cursor: "pointer" }} value={v.checklist_feedback_cliente} onChange={(e) => updateVisita(idx, "checklist_feedback_cliente", e.target.value)}>
+                            <option value="">—</option>
+                            {CHECKLIST_FEEDBACK.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: 12 }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, color: "#374151", cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={v.problema_identificado}
+                            onChange={(e) => updateVisita(idx, "problema_identificado", e.target.checked)}
+                          />
+                          Problema identificado?
+                        </label>
+                        {v.problema_identificado && (
+                          <div style={{ marginTop: 8 }}>
+                            <label style={labelStyle}>Plano de ação *</label>
+                            <textarea
+                              style={{ ...inputStyle, resize: "none", minHeight: 60 }}
+                              placeholder="Descreva o plano de ação para resolver o problema..."
+                              value={v.plano_acao}
+                              onChange={(e) => updateVisita(idx, "plano_acao", e.target.value)}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ marginTop: 12 }}>
+                        <label style={labelStyle}>Fotos (evidências, opcional)</label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          style={{ fontSize: 12, color: "#6B7280" }}
+                          onChange={(e) => setFotosNovas((prev) => ({ ...prev, [idx]: Array.from(e.target.files ?? []) }))}
+                        />
+                        {v.evidenciasExistentes.length > 0 && (
+                          <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            {v.evidenciasExistentes.map((path, fi) => (
+                              <LinkFotoSupervisao key={fi} path={path} label={`Foto ${fi + 1}`} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Inline history — only shown after selecting from autocomplete */}
                   {empresaSelecionada[idx] && hist && hist.length > 0 && (
@@ -940,13 +1280,30 @@ function RegistroRow({
                 </p>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {visitas.map((v, idx) => (
-                    <div key={v.id} style={{ display: "flex", gap: 16, fontSize: 13, padding: "6px 0", borderBottom: idx < visitas.length - 1 ? "1px solid #E5E7EB" : "none" }}>
+                    <div key={v.id} style={{ display: "flex", gap: 16, fontSize: 13, padding: "6px 0", borderBottom: idx < visitas.length - 1 ? "1px solid #E5E7EB" : "none", alignItems: "center" }}>
+                      {v.tipo_visita === "supervisao" && (
+                        <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, background: "#EDE9FE", color: "#6D28D9", whiteSpace: "nowrap" }}>
+                          Supervisão
+                        </span>
+                      )}
+                      {v.problema_identificado && (
+                        <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, background: "#FEE2E2", color: "#991B1B", whiteSpace: "nowrap" }}>
+                          Problema identificado
+                        </span>
+                      )}
                       <span style={{ fontWeight: 600, color: "#111827", minWidth: 160 }}>{v.empresa}</span>
                       {v.contato && <span style={{ color: "#6B7280" }}>Contato: {v.contato}</span>}
                       {v.contato_telefone && <span style={{ color: "#6B7280" }}>{v.contato_telefone}</span>}
                       {v.contato_email && <span style={{ color: "#6B7280" }}>{v.contato_email}</span>}
                       {v.motivo && <span style={{ color: "#6B7280" }}>Motivo: {v.motivo}</span>}
                       {v.resultado && <span style={{ color: "#374151" }}>→ {v.resultado}</span>}
+                      {v.evidencias_fotos && v.evidencias_fotos.length > 0 && (
+                        <span style={{ display: "flex", gap: 8 }}>
+                          {v.evidencias_fotos.map((path, fi) => (
+                            <LinkFotoSupervisao key={fi} path={path} label={`Foto ${fi + 1}`} />
+                          ))}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
