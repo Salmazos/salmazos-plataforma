@@ -6,16 +6,26 @@ import {
   CategoryScale,
   LinearScale,
   BarElement,
+  BarController,
   LineElement,
   PointElement,
+  LineController,
   Tooltip,
+  Legend,
 } from "chart.js";
 import type { ChartOptions, Plugin } from "chart.js";
 import { Bar, Chart } from "react-chartjs-2";
 import ModalDetalheVisitaSupervisao from "./ModalDetalheVisitaSupervisao";
 import type { VisitaHistoricoItem, ParetoClienteItem } from "@/app/api/supervisao/historico/route";
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip);
+// BarController/LineController (não só BarElement/LineElement) são obrigatórios aqui porque
+// o gráfico de Pareto usa o componente genérico <Chart> do react-chartjs-2 (bar+linha
+// misturados no mesmo canvas) — diferente de <Bar>, que auto-registra o BarController
+// internamente ao ser importado. <Chart> não registra nada sozinho; sem os controllers
+// explícitos, o Chart.js lança "'line' is not a registered controller" em runtime (não pega
+// no build, só quando o componente renderiza) e, por ser um client component, essa exception
+// derruba a página inteira, não só o gráfico.
+ChartJS.register(CategoryScale, LinearScale, BarElement, BarController, LineElement, PointElement, LineController, Tooltip, Legend);
 
 export interface ClienteHistoricoOption {
   id: string;
