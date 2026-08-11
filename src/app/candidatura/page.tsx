@@ -7,6 +7,7 @@ import { ESTADOS, HABILIDADES, TEMPO_EXPERIENCIA, TURNOS } from "@/lib/constants
 import BotaoVoltarSite from "@/components/BotaoVoltarSite";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import ModalConfirmarSemCurriculo from "@/components/ModalConfirmarSemCurriculo";
+import SeletorEscolaridade from "@/components/SeletorEscolaridade";
 
 interface FormData {
   nome_completo: string;
@@ -360,10 +361,9 @@ export default function BancoTalentosPage() {
                   <input type="number" style={INPUT} placeholder="Ex: 28" min={14} max={99}
                     value={form.idade} onChange={(e) => set("idade", e.target.value)} />
                 </div>
-                <div>
+                <div className="sm:col-span-2">
                   <label style={LABEL}>Formação acadêmica</label>
-                  <input type="text" style={INPUT} placeholder="Ex: Ensino Médio Completo"
-                    value={form.formacao_academica} onChange={(e) => set("formacao_academica", e.target.value)} />
+                  <SeletorEscolaridade onChange={(v) => set("formacao_academica", v)} />
                 </div>
                 <div>
                   <label style={LABEL}>Gênero</label>

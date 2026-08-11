@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { formatarCPF, formatarTelefone, validarCPF } from "@/lib/utils";
 import { ESTADOS, HABILIDADES, TEMPO_EXPERIENCIA, TURNOS } from "@/lib/constants";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import SeletorEscolaridade from "@/components/SeletorEscolaridade";
 import ModalConfirmarSemCurriculo from "@/components/ModalConfirmarSemCurriculo";
 
 interface Props {
@@ -438,10 +439,9 @@ export default function FormCandidaturaVagaPublica({ vagaId, vagaTitulo }: Props
             <input type="number" style={INPUT} placeholder="Ex: 28" min={14} max={99}
               value={form.idade} onChange={(e) => set("idade", e.target.value)} />
           </div>
-          <div>
+          <div className="sm:col-span-2">
             <label style={LABEL}>Formação acadêmica</label>
-            <input type="text" style={INPUT} placeholder="Ex: Ensino Médio Completo"
-              value={form.formacao_academica} onChange={(e) => set("formacao_academica", e.target.value)} />
+            <SeletorEscolaridade onChange={(v) => set("formacao_academica", v)} />
           </div>
           <div>
             <label style={LABEL}>Gênero</label>

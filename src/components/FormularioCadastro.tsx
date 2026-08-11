@@ -7,6 +7,7 @@ import { formatarCPF, formatarTelefone, validarCPF } from "@/lib/utils";
 import { ESTADOS, HABILIDADES, TEMPO_EXPERIENCIA, TURNOS } from "@/lib/constants";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import ModalConfirmarSemCurriculo from "@/components/ModalConfirmarSemCurriculo";
+import SeletorEscolaridade from "@/components/SeletorEscolaridade";
 
 interface FormData {
   nome_completo: string;
@@ -279,6 +280,11 @@ export default function FormularioCadastro({ vagaParam }: Props) {
                   ))}
                 </select>
                 {erros.estado && <p className="text-red-500 text-xs mt-1">{erros.estado}</p>}
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="label">Formação acadêmica</label>
+                <SeletorEscolaridade onChange={(v) => set("formacao_academica", v)} />
               </div>
             </div>
           </div>
