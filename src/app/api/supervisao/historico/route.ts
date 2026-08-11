@@ -23,12 +23,21 @@ export interface VisitaHistoricoItem {
   evidencias_fotos: string[];
 }
 
-// Alimenta o drill-down de histórico (mês → semana → visitas individuais) do Painel de
-// Supervisão — devolve todas as visitas de supervisão de um cliente num mês de uma vez só,
-// já com o nome de quem visitou; o agrupamento por semana e a paginação entre níveis do
-// drill-down acontecem no client (SupervisaoHistoricoClient.tsx), sem round-trip extra por
-// nível. Mesma regra de acesso do resto do Painel de Supervisão: full access vê qualquer
-// cliente, supervisor só vê cliente da própria carteira (clientes_meta_supervisao).
+export interface ParetoClienteItem {
+  clienteId: string;
+  clienteNome: string;
+  total: number;
+}
+
+// Alimenta os 4 níveis de drill-down da aba Histórico de Visitas do Painel de Supervisão:
+// sem cliente_id -> Nível 0 (Pareto: total de visitas de supervisão no mês, por cliente, pra
+// todo o universo que o usuário pode ver); com cliente_id -> Níveis 1-3 (lista de visitas
+// daquele cliente no mês, agrupada em semana/visita individual no client). Uma única rota (em
+// vez de duas) porque os dois modos compartilham auth, cálculo do intervalo do mês e a
+// filtragem por tipo_visita='supervisao' — só o agregado final muda. Mesma regra de acesso em
+// ambos os modos: full access vê qualquer cliente, supervisor só vê a própria carteira
+// (clientes_meta_supervisao) — inclusive no Pareto, que nunca lista o programa inteiro pra
+// quem não é full access.
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -38,8 +47,8 @@ export async function GET(request: NextRequest) {
   const clienteId = params.get("cliente_id");
   const ano = Number(params.get("ano"));
   const mes = Number(params.get("mes"));
-  if (!clienteId || !ano || !mes || mes < 1 || mes > 12) {
-    return NextResponse.json({ error: "cliente_id, ano e mes são obrigatórios." }, { status: 400 });
+  if (!ano || !mes || mes < 1 || mes > 12) {
+    return NextResponse.json({ error: "ano e mes são obrigatórios." }, { status: 400 });
   }
 
   const { acesso, fullAccess, analistaPerfilId } = await checarAcessoSupervisao(user);
@@ -47,6 +56,53 @@ export async function GET(request: NextRequest) {
 
   const svc = createServiceClient();
 
+  const inicio = `${ano}-${String(mes).padStart(2, "0")}-01`;
+  const proxMes = mes === 12 ? 1 : mes + 1;
+  const anoProxMes = mes === 12 ? ano + 1 : ano;
+  const fim = `${anoProxMes}-${String(proxMes).padStart(2, "0")}-01`;
+
+  // ── Nível 0: sem cliente_id, devolve totais agregados por cliente (Pareto) ──
+  if (!clienteId) {
+    let metasQuery = svc.from("clientes_meta_supervisao").select("cliente_id, clientes(nome)");
+    if (!fullAccess) {
+      metasQuery = metasQuery.eq("supervisor_responsavel_id", analistaPerfilId ?? "00000000-0000-0000-0000-000000000000");
+    }
+    const { data: metas, error: metasError } = await metasQuery;
+    if (metasError) return NextResponse.json({ error: metasError.message }, { status: 500 });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const metasTyped = (metas ?? []) as any[];
+    const clienteIds = metasTyped.map((m) => m.cliente_id);
+    if (clienteIds.length === 0) return NextResponse.json({ data: [] as ParetoClienteItem[] });
+
+    const { data: visitasCont, error: visitasError } = await svc
+      .from("km_visitas")
+      .select("cliente_id, km_registros!inner(data)")
+      .eq("tipo_visita", "supervisao")
+      .in("cliente_id", clienteIds)
+      .gte("km_registros.data", inicio)
+      .lt("km_registros.data", fim);
+
+    if (visitasError) return NextResponse.json({ error: visitasError.message }, { status: 500 });
+
+    const contagem = new Map<string, number>();
+    for (const v of visitasCont ?? []) {
+      contagem.set(v.cliente_id, (contagem.get(v.cliente_id) ?? 0) + 1);
+    }
+
+    const paretoItems: ParetoClienteItem[] = metasTyped
+      .map((m) => ({
+        clienteId: m.cliente_id as string,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        clienteNome: ((m.clientes as any)?.nome as string | undefined) ?? "—",
+        total: contagem.get(m.cliente_id) ?? 0,
+      }))
+      .sort((a, b) => b.total - a.total || a.clienteNome.localeCompare(b.clienteNome));
+
+    return NextResponse.json({ data: paretoItems });
+  }
+
+  // ── Níveis 1-3: com cliente_id, devolve a lista individual de visitas do mês ──
   if (!fullAccess) {
     const { data: meta } = await svc
       .from("clientes_meta_supervisao")
@@ -57,11 +113,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
     }
   }
-
-  const inicio = `${ano}-${String(mes).padStart(2, "0")}-01`;
-  const proxMes = mes === 12 ? 1 : mes + 1;
-  const anoProxMes = mes === 12 ? ano + 1 : ano;
-  const fim = `${anoProxMes}-${String(proxMes).padStart(2, "0")}-01`;
 
   const { data, error } = await svc
     .from("km_visitas")
