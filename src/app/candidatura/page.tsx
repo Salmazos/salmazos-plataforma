@@ -6,6 +6,7 @@ import { formatarCPF, formatarTelefone, validarCPF } from "@/lib/utils";
 import { ESTADOS, HABILIDADES, TEMPO_EXPERIENCIA, TURNOS } from "@/lib/constants";
 import BotaoVoltarSite from "@/components/BotaoVoltarSite";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import ModalConfirmarSemCurriculo from "@/components/ModalConfirmarSemCurriculo";
 
 interface FormData {
   nome_completo: string;
@@ -91,6 +92,7 @@ export default function BancoTalentosPage() {
   const [sucesso, setSucesso] = useState(false);
   const [hovering, setHovering] = useState(false);
   const [tentouEnviar, setTentouEnviar] = useState(false);
+  const [mostrarConfirmacaoCurriculo, setMostrarConfirmacaoCurriculo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = (field: keyof FormData, value: string) =>
@@ -138,10 +140,7 @@ export default function BancoTalentosPage() {
     return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setTentouEnviar(true);
-    if (!validar()) return;
+  const enviarCandidatura = async () => {
     setEnviando(true);
     setErroGeral(null);
 
@@ -202,8 +201,34 @@ export default function BancoTalentosPage() {
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTentouEnviar(true);
+    if (!validar()) return;
+    if (!curriculo) {
+      setMostrarConfirmacaoCurriculo(true);
+      return;
+    }
+    await enviarCandidatura();
+  };
+
+  const handleConfirmarSemCurriculo = () => {
+    setMostrarConfirmacaoCurriculo(false);
+    enviarCandidatura();
+  };
+
+  const handleVoltarParaAnexar = () => {
+    setMostrarConfirmacaoCurriculo(false);
+    setTimeout(() => {
+      document.getElementById("curriculo")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+  };
+
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#000" }}>
+      {mostrarConfirmacaoCurriculo && (
+        <ModalConfirmarSemCurriculo onVoltar={handleVoltarParaAnexar} onConfirmar={handleConfirmarSemCurriculo} />
+      )}
       <BotaoVoltarSite />
       {/* Header */}
       <header style={{ backgroundColor: "#000", borderBottom: "3px solid #FFD700" }}>
