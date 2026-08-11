@@ -648,11 +648,15 @@ export const admissaoDocumentoRevisarSchema = z.object({
 export const kmVisitaCreateSchema = z.object({
   registro_id: z.string().uuid(),
   empresa: z.string().min(1),
-  contato: z.string().optional(),
-  contato_telefone: z.string().optional(),
-  contato_email: z.string().optional(),
-  motivo: z.string().optional(),
-  resultado: z.string().optional(),
+  // optStr (não z.string().optional() puro) porque o cliente (KmTab.tsx) envia null quando o
+  // campo fica em branco — .optional() sozinho só aceita string|undefined, rejeita null com
+  // 400. Bug real de produção: causava km_registros órfão (dia salvo, visita perdida) sempre
+  // que um desses 5 campos ficava vazio. Mesmo padrão já usado no resto do projeto (ver optStr).
+  contato: optStr,
+  contato_telefone: optStr,
+  contato_email: optStr,
+  motivo: optStr,
+  resultado: optStr,
   ordem: coerceNumberOptional,
   tipo_visita: z.enum(["supervisao", "comercial"]).optional(),
   cliente_id: z.string().uuid().optional().nullable(),
@@ -709,7 +713,14 @@ export const kmRegistroCreateSchema = z.object({
   outros_custos: coerceNumberOptional,
 });
 
-export const kmRegistroUpdateSchema = kmRegistroCreateSchema.partial();
+// status não faz parte de kmRegistroCreateSchema (nunca é setado pelo cliente na criação —
+// sempre nasce 'enviado' via default do banco) — só de update, e restrito a esses 2 valores:
+// KmTab.tsx usa isso pra rebaixar o registro pra 'incompleto' quando 1+ visita falha ao salvar
+// depois do registro do dia já ter sido criado (ver handleSubmit), e pra promover de volta a
+// 'enviado' se uma edição posterior salva todas as visitas com sucesso.
+export const kmRegistroUpdateSchema = kmRegistroCreateSchema.partial().extend({
+  status: z.enum(["enviado", "incompleto"]).optional(),
+});
 
 export const kmConfigSchema = z.object({
   tipo_servico: z.string().min(1),

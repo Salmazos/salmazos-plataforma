@@ -79,6 +79,7 @@ interface KmRegistro {
   valor_por_km: number | null;
   valor_total: number | null;
   outros_custos: OutroCustoDB[] | null;
+  status: "rascunho" | "enviado" | "incompleto";
 }
 
 interface KmVisita {
@@ -518,9 +519,19 @@ export default function KmTab({ analistaId, isGestor }: Props) {
       );
       const falhas = visitaResults.filter((r) => !r.ok) as { empresa: string; ok: false; error: string }[];
 
+      // Rebaixa o registro pra 'incompleto' quando 1+ visita falha — sem isso ele ficava
+      // 'enviado' (pronto pra reembolso) mesmo com a visita perdida. Também promove de volta
+      // pra 'enviado' se uma edição corrige tudo (falhas.length === 0 mas o registro já
+      // estava 'incompleto' de uma tentativa anterior).
+      await fetch(`/api/km/registros/${registroId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: falhas.length > 0 ? "incompleto" : "enviado" }),
+      });
+
       if (falhas.length > 0) {
         setToast(
-          `Registro salvo, mas ${falhas.length} visita(s) NÃO foram salvas: ${falhas.map((f) => `${f.empresa} (${f.error})`).join("; ")}. Edite o registro e adicione essas visitas novamente.`
+          `Registro salvo como INCOMPLETO — ${falhas.length} visita(s) NÃO foram salvas: ${falhas.map((f) => `${f.empresa} (${f.error})`).join("; ")}. Edite o registro pra tentar novamente; ele não entra nos totais de reembolso até isso ser corrigido.`
         );
       } else {
         setToast(editingId ? "Registro atualizado!" : "Registro criado!");
@@ -650,9 +661,12 @@ export default function KmTab({ analistaId, isGestor }: Props) {
 
   // ── Totals ──
 
+  // Total KM continua somando tudo (o carro rodou de qualquer forma) — só os totais
+  // monetários de reembolso excluem 'incompleto' (visita perdida, não pronto pra pagar).
   const totalKm = registros.reduce((s, r) => s + r.km_rodados, 0);
-  const totalReembolso = registros.reduce((s, r) => s + (r.valor_total ?? 0), 0);
-  const totalOutrosCustos = registros.reduce((s, r) => s + outrosCustosSum(r.outros_custos), 0);
+  const registrosCompletos = registros.filter((r) => r.status !== "incompleto");
+  const totalReembolso = registrosCompletos.reduce((s, r) => s + (r.valor_total ?? 0), 0);
+  const totalOutrosCustos = registrosCompletos.reduce((s, r) => s + outrosCustosSum(r.outros_custos), 0);
   const totalGeral = totalReembolso + totalOutrosCustos;
 
   if (loading) return <p style={{ color: "#9CA3AF", fontSize: 14 }}>Carregando dados de quilometragem...</p>;
@@ -1241,7 +1255,7 @@ function RegistroRow({
 
   return (
     <>
-      <tr style={{ borderBottom: isExpanded ? "none" : "1px solid #F3F4F6", cursor: "pointer" }} onClick={onToggle}>
+      <tr style={{ borderBottom: isExpanded ? "none" : "1px solid #F3F4F6", cursor: "pointer", background: r.status === "incompleto" ? "#FFFBEB" : undefined }} onClick={onToggle}>
         <td style={{ ...tdStyle, fontWeight: 600, color: "#111827" }}>
           <span style={{ marginRight: 6, fontSize: 10, color: "#9CA3AF" }}>{isExpanded ? "▼" : "▶"}</span>
           {formatDate(r.data)}
@@ -1250,6 +1264,11 @@ function RegistroRow({
           <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700, background: tipoInfo.bg, color: tipoInfo.color }}>
             {tipoInfo.label}
           </span>
+          {r.status === "incompleto" && (
+            <span style={{ display: "inline-block", marginLeft: 6, padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700, background: "#FEE2E2", color: "#991B1B" }}>
+              Incompleto
+            </span>
+          )}
         </td>
         <td style={{ ...tdStyle, textAlign: "right" }}>{r.km_inicial.toLocaleString("pt-BR")}</td>
         <td style={{ ...tdStyle, textAlign: "right" }}>{r.km_final.toLocaleString("pt-BR")}</td>
@@ -1271,6 +1290,11 @@ function RegistroRow({
       {isExpanded && (
         <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
           <td colSpan={9} style={{ padding: "12px 24px 16px", background: "#FAFAFA" }}>
+            {r.status === "incompleto" && (
+              <div style={{ marginBottom: 12, padding: "10px 14px", background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 8, fontSize: 13, color: "#92400E" }}>
+                ⚠ Pelo menos 1 visita não foi salva neste registro. Clique em <strong>Editar</strong> e reenvie — o registro não entra nos totais de reembolso até isso ser corrigido.
+              </div>
+            )}
             {loadingVisitas ? (
               <p style={{ fontSize: 13, color: "#9CA3AF" }}>Carregando visitas...</p>
             ) : visitas && visitas.length > 0 ? (

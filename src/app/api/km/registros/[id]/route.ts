@@ -27,6 +27,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (parsed.data.tipo_servico !== undefined) updatePayload.tipo_servico = parsed.data.tipo_servico || null;
   if (parsed.data.valor_por_km !== undefined) updatePayload.valor_por_km = parsed.data.valor_por_km ? Number(parsed.data.valor_por_km) : null;
   if (parsed.data.outros_custos !== undefined) updatePayload.outros_custos = parsed.data.outros_custos;
+  if (parsed.data.status !== undefined) updatePayload.status = parsed.data.status;
 
   if (updatePayload.km_inicial !== undefined || updatePayload.km_final !== undefined) {
     const svcCheck = createServiceClient();

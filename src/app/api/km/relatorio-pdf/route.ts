@@ -89,8 +89,11 @@ export async function POST(request: NextRequest) {
   // ── Fetch registros ──
   let registros: Registro[] = [];
 
+  // Exclui status='incompleto' — este PDF é um documento de reembolso/pagamento; um registro
+  // com visita não salva não está pronto pra ser pago e não deve aparecer aqui (o analista
+  // corrige e reenvia direto na tela de Quilometragem, não neste relatório).
   if (analista_id) {
-    let q = svc.from("km_registros").select("*").eq("analista_id", analista_id).order("data", { ascending: false });
+    let q = svc.from("km_registros").select("*").eq("analista_id", analista_id).neq("status", "incompleto").order("data", { ascending: false });
     if (from) q = q.gte("data", from);
     if (to) q = q.lte("data", to);
     const { data } = await q;
@@ -99,7 +102,7 @@ export async function POST(request: NextRequest) {
     const { data: analistas } = await svc.from("analistas_perfil").select("id").eq("ativo", true);
     const results = await Promise.all(
       (analistas ?? []).map(async (a) => {
-        let q = svc.from("km_registros").select("*").eq("analista_id", a.id).order("data", { ascending: false });
+        let q = svc.from("km_registros").select("*").eq("analista_id", a.id).neq("status", "incompleto").order("data", { ascending: false });
         if (from) q = q.gte("data", from);
         if (to) q = q.lte("data", to);
         const { data } = await q;
