@@ -1,7 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
 import { registrarAuditoria } from "@/lib/audit";
+import { obterDestinatariosCobrancaRS } from "@/lib/cobrancaRS";
+import { getEmailTemplate } from "@/lib/emailTemplates";
+import { sendEmail } from "@/lib/sendEmail";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -46,6 +49,52 @@ export async function POST(_request: NextRequest, { params }: Params) {
     entidade: "cobrancas_rs",
     entidade_id: id,
     detalhes: { cliente: data.cliente_nome_snapshot, candidato: data.candidato_nome_snapshot },
+  });
+
+  // E-mail (sem sino) pros mesmos destinatários do aviso de atraso — best-effort, nunca
+  // bloqueia nem derruba a resposta: o pagamento já foi confirmado no banco antes disso.
+  // after() (não uma Promise solta) garante que o runtime espera esse trabalho terminar
+  // depois de enviar a resposta, em vez de arriscar a função ser congelada antes do envio
+  // sair — mesmo padrão já usado em notificar-encerramento/route.ts.
+  after(async () => {
+    try {
+      let responsavelComercial: string | null = null;
+      if (data.cliente_id) {
+        const { data: cliente } = await svc
+          .from("clientes")
+          .select("responsavel_comercial")
+          .eq("id", data.cliente_id)
+          .maybeSingle();
+        responsavelComercial = cliente?.responsavel_comercial ?? null;
+      }
+
+      const destinatarios = await obterDestinatariosCobrancaRS(responsavelComercial, svc);
+      if (destinatarios.length === 0) {
+        console.error(`[marcar-paga] Nenhum destinatário resolvido pro e-mail de pagamento (cobranca_id=${id}).`);
+        return;
+      }
+
+      const template = getEmailTemplate("cobranca_rs_paga", {
+        nome: "",
+        cargo: data.cargo ?? "—",
+        nomeCliente: data.cliente_nome_snapshot,
+        nomeCandidato: data.candidato_nome_snapshot ?? undefined,
+        feeValor: data.fee_valor,
+        // Normaliza pra "YYYY-MM-DD" antes de passar pro template — data.pago_em é
+        // timestamptz completo, mas o formatador de dataPagamento (mesmo padrão de
+        // dataVencimento) espera só a parte da data.
+        dataPagamento: data.pago_em ? data.pago_em.split("T")[0] : undefined,
+        tipoCobrancaRS: data.tipo,
+      });
+
+      await Promise.all(
+        destinatarios.map((d) =>
+          sendEmail({ to: d.email, subject: template.subject, html: template.html, tipo: "cobranca_rs_paga" })
+        )
+      ).catch((err) => console.error(`[marcar-paga] Erro ao enviar e-mail de pagamento (cobranca_id=${id}):`, err));
+    } catch (err) {
+      console.error(`[marcar-paga] Erro ao montar e-mail de pagamento (cobranca_id=${id}):`, err);
+    }
   });
 
   return NextResponse.json({ data });

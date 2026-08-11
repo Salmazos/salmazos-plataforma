@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { obterDestinatariosAtrasoCobranca } from "@/lib/cobrancaRS";
+import { obterDestinatariosCobrancaRS } from "@/lib/cobrancaRS";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { sendEmail } from "@/lib/sendEmail";
 
@@ -42,7 +42,7 @@ export async function GET(request: Request) {
       const responsavelComercial = r.clientes?.responsavel_comercial ?? null;
       const diasAtraso = Math.floor((Date.now() - new Date(r.data_vencimento + "T00:00:00").getTime()) / 86400000);
 
-      const destinatarios = await obterDestinatariosAtrasoCobranca(responsavelComercial, supabase);
+      const destinatarios = await obterDestinatariosCobrancaRS(responsavelComercial, supabase);
       if (destinatarios.length === 0) {
         console.error(
           `[cron/lembrete-cobranca-atraso] Nenhum destinatário resolvido (cobranca_id=${r.id}) — lembrete não enviado.`

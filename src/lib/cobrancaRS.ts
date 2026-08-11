@@ -265,16 +265,17 @@ export interface DestinatarioAtrasoCobranca {
 }
 
 /**
- * Destinatários do lembrete de cobrança R&S atrasada (cron lembrete-cobranca-atraso):
- * base fixa (PAPEIS_FULL_ACCESS + analistas com acesso configurável à tela — mesma query
- * de leitura usada em /painel/cobranca-rs-acesso-config, sem alterar checarAcessoCobrancaRS
- * em si, que só checa um usuário por vez) + o responsável comercial do cliente (nome livre
- * em clientes.responsavel_comercial), resolvido por nome contra analistas_perfil.nome_completo.
+ * Destinatários compartilhados dos avisos de Cobrança R&S (hoje usado pelo cron
+ * lembrete-cobranca-atraso e pelo e-mail de cobrança marcada como paga): base fixa
+ * (PAPEIS_FULL_ACCESS + analistas com acesso configurável à tela — mesma query de leitura
+ * usada em /painel/cobranca-rs-acesso-config, sem alterar checarAcessoCobrancaRS em si, que
+ * só checa um usuário por vez) + o responsável comercial do cliente (nome livre em
+ * clientes.responsavel_comercial), resolvido por nome contra analistas_perfil.nome_completo.
  * Diferente de notifyResponsibleOrAll: se o nome do responsável não bater com nenhum
  * analista ativo, essa fonte não contribui ninguém — não cai para broadcast geral, porque
  * a base já cobre a diretoria/acesso configurado independentemente disso.
  */
-export async function obterDestinatariosAtrasoCobranca(
+export async function obterDestinatariosCobrancaRS(
   responsavelComercialNome: string | null,
   supabase?: ServiceClient
 ): Promise<DestinatarioAtrasoCobranca[]> {
