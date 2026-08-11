@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     registro_id, empresa, contato, contato_telefone, contato_email, motivo, resultado, ordem,
     tipo_visita, cliente_id, checklist_equipe_completa, checklist_epi, checklist_uniforme,
     checklist_pontualidade, checklist_ambiente, checklist_feedback_cliente,
-    problema_identificado, plano_acao, evidencias_fotos,
+    problema_identificado, problema_descricao, plano_acao, evidencias_fotos,
   } = parsed.data;
 
   const svc = createServiceClient();
@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
       checklist_ambiente: checklist_ambiente || null,
       checklist_feedback_cliente: checklist_feedback_cliente || null,
       problema_identificado: problema_identificado ?? false,
+      problema_descricao: problema_descricao || null,
       plano_acao: plano_acao || null,
       evidencias_fotos: evidencias_fotos ?? [],
     })

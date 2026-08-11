@@ -25,9 +25,9 @@ const TIPOS_VISITA = [
 ] as const;
 
 const CHECKLIST_EQUIPE = [
-  { value: "sim", label: "Completa" },
+  { value: "sim", label: "Sim" },
   { value: "parcial", label: "Parcial" },
-  { value: "nao", label: "Incompleta" },
+  { value: "nao", label: "Não" },
 ] as const;
 const CHECKLIST_EPI = [
   { value: "sim", label: "Sim" },
@@ -101,6 +101,7 @@ interface KmVisita {
   checklist_ambiente: string | null;
   checklist_feedback_cliente: string | null;
   problema_identificado: boolean;
+  problema_descricao: string | null;
   plano_acao: string | null;
   evidencias_fotos: string[] | null;
 }
@@ -144,6 +145,7 @@ interface VisitaLocal {
   checklist_ambiente: string;
   checklist_feedback_cliente: string;
   problema_identificado: boolean;
+  problema_descricao: string;
   plano_acao: string;
   evidenciasExistentes: string[];
 }
@@ -154,7 +156,7 @@ function novaVisitaLocal(): VisitaLocal {
     tipo_visita: "comercial", cliente_id: null,
     checklist_equipe_completa: "", checklist_epi: "", checklist_uniforme: "",
     checklist_pontualidade: "", checklist_ambiente: "", checklist_feedback_cliente: "",
-    problema_identificado: false, plano_acao: "", evidenciasExistentes: [],
+    problema_identificado: false, problema_descricao: "", plano_acao: "", evidenciasExistentes: [],
   };
 }
 
@@ -394,7 +396,7 @@ export default function KmTab({ analistaId, isGestor }: Props) {
               checklist_equipe_completa: v.checklist_equipe_completa ?? "", checklist_epi: v.checklist_epi ?? "",
               checklist_uniforme: v.checklist_uniforme ?? "", checklist_pontualidade: v.checklist_pontualidade ?? "",
               checklist_ambiente: v.checklist_ambiente ?? "", checklist_feedback_cliente: v.checklist_feedback_cliente ?? "",
-              problema_identificado: v.problema_identificado ?? false, plano_acao: v.plano_acao ?? "",
+              problema_identificado: v.problema_identificado ?? false, problema_descricao: v.problema_descricao ?? "", plano_acao: v.plano_acao ?? "",
               evidenciasExistentes: v.evidencias_fotos ?? [],
             }))
           : [novaVisitaLocal()]
@@ -419,6 +421,10 @@ export default function KmTab({ analistaId, isGestor }: Props) {
       .filter(({ v }) => v.tipo_visita === "supervisao" ? !!(v.cliente_id && v.empresa.trim()) : v.empresa.trim());
     if (validVisitas.length === 0) {
       setToast("Adicione pelo menos 1 visita com empresa preenchida."); return;
+    }
+    const visitaSemDescricao = validVisitas.find(({ v }) => v.tipo_visita === "supervisao" && v.problema_identificado && !v.problema_descricao.trim());
+    if (visitaSemDescricao) {
+      setToast(`Descreva o problema reportado em "${visitaSemDescricao.v.empresa}".`); return;
     }
     const visitaSemPlano = validVisitas.find(({ v }) => v.tipo_visita === "supervisao" && v.problema_identificado && !v.plano_acao.trim());
     if (visitaSemPlano) {
@@ -508,6 +514,7 @@ export default function KmTab({ analistaId, isGestor }: Props) {
               checklist_ambiente: v.tipo_visita === "supervisao" ? (v.checklist_ambiente || null) : null,
               checklist_feedback_cliente: v.tipo_visita === "supervisao" ? (v.checklist_feedback_cliente || null) : null,
               problema_identificado: v.tipo_visita === "supervisao" ? v.problema_identificado : false,
+              problema_descricao: v.tipo_visita === "supervisao" && v.problema_identificado ? v.problema_descricao : null,
               plano_acao: v.tipo_visita === "supervisao" && v.problema_identificado ? v.plano_acao : null,
               evidencias_fotos: v.tipo_visita === "supervisao" ? evidenciasFotos : [],
             }),
@@ -808,8 +815,11 @@ export default function KmTab({ analistaId, isGestor }: Props) {
       {/* ── Modal ── */}
       {modalOpen && (
         <div
+          // Não fecha ao clicar no backdrop — formulário de visita/checklist é longo e um
+          // clique acidental fora da área perdia todo o preenchimento. Fechar só via botão
+          // explícito (Cancelar / X). Padrão inline duplicado em cada modal do projeto, não
+          // um componente compartilhado — essa mudança fica isolada neste modal.
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}
-          onClick={(e) => { if (e.target === e.currentTarget && !submitting) setModalOpen(false); }}
         >
           <div style={{ background: "#fff", borderRadius: 12, padding: "24px 28px", width: 680, maxWidth: "95vw", maxHeight: "92vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
             <h2 style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: "0 0 20px" }}>
@@ -1062,8 +1072,19 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                             checked={v.problema_identificado}
                             onChange={(e) => updateVisita(idx, "problema_identificado", e.target.checked)}
                           />
-                          Problema identificado?
+                          Problemas Reportados?
                         </label>
+                        {v.problema_identificado && (
+                          <div style={{ marginTop: 8 }}>
+                            <label style={labelStyle}>Qual o problema? *</label>
+                            <textarea
+                              style={{ ...inputStyle, resize: "none", minHeight: 60 }}
+                              placeholder="Descreva o que foi observado/reportado..."
+                              value={v.problema_descricao}
+                              onChange={(e) => updateVisita(idx, "problema_descricao", e.target.value)}
+                            />
+                          </div>
+                        )}
                         {v.problema_identificado && (
                           <div style={{ marginTop: 8 }}>
                             <label style={labelStyle}>Plano de ação *</label>

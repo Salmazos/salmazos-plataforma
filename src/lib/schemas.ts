@@ -667,11 +667,15 @@ export const kmVisitaCreateSchema = z.object({
   checklist_ambiente: z.enum(["ok", "atencao"]).optional().nullable(),
   checklist_feedback_cliente: z.enum(["positivo", "neutro", "negativo"]).optional().nullable(),
   problema_identificado: z.boolean().optional(),
+  problema_descricao: z.string().optional().nullable(),
   plano_acao: z.string().optional().nullable(),
   evidencias_fotos: z.array(z.string()).optional(),
 }).superRefine((data, ctx) => {
   if (data.tipo_visita === "supervisao" && !data.cliente_id) {
     ctx.addIssue({ code: "custom", path: ["cliente_id"], message: "cliente_id é obrigatório para visita de supervisão." });
+  }
+  if (data.problema_identificado && !data.problema_descricao?.trim()) {
+    ctx.addIssue({ code: "custom", path: ["problema_descricao"], message: "problema_descricao é obrigatório quando problema_identificado é true." });
   }
   if (data.problema_identificado && !data.plano_acao?.trim()) {
     ctx.addIssue({ code: "custom", path: ["plano_acao"], message: "plano_acao é obrigatório quando problema_identificado é true." });
