@@ -991,15 +991,17 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                         ))}
                       </select>
                     </div>
-                    <div>
-                      <label style={labelStyle}>Resumo da visita</label>
-                      <textarea
-                        style={{ ...inputStyle, resize: "none", minHeight: 38 }}
-                        placeholder="Resumo da visita..."
-                        value={v.resultado}
-                        onChange={(e) => updateVisita(idx, "resultado", e.target.value)}
-                      />
-                    </div>
+                    {v.tipo_visita !== "supervisao" && (
+                      <div>
+                        <label style={labelStyle}>Resumo da visita</label>
+                        <textarea
+                          style={{ ...inputStyle, resize: "none", minHeight: 38 }}
+                          placeholder="Resumo da visita..."
+                          value={v.resultado}
+                          onChange={(e) => updateVisita(idx, "resultado", e.target.value)}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   {/* Checklist de supervisão */}
@@ -1073,6 +1075,16 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                             />
                           </div>
                         )}
+                      </div>
+
+                      <div style={{ marginTop: 12 }}>
+                        <label style={labelStyle}>Resumo da visita</label>
+                        <textarea
+                          style={{ ...inputStyle, resize: "none", minHeight: 38 }}
+                          placeholder="Resumo da visita..."
+                          value={v.resultado}
+                          onChange={(e) => updateVisita(idx, "resultado", e.target.value)}
+                        />
                       </div>
 
                       <div style={{ marginTop: 12 }}>
