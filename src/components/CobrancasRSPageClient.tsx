@@ -27,6 +27,7 @@ export interface CobrancaRSRow {
 
 interface Props {
   rows: CobrancaRSRow[];
+  isFullAccess: boolean;
 }
 
 const STATUS_LABEL: Record<string, { label: string; bg: string; color: string }> = {
@@ -53,7 +54,7 @@ function estaAtrasada(row: CobrancaRSRow): boolean {
 
 type FiltroTab = "pendente_revisao" | "aprovada_enviada" | "paga" | "todas";
 
-export default function CobrancasRSPageClient({ rows: rowsIniciais }: Props) {
+export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess }: Props) {
   const [rows, setRows] = useState(rowsIniciais);
   const [tab, setTab] = useState<FiltroTab>("pendente_revisao");
   const [cobrancaAberta, setCobrancaAberta] = useState<CobrancaRSRow | null>(null);
@@ -187,6 +188,7 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais }: Props) {
           cobrancaId={cobrancaAberta.id}
           onClose={() => setCobrancaAberta(null)}
           onAtualizada={handleAtualizada}
+          isFullAccess={isFullAccess}
         />
       )}
     </div>

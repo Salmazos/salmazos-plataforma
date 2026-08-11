@@ -58,17 +58,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
   // sair — mesmo padrão já usado em notificar-encerramento/route.ts.
   after(async () => {
     try {
-      let responsavelComercial: string | null = null;
-      if (data.cliente_id) {
-        const { data: cliente } = await svc
-          .from("clientes")
-          .select("responsavel_comercial")
-          .eq("id", data.cliente_id)
-          .maybeSingle();
-        responsavelComercial = cliente?.responsavel_comercial ?? null;
-      }
-
-      const destinatarios = await obterDestinatariosCobrancaRS(responsavelComercial, svc);
+      const destinatarios = await obterDestinatariosCobrancaRS(data.revisado_por ?? null, svc);
       if (destinatarios.length === 0) {
         console.error(`[marcar-paga] Nenhum destinatário resolvido pro e-mail de pagamento (cobranca_id=${id}).`);
         return;

@@ -482,6 +482,9 @@ export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosI
           cobrancaId={cobrancaAbertaId}
           onClose={() => setCobrancaAbertaId(null)}
           onAtualizada={() => setCobrancaAbertaId(null)}
+          // /painel/faturamento-rs já é restrita a PAPEIS_FULL_ACCESS no page.tsx — quem chega
+          // aqui já passou por esse gate, então full access é sempre true neste ponto de entrada.
+          isFullAccess={true}
         />
       )}
     </div>

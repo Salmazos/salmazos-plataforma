@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     const { data: rows, error } = await supabase
       .from("cobrancas_rs")
       .select(
-        "id, tipo, cliente_nome_snapshot, candidato_nome_snapshot, cargo, fee_valor, data_vencimento, vagas(titulo), clientes(responsavel_comercial)"
+        "id, tipo, cliente_nome_snapshot, candidato_nome_snapshot, cargo, fee_valor, data_vencimento, revisado_por, vagas(titulo)"
       )
       .eq("status", "aprovada_enviada")
       .lt("data_vencimento", hojeISO)
@@ -39,10 +39,9 @@ export async function GET(request: Request) {
       const r = row as any;
       const clienteNome = r.cliente_nome_snapshot ?? "Cliente";
       const vagaTitulo = r.vagas?.titulo ?? r.cargo ?? "—";
-      const responsavelComercial = r.clientes?.responsavel_comercial ?? null;
       const diasAtraso = Math.floor((Date.now() - new Date(r.data_vencimento + "T00:00:00").getTime()) / 86400000);
 
-      const destinatarios = await obterDestinatariosCobrancaRS(responsavelComercial, supabase);
+      const destinatarios = await obterDestinatariosCobrancaRS(r.revisado_por ?? null, supabase);
       if (destinatarios.length === 0) {
         console.error(
           `[cron/lembrete-cobranca-atraso] Nenhum destinatário resolvido (cobranca_id=${r.id}) — lembrete não enviado.`

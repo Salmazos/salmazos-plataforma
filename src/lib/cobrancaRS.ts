@@ -265,18 +265,20 @@ export interface DestinatarioAtrasoCobranca {
 }
 
 /**
- * Destinatários compartilhados dos avisos de Cobrança R&S (hoje usado pelo cron
- * lembrete-cobranca-atraso e pelo e-mail de cobrança marcada como paga): base fixa
- * (PAPEIS_FULL_ACCESS + analistas com acesso configurável à tela — mesma query de leitura
- * usada em /painel/cobranca-rs-acesso-config, sem alterar checarAcessoCobrancaRS em si, que
- * só checa um usuário por vez) + o responsável comercial do cliente (nome livre em
- * clientes.responsavel_comercial), resolvido por nome contra analistas_perfil.nome_completo.
- * Diferente de notifyResponsibleOrAll: se o nome do responsável não bater com nenhum
- * analista ativo, essa fonte não contribui ninguém — não cai para broadcast geral, porque
- * a base já cobre a diretoria/acesso configurado independentemente disso.
+ * Destinatários compartilhados dos avisos de Cobrança R&S (cobranca_rs_gerada, cron
+ * lembrete-cobranca-atraso, e-mail de cobrança marcada como paga, e o reenvio manual): base
+ * fixa (PAPEIS_FULL_ACCESS + cobranca_rs_avisos_destinatarios ativos — mesma query de leitura
+ * usada em /painel/cobranca-rs-acesso-config, sem alterar checarAcessoCobrancaRS em si, que só
+ * checa um usuário por vez) + o analista com acesso configurável, mas SÓ se ele for o revisor
+ * daquela cobrança específica (cobrancas_rs.revisado_por, que guarda auth.users.id — comparado
+ * contra analistas_perfil.user_id, não contra .id). Não usa mais responsavel_comercial do
+ * cliente (removido — deixou de fazer parte da regra de negócio deste fluxo). revisadoPor pode
+ * ser null (cobrança ainda não tem revisor — ex: cron de atraso processando uma cobrança cujo
+ * revisor nunca foi setado por algum motivo): nesse caso nenhum analista extra entra, só a base
+ * fixa, sem quebrar nem cair pra broadcast geral.
  */
 export async function obterDestinatariosCobrancaRS(
-  responsavelComercialNome: string | null,
+  revisadoPor: string | null,
   supabase?: ServiceClient
 ): Promise<DestinatarioAtrasoCobranca[]> {
   const svc = supabase ?? createServiceClient();
@@ -297,20 +299,9 @@ export async function obterDestinatariosCobrancaRS(
   for (const a of analistas ?? []) {
     if (!a.user_id || !a.email) continue;
     const ehFullAccess = a.nivel_acesso === "diretoria" || a.nivel_acesso === "superuser";
-    if (ehFullAccess || acessoIds.has(a.id)) {
+    const ehRevisorComAcesso = revisadoPor != null && a.user_id === revisadoPor && acessoIds.has(a.id);
+    if (ehFullAccess || ehRevisorComAcesso) {
       destinatarios.set(a.user_id, { user_id: a.user_id, email: a.email, nome_completo: a.nome_completo });
-    }
-  }
-
-  if (responsavelComercialNome) {
-    const alvo = responsavelComercialNome.trim().toLowerCase();
-    const responsavel = (analistas ?? []).find((a) => a.nome_completo.trim().toLowerCase() === alvo);
-    if (responsavel?.user_id && responsavel.email) {
-      destinatarios.set(responsavel.user_id, {
-        user_id: responsavel.user_id,
-        email: responsavel.email,
-        nome_completo: responsavel.nome_completo,
-      });
     }
   }
 

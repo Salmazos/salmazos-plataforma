@@ -4,6 +4,7 @@ import { checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
 import { registrarAuditoria } from "@/lib/audit";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { sendEmail } from "@/lib/sendEmail";
+import { obterDestinatariosCobrancaRS } from "@/lib/cobrancaRS";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -64,13 +65,17 @@ export async function POST(_request: NextRequest, { params }: Params) {
   const salario = Number(cobranca.salario);
   const feeValor = Math.round(((salario * feePercentual) / 100) * 100) / 100;
 
-  const { data: destinatarios } = await svc
-    .from("cobranca_rs_avisos_destinatarios")
-    .select("email")
-    .eq("ativo", true);
+  // Mesma base de destinatários do aviso de atraso e do "cobrança paga" (obterDestinatariosCobrancaRS):
+  // PAPEIS_FULL_ACCESS + acesso configurável à tela, mas o analista com acesso configurável só
+  // entra se for o revisor desta cobrança — que é o próprio usuário aprovando agora (user.id vira
+  // revisado_por no UPDATE logo abaixo, então já dá pra passar direto, sem esperar o UPDATE
+  // terminar). Antes desta correção, o envio dependia só de cobranca_rs_avisos_destinatarios —
+  // tabela que na prática só tinha 1 e-mail ativo (olver@salmazos.com.br), deixando o resto da
+  // base sem o aviso de cobrança gerada.
+  const destinatarios = await obterDestinatariosCobrancaRS(user.id, svc);
 
   let emailFalhou = false;
-  if (destinatarios && destinatarios.length > 0) {
+  if (destinatarios.length > 0) {
     const template = getEmailTemplate("cobranca_rs_gerada", {
       nome: "",
       cargo: ehCancelamento ? vagaTitulo : cobranca.cargo,
@@ -124,9 +129,9 @@ export async function POST(_request: NextRequest, { params }: Params) {
       candidato: cobranca.candidato_nome_snapshot,
       fee_valor: feeValor,
       email_falhou: emailFalhou,
-      destinatarios: destinatarios?.length ?? 0,
+      destinatarios: destinatarios.length,
     },
   });
 
-  return NextResponse.json({ data, emailFalhou, destinatariosCount: destinatarios?.length ?? 0 });
+  return NextResponse.json({ data, emailFalhou, destinatariosCount: destinatarios.length });
 }

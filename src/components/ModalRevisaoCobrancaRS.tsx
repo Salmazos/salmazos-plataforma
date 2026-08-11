@@ -34,6 +34,7 @@ interface Props {
   cobrancaId: string;
   onClose: () => void;
   onAtualizada: (row: CobrancaRSRow) => void;
+  isFullAccess: boolean;
 }
 
 function formatarMoeda(v: number | null): string {
@@ -64,7 +65,7 @@ function paraLinha(c: CobrancaDetalhe): CobrancaRSRow {
   };
 }
 
-export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualizada }: Props) {
+export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualizada, isFullAccess }: Props) {
   const [carregando, setCarregando] = useState(true);
   const [cobranca, setCobranca] = useState<CobrancaDetalhe | null>(null);
   const [erro, setErro] = useState("");
@@ -82,6 +83,8 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
   const [marcandoPaga, setMarcandoPaga] = useState(false);
   const [salvandoVencimento, setSalvandoVencimento] = useState(false);
   const [vencimentoSalvo, setVencimentoSalvo] = useState(false);
+  const [reenviando, setReenviando] = useState(false);
+  const [reenviado, setReenviado] = useState(false);
 
   useEffect(() => {
     setCarregando(true);
@@ -184,6 +187,23 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
       setErro("Erro de conexão. Tente novamente.");
     } finally {
       setSalvandoVencimento(false);
+    }
+  };
+
+  const handleReenviar = async () => {
+    setReenviando(true);
+    setErro("");
+    setReenviado(false);
+    try {
+      const res = await fetch(`/api/cobrancas-rs/${cobrancaId}/reenviar`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) { setErro(json.error || "Erro ao reenviar notificação."); return; }
+      setReenviado(true);
+      setTimeout(() => setReenviado(false), 3500);
+    } catch {
+      setErro("Erro de conexão. Tente novamente.");
+    } finally {
+      setReenviando(false);
     }
   };
 
@@ -347,6 +367,15 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                   <button onClick={handleMarcarPaga} disabled={marcandoPaga} className="btn-primary w-full disabled:opacity-50">
                     {marcandoPaga ? "Marcando..." : "Marcar como paga"}
                   </button>
+
+                  {isFullAccess && (
+                    <div className="mt-3">
+                      <button onClick={handleReenviar} disabled={reenviando} className="btn-outline w-full disabled:opacity-50">
+                        {reenviando ? "Reenviando..." : "Reenviar notificação"}
+                      </button>
+                      {reenviado && <p className="text-green-700 text-xs mt-1">Notificação reenviada!</p>}
+                    </div>
+                  )}
                 </div>
               )}
 

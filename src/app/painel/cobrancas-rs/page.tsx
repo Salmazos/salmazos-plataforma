@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import CobrancasRSPageClient, { type CobrancaRSRow } from "@/components/CobrancasRSPageClient";
-import { checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
+import { checarAcessoCobrancaRS, PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,9 @@ export default async function CobrancasRSPage() {
 
   const temAcesso = await checarAcessoCobrancaRS(user);
   if (!temAcesso) redirect("/painel");
+
+  const role = user.app_metadata?.role ?? "analista";
+  const isFullAccess = PAPEIS_FULL_ACCESS.includes(role);
 
   const svc = createServiceClient();
   const { data } = await svc
@@ -44,5 +47,5 @@ export default async function CobrancasRSPage() {
     dataVencimento: c.data_vencimento,
   }));
 
-  return <CobrancasRSPageClient rows={rows} />;
+  return <CobrancasRSPageClient rows={rows} isFullAccess={isFullAccess} />;
 }
