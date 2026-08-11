@@ -94,7 +94,10 @@ const baseOptions: ChartOptions<"bar"> = {
   responsive: true,
   maintainAspectRatio: false,
   plugins: { legend: { display: false }, tooltip: { enabled: true } },
-  scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+  // grace dá folga acima do maior valor — sem isso, quando a barra bate exatamente no topo
+  // do eixo (ex: maior valor = maior tick), o data label desenhado logo acima dela fica
+  // cortado pela borda do canvas.
+  scales: { y: { beginAtZero: true, ticks: { precision: 0 }, grace: "15%" } },
   onHover: (event, elements) => {
     const target = event.native?.target as HTMLElement | null;
     if (target) target.style.cursor = elements.length > 0 ? "pointer" : "default";
@@ -340,7 +343,7 @@ export default function SupervisaoHistoricoClient({ clientes }: Props) {
                     maintainAspectRatio: false,
                     plugins: { legend: { display: true, position: "top" as const }, tooltip: { enabled: true } },
                     scales: {
-                      y: { beginAtZero: true, ticks: { precision: 0 }, position: "left" as const },
+                      y: { beginAtZero: true, ticks: { precision: 0 }, position: "left" as const, grace: "15%" },
                       y1: {
                         beginAtZero: true, max: 100, position: "right" as const,
                         grid: { drawOnChartArea: false },
