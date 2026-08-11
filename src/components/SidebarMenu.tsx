@@ -90,6 +90,7 @@ const menuItems: MenuItemDef[] = [
   { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },
   { label: "Dashboard", href: "/painel/dashboard", icon: TrendingUp, requireFullAccess: true },
   { label: "Financeiro R&S", href: "/painel/financeiro-rs", icon: DollarSign, requireFullAccess: true },
+  { label: "Faturamento R&S", href: "/painel/faturamento-rs", icon: Landmark, requireFullAccess: true },
   { label: "Cobranças R&S", href: "/painel/cobrancas-rs", icon: Banknote, requireCobrancasRS: true },
   { label: "Reembolsos", href: "/painel/reembolsos", icon: Receipt, requireFullAccess: true },
   { label: "Quilometragem", href: "/painel/quilometragem", icon: Car },

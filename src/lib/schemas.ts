@@ -964,6 +964,14 @@ export const cobrancaRsVencimentoSchema = z.object({
   data_vencimento: z.string().nullable(),
 });
 
+// ── Faturamento R&S — percentual de imposto informado manualmente por mês/ano
+// (upsert em faturamento_rs_impostos_mensais, ver PATCH /api/faturamento-rs/imposto).
+export const faturamentoRsImpostoSchema = z.object({
+  ano: z.number().int().min(2000).max(2100),
+  mes: z.number().int().min(1).max(12),
+  percentual: z.number().min(0).max(100),
+});
+
 export const rescisaoAvisoPlataformaCreateSchema = z.object({
   usuario_id: z.string().uuid(),
 });
