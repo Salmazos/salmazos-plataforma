@@ -20,6 +20,19 @@ export function checarPapelFullAccess(user: User): NextResponse | null {
   return null;
 }
 
+// Mais restrito que checarPapelFullAccess — só "superuser", nem diretoria. Usado nas telas
+// do grupo "Configurações" que o menu (SidebarMenu.tsx) já esconde de diretoria; antes dessa
+// correção várias dessas rotas ainda aceitavam checarPapelFullAccess, criando a mesma falha
+// de "menu escondido mas API ainda permite acesso direto por URL" que o gate do menu existe
+// pra evitar.
+export function checarPapelSuperuser(user: User): NextResponse | null {
+  const role = user.app_metadata?.role ?? "analista";
+  if (role !== "superuser") {
+    return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
+  }
+  return null;
+}
+
 // Acesso à tela de Cobrança R&S: PAPEIS_FULL_ACCESS sempre tem acesso, mais uma lista
 // configurável de analistas/supervisores liberados individualmente pela diretoria (tabela
 // cobranca_rs_analistas_acesso, gerenciada em /painel/cobranca-rs-acesso-config — essa tela

@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import RescisoesAvisosConfigClient from "@/components/RescisoesAvisosConfigClient";
-import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +12,7 @@ export default async function RescisoesAvisosConfigPage() {
   if (!user) redirect("/login");
 
   const role = user.app_metadata?.role ?? "analista";
-  if (!PAPEIS_FULL_ACCESS.includes(role)) redirect("/painel");
+  if (role !== "superuser") redirect("/painel");
 
   const svc = createServiceClient();
 

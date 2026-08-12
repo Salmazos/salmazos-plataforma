@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import CobrancaRSAcessoConfigClient, { type AnalistaAcessoRow } from "@/components/CobrancaRSAcessoConfigClient";
-import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +12,11 @@ export default async function CobrancaRSAcessoConfigPage() {
   if (!user) redirect("/login");
 
   const role = user.app_metadata?.role ?? "analista";
-  // Restrita a PAPEIS_FULL_ACCESS (não a checarAcessoCobrancaRS) — quem tem acesso à tela
-  // de Cobrança R&S via lista configurável não pode se auto-gerenciar aqui.
-  if (!PAPEIS_FULL_ACCESS.includes(role)) redirect("/painel");
+  // Restrita a superuser (não a checarAcessoCobrancaRS, nem mais a PAPEIS_FULL_ACCESS) —
+  // quem tem acesso à tela de Cobrança R&S via lista configurável não pode se
+  // auto-gerenciar aqui, e diretoria deixou de ter acesso junto com o resto do grupo
+  // "Configurações" no menu.
+  if (role !== "superuser") redirect("/painel");
 
   const svc = createServiceClient();
   const { data: analistas } = await svc

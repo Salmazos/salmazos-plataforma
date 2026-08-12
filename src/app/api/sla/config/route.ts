@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, slaConfigUpdateSchema } from "@/lib/schemas";
+import { checarPapelSuperuser } from "@/lib/fullAccessAuth";
 
 async function autenticar() {
   const supabase = await createClient();
@@ -11,6 +12,8 @@ async function autenticar() {
 export async function GET() {
   const user = await autenticar();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const gate = checarPapelSuperuser(user);
+  if (gate) return gate;
 
   const svc = createServiceClient();
   const { data, error } = await svc

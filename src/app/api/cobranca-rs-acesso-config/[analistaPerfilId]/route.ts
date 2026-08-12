@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, cobrancaRsAcessoUpdateSchema } from "@/lib/schemas";
-import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
+import { checarPapelSuperuser } from "@/lib/fullAccessAuth";
 import { registrarAuditoria } from "@/lib/audit";
 
 interface Params {
@@ -18,10 +18,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const role = user.app_metadata?.role ?? "analista";
-  if (!PAPEIS_FULL_ACCESS.includes(role)) {
-    return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
-  }
+  const gate = checarPapelSuperuser(user);
+  if (gate) return gate;
 
   const { analistaPerfilId } = await params;
   const body = await request.json();

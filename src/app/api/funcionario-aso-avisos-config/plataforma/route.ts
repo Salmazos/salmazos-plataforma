@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, funcionarioAsoAvisoPlataformaCreateSchema } from "@/lib/schemas";
-import { checarPapelFullAccess } from "@/lib/fullAccessAuth";
+import { checarPapelSuperuser } from "@/lib/fullAccessAuth";
 import { registrarAuditoria } from "@/lib/audit";
 
 export async function GET() {
@@ -10,7 +10,7 @@ export async function GET() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const acessoNegado = checarPapelFullAccess(user);
+  const acessoNegado = checarPapelSuperuser(user);
   if (acessoNegado) return acessoNegado;
 
   const svc = createServiceClient();
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const acessoNegado = checarPapelFullAccess(user);
+  const acessoNegado = checarPapelSuperuser(user);
   if (acessoNegado) return acessoNegado;
 
   const body = await request.json();
