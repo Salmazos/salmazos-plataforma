@@ -63,7 +63,7 @@ export default function PopupSupervisaoPendente() {
         <div className="bg-black px-6 py-5 flex items-start justify-between">
           <div>
             <h2 className="text-lg font-bold text-[#FFD700]">
-              🛡️ Supervisão{pendentes.length > 1 ? "ões" : ""} pendente{pendentes.length > 1 ? "s" : ""}
+              🛡️ {pendentes.length > 1 ? "Supervisões" : "Supervisão"} pendente{pendentes.length > 1 ? "s" : ""}
             </h2>
             <p className="text-xs text-gray-300 mt-0.5">Confira o que precisa de atenção</p>
           </div>
