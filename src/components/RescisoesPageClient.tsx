@@ -33,6 +33,7 @@ interface ClienteOption {
 interface Props {
   rescisoesIniciais: RescisaoRow[];
   clientes: ClienteOption[];
+  isFullAccess: boolean;
 }
 
 const MODALIDADE_LABEL: Record<string, string> = {
@@ -45,7 +46,7 @@ function moeda(v: number | null): string {
   return v != null ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—";
 }
 
-export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Props) {
+export default function RescisoesPageClient({ rescisoesIniciais, clientes, isFullAccess }: Props) {
   const searchParams = useSearchParams();
   const rescisaoFocoId = searchParams.get("rescisao");
   const linhaRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
@@ -224,6 +225,7 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
           rescisao={rescisaoEditando}
           onClose={() => setRescisaoEditando(null)}
           onAtualizada={handleAtualizada}
+          isFullAccess={isFullAccess}
         />
       )}
     </div>

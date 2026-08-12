@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, rescisaoCreateSchema } from "@/lib/schemas";
-import { registrarAuditoria } from "@/lib/audit";
+import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
 import { dispararAvisosRescisao } from "@/lib/dispararAvisosRescisao";
 
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
 
   registrarAuditoria({
     usuario_id: user.id,
-    usuario_nome: user.email ?? null,
+    usuario_nome: await resolverNomeUsuario(user.id, user.email ?? null, svc),
     acao: "rescisao_criada",
     entidade: "rescisoes",
     entidade_id: rescisao.id,

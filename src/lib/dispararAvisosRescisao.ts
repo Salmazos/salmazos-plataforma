@@ -1,6 +1,8 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 
+type ServiceClient = ReturnType<typeof createServiceClient>;
+
 export type MomentoAvisoRescisao = "lancamento" | "vencimento_rescisao" | "vencimento_guia";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://vagas.salmazos.com.br";
@@ -100,6 +102,112 @@ export interface ResultadoAvisoRescisao {
   sucesso: boolean;
 }
 
+interface RescisaoParaAviso {
+  id: string;
+  empresa: string;
+  valor_rescisao: number | null;
+  data_pagamento_rescisao: string | null;
+  valor_guia: number | null;
+  data_pagamento_guia: string | null;
+  nomeFuncionario: string;
+}
+
+async function buscarRescisaoParaAviso(svc: ServiceClient, rescisaoId: string): Promise<RescisaoParaAviso | null> {
+  const { data, error } = await svc
+    .from("rescisoes")
+    .select("id, empresa, valor_rescisao, data_pagamento_rescisao, valor_guia, data_pagamento_guia, funcionarios(nome_completo)")
+    .eq("id", rescisaoId)
+    .single();
+
+  if (error || !data) {
+    console.error(`[dispararAvisosRescisao] Rescisão não encontrada (id=${rescisaoId}):`, error?.message);
+    return null;
+  }
+
+  return {
+    id: data.id,
+    empresa: data.empresa,
+    valor_rescisao: data.valor_rescisao,
+    data_pagamento_rescisao: data.data_pagamento_rescisao,
+    valor_guia: data.valor_guia,
+    data_pagamento_guia: data.data_pagamento_guia,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    nomeFuncionario: (data.funcionarios as any)?.nome_completo ?? "Funcionário",
+  };
+}
+
+export interface ResultadoEnvioEmailRescisao {
+  sucesso: boolean;
+  destinatariosCount: number;
+  funcionario: string;
+  empresa: string;
+  valorRescisao: number | null;
+}
+
+// Canal de e-mail isolado (extraído de dispararAvisosRescisao) — usado tanto pelo disparo
+// automático abaixo (que depois cuida do sino/popup separadamente) quanto pelo reenvio
+// manual (POST /api/rescisoes/[id]/reenviar). O reenvio NUNCA deve chamar
+// dispararAvisosRescisao inteiro: isso reinseriria em notificacoes_analista e duplicaria
+// sino/popup pra quem já recebeu no disparo original — só esta função é segura de repetir.
+export async function enviarEmailRescisao(
+  rescisaoId: string,
+  momento: MomentoAvisoRescisao,
+  supabase?: ServiceClient
+): Promise<ResultadoEnvioEmailRescisao | null> {
+  const svc = supabase ?? createServiceClient();
+
+  const rescisao = await buscarRescisaoParaAviso(svc, rescisaoId);
+  if (!rescisao) return null;
+
+  const { assuntoEmail, corDestaque, tituloEmail } = conteudo(momento, rescisao.nomeFuncionario, rescisao.empresa, rescisao.valor_rescisao);
+
+  const { data: emailDestinatarios, error: emailDestError } = await svc
+    .from("rescisao_avisos_email_destinatarios")
+    .select("id, nome, email")
+    .eq("ativo", true);
+
+  const base = { funcionario: rescisao.nomeFuncionario, empresa: rescisao.empresa, valorRescisao: rescisao.valor_rescisao };
+
+  if (emailDestError) {
+    console.error(`[enviarEmailRescisao] Erro ao buscar destinatários de e-mail (rescisao_id=${rescisaoId}):`, emailDestError.message);
+    return { ...base, sucesso: false, destinatariosCount: 0 };
+  }
+
+  if (!emailDestinatarios || emailDestinatarios.length === 0) {
+    return { ...base, sucesso: true, destinatariosCount: 0 };
+  }
+
+  const html = montarHtmlEmail(
+    tituloEmail,
+    corDestaque,
+    rescisao.nomeFuncionario,
+    rescisao.empresa,
+    {
+      valorRescisao: rescisao.valor_rescisao,
+      dataPagamentoRescisao: rescisao.data_pagamento_rescisao,
+      valorGuia: rescisao.valor_guia,
+      dataPagamentoGuia: rescisao.data_pagamento_guia,
+    },
+    rescisaoId
+  );
+
+  const resultados = await Promise.all(
+    emailDestinatarios.map((d) =>
+      sendEmail({ to: d.email, subject: assuntoEmail, html, tipo: `rescisao_${momento}` }).then((r) => ({ email: d.email, ...r }))
+    )
+  );
+
+  let algumEmailFalhou = false;
+  for (const r of resultados) {
+    if (!r.success) {
+      console.error(`[enviarEmailRescisao] E-mail não enviado (rescisao_id=${rescisaoId}, destinatario=${r.email}):`, r.error);
+      algumEmailFalhou = true;
+    }
+  }
+
+  return { ...base, sucesso: !algumEmailFalhou, destinatariosCount: emailDestinatarios.length };
+}
+
 // Função central chamada nos 3 momentos possíveis de uma rescisão (lançamento, vencimento
 // da rescisão, vencimento da guia) — sempre os mesmos 3 canais (e-mail, sino, popup de
 // login), para as mesmas 2 listas de destinatários escolhidas no lançamento. O popup não
@@ -116,78 +224,28 @@ export async function dispararAvisosRescisao(rescisaoId: string, momento: Moment
   try {
     const svc = createServiceClient();
 
-    const { data: rescisao, error: rescisaoError } = await svc
-      .from("rescisoes")
-      .select("id, empresa, valor_rescisao, data_pagamento_rescisao, valor_guia, data_pagamento_guia, funcionarios(nome_completo)")
-      .eq("id", rescisaoId)
-      .single();
+    // ── Canal 1: e-mail ──────────────────────────────────────────────────────
+    const resultadoEmail = await enviarEmailRescisao(rescisaoId, momento, svc);
+    if (!resultadoEmail) return { sucesso: false };
 
-    if (rescisaoError || !rescisao) {
-      console.error(`[dispararAvisosRescisao] Rescisão não encontrada (id=${rescisaoId}):`, rescisaoError?.message);
-      return { sucesso: false };
-    }
+    const { titulo, mensagem } = conteudo(momento, resultadoEmail.funcionario, resultadoEmail.empresa, resultadoEmail.valorRescisao);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const nomeFuncionario = (rescisao.funcionarios as any)?.nome_completo ?? "Funcionário";
-    const { titulo, mensagem, assuntoEmail, corDestaque, tituloEmail } = conteudo(
-      momento,
-      nomeFuncionario,
-      rescisao.empresa,
-      rescisao.valor_rescisao
-    );
-
+    // ── Canal 2 e 3: sino + popup (mesma linha em notificacoes_analista alimenta os dois — ver /api/rescisoes/avisos-hoje) ──
     // Fase 3.1 — destinatários deixaram de ser por-rescisão: agora é configuração global
     // (ver /painel/rescisoes-avisos-config), a mesma lista pros 3 momentos de toda rescisão.
-    const [{ data: emailDestinatarios, error: emailDestError }, { data: plataformaDestinatarios, error: plataformaDestError }] =
-      await Promise.all([
-        svc.from("rescisao_avisos_email_destinatarios").select("id, nome, email").eq("ativo", true),
-        svc.from("rescisao_avisos_plataforma_destinatarios").select("usuario_id"),
-      ]);
+    const { data: plataformaDestinatarios, error: plataformaDestError } = await svc
+      .from("rescisao_avisos_plataforma_destinatarios")
+      .select("usuario_id");
 
-    if (emailDestError || plataformaDestError) {
+    if (plataformaDestError) {
       console.error(
-        `[dispararAvisosRescisao] Erro ao buscar configuração global de destinatários (rescisao_id=${rescisaoId}):`,
-        emailDestError?.message ?? plataformaDestError?.message
+        `[dispararAvisosRescisao] Erro ao buscar destinatários de plataforma (rescisao_id=${rescisaoId}):`,
+        plataformaDestError.message
       );
       return { sucesso: false };
-    }
-
-    let algumEmailFalhou = false;
-
-    // ── Canal 1: e-mail ──────────────────────────────────────────────────────
-    // Endereço já vem direto da configuração global (livre, não depende mais de
-    // analistas_perfil) — sem a indireção por usuario_id que existia na Fase 3 original.
-    if (emailDestinatarios && emailDestinatarios.length > 0) {
-      const html = montarHtmlEmail(
-        tituloEmail,
-        corDestaque,
-        nomeFuncionario,
-        rescisao.empresa,
-        {
-          valorRescisao: rescisao.valor_rescisao,
-          dataPagamentoRescisao: rescisao.data_pagamento_rescisao,
-          valorGuia: rescisao.valor_guia,
-          dataPagamentoGuia: rescisao.data_pagamento_guia,
-        },
-        rescisaoId
-      );
-
-      const resultados = await Promise.all(
-        emailDestinatarios.map((d) =>
-          sendEmail({ to: d.email, subject: assuntoEmail, html, tipo: `rescisao_${momento}` }).then((r) => ({ email: d.email, ...r }))
-        )
-      );
-      for (const r of resultados) {
-        if (!r.success) {
-          console.error(`[dispararAvisosRescisao] E-mail não enviado (rescisao_id=${rescisaoId}, destinatario=${r.email}):`, r.error);
-          algumEmailFalhou = true;
-        }
-      }
     }
 
     let plataformaFalhou = false;
-
-    // ── Canal 2 e 3: sino + popup (mesma linha em notificacoes_analista alimenta os dois — ver /api/rescisoes/avisos-hoje) ──
     if (plataformaDestinatarios && plataformaDestinatarios.length > 0) {
       const rows = plataformaDestinatarios.map((d) => ({
         tipo: `rescisao_${momento}`,
@@ -204,7 +262,7 @@ export async function dispararAvisosRescisao(rescisaoId: string, momento: Moment
       }
     }
 
-    return { sucesso: !algumEmailFalhou && !plataformaFalhou };
+    return { sucesso: resultadoEmail.sucesso && !plataformaFalhou };
   } catch (err) {
     console.error(`[dispararAvisosRescisao] Falha inesperada (rescisao_id=${rescisaoId}, momento=${momento}):`, err);
     return { sucesso: false };

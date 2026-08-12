@@ -8,6 +8,7 @@ interface Props {
   rescisao: RescisaoRow;
   onClose: () => void;
   onAtualizada: (row: RescisaoRow) => void;
+  isFullAccess: boolean;
 }
 
 function paraValores(r: RescisaoRow): ValoresRescisao {
@@ -26,12 +27,15 @@ function paraValores(r: RescisaoRow): ValoresRescisao {
   };
 }
 
-export default function ModalEditarRescisao({ rescisao, onClose, onAtualizada }: Props) {
+export default function ModalEditarRescisao({ rescisao, onClose, onAtualizada, isFullAccess }: Props) {
   const [valores, setValores] = useState<ValoresRescisao>(() => paraValores(rescisao));
   const [asoFile, setAsoFile] = useState<File | null>(null);
   const [asoAtualPath, setAsoAtualPath] = useState(rescisao.aso_documento_path);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  const [reenviando, setReenviando] = useState(false);
+  const [reenviado, setReenviado] = useState(false);
+  const [erroReenvio, setErroReenvio] = useState("");
 
   const valido = valoresRescisaoValidos(valores);
 
@@ -104,6 +108,23 @@ export default function ModalEditarRescisao({ rescisao, onClose, onAtualizada }:
     }
   };
 
+  const handleReenviar = async () => {
+    setReenviando(true);
+    setErroReenvio("");
+    setReenviado(false);
+    try {
+      const res = await fetch(`/api/rescisoes/${rescisao.id}/reenviar`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) { setErroReenvio(json.error || "Erro ao reenviar e-mail."); return; }
+      setReenviado(true);
+      setTimeout(() => setReenviado(false), 3500);
+    } catch {
+      setErroReenvio("Erro de conexão. Tente novamente.");
+    } finally {
+      setReenviando(false);
+    }
+  };
+
   const empresaNome = rescisao.empresa;
 
   return (
@@ -131,6 +152,17 @@ export default function ModalEditarRescisao({ rescisao, onClose, onAtualizada }:
           asoAtualPath={asoAtualPath}
           onVerAsoAtual={handleVerAsoAtual}
         />
+
+        {isFullAccess && (
+          <div className="border-t pt-4 mb-4">
+            <button onClick={handleReenviar} disabled={reenviando} className="btn-outline w-full disabled:opacity-50">
+              {reenviando ? "Reenviando..." : "Reenviar e-mail de lançamento"}
+            </button>
+            {reenviado && <p className="text-green-700 text-xs mt-1">E-mail reenviado!</p>}
+            {erroReenvio && <p className="text-red-600 text-xs mt-1">{erroReenvio}</p>}
+            <p className="text-xs text-gray-400 mt-1">Reenvia só o e-mail — não gera sino/popup novo pra quem já recebeu.</p>
+          </div>
+        )}
 
         {erro && <p className="text-red-600 text-sm mb-3">{erro}</p>}
 

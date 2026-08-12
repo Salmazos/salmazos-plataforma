@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, rescisaoUpdateSchema } from "@/lib/schemas";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
-import { registrarAuditoria, diffCampos } from "@/lib/audit";
+import { registrarAuditoria, diffCampos, resolverNomeUsuario } from "@/lib/audit";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -84,7 +84,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   registrarAuditoria({
     usuario_id: user.id,
-    usuario_nome: user.email ?? null,
+    usuario_nome: await resolverNomeUsuario(user.id, user.email ?? null, svc),
     acao: "rescisao_atualizada",
     entidade: "rescisoes",
     entidade_id: id,
