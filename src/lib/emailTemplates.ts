@@ -544,6 +544,7 @@ export function getEmailTemplate(
             <ul style="margin:0;padding-left:18px;color:#15803d;line-height:2;font-size:14px;">
               <li><strong>Taxa:</strong> ${feeRsPercentual != null ? `${feeRsPercentual}%` : "—"}</li>
               <li><strong>Valor total:</strong> ${feeValorFmt}</li>
+              ${feeRsPrazoCobranca ? `<li><strong>Prazo de cobrança:</strong> ${feeRsPrazoCobranca}</li>` : ""}
             </ul>
           </div>`
         ),

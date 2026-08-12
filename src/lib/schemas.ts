@@ -964,6 +964,18 @@ export const rescisaoCreateSchema = z.object({
   aso_documento_path: z.string().optional().nullable(),
 });
 
+// Edição (Fase 2): funcionario_id e empresa ficam de fora — são identidade do registro,
+// travados desde a criação, nunca editáveis por esta rota.
+export const rescisaoUpdateSchema = rescisaoCreateSchema
+  .omit({ funcionario_id: true, empresa: true })
+  .partial();
+
+// Toggle isolado do badge "Faturado" na tabela (PATCH /api/rescisoes/[id]/faturado) —
+// mesmo padrão de rota dedicada já usado em cobrancaRsVencimentoSchema.
+export const rescisaoFaturadoSchema = z.object({
+  faturado: z.boolean(),
+});
+
 // ── Avisos de rescisão — configuração global (Fase 3.1) ───────────────────────
 //
 // Substituiu os destinatários por-rescisão da Fase 3 original: agora é uma lista fixa,
@@ -1010,6 +1022,7 @@ export const cobrancaRsRascunhoSchema = z.object({
   data_inicio: z.string().optional().nullable(),
   cliente_cnpj: z.string().optional().nullable(),
   cliente_endereco: z.string().optional().nullable(),
+  prazo_cobranca: z.string().optional().nullable(),
 });
 
 // ── Cobrança R&S — data de vencimento (rota dedicada, editável fora de

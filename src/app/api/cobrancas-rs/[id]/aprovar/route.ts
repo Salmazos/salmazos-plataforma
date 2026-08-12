@@ -88,6 +88,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       salario: formatarMoeda(salario),
       dataInicio: ehCancelamento ? undefined : formatarData(cobranca.data_inicio),
       feeRsPercentual: feePercentual,
+      feeRsPrazoCobranca: cobranca.prazo_cobranca,
       feeValor,
       tipoCobrancaRS: ehCancelamento ? "cancelamento" : "contratacao",
     });

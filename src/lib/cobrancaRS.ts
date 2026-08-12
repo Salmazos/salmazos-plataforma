@@ -42,7 +42,7 @@ export async function gerarCobrancaRSSeAplicavel(
   const { data: cv } = await svc
     .from("candidatos_vagas")
     .select(
-      "id, candidato_id, vaga_id, candidatos(nome_completo), vagas(id, titulo, tipo_servico, fee_rs_percentual, cliente_id, cliente_nome, clientes(nome, cnpj, endereco, contato_telefone, contato_email))"
+      "id, candidato_id, vaga_id, candidatos(nome_completo), vagas(id, titulo, tipo_servico, fee_rs_percentual, fee_rs_prazo_cobranca, cliente_id, cliente_nome, clientes(nome, cnpj, endereco, contato_telefone, contato_email))"
     )
     .eq("id", candidatoVagaId)
     .single();
@@ -52,6 +52,7 @@ export async function gerarCobrancaRSSeAplicavel(
   const row = cv as CandidatoVagaComRelacoes;
   const vaga = row.vagas as {
     id: string; titulo: string; tipo_servico: string; fee_rs_percentual: number | null;
+    fee_rs_prazo_cobranca: string | null;
     cliente_id: string | null; cliente_nome: string | null;
     clientes: { nome: string; cnpj: string | null; endereco: string | null; contato_telefone: string | null; contato_email: string | null } | null;
   } | null;
@@ -107,6 +108,7 @@ export async function gerarCobrancaRSSeAplicavel(
     candidato_nome_snapshot: candidatoNome,
 
     fee_percentual: vaga.fee_rs_percentual,
+    prazo_cobranca: vaga.fee_rs_prazo_cobranca,
 
     status: "pendente_revisao",
   });
@@ -168,7 +170,7 @@ export async function gerarCobrancaCancelamentoRSSeAplicavel(
   const { data: vaga } = await svc
     .from("vagas")
     .select(
-      "id, titulo, tipo_servico, taxa_cancelamento, taxa_cancelamento_percentual, salario, cliente_id, cliente_nome, clientes(nome, cnpj, endereco, contato_telefone, contato_email)"
+      "id, titulo, tipo_servico, taxa_cancelamento, taxa_cancelamento_percentual, salario, fee_rs_prazo_cobranca, cliente_id, cliente_nome, clientes(nome, cnpj, endereco, contato_telefone, contato_email)"
     )
     .eq("id", vagaId)
     .single();
@@ -245,6 +247,7 @@ export async function gerarCobrancaCancelamentoRSSeAplicavel(
     salario: salarioValor,
     fee_percentual: feePercentual,
     fee_valor: feeValor,
+    prazo_cobranca: vaga.fee_rs_prazo_cobranca,
 
     status: "pendente_revisao",
   });

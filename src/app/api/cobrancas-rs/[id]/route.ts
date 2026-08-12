@@ -45,7 +45,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const body = await request.json();
   const parsed = parseBody(cobrancaRsRascunhoSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
-  const { cargo, salario, data_inicio, cliente_cnpj, cliente_endereco } = parsed.data;
+  const { cargo, salario, data_inicio, cliente_cnpj, cliente_endereco, prazo_cobranca } = parsed.data;
 
   const svc = createServiceClient();
 
@@ -64,6 +64,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (cargo !== undefined) campos.cargo = cargo || null;
   if (salario !== undefined) campos.salario = salario;
   if (data_inicio !== undefined) campos.data_inicio = data_inicio || null;
+  if (prazo_cobranca !== undefined) campos.prazo_cobranca = prazo_cobranca || null;
 
   // CNPJ/Endereço só são graváveis aqui enquanto o snapshot ainda não tiver esse dado —
   // uma vez preenchido (seja do cadastro original ou desta tela), passa a ser somente

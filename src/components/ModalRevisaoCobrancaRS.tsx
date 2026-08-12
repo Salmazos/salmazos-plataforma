@@ -21,6 +21,7 @@ interface CobrancaDetalhe {
   data_inicio: string | null;
   fee_percentual: number | null;
   fee_valor: number | null;
+  prazo_cobranca: string | null;
   status: "pendente_revisao" | "aprovada_enviada" | "paga" | "cancelada";
   enviado_em: string | null;
   pago_em: string | null;
@@ -75,6 +76,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
   const [dataInicio, setDataInicio] = useState("");
   const [clienteCnpj, setClienteCnpj] = useState("");
   const [clienteEndereco, setClienteEndereco] = useState("");
+  const [prazoCobranca, setPrazoCobranca] = useState("");
   const [dataVencimento, setDataVencimento] = useState("");
 
   const [salvando, setSalvando] = useState(false);
@@ -98,6 +100,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
         setDataInicio(c.data_inicio ?? "");
         setClienteCnpj(c.cliente_cnpj_snapshot ?? "");
         setClienteEndereco(c.cliente_endereco_snapshot ?? "");
+        setPrazoCobranca(c.prazo_cobranca ?? "");
         setDataVencimento(c.data_vencimento ?? "");
       })
       .catch(() => setErro("Erro ao carregar cobrança."))
@@ -123,6 +126,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
           data_inicio: ehCancelamento ? undefined : dataInicio || null,
           cliente_cnpj: clienteCnpj || undefined,
           cliente_endereco: clienteEndereco || undefined,
+          prazo_cobranca: prazoCobranca || null,
         }),
       });
       const json = await res.json();
@@ -314,6 +318,17 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                     />
                   </div>
                 )}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Prazo de cobrança</label>
+                  <input
+                    value={prazoCobranca}
+                    onChange={(e) => setPrazoCobranca(e.target.value)}
+                    disabled={cobranca.status !== "pendente_revisao"}
+                    placeholder="Ex: 30 dias após início do candidato"
+                    className="input-field"
+                  />
+                  <p className="text-gray-400 text-xs mt-1">Copiado da vaga — texto livre, informativo (não define a data de vencimento abaixo).</p>
+                </div>
               </div>
 
               <div className="rounded-lg p-3" style={{ background: "#F0FDF4", border: "1px solid #BBF7D0" }}>

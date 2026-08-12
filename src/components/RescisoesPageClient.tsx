@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { formatarDataSemFuso } from "@/lib/utils";
+import ModalEditarRescisao from "./ModalEditarRescisao";
 
 export interface RescisaoRow {
   id: string;
@@ -49,10 +50,13 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
   const rescisaoFocoId = searchParams.get("rescisao");
   const linhaRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
 
+  const [rescisoes, setRescisoes] = useState(rescisoesIniciais);
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [filtroFaturado, setFiltroFaturado] = useState("todos");
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
+  const [rescisaoEditando, setRescisaoEditando] = useState<RescisaoRow | null>(null);
+  const [alterandoFaturadoId, setAlterandoFaturadoId] = useState<string | null>(null);
 
   // Deep-link do sino/popup/e-mail: limpa os filtros (que poderiam esconder a linha) e
   // rola até a rescisão referenciada assim que a lista estiver na tela.
@@ -68,10 +72,10 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
     if (!rescisaoFocoId) return;
     const el = linhaRefs.current[rescisaoFocoId];
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [rescisaoFocoId, rescisoesIniciais]);
+  }, [rescisaoFocoId, rescisoes]);
 
   const filtradas = useMemo(() => {
-    return rescisoesIniciais.filter((r) => {
+    return rescisoes.filter((r) => {
       if (filtroEmpresa && r.empresa !== filtroEmpresa) return false;
       if (filtroFaturado === "sim" && !r.faturado) return false;
       if (filtroFaturado === "nao" && r.faturado) return false;
@@ -79,9 +83,10 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
       if (dataFim && r.data_desligamento > dataFim) return false;
       return true;
     });
-  }, [rescisoesIniciais, filtroEmpresa, filtroFaturado, dataInicio, dataFim]);
+  }, [rescisoes, filtroEmpresa, filtroFaturado, dataInicio, dataFim]);
 
-  const handleVerAso = async (rescisaoId: string) => {
+  const handleVerAso = async (e: React.MouseEvent, rescisaoId: string) => {
+    e.stopPropagation();
     try {
       const res = await fetch(`/api/rescisoes/${rescisaoId}/aso-url`);
       const json = await res.json();
@@ -90,6 +95,31 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
     } catch {
       alert("Erro de conexão ao abrir o ASO.");
     }
+  };
+
+  const handleToggleFaturado = async (e: React.MouseEvent, r: RescisaoRow) => {
+    e.stopPropagation();
+    if (alterandoFaturadoId) return;
+    setAlterandoFaturadoId(r.id);
+    try {
+      const res = await fetch(`/api/rescisoes/${r.id}/faturado`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ faturado: !r.faturado }),
+      });
+      const json = await res.json();
+      if (!res.ok) { alert(json.error || "Erro ao atualizar faturamento."); return; }
+      setRescisoes((prev) => prev.map((row) => (row.id === json.data.id ? json.data : row)));
+    } catch {
+      alert("Erro de conexão. Tente novamente.");
+    } finally {
+      setAlterandoFaturadoId(null);
+    }
+  };
+
+  const handleAtualizada = (atualizada: RescisaoRow) => {
+    setRescisoes((prev) => prev.map((r) => (r.id === atualizada.id ? atualizada : r)));
+    setRescisaoEditando(null);
   };
 
   return (
@@ -122,7 +152,7 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-              {["Funcionário", "Empresa", "Data desligamento", "Modalidade", "Valor rescisão", "Faturado", "ASO"].map((h) => (
+              {["Funcionário", "Empresa", "Data desligamento", "Modalidade", "Valor rescisão", "Data Pag. Rescisão", "Data Pag. Guia", "Faturado", "ASO"].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>
                   {h}
                 </th>
@@ -132,7 +162,7 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
           <tbody>
             {filtradas.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF" }}>
+                <td colSpan={9} style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF" }}>
                   Nenhuma rescisão encontrada.
                 </td>
               </tr>
@@ -141,9 +171,11 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
                 <tr
                   key={r.id}
                   ref={(el) => { linhaRefs.current[r.id] = el; }}
+                  onClick={() => setRescisaoEditando(r)}
                   style={{
                     borderBottom: "1px solid #F3F4F6",
                     background: r.id === rescisaoFocoId ? "#FFFBEB" : undefined,
+                    cursor: "pointer",
                   }}
                 >
                   <td style={{ padding: "10px 12px", fontWeight: 600, color: "#111827" }}>{r.funcionarios?.nome_completo ?? "—"}</td>
@@ -155,14 +187,25 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
                     </span>
                   </td>
                   <td style={{ padding: "10px 12px", color: "#374151" }}>{moeda(r.valor_rescisao)}</td>
+                  <td style={{ padding: "10px 12px", color: "#6B7280" }}>{r.data_pagamento_rescisao ? formatarDataSemFuso(r.data_pagamento_rescisao) : "—"}</td>
+                  <td style={{ padding: "10px 12px", color: "#6B7280" }}>{r.data_pagamento_guia ? formatarDataSemFuso(r.data_pagamento_guia) : "—"}</td>
                   <td style={{ padding: "10px 12px" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: r.faturado ? "#D1FAE5" : "#F3F4F6", color: r.faturado ? "#166534" : "#374151" }}>
+                    <button
+                      onClick={(e) => handleToggleFaturado(e, r)}
+                      disabled={alterandoFaturadoId === r.id}
+                      style={{
+                        fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999,
+                        background: r.faturado ? "#D1FAE5" : "#F3F4F6", color: r.faturado ? "#166534" : "#374151",
+                        border: "none", cursor: "pointer", opacity: alterandoFaturadoId === r.id ? 0.5 : 1,
+                      }}
+                      title="Clique para alternar"
+                    >
                       {r.faturado ? "Faturado" : "Pendente"}
-                    </span>
+                    </button>
                   </td>
                   <td style={{ padding: "10px 12px" }}>
                     {r.aso_documento_path ? (
-                      <button onClick={() => handleVerAso(r.id)} className="btn-outline" style={{ padding: "4px 10px", fontSize: 12 }}>
+                      <button onClick={(e) => handleVerAso(e, r.id)} className="btn-outline" style={{ padding: "4px 10px", fontSize: 12 }}>
                         Ver ASO
                       </button>
                     ) : (
@@ -175,6 +218,14 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
           </tbody>
         </table>
       </div>
+
+      {rescisaoEditando && (
+        <ModalEditarRescisao
+          rescisao={rescisaoEditando}
+          onClose={() => setRescisaoEditando(null)}
+          onAtualizada={handleAtualizada}
+        />
+      )}
     </div>
   );
 }

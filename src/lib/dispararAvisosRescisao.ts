@@ -38,7 +38,32 @@ function conteudo(momento: MomentoAvisoRescisao, nome: string, empresa: string, 
   }
 }
 
-function montarHtmlEmail(tituloEmail: string, corDestaque: string, nome: string, empresa: string, valor: number | null, rescisaoId: string): string {
+function formatarData(iso: string | null | undefined): string {
+  return iso ? iso.split("-").reverse().join("/") : "—";
+}
+
+interface DadosFinanceirosRescisao {
+  valorRescisao: number | null;
+  dataPagamentoRescisao: string | null;
+  valorGuia: number | null;
+  dataPagamentoGuia: string | null;
+}
+
+function montarHtmlEmail(
+  tituloEmail: string,
+  corDestaque: string,
+  nome: string,
+  empresa: string,
+  financeiro: DadosFinanceirosRescisao,
+  rescisaoId: string
+): string {
+  const { valorRescisao, dataPagamentoRescisao, valorGuia, dataPagamentoGuia } = financeiro;
+  const temGuia = valorGuia != null;
+  const linhaTotal =
+    valorRescisao != null && temGuia
+      ? `<tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Total</td><td style="padding:6px 0;color:#111827;font-weight:700">${moeda(valorRescisao + (valorGuia ?? 0))}</td></tr>`
+      : "";
+
   return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
 <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
@@ -49,7 +74,11 @@ function montarHtmlEmail(tituloEmail: string, corDestaque: string, nome: string,
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Funcionário</td><td style="padding:6px 0;color:#111827">${nome}</td></tr>
       <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Empresa</td><td style="padding:6px 0;color:#111827">${empresa}</td></tr>
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Valor da rescisão</td><td style="padding:6px 0;color:${corDestaque};font-weight:700">${moeda(valor)}</td></tr>
+      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Valor da rescisão</td><td style="padding:6px 0;color:${corDestaque};font-weight:700">${moeda(valorRescisao)}</td></tr>
+      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Data de pagamento</td><td style="padding:6px 0;color:#111827">${formatarData(dataPagamentoRescisao)}</td></tr>
+      ${temGuia ? `<tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Valor da guia</td><td style="padding:6px 0;color:${corDestaque};font-weight:700">${moeda(valorGuia)}</td></tr>` : ""}
+      ${temGuia ? `<tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Data de pagamento da guia</td><td style="padding:6px 0;color:#111827">${formatarData(dataPagamentoGuia)}</td></tr>` : ""}
+      ${linhaTotal}
     </table>
     <div style="text-align:center;margin-top:20px">
       <a href="${SITE_URL}/painel/rescisoes?rescisao=${rescisaoId}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver rescisão</a>
@@ -89,7 +118,7 @@ export async function dispararAvisosRescisao(rescisaoId: string, momento: Moment
 
     const { data: rescisao, error: rescisaoError } = await svc
       .from("rescisoes")
-      .select("id, empresa, valor_rescisao, funcionarios(nome_completo)")
+      .select("id, empresa, valor_rescisao, data_pagamento_rescisao, valor_guia, data_pagamento_guia, funcionarios(nome_completo)")
       .eq("id", rescisaoId)
       .single();
 
@@ -129,7 +158,19 @@ export async function dispararAvisosRescisao(rescisaoId: string, momento: Moment
     // Endereço já vem direto da configuração global (livre, não depende mais de
     // analistas_perfil) — sem a indireção por usuario_id que existia na Fase 3 original.
     if (emailDestinatarios && emailDestinatarios.length > 0) {
-      const html = montarHtmlEmail(tituloEmail, corDestaque, nomeFuncionario, rescisao.empresa, rescisao.valor_rescisao, rescisaoId);
+      const html = montarHtmlEmail(
+        tituloEmail,
+        corDestaque,
+        nomeFuncionario,
+        rescisao.empresa,
+        {
+          valorRescisao: rescisao.valor_rescisao,
+          dataPagamentoRescisao: rescisao.data_pagamento_rescisao,
+          valorGuia: rescisao.valor_guia,
+          dataPagamentoGuia: rescisao.data_pagamento_guia,
+        },
+        rescisaoId
+      );
 
       const resultados = await Promise.all(
         emailDestinatarios.map((d) =>

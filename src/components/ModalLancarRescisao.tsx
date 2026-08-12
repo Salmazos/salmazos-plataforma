@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import CampoMoeda from "@/components/ui/CampoMoeda";
+import CamposRescisaoForm, { VALORES_RESCISAO_VAZIOS, valoresRescisaoValidos, type ValoresRescisao } from "@/components/CamposRescisaoForm";
 import type { FuncionarioRow } from "./FuncionariosPageClient";
 
 interface Props {
@@ -11,41 +11,15 @@ interface Props {
   onLancado: () => void;
 }
 
-const MODALIDADE_OPCOES = [
-  { value: "pedido_demissao", label: "Pedido de demissão" },
-  { value: "desligamento_pela_empresa", label: "Desligamento pela empresa" },
-  { value: "efetivado", label: "Efetivado" },
-];
-
 export default function ModalLancarRescisao({ isOpen, funcionario, onClose, onLancado }: Props) {
-  const [dataDesligamento, setDataDesligamento] = useState("");
-  const [modalidade, setModalidade] = useState("");
-  const [entrevistaDesligamento, setEntrevistaDesligamento] = useState(false);
-  const [funcionarioAssinou, setFuncionarioAssinou] = useState(false);
-  const [valorRescisao, setValorRescisao] = useState("");
-  const [dataPagamentoRescisao, setDataPagamentoRescisao] = useState("");
-  const [valorGuia, setValorGuia] = useState("");
-  const [dataPagamentoGuia, setDataPagamentoGuia] = useState("");
-  const [pensao, setPensao] = useState("");
-  const [farmacia, setFarmacia] = useState("");
-  const [faturado, setFaturado] = useState(false);
+  const [valores, setValores] = useState<ValoresRescisao>(VALORES_RESCISAO_VAZIOS);
   const [asoFile, setAsoFile] = useState<File | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
 
   useEffect(() => {
     if (!isOpen) return;
-    setDataDesligamento("");
-    setModalidade("");
-    setEntrevistaDesligamento(false);
-    setFuncionarioAssinou(false);
-    setValorRescisao("");
-    setDataPagamentoRescisao("");
-    setValorGuia("");
-    setDataPagamentoGuia("");
-    setPensao("");
-    setFarmacia("");
-    setFaturado(false);
+    setValores(VALORES_RESCISAO_VAZIOS);
     setAsoFile(null);
     setErro("");
   }, [isOpen]);
@@ -53,8 +27,11 @@ export default function ModalLancarRescisao({ isOpen, funcionario, onClose, onLa
   if (!isOpen || !funcionario) return null;
 
   const empresaNome = funcionario.clientes?.nome ?? funcionario.empresa ?? "—";
-  const valorValido = Number(valorRescisao) > 0;
-  const valido = Boolean(dataDesligamento && modalidade && valorValido && dataPagamentoRescisao);
+  const valido = valoresRescisaoValidos(valores);
+
+  const alterar = <K extends keyof ValoresRescisao>(campo: K, valor: ValoresRescisao[K]) => {
+    setValores((prev) => ({ ...prev, [campo]: valor }));
+  };
 
   const handleSalvar = async () => {
     if (!valido) return;
@@ -87,17 +64,17 @@ export default function ModalLancarRescisao({ isOpen, funcionario, onClose, onLa
         body: JSON.stringify({
           funcionario_id: funcionario.id,
           empresa: empresaNome,
-          data_desligamento: dataDesligamento,
-          modalidade,
-          entrevista_desligamento: entrevistaDesligamento,
-          funcionario_assinou: funcionarioAssinou,
-          valor_rescisao: Number(valorRescisao),
-          data_pagamento_rescisao: dataPagamentoRescisao,
-          valor_guia: valorGuia ? Number(valorGuia) : null,
-          data_pagamento_guia: dataPagamentoGuia || null,
-          pensao: pensao ? Number(pensao) : null,
-          farmacia: farmacia ? Number(farmacia) : null,
-          faturado,
+          data_desligamento: valores.dataDesligamento,
+          modalidade: valores.modalidade,
+          entrevista_desligamento: valores.entrevistaDesligamento,
+          funcionario_assinou: valores.funcionarioAssinou,
+          valor_rescisao: Number(valores.valorRescisao),
+          data_pagamento_rescisao: valores.dataPagamentoRescisao,
+          valor_guia: valores.valorGuia ? Number(valores.valorGuia) : null,
+          data_pagamento_guia: valores.dataPagamentoGuia || null,
+          pensao: valores.pensao ? Number(valores.pensao) : null,
+          farmacia: valores.farmacia ? Number(valores.farmacia) : null,
+          faturado: valores.faturado,
           aso_documento_path: asoDocumentoPath,
         }),
       });
@@ -128,83 +105,7 @@ export default function ModalLancarRescisao({ isOpen, funcionario, onClose, onLa
           <p className="text-xs text-gray-500">{empresaNome}{funcionario.cargo ? ` · ${funcionario.cargo}` : ""}</p>
         </div>
 
-        <div className="mb-3">
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data de desligamento *</label>
-          <input type="date" value={dataDesligamento} onChange={(e) => setDataDesligamento(e.target.value)} className="input-field" />
-        </div>
-
-        <div className="mb-3">
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Modalidade *</label>
-          <select value={modalidade} onChange={(e) => setModalidade(e.target.value)} className="input-field">
-            <option value="">Selecione</option>
-            {MODALIDADE_OPCOES.map((m) => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="mb-3 flex gap-4">
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={entrevistaDesligamento} onChange={(e) => setEntrevistaDesligamento(e.target.checked)} />
-            Entrevista de desligamento feita
-          </label>
-        </div>
-        <div className="mb-3 flex gap-4">
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={funcionarioAssinou} onChange={(e) => setFuncionarioAssinou(e.target.checked)} />
-            Funcionário assinou
-          </label>
-        </div>
-
-        <div className="mb-3">
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valor da rescisão *</label>
-          <CampoMoeda value={valorRescisao} onChange={(v) => setValorRescisao(v > 0 ? String(v) : "")} placeholder="Ex: 1.500,00" className="input-field" />
-        </div>
-
-        <div className="mb-3">
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data de pagamento da rescisão *</label>
-          <input type="date" value={dataPagamentoRescisao} onChange={(e) => setDataPagamentoRescisao(e.target.value)} className="input-field" />
-        </div>
-
-        <div className="mb-3 flex gap-2">
-          <div className="flex-1">
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valor da guia</label>
-            <CampoMoeda value={valorGuia} onChange={(v) => setValorGuia(v > 0 ? String(v) : "")} placeholder="Opcional" className="input-field" />
-          </div>
-          <div className="flex-1">
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data de pagamento da guia</label>
-            <input type="date" value={dataPagamentoGuia} onChange={(e) => setDataPagamentoGuia(e.target.value)} className="input-field" />
-          </div>
-        </div>
-
-        <div className="mb-3 flex gap-2">
-          <div className="flex-1">
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Pensão</label>
-            <CampoMoeda value={pensao} onChange={(v) => setPensao(v > 0 ? String(v) : "")} placeholder="Opcional" className="input-field" />
-          </div>
-          <div className="flex-1">
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Farmácia</label>
-            <CampoMoeda value={farmacia} onChange={(v) => setFarmacia(v > 0 ? String(v) : "")} placeholder="Opcional" className="input-field" />
-          </div>
-        </div>
-
-        <div className="mb-3">
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input type="checkbox" checked={faturado} onChange={(e) => setFaturado(e.target.checked)} />
-            Faturado
-          </label>
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">ASO (opcional)</label>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,application/pdf"
-            onChange={(e) => setAsoFile(e.target.files?.[0] ?? null)}
-            className="input-field"
-          />
-          <p className="text-xs text-gray-400 mt-1">PDF ou imagem. Nunca bloqueia o lançamento da rescisão.</p>
-        </div>
+        <CamposRescisaoForm valores={valores} onAlterar={alterar} asoFile={asoFile} onAsoFileChange={setAsoFile} />
 
         <p className="text-xs text-gray-400 mb-4">
           Os avisos de e-mail e plataforma são enviados automaticamente para a lista configurada em{" "}
