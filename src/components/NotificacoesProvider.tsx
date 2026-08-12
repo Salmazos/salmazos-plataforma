@@ -15,6 +15,8 @@ export interface Notificacao {
   rescisao_id: string | null;
   funcionario_id: string | null;
   vaga_id: string | null;
+  cobranca_rs_id: string | null;
+  cliente_meta_supervisao_id: string | null;
   lida: boolean;
   created_at: string;
 }
@@ -115,6 +117,8 @@ export default function NotificacoesProvider({ children }: { children: React.Rea
     else if (n.solicitacao_vaga_id) router.push(`/painel/vagas?solicitacao=${n.solicitacao_vaga_id}`);
     else if (n.rescisao_id) router.push(`/painel/rescisoes?rescisao=${n.rescisao_id}`);
     else if (n.funcionario_id) router.push(`/painel/funcionarios/${n.funcionario_id}`);
+    else if (n.cobranca_rs_id) router.push(`/painel/cobrancas-rs`);
+    else if (n.cliente_meta_supervisao_id) router.push(`/painel/supervisao`);
   }, [marcarComoLida, router]);
 
   const dismissToast = useCallback((id: string) => {

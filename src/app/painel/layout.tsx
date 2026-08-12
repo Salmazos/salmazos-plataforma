@@ -5,6 +5,7 @@ import PopupAniversariosHoje from "@/components/PopupAniversariosHoje";
 import PopupRescisoesHoje from "@/components/PopupRescisoesHoje";
 import PopupAsoPeriodicoHoje from "@/components/PopupAsoPeriodicoHoje";
 import PopupCobrancasRSPendentes from "@/components/PopupCobrancasRSPendentes";
+import PopupSupervisaoPendente from "@/components/PopupSupervisaoPendente";
 import NotificacoesProvider from "@/components/NotificacoesProvider";
 import { PAPEIS_PAINEL_FUNCIONARIOS } from "@/lib/funcionariosAuth";
 import { PAPEIS_PAINEL_ADMISSOES } from "@/lib/admissaoAuth";
@@ -67,6 +68,7 @@ export default async function PainelLayout({
         <PopupRescisoesHoje />
         <PopupAsoPeriodicoHoje />
         <PopupCobrancasRSPendentes />
+        <PopupSupervisaoPendente />
       </div>
     </NotificacoesProvider>
   );

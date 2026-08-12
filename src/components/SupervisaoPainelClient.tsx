@@ -37,7 +37,7 @@ interface Props {
 const BADGE_INFO: Record<ClienteSupervisaoRow["badge"], { label: string; bg: string; color: string }> = {
   em_dia: { label: "Em dia", bg: "#D1FAE5", color: "#065F46" },
   atrasado: { label: "Atrasado", bg: "#FEE2E2", color: "#991B1B" },
-  nunca: { label: "Nunca supervisionado", bg: "#F3F4F6", color: "#6B7280" },
+  nunca: { label: "Sem registro", bg: "#F3F4F6", color: "#6B7280" },
 };
 
 const thStyle: React.CSSProperties = {
@@ -93,7 +93,7 @@ export default function SupervisaoPainelClient({ rows, ranking, supervisores, fu
           { title: "Total de Clientes", value: rows.length, accent: "#FFD700" },
           { title: "Em Dia", value: counts.em_dia, accent: "#10B981" },
           { title: "Atrasados", value: counts.atrasado, accent: "#DC2626" },
-          { title: "Nunca Supervisionados", value: counts.nunca, accent: "#6B7280" },
+          { title: "Sem Registro", value: counts.nunca, accent: "#6B7280" },
         ].map((card) => (
           <div key={card.title} style={{ background: "#F9FAFB", borderRadius: 12, padding: 20, position: "relative", overflow: "hidden" }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 8px" }}>{card.title}</p>
@@ -155,7 +155,7 @@ export default function SupervisaoPainelClient({ rows, ranking, supervisores, fu
               <option value="todos">Todos os status</option>
               <option value="em_dia">Em dia</option>
               <option value="atrasado">Atrasado</option>
-              <option value="nunca">Nunca supervisionado</option>
+              <option value="nunca">Sem registro</option>
             </select>
             {fullAccess && (
               <select value={filtroSupervisor} onChange={(e) => setFiltroSupervisor(e.target.value)} style={{ padding: "8px 12px", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 13 }}>
