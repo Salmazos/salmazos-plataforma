@@ -35,6 +35,9 @@ import {
   Stethoscope,
   DollarSign,
   Banknote,
+  Handshake,
+  Search,
+  Wallet,
 } from "lucide-react";
 
 interface Props {
@@ -63,7 +66,7 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-interface MenuItemDef {
+interface MenuLeafDef {
   label: string;
   href: string;
   icon: React.ElementType;
@@ -74,31 +77,66 @@ interface MenuItemDef {
   requireAdmissoes?: boolean;
   requireCobrancasRS?: boolean;
   requireSupervisao?: boolean;
+}
+
+interface MenuItemDef extends MenuLeafDef {
   separator?: boolean;
-  submenu?: { label: string; href: string; icon: React.ElementType; requireSuperuser?: boolean }[];
+  submenu?: MenuLeafDef[];
 }
 
 const menuItems: MenuItemDef[] = [
   { label: "Meu Perfil", href: "/painel/meu-perfil", icon: User },
-  { label: "Banco de Candidatos", href: "/painel/banco-candidatos", icon: Users },
-  { label: "Painel", href: "/painel", icon: LayoutDashboard },
-  { label: "Gestão de Clientes", href: "/painel/gestao-clientes", icon: AlertTriangle },
-  { label: "Vagas", href: "/painel/vagas", icon: Briefcase },
-  { label: "Admissões", href: "/painel/admissoes", icon: FileCheck, requireAdmissoes: true },
-  { label: "Funcionários", href: "/painel/funcionarios", icon: IdCard, requireFuncionarios: true },
-  { label: "Rescisões", href: "/painel/rescisoes", icon: UserMinus, requireFuncionarios: true },
-  { label: "Clientes", href: "/painel/clientes", icon: Building2 },
+  {
+    label: "Recrutamento",
+    href: "/painel/grupo-recrutamento",
+    icon: Search,
+    separator: true,
+    submenu: [
+      { label: "Banco de Candidatos", href: "/painel/banco-candidatos", icon: Users },
+      { label: "Painel", href: "/painel", icon: LayoutDashboard },
+      { label: "Vagas", href: "/painel/vagas", icon: Briefcase },
+    ],
+  },
+  {
+    label: "Comercial",
+    href: "/painel/grupo-comercial",
+    icon: Handshake,
+    separator: true,
+    submenu: [
+      { label: "Clientes", href: "/painel/clientes", icon: Building2 },
+      { label: "Carteira de Clientes", href: "/painel/empresas-visitadas", icon: MapPin, requireSupervisor: true },
+      { label: "Gestão de Clientes", href: "/painel/gestao-clientes", icon: AlertTriangle },
+    ],
+  },
+  {
+    label: "RH",
+    href: "/painel/grupo-rh",
+    icon: Users,
+    separator: true,
+    submenu: [
+      { label: "Admissões", href: "/painel/admissoes", icon: FileCheck, requireAdmissoes: true },
+      { label: "Funcionários", href: "/painel/funcionarios", icon: IdCard, requireFuncionarios: true },
+      { label: "Rescisões", href: "/painel/rescisoes", icon: UserMinus, requireFuncionarios: true },
+      { label: "Aniversários", href: "/painel/aniversarios", icon: Cake },
+    ],
+  },
   { label: "Agenda", href: "/painel/agenda", icon: Calendar },
   { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },
   { label: "Dashboard", href: "/painel/dashboard", icon: TrendingUp, requireFullAccess: true },
-  { label: "Financeiro R&S", href: "/painel/financeiro-rs", icon: DollarSign, requireFullAccess: true },
-  { label: "Faturamento R&S", href: "/painel/faturamento-rs", icon: Landmark, requireFullAccess: true },
-  { label: "Cobranças R&S", href: "/painel/cobrancas-rs", icon: Banknote, requireCobrancasRS: true },
+  {
+    label: "Financeiro",
+    href: "/painel/grupo-financeiro",
+    icon: Wallet,
+    separator: true,
+    submenu: [
+      { label: "Financeiro R&S", href: "/painel/financeiro-rs", icon: DollarSign, requireFullAccess: true },
+      { label: "Faturamento R&S", href: "/painel/faturamento-rs", icon: Landmark, requireFullAccess: true },
+      { label: "Cobranças R&S", href: "/painel/cobrancas-rs", icon: Banknote, requireCobrancasRS: true },
+    ],
+  },
   { label: "Reembolsos", href: "/painel/reembolsos", icon: Receipt, requireFullAccess: true },
   { label: "Quilometragem", href: "/painel/quilometragem", icon: Car },
   { label: "Supervisão de Postos", href: "/painel/supervisao", icon: ShieldCheck, requireSupervisao: true },
-  { label: "Carteira de Clientes", href: "/painel/empresas-visitadas", icon: MapPin, requireSupervisor: true },
-  { label: "Aniversários", href: "/painel/aniversarios", icon: Cake },
   { label: "Documentos", href: "/painel/documentos", icon: FolderOpen },
   {
     label: "Configurações",
@@ -137,7 +175,11 @@ export default function SidebarMenu({
   const router = useRouter();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const [configOpen, setConfigOpen] = useState(false);
+  // Um Set de hrefs de grupo (não um boolean por grupo) — generalização do antigo
+  // `configOpen` (único useState boolean, só existia 1 grupo colapsável). Não persiste em
+  // localStorage de propósito: mesmo comportamento que "Configurações" sempre teve, reseta
+  // fechado a cada reload.
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -167,31 +209,39 @@ export default function SidebarMenu({
 
   const displayName = userName ?? userEmail;
 
+  // "/painel" precisa de comparação exata (não prefixo) tanto no nível raiz quanto dentro de
+  // qualquer submenu — senão, como toda rota do painel começa com "/painel", o item/grupo que
+  // contém o link "Painel" ficaria destacado em qualquer página do sistema.
+  function hrefMatches(href: string) {
+    return href === "/painel" ? pathname === "/painel" : pathname.startsWith(href);
+  }
+
   function isActive(href: string, submenu?: MenuItemDef["submenu"]) {
-    if (href === "/painel") return pathname === "/painel";
     if (submenu) {
-      return submenu.some((s) => pathname.startsWith(s.href));
+      return submenu.some((s) => hrefMatches(s.href));
     }
-    return pathname.startsWith(href);
+    return hrefMatches(href);
   }
 
   const isSuperuser = role === "superuser";
 
-  const filteredItems = menuItems.filter((item) => {
-    if (item.requireFullAccess && !isFullAccess) return false;
-    if (item.requireSuperuser && !isSuperuser) return false;
-    if (item.requireSupervisor && !isSupervisorOrAbove) return false;
-    if (item.requireFuncionarios && !canAccessFuncionarios) return false;
-    if (item.requireAdmissoes && !canAccessAdmissoes) return false;
-    if (item.requireCobrancasRS && !canAccessCobrancasRS) return false;
-    if (item.requireSupervisao && !canAccessSupervisao) return false;
+  function passaRequisitos(def: MenuLeafDef): boolean {
+    if (def.requireFullAccess && !isFullAccess) return false;
+    if (def.requireSuperuser && !isSuperuser) return false;
+    if (def.requireSupervisor && !isSupervisorOrAbove) return false;
+    if (def.requireFuncionarios && !canAccessFuncionarios) return false;
+    if (def.requireAdmissoes && !canAccessAdmissoes) return false;
+    if (def.requireCobrancasRS && !canAccessCobrancasRS) return false;
+    if (def.requireSupervisao && !canAccessSupervisao) return false;
     return true;
-  }).map((item) => {
-    if (item.submenu) {
-      return { ...item, submenu: item.submenu.filter((sub) => !sub.requireSuperuser || isSuperuser) };
-    }
-    return item;
-  });
+  }
+
+  // Grupos (item.submenu) filtram cada item do submenu individualmente pela própria
+  // condição — se nenhum item do grupo sobrar visível, o grupo inteiro é removido a seguir.
+  const filteredItems = menuItems
+    .filter((item) => passaRequisitos(item))
+    .map((item) => (item.submenu ? { ...item, submenu: item.submenu.filter((sub) => passaRequisitos(sub)) } : item))
+    .filter((item) => !item.submenu || item.submenu.length > 0);
 
   const sidebarWidth = collapsed ? 64 : 240;
 
@@ -330,7 +380,12 @@ export default function SidebarMenu({
                         if (isCollapsedView) {
                           router.push(item.submenu![0].href);
                         } else {
-                          setConfigOpen((o) => !o);
+                          setOpenGroups((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(item.href)) next.delete(item.href);
+                            else next.add(item.href);
+                            return next;
+                          });
                         }
                       }}
                       className="group relative flex items-center w-full rounded-lg transition-colors"
@@ -354,7 +409,7 @@ export default function SidebarMenu({
                             size={14}
                             style={{
                               transition: "transform 0.2s",
-                              transform: configOpen ? "rotate(180deg)" : "rotate(0)",
+                              transform: openGroups.has(item.href) ? "rotate(180deg)" : "rotate(0)",
                             }}
                           />
                         </>
@@ -365,11 +420,11 @@ export default function SidebarMenu({
                         </span>
                       )}
                     </button>
-                    {configOpen && !isCollapsedView && (
+                    {openGroups.has(item.href) && !isCollapsedView && (
                       <div className="ml-4 mt-1 flex flex-col gap-0.5">
                         {item.submenu!.map((sub) => {
                           const SubIcon = sub.icon;
-                          const subActive = pathname.startsWith(sub.href);
+                          const subActive = hrefMatches(sub.href);
                           return (
                             <Link
                               key={sub.href}
