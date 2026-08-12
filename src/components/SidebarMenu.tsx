@@ -142,16 +142,21 @@ const menuItems: MenuItemDef[] = [
     label: "Configurações",
     href: "/painel/configuracoes",
     icon: Settings,
-    requireFullAccess: true,
+    // Restrito a superuser (não mais PAPEIS_FULL_ACCESS/diretoria) — decisão explícita: só
+    // esconde o grupo no menu. Cada item do submenu carrega o mesmo requireSuperuser, não só
+    // o grupo, porque um item isolado que algum dia saia daqui pra ser linkado em outro lugar
+    // não pode herdar visibilidade por acidente. Isso NÃO substitui checar a rota de API por
+    // trás de cada tela — algumas ainda aceitam diretoria (ver checarPapelFullAccess nelas).
+    requireSuperuser: true,
     separator: true,
     submenu: [
-      { label: "Config. SLA", href: "/painel/sla-config", icon: Clock },
-      { label: "Log de E-mails", href: "/painel/email-logs", icon: Mail },
-      { label: "Avisos de Rescisão", href: "/painel/rescisoes-avisos-config", icon: Megaphone },
-      { label: "Avisos de Cobrança R&S", href: "/painel/cobranca-rs-avisos-config", icon: Megaphone },
-      { label: "Acesso à Cobrança R&S", href: "/painel/cobranca-rs-acesso-config", icon: Banknote },
-      { label: "Avisos de ASO Periódico", href: "/painel/funcionario-aso-avisos-config", icon: Stethoscope },
-      { label: "Configuração de Supervisão", href: "/painel/supervisao-config", icon: ShieldCheck },
+      { label: "Config. SLA", href: "/painel/sla-config", icon: Clock, requireSuperuser: true },
+      { label: "Log de E-mails", href: "/painel/email-logs", icon: Mail, requireSuperuser: true },
+      { label: "Avisos de Rescisão", href: "/painel/rescisoes-avisos-config", icon: Megaphone, requireSuperuser: true },
+      { label: "Avisos de Cobrança R&S", href: "/painel/cobranca-rs-avisos-config", icon: Megaphone, requireSuperuser: true },
+      { label: "Acesso à Cobrança R&S", href: "/painel/cobranca-rs-acesso-config", icon: Banknote, requireSuperuser: true },
+      { label: "Avisos de ASO Periódico", href: "/painel/funcionario-aso-avisos-config", icon: Stethoscope, requireSuperuser: true },
+      { label: "Configuração de Supervisão", href: "/painel/supervisao-config", icon: ShieldCheck, requireSuperuser: true },
       { label: "Usuários", href: "/painel/usuarios", icon: Users, requireSuperuser: true },
       { label: "Audit Logs", href: "/painel/audit-logs", icon: ShieldCheck, requireSuperuser: true },
       { label: "Carta de Abertura de Conta", href: "/painel/carta-conta-salario-config", icon: Landmark, requireSuperuser: true },
