@@ -95,6 +95,7 @@ const menuItems: MenuItemDef[] = [
       { label: "Banco de Candidatos", href: "/painel/banco-candidatos", icon: Users },
       { label: "Painel", href: "/painel", icon: LayoutDashboard },
       { label: "Vagas", href: "/painel/vagas", icon: Briefcase },
+      { label: "Agenda", href: "/painel/agenda", icon: Calendar },
     ],
   },
   {
@@ -120,7 +121,6 @@ const menuItems: MenuItemDef[] = [
       { label: "Aniversários", href: "/painel/aniversarios", icon: Cake },
     ],
   },
-  { label: "Agenda", href: "/painel/agenda", icon: Calendar },
   { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },
   { label: "Dashboard", href: "/painel/dashboard", icon: TrendingUp, requireFullAccess: true },
   {
