@@ -5,6 +5,7 @@ import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, candidatoVagaFinalizarSchema } from "@/lib/schemas";
 import { gerarCobrancasRSParaVaga } from "@/lib/cobrancaRS";
 import { notificarVagaEncerrada } from "@/lib/notificarVagaEncerrada";
+import { resolverTipoServicoVigente } from "@/lib/tipoServicoVigente";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -27,7 +28,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const {
       resultado, data_inicio, data_fim, renovavel,
-      tipo_servico, motivo_reprovacao, responsavel_encerramento, observacoes,
+      motivo_reprovacao, responsavel_encerramento, observacoes,
       vaga_cancelada_cliente, admissao_salario, fee_ausente_justificativa,
     } = parsed.data;
 
@@ -50,7 +51,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     } | null;
     const vagaTitulo = vaga?.titulo ?? "vaga";
     const clienteNome = vaga?.clientes?.nome ?? null;
-    const tipoServicoFinal = tipo_servico || vaga?.tipo_servico || null;
+    // Nunca confia no tipo_servico que o client mandou no body — resolve aqui o "vigente"
+    // de verdade (encaminhamento mais recente daquele candidato+vaga, com fallback pra
+    // vagas.tipo_servico), mesma fonte usada pro Kanban (ver tipoServicoVigente.ts). Client
+    // desatualizado ou manipulado não consegue mais forçar a trava de fee R&S numa vaga
+    // que não é R&S.
+    const tipoServicoFinal = await resolverTipoServicoVigente(supabase, cv.candidato_id, cv.vaga_id, vaga?.tipo_servico ?? null);
 
     if (resultado === "contratado") {
       if (!data_inicio)

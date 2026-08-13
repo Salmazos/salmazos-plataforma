@@ -36,6 +36,35 @@ export async function mapTipoServicoPorCandidatura(
   return map;
 }
 
+// Mesma regra de "mais recente vence" acima, só que resolvida server-side pra UMA
+// candidatura específica — usada onde o tipo de serviço vigente decide um comportamento
+// de negócio (ex: PATCH /api/candidatos-vagas/[id]/finalizar) e não pode depender do valor
+// que o client mandou no body, que reflete só o que a tela tinha carregado no momento
+// (podendo estar desatualizado, ou em tese manipulado). Reaproveita
+// mapTipoServicoPorCandidatura em vez de duplicar a query.
+//
+// Nunca lança exceção: uma instabilidade pontual de rede/banco aqui não pode bloquear uma
+// ação crítica de negócio (finalizar uma contratação) com 500 — cai pro tipo_servico da
+// vaga (o mesmo fallback já usado quando não há encaminhamento) e loga o problema.
+export async function resolverTipoServicoVigente(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any, any, any>,
+  candidatoId: string,
+  vagaId: string,
+  tipoServicoVagaFallback: string | null
+): Promise<string | null> {
+  try {
+    const map = await mapTipoServicoPorCandidatura(supabase, [candidatoId]);
+    return map.get(`${candidatoId}|${vagaId}`) ?? tipoServicoVagaFallback;
+  } catch (err) {
+    console.error(
+      `[resolverTipoServicoVigente] Falha ao buscar encaminhamento vigente (candidato_id=${candidatoId}, vaga_id=${vagaId}) — usando tipo_servico da vaga como fallback:`,
+      err
+    );
+    return tipoServicoVagaFallback;
+  }
+}
+
 interface EncaminhamentoAgendamentoRow {
   candidato_id: string;
   vaga_id: string | null;

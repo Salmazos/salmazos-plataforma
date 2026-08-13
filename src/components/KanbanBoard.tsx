@@ -26,6 +26,7 @@ interface PendingEncaminhamento {
   vagaId: string;
   vagaTitulo: string;
   clienteId: string | null;
+  vagaTipoServico: string | null;
 }
 
 interface PendingFinalizar {
@@ -34,6 +35,7 @@ interface PendingFinalizar {
   vagaTitulo: string;
   vagaId: string | null;
   tipoServico: string | null;
+  tipoServicoVaga: string | null;
   resultado: "contratado" | "reprovado_final";
   clienteId: string | null;
 }
@@ -190,6 +192,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
         vagaId: card?.vaga_id ?? "",
         vagaTitulo: card?.vaga_titulo ?? "",
         clienteId: card?.cliente_id ?? null,
+        vagaTipoServico: card?.vaga_tipo_servico ?? null,
       });
       return;
     }
@@ -205,6 +208,9 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
         // combinado com o cliente na entrevista) — cai para o da vaga só quando o
         // candidato nunca passou por um encaminhamento vinculado a essa vaga.
         tipoServico: card?.encaminhamento_tipo_servico ?? card?.vaga_tipo_servico ?? null,
+        // Cadastro original da vaga, separado do vigente acima — só pra detectar e avisar
+        // divergência no modal (ver ModalFinalizarProcesso).
+        tipoServicoVaga: card?.vaga_tipo_servico ?? null,
         resultado: novaEtapa as "contratado" | "reprovado_final",
         clienteId: card?.cliente_id ?? null,
       });
@@ -486,6 +492,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
         candidatoNome={pendingFinalizar?.candidatoNome ?? ""}
         vagaTitulo={pendingFinalizar?.vagaTitulo ?? ""}
         tipoServico={pendingFinalizar?.tipoServico ?? null}
+        tipoServicoVaga={pendingFinalizar?.tipoServicoVaga ?? null}
         cvId={pendingFinalizar?.cvId ?? ""}
         vagaId={pendingFinalizar?.vagaId ?? null}
         clienteId={pendingFinalizar?.clienteId ?? null}
@@ -524,6 +531,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
         vagaId={pendingEncaminhamento?.vagaId}
         vagaTitulo={pendingEncaminhamento?.vagaTitulo}
         clienteIdInicial={pendingEncaminhamento?.clienteId}
+        tipoServicoVaga={pendingEncaminhamento?.vagaTipoServico ?? null}
         onClose={() => setPendingEncaminhamento(null)}
         onConfirmar={handleConfirmarEncaminhamento}
       />

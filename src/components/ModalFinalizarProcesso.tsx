@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { MOTIVOS_REPROVACAO_INTERNA, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
+import { TIPOS_SERVICO } from "@/lib/constants";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 
 interface Props {
@@ -9,12 +10,22 @@ interface Props {
   resultado: "contratado" | "reprovado_final";
   candidatoNome: string;
   vagaTitulo: string;
+  // tipoServico: o vigente (encaminhamento mais recente, com fallback pra vaga) — decide o
+  // comportamento do modal (campos, trava de fee). tipoServicoVaga: o cadastro original da
+  // vaga, só pra detectar divergência e explicar isso na mensagem de aviso (ver PROBLEMA do
+  // caso Embalatec/Márcio Schall — a mensagem dizia "vaga é R&S" quando na verdade só o
+  // encaminhamento divergente é que era R&S).
   tipoServico?: string | null;
+  tipoServicoVaga?: string | null;
   cvId: string;
   vagaId?: string | null;
   clienteId?: string | null;
   onClose: () => void;
   onConfirmar: (res: FinalizarResult) => void;
+}
+
+function labelTipoServico(id: string | null | undefined): string {
+  return TIPOS_SERVICO.find((t) => t.id === id)?.label ?? id ?? "—";
 }
 
 interface FeeInfo {
@@ -142,6 +153,7 @@ export default function ModalFinalizarProcesso({
   candidatoNome,
   vagaTitulo,
   tipoServico,
+  tipoServicoVaga,
   cvId,
   vagaId,
   clienteId,
@@ -229,6 +241,10 @@ export default function ModalFinalizarProcesso({
   const feeConfigPendente =
     isContratado && tipoServico === "recrutamento_selecao" && !feeJaLancado &&
     !carregandoFee && feeInfo != null && feeInfo.feeRsPercentual == null;
+  // Vigente (tipoServico, do encaminhamento mais recente) diverge do cadastro original da
+  // vaga — caso real que gerou confusão: aviso dizia "esta vaga é R&S" numa vaga MOT porque
+  // só o encaminhamento estava (incorretamente) marcado como R&S.
+  const divergeDeVaga = Boolean(tipoServico && tipoServicoVaga && tipoServico !== tipoServicoVaga);
   const invalidStyle = { borderColor: "#EF4444", boxShadow: "0 0 0 1px #EF4444" };
   const isOutroMotivo = motivoReprovacao === OUTRO_MOTIVO_REPROVACAO;
   // MOT e terceirização: contrato inicial obrigatoriamente limitado a 180 dias — a
@@ -516,7 +532,16 @@ export default function ModalFinalizarProcesso({
                     ⚠️ Taxa de R&S não configurada
                   </p>
                   <p style={{ fontSize: 12, color: "#92400E", margin: "0 0 10px", lineHeight: 1.5 }}>
-                    Esta vaga é de Recrutamento e Seleção mas não tem taxa (%) configurada. O fee não será calculado se você continuar assim.
+                    {divergeDeVaga ? (
+                      <>
+                        Esta contratação foi negociada como <strong>{labelTipoServico(tipoServico)}</strong>, conforme o
+                        encaminhamento mais recente — mas a vaga está cadastrada como <strong>{labelTipoServico(tipoServicoVaga)}</strong>.
+                        Confirme se isso está correto antes de continuar. Além disso, a taxa (%) de R&S não está configurada
+                        e o fee não será calculado se você continuar assim.
+                      </>
+                    ) : (
+                      "Esta vaga é de Recrutamento e Seleção mas não tem taxa (%) configurada. O fee não será calculado se você continuar assim."
+                    )}
                   </p>
 
                   {modoResolucaoFee === null && (

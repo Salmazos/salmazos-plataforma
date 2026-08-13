@@ -13,6 +13,11 @@ interface Props {
   vagaTitulo?: string;
   clienteIdInicial?: string | null;
   tipoServicoInicial?: string | null;
+  // Cadastro original da vaga sendo encaminhada — usado só pra alertar (não bloqueia) quando
+  // o tipo de serviço escolhido aqui diverge dele, já que esse campo é livre pra registrar
+  // renegociações reais na entrevista. Ver caso Embalatec/Márcio Schall: um encaminhamento
+  // marcado como R&S numa vaga MOT, sem nada avisando no momento do cadastro.
+  tipoServicoVaga?: string | null;
   onClose: () => void;
   onConfirmar: (dados: {
     cliente_id: string;
@@ -39,6 +44,7 @@ export default function ModalEncaminhamento({
   vagaTitulo: vagaTituloProp,
   clienteIdInicial,
   tipoServicoInicial,
+  tipoServicoVaga,
   onClose,
   onConfirmar,
 }: Props) {
@@ -62,6 +68,8 @@ export default function ModalEncaminhamento({
 
   const clienteSelecionado = clientes.find((c) => c.id === clienteId);
   const duplicata = historico.find((e) => e.cliente_id === clienteId);
+  const divergeDeVaga = Boolean(tipoServico && tipoServicoVaga && tipoServico !== tipoServicoVaga);
+  const labelTipoServicoVaga = TIPOS_SERVICO.find((t) => t.id === tipoServicoVaga)?.label ?? tipoServicoVaga;
 
   const servicosDisponiveis =
     clienteSelecionado?.servicos?.length
@@ -373,6 +381,12 @@ export default function ModalEncaminhamento({
                       );
                     })}
                   </div>
+                  {divergeDeVaga && (
+                    <p className="text-amber-700 text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+                      Isso é diferente do tipo de serviço cadastrado nesta vaga ({labelTipoServicoVaga}) — confirme se
+                      foi renegociado com o cliente.
+                    </p>
+                  )}
                 </div>
               )}
 

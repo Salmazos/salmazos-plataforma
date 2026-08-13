@@ -719,6 +719,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
         vagaTitulo={vaga.titulo}
         clienteIdInicial={vaga.cliente_id}
         tipoServicoInicial={vaga.tipo_servico}
+        tipoServicoVaga={vaga.tipo_servico}
         onClose={() => setPendingEncaminhamento(null)}
         onConfirmar={handleConfirmarEncaminhamento}
       />
@@ -734,6 +735,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
           candidatoNome={pendingFinalizar.candidatoNome}
           vagaTitulo={vaga.titulo}
           tipoServico={vaga.tipo_servico}
+          tipoServicoVaga={vaga.tipo_servico}
           cvId={pendingFinalizar.cvId}
           vagaId={vaga.id}
           clienteId={vaga.cliente_id}
