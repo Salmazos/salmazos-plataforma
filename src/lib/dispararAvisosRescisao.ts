@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
+import { RESCISAO_MODALIDADE_LABEL } from "@/lib/rescisaoModalidade";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -56,6 +57,7 @@ function montarHtmlEmail(
   corDestaque: string,
   nome: string,
   empresa: string,
+  modalidadeLabel: string,
   financeiro: DadosFinanceirosRescisao,
   rescisaoId: string
 ): string {
@@ -76,6 +78,7 @@ function montarHtmlEmail(
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Funcionário</td><td style="padding:6px 0;color:#111827">${nome}</td></tr>
       <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Empresa</td><td style="padding:6px 0;color:#111827">${empresa}</td></tr>
+      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Modalidade</td><td style="padding:6px 0;color:#111827">${modalidadeLabel}</td></tr>
       <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Valor da rescisão</td><td style="padding:6px 0;color:${corDestaque};font-weight:700">${moeda(valorRescisao)}</td></tr>
       <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Data de pagamento</td><td style="padding:6px 0;color:#111827">${formatarData(dataPagamentoRescisao)}</td></tr>
       ${temGuia ? `<tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Valor da guia</td><td style="padding:6px 0;color:${corDestaque};font-weight:700">${moeda(valorGuia)}</td></tr>` : ""}
@@ -105,6 +108,7 @@ export interface ResultadoAvisoRescisao {
 interface RescisaoParaAviso {
   id: string;
   empresa: string;
+  modalidade: string;
   valor_rescisao: number | null;
   data_pagamento_rescisao: string | null;
   valor_guia: number | null;
@@ -115,7 +119,7 @@ interface RescisaoParaAviso {
 async function buscarRescisaoParaAviso(svc: ServiceClient, rescisaoId: string): Promise<RescisaoParaAviso | null> {
   const { data, error } = await svc
     .from("rescisoes")
-    .select("id, empresa, valor_rescisao, data_pagamento_rescisao, valor_guia, data_pagamento_guia, funcionarios(nome_completo)")
+    .select("id, empresa, modalidade, valor_rescisao, data_pagamento_rescisao, valor_guia, data_pagamento_guia, funcionarios(nome_completo)")
     .eq("id", rescisaoId)
     .single();
 
@@ -127,6 +131,7 @@ async function buscarRescisaoParaAviso(svc: ServiceClient, rescisaoId: string): 
   return {
     id: data.id,
     empresa: data.empresa,
+    modalidade: data.modalidade,
     valor_rescisao: data.valor_rescisao,
     data_pagamento_rescisao: data.data_pagamento_rescisao,
     valor_guia: data.valor_guia,
@@ -182,6 +187,7 @@ export async function enviarEmailRescisao(
     corDestaque,
     rescisao.nomeFuncionario,
     rescisao.empresa,
+    RESCISAO_MODALIDADE_LABEL[rescisao.modalidade] ?? rescisao.modalidade,
     {
       valorRescisao: rescisao.valor_rescisao,
       dataPagamentoRescisao: rescisao.data_pagamento_rescisao,

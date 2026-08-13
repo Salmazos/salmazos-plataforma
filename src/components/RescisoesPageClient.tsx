@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { formatarDataSemFuso } from "@/lib/utils";
+import { RESCISAO_MODALIDADE_LABEL } from "@/lib/rescisaoModalidade";
 import ModalEditarRescisao from "./ModalEditarRescisao";
 
 export interface RescisaoRow {
@@ -35,12 +36,6 @@ interface Props {
   clientes: ClienteOption[];
   isFullAccess: boolean;
 }
-
-const MODALIDADE_LABEL: Record<string, string> = {
-  pedido_demissao: "Pedido de demissão",
-  desligamento_pela_empresa: "Desligamento pela empresa",
-  efetivado: "Efetivado",
-};
 
 function moeda(v: number | null): string {
   return v != null ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—";
@@ -184,7 +179,7 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes, isFul
                   <td style={{ padding: "10px 12px", color: "#6B7280" }}>{formatarDataSemFuso(r.data_desligamento)}</td>
                   <td style={{ padding: "10px 12px" }}>
                     <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#EFF6FF", color: "#1D4ED8" }}>
-                      {MODALIDADE_LABEL[r.modalidade] ?? r.modalidade}
+                      {RESCISAO_MODALIDADE_LABEL[r.modalidade] ?? r.modalidade}
                     </span>
                   </td>
                   <td style={{ padding: "10px 12px", color: "#374151" }}>{moeda(r.valor_rescisao)}</td>
