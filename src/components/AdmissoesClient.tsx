@@ -51,6 +51,7 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
   const [admissoes, setAdmissoes] = useState(admissoesIniciais);
   const [disponiveis, setDisponiveis] = useState(disponiveisIniciais);
   const [filtroStatus, setFiltroStatus] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
   const [modalAberto, setModalAberto] = useState(false);
   const [preSelecionado, setPreSelecionado] = useState<DisponivelAdmissao | null>(null);
   const [toast, setToast] = useState("");
@@ -88,9 +89,14 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
   // Sem filtro explícito, "cancelada" fica fora da lista padrão — não deve poluir o
   // caminho normal de trabalho. Só aparece quando alguém clica no card "Canceladas"
   // (mesmo mecanismo de toggle já usado pelos outros cards), nunca escondida de vez.
-  const filtradas = filtroStatus
-    ? admissoes.filter((a) => a.status === filtroStatus)
-    : admissoes.filter((a) => a.status !== "cancelada");
+  const filtradas = useMemo(() => {
+    const buscaLower = busca.trim().toLowerCase();
+    const base = filtroStatus
+      ? admissoes.filter((a) => a.status === filtroStatus)
+      : admissoes.filter((a) => a.status !== "cancelada");
+    if (!buscaLower) return base;
+    return base.filter((a) => a.candidatos?.nome_completo?.toLowerCase().includes(buscaLower));
+  }, [admissoes, filtroStatus, busca]);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -218,11 +224,21 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
         ))}
       </div>
 
-      {filtroStatus && (
-        <button onClick={() => setFiltroStatus(null)} className="text-xs text-gray-500 hover:text-black mb-3">
-          ✕ Limpar filtro
-        </button>
-      )}
+      <div className="flex gap-3 mb-3 flex-wrap items-center">
+        <input
+          type="text"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar por nome..."
+          className="input-field"
+          style={{ maxWidth: 240 }}
+        />
+        {filtroStatus && (
+          <button onClick={() => setFiltroStatus(null)} className="text-xs text-gray-500 hover:text-black">
+            ✕ Limpar filtro
+          </button>
+        )}
+      </div>
 
       {/* Table */}
       <div className="card" style={{ padding: 0, overflowX: "auto" }}>
