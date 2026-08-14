@@ -233,7 +233,7 @@ export default function BancoTalentosPage() {
       )}
       {/* Header */}
       <header style={{ backgroundColor: "#000", borderBottom: "3px solid #FFD700" }}>
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/Salmazos_logo_Amarelo.png"
@@ -253,8 +253,8 @@ export default function BancoTalentosPage() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8 pb-16">
-      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_320px] gap-8 items-start">
+      <main className="max-w-7xl mx-auto px-4 py-8 pb-16">
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_420px] gap-8 items-start">
       <div className="max-w-2xl">
         {/* Title card */}
         <div style={{ backgroundColor: "#111", border: "1px solid #2a2a2a", borderRadius: "16px", padding: "24px", marginBottom: "24px", textAlign: "center" }}>
