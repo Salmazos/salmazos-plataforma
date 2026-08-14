@@ -2,6 +2,8 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createServiceClient } from "@/lib/supabase/server";
 import { TIPOS_SERVICO } from "@/lib/constants";
+import BotaoVoltarSite from "@/components/BotaoVoltarSite";
+import CurriculoMotivacional from "@/components/CurriculoMotivacional";
 import FormCandidaturaVagaPublica from "@/components/FormCandidaturaVagaPublica";
 
 export const dynamic = "force-dynamic";
@@ -65,17 +67,22 @@ export default async function VagaPublicaPage({ params }: Props) {
     <div style={{ minHeight: "100vh", backgroundColor: "#000" }}>
       {/* Header */}
       <header style={{ backgroundColor: "#000", borderBottom: "3px solid #FFD700" }}>
-        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/Salmazos_logo_Amarelo.png" alt="Salmazos RH" className="h-12 w-auto object-contain" />
-          <Link href="/vagas" style={{ color: "rgba(255,255,255,0.5)", fontSize: "14px" }}
-            className="hover:text-white transition-colors">
-            ← Todas as vagas
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href="/vagas" style={{ color: "rgba(255,255,255,0.5)", fontSize: "14px" }}
+              className="hover:text-white transition-colors">
+              ← Todas as vagas
+            </Link>
+            <BotaoVoltarSite />
+          </div>
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-8 pb-16">
+      <main className="max-w-5xl mx-auto px-4 py-8 pb-16">
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_320px] gap-8 items-start">
+      <div className="max-w-3xl">
 
         {/* Job info card */}
         <div style={{ backgroundColor: "#fff", border: "1px solid #e5e7eb", borderRadius: "16px", padding: "24px", marginBottom: "24px" }}>
@@ -157,6 +164,9 @@ export default async function VagaPublicaPage({ params }: Props) {
             </p>
           </div>
         )}
+      </div>
+      <CurriculoMotivacional />
+      </div>
       </main>
 
       <footer style={{ textAlign: "center", padding: "32px 0", fontSize: "12px", color: "#4b5563" }}>

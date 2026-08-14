@@ -6,6 +6,7 @@ import { formatarCPF, formatarTelefone, validarCPF } from "@/lib/utils";
 import { ESTADOS, HABILIDADES, TEMPO_EXPERIENCIA, TURNOS } from "@/lib/constants";
 import BotaoVoltarSite from "@/components/BotaoVoltarSite";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import CurriculoMotivacional from "@/components/CurriculoMotivacional";
 import ModalConfirmarSemCurriculo from "@/components/ModalConfirmarSemCurriculo";
 import SeletorEscolaridade from "@/components/SeletorEscolaridade";
 
@@ -230,27 +231,31 @@ export default function BancoTalentosPage() {
       {mostrarConfirmacaoCurriculo && (
         <ModalConfirmarSemCurriculo onVoltar={handleVoltarParaAnexar} onConfirmar={handleConfirmarSemCurriculo} />
       )}
-      <BotaoVoltarSite />
       {/* Header */}
       <header style={{ backgroundColor: "#000", borderBottom: "3px solid #FFD700" }}>
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/Salmazos_logo_Amarelo.png"
             alt="Salmazos RH"
             className="h-[75px] w-auto object-contain"
           />
-          <Link
-            href="/vagas"
-            style={{ color: "rgba(255,255,255,0.5)", fontSize: "14px" }}
-            className="hover:text-white transition-colors"
-          >
-            Ver vagas abertas →
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              href="/vagas"
+              style={{ color: "rgba(255,255,255,0.5)", fontSize: "14px" }}
+              className="hover:text-white transition-colors"
+            >
+              Ver vagas abertas →
+            </Link>
+            <BotaoVoltarSite />
+          </div>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 py-8 pb-16">
+      <main className="max-w-5xl mx-auto px-4 py-8 pb-16">
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_320px] gap-8 items-start">
+      <div className="max-w-2xl">
         {/* Title card */}
         <div style={{ backgroundColor: "#111", border: "1px solid #2a2a2a", borderRadius: "16px", padding: "24px", marginBottom: "24px", textAlign: "center" }}>
           <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "48px", height: "48px", backgroundColor: "#FFD700", borderRadius: "12px", marginBottom: "12px" }}>
@@ -565,6 +570,9 @@ export default function BancoTalentosPage() {
             </button>
           </form>
         )}
+      </div>
+      <CurriculoMotivacional />
+      </div>
       </main>
     </div>
   );
