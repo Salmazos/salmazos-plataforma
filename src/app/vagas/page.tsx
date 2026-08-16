@@ -24,6 +24,7 @@ export default async function VagasPublicaPage() {
     .from("vagas")
     .select("id, titulo, cidade, estado, salario, tipo_servico, slug")
     .eq("status", "aberta")
+    .eq("visivel_publicamente", true)
     .order("titulo", { ascending: true });
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

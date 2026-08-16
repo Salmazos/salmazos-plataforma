@@ -341,6 +341,7 @@ export interface Vaga {
   confidencial?: boolean;
   taxa_cancelamento?: boolean;
   taxa_cancelamento_percentual?: number | null;
+  visivel_publicamente?: boolean;
   tipo_servico_original?: string | null;
   tipo_servico_alterado_em?: string | null;
   tipo_servico_alterado_por?: string | null;

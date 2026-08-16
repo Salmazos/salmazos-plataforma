@@ -139,6 +139,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
     confidencial: false,
     taxa_cancelamento: false,
     taxa_cancelamento_percentual: "",
+    visivel_publicamente: true,
   });
   const [habilidades, setHabilidades] = useState<string[]>([]);
   const [clientes, setClientes]       = useState<ClienteOpcao[]>([]);
@@ -191,6 +192,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
       confidencial: vaga.confidencial ?? false,
       taxa_cancelamento: vaga.taxa_cancelamento ?? false,
       taxa_cancelamento_percentual: vaga.taxa_cancelamento_percentual != null ? String(vaga.taxa_cancelamento_percentual) : "",
+      visivel_publicamente: vaga.visivel_publicamente ?? true,
     });
     setSalarioModo(detectarModoSalario(vaga.salario ?? ""));
     setHabilidades(vaga.habilidades_desejadas ?? []);
@@ -415,6 +417,19 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
                   Vagas confidenciais possuem dados sensíveis do cliente e devem ser tratadas com cuidado na divulgação.
                 </p>
               </span>
+            </label>
+          </div>
+
+          {/* Visível publicamente */}
+          <div className="border-t pt-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.visivel_publicamente}
+                onChange={(e) => setForm((f) => ({ ...f, visivel_publicamente: e.target.checked }))}
+                className="accent-black"
+              />
+              <span className="text-sm text-gray-700 font-medium">Visível na página pública de vagas</span>
             </label>
           </div>
 

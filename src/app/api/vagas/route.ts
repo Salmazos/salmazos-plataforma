@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
         confidencial: body.confidencial === true,
         taxa_cancelamento: body.taxa_cancelamento === true,
         taxa_cancelamento_percentual: body.taxa_cancelamento_percentual !== "" && body.taxa_cancelamento_percentual != null ? Number(body.taxa_cancelamento_percentual) : null,
+        visivel_publicamente: body.visivel_publicamente !== false,
         data_abertura: new Date().toISOString(),
       })
       .select("*, clientes(id, nome)")

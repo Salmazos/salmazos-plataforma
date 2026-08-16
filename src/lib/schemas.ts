@@ -101,6 +101,7 @@ export const vagaCreateSchema = z.object({
   confidencial: z.boolean().default(false),
   taxa_cancelamento: z.boolean().default(false),
   taxa_cancelamento_percentual: coerceNumberOptional.pipe(z.number().min(0).max(100).optional()),
+  visivel_publicamente: z.boolean().default(true),
 });
 
 export const vagaUpdateSchema = vagaCreateSchema.partial().extend({

@@ -57,6 +57,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (body.confidencial !== undefined)        campos.confidencial = body.confidencial === true;
     if (body.taxa_cancelamento !== undefined)   campos.taxa_cancelamento = body.taxa_cancelamento === true;
     if (body.taxa_cancelamento_percentual !== undefined) campos.taxa_cancelamento_percentual = body.taxa_cancelamento_percentual !== "" ? Number(body.taxa_cancelamento_percentual) : null;
+    if (body.visivel_publicamente !== undefined) campos.visivel_publicamente = body.visivel_publicamente === true;
 
     let statusAlterado = false;
     let statusAnterior: string | null = null;
