@@ -32,7 +32,7 @@ export default async function CandidatoPerfilPage({ params }: Props) {
   // Fetch candidatos_vagas with guarantee OR fee data
   const { data: cvRows } = await supabase
     .from("candidatos_vagas")
-    .select("id, vaga_id, etapa, garantia_data_fim, garantia_acionada, garantia_acionada_em, admissao_fee_percentual, admissao_fee_valor, admissao_fee_prazo, fee_status, vagas(titulo)")
+    .select("id, vaga_id, etapa, garantia_data_fim, garantia_acionada, garantia_acionada_em, admissao_fee_percentual, admissao_fee_valor, admissao_fee_prazo, fee_status, vagas!candidatos_vagas_vaga_id_fkey(titulo)")
     .eq("candidato_id", id)
     .order("created_at", { ascending: false });
 

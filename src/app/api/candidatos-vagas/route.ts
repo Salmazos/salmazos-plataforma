@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   if (candidatoId) {
     const { data, error } = await supabase
       .from("candidatos_vagas")
-      .select("*, vagas(id, titulo, cidade, estado)")
+      .select("*, vagas!candidatos_vagas_vaga_id_fkey(id, titulo, cidade, estado)")
       .eq("candidato_id", candidatoId)
       .order("created_at", { ascending: false });
 

@@ -49,7 +49,7 @@ export default async function AdmissoesPage() {
   // 'contratado' — é uma lista de "ação pendente", não de elegibilidade ampla.
   const { data: contratadosSemAdmissao } = await svc
     .from("candidatos_vagas")
-    .select("id, candidato_id, vaga_id, updated_at, candidatos(id, nome_completo, cargo_pretendido, telefone), vagas(id, titulo, tipo_servico, cliente_id, clientes(nome, entidade_contratante))")
+    .select("id, candidato_id, vaga_id, updated_at, candidatos(id, nome_completo, cargo_pretendido, telefone), vagas!candidatos_vagas_vaga_id_fkey(id, titulo, tipo_servico, cliente_id, clientes(nome, entidade_contratante))")
     .eq("etapa", "contratado")
     .order("updated_at", { ascending: false });
 

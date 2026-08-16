@@ -79,6 +79,7 @@ export async function PATCH(_request: NextRequest, { params }: Params) {
           observacoes: obsReposicao,
           fee_rs_percentual: vo.fee_rs_percentual,
           fee_rs_prazo_cobranca: vo.fee_rs_prazo_cobranca,
+          reposicao_de_candidato_vaga_id: cv.id,
         })
         .select("id")
         .single();

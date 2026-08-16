@@ -24,7 +24,7 @@ export async function GET(request: Request) {
 
     const { data: rows, error } = await supabase
       .from("candidatos_vagas")
-      .select("id, candidato_id, vaga_id, garantia_data_fim, admissao_fee_valor, candidatos(nome_completo), vagas(titulo, clientes(nome))")
+      .select("id, candidato_id, vaga_id, garantia_data_fim, admissao_fee_valor, candidatos(nome_completo), vagas!candidatos_vagas_vaga_id_fkey(titulo, clientes(nome))")
       .eq("garantia_acionada", false)
       .not("garantia_data_fim", "is", null)
       .in("etapa", ["aprovado_cliente", "contratado"])

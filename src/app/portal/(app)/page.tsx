@@ -52,7 +52,7 @@ export default async function PortalPage() {
   if (vagaIds.length > 0 && candidatoIds.length > 0) {
     const { data: cvRows } = await service
       .from("candidatos_vagas")
-      .select("candidato_id, match_score, etapa, responsavel, updated_at, vagas(titulo)")
+      .select("candidato_id, match_score, etapa, responsavel, updated_at, vagas!candidatos_vagas_vaga_id_fkey(titulo)")
       .in("vaga_id", vagaIds)
       .in("candidato_id", candidatoIds);
 
@@ -84,7 +84,7 @@ export default async function PortalPage() {
   // Candidates in entrevista_salmazos linked to this client via candidatos_vagas.cliente_id
   const { data: cvEmAvaliacao } = await service
     .from("candidatos_vagas")
-    .select("id, etapa, candidato_id, vaga_id, data_entrevista_salmazos, responsavel, updated_at, candidatos(id, nome_completo, cargo_pretendido, cidade, estado), vagas(titulo)")
+    .select("id, etapa, candidato_id, vaga_id, data_entrevista_salmazos, responsavel, updated_at, candidatos(id, nome_completo, cargo_pretendido, cidade, estado), vagas!candidatos_vagas_vaga_id_fkey(titulo)")
     .eq("cliente_id", clienteId)
     .eq("etapa", "entrevista_salmazos");
 

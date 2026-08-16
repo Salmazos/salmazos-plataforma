@@ -36,7 +36,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const { data: cv, error: cvErr } = await supabase
       .from("candidatos_vagas")
-      .select("id, candidato_id, vaga_id, admissao_fee_valor, vagas(id, titulo, status, tipo_servico, num_posicoes_abertas, num_posicoes, cliente_id, fee_rs_percentual, fee_rs_prazo_cobranca, clientes(nome))")
+      .select("id, candidato_id, vaga_id, admissao_fee_valor, vagas!candidatos_vagas_vaga_id_fkey(id, titulo, status, tipo_servico, num_posicoes_abertas, num_posicoes, cliente_id, fee_rs_percentual, fee_rs_prazo_cobranca, clientes(nome))")
       .eq("id", id)
       .single();
 
@@ -159,9 +159,21 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         await supabase.from("vagas").update(updateFields).eq("id", vaga.id);
 
         if (vagaEncerrada) {
-          await gerarCobrancasRSParaVaga(vaga.id, supabase).catch((err) =>
-            console.error("[finalizar] Erro ao gerar cobranças R&S:", err)
-          );
+          // Mudança de comportamento confirmada com o cliente: nenhuma vaga R&S gera
+          // cobrança automática ao fechar, nem na primeira contratação — a decisão é
+          // sempre do analista. Fechamento automático (última posição preenchida) não
+          // tem como perguntar nada nesse momento, então fecha a vaga normalmente e pula
+          // a geração: fica "pendente de decisão de cobrança" até o analista abrir a
+          // tela da vaga, onde o aviso (VagaDetalheClient) aparece sozinho ou um botão
+          // fixo fica disponível pra ele decidir — mesma trava do fechamento manual via
+          // PATCH /api/vagas/[id], só que sem bloquear a finalização do candidato (são
+          // ações diferentes: finalizar a contratação não devia travar por causa de uma
+          // decisão financeira pendente da vaga).
+          if (vaga.tipo_servico !== "recrutamento_selecao") {
+            await gerarCobrancasRSParaVaga(vaga.id, supabase).catch((err) =>
+              console.error("[finalizar] Erro ao gerar cobranças R&S:", err)
+            );
+          }
 
           // Fechamento automático (última posição preenchida) atualiza a tabela `vagas`
           // direto aqui em vez de passar por PATCH /api/vagas/[id] — por isso precisa

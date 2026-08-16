@@ -13,7 +13,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
   const { data, error } = await supabase
     .from("candidatos_vagas")
-    .select("id, etapa, responsavel, vagas(titulo)")
+    .select("id, etapa, responsavel, vagas!candidatos_vagas_vaga_id_fkey(titulo)")
     .eq("candidato_id", id)
     .in("etapa", ETAPAS_ATIVAS);
 

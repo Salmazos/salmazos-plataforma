@@ -74,7 +74,7 @@ export async function verificarSLA(): Promise<void> {
   // 2. Fetch active candidatos_vagas with joins
   const { data: rows, error: cvErr } = await supabase
     .from("candidatos_vagas")
-    .select("id, candidato_id, vaga_id, etapa, updated_at, candidatos(nome_completo), vagas(id, titulo, status)")
+    .select("id, candidato_id, vaga_id, etapa, updated_at, candidatos(nome_completo), vagas!candidatos_vagas_vaga_id_fkey(id, titulo, status)")
     .not("etapa", "in", `(${ETAPAS_EXCLUIDAS.join(",")})`);
 
   if (cvErr) {

@@ -112,7 +112,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (dbEtapa === "entrevista_cliente") {
     const { data: cv } = await svc
       .from("candidatos_vagas")
-      .select("vaga_id, vagas(cliente_id, clientes(nome, contato_email))")
+      .select("vaga_id, vagas!candidatos_vagas_vaga_id_fkey(cliente_id, clientes(nome, contato_email))")
       .eq("candidato_id", id)
       .limit(1)
       .single();

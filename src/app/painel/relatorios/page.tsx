@@ -52,7 +52,7 @@ export default async function RelatoriosPage() {
       supabase
         .from("candidatos_vagas")
         .select(
-          "id, admissao_salario, admissao_fee_percentual, admissao_fee_valor, admissao_fee_prazo, admissao_fee_origem, fee_status, candidatos(nome_completo), vagas!inner(titulo, tipo_servico, fee_rs_percentual, taxa_cancelamento, taxa_cancelamento_percentual, cliente_id, clientes(nome))"
+          "id, admissao_salario, admissao_fee_percentual, admissao_fee_valor, admissao_fee_prazo, admissao_fee_origem, fee_status, candidatos(nome_completo), vagas!candidatos_vagas_vaga_id_fkey!inner(titulo, tipo_servico, fee_rs_percentual, taxa_cancelamento, taxa_cancelamento_percentual, cliente_id, clientes(nome))"
         )
         .eq("etapa", "contratado"),
     ]);

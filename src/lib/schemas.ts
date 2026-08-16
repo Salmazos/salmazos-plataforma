@@ -106,6 +106,11 @@ export const vagaCreateSchema = z.object({
 
 export const vagaUpdateSchema = vagaCreateSchema.partial().extend({
   motivo_alteracao: z.string().optional(),
+  // Só relevante ao fechar (status: "fechada") uma vaga de reposição de garantia
+  // (vagas.reposicao_de_candidato_vaga_id preenchido) — decisão explícita do analista sobre
+  // gerar ou não uma nova cobrança R&S, já que a cobrança original da contratação anterior
+  // já foi feita. Ver PATCH /api/vagas/[id].
+  gerar_cobranca: z.boolean().optional(),
 });
 
 // ── Cliente ──────────────────────────────────────────────────────────────────

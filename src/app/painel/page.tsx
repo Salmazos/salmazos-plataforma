@@ -15,7 +15,7 @@ export default async function PainelPage() {
     .select(`
       id, etapa, vaga_id, cliente_id, observacoes, created_at,
       candidatos!inner(id, nome_completo, cargo_pretendido, cidade, estado, triagem_score, triagem_label, origem, bloqueado, responsavel, habilidades, resumo_profissional, created_at, updated_at),
-      vagas!inner(id, titulo, tipo_servico, cliente_id, confidencial, clientes(nome, processo_simplificado)),
+      vagas!candidatos_vagas_vaga_id_fkey!inner(id, titulo, tipo_servico, cliente_id, confidencial, clientes(nome, processo_simplificado)),
       clientes(nome)
     `)
     .in("etapa", ETAPAS_KANBAN_VISIVEIS)

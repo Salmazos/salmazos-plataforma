@@ -42,7 +42,7 @@ export async function gerarCobrancaRSSeAplicavel(
   const { data: cv } = await svc
     .from("candidatos_vagas")
     .select(
-      "id, candidato_id, vaga_id, candidatos(nome_completo), vagas(id, titulo, tipo_servico, fee_rs_percentual, fee_rs_prazo_cobranca, cliente_id, cliente_nome, clientes(nome, cnpj, endereco, contato_telefone, contato_email))"
+      "id, candidato_id, vaga_id, candidatos(nome_completo), vagas!candidatos_vagas_vaga_id_fkey(id, titulo, tipo_servico, fee_rs_percentual, fee_rs_prazo_cobranca, cliente_id, cliente_nome, clientes(nome, cnpj, endereco, contato_telefone, contato_email))"
     )
     .eq("id", candidatoVagaId)
     .single();
@@ -144,6 +144,76 @@ export async function gerarCobrancasRSParaVaga(vagaId: string, supabase?: Servic
   for (const cv of contratados ?? []) {
     await gerarCobrancaRSSeAplicavel(vagaId, cv.id, svc);
   }
+}
+
+export interface ReaberturaAnterior {
+  candidatoVagaId: string;
+  candidatoNome: string | null;
+  dataInicio: string;
+}
+
+/**
+ * Detecta reabertura manual de uma vaga R&S: mesma vaga (mesmo vaga_id) reaberta e fechada
+ * de novo com um candidato diferente, sem passar pelo fluxo de garantia (acionar-garantia),
+ * que cria uma vaga NOVA e grava o vínculo em vagas.reposicao_de_candidato_vaga_id — esse
+ * vínculo não existe nesse caso porque é a mesma linha de vaga sendo reutilizada. Só dá pra
+ * saber pelo histórico: se existe mais de uma contratação ('contratado', data_inicio
+ * preenchida) pra essa vaga, a penúltima (a mais recente ANTES da contratação que está
+ * fechando agora, que é a mais recente de todas) é a "contratação anterior" candidata a
+ * reabertura. Quem chama decide se a diferença de datas é "recente o bastante" (< 30 dias)
+ * pra contar como garantia — esse helper só resolve QUEM foi a contratação anterior.
+ */
+export async function detectarReaberturaAnterior(
+  vagaId: string,
+  supabase?: ServiceClient
+): Promise<ReaberturaAnterior | null> {
+  const svc = supabase ?? createServiceClient();
+
+  const { data: rows } = await svc
+    .from("candidatos_vagas")
+    .select("id, data_inicio, candidatos(nome_completo)")
+    .eq("vaga_id", vagaId)
+    .eq("etapa", "contratado")
+    .not("data_inicio", "is", null)
+    .order("data_inicio", { ascending: false });
+
+  if (!rows || rows.length < 2) return null;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const anterior = rows[1] as any;
+  return {
+    candidatoVagaId: anterior.id,
+    candidatoNome: anterior.candidatos?.nome_completo ?? null,
+    dataInicio: anterior.data_inicio,
+  };
+}
+
+/**
+ * Se já existe uma decisão do analista (gerar cobrança ou não) registrada em audit_logs
+ * pra essa vaga — mas só considera decisões do CICLO ATUAL (created_at >= data_abertura
+ * vigente da vaga). Necessário porque, com a mesma vaga podendo reabrir e fechar várias
+ * vezes (ver detectarReaberturaAnterior), uma decisão de um fechamento anterior não pode
+ * bloquear a pergunta de novo no fechamento seguinte — cada ciclo aberto→fechado precisa da
+ * sua própria decisão.
+ */
+export async function decisaoCobrancaJaRegistrada(
+  vagaId: string,
+  dataAberturaAtual: string | null | undefined,
+  supabase?: ServiceClient
+): Promise<boolean> {
+  const svc = supabase ?? createServiceClient();
+
+  let query = svc
+    .from("audit_logs")
+    .select("id")
+    .eq("entidade", "vagas")
+    .eq("entidade_id", vagaId)
+    .eq("acao", "cobranca_rs_reposicao_decisao")
+    .limit(1);
+  if (dataAberturaAtual) query = query.gte("created_at", dataAberturaAtual);
+
+  const { data } = await query;
+  return !!data && data.length > 0;
 }
 
 /**

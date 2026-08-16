@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { registrarAuditoria } from "@/lib/audit";
+import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { parseBody, vagaUpdateSchema } from "@/lib/schemas";
 import { generateUniqueSlug } from "@/lib/slug";
 import { gerarCobrancasRSParaVaga, gerarCobrancaCancelamentoRSSeAplicavel } from "@/lib/cobrancaRS";
@@ -61,16 +61,37 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     let statusAlterado = false;
     let statusAnterior: string | null = null;
+    let reposicaoDeCandidatoVagaId: string | null = null;
+    let vagaEhRS = false;
 
     if (body.status !== undefined) {
       const { data: current } = await supabase
         .from("vagas")
-        .select("status")
+        .select("status, tipo_servico, reposicao_de_candidato_vaga_id")
         .eq("id", id)
         .single();
       if (current && current.status !== body.status) {
         statusAlterado = true;
         statusAnterior = current.status as string;
+        reposicaoDeCandidatoVagaId = current.reposicao_de_candidato_vaga_id as string | null;
+        vagaEhRS = current.tipo_servico === "recrutamento_selecao";
+
+        // Mudança de comportamento confirmada com o cliente: NENHUMA vaga R&S gera
+        // cobrança automática ao fechar, nem na primeira contratação — a decisão de
+        // gerar ou não é sempre do analista (inclusive casos de cortesia sem cobrar).
+        // Antes essa trava só valia pra vagas de reposição de garantia
+        // (reposicao_de_candidato_vaga_id); ver VagaDetalheClient "Encerrar vaga", que já
+        // pergunta isso ao usuário antes de mandar esse PATCH pra qualquer vaga R&S.
+        if (body.status === "fechada" && vagaEhRS && body.gerar_cobranca === undefined) {
+          return NextResponse.json(
+            {
+              error: "Esta vaga é de Recrutamento e Seleção — confirme se deve gerar cobrança de R&S ao fechar.",
+              code: "confirmacao_cobranca_necessaria",
+            },
+            { status: 400 }
+          );
+        }
+
         if (body.status === "aberta") {
           campos.data_abertura = new Date().toISOString();
           campos.data_fechamento = null;
@@ -139,9 +160,39 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       // cobrança R&S pros candidatos já contratados, não só o fechamento automático por
       // última posição preenchida em finalizar/route.ts.
       if (body.status === "fechada") {
-        await gerarCobrancasRSParaVaga(id, supabase).catch((err) =>
-          console.error("[PATCH /api/vagas/[id]] Erro ao gerar cobranças R&S:", err)
-        );
+        if (vagaEhRS) {
+          // Decisão do analista (Sim/Não) sempre registrada em audit_logs, mesmo quando
+          // ele decide não gerar — é a explicação de por que uma vaga R&S fechada não
+          // tem cobrança correspondente, pra quem revisar depois não achar que é bug.
+          let usuarioId: string | null = null;
+          let usuarioNome: string | null = null;
+          const authClient = await createClient();
+          const { data: { user } } = await authClient.auth.getUser();
+          if (user) {
+            usuarioId = user.id;
+            usuarioNome = await resolverNomeUsuario(user.id, user.email ?? null, supabase);
+          }
+
+          registrarAuditoria({
+            usuario_id: usuarioId,
+            usuario_nome: usuarioNome,
+            acao: "cobranca_rs_reposicao_decisao",
+            entidade: "vagas",
+            entidade_id: id,
+            detalhes: {
+              reposicao_de_candidato_vaga_id: reposicaoDeCandidatoVagaId,
+              gerar_cobranca: body.gerar_cobranca === true,
+            },
+          });
+
+          if (body.gerar_cobranca === true) {
+            await gerarCobrancasRSParaVaga(id, supabase).catch((err) =>
+              console.error("[PATCH /api/vagas/[id]] Erro ao gerar cobranças R&S:", err)
+            );
+          }
+        }
+        // Vagas que não são R&S nunca geraram cobrança (gerarCobrancasRSParaVaga sempre
+        // foi no-op pra elas) — nem precisa chamar.
       }
 
       // Cancelamento manual (mesmos 2 caminhos: "Encerrar vaga" e edição direta do status)
