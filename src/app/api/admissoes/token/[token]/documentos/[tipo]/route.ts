@@ -3,6 +3,7 @@ import { parseBody, admissaoDocumentoConfirmarSchema } from "@/lib/schemas";
 import { resolveAdmissaoByToken } from "@/lib/admissaoToken";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
 import { registrarAuditoria } from "@/lib/audit";
+import { converterHeicSeNecessario } from "@/lib/heicConversion";
 
 interface Params {
   params: Promise<{ token: string; tipo: string }>;
@@ -55,13 +56,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const def = DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === tipo)!;
   const aceitaMultiplos = def.multiArquivo === true;
 
+  // Candidatos que enviam pelo iPhone geram .heic — nenhum navegador exibe isso inline, só
+  // sabe baixar. Converte pra JPEG aqui, de forma transparente pro candidato: se falhar por
+  // qualquer motivo, converterHeicSeNecessario devolve o caminho original (.heic) sem
+  // travar a confirmação do upload.
+  const storagePath = await converterHeicSeNecessario(svc, parsed.data.storage_path);
+
   let data;
   if (parsed.data.doc_id) {
     // Reenvio de uma linha específica (ex.: arquivo rejeitado de um tipo com múltiplos
     // arquivos) — substitui só aquela linha, nunca cria uma nova.
     const { data: updated, error } = await svc
       .from("admissao_documentos")
-      .update({ storage_path: parsed.data.storage_path, status: "enviado", motivo_rejeicao: null })
+      .update({ storage_path: storagePath, status: "enviado", motivo_rejeicao: null })
       .eq("id", parsed.data.doc_id)
       .eq("admissao_id", admissaoId)
       .eq("tipo_documento", tipo)
@@ -84,7 +91,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (slotVazio) {
       const { data: updated, error } = await svc
         .from("admissao_documentos")
-        .update({ storage_path: parsed.data.storage_path, status: "enviado", motivo_rejeicao: null })
+        .update({ storage_path: storagePath, status: "enviado", motivo_rejeicao: null })
         .eq("id", slotVazio.id)
         .select()
         .single();
@@ -107,7 +114,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           tipo_documento: tipo,
           obrigatorio: def.obrigatorio,
           condicional: def.condicional,
-          storage_path: parsed.data.storage_path,
+          storage_path: storagePath,
           status: "enviado",
         })
         .select()
@@ -119,7 +126,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const { data: updated, error } = await svc
       .from("admissao_documentos")
       .update({
-        storage_path: parsed.data.storage_path,
+        storage_path: storagePath,
         status: "enviado",
         motivo_rejeicao: null,
       })
