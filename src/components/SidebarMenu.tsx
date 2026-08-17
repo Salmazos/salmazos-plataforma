@@ -138,12 +138,6 @@ const menuItems: MenuItemDef[] = [
       { label: "Cobranças R&S", href: "/painel/cobrancas-rs", icon: Banknote, requireCobrancasRS: true },
     ],
   },
-  { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },
-  { label: "Dashboard", href: "/painel/dashboard", icon: TrendingUp, requireFullAccess: true },
-  { label: "Reembolsos", href: "/painel/reembolsos", icon: Receipt, requireFullAccess: true },
-  { label: "Quilometragem", href: "/painel/quilometragem", icon: Car },
-  { label: "Supervisão de Postos", href: "/painel/supervisao", icon: ShieldCheck, requireSupervisao: true },
-  { label: "Documentos", href: "/painel/documentos", icon: FolderOpen },
   {
     label: "Configurações",
     href: "/painel/configuracoes",
@@ -168,6 +162,12 @@ const menuItems: MenuItemDef[] = [
       { label: "Carta de Abertura de Conta", href: "/painel/carta-conta-salario-config", icon: Landmark, requireSuperuser: true },
     ],
   },
+  { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },
+  { label: "Dashboard", href: "/painel/dashboard", icon: TrendingUp, requireFullAccess: true },
+  { label: "Reembolsos", href: "/painel/reembolsos", icon: Receipt, requireFullAccess: true },
+  { label: "Quilometragem", href: "/painel/quilometragem", icon: Car },
+  { label: "Supervisão de Postos", href: "/painel/supervisao", icon: ShieldCheck, requireSupervisao: true },
+  { label: "Documentos", href: "/painel/documentos", icon: FolderOpen },
 ];
 
 export default function SidebarMenu({
