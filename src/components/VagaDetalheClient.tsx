@@ -29,20 +29,6 @@ type HistoricoModalidade = {
   created_at: string;
 };
 
-// Resposta de GET /api/vagas/[id]/reposicao-info — pendência de decisão de cobrança R&S.
-// reaberturaRecente decide se o aviso abre sozinho (reabertura dentro de 30 dias, com ou
-// sem vínculo explícito de garantia) ou se fica só como botão discreto (fechamento comum
-// de R&S, sem reabertura, mas ainda pedindo decisão do analista).
-type CobrancaRSInfo = {
-  pendente: boolean;
-  decisaoRegistrada?: boolean;
-  reaberturaRecente?: boolean;
-  candidatoNome?: string | null;
-  dataInicioAnterior?: string | null;
-  cobrancaValor?: number | null;
-  cobrancaData?: string | null;
-};
-
 function formatarSalario(valor: string | null | undefined): string {
   if (!valor) return "A combinar";
   const trimmed = valor.trim();
@@ -104,13 +90,6 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
   const [linkCopiado, setLinkCopiado] = useState(false);
   const [historicoModalidade, setHistoricoModalidade] = useState<HistoricoModalidade[]>([]);
   const [historicoAberto, setHistoricoAberto] = useState(false);
-  const [modalReposicaoCobranca, setModalReposicaoCobranca] = useState(false);
-  const [reposicaoInfo, setReposicaoInfo] = useState<CobrancaRSInfo | null>(null);
-  // Pendência persistente (botão fixo) — diferente de reposicaoInfo, que só existe
-  // enquanto o modal está aberto: cobrancaPendente sobrevive ao fechar/cancelar o modal,
-  // pra o botão continuar disponível até a decisão ser de fato registrada.
-  const [cobrancaPendente, setCobrancaPendente] = useState<CobrancaRSInfo | null>(null);
-  const [carregandoReposicao, setCarregandoReposicao] = useState(false);
 
   const tipoLabel = useCallback((id: string) => TIPOS_SERVICO.find((t) => t.id === id)?.label ?? id, []);
 
@@ -121,35 +100,6 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
       .then((j) => setHistoricoModalidade(j.data ?? []))
       .catch(() => {});
   }, [vaga.id, vaga.tipo_servico_original, vaga.tipo_servico]);
-
-  // Toda vaga R&S já fechada sem decisão de cobrança registrada ainda fica "pendente" —
-  // sempre gera o botão fixo; se além disso for uma reabertura dentro de 30 dias (vínculo
-  // de garantia ou detecção por histórico), o aviso abre sozinho assim que a tela carrega,
-  // porque esse caminho (fechamento automático por última posição preenchida) nunca teve
-  // chance de perguntar isso ao analista antes.
-  useEffect(() => {
-    if (vaga.status !== "fechada" || vaga.tipo_servico !== "recrutamento_selecao") {
-      setCobrancaPendente(null);
-      return;
-    }
-    let cancelado = false;
-    fetch(`/api/vagas/${vaga.id}/reposicao-info`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((info: CobrancaRSInfo | null) => {
-        if (cancelado) return;
-        if (info?.pendente) {
-          setCobrancaPendente(info);
-          if (info.reaberturaRecente) {
-            setReposicaoInfo(info);
-            setModalReposicaoCobranca(true);
-          }
-        } else {
-          setCobrancaPendente(null);
-        }
-      })
-      .catch(() => {});
-    return () => { cancelado = true; };
-  }, [vaga.id, vaga.status, vaga.tipo_servico]);
 
   const handleCompartilhar = () => {
     const url = window.location.origin + "/vagas/" + vaga.id;
@@ -231,14 +181,12 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
   const tipoInfo   = TIPOS_SERVICO.find((t) => t.id === vaga.tipo_servico);
   const coresTipo  = vaga.tipo_servico ? CORES_TIPO[vaga.tipo_servico] : null;
 
-  const handleEncerrarConfirm = async (status: "fechada" | "cancelada", gerarCobranca?: boolean) => {
+  const handleEncerrarConfirm = async (status: "fechada" | "cancelada") => {
     setEncerrando(true);
-    const body: Record<string, unknown> = { status };
-    if (gerarCobranca !== undefined) body.gerar_cobranca = gerarCobranca;
     const res = await fetch(`/api/vagas/${vaga.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ status }),
     });
     if (res.ok) {
       const json = await res.json();
@@ -251,60 +199,6 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
     }
     setEncerrando(false);
     setModalEncerrar(false);
-    setModalReposicaoCobranca(false);
-    setCobrancaPendente(null);
-  };
-
-  // Nenhuma vaga R&S gera cobrança automaticamente ao fechar (mudança de comportamento
-  // confirmada com o cliente) — em vez de fechar direto, busca o contexto (reabertura
-  // recente dentro de 30 dias, se houver, com o candidato/cobrança anterior) e pergunta
-  // explicitamente ao analista se deve gerar cobrança (ver PATCH /api/vagas/[id], que
-  // também recusa o fechamento sem essa resposta como backstop).
-  const handleFecharClick = async () => {
-    if (vaga.tipo_servico !== "recrutamento_selecao") {
-      handleEncerrarConfirm("fechada");
-      return;
-    }
-    setCarregandoReposicao(true);
-    setModalEncerrar(false);
-    try {
-      const res = await fetch(`/api/vagas/${vaga.id}/reposicao-info`);
-      const info: CobrancaRSInfo | null = res.ok ? await res.json() : null;
-      setReposicaoInfo(info);
-      setModalReposicaoCobranca(true);
-    } finally {
-      setCarregandoReposicao(false);
-    }
-  };
-
-  // Reabre o modal a partir do botão fixo "Gerar cobrança de R&S?" — reusa os dados já
-  // carregados por cobrancaPendente, sem precisar buscar de novo.
-  const handleAbrirCobrancaPendente = () => {
-    if (!cobrancaPendente) return;
-    setReposicaoInfo(cobrancaPendente);
-    setModalReposicaoCobranca(true);
-  };
-
-  // Resolve a decisão do modal pelos dois caminhos possíveis: vaga ainda aberta (fechando
-  // agora pelo botão "Encerrar vaga" — PATCH normal, que muda o status e decide a cobrança
-  // no mesmo request) ou vaga já fechada sozinha pelo fechamento automático (endpoint
-  // dedicado, que só resolve a pendência financeira sem mexer em status).
-  const handleDecidirCobranca = async (gerarCobranca: boolean) => {
-    if (vaga.status !== "fechada") {
-      await handleEncerrarConfirm("fechada", gerarCobranca);
-      return;
-    }
-    setEncerrando(true);
-    const res = await fetch(`/api/vagas/${vaga.id}/decidir-cobranca-reposicao`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ gerar_cobranca: gerarCobranca }),
-    });
-    if (res.ok) {
-      setCobrancaPendente(null);
-    }
-    setEncerrando(false);
-    setModalReposicaoCobranca(false);
   };
 
   const handleAtivarConfirm = async () => {
@@ -495,19 +389,6 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
                 <span className="text-xs bg-black/5 text-gray-600 px-2.5 py-1 rounded-full font-medium">
                   {vaga.clientes.nome}
                 </span>
-              )}
-              {cobrancaPendente && (
-                <button
-                  onClick={handleAbrirCobrancaPendente}
-                  className="text-xs font-bold px-2.5 py-1 rounded-full"
-                  style={
-                    cobrancaPendente.reaberturaRecente
-                      ? { backgroundColor: "#FEF3C7", color: "#92400E", border: "1px solid #FCD34D", cursor: "pointer" }
-                      : { backgroundColor: "#DBEAFE", color: "#1D4ED8", border: "1px solid #93C5FD", cursor: "pointer" }
-                  }
-                >
-                  {cobrancaPendente.reaberturaRecente ? "⚠ Decisão de cobrança R&S pendente" : "💰 Gerar cobrança de R&S?"}
-                </button>
               )}
             </div>
           </div>
@@ -925,8 +806,8 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
 
                 {/* Fechada */}
                 <button
-                  onClick={handleFecharClick}
-                  disabled={encerrando || carregandoReposicao}
+                  onClick={() => handleEncerrarConfirm("fechada")}
+                  disabled={encerrando}
                   style={{
                     display: "flex", flexDirection: "column", alignItems: "center", gap: "8px",
                     padding: "20px 16px", borderRadius: "12px", border: "1px solid #e5e7eb",
@@ -947,83 +828,6 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
               <div style={{ textAlign: "center", marginTop: "16px" }}>
                 <button
                   onClick={() => setModalEncerrar(false)}
-                  disabled={encerrando}
-                  style={{ fontSize: "13px", color: "#6b7280", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: "2px" }}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal decisão de cobrança R&S — confirma gerar cobrança ou não. Texto de alerta de
-          reabertura só aparece quando reaberturaRecente é true; senão é uma pergunta
-          simples, sem framing de reposição/garantia. */}
-      {modalReposicaoCobranca && (
-        <div
-          style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: "16px" }}
-          onClick={() => !encerrando && setModalReposicaoCobranca(false)}
-        >
-          <div
-            style={{ backgroundColor: "#fff", borderRadius: "16px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", width: "100%", maxWidth: "480px" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ padding: "24px" }}>
-              <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#111827", marginBottom: "12px" }}>
-                {reposicaoInfo?.reaberturaRecente ? "Fechar vaga reaberta recentemente" : "Cobrança de R&S"}
-              </h2>
-
-              {reposicaoInfo?.reaberturaRecente ? (
-                <div style={{ backgroundColor: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: "10px", padding: "14px 16px", marginBottom: "20px" }}>
-                  <p style={{ fontSize: "13px", color: "#92400E", lineHeight: 1.6, margin: 0 }}>
-                    Esta vaga foi reaberta e fechada de novo há menos de 30 dias
-                    {reposicaoInfo?.candidatoNome ? <> — candidato anterior: <strong>{reposicaoInfo.candidatoNome}</strong></> : ""}
-                    {reposicaoInfo?.dataInicioAnterior ? <> (início em {formatarData(reposicaoInfo.dataInicioAnterior)})</> : ""}.
-                    {reposicaoInfo?.cobrancaValor != null ? (
-                      <>
-                        {" "}A cobrança original já foi feita{reposicaoInfo.cobrancaData ? ` em ${formatarData(reposicaoInfo.cobrancaData)}` : ""} no valor de{" "}
-                        <strong>{reposicaoInfo.cobrancaValor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong>.
-                      </>
-                    ) : null}
-                    {" "}Gerar uma nova cobrança de R&S mesmo assim?
-                  </p>
-                </div>
-              ) : (
-                <p style={{ fontSize: "14px", color: "#374151", lineHeight: 1.6, marginBottom: "20px" }}>
-                  Gerar cobrança de R&S para esta contratação?
-                </p>
-              )}
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                <button
-                  onClick={() => handleDecidirCobranca(false)}
-                  disabled={encerrando}
-                  style={{
-                    padding: "12px 16px", borderRadius: "10px", border: "1px solid #e5e7eb",
-                    backgroundColor: "#f9fafb", cursor: encerrando ? "not-allowed" : "pointer",
-                    opacity: encerrando ? 0.6 : 1, fontSize: "14px", fontWeight: 700, color: "#374151",
-                  }}
-                >
-                  Não gerar cobrança
-                </button>
-                <button
-                  onClick={() => handleDecidirCobranca(true)}
-                  disabled={encerrando}
-                  style={{
-                    padding: "12px 16px", borderRadius: "10px", border: "1px solid #FCA5A5",
-                    backgroundColor: "#FEF2F2", cursor: encerrando ? "not-allowed" : "pointer",
-                    opacity: encerrando ? 0.6 : 1, fontSize: "14px", fontWeight: 700, color: "#DC2626",
-                  }}
-                >
-                  Sim, gerar cobrança
-                </button>
-              </div>
-
-              <div style={{ textAlign: "center", marginTop: "16px" }}>
-                <button
-                  onClick={() => setModalReposicaoCobranca(false)}
                   disabled={encerrando}
                   style={{ fontSize: "13px", color: "#6b7280", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: "2px" }}
                 >

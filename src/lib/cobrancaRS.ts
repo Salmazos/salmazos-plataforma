@@ -20,10 +20,12 @@ type CandidatoVagaComRelacoes = any;
 
 /**
  * Gera o rascunho de cobrança R&S (status 'pendente_revisao') para um candidato_vaga
- * específico, se aplicável — chamado sempre que uma vaga fecha com candidato(s) já
- * contratado(s) (ver gerarCobrancasRSParaVaga). Idempotente: não cria duplicata se já
- * existir uma cobrança para esse candidato_vaga_id (também garantido a nível de banco
- * pelo UNIQUE em cobrancas_rs.candidato_vaga_id).
+ * específico, se aplicável — chamado direto no momento da finalização da contratação
+ * (PATCH /api/candidatos-vagas/[id]/finalizar), quando o analista responde "Sim" à
+ * pergunta de gerar cobrança. Cada contratação decide por si (candidatos_vagas.
+ * gerar_cobranca_rs), não há mais geração em lote por vaga. Idempotente: não cria
+ * duplicata se já existir uma cobrança para esse candidato_vaga_id (também garantido a
+ * nível de banco pelo UNIQUE em cobrancas_rs.candidato_vaga_id).
  */
 export async function gerarCobrancaRSSeAplicavel(
   vagaId: string,
@@ -125,48 +127,26 @@ export async function gerarCobrancaRSSeAplicavel(
   return { criada: true };
 }
 
-/**
- * Chamada nos pontos onde uma vaga R&S pode fechar (fechamento automático por última
- * posição preenchida, ou fechamento manual via PATCH /api/vagas/[id]) — cobre todos os
- * candidatos já em etapa 'contratado' vinculados à vaga, não só o que motivou o
- * fechamento nesse request específico (ex: vaga fechada manualmente que já tinha
- * contratados de antes).
- */
-export async function gerarCobrancasRSParaVaga(vagaId: string, supabase?: ServiceClient): Promise<void> {
-  const svc = supabase ?? createServiceClient();
-
-  const { data: contratados } = await svc
-    .from("candidatos_vagas")
-    .select("id")
-    .eq("vaga_id", vagaId)
-    .eq("etapa", "contratado");
-
-  for (const cv of contratados ?? []) {
-    await gerarCobrancaRSSeAplicavel(vagaId, cv.id, svc);
-  }
-}
-
-export interface ReaberturaAnterior {
+export interface ContratacaoAnteriorRecente {
   candidatoVagaId: string;
   candidatoNome: string | null;
   dataInicio: string;
 }
 
 /**
- * Detecta reabertura manual de uma vaga R&S: mesma vaga (mesmo vaga_id) reaberta e fechada
- * de novo com um candidato diferente, sem passar pelo fluxo de garantia (acionar-garantia),
- * que cria uma vaga NOVA e grava o vínculo em vagas.reposicao_de_candidato_vaga_id — esse
- * vínculo não existe nesse caso porque é a mesma linha de vaga sendo reutilizada. Só dá pra
- * saber pelo histórico: se existe mais de uma contratação ('contratado', data_inicio
- * preenchida) pra essa vaga, a penúltima (a mais recente ANTES da contratação que está
- * fechando agora, que é a mais recente de todas) é a "contratação anterior" candidata a
- * reabertura. Quem chama decide se a diferença de datas é "recente o bastante" (< 30 dias)
- * pra contar como garantia — esse helper só resolve QUEM foi a contratação anterior.
+ * Contratação anterior mais recente para essa mesma vaga (mesmo vaga_id), usada pra dar
+ * contexto à decisão de cobrança no momento de finalizar uma NOVA contratação (ver
+ * ModalFinalizarProcesso) — cobre tanto reabertura manual da vaga (sem vínculo explícito)
+ * quanto o caso de garantia acionada, se a vaga em questão for a mesma (não costuma ser,
+ * porque acionar-garantia cria uma vaga nova). Chamado ANTES da contratação atual ser
+ * gravada como 'contratado', então o candidato mais recente já encontrado aqui é sempre de
+ * uma contratação anterior de verdade, nunca a que está em andamento. Quem chama decide se
+ * a diferença de datas é "recente o bastante" (< 30 dias) pra ser tratada como garantia.
  */
-export async function detectarReaberturaAnterior(
+export async function buscarContratacaoAnteriorRecente(
   vagaId: string,
   supabase?: ServiceClient
-): Promise<ReaberturaAnterior | null> {
+): Promise<ContratacaoAnteriorRecente | null> {
   const svc = supabase ?? createServiceClient();
 
   const { data: rows } = await svc
@@ -175,45 +155,18 @@ export async function detectarReaberturaAnterior(
     .eq("vaga_id", vagaId)
     .eq("etapa", "contratado")
     .not("data_inicio", "is", null)
-    .order("data_inicio", { ascending: false });
+    .order("data_inicio", { ascending: false })
+    .limit(1);
 
-  if (!rows || rows.length < 2) return null;
+  if (!rows || rows.length === 0) return null;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const anterior = rows[1] as any;
+  const row = rows[0] as any;
   return {
-    candidatoVagaId: anterior.id,
-    candidatoNome: anterior.candidatos?.nome_completo ?? null,
-    dataInicio: anterior.data_inicio,
+    candidatoVagaId: row.id,
+    candidatoNome: row.candidatos?.nome_completo ?? null,
+    dataInicio: row.data_inicio,
   };
-}
-
-/**
- * Se já existe uma decisão do analista (gerar cobrança ou não) registrada em audit_logs
- * pra essa vaga — mas só considera decisões do CICLO ATUAL (created_at >= data_abertura
- * vigente da vaga). Necessário porque, com a mesma vaga podendo reabrir e fechar várias
- * vezes (ver detectarReaberturaAnterior), uma decisão de um fechamento anterior não pode
- * bloquear a pergunta de novo no fechamento seguinte — cada ciclo aberto→fechado precisa da
- * sua própria decisão.
- */
-export async function decisaoCobrancaJaRegistrada(
-  vagaId: string,
-  dataAberturaAtual: string | null | undefined,
-  supabase?: ServiceClient
-): Promise<boolean> {
-  const svc = supabase ?? createServiceClient();
-
-  let query = svc
-    .from("audit_logs")
-    .select("id")
-    .eq("entidade", "vagas")
-    .eq("entidade_id", vagaId)
-    .eq("acao", "cobranca_rs_reposicao_decisao")
-    .limit(1);
-  if (dataAberturaAtual) query = query.gte("created_at", dataAberturaAtual);
-
-  const { data } = await query;
-  return !!data && data.length > 0;
 }
 
 /**

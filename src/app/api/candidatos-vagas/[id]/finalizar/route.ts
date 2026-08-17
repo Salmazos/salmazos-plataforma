@@ -3,7 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, candidatoVagaFinalizarSchema } from "@/lib/schemas";
-import { gerarCobrancasRSParaVaga } from "@/lib/cobrancaRS";
+import { gerarCobrancaRSSeAplicavel } from "@/lib/cobrancaRS";
 import { notificarVagaEncerrada } from "@/lib/notificarVagaEncerrada";
 import { resolverTipoServicoVigente } from "@/lib/tipoServicoVigente";
 
@@ -30,6 +30,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       resultado, data_inicio, data_fim, renovavel,
       motivo_reprovacao, responsavel_encerramento, observacoes,
       vaga_cancelada_cliente, admissao_salario, fee_ausente_justificativa,
+      gerar_cobranca_rs,
     } = parsed.data;
 
     const supabase = createServiceClient();
@@ -96,6 +97,17 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         );
       }
 
+      // Decisão de gerar cobrança R&S passa a ser por contratação, capturada aqui, não
+      // mais no fechamento da vaga. Obrigatória pra toda vaga R&S — o frontend
+      // (ModalFinalizarProcesso) já pergunta isso no mesmo formulário; essa checagem é o
+      // backstop server-side pra chamada direta à API não pular a decisão.
+      if (tipoServicoFinal === "recrutamento_selecao" && gerar_cobranca_rs == null) {
+        return NextResponse.json(
+          { error: "Informe se deve gerar cobrança de R&S para esta contratação.", requiresDecisaoCobranca: true },
+          { status: 400 }
+        );
+      }
+
       if (
         tipoServicoFinal === "recrutamento_selecao" &&
         admissao_salario != null &&
@@ -112,10 +124,31 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         cvFields.garantia_data_fim = inicioGarantia.toISOString().split("T")[0];
       }
 
+      if (tipoServicoFinal === "recrutamento_selecao") {
+        cvFields.gerar_cobranca_rs = gerar_cobranca_rs === true;
+        cvFields.decisao_cobranca_registrada_em = new Date().toISOString();
+      }
+
       await supabase
         .from("candidatos_vagas")
         .update(cvFields)
         .eq("id", id);
+
+      if (tipoServicoFinal === "recrutamento_selecao") {
+        registrarAuditoria({
+          acao: "cobranca_rs_decisao",
+          entidade: "candidatos_vagas",
+          entidade_id: id,
+          detalhes: { candidato_id: cv.candidato_id, vaga_id: cv.vaga_id, gerar_cobranca_rs: gerar_cobranca_rs === true },
+        });
+
+        // Gera na hora, não espera a vaga fechar — cada contratação decide por si.
+        if (gerar_cobranca_rs === true) {
+          await gerarCobrancaRSSeAplicavel(cv.vaga_id, id, supabase).catch((err) =>
+            console.error("[finalizar] Erro ao gerar cobrança R&S:", err)
+          );
+        }
+      }
 
       if (precisaFeeSemTaxaConfigurada) {
         registrarAuditoria({
@@ -159,21 +192,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         await supabase.from("vagas").update(updateFields).eq("id", vaga.id);
 
         if (vagaEncerrada) {
-          // Mudança de comportamento confirmada com o cliente: nenhuma vaga R&S gera
-          // cobrança automática ao fechar, nem na primeira contratação — a decisão é
-          // sempre do analista. Fechamento automático (última posição preenchida) não
-          // tem como perguntar nada nesse momento, então fecha a vaga normalmente e pula
-          // a geração: fica "pendente de decisão de cobrança" até o analista abrir a
-          // tela da vaga, onde o aviso (VagaDetalheClient) aparece sozinho ou um botão
-          // fixo fica disponível pra ele decidir — mesma trava do fechamento manual via
-          // PATCH /api/vagas/[id], só que sem bloquear a finalização do candidato (são
-          // ações diferentes: finalizar a contratação não devia travar por causa de uma
-          // decisão financeira pendente da vaga).
-          if (vaga.tipo_servico !== "recrutamento_selecao") {
-            await gerarCobrancasRSParaVaga(vaga.id, supabase).catch((err) =>
-              console.error("[finalizar] Erro ao gerar cobranças R&S:", err)
-            );
-          }
+          // Cobrança R&S da contratação que motivou esse fechamento já foi decidida e
+          // gerada (ou não) logo acima, no momento da finalização — fechar a vaga aqui
+          // não mexe em cobrança.
 
           // Fechamento automático (última posição preenchida) atualiza a tabela `vagas`
           // direto aqui em vez de passar por PATCH /api/vagas/[id] — por isso precisa

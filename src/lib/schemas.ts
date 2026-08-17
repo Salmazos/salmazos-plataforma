@@ -106,11 +106,6 @@ export const vagaCreateSchema = z.object({
 
 export const vagaUpdateSchema = vagaCreateSchema.partial().extend({
   motivo_alteracao: z.string().optional(),
-  // Só relevante ao fechar (status: "fechada") uma vaga de reposição de garantia
-  // (vagas.reposicao_de_candidato_vaga_id preenchido) — decisão explícita do analista sobre
-  // gerar ou não uma nova cobrança R&S, já que a cobrança original da contratação anterior
-  // já foi feita. Ver PATCH /api/vagas/[id].
-  gerar_cobranca: z.boolean().optional(),
 });
 
 // ── Cliente ──────────────────────────────────────────────────────────────────
@@ -367,6 +362,11 @@ export const candidatoVagaFinalizarSchema = z.object({
   // guard em finalizar/route.ts. Mesmo padrão de justificativa do forçar geração de
   // pacote (admissaoGerarPdfSchema).
   fee_ausente_justificativa: z.string().optional().nullable(),
+  // Obrigatória só quando resultado="contratado" e a vaga é R&S — decisão do analista
+  // sobre gerar cobrança R&S para ESSA contratação especificamente (não mais por vaga
+  // fechada). Ver guard em finalizar/route.ts e ModalFinalizarProcesso, que já pergunta
+  // isso no mesmo formulário antes de chegar aqui.
+  gerar_cobranca_rs: z.boolean().optional().nullable(),
 });
 
 // ── Admissão Digital ─────────────────────────────────────────────────────────

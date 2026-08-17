@@ -35,6 +35,16 @@ interface FeeInfo {
   admissaoFeeOrigem: string | null;
 }
 
+interface ReaberturaInfo {
+  reaberturaRecente: boolean;
+  candidatoNome?: string | null;
+  dataInicioAnterior?: string | null;
+}
+
+function formatarDataBR(dataISO: string): string {
+  return dataISO.split("-").reverse().join("/");
+}
+
 export interface FinalizarResult {
   resultado: "contratado" | "reprovado_final";
   vaga_encerrada?: boolean;
@@ -187,6 +197,11 @@ export default function ModalFinalizarProcesso({
   const [justificativaSemTaxa, setJustificativaSemTaxa] = useState("");
   const [erroFee, setErroFee] = useState("");
 
+  // Decisão de gerar cobrança R&S — captada aqui, por contratação, no momento da
+  // finalização (não mais no fechamento da vaga). null = ainda não respondido.
+  const [gerarCobrancaRS, setGerarCobrancaRS] = useState<boolean | null>(null);
+  const [reaberturaInfo, setReaberturaInfo] = useState<ReaberturaInfo | null>(null);
+
   useEffect(() => {
     if (!isOpen) return;
     setMostrarAvisoFeeAusente(false);
@@ -194,7 +209,23 @@ export default function ModalFinalizarProcesso({
     setNovaTaxaPercentual("");
     setJustificativaSemTaxa("");
     setErroFee("");
+    setGerarCobrancaRS(null);
+    setReaberturaInfo(null);
   }, [isOpen, cvId]);
+
+  // Contexto de reabertura recente (< 30 dias) pra essa vaga — dá base pra decisão de
+  // cobrança quando essa contratação é uma reposição, seja por vínculo explícito de
+  // garantia ou por reabertura manual da mesma vaga (ver /api/vagas/[id]/reabertura-recente).
+  useEffect(() => {
+    const precisa = isOpen && resultado === "contratado" && tipoServico === "recrutamento_selecao" && !!vagaId;
+    if (!precisa) { setReaberturaInfo(null); return; }
+    let cancelado = false;
+    fetch(`/api/vagas/${vagaId}/reabertura-recente`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!cancelado) setReaberturaInfo(j); })
+      .catch(() => { if (!cancelado) setReaberturaInfo(null); });
+    return () => { cancelado = true; };
+  }, [isOpen, resultado, tipoServico, vagaId]);
 
   // Só busca fee/portal no fluxo R&S "Contratado" — os outros tipos de serviço
   // nunca usam esses dados, e a maioria dos cards do Kanban nunca chega aqui.
@@ -274,6 +305,7 @@ export default function ModalFinalizarProcesso({
                 tipo_servico: tipoServico,
                 admissao_salario: admSalario ? parseFloat(admSalario) : undefined,
                 fee_ausente_justificativa: feeAusenteJustificativa,
+                gerar_cobranca_rs: tipoServico === "recrutamento_selecao" ? gerarCobrancaRS : undefined,
               }
             : {
                 motivo_reprovacao: motivoFinal,
@@ -311,6 +343,10 @@ export default function ModalFinalizarProcesso({
         return;
       }
       if (salarioObrigatorio && !admSalario) { setErro("Informe o salário acordado."); return; }
+      if (tipoServico === "recrutamento_selecao" && gerarCobrancaRS === null) {
+        setErro("Responda se deve gerar cobrança de R&S para esta contratação.");
+        return;
+      }
 
       // Trava: vaga R&S sem taxa configurada não segue sem uma decisão explícita.
       if (feeConfigPendente && modoResolucaoFee !== "sem_taxa") {
@@ -524,6 +560,53 @@ export default function ModalFinalizarProcesso({
 
               {/* Info box */}
               <ContratadoInfoBox tipoServico={tipoServico ?? null} />
+
+              {/* Decisão de cobrança R&S — por contratação, capturada aqui */}
+              {tipoServico === "recrutamento_selecao" && (
+                <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 8, padding: "12px 14px" }}>
+                  {reaberturaInfo?.reaberturaRecente && (
+                    <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "10px 12px", marginBottom: 10 }}>
+                      <p style={{ fontSize: 12, color: "#92400E", margin: 0, lineHeight: 1.5 }}>
+                        ⚠️ Esta vaga foi reaberta e fechada de novo há menos de 30 dias
+                        {reaberturaInfo.candidatoNome ? <> — candidato anterior: <strong>{reaberturaInfo.candidatoNome}</strong></> : ""}
+                        {reaberturaInfo.dataInicioAnterior ? <> (início em {formatarDataBR(reaberturaInfo.dataInicioAnterior)})</> : ""}.
+                      </p>
+                    </div>
+                  )}
+                  <p style={{ fontSize: 12, fontWeight: 700, color: "#374151", margin: "0 0 8px" }}>
+                    Gerar cobrança de R&S para esta contratação? *
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setGerarCobrancaRS(false)}
+                      className="text-sm px-3 py-1.5 rounded-lg font-semibold transition-colors"
+                      style={
+                        gerarCobrancaRS === false
+                          ? { background: "#374151", color: "#fff" }
+                          : { background: "#fff", color: "#374151", border: "1px solid #D1D5DB" }
+                      }
+                    >
+                      Não
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGerarCobrancaRS(true)}
+                      className="text-sm px-3 py-1.5 rounded-lg font-semibold transition-colors"
+                      style={
+                        gerarCobrancaRS === true
+                          ? { background: "#16A34A", color: "#fff" }
+                          : { background: "#fff", color: "#374151", border: "1px solid #D1D5DB" }
+                      }
+                    >
+                      Sim
+                    </button>
+                  </div>
+                  {tentouEnviar && gerarCobrancaRS === null && (
+                    <p className="text-red-500 text-xs mt-1">Responda se deve gerar cobrança de R&S.</p>
+                  )}
+                </div>
+              )}
 
               {/* Trava: taxa R&S não configurada na vaga */}
               {mostrarAvisoFeeAusente && (
