@@ -485,6 +485,7 @@ export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosI
           // /painel/faturamento-rs já é restrita a PAPEIS_FULL_ACCESS no page.tsx — quem chega
           // aqui já passou por esse gate, então full access é sempre true neste ponto de entrada.
           isFullAccess={true}
+          acessoAmplo={true}
         />
       )}
     </div>

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import SidebarMenu from "@/components/SidebarMenu";
 import PopupAniversariosHoje from "@/components/PopupAniversariosHoje";
 import PopupRescisoesHoje from "@/components/PopupRescisoesHoje";
@@ -39,6 +39,20 @@ export default async function PainelLayout({
   const canAccessFuncionarios = PAPEIS_PAINEL_FUNCIONARIOS.includes(role);
   const canAccessAdmissoes = PAPEIS_PAINEL_ADMISSOES.includes(role);
   const canAccessCobrancasRS = await checarAcessoCobrancaRS(user);
+  // Acesso restrito: sem acesso amplo, mas já gerou pelo menos uma cobrança própria
+  // (independente do status — continua enxergando o link mesmo depois de
+  // aprovada/paga, pra acessar o histórico do que ele mesmo gerou). Só consulta o banco
+  // quando falta o acesso amplo — quem já tem canAccessCobrancasRS não precisa disso.
+  let temCobrancasGeradas = false;
+  if (!canAccessCobrancasRS) {
+    const svc = createServiceClient();
+    const { data: minhas } = await svc
+      .from("cobrancas_rs")
+      .select("id")
+      .eq("gerado_por_user_id", user.id)
+      .limit(1);
+    temCobrancasGeradas = !!minhas && minhas.length > 0;
+  }
   const canAccessSupervisao = (await checarAcessoSupervisao(user)).acesso;
 
   const { data: perfil } = await supabase
@@ -61,6 +75,7 @@ export default async function PainelLayout({
           canAccessFuncionarios={canAccessFuncionarios}
           canAccessAdmissoes={canAccessAdmissoes}
           canAccessCobrancasRS={canAccessCobrancasRS}
+          temCobrancasGeradas={temCobrancasGeradas}
           canAccessSupervisao={canAccessSupervisao}
         />
         <main className="flex-1 min-w-0 px-6 py-6">{children}</main>

@@ -51,6 +51,12 @@ interface Props {
   canAccessFuncionarios: boolean;
   canAccessAdmissoes: boolean;
   canAccessCobrancasRS: boolean;
+  // Acesso restrito: usuário sem canAccessCobrancasRS (acesso amplo) mas que já gerou
+  // pelo menos uma cobrança própria (cobrancas_rs.gerado_por_user_id) — ainda precisa do
+  // link no menu pra voltar à tela filtrada dele mesmo depois de dispensar o popup de
+  // aviso (ver painel/layout.tsx). Rótulo do item muda pra deixar claro que é uma visão
+  // limitada, não a tela cheia do módulo.
+  temCobrancasGeradas: boolean;
   canAccessSupervisao: boolean;
 }
 
@@ -174,6 +180,7 @@ export default function SidebarMenu({
   canAccessFuncionarios,
   canAccessAdmissoes,
   canAccessCobrancasRS,
+  temCobrancasGeradas,
   canAccessSupervisao,
   userEmail,
 }: Props) {
@@ -236,9 +243,19 @@ export default function SidebarMenu({
     if (def.requireSupervisor && !isSupervisorOrAbove) return false;
     if (def.requireFuncionarios && !canAccessFuncionarios) return false;
     if (def.requireAdmissoes && !canAccessAdmissoes) return false;
-    if (def.requireCobrancasRS && !canAccessCobrancasRS) return false;
+    if (def.requireCobrancasRS && !canAccessCobrancasRS && !temCobrancasGeradas) return false;
     if (def.requireSupervisao && !canAccessSupervisao) return false;
     return true;
+  }
+
+  // "Cobranças R&S" muda de rótulo quando o acesso vem só de temCobrancasGeradas (sem
+  // canAccessCobrancasRS) — deixa visualmente claro que é a visão filtrada (só o que o
+  // próprio usuário gerou), não a tela cheia do módulo.
+  function rotulo(def: MenuLeafDef): string {
+    if (def.requireCobrancasRS && !canAccessCobrancasRS && temCobrancasGeradas) {
+      return "Minhas Cobranças R&S";
+    }
+    return def.label;
   }
 
   // Grupos (item.submenu) filtram cada item do submenu individualmente pela própria
@@ -246,7 +263,12 @@ export default function SidebarMenu({
   const filteredItems = menuItems
     .filter((item) => passaRequisitos(item))
     .map((item) => (item.submenu ? { ...item, submenu: item.submenu.filter((sub) => passaRequisitos(sub)) } : item))
-    .filter((item) => !item.submenu || item.submenu.length > 0);
+    .filter((item) => !item.submenu || item.submenu.length > 0)
+    .map((item) => ({
+      ...item,
+      label: rotulo(item),
+      submenu: item.submenu?.map((sub) => ({ ...sub, label: rotulo(sub) })),
+    }));
 
   const sidebarWidth = collapsed ? 64 : 240;
 

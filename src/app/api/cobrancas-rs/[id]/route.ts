@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, cobrancaRsRascunhoSchema } from "@/lib/schemas";
-import { checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
+import { podeRevisarCobranca } from "@/lib/fullAccessAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -13,8 +13,6 @@ export async function GET(_request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const temAcesso = await checarAcessoCobrancaRS(user);
-  if (!temAcesso) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
 
   const { id } = await params;
   const svc = createServiceClient();
@@ -24,7 +22,11 @@ export async function GET(_request: NextRequest, { params }: Params) {
     .eq("id", id)
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 404 });
+  if (error || !data) return NextResponse.json({ error: "Cobrança não encontrada." }, { status: 404 });
+
+  const pode = await podeRevisarCobranca(user, data);
+  if (!pode) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
+
   return NextResponse.json({ data });
 }
 
@@ -38,8 +40,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const temAcesso = await checarAcessoCobrancaRS(user);
-  if (!temAcesso) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
 
   const { id } = await params;
   const body = await request.json();
@@ -51,11 +51,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const { data: atual, error: atualErr } = await svc
     .from("cobrancas_rs")
-    .select("id, status, cliente_id, cliente_cnpj_snapshot, cliente_endereco_snapshot")
+    .select("id, status, cliente_id, cliente_cnpj_snapshot, cliente_endereco_snapshot, gerado_por_user_id")
     .eq("id", id)
     .single();
 
   if (atualErr || !atual) return NextResponse.json({ error: "Cobrança não encontrada." }, { status: 404 });
+
+  const pode = await podeRevisarCobranca(user, atual);
+  if (!pode) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
+
   if (atual.status !== "pendente_revisao") {
     return NextResponse.json({ error: "Esta cobrança já foi revisada e não pode mais ser editada." }, { status: 400 });
   }

@@ -62,3 +62,19 @@ export async function checarAcessoCobrancaRS(user: User): Promise<boolean> {
 
   return !!acesso;
 }
+
+// Acesso a UMA cobrança específica: quem já tem acesso amplo (checarAcessoCobrancaRS)
+// sempre pode; além disso, o analista que GEROU aquela cobrança (respondeu "sim" à
+// pergunta de cobrança no momento da contratação, cobrancas_rs.gerado_por_user_id) também
+// pode revisar/aprovar — mas só a(s) cobrança(s) dele mesmo, nunca a tela cheia com as de
+// outros clientes/analistas. Motivo de precisar de uma segunda revisão mesmo sendo quem
+// gerou: o salário anunciado na contratação pode ter mudado depois (cliente confirma
+// diferente pelo portal, por exemplo), então sempre precisa conferir antes de aprovar e
+// enviar pro cliente.
+export async function podeRevisarCobranca(
+  user: User,
+  cobranca: { gerado_por_user_id: string | null }
+): Promise<boolean> {
+  if (await checarAcessoCobrancaRS(user)) return true;
+  return cobranca.gerado_por_user_id === user.id;
+}

@@ -28,6 +28,11 @@ export interface CobrancaRSRow {
 interface Props {
   rows: CobrancaRSRow[];
   isFullAccess: boolean;
+  // Acesso amplo ao módulo (PAPEIS_FULL_ACCESS + configurado em
+  // cobranca_rs_analistas_acesso) — quando false, a lista já vem filtrada só pras
+  // cobranças que o próprio usuário gerou (ver painel/cobrancas-rs/page.tsx), e a UI
+  // troca pra um framing de "minhas pendências" em vez da tela cheia do módulo.
+  acessoAmplo: boolean;
 }
 
 const STATUS_LABEL: Record<string, { label: string; bg: string; color: string }> = {
@@ -54,7 +59,7 @@ function estaAtrasada(row: CobrancaRSRow): boolean {
 
 type FiltroTab = "pendente_revisao" | "aprovada_enviada" | "paga" | "todas";
 
-export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess }: Props) {
+export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess, acessoAmplo }: Props) {
   const [rows, setRows] = useState(rowsIniciais);
   const [tab, setTab] = useState<FiltroTab>("pendente_revisao");
   const [cobrancaAberta, setCobrancaAberta] = useState<CobrancaRSRow | null>(null);
@@ -78,9 +83,11 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Cobranças R&S</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{acessoAmplo ? "Cobranças R&S" : "Minhas cobranças R&S"}</h1>
         <p className="text-gray-500 text-sm mt-0.5">
-          Rascunhos gerados automaticamente ao fechar (com candidato contratado) ou cancelar (com taxa configurada) vagas de Recrutamento e Seleção
+          {acessoAmplo
+            ? "Rascunhos gerados no momento da contratação (R&S), quando o analista responde \"sim\" à cobrança"
+            : "Cobranças que você gerou ao contratar — revise os dados e aprove antes do envio pro cliente"}
         </p>
       </div>
 
@@ -189,6 +196,7 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess
           onClose={() => setCobrancaAberta(null)}
           onAtualizada={handleAtualizada}
           isFullAccess={isFullAccess}
+          acessoAmplo={acessoAmplo}
         />
       )}
     </div>

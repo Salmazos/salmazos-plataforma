@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
-import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
 
 export const dynamic = "force-dynamic";
 
@@ -17,11 +16,17 @@ interface CobrancaPendenteRow {
 // Diferente de PopupAsoPeriodicoHoje/PopupRescisoesHoje (orientados a evento-do-dia, via
 // notificacoes_analista já targetada por user_id): cobrança R&S pendente é ESTADO
 // PERSISTENTE, não evento datado — uma cobrança criada há dias e ainda pendente continua
-// relevante hoje. Por isso consulta cobrancas_rs diretamente (não notificacoes_analista),
-// e precisa da checagem de role aqui dentro (os popups de ASO/Rescisão não precisam,
-// porque já vêm pré-filtrados por destinatário na origem da notificação). O dedup
-// "1x por usuário por dia" (cobranca_rs_popup_visualizacoes) segue o mesmo padrão dos
-// outros 3 popups — só essa parte é reaproveitável como está.
+// relevante hoje. Por isso consulta cobrancas_rs diretamente, e precisa da checagem de
+// acesso aqui dentro.
+//
+// Dedup por PENDÊNCIA INDIVIDUAL (cobranca_rs_popup_ids_vistos, unique
+// usuario_id+cobranca_id) em vez de "1x por dia": uma cobrança nova (nunca vista por esse
+// usuário) sempre dispara o popup de novo, mesmo que outras já tenham sido vistas hoje —
+// senão uma segunda contratação no mesmo dia ficaria sem aviso até o dia seguinte.
+//
+// Quem não tem acesso amplo (checarAcessoCobrancaRS) só vê as pendências que ele mesmo
+// gerou (cobrancas_rs.gerado_por_user_id) — mesma regra de podeRevisarCobranca usada nas
+// rotas de detalhe/edição/aprovação de uma cobrança específica.
 export async function GET() {
   const supabase = await createClient();
   const {
@@ -29,28 +34,30 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const temAcesso = await checarAcessoCobrancaRS(user);
-  if (!temAcesso) return NextResponse.json({ data: [], ja_visto: true });
-
   const svc = createServiceClient();
+  const acessoAmplo = await checarAcessoCobrancaRS(user);
 
-  const { data: pendentesRaw, error } = await svc
+  let query = svc
     .from("cobrancas_rs")
     .select("id, tipo, cliente_nome_snapshot, created_at, vagas(titulo)")
     .eq("status", "pendente_revisao")
     .order("created_at", { ascending: true });
+  if (!acessoAmplo) query = query.eq("gerado_por_user_id", user.id);
 
+  const { data: pendentesRaw, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const pendentes = (pendentesRaw ?? []) as CobrancaPendenteRow[];
+  if (pendentes.length === 0) return NextResponse.json({ data: [], temNovas: false });
 
-  const hojeISO = formatarDataISO(obterDataHojeBrasil());
-  const { data: visto } = await svc
-    .from("cobranca_rs_popup_visualizacoes")
-    .select("id")
+  const { data: vistas } = await svc
+    .from("cobranca_rs_popup_ids_vistos")
+    .select("cobranca_id")
     .eq("usuario_id", user.id)
-    .eq("data_referencia", hojeISO)
-    .maybeSingle();
+    .in("cobranca_id", pendentes.map((c) => c.id));
+
+  const idsVistos = new Set((vistas ?? []).map((v) => v.cobranca_id));
+  const temNovas = pendentes.some((c) => !idsVistos.has(c.id));
 
   const data = pendentes.map((c) => ({
     id: c.id,
@@ -60,5 +67,5 @@ export async function GET() {
     createdAt: c.created_at,
   }));
 
-  return NextResponse.json({ data, ja_visto: !!visto });
+  return NextResponse.json({ data, temNovas });
 }

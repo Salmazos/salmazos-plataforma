@@ -36,6 +36,11 @@ interface Props {
   onClose: () => void;
   onAtualizada: (row: CobrancaRSRow) => void;
   isFullAccess: boolean;
+  // Acesso amplo ao módulo — quem só pode revisar por ter gerado esta cobrança
+  // específica (ver podeRevisarCobranca) consegue editar vencimento normalmente, mas não
+  // marcar como paga (ação de operação financeira, fora do escopo "gerar → revisar →
+  // aprovar" que motivou dar acesso a essa pendência específica pra ele).
+  acessoAmplo: boolean;
 }
 
 function formatarMoeda(v: number | null): string {
@@ -66,7 +71,7 @@ function paraLinha(c: CobrancaDetalhe): CobrancaRSRow {
   };
 }
 
-export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualizada, isFullAccess }: Props) {
+export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualizada, isFullAccess, acessoAmplo }: Props) {
   const [carregando, setCarregando] = useState(true);
   const [cobranca, setCobranca] = useState<CobrancaDetalhe | null>(null);
   const [erro, setErro] = useState("");
@@ -379,9 +384,11 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                     {vencimentoSalvo && <p className="text-green-700 text-xs mt-1">Vencimento salvo!</p>}
                   </div>
 
-                  <button onClick={handleMarcarPaga} disabled={marcandoPaga} className="btn-primary w-full disabled:opacity-50">
-                    {marcandoPaga ? "Marcando..." : "Marcar como paga"}
-                  </button>
+                  {acessoAmplo && (
+                    <button onClick={handleMarcarPaga} disabled={marcandoPaga} className="btn-primary w-full disabled:opacity-50">
+                      {marcandoPaga ? "Marcando..." : "Marcar como paga"}
+                    </button>
+                  )}
 
                   {isFullAccess && (
                     <div className="mt-3">

@@ -30,7 +30,8 @@ type CandidatoVagaComRelacoes = any;
 export async function gerarCobrancaRSSeAplicavel(
   vagaId: string,
   candidatoVagaId: string,
-  supabase?: ServiceClient
+  supabase?: ServiceClient,
+  geradoPorUserId?: string | null
 ): Promise<ResultadoCobranca> {
   const svc = supabase ?? createServiceClient();
 
@@ -113,6 +114,7 @@ export async function gerarCobrancaRSSeAplicavel(
     prazo_cobranca: vaga.fee_rs_prazo_cobranca,
 
     status: "pendente_revisao",
+    gerado_por_user_id: geradoPorUserId ?? null,
   });
 
   if (error) {

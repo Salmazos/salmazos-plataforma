@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, cobrancaRsVencimentoSchema } from "@/lib/schemas";
-import { checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
+import { podeRevisarCobranca } from "@/lib/fullAccessAuth";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 
 interface Params {
@@ -18,8 +18,6 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const temAcesso = await checarAcessoCobrancaRS(user);
-  if (!temAcesso) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
 
   const { id } = await params;
   const body = await request.json();
@@ -31,11 +29,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const { data: atual, error: atualErr } = await svc
     .from("cobrancas_rs")
-    .select("id, status")
+    .select("id, status, gerado_por_user_id")
     .eq("id", id)
     .single();
 
   if (atualErr || !atual) return NextResponse.json({ error: "Cobrança não encontrada." }, { status: 404 });
+
+  const pode = await podeRevisarCobranca(user, atual);
+  if (!pode) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
+
   if (atual.status === "paga") {
     return NextResponse.json({ error: "Esta cobrança já foi paga — o vencimento não pode mais ser alterado." }, { status: 400 });
   }

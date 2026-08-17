@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
+import { podeRevisarCobranca } from "@/lib/fullAccessAuth";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { sendEmail } from "@/lib/sendEmail";
@@ -24,8 +24,6 @@ export async function POST(_request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const temAcesso = await checarAcessoCobrancaRS(user);
-  if (!temAcesso) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
 
   const { id } = await params;
   const svc = createServiceClient();
@@ -37,6 +35,10 @@ export async function POST(_request: NextRequest, { params }: Params) {
     .single();
 
   if (cobrancaErr || !cobranca) return NextResponse.json({ error: "Cobrança não encontrada." }, { status: 404 });
+
+  const pode = await podeRevisarCobranca(user, cobranca);
+  if (!pode) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
+
   if (cobranca.status !== "pendente_revisao") {
     return NextResponse.json({ error: "Esta cobrança já foi revisada." }, { status: 400 });
   }

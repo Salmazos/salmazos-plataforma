@@ -12,17 +12,29 @@ export default async function CobrancasRSPage() {
   } = await supabaseAuth.auth.getUser();
   if (!user) redirect("/login");
 
-  const temAcesso = await checarAcessoCobrancaRS(user);
-  if (!temAcesso) redirect("/painel");
+  const svc = createServiceClient();
+
+  // Acesso amplo (PAPEIS_FULL_ACCESS + configurado em cobranca_rs_analistas_acesso) vê a
+  // lista completa, como sempre. Quem não tem acesso amplo só entra se tiver pelo menos
+  // uma cobrança que ele mesmo gerou (gerado_por_user_id) — nesse caso a lista já vem
+  // filtrada só pras dele (ver podeRevisarCobranca, mesma regra usada nas rotas de
+  // detalhe/edição/aprovação de uma cobrança específica).
+  const acessoAmplo = await checarAcessoCobrancaRS(user);
+  if (!acessoAmplo) {
+    const { data: minhas } = await svc
+      .from("cobrancas_rs")
+      .select("id")
+      .eq("gerado_por_user_id", user.id)
+      .limit(1);
+    if (!minhas || minhas.length === 0) redirect("/painel");
+  }
 
   const role = user.app_metadata?.role ?? "analista";
   const isFullAccess = PAPEIS_FULL_ACCESS.includes(role);
 
-  const svc = createServiceClient();
-  const { data } = await svc
-    .from("cobrancas_rs")
-    .select("*, vagas(titulo)")
-    .order("created_at", { ascending: false });
+  let query = svc.from("cobrancas_rs").select("*, vagas(titulo)").order("created_at", { ascending: false });
+  if (!acessoAmplo) query = query.eq("gerado_por_user_id", user.id);
+  const { data } = await query;
 
   const rows: CobrancaRSRow[] = (data ?? []).map((c) => ({
     id: c.id,
@@ -47,5 +59,5 @@ export default async function CobrancasRSPage() {
     dataVencimento: c.data_vencimento,
   }));
 
-  return <CobrancasRSPageClient rows={rows} isFullAccess={isFullAccess} />;
+  return <CobrancasRSPageClient rows={rows} isFullAccess={isFullAccess} acessoAmplo={acessoAmplo} />;
 }

@@ -12,10 +12,12 @@ interface CobrancaPendente {
 }
 
 // Mesmo padrão estrutural de PopupAsoPeriodicoHoje.tsx/PopupRescisoesHoje.tsx (checagem ao
-// carregar o painel + "marcar visto" upsert por dia), mas com lógica de dados própria: a
-// API por trás consulta o estado atual de cobrancas_rs (pendente_revisao), não um evento
-// de "hoje" — ver /api/cobrancas-rs/pendentes-popup. A gate de acesso (PAPEIS_FULL_ACCESS)
-// é decidida inteiramente pela API; este componente é montado sem prop de role.
+// carregar o painel + "marcar visto"), mas com lógica de dados própria: a API por trás
+// consulta o estado atual de cobrancas_rs (pendente_revisao), não um evento de "hoje" —
+// ver /api/cobrancas-rs/pendentes-popup. A gate de acesso (amplo ou só cobranças geradas
+// pelo próprio usuário) é decidida inteiramente pela API; este componente é montado sem
+// prop de role. Dedup é por pendência individual (não mais "1x por dia") — uma cobrança
+// nova sempre reabre o popup, mesmo que outras já tenham sido vistas no mesmo dia.
 export default function PopupCobrancasRSPendentes() {
   const router = useRouter();
   const [pendentes, setPendentes] = useState<CobrancaPendente[]>([]);
@@ -30,7 +32,7 @@ export default function PopupCobrancasRSPendentes() {
         const body = await res.json();
         if (cancelado) return;
         const lista: CobrancaPendente[] = body.data ?? [];
-        if (lista.length > 0 && !body.ja_visto) {
+        if (lista.length > 0 && body.temNovas) {
           setPendentes(lista);
           setAberto(true);
         }
@@ -43,10 +45,17 @@ export default function PopupCobrancasRSPendentes() {
     };
   }, []);
 
+  // Marca como vistas exatamente as pendências que estavam sendo mostradas agora — se uma
+  // nova aparecer depois (outra contratação no mesmo dia, por exemplo), o popup volta.
   async function marcarVisto() {
+    const ids = pendentes.map((p) => p.id);
     setAberto(false);
     try {
-      await fetch("/api/cobrancas-rs/pendentes-popup/marcar-visto", { method: "POST" });
+      await fetch("/api/cobrancas-rs/pendentes-popup/marcar-visto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
     } catch {
       // se falhar, o pop-up volta a aparecer na próxima navegação — sem problema
     }

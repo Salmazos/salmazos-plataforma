@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, candidatoVagaFinalizarSchema } from "@/lib/schemas";
@@ -34,6 +34,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     } = parsed.data;
 
     const supabase = createServiceClient();
+
+    // Autenticação — só usada pra atribuir a autoria da cobrança R&S (cobrancas_rs.
+    // gerado_por_user_id), que decide quem além do acesso amplo pode revisar essa
+    // pendência específica depois (ver podeRevisarCobranca). Nunca bloqueia a
+    // finalização em si por falta de user — se por algum motivo não resolver, a
+    // cobrança simplesmente nasce sem "dono" e só quem tem acesso amplo revisa.
+    const authClient = await createClient();
+    const { data: { user } } = await authClient.auth.getUser();
 
     const { data: cv, error: cvErr } = await supabase
       .from("candidatos_vagas")
@@ -144,7 +152,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
         // Gera na hora, não espera a vaga fechar — cada contratação decide por si.
         if (gerar_cobranca_rs === true) {
-          await gerarCobrancaRSSeAplicavel(cv.vaga_id, id, supabase).catch((err) =>
+          await gerarCobrancaRSSeAplicavel(cv.vaga_id, id, supabase, user?.id ?? null).catch((err) =>
             console.error("[finalizar] Erro ao gerar cobrança R&S:", err)
           );
         }
