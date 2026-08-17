@@ -127,8 +127,6 @@ const menuItems: MenuItemDef[] = [
       { label: "Aniversários", href: "/painel/aniversarios", icon: Cake },
     ],
   },
-  { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },
-  { label: "Dashboard", href: "/painel/dashboard", icon: TrendingUp, requireFullAccess: true },
   {
     label: "Financeiro",
     href: "/painel/grupo-financeiro",
@@ -140,6 +138,8 @@ const menuItems: MenuItemDef[] = [
       { label: "Cobranças R&S", href: "/painel/cobrancas-rs", icon: Banknote, requireCobrancasRS: true },
     ],
   },
+  { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },
+  { label: "Dashboard", href: "/painel/dashboard", icon: TrendingUp, requireFullAccess: true },
   { label: "Reembolsos", href: "/painel/reembolsos", icon: Receipt, requireFullAccess: true },
   { label: "Quilometragem", href: "/painel/quilometragem", icon: Car },
   { label: "Supervisão de Postos", href: "/painel/supervisao", icon: ShieldCheck, requireSupervisao: true },
@@ -401,7 +401,25 @@ export default function SidebarMenu({
               <div key={item.href}>
                 <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "8px 0" }} />
                 {item.submenu ? (
-                  <>
+                  <div
+                    // Hover abre o grupo (procura de aba sem precisar clicar) e fecha ao sair da
+                    // área inteira (botão + submenu) — só no desktop expandido, onde faz sentido
+                    // como affordance de mouse. onClick abaixo continua funcionando à parte (toggle),
+                    // que é o único jeito de abrir/fechar em touch (mobile não dispara mouseenter).
+                    onMouseEnter={() => {
+                      if (isCollapsedView) return;
+                      setOpenGroups((prev) => (prev.has(item.href) ? prev : new Set(prev).add(item.href)));
+                    }}
+                    onMouseLeave={() => {
+                      if (isCollapsedView) return;
+                      setOpenGroups((prev) => {
+                        if (!prev.has(item.href)) return prev;
+                        const next = new Set(prev);
+                        next.delete(item.href);
+                        return next;
+                      });
+                    }}
+                  >
                     <button
                       onClick={() => {
                         if (isCollapsedView) {
@@ -479,7 +497,7 @@ export default function SidebarMenu({
                         })}
                       </div>
                     )}
-                  </>
+                  </div>
                 ) : (
                   <SidebarLink item={item} active={active} isCollapsedView={isCollapsedView} />
                 )}
