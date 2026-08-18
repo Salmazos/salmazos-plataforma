@@ -38,6 +38,7 @@ import {
   Handshake,
   Search,
   Wallet,
+  KeyRound,
 } from "lucide-react";
 
 interface Props {
@@ -160,6 +161,7 @@ const menuItems: MenuItemDef[] = [
       { label: "Usuários", href: "/painel/usuarios", icon: Users, requireSuperuser: true },
       { label: "Audit Logs", href: "/painel/audit-logs", icon: ShieldCheck, requireSuperuser: true },
       { label: "Carta de Abertura de Conta", href: "/painel/carta-conta-salario-config", icon: Landmark, requireSuperuser: true },
+      { label: "Acesso Customizado", href: "/painel/configuracoes/acesso-customizado", icon: KeyRound, requireSuperuser: true },
     ],
   },
   { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },

@@ -1016,6 +1016,15 @@ export const cobrancaRsAcessoUpdateSchema = z.object({
   ativo: z.boolean(),
 });
 
+// ── Sistema central de exceção de acesso por pessoa × aba (Fase 2a) ───────────────
+// liberado: true/false grava a exceção; null volta pro estado "sem exceção" (comportamento
+// de papel padrão), fazendo a rota deletar a linha em vez de gravar.
+export const acessoCustomizadoUpdateSchema = z.object({
+  analista_perfil_id: z.string().uuid(),
+  chave_aba: z.string().min(1),
+  liberado: z.boolean().nullable(),
+});
+
 // ── Cobrança R&S — revisão do rascunho (Fase 2b) ──────────────────────────────
 // Mesmo payload serve pra "Salvar rascunho" (sem validação obrigatória, salva parcial)
 // e como primeiro passo de "Aprovar e enviar" (o cliente sempre salva antes de aprovar,
