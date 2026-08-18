@@ -2,13 +2,18 @@ import type { User } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
+import { podeAcessarAba } from "@/lib/acessoCustomizadoAuth";
 
-// Acesso ao módulo de Supervisão de Postos de Trabalho tem duas fontes: PAPEIS_FULL_ACCESS
-// (diretoria/superuser, via app_metadata.role — mesma fonte usada em todo o resto do
-// projeto) vê tudo; analistas_perfil.nivel_acesso = 'supervisor' vê só a própria carteira
-// (clientes onde é supervisor_responsavel_id em clientes_meta_supervisao). Precisa consultar
-// o banco (perfilId é necessário pros callers filtrarem a carteira), por isso é assíncrono —
-// mesmo padrão de checarAcessoCobrancaRS em fullAccessAuth.ts.
+// Acesso ao módulo de Supervisão de Postos de Trabalho (Fase 2b — migrado pro sistema
+// central de exceção, ver podeAcessarAba): comportamento padrão continua PAPEIS_FULL_ACCESS
+// (diretoria/superuser, via app_metadata.role) OU analistas_perfil.nivel_acesso = 'supervisor',
+// mas uma exceção individual em usuario_acesso_customizado (chave_aba "supervisao_postos")
+// sempre vence — libera quem o papel não liberaria, ou bloqueia quem o papel liberaria.
+// Diferente de Quilometragem, aqui não existe recorte de "dados próprios": é tudo ou nada
+// pro módulo inteiro (o recorte de carteira por supervisor_responsavel_id em
+// clientes_meta_supervisao continua acontecendo depois, sem relação com esta checagem).
+// Precisa consultar o banco (perfilId é necessário pros callers filtrarem a carteira), por
+// isso é assíncrono — mesmo padrão de checarAcessoCobrancaRS em fullAccessAuth.ts.
 export interface AcessoSupervisao {
   acesso: boolean;
   fullAccess: boolean;
@@ -26,13 +31,10 @@ export async function checarAcessoSupervisao(user: User): Promise<AcessoSupervis
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (fullAccess) {
-    return { acesso: true, fullAccess: true, analistaPerfilId: perfil?.id ?? null };
-  }
-  if (perfil?.nivel_acesso === "supervisor") {
-    return { acesso: true, fullAccess: false, analistaPerfilId: perfil.id };
-  }
-  return { acesso: false, fullAccess: false, analistaPerfilId: perfil?.id ?? null };
+  const comportamentoPadrao = fullAccess || perfil?.nivel_acesso === "supervisor";
+  const acesso = await podeAcessarAba(user, "supervisao_postos", comportamentoPadrao);
+
+  return { acesso, fullAccess, analistaPerfilId: perfil?.id ?? null };
 }
 
 // Gate de rota de API (painel de supervisão) — 'analista' e 'dp' caem aqui como 403.
