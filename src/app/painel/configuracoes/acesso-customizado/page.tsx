@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { ABAS_CONFIG } from "@/lib/abasConfig";
+import { acessoPadraoPorPapel } from "@/lib/regraPadraoPorPapel";
 import AcessoCustomizadoConfigClient, { type AnalistaRow, type ExcecaoInicial } from "@/components/AcessoCustomizadoConfigClient";
 
 export const dynamic = "force-dynamic";
@@ -42,11 +43,22 @@ export default async function AcessoCustomizadoConfigPage() {
     liberado: e.liberado,
   }));
 
+  // Calculado aqui (server component) porque acessoPadraoPorPapel importa PAPEIS_FULL_ACCESS/
+  // PAPEIS_PAINEL_*, que puxam createServiceClient (next/headers) na cadeia de import —
+  // inválido dentro do componente cliente da matriz.
+  const regraPadrao: Record<string, boolean> = {};
+  for (const a of rows) {
+    for (const aba of ABAS_CONFIG) {
+      regraPadrao[`${a.analistaPerfilId}::${aba.chave}`] = acessoPadraoPorPapel(aba.chave, a.nivelAcesso);
+    }
+  }
+
   return (
     <AcessoCustomizadoConfigClient
       analistasIniciais={rows}
       abas={ABAS_CONFIG}
       excecoesIniciais={excecoesIniciais}
+      regraPadrao={regraPadrao}
     />
   );
 }

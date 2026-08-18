@@ -21,6 +21,11 @@ interface Props {
   analistasIniciais: AnalistaRow[];
   abas: AbaConfig[];
   excecoesIniciais: ExcecaoInicial[];
+  // Chave "analistaPerfilId::chaveAba" -> teria acesso por papel, sem exceção (calculado no
+  // server component com acessoPadraoPorPapel — ver regraPadraoPorPapel.ts). Não pode ser
+  // calculado aqui porque essa função importa PAPEIS_FULL_ACCESS/PAPEIS_PAINEL_*, que puxam
+  // createServiceClient (next/headers) na cadeia de import — inválido em componente cliente.
+  regraPadrao: Record<string, boolean>;
 }
 
 // null = sem exceção (comportamento de papel padrão), true = liberado, false = bloqueado —
@@ -49,7 +54,7 @@ function estiloDoEstado(estado: Estado) {
   return ESTILO_ESTADO.sem_excecao;
 }
 
-export default function AcessoCustomizadoConfigClient({ analistasIniciais, abas, excecoesIniciais }: Props) {
+export default function AcessoCustomizadoConfigClient({ analistasIniciais, abas, excecoesIniciais, regraPadrao }: Props) {
   const [busca, setBusca] = useState("");
   const [mapa, setMapa] = useState<Map<string, Estado>>(
     () => new Map(excecoesIniciais.map((e) => [chave(e.analistaPerfilId, e.chaveAba), e.liberado]))
@@ -224,6 +229,7 @@ export default function AcessoCustomizadoConfigClient({ analistasIniciais, abas,
                         const estado = mapa.get(k) ?? null;
                         const estilo = estiloDoEstado(estado);
                         const ocupado = salvando.has(k);
+                        const acessoPadrao = estado === null ? (regraPadrao[k] ?? false) : null;
                         return (
                           <td
                             key={aba.chave}
@@ -249,6 +255,19 @@ export default function AcessoCustomizadoConfigClient({ analistasIniciais, abas,
                             >
                               {estilo.label}
                             </button>
+                            {acessoPadrao !== null && (
+                              <div
+                                style={{
+                                  width: 64,
+                                  textAlign: "center",
+                                  fontSize: 9,
+                                  color: "#D1D5DB",
+                                  marginTop: 2,
+                                }}
+                              >
+                                Acesso: {acessoPadrao ? "Sim" : "Não"}
+                              </div>
+                            )}
                           </td>
                         );
                       })
