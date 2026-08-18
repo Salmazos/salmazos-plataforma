@@ -51,6 +51,7 @@ interface Props {
   isSupervisorOrAbove: boolean;
   canAccessFuncionarios: boolean;
   canAccessAdmissoes: boolean;
+  canAccessAniversarios: boolean;
   canAccessCobrancasRS: boolean;
   // Acesso restrito: usuário sem canAccessCobrancasRS (acesso amplo) mas que já gerou
   // pelo menos uma cobrança própria (cobrancas_rs.gerado_por_user_id) — ainda precisa do
@@ -84,6 +85,7 @@ interface MenuLeafDef {
   requireAdmissoes?: boolean;
   requireCobrancasRS?: boolean;
   requireSupervisao?: boolean;
+  requireAniversarios?: boolean;
 }
 
 interface MenuItemDef extends MenuLeafDef {
@@ -125,7 +127,7 @@ const menuItems: MenuItemDef[] = [
       { label: "Admissões", href: "/painel/admissoes", icon: FileCheck, requireAdmissoes: true },
       { label: "Funcionários", href: "/painel/funcionarios", icon: IdCard, requireFuncionarios: true },
       { label: "Rescisões", href: "/painel/rescisoes", icon: UserMinus, requireFuncionarios: true },
-      { label: "Aniversários", href: "/painel/aniversarios", icon: Cake },
+      { label: "Aniversários", href: "/painel/aniversarios", icon: Cake, requireAniversarios: true },
     ],
   },
   {
@@ -181,6 +183,7 @@ export default function SidebarMenu({
   isSupervisorOrAbove,
   canAccessFuncionarios,
   canAccessAdmissoes,
+  canAccessAniversarios,
   canAccessCobrancasRS,
   temCobrancasGeradas,
   canAccessSupervisao,
@@ -245,6 +248,7 @@ export default function SidebarMenu({
     if (def.requireSupervisor && !isSupervisorOrAbove) return false;
     if (def.requireFuncionarios && !canAccessFuncionarios) return false;
     if (def.requireAdmissoes && !canAccessAdmissoes) return false;
+    if (def.requireAniversarios && !canAccessAniversarios) return false;
     if (def.requireCobrancasRS && !canAccessCobrancasRS && !temCobrancasGeradas) return false;
     if (def.requireSupervisao && !canAccessSupervisao) return false;
     return true;

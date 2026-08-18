@@ -11,6 +11,7 @@ import { podeAcessarFuncionarios } from "@/lib/funcionariosAuth";
 import { podeAcessarAdmissoes } from "@/lib/admissaoAuth";
 import { PAPEIS_FULL_ACCESS, checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
 import { checarAcessoSupervisao } from "@/lib/supervisaoAuth";
+import { podeAcessarAniversarios } from "@/lib/aniversariosAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,7 @@ export default async function PainelLayout({
     temCobrancasGeradas = !!minhas && minhas.length > 0;
   }
   const canAccessSupervisao = (await checarAcessoSupervisao(user)).acesso;
+  const canAccessAniversarios = await podeAcessarAniversarios(user);
 
   const { data: perfil } = await supabase
     .from("analistas_perfil")
@@ -74,6 +76,7 @@ export default async function PainelLayout({
           isSupervisorOrAbove={isSupervisorOrAbove}
           canAccessFuncionarios={canAccessFuncionarios}
           canAccessAdmissoes={canAccessAdmissoes}
+          canAccessAniversarios={canAccessAniversarios}
           canAccessCobrancasRS={canAccessCobrancasRS}
           temCobrancasGeradas={temCobrancasGeradas}
           canAccessSupervisao={canAccessSupervisao}
