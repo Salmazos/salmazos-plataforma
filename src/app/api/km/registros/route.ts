@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, kmRegistroCreateSchema } from "@/lib/schemas";
+import { autorizarAnalistaId } from "@/lib/kmAuth";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -8,17 +9,17 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const params = request.nextUrl.searchParams;
-  const analistaId = params.get("analista_id");
   const from = params.get("from");
   const to = params.get("to");
 
-  if (!analistaId) return NextResponse.json({ error: "analista_id é obrigatório." }, { status: 400 });
+  const { analistaId, erro } = await autorizarAnalistaId(user, params.get("analista_id"));
+  if (erro) return erro;
 
   const svc = createServiceClient();
   let query = svc
     .from("km_registros")
     .select("*")
-    .eq("analista_id", analistaId)
+    .eq("analista_id", analistaId as string)
     .order("data", { ascending: false });
 
   if (from) query = query.gte("data", from);
@@ -38,6 +39,9 @@ export async function POST(request: NextRequest) {
   const parsed = parseBody(kmRegistroCreateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
   const { analista_id, data: dataRegistro, km_inicial, km_final, destino, cliente_visitado, motivo, resultado, tipo_servico, valor_por_km, outros_custos } = parsed.data;
+
+  const { erro } = await autorizarAnalistaId(user, analista_id);
+  if (erro) return erro;
 
   if (Number(km_final) < Number(km_inicial)) {
     return NextResponse.json({ error: "km_final deve ser maior ou igual a km_inicial." }, { status: 400 });

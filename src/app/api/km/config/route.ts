@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, kmConfigSchema } from "@/lib/schemas";
+import { autorizarAnalistaId } from "@/lib/kmAuth";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -24,10 +25,13 @@ export async function GET(request: NextRequest) {
 
   // Fallback: per-analyst rows (legacy data only)
   if (analistaId) {
+    const { analistaId: analistaIdAutorizado, erro } = await autorizarAnalistaId(user, analistaId);
+    if (erro) return erro;
+
     const { data, error } = await svc
       .from("km_config")
       .select("*")
-      .eq("analista_id", analistaId);
+      .eq("analista_id", analistaIdAutorizado as string);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ data });
   }
@@ -67,6 +71,9 @@ export async function POST(request: NextRequest) {
   if (!analista_id) {
     return NextResponse.json({ error: "analista_id é obrigatório." }, { status: 400 });
   }
+  const { erro } = await autorizarAnalistaId(user, analista_id);
+  if (erro) return erro;
+
   const { data, error } = await svc
     .from("km_config")
     .upsert(

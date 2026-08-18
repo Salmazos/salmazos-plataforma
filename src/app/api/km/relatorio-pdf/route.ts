@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { PDFDocument, PDFPage, rgb, StandardFonts, PageSizes } from "pdf-lib";
+import { autorizarAnalistaId } from "@/lib/kmAuth";
 
 const PW = PageSizes.A4[0];
 const PH = PageSizes.A4[1];
@@ -77,12 +78,19 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
 
   const body = await request.json();
-  const { analista_id, analista_nome, from, to } = body as {
+  const { analista_nome, from, to } = body as {
     analista_id?: string;
     analista_nome?: string;
     from?: string;
     to?: string;
   };
+
+  // Sem analista_id = relatório consolidado de todos — só gestor (full access/supervisor)
+  // pode pedir esse modo; analista comum sempre cai pro próprio relatório.
+  const { analistaId: analista_id, erro } = await autorizarAnalistaId(user, body.analista_id ?? null, {
+    permitirTodosSemId: true,
+  });
+  if (erro) return erro;
 
   const svc = createServiceClient();
 

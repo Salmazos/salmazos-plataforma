@@ -1,6 +1,15 @@
+import type { User } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, kmVisitaCreateSchema } from "@/lib/schemas";
+import { autorizarDonoRegistro } from "@/lib/kmAuth";
+
+async function autorizarPorRegistroId(user: User, registroId: string): Promise<NextResponse | null> {
+  const svc = createServiceClient();
+  const { data: registro } = await svc.from("km_registros").select("analista_id").eq("id", registroId).maybeSingle();
+  if (!registro) return NextResponse.json({ error: "Registro não encontrado." }, { status: 404 });
+  return autorizarDonoRegistro(user, registro.analista_id);
+}
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -9,6 +18,9 @@ export async function GET(request: NextRequest) {
 
   const registroId = request.nextUrl.searchParams.get("registro_id");
   if (!registroId) return NextResponse.json({ error: "registro_id é obrigatório." }, { status: 400 });
+
+  const erroDono = await autorizarPorRegistroId(user, registroId);
+  if (erroDono) return erroDono;
 
   const svc = createServiceClient();
   const { data, error } = await svc
@@ -35,6 +47,9 @@ export async function POST(request: NextRequest) {
     checklist_pontualidade, checklist_ambiente, checklist_feedback_cliente,
     problema_identificado, problema_descricao, plano_acao, evidencias_fotos,
   } = parsed.data;
+
+  const erroDono = await autorizarPorRegistroId(user, registro_id);
+  if (erroDono) return erroDono;
 
   const svc = createServiceClient();
   const { data, error } = await svc
@@ -151,6 +166,9 @@ export async function DELETE(request: NextRequest) {
 
   const registroId = request.nextUrl.searchParams.get("registro_id");
   if (!registroId) return NextResponse.json({ error: "registro_id é obrigatório." }, { status: 400 });
+
+  const erroDono = await autorizarPorRegistroId(user, registroId);
+  if (erroDono) return erroDono;
 
   const svc = createServiceClient();
   const { error } = await svc.from("km_visitas").delete().eq("registro_id", registroId);

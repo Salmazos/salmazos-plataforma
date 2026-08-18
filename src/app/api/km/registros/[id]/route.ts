@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, kmRegistroUpdateSchema } from "@/lib/schemas";
+import { autorizarDonoRegistro } from "@/lib/kmAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -12,6 +13,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const { id } = await params;
+
+  const svcOwner = createServiceClient();
+  const { data: dono } = await svcOwner.from("km_registros").select("analista_id").eq("id", id).maybeSingle();
+  if (!dono) return NextResponse.json({ error: "Registro não encontrado." }, { status: 404 });
+  const erroDono = await autorizarDonoRegistro(user, dono.analista_id);
+  if (erroDono) return erroDono;
+
   const body = await request.json();
   const parsed = parseBody(kmRegistroUpdateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
@@ -57,6 +65,13 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const { id } = await params;
+
+  const svcOwner = createServiceClient();
+  const { data: dono } = await svcOwner.from("km_registros").select("analista_id").eq("id", id).maybeSingle();
+  if (!dono) return NextResponse.json({ error: "Registro não encontrado." }, { status: 404 });
+  const erroDono = await autorizarDonoRegistro(user, dono.analista_id);
+  if (erroDono) return erroDono;
+
   const svc = createServiceClient();
   const { error } = await svc.from("km_registros").delete().eq("id", id);
 
