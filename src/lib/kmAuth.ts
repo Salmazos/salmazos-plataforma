@@ -2,12 +2,16 @@ import type { User } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
+import { podeAcessarAba } from "@/lib/acessoCustomizadoAuth";
 
 // Quilometragem/Reembolsos expõe dado financeiro pessoal (km rodado, valores de reembolso).
 // Sem isso, qualquer usuário autenticado podia forjar analista_id na URL e ler/editar/apagar
-// registros de outro analista. Mesmo critério de "gestor" já usado em checarAcessoSupervisao:
-// PAPEIS_FULL_ACCESS (superuser/diretoria) ou nivel_acesso = 'supervisor' enxerga todo mundo;
-// qualquer outro só enxerga o próprio analista_id.
+// registros de outro analista. "Gestor" (Fase 2b — migrado pro sistema central de exceção,
+// ver podeAcessarAba): comportamento padrão continua PAPEIS_FULL_ACCESS/supervisor, mas uma
+// exceção individual em usuario_acesso_customizado (chave_aba "reembolsos_quilometragem")
+// sempre vence — libera quem o papel não liberaria, ou bloqueia quem o papel liberaria. O
+// próprio analista_id nunca é afetado por isso: ver/editar os próprios registros continua
+// liberado pra qualquer autenticado, independente de gestor.
 export interface AcessoKm {
   analistaPerfilId: string | null;
   gestor: boolean;
@@ -15,7 +19,6 @@ export interface AcessoKm {
 
 export async function resolverAcessoKm(user: User): Promise<AcessoKm> {
   const role = user.app_metadata?.role ?? "analista";
-  const fullAccess = PAPEIS_FULL_ACCESS.includes(role);
 
   const svc = createServiceClient();
   const { data: perfil } = await svc
@@ -24,7 +27,8 @@ export async function resolverAcessoKm(user: User): Promise<AcessoKm> {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const gestor = fullAccess || perfil?.nivel_acesso === "supervisor";
+  const comportamentoPadrao = PAPEIS_FULL_ACCESS.includes(role) || perfil?.nivel_acesso === "supervisor";
+  const gestor = await podeAcessarAba(user, "reembolsos_quilometragem", comportamentoPadrao);
   return { analistaPerfilId: perfil?.id ?? null, gestor };
 }
 
