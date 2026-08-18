@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import FuncionarioDetalheClient from "@/components/FuncionarioDetalheClient";
-import { PAPEIS_PAINEL_FUNCIONARIOS } from "@/lib/funcionariosAuth";
+import { podeAcessarFuncionarios } from "@/lib/funcionariosAuth";
 import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ export default async function FuncionarioDetalhePage({ params }: Params) {
   if (!user) redirect("/login");
 
   const role = user.app_metadata?.role ?? "analista";
-  if (!PAPEIS_PAINEL_FUNCIONARIOS.includes(role)) redirect("/painel");
+  if (!(await podeAcessarFuncionarios(user))) redirect("/painel");
   const podeExcluirDocumento = PAPEIS_FULL_ACCESS.includes(role);
 
   const { id } = await params;

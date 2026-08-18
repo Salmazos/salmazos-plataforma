@@ -14,7 +14,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const acessoNegado = checarPapelFuncionarios(user);
+  const acessoNegado = await checarPapelFuncionarios(user);
   if (acessoNegado) return acessoNegado;
 
   const { id } = await params;

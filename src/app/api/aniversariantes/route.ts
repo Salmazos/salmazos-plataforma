@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, aniversarianteCreateSchema } from "@/lib/schemas";
+import { checarAcessoAniversarios } from "@/lib/aniversariosAuth";
 
 // Módulo não lida com dado sensível (CPF/bancário) — acesso de leitura/escrita liberado
-// pra qualquer usuário autenticado (superuser/diretoria/supervisor/analista), mesmo padrão
-// já usado nas outras tabelas da plataforma. A restrição fica só na tela
-// (/painel/aniversarios), que exige supervisor+.
+// por padrão pra qualquer usuário autenticado (superuser/diretoria/supervisor/analista),
+// mesmo padrão já usado nas outras tabelas da plataforma. A restrição fica só na tela
+// (/painel/aniversarios), que exige supervisor+; checarAcessoAniversarios (Fase 2b) permite
+// fechar isso pra alguém específico via exceção, mas não muda o padrão aberto.
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const acessoNegado = await checarAcessoAniversarios(user);
+  if (acessoNegado) return acessoNegado;
 
   const { searchParams } = new URL(request.url);
   const incluirInativos = searchParams.get("incluir_inativos") === "1";
@@ -37,6 +41,8 @@ export async function POST(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const acessoNegado = await checarAcessoAniversarios(user);
+    if (acessoNegado) return acessoNegado;
 
     const body = await request.json();
     const parsed = parseBody(aniversarianteCreateSchema, body);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, aniversarianteUpdateSchema } from "@/lib/schemas";
+import { checarAcessoAniversarios } from "@/lib/aniversariosAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -15,6 +16,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const acessoNegado = await checarAcessoAniversarios(user);
+    if (acessoNegado) return acessoNegado;
 
     const body = await request.json();
     const parsed = parseBody(aniversarianteUpdateSchema, body);
@@ -58,6 +61,8 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const acessoNegado = await checarAcessoAniversarios(user);
+    if (acessoNegado) return acessoNegado;
 
     const svc = createServiceClient();
     const { data, error } = await svc

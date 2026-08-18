@@ -7,8 +7,8 @@ import PopupAsoPeriodicoHoje from "@/components/PopupAsoPeriodicoHoje";
 import PopupCobrancasRSPendentes from "@/components/PopupCobrancasRSPendentes";
 import PopupSupervisaoPendente from "@/components/PopupSupervisaoPendente";
 import NotificacoesProvider from "@/components/NotificacoesProvider";
-import { PAPEIS_PAINEL_FUNCIONARIOS } from "@/lib/funcionariosAuth";
-import { PAPEIS_PAINEL_ADMISSOES } from "@/lib/admissaoAuth";
+import { podeAcessarFuncionarios } from "@/lib/funcionariosAuth";
+import { podeAcessarAdmissoes } from "@/lib/admissaoAuth";
 import { PAPEIS_FULL_ACCESS, checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
 import { checarAcessoSupervisao } from "@/lib/supervisaoAuth";
 
@@ -36,8 +36,8 @@ export default async function PainelLayout({
   // alimenta a criação automática de funcionários). Importadas de funcionariosAuth.ts/
   // admissaoAuth.ts em vez de reescritas aqui — mesma fonte usada pelos gates reais de
   // página/API, pra nunca divergir do que o Sidebar mostra.
-  const canAccessFuncionarios = PAPEIS_PAINEL_FUNCIONARIOS.includes(role);
-  const canAccessAdmissoes = PAPEIS_PAINEL_ADMISSOES.includes(role);
+  const canAccessFuncionarios = await podeAcessarFuncionarios(user);
+  const canAccessAdmissoes = await podeAcessarAdmissoes(user);
   const canAccessCobrancasRS = await checarAcessoCobrancaRS(user);
   // Acesso restrito: sem acesso amplo, mas já gerou pelo menos uma cobrança própria
   // (independente do status — continua enxergando o link mesmo depois de

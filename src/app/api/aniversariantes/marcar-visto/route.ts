@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
+import { checarAcessoAniversarios } from "@/lib/aniversariosAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,8 @@ export async function POST() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const acessoNegado = await checarAcessoAniversarios(user);
+  if (acessoNegado) return acessoNegado;
 
   const hojeISO = formatarDataISO(obterDataHojeBrasil());
 

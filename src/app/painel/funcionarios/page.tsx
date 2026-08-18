@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import FuncionariosPageClient from "@/components/FuncionariosPageClient";
-import { PAPEIS_PAINEL_FUNCIONARIOS } from "@/lib/funcionariosAuth";
+import { podeAcessarFuncionarios } from "@/lib/funcionariosAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +12,7 @@ export default async function FuncionariosPage() {
   } = await supabaseAuth.auth.getUser();
   if (!user) redirect("/login");
 
-  const role = user.app_metadata?.role ?? "analista";
-  if (!PAPEIS_PAINEL_FUNCIONARIOS.includes(role)) redirect("/painel");
+  if (!(await podeAcessarFuncionarios(user))) redirect("/painel");
 
   const svc = createServiceClient();
 

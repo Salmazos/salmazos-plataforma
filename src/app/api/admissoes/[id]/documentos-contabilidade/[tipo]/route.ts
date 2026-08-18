@@ -29,7 +29,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const acessoNegado = checarPapelAdmissoes(user);
+  const acessoNegado = await checarPapelAdmissoes(user);
   if (acessoNegado) return acessoNegado;
 
   const svc = createServiceClient();
@@ -54,7 +54,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const acessoNegado = checarPapelAdmissoes(user);
+  const acessoNegado = await checarPapelAdmissoes(user);
   if (acessoNegado) return acessoNegado;
 
   const body = await request.json().catch(() => ({}));

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import RescisoesPageClient from "@/components/RescisoesPageClient";
-import { PAPEIS_PAINEL_FUNCIONARIOS } from "@/lib/funcionariosAuth";
+import { podeAcessarFuncionarios } from "@/lib/funcionariosAuth";
 import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export default async function RescisoesPage() {
   if (!user) redirect("/login");
 
   const role = user.app_metadata?.role ?? "analista";
-  if (!PAPEIS_PAINEL_FUNCIONARIOS.includes(role)) redirect("/painel");
+  if (!(await podeAcessarFuncionarios(user))) redirect("/painel");
   const isFullAccess = PAPEIS_FULL_ACCESS.includes(role);
 
   const svc = createServiceClient();
