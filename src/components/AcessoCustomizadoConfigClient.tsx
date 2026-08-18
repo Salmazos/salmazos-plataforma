@@ -261,7 +261,7 @@ export default function AcessoCustomizadoConfigClient({ analistasIniciais, abas,
                                   width: 64,
                                   textAlign: "center",
                                   fontSize: 9,
-                                  color: "#D1D5DB",
+                                  color: acessoPadrao ? "#86EFAC" : "#FCA5A5",
                                   marginTop: 2,
                                 }}
                               >
