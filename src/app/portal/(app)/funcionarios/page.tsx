@@ -14,6 +14,21 @@ const CONTRATO_STATUS_INFO = {
   pendente: { label: "Pendente", bg: "#FEF3C7", text: "#92400E" },
 };
 
+// `nowrap: true` só nas colunas de valor curto e previsível (datas, RG, CPF, PIS) — evita
+// quebra de linha feia nelas. "Nome completo" fica de fora de propósito (varia bastante de
+// tamanho, quebrar é o comportamento certo ali).
+const COLUNAS = [
+  { label: "Nome completo", nowrap: false },
+  { label: "Data de nascimento", nowrap: true },
+  { label: "RG", nowrap: true },
+  { label: "CPF", nowrap: true },
+  { label: "PIS", nowrap: true },
+  { label: "Data de admissão", nowrap: true },
+  { label: "Função", nowrap: false },
+  { label: "ASO Periódico", nowrap: false },
+  { label: "Contrato", nowrap: false },
+] as const;
+
 export default async function PortalFuncionariosPage() {
   const supabase = await createPortalClient();
   const {
@@ -109,9 +124,20 @@ export default async function PortalFuncionariosPage() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-                {["Nome completo", "Data de nascimento", "RG", "CPF", "PIS", "Data de admissão", "Função", "ASO Periódico", "Contrato"].map((h) => (
-                  <th key={h} style={{ textAlign: "left", padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>
-                    {h}
+                {COLUNAS.map((c) => (
+                  <th
+                    key={c.label}
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#6B7280",
+                      textTransform: "uppercase",
+                      whiteSpace: c.nowrap ? "nowrap" : undefined,
+                    }}
+                  >
+                    {c.label}
                   </th>
                 ))}
               </tr>
@@ -119,7 +145,7 @@ export default async function PortalFuncionariosPage() {
             <tbody>
               {(funcionarios ?? []).length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ padding: "40px 16px", textAlign: "center", color: "#9CA3AF" }}>
+                  <td colSpan={COLUNAS.length} style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF" }}>
                     Nenhum funcionário ativo encontrado.
                   </td>
                 </tr>
@@ -138,23 +164,23 @@ export default async function PortalFuncionariosPage() {
                   const dadosPessoais = f.admissao_id ? dadosPessoaisPorAdmissao.get(f.admissao_id) : undefined;
                   return (
                     <tr key={f.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                      <td style={{ padding: "10px 16px", fontWeight: 600, color: "#111827" }}>{f.nome_completo}</td>
-                      <td style={{ padding: "10px 16px", color: "#6B7280" }}>
+                      <td style={{ padding: "10px 12px", fontWeight: 600, color: "#111827" }}>{f.nome_completo}</td>
+                      <td style={{ padding: "10px 12px", color: "#6B7280", whiteSpace: "nowrap" }}>
                         {dadosPessoais?.data_nascimento ? formatarDataSemFuso(dadosPessoais.data_nascimento) : "—"}
                       </td>
-                      <td style={{ padding: "10px 16px", color: "#374151" }}>{dadosPessoais?.rg_numero ?? "—"}</td>
-                      <td style={{ padding: "10px 16px", color: "#374151" }}>
+                      <td style={{ padding: "10px 12px", color: "#374151", whiteSpace: "nowrap" }}>{dadosPessoais?.rg_numero ?? "—"}</td>
+                      <td style={{ padding: "10px 12px", color: "#374151", whiteSpace: "nowrap" }}>
                         {dadosPessoais?.cpf ? formatarCPF(dadosPessoais.cpf) : "—"}
                       </td>
-                      <td style={{ padding: "10px 16px", color: "#374151" }}>{dadosPessoais?.pis_pasep ?? "—"}</td>
-                      <td style={{ padding: "10px 16px", color: "#6B7280" }}>
+                      <td style={{ padding: "10px 12px", color: "#374151", whiteSpace: "nowrap" }}>{dadosPessoais?.pis_pasep ?? "—"}</td>
+                      <td style={{ padding: "10px 12px", color: "#6B7280", whiteSpace: "nowrap" }}>
                         {f.data_admissao ? formatarDataSemFuso(f.data_admissao) : "—"}
                       </td>
-                      <td style={{ padding: "10px 16px", color: "#374151" }}>{f.cargo ?? "—"}</td>
-                      <td style={{ padding: "10px 16px" }}>
+                      <td style={{ padding: "10px 12px", color: "#374151" }}>{f.cargo ?? "—"}</td>
+                      <td style={{ padding: "10px 12px" }}>
                         <PortalDocumentoBadge label={badgeAso.label} bg={badgeAso.bg} text={badgeAso.text} url={urlAso} />
                       </td>
-                      <td style={{ padding: "10px 16px" }}>
+                      <td style={{ padding: "10px 12px" }}>
                         <PortalDocumentoBadge label={badgeContrato.label} bg={badgeContrato.bg} text={badgeContrato.text} url={urlContrato} />
                       </td>
                     </tr>
