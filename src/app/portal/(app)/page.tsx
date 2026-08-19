@@ -23,12 +23,7 @@ export default async function PortalPage() {
 
   const clienteId = clienteUsuario.cliente_id;
 
-  const [{ data: cliente }, { data: encRows }, { data: vagasCliente }] = await Promise.all([
-    service
-      .from("clientes")
-      .select("id, nome, contato_nome")
-      .eq("id", clienteId)
-      .single(),
+  const [{ data: encRows }, { data: vagasCliente }] = await Promise.all([
     service
       .from("encaminhamentos")
       .select(
@@ -117,7 +112,13 @@ export default async function PortalPage() {
     };
   });
 
-  const nomeCliente = cliente?.contato_nome || cliente?.nome || "Cliente";
+  // Saudação pessoal do USUÁRIO logado, não do contato comercial da empresa (contato_nome
+  // em `clientes`) — uma empresa pode ter até 3 usuários de portal (ver
+  // /api/clientes/portal-acesso), cada um com seu próprio nome em user_metadata.nome
+  // (preenchido na criação/edição do acesso). Antes disso, todos viam o mesmo nome do
+  // contato comercial, mesmo logando com contas diferentes.
+  const nomeCliente =
+    (user.user_metadata?.nome as string | undefined)?.trim() || user.email?.split("@")[0] || "Cliente";
 
   // Brasil não observa horário de verão desde 2019 — comparar a data em
   // America/Sao_Paulo com toLocaleDateString é suficiente, sem precisar de lib de timezone.
