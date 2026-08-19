@@ -9,10 +9,11 @@ import { PAPEIS_PAINEL_FUNCIONARIOS } from "@/lib/funcionariosAuth";
 // antigo de papel direto, pros que ainda não migraram).
 //
 // Pros módulos já migrados pro sistema central (reembolsos_quilometragem, supervisao_postos,
-// rh_admissoes, rh_funcionarios, rh_aniversarios), a regra abaixo É o comportamentoPadrao
-// real que cada helper passa pra podeAcessarAba — reaproveita as mesmas constantes
-// (PAPEIS_FULL_ACCESS, PAPEIS_PAINEL_ADMISSOES, PAPEIS_PAINEL_FUNCIONARIOS) em vez de
-// reescrever, pra nunca divergir do comportamento real.
+// rh_admissoes, rh_funcionarios, rh_aniversarios, financeiro_rs, faturamento_rs, relatorios,
+// dashboard), a regra abaixo É o comportamentoPadrao real que cada helper passa pra
+// podeAcessarAba — reaproveita as mesmas constantes (PAPEIS_FULL_ACCESS,
+// PAPEIS_PAINEL_ADMISSOES, PAPEIS_PAINEL_FUNCIONARIOS) em vez de reescrever, pra nunca
+// divergir do comportamento real.
 //
 // Pros módulos ainda não migrados, é uma aproximação fiel ao gate de página/API atual
 // (levantado direto no código nesta sessão, mesmo escopo do relatório da Fase 1): a maioria
@@ -46,7 +47,8 @@ const REGRA_POR_CHAVE: Record<string, Regra> = {
   rh_rescisoes: PAPEIS_PAINEL_FUNCIONARIOS,
   rh_aniversarios: "todos",
 
-  // Financeiro
+  // Financeiro — financeiro_rs/faturamento_rs migrados (Fase 2b), regra abaixo É o
+  // comportamentoPadrao real (podeAcessarFinanceiroRs/podeAcessarFaturamentoRs).
   financeiro_rs: PAPEIS_FULL_ACCESS,
   faturamento_rs: PAPEIS_FULL_ACCESS,
   // Cobranças R&S tem exceção própria e separada (tabela cobranca_rs_analistas_acesso, fora
@@ -70,6 +72,8 @@ const REGRA_POR_CHAVE: Record<string, Regra> = {
   configuracoes_carta_conta_salario: SUPERUSER_ONLY,
   configuracoes_acesso_customizado: SUPERUSER_ONLY,
 
+  // Migrados pro sistema central (Fase 2b) — regra abaixo É o comportamentoPadrao real
+  // (podeAcessarRelatorios/podeAcessarDashboard).
   relatorios: SUPERVISOR_ACIMA,
   dashboard: PAPEIS_FULL_ACCESS,
   // Migrados pro sistema central (Fase 2b) — mesma regra usada como comportamentoPadrao em

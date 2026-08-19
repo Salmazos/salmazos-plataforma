@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
+import { checarAcessoFaturamentoRs } from "@/lib/faturamentoRsAuth";
 import { limitesMesBrasil } from "@/lib/faturamentoRS";
 import { obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
 
@@ -30,11 +30,8 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-
-  const role = user.app_metadata?.role ?? "analista";
-  if (!PAPEIS_FULL_ACCESS.includes(role)) {
-    return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
-  }
+  const acessoNegado = await checarAcessoFaturamentoRs(user);
+  if (acessoNegado) return acessoNegado;
 
   const { searchParams } = new URL(request.url);
   const mesesParam = Number(searchParams.get("meses"));

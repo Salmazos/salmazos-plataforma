@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
+import { checarAcessoFaturamentoRs } from "@/lib/faturamentoRsAuth";
 import { obterReceitaMes } from "@/lib/faturamentoRS";
 
 export async function GET(request: NextRequest) {
@@ -9,14 +9,8 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-
-  // Faturamento R&S é restrito a PAPEIS_FULL_ACCESS diretamente — não usa
-  // checarAcessoCobrancaRS, então analistas com acesso configurável só à tela de
-  // Cobranças R&S (ex: Giovanni) não têm acesso aqui.
-  const role = user.app_metadata?.role ?? "analista";
-  if (!PAPEIS_FULL_ACCESS.includes(role)) {
-    return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
-  }
+  const acessoNegado = await checarAcessoFaturamentoRs(user);
+  if (acessoNegado) return acessoNegado;
 
   const { searchParams } = new URL(request.url);
   const ano = Number(searchParams.get("ano"));

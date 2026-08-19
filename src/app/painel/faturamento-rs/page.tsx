@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import FaturamentoRSPageClient from "@/components/FaturamentoRSPageClient";
-import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
+import { podeAcessarFaturamentoRs } from "@/lib/faturamentoRsAuth";
 import { obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
 import { obterReceitaMes } from "@/lib/faturamentoRS";
 
@@ -13,11 +13,7 @@ export default async function FaturamentoRSPage() {
     data: { user },
   } = await supabaseAuth.auth.getUser();
   if (!user) redirect("/login");
-
-  // Restrito a PAPEIS_FULL_ACCESS diretamente — não usa checarAcessoCobrancaRS, então o
-  // acesso configurável à tela de Cobranças R&S (ex: Giovanni) não se estende aqui.
-  const role = user.app_metadata?.role ?? "analista";
-  if (!PAPEIS_FULL_ACCESS.includes(role)) redirect("/painel");
+  if (!(await podeAcessarFaturamentoRs(user))) redirect("/painel");
 
   const hoje = obterDataHojeBrasil();
   const ano = hoje.getFullYear();

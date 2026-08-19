@@ -60,6 +60,10 @@ interface Props {
   // limitada, não a tela cheia do módulo.
   temCobrancasGeradas: boolean;
   canAccessSupervisao: boolean;
+  canAccessFinanceiroRs: boolean;
+  canAccessFaturamentoRs: boolean;
+  canAccessRelatorios: boolean;
+  canAccessDashboard: boolean;
 }
 
 const STORAGE_KEY = "sidebar-collapsed";
@@ -86,6 +90,10 @@ interface MenuLeafDef {
   requireCobrancasRS?: boolean;
   requireSupervisao?: boolean;
   requireAniversarios?: boolean;
+  requireFinanceiroRs?: boolean;
+  requireFaturamentoRs?: boolean;
+  requireRelatorios?: boolean;
+  requireDashboard?: boolean;
 }
 
 interface MenuItemDef extends MenuLeafDef {
@@ -136,8 +144,8 @@ const menuItems: MenuItemDef[] = [
     icon: Wallet,
     separator: true,
     submenu: [
-      { label: "Financeiro R&S", href: "/painel/financeiro-rs", icon: DollarSign, requireFullAccess: true },
-      { label: "Faturamento R&S", href: "/painel/faturamento-rs", icon: Landmark, requireFullAccess: true },
+      { label: "Financeiro R&S", href: "/painel/financeiro-rs", icon: DollarSign, requireFinanceiroRs: true },
+      { label: "Faturamento R&S", href: "/painel/faturamento-rs", icon: Landmark, requireFaturamentoRs: true },
       { label: "Cobranças R&S", href: "/painel/cobrancas-rs", icon: Banknote, requireCobrancasRS: true },
     ],
   },
@@ -166,8 +174,8 @@ const menuItems: MenuItemDef[] = [
       { label: "Acesso Customizado", href: "/painel/configuracoes/acesso-customizado", icon: KeyRound, requireSuperuser: true },
     ],
   },
-  { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireSupervisor: true },
-  { label: "Dashboard", href: "/painel/dashboard", icon: TrendingUp, requireFullAccess: true },
+  { label: "Relatórios", href: "/painel/relatorios", icon: BarChart2, requireRelatorios: true },
+  { label: "Dashboard", href: "/painel/dashboard", icon: TrendingUp, requireDashboard: true },
   { label: "Reembolsos", href: "/painel/reembolsos", icon: Receipt, requireFullAccess: true },
   { label: "Quilometragem", href: "/painel/quilometragem", icon: Car },
   { label: "Supervisão de Postos", href: "/painel/supervisao", icon: ShieldCheck, requireSupervisao: true },
@@ -187,6 +195,10 @@ export default function SidebarMenu({
   canAccessCobrancasRS,
   temCobrancasGeradas,
   canAccessSupervisao,
+  canAccessFinanceiroRs,
+  canAccessFaturamentoRs,
+  canAccessRelatorios,
+  canAccessDashboard,
   userEmail,
 }: Props) {
   const router = useRouter();
@@ -251,6 +263,10 @@ export default function SidebarMenu({
     if (def.requireAniversarios && !canAccessAniversarios) return false;
     if (def.requireCobrancasRS && !canAccessCobrancasRS && !temCobrancasGeradas) return false;
     if (def.requireSupervisao && !canAccessSupervisao) return false;
+    if (def.requireFinanceiroRs && !canAccessFinanceiroRs) return false;
+    if (def.requireFaturamentoRs && !canAccessFaturamentoRs) return false;
+    if (def.requireRelatorios && !canAccessRelatorios) return false;
+    if (def.requireDashboard && !canAccessDashboard) return false;
     return true;
   }
 

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import FinanceiroRSPageClient, { type VagaFinanceiraRow } from "@/components/FinanceiroRSPageClient";
-import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
+import { podeAcessarFinanceiroRs } from "@/lib/financeiroRsAuth";
 import { ETAPAS_KANBAN, ETAPAS_KANBAN_VISIVEIS, detectarModoSalario, parseSalarioFixo } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -24,9 +24,7 @@ export default async function FinanceiroRSPage() {
     data: { user },
   } = await supabaseAuth.auth.getUser();
   if (!user) redirect("/login");
-
-  const role = user.app_metadata?.role ?? "analista";
-  if (!PAPEIS_FULL_ACCESS.includes(role)) redirect("/painel");
+  if (!(await podeAcessarFinanceiroRs(user))) redirect("/painel");
 
   const svc = createServiceClient();
 

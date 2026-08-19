@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
+import { checarAcessoFaturamentoRs } from "@/lib/faturamentoRsAuth";
 import { parseBody, faturamentoRsAjusteCreateSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
 
@@ -12,11 +12,8 @@ export async function POST(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-
-  const role = user.app_metadata?.role ?? "analista";
-  if (!PAPEIS_FULL_ACCESS.includes(role)) {
-    return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
-  }
+  const acessoNegado = await checarAcessoFaturamentoRs(user);
+  if (acessoNegado) return acessoNegado;
 
   const body = await request.json();
   const parsed = parseBody(faturamentoRsAjusteCreateSchema, body);

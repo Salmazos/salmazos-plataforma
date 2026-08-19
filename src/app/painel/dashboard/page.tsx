@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { ORIGEM_LABELS, ETAPAS_KANBAN_VISIVEIS } from "@/lib/constants";
+import { podeAcessarDashboard } from "@/lib/dashboardAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -124,8 +125,8 @@ function TaxaBadge({ taxa }: { taxa: number }) {
 export default async function DashboardPage() {
   const supabaseAuth = await createClient();
   const { data: { user: authUser } } = await supabaseAuth.auth.getUser();
-  const role = authUser?.app_metadata?.role ?? "analista";
-  if (!["superuser", "diretoria"].includes(role)) redirect("/painel");
+  if (!authUser) redirect("/login");
+  if (!(await podeAcessarDashboard(authUser))) redirect("/painel");
 
   const supabase = createServiceClient();
 

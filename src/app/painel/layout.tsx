@@ -12,6 +12,10 @@ import { podeAcessarAdmissoes } from "@/lib/admissaoAuth";
 import { PAPEIS_FULL_ACCESS, checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
 import { checarAcessoSupervisao } from "@/lib/supervisaoAuth";
 import { podeAcessarAniversarios } from "@/lib/aniversariosAuth";
+import { podeAcessarFinanceiroRs } from "@/lib/financeiroRsAuth";
+import { podeAcessarFaturamentoRs } from "@/lib/faturamentoRsAuth";
+import { podeAcessarRelatorios } from "@/lib/relatoriosAuth";
+import { podeAcessarDashboard } from "@/lib/dashboardAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +60,10 @@ export default async function PainelLayout({
   }
   const canAccessSupervisao = (await checarAcessoSupervisao(user)).acesso;
   const canAccessAniversarios = await podeAcessarAniversarios(user);
+  const canAccessFinanceiroRs = await podeAcessarFinanceiroRs(user);
+  const canAccessFaturamentoRs = await podeAcessarFaturamentoRs(user);
+  const canAccessRelatorios = await podeAcessarRelatorios(user);
+  const canAccessDashboard = await podeAcessarDashboard(user);
 
   const { data: perfil } = await supabase
     .from("analistas_perfil")
@@ -80,6 +88,10 @@ export default async function PainelLayout({
           canAccessCobrancasRS={canAccessCobrancasRS}
           temCobrancasGeradas={temCobrancasGeradas}
           canAccessSupervisao={canAccessSupervisao}
+          canAccessFinanceiroRs={canAccessFinanceiroRs}
+          canAccessFaturamentoRs={canAccessFaturamentoRs}
+          canAccessRelatorios={canAccessRelatorios}
+          canAccessDashboard={canAccessDashboard}
         />
         <main className="flex-1 min-w-0 px-6 py-6">{children}</main>
         <PopupAniversariosHoje />
