@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { formatarDataSemFuso } from "@/lib/utils";
 import { calcularStatusAso, ASO_STATUS_INFO } from "@/lib/asoStatus";
+import PortalDocumentoBadge from "@/components/PortalDocumentoBadge";
 
 export const dynamic = "force-dynamic";
 
@@ -43,22 +44,35 @@ export default async function PortalFuncionariosPage() {
 
   const [{ data: asos }, { data: contratos }] = await Promise.all([
     funcionarioIds.length
-      ? service.from("funcionario_asos").select("funcionario_id, data_exame").in("funcionario_id", funcionarioIds).is("excluido_em", null).order("data_exame", { ascending: false })
-      : Promise.resolve({ data: [] as { funcionario_id: string; data_exame: string }[] }),
+      ? service.from("funcionario_asos").select("funcionario_id, data_exame, arquivo_path").in("funcionario_id", funcionarioIds).is("excluido_em", null).order("data_exame", { ascending: false })
+      : Promise.resolve({ data: [] as { funcionario_id: string; data_exame: string; arquivo_path: string | null }[] }),
     funcionarioIds.length
-      ? service.from("funcionario_contratos").select("funcionario_id").in("funcionario_id", funcionarioIds).is("excluido_em", null)
-      : Promise.resolve({ data: [] as { funcionario_id: string }[] }),
+      ? service.from("funcionario_contratos").select("funcionario_id, arquivo_path").in("funcionario_id", funcionarioIds).is("excluido_em", null).order("criado_em", { ascending: false })
+      : Promise.resolve({ data: [] as { funcionario_id: string; arquivo_path: string | null }[] }),
   ]);
 
   // Já ordenado por data_exame desc — o primeiro encontro de cada funcionario_id é o
-  // exame mais recente (mesma técnica já usada no painel interno).
+  // exame mais recente (mesma técnica já usada no painel interno). arquivo_path do exame
+  // mais recente decide se o badge abre um documento: pode haver ASO registrado sem
+  // arquivo anexado (schema permite), aí o badge mostra o status mas não é clicável.
   const dataExameMaisRecentePorFuncionario = new Map<string, string>();
+  const arquivoAsoMaisRecentePorFuncionario = new Map<string, string | null>();
   for (const a of asos ?? []) {
     if (!dataExameMaisRecentePorFuncionario.has(a.funcionario_id)) {
       dataExameMaisRecentePorFuncionario.set(a.funcionario_id, a.data_exame);
+      arquivoAsoMaisRecentePorFuncionario.set(a.funcionario_id, a.arquivo_path);
     }
   }
   const funcionarioIdsComContrato = new Set((contratos ?? []).map((c) => c.funcionario_id));
+  // Mesma técnica — já ordenado por criado_em desc, primeiro encontro = contrato mais
+  // recente. Badge "Assinado" só reflete existir pelo menos 1 contrato (funcionarioIdsComContrato
+  // acima); o arquivo clicável é sempre o do contrato mais recente especificamente.
+  const arquivoContratoMaisRecentePorFuncionario = new Map<string, string | null>();
+  for (const c of contratos ?? []) {
+    if (!arquivoContratoMaisRecentePorFuncionario.has(c.funcionario_id)) {
+      arquivoContratoMaisRecentePorFuncionario.set(c.funcionario_id, c.arquivo_path);
+    }
+  }
 
   return (
     <div>
@@ -102,6 +116,12 @@ export default async function PortalFuncionariosPage() {
                   const badgeContrato = funcionarioIdsComContrato.has(f.id)
                     ? CONTRATO_STATUS_INFO.assinado
                     : CONTRATO_STATUS_INFO.pendente;
+                  const urlAso = arquivoAsoMaisRecentePorFuncionario.get(f.id)
+                    ? `/api/portal/funcionarios/${f.id}/aso-url`
+                    : null;
+                  const urlContrato = arquivoContratoMaisRecentePorFuncionario.get(f.id)
+                    ? `/api/portal/funcionarios/${f.id}/contrato-url`
+                    : null;
                   return (
                     <tr key={f.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
                       <td style={{ padding: "10px 16px", fontWeight: 600, color: "#111827" }}>{f.nome_completo}</td>
@@ -110,14 +130,10 @@ export default async function PortalFuncionariosPage() {
                         {f.data_admissao ? formatarDataSemFuso(f.data_admissao) : "—"}
                       </td>
                       <td style={{ padding: "10px 16px" }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: badgeAso.bg, color: badgeAso.text }}>
-                          {badgeAso.label}
-                        </span>
+                        <PortalDocumentoBadge label={badgeAso.label} bg={badgeAso.bg} text={badgeAso.text} url={urlAso} />
                       </td>
                       <td style={{ padding: "10px 16px" }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: badgeContrato.bg, color: badgeContrato.text }}>
-                          {badgeContrato.label}
-                        </span>
+                        <PortalDocumentoBadge label={badgeContrato.label} bg={badgeContrato.bg} text={badgeContrato.text} url={urlContrato} />
                       </td>
                     </tr>
                   );
