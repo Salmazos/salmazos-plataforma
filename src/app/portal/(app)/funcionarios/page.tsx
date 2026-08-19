@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
-import { formatarDataSemFuso } from "@/lib/utils";
+import { formatarDataSemFuso, formatarCPF } from "@/lib/utils";
 import { calcularStatusAso, ASO_STATUS_INFO } from "@/lib/asoStatus";
 import PortalDocumentoBadge from "@/components/PortalDocumentoBadge";
 
@@ -35,21 +35,34 @@ export default async function PortalFuncionariosPage() {
   // tipo_servico, só por cliente_id + status ativo.
   const { data: funcionarios } = await service
     .from("funcionarios")
-    .select("id, nome_completo, cargo, data_admissao")
+    .select("id, nome_completo, cargo, data_admissao, admissao_id")
     .eq("cliente_id", clienteUsuario.cliente_id)
     .eq("status", "ativo")
     .order("nome_completo");
 
   const funcionarioIds = (funcionarios ?? []).map((f) => f.id);
 
-  const [{ data: asos }, { data: contratos }] = await Promise.all([
+  // Data de nascimento/CPF/RG/PIS não existem em `funcionarios` — vêm de
+  // admissao_dados_pessoais, preenchida no formulário de admissão digital. Sem FK direta
+  // entre as duas tabelas (cada uma referencia `admissoes` separadamente, ver
+  // funcionarios.admissao_id), então não dá pra usar embed do PostgREST — segunda consulta
+  // por admissao_id e mapeia manualmente, mesmo padrão já usado no projeto pra esse tipo de
+  // relação (ver funcionario_asos/funcionario_contratos × analistas_perfil).
+  const admissaoIds = [...new Set((funcionarios ?? []).map((f) => f.admissao_id).filter(Boolean))] as string[];
+
+  const [{ data: asos }, { data: contratos }, { data: dadosPessoais }] = await Promise.all([
     funcionarioIds.length
       ? service.from("funcionario_asos").select("funcionario_id, data_exame, arquivo_path").in("funcionario_id", funcionarioIds).is("excluido_em", null).order("data_exame", { ascending: false })
       : Promise.resolve({ data: [] as { funcionario_id: string; data_exame: string; arquivo_path: string | null }[] }),
     funcionarioIds.length
       ? service.from("funcionario_contratos").select("funcionario_id, arquivo_path").in("funcionario_id", funcionarioIds).is("excluido_em", null).order("criado_em", { ascending: false })
       : Promise.resolve({ data: [] as { funcionario_id: string; arquivo_path: string | null }[] }),
+    admissaoIds.length
+      ? service.from("admissao_dados_pessoais").select("admissao_id, data_nascimento, cpf, rg_numero, pis_pasep").in("admissao_id", admissaoIds)
+      : Promise.resolve({ data: [] as { admissao_id: string; data_nascimento: string | null; cpf: string | null; rg_numero: string | null; pis_pasep: string | null }[] }),
   ]);
+
+  const dadosPessoaisPorAdmissao = new Map((dadosPessoais ?? []).map((d) => [d.admissao_id, d]));
 
   // Já ordenado por data_exame desc — o primeiro encontro de cada funcionario_id é o
   // exame mais recente (mesma técnica já usada no painel interno). arquivo_path do exame
@@ -96,7 +109,7 @@ export default async function PortalFuncionariosPage() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-                {["Nome", "Cargo", "Data de admissão", "ASO Periódico", "Contrato"].map((h) => (
+                {["Nome completo", "Data de nascimento", "RG", "CPF", "PIS", "Data de admissão", "Função", "ASO Periódico", "Contrato"].map((h) => (
                   <th key={h} style={{ textAlign: "left", padding: "10px 16px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>
                     {h}
                   </th>
@@ -106,7 +119,7 @@ export default async function PortalFuncionariosPage() {
             <tbody>
               {(funcionarios ?? []).length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ padding: "40px 16px", textAlign: "center", color: "#9CA3AF" }}>
+                  <td colSpan={9} style={{ padding: "40px 16px", textAlign: "center", color: "#9CA3AF" }}>
                     Nenhum funcionário ativo encontrado.
                   </td>
                 </tr>
@@ -122,13 +135,22 @@ export default async function PortalFuncionariosPage() {
                   const urlContrato = arquivoContratoMaisRecentePorFuncionario.get(f.id)
                     ? `/api/portal/funcionarios/${f.id}/contrato-url`
                     : null;
+                  const dadosPessoais = f.admissao_id ? dadosPessoaisPorAdmissao.get(f.admissao_id) : undefined;
                   return (
                     <tr key={f.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
                       <td style={{ padding: "10px 16px", fontWeight: 600, color: "#111827" }}>{f.nome_completo}</td>
-                      <td style={{ padding: "10px 16px", color: "#374151" }}>{f.cargo ?? "—"}</td>
+                      <td style={{ padding: "10px 16px", color: "#6B7280" }}>
+                        {dadosPessoais?.data_nascimento ? formatarDataSemFuso(dadosPessoais.data_nascimento) : "—"}
+                      </td>
+                      <td style={{ padding: "10px 16px", color: "#374151" }}>{dadosPessoais?.rg_numero ?? "—"}</td>
+                      <td style={{ padding: "10px 16px", color: "#374151" }}>
+                        {dadosPessoais?.cpf ? formatarCPF(dadosPessoais.cpf) : "—"}
+                      </td>
+                      <td style={{ padding: "10px 16px", color: "#374151" }}>{dadosPessoais?.pis_pasep ?? "—"}</td>
                       <td style={{ padding: "10px 16px", color: "#6B7280" }}>
                         {f.data_admissao ? formatarDataSemFuso(f.data_admissao) : "—"}
                       </td>
+                      <td style={{ padding: "10px 16px", color: "#374151" }}>{f.cargo ?? "—"}</td>
                       <td style={{ padding: "10px 16px" }}>
                         <PortalDocumentoBadge label={badgeAso.label} bg={badgeAso.bg} text={badgeAso.text} url={urlAso} />
                       </td>
