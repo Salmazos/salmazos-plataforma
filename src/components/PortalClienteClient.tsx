@@ -77,22 +77,47 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos, emAv
       {/* Banner de entrevista hoje */}
       {entrevistasHoje.length > 0 && (
         <div className="mb-6 rounded-2xl p-5 shadow-sm" style={{ backgroundColor: "#000" }}>
-          <div className="flex items-start gap-3">
-            <span className="text-2xl leading-none">📅</span>
-            <div className="min-w-0">
-              <p className="font-bold text-sm" style={{ color: "#FFD700" }}>
-                {entrevistasHoje.length === 1
-                  ? "Você tem entrevista hoje"
-                  : `Você tem ${entrevistasHoje.length} entrevistas hoje`}
-              </p>
-              <div className="mt-1.5 space-y-1">
-                {entrevistasHoje.map((e) => (
-                  <p key={e.id} className="text-sm" style={{ color: "#FDE68A" }}>
-                    {e.candidato_nome} às {e.hora}
-                  </p>
-                ))}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <span className="text-2xl leading-none">📅</span>
+              <div className="min-w-0">
+                <p className="font-bold text-sm" style={{ color: "#FFD700" }}>
+                  {entrevistasHoje.length === 1
+                    ? "Você tem entrevista hoje"
+                    : `Você tem ${entrevistasHoje.length} entrevistas hoje`}
+                </p>
+                <div className="mt-1.5 space-y-1">
+                  {entrevistasHoje.map((e) => (
+                    <p key={e.id} className="text-sm" style={{ color: "#FDE68A" }}>
+                      {e.candidato_nome} às {e.hora}
+                    </p>
+                  ))}
+                </div>
               </div>
             </div>
+            {/* Atalho extra pro mesmo destino do botão da sidebar (SidebarPortal) — não
+                substitui aquele, é um chamariz a mais dentro do banner, já que quem tem
+                entrevista hoje é um momento natural pra lembrar que dá pra abrir outra vaga. */}
+            <Link
+              href="/portal/solicitar-vaga"
+              className="portal-cta-pulse shrink-0 self-start sm:self-center"
+              style={{
+                backgroundColor: "#FFD700",
+                color: "#000",
+                fontWeight: 700,
+                padding: "8px 16px",
+                borderRadius: 8,
+                border: "none",
+                fontSize: 13,
+                textDecoration: "none",
+                whiteSpace: "nowrap",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              + Solicitar Vaga
+            </Link>
           </div>
         </div>
       )}
@@ -326,6 +351,20 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos, emAv
           )}
         </div>
       )}
+
+      {/* Anel de destaque suave e contínuo pro CTA do banner de entrevista — animate-pulse
+          padrão do Tailwind só varia opacidade (lê como estado "carregando/desabilitado",
+          não como convite pra clicar); este anel de glow comunica "chame atenção" sem ficar
+          irritante ao longo do tempo. */}
+      <style jsx>{`
+        @keyframes portalCtaPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.55); }
+          50% { box-shadow: 0 0 0 7px rgba(255, 215, 0, 0); }
+        }
+        .portal-cta-pulse {
+          animation: portalCtaPulse 2.4s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   );
 }
