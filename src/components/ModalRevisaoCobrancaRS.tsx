@@ -117,6 +117,21 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
 
   const ehCancelamento = cobranca?.tipo === "cancelamento";
 
+  // Mesma lista de "faltando" validada em /api/cobrancas-rs/[id]/aprovar (fonte de verdade,
+  // continua sendo quem decide de fato) — replicada aqui só pra desabilitar o botão
+  // proativamente e evitar o clique frustrado, em vez de descobrir o campo faltante só depois
+  // do erro 400. Lê do estado local (cargo/salario/etc.), não do snapshot de `cobranca`, pra
+  // reagir em tempo real enquanto o usuário preenche o formulário.
+  const camposFaltando: string[] = [];
+  if (!ehCancelamento) {
+    if (!cargo.trim()) camposFaltando.push("Cargo");
+    if (!dataInicio) camposFaltando.push("Data de início");
+  }
+  if (salario <= 0) camposFaltando.push(ehCancelamento ? "Salário-base" : "Salário");
+  if (!clienteCnpj.trim()) camposFaltando.push("CNPJ do cliente");
+  if (!clienteEndereco.trim()) camposFaltando.push("Endereço do cliente");
+  const camposCompletos = camposFaltando.length === 0;
+
   const salvarRascunho = async (): Promise<boolean> => {
     setSalvando(true);
     setErro("");
@@ -349,13 +364,20 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
               {salvo && !erro && <p className="text-green-700 text-sm">Rascunho salvo!</p>}
 
               {cobranca.status === "pendente_revisao" && (
-                <div className="flex gap-3 pt-2 border-t">
-                  <button onClick={handleSalvarRascunho} disabled={salvando || aprovando} className="btn-outline flex-1 disabled:opacity-50">
-                    {salvando ? "Salvando..." : "Salvar rascunho"}
-                  </button>
-                  <button onClick={handleAprovar} disabled={salvando || aprovando} className="btn-primary flex-1 disabled:opacity-50">
-                    {aprovando ? "Aprovando..." : "Aprovar e enviar"}
-                  </button>
+                <div className="pt-2 border-t">
+                  <div className="flex gap-3">
+                    <button onClick={handleSalvarRascunho} disabled={salvando || aprovando} className="btn-outline flex-1 disabled:opacity-50">
+                      {salvando ? "Salvando..." : "Salvar rascunho"}
+                    </button>
+                    <button onClick={handleAprovar} disabled={salvando || aprovando || !camposCompletos} className="btn-primary flex-1 disabled:opacity-50">
+                      {aprovando ? "Aprovando..." : "Aprovar e enviar"}
+                    </button>
+                  </div>
+                  {!camposCompletos && (
+                    <p className="text-xs text-gray-400 mt-2">
+                      Preencha antes de aprovar: {camposFaltando.join(", ")}.
+                    </p>
+                  )}
                 </div>
               )}
 
