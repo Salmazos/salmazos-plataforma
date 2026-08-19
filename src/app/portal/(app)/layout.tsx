@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
-import NavbarPortal from "@/components/NavbarPortal";
+import SidebarPortal from "@/components/SidebarPortal";
 
 export default async function PortalAppLayout({
   children,
@@ -42,9 +42,11 @@ export default async function PortalAppLayout({
     .maybeSingle();
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <NavbarPortal userEmail={user.email ?? ""} mostrarFuncionarios={!!funcionarioAtivo} />
-      <main className="max-w-5xl mx-auto px-4 py-8">{children}</main>
+    <div className="min-h-screen bg-gray-50 flex">
+      <SidebarPortal userEmail={user.email ?? ""} mostrarFuncionarios={!!funcionarioAtivo} />
+      <main className="flex-1 min-w-0 px-4 py-8">
+        <div className="max-w-5xl mx-auto">{children}</div>
+      </main>
     </div>
   );
 }
