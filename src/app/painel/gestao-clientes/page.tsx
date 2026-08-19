@@ -1,6 +1,8 @@
+import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import GestaoClientesClient from "@/components/GestaoClientesClient";
 import { ETAPAS_KANBAN_VISIVEIS } from "@/lib/constants";
+import { podeAcessarGestaoClientes } from "@/lib/comercialAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +30,10 @@ export default async function GestaoClientesPage() {
   const {
     data: { user },
   } = await authClient.auth.getUser();
-  const role = user?.app_metadata?.role ?? "analista";
+  if (!user) redirect("/login");
+  if (!(await podeAcessarGestaoClientes(user))) redirect("/painel");
+
+  const role = user.app_metadata?.role ?? "analista";
 
   const svc = createServiceClient();
 

@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, documentoCreateSchema } from "@/lib/schemas";
+import { checarAcessoDocumentos } from "@/lib/documentosAuth";
 
 export async function GET(request: NextRequest) {
   try {
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const acessoNegado = await checarAcessoDocumentos(user);
+    if (acessoNegado) return acessoNegado;
+
     const { searchParams } = new URL(request.url);
     const tipo = searchParams.get("tipo");
     const categoria = searchParams.get("categoria");
@@ -36,6 +45,14 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const acessoNegado = await checarAcessoDocumentos(user);
+    if (acessoNegado) return acessoNegado;
+
     const body = await request.json();
     const parsed = parseBody(documentoCreateSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });

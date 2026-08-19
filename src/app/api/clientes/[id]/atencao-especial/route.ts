@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, clienteAtencaoEspecialSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
+import { checarAcessoClientes } from "@/lib/comercialAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -16,7 +17,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const acessoNegado = await checarAcessoClientes(user);
+  if (acessoNegado) return acessoNegado;
 
+  // Trava adicional, mais restrita que o acesso geral a Clientes (checarAcessoClientes acima)
+  // — só superuser/diretoria pode marcar "Atenção Especial", mesmo quem tem acesso geral ao
+  // módulo (ex: supervisor liberado por exceção) não pode. Checagem separada, intocada.
   const role = user.app_metadata?.role ?? "analista";
   if (!["superuser", "diretoria"].includes(role)) {
     return NextResponse.json({ error: "Acesso negado" }, { status: 403 });

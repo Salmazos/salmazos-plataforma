@@ -7,6 +7,7 @@ import {
   portalAcessoUpdateSchema,
   portalAcessoDeleteSchema,
 } from "@/lib/schemas";
+import { checarAcessoClientes } from "@/lib/comercialAuth";
 
 const MAX_USUARIOS_POR_CLIENTE = 3;
 
@@ -34,6 +35,8 @@ export async function GET(request: NextRequest) {
   try {
     const user = await exigirAnalista();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const acessoNegado = await checarAcessoClientes(user);
+    if (acessoNegado) return acessoNegado;
 
     const { searchParams } = new URL(request.url);
     const cliente_id = searchParams.get("cliente_id");
@@ -73,6 +76,8 @@ export async function POST(request: NextRequest) {
   try {
     const user = await exigirAnalista();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const acessoNegado = await checarAcessoClientes(user);
+    if (acessoNegado) return acessoNegado;
 
     const body = await request.json();
     const parsed = parseBody(portalAcessoSchema, body);
@@ -126,6 +131,8 @@ export async function PATCH(request: NextRequest) {
   try {
     const user = await exigirAnalista();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const acessoNegado = await checarAcessoClientes(user);
+    if (acessoNegado) return acessoNegado;
 
     const body = await request.json();
     const parsed = parseBody(portalAcessoUpdateSchema, body);
@@ -171,6 +178,8 @@ export async function DELETE(request: NextRequest) {
   try {
     const user = await exigirAnalista();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const acessoNegado = await checarAcessoClientes(user);
+    if (acessoNegado) return acessoNegado;
 
     const { searchParams } = new URL(request.url);
     const parsed = parseBody(portalAcessoDeleteSchema, {

@@ -64,6 +64,10 @@ interface Props {
   canAccessFaturamentoRs: boolean;
   canAccessRelatorios: boolean;
   canAccessDashboard: boolean;
+  canAccessClientes: boolean;
+  canAccessCarteiraClientes: boolean;
+  canAccessGestaoClientes: boolean;
+  canAccessDocumentos: boolean;
 }
 
 const STORAGE_KEY = "sidebar-collapsed";
@@ -94,6 +98,10 @@ interface MenuLeafDef {
   requireFaturamentoRs?: boolean;
   requireRelatorios?: boolean;
   requireDashboard?: boolean;
+  requireClientes?: boolean;
+  requireCarteiraClientes?: boolean;
+  requireGestaoClientes?: boolean;
+  requireDocumentos?: boolean;
 }
 
 interface MenuItemDef extends MenuLeafDef {
@@ -121,9 +129,9 @@ const menuItems: MenuItemDef[] = [
     icon: Handshake,
     separator: true,
     submenu: [
-      { label: "Clientes", href: "/painel/clientes", icon: Building2 },
-      { label: "Carteira de Clientes", href: "/painel/empresas-visitadas", icon: MapPin, requireSupervisor: true },
-      { label: "Gestão de Clientes", href: "/painel/gestao-clientes", icon: AlertTriangle },
+      { label: "Clientes", href: "/painel/clientes", icon: Building2, requireClientes: true },
+      { label: "Carteira de Clientes", href: "/painel/empresas-visitadas", icon: MapPin, requireCarteiraClientes: true },
+      { label: "Gestão de Clientes", href: "/painel/gestao-clientes", icon: AlertTriangle, requireGestaoClientes: true },
     ],
   },
   {
@@ -179,7 +187,7 @@ const menuItems: MenuItemDef[] = [
   { label: "Reembolsos", href: "/painel/reembolsos", icon: Receipt, requireFullAccess: true },
   { label: "Quilometragem", href: "/painel/quilometragem", icon: Car },
   { label: "Supervisão de Postos", href: "/painel/supervisao", icon: ShieldCheck, requireSupervisao: true },
-  { label: "Documentos", href: "/painel/documentos", icon: FolderOpen },
+  { label: "Documentos", href: "/painel/documentos", icon: FolderOpen, requireDocumentos: true },
 ];
 
 export default function SidebarMenu({
@@ -199,6 +207,10 @@ export default function SidebarMenu({
   canAccessFaturamentoRs,
   canAccessRelatorios,
   canAccessDashboard,
+  canAccessClientes,
+  canAccessCarteiraClientes,
+  canAccessGestaoClientes,
+  canAccessDocumentos,
   userEmail,
 }: Props) {
   const router = useRouter();
@@ -267,6 +279,10 @@ export default function SidebarMenu({
     if (def.requireFaturamentoRs && !canAccessFaturamentoRs) return false;
     if (def.requireRelatorios && !canAccessRelatorios) return false;
     if (def.requireDashboard && !canAccessDashboard) return false;
+    if (def.requireClientes && !canAccessClientes) return false;
+    if (def.requireCarteiraClientes && !canAccessCarteiraClientes) return false;
+    if (def.requireGestaoClientes && !canAccessGestaoClientes) return false;
+    if (def.requireDocumentos && !canAccessDocumentos) return false;
     return true;
   }
 

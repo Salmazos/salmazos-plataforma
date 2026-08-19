@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, clienteUpdateSchema } from "@/lib/schemas";
+import { checarAcessoClientes } from "@/lib/comercialAuth";
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const acessoNegado = await checarAcessoClientes(user);
+    if (acessoNegado) return acessoNegado;
+
     const { id } = await params;
     const body = await request.json();
 

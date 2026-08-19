@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { checarAcessoCarteiraClientes } from "@/lib/comercialAuth";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const acessoNegado = await checarAcessoCarteiraClientes(user);
+  if (acessoNegado) return acessoNegado;
 
   const params = request.nextUrl.searchParams;
   const q = params.get("q");

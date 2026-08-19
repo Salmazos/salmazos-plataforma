@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { checarAcessoDocumentos } from "@/lib/documentosAuth";
 
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    const acessoNegado = await checarAcessoDocumentos(user);
+    if (acessoNegado) return acessoNegado;
+
     const { id } = await params;
 
     const supabase = createServiceClient();

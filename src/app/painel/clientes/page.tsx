@@ -1,6 +1,8 @@
-import { createServiceClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import ClientesPageClient from "@/components/ClientesPageClient";
 import type { Cliente } from "@/types";
+import { podeAcessarClientes } from "@/lib/comercialAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +11,13 @@ interface ClienteComCount extends Cliente {
 }
 
 export default async function ClientesPage() {
+  const supabaseAuth = await createClient();
+  const {
+    data: { user },
+  } = await supabaseAuth.auth.getUser();
+  if (!user) redirect("/login");
+  if (!(await podeAcessarClientes(user))) redirect("/painel");
+
   const supabase = createServiceClient();
 
   const [{ data: clientes }, { data: counts }] = await Promise.all([

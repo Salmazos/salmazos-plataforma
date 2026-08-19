@@ -34,9 +34,10 @@ const REGRA_POR_CHAVE: Record<string, Regra> = {
   recrutamento_vagas: "todos",
   recrutamento_agenda: "todos",
 
-  // Comercial
+  // Comercial — migrados (Fase 2b), regra abaixo É o comportamentoPadrao real
+  // (podeAcessarClientes/podeAcessarCarteiraClientes/podeAcessarGestaoClientes).
   comercial_clientes: "todos",
-  comercial_carteira: SUPERVISOR_ACIMA, // requireSupervisor no SidebarMenu
+  comercial_carteira: SUPERVISOR_ACIMA,
   comercial_gestao: "todos",
 
   // RH — rh_admissoes/rh_funcionarios/rh_aniversarios migrados (Fase 2b), regra abaixo É o
@@ -80,6 +81,7 @@ const REGRA_POR_CHAVE: Record<string, Regra> = {
   // resolverAcessoKm (kmAuth.ts) e checarAcessoSupervisao (supervisaoAuth.ts).
   reembolsos_quilometragem: SUPERVISOR_ACIMA,
   supervisao_postos: SUPERVISOR_ACIMA,
+  // Migrado (Fase 2b) — regra abaixo É o comportamentoPadrao real (podeAcessarDocumentos).
   documentos: "todos",
 };
 

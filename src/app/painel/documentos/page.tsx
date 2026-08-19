@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import DocumentosPageClient from "@/components/DocumentosPageClient";
+import { podeAcessarDocumentos } from "@/lib/documentosAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export default async function DocumentosPage() {
   } = await authClient.auth.getUser();
 
   if (!user) redirect("/login");
+  if (!(await podeAcessarDocumentos(user))) redirect("/painel");
 
   const role = user.app_metadata?.role ?? "analista";
   const isFullAccess = ["superuser", "diretoria"].includes(role);
