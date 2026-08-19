@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
@@ -41,6 +42,11 @@ export async function POST(_request: NextRequest, { params }: Params) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  // Invalida o Router Cache do lado do cliente pra /painel/cobrancas-rs — mesma lógica de
+  // aprovar/route.ts (ver comentário lá). Roda antes do after() do e-mail de propósito, pra
+  // garantir que aconteça mesmo se o envio falhar.
+  revalidatePath("/painel/cobrancas-rs");
 
   registrarAuditoria({
     usuario_id: user.id,

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { podeRevisarCobranca } from "@/lib/fullAccessAuth";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
@@ -120,6 +121,12 @@ export async function POST(_request: NextRequest, { params }: Params) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  // Invalida o Router Cache do lado do cliente pra /painel/cobrancas-rs — sem isso, ao
+  // navegar pra outra aba e voltar (não um reload manual), o Next reaproveita a versão da
+  // lista de antes da aprovação em vez de buscar o servidor de novo. force-dynamic só evita
+  // cache de renderização no servidor, não afeta esse cache do lado do cliente.
+  revalidatePath("/painel/cobrancas-rs");
 
   registrarAuditoria({
     usuario_id: user.id,

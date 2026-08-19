@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, cobrancaRsVencimentoSchema } from "@/lib/schemas";
 import { podeRevisarCobranca } from "@/lib/fullAccessAuth";
@@ -50,6 +51,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  // Invalida o Router Cache do lado do cliente pra /painel/cobrancas-rs — data de
+  // vencimento aparece na listagem, mesma lógica de aprovar/route.ts (ver comentário lá).
+  revalidatePath("/painel/cobrancas-rs");
 
   registrarAuditoria({
     usuario_id: user.id,
