@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
         cidade: sol.cidade ?? null,
         estado: sol.estado ?? null,
         salario: sol.salario ?? null,
+        adicionais_salariais: sol.adicionais_salariais ?? null,
         horario: sol.horario_texto ?? null,
         requisitos: sol.requisitos ?? null,
         beneficios: sol.beneficios ?? null,

@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
         cidade: body.cidade.trim(),
         estado: body.estado.trim(),
         salario: body.salario || null,
+        adicionais_salariais: body.adicionais_salariais || null,
         horario_tipo: body.horario_tipo || null,
         horario_texto: body.horario_texto || null,
         previsao_inicio: body.previsao_inicio || null,
@@ -169,6 +170,7 @@ export async function POST(request: NextRequest) {
       ${detailRow("Cidade/Estado", [body.cidade, body.estado].filter(Boolean).join(" / "))}
       ${detailRow("Previsão de Início", previsaoFormatted)}
       ${detailRow("Salário", body.salario)}
+      ${detailRow("Adicionais Salariais", body.adicionais_salariais)}
       ${detailRow("Horário", body.horario_texto || body.horario_tipo)}
     </table>
     ${requisitosHtml}

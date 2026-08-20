@@ -767,6 +767,7 @@ export const portalSolicitarVagaSchema = z.object({
   estado: z.string().max(2),
   num_posicoes: coerceNumberOptional,
   salario: z.string().optional().nullable(),
+  adicionais_salariais: z.string().optional().nullable(),
   horario_tipo: z.string().optional().nullable(),
   horario_texto: z.string().optional().nullable(),
   previsao_inicio: z.string().optional().nullable(),

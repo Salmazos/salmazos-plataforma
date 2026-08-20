@@ -96,6 +96,7 @@ export default function SolicitarVagaPage() {
   const [cidade, setCidade] = useState("");
   const [estado, setEstado] = useState("");
   const [salario, setSalario] = useState("");
+  const [adicionaisSalariais, setAdicionaisSalariais] = useState("");
   const [salarioModo, setSalarioModo] = useState<SalarioModo>("fixo");
   const [previsaoInicio, setPrevisaoInicio] = useState("");
   const [observacoes, setObservacoes] = useState("");
@@ -152,6 +153,10 @@ export default function SolicitarVagaPage() {
     setEstado(tpl.estado ?? "");
     setSalario(tpl.salario ?? "");
     setSalarioModo(detectarModoSalario(tpl.salario ?? ""));
+    // Templates (vaga_templates_cliente) não têm conceito de adicionais salariais ainda —
+    // sempre reseta ao aplicar um template, pra não carregar valor de uma solicitação
+    // anterior sem querer.
+    setAdicionaisSalariais("");
     setObservacoes(tpl.observacoes ?? "");
     if (tpl.horario_padrao) {
       const hp = tpl.horario_padrao;
@@ -372,6 +377,7 @@ export default function SolicitarVagaPage() {
           cidade: cidade.trim(),
           estado,
           salario: salario.trim() || null,
+          adicionais_salariais: adicionaisSalariais.trim() || null,
           horario_tipo: horarioTipo || null,
           horario_texto: horarioTexto || null,
           previsao_inicio: previsaoInicio || null,
@@ -616,7 +622,18 @@ export default function SolicitarVagaPage() {
               ))}
             </div>
             {salarioModo === "fixo" && (
-              <CampoMoeda value={salario} onChange={(v) => setSalario(v > 0 ? String(v) : "")} placeholder="Ex: 2.000,00" style={{ ...inputStyle, maxWidth: 240 }} />
+              <>
+                <CampoMoeda value={salario} onChange={(v) => setSalario(v > 0 ? String(v) : "")} placeholder="Ex: 2.000,00" style={{ ...inputStyle, maxWidth: 240 }} />
+                <div className="mt-3" style={{ maxWidth: 400 }}>
+                  <label style={labelStyle}>Adicionais salariais (opcional)</label>
+                  <input
+                    value={adicionaisSalariais}
+                    onChange={(e) => setAdicionaisSalariais(e.target.value)}
+                    placeholder="Ex: + Insalubridade 30%, + Periculosidade"
+                    style={inputStyle}
+                  />
+                </div>
+              </>
             )}
           </div>
 

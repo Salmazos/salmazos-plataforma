@@ -18,6 +18,7 @@ interface Solicitacao {
   cidade: string | null;
   estado: string | null;
   salario: string | null;
+  adicionais_salariais: string | null;
   horario_texto: string | null;
   previsao_inicio: string | null;
   requisitos: string | null;
@@ -192,6 +193,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                         <span>{"📅"} Previsão: {s.previsao_inicio.split("-").reverse().join("/")}</span>
                       )}
                       {s.salario && <span>{"💰"} {s.salario}</span>}
+                      {s.adicionais_salariais && <span className="text-gray-400">+ {s.adicionais_salariais}</span>}
                     </div>
 
                     {s.horario_texto && (
