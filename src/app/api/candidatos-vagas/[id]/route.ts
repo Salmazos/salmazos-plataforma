@@ -40,7 +40,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       .from("candidatos_vagas")
       .update(campos)
       .eq("id", id)
-      .select("*, candidatos(id, nome_completo), vagas(cliente_id)")
+      .select("*, candidatos(id, nome_completo), vagas!candidatos_vagas_vaga_id_fkey(cliente_id)")
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

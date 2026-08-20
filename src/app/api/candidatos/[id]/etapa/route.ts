@@ -105,7 +105,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: cvsAfetados } = await svc
       .from("candidatos_vagas")
-      .select("vagas(cliente_id)")
+      .select("vagas!candidatos_vagas_vaga_id_fkey(cliente_id)")
       .eq("candidato_id", id);
     const clienteIds = new Set(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
