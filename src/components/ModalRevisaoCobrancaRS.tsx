@@ -370,7 +370,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                       {salvando ? "Salvando..." : "Salvar rascunho"}
                     </button>
                     <button onClick={handleAprovar} disabled={salvando || aprovando || !camposCompletos} className="btn-primary flex-1 disabled:opacity-50">
-                      {aprovando ? "Aprovando..." : "Aprovar e enviar"}
+                      {aprovando ? "Enviando..." : "Enviar para validação da diretoria"}
                     </button>
                   </div>
                   {!camposCompletos && (
@@ -383,7 +383,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
 
               {cobranca.status === "aprovada_enviada" && (
                 <div className="pt-2 border-t">
-                  <p className="text-xs text-gray-400 mb-3">Enviada em {cobranca.enviado_em ? new Date(cobranca.enviado_em).toLocaleString("pt-BR") : "—"}</p>
+                  <p className="text-xs text-gray-400 mb-3">Enviada para validação da diretoria em {cobranca.enviado_em ? new Date(cobranca.enviado_em).toLocaleString("pt-BR") : "—"}</p>
 
                   <div className="mb-4">
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data de vencimento</label>

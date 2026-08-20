@@ -75,9 +75,11 @@ export default function PopupCobrancaEnviada() {
         <div className="bg-black px-6 py-5 flex items-start justify-between">
           <div>
             <h2 className="text-lg font-bold text-[#FFD700]">
-              💰 Cobrança{enviadas.length > 1 ? "s" : ""} R&S enviada{enviadas.length > 1 ? "s" : ""}
+              💰 Cobrança{enviadas.length > 1 ? "s" : ""} aguardando validação da diretoria
             </h2>
-            <p className="text-xs text-gray-300 mt-0.5">Cobranças já aprovadas e enviadas ao cliente</p>
+            <p className="text-xs text-gray-300 mt-0.5">
+              Cobranças revisadas, aguardando validação da diretoria antes do envio ao cliente
+            </p>
           </div>
           <button
             onClick={marcarVisto}

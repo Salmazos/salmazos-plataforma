@@ -37,7 +37,7 @@ interface Props {
 
 const STATUS_LABEL: Record<string, { label: string; bg: string; color: string }> = {
   pendente_revisao: { label: "Pendente de revisão", bg: "#FEF3C7", color: "#92400E" },
-  aprovada_enviada: { label: "Enviada", bg: "#DBEAFE", color: "#1D4ED8" },
+  aprovada_enviada: { label: "Aguardando validação", bg: "#DBEAFE", color: "#1D4ED8" },
   paga: { label: "Paga", bg: "#DCFCE7", color: "#166534" },
   cancelada: { label: "Cancelada", bg: "#F3F4F6", color: "#6B7280" },
 };
@@ -95,7 +95,7 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess
         {(
           [
             { key: "pendente_revisao" as const, label: "Pendentes de revisão", valor: contagens.pendente_revisao },
-            { key: "aprovada_enviada" as const, label: "Enviadas", valor: contagens.aprovada_enviada },
+            { key: "aprovada_enviada" as const, label: "Aguardando validação", valor: contagens.aprovada_enviada },
             { key: "paga" as const, label: "Pagas", valor: contagens.paga },
           ]
         ).map((c) => (
@@ -115,7 +115,7 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess
         {(
           [
             { id: "pendente_revisao" as const, label: "Pendentes de revisão" },
-            { id: "aprovada_enviada" as const, label: "Enviadas" },
+            { id: "aprovada_enviada" as const, label: "Aguardando validação" },
             { id: "paga" as const, label: "Pagas" },
             { id: "todas" as const, label: "Todas" },
           ]
@@ -172,7 +172,7 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess
                     </td>
                     <td style={{ padding: "10px 12px", color: "#374151" }}>{r.feePercentual != null ? `${r.feePercentual}%` : "—"}</td>
                     <td style={{ padding: "10px 12px" }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: statusInfo.bg, color: statusInfo.color }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: statusInfo.bg, color: statusInfo.color, whiteSpace: "nowrap" }}>
                         {statusInfo.label}
                       </span>
                       {estaAtrasada(r) && (

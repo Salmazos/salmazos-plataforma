@@ -528,6 +528,9 @@ export function getEmailTemplate(
           `<p style="font-size:16px;color:#111827;margin:0 0 16px;">
             ${ehCancelamento ? "Segue a cobrança referente ao cancelamento da vaga abaixo:" : "Segue a cobrança referente à contratação abaixo:"}
           </p>
+          <div style="background:#FEF9C3;border-left:4px solid #CA8A04;border-radius:4px;padding:14px 16px;margin:0 0 20px;">
+            <p style="margin:0;color:#854D0E;font-size:14px;font-weight:700;">⚠️ Aguardando validação da diretoria antes do envio ao cliente</p>
+          </div>
           <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
             <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados do cliente:</p>
             <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
