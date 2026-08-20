@@ -36,6 +36,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (parsed.data.data_entrevista_salmazos !== undefined) campos.data_entrevista_salmazos = parsed.data.data_entrevista_salmazos || null;
 
     const supabase = createServiceClient();
+    // ⚠️ ATENÇÃO: existe uma segunda FK entre vagas e candidatos_vagas
+    // (vagas.reposicao_de_candidato_vaga_id). Qualquer select() que embuta
+    // vagas(...) a partir de candidatos_vagas DEVE especificar
+    // vagas!candidatos_vagas_vaga_id_fkey(...), senão quebra com erro de
+    // "more than one relationship" do PostgREST. Já aconteceu 2x (ago/2026).
     const { data, error } = await supabase
       .from("candidatos_vagas")
       .update(campos)

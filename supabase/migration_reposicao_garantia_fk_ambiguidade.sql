@@ -1,0 +1,44 @@
+-- ============================================================================
+-- REGISTRO RETROATIVO — coluna/constraint já existem em produção, aplicadas
+-- diretamente via MCP Supabase sem terem sido salvas antes num arquivo local
+-- (violação pontual da convenção do projeto: toda mudança de schema deve ter
+-- .sql em supabase/). Este arquivo é idempotente (IF NOT EXISTS) e serve só
+-- pra registrar o que já existe + documentar a armadilha que essa FK criou.
+-- ============================================================================
+--
+-- ⚠️ ATENÇÃO — AMBIGUIDADE DE EMBED ENTRE vagas E candidatos_vagas ⚠️
+--
+-- A coluna abaixo cria uma SEGUNDA foreign key entre as tabelas `vagas` e
+-- `candidatos_vagas` (a primeira é candidatos_vagas.vaga_id -> vagas.id,
+-- via candidatos_vagas_vaga_id_fkey — a relação "normal", de uma candidatura
+-- pertencer a uma vaga).
+--
+-- Essa segunda FK existe pro fluxo de "reposição de garantia": quando um
+-- candidato contratado é substituído dentro do prazo de garantia, uma NOVA
+-- vaga é criada apontando de volta pra candidatos_vagas ORIGINAL que está
+-- sendo substituída (ver src/app/api/candidatos-vagas/[id]/acionar-garantia/route.ts).
+--
+-- CONSEQUÊNCIA PRÁTICA: qualquer query Supabase/PostgREST que faça
+--   .from("candidatos_vagas").select("..., vagas(...)")
+-- (ou o inverso, .from("vagas").select("..., candidatos_vagas(...)"))
+-- SEM especificar qual das duas FKs usar, quebra em runtime com o erro:
+--   "Could not embed because more than one relationship was found for
+--    'candidatos_vagas' and 'vagas'"
+--
+-- REGRA: em embeds "normais" (buscar a vaga de uma candidatura), sempre usar
+-- o hint explícito da FK original:
+--   vagas!candidatos_vagas_vaga_id_fkey(...)
+-- Só usar vagas!vagas_reposicao_de_candidato_vaga_id_fkey(...) no contexto
+-- específico de reposição/garantia (ex: reabertura-recente/route.ts, que
+-- busca a vaga original a partir de vaga.reposicao_de_candidato_vaga_id).
+--
+-- Esse bug já se repetiu 2x em produção (a primeira correção abrangeu ~15
+-- arquivos; a segunda, em código novo adicionado depois, foi corrigida em
+-- ago/2026 em src/app/api/candidatos-vagas/[id]/route.ts e
+-- src/app/api/candidatos/[id]/etapa/route.ts). Antes de adicionar qualquer
+-- novo select() que junte essas duas tabelas, especifique o hint de FK.
+-- ============================================================================
+
+alter table vagas
+  add column if not exists reposicao_de_candidato_vaga_id uuid
+    references candidatos_vagas(id);

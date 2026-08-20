@@ -102,6 +102,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   // candidaturas ativas desse candidato de uma vez. Sincroniza o encaminhamento
   // 'aguardando' (se existir) de cada cliente distinto entre elas.
   {
+    // ⚠️ ATENÇÃO: existe uma segunda FK entre vagas e candidatos_vagas
+    // (vagas.reposicao_de_candidato_vaga_id). Qualquer select() que embuta
+    // vagas(...) a partir de candidatos_vagas DEVE especificar
+    // vagas!candidatos_vagas_vaga_id_fkey(...), senão quebra com erro de
+    // "more than one relationship" do PostgREST. Já aconteceu 2x (ago/2026).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: cvsAfetados } = await svc
       .from("candidatos_vagas")
@@ -130,6 +135,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   }
 
   if (dbEtapa === "entrevista_cliente") {
+    // ⚠️ ATENÇÃO: existe uma segunda FK entre vagas e candidatos_vagas
+    // (vagas.reposicao_de_candidato_vaga_id). Qualquer select() que embuta
+    // vagas(...) a partir de candidatos_vagas DEVE especificar
+    // vagas!candidatos_vagas_vaga_id_fkey(...), senão quebra com erro de
+    // "more than one relationship" do PostgREST. Já aconteceu 2x (ago/2026).
     const { data: cv } = await svc
       .from("candidatos_vagas")
       .select("vaga_id, vagas!candidatos_vagas_vaga_id_fkey(cliente_id, clientes(nome, contato_email))")
