@@ -1,7 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createServiceClient } from "@/lib/supabase/server";
-import { TIPOS_SERVICO } from "@/lib/constants";
 import BotaoVoltarSite from "@/components/BotaoVoltarSite";
 import CurriculoMotivacional from "@/components/CurriculoMotivacional";
 import FormCandidaturaVagaPublica from "@/components/FormCandidaturaVagaPublica";
@@ -45,14 +44,14 @@ export default async function VagaPublicaPage({ params }: Props) {
 
   let { data: vaga } = await supabase
     .from("vagas")
-    .select("id, titulo, cidade, estado, salario, adicionais_salariais, tipo_servico, requisitos, beneficios, horario, observacoes, status")
+    .select("id, titulo, cidade, estado, salario, adicionais_salariais, requisitos, beneficios, horario, observacoes, status")
     .eq("slug", slug)
     .maybeSingle();
 
   if (!vaga) {
     const { data: vagaById } = await supabase
       .from("vagas")
-      .select("id, titulo, cidade, estado, salario, adicionais_salariais, tipo_servico, requisitos, beneficios, horario, observacoes, status, slug")
+      .select("id, titulo, cidade, estado, salario, adicionais_salariais, requisitos, beneficios, horario, observacoes, status, slug")
       .eq("id", slug)
       .maybeSingle();
     if (vagaById?.slug) {
@@ -63,7 +62,6 @@ export default async function VagaPublicaPage({ params }: Props) {
 
   if (!vaga) notFound();
 
-  const tipo = TIPOS_SERVICO.find((t) => t.id === vaga!.tipo_servico);
   const encerrada = vaga.status === "fechada" || vaga.status === "cancelada";
 
   return (
@@ -88,65 +86,56 @@ export default async function VagaPublicaPage({ params }: Props) {
       <div className="max-w-3xl">
 
         {/* Job info card */}
-        <div style={{ backgroundColor: "#fff", border: "1px solid #e5e7eb", borderRadius: "16px", padding: "24px", marginBottom: "24px" }}>
-          <div className="flex flex-wrap items-start justify-between gap-3" style={{ marginBottom: "16px" }}>
-            <div className="flex-1">
-              {tipo && (
-                <span style={{
-                  display: "inline-block",
-                  backgroundColor: "#1a1a1a",
-                  color: "#FFD700",
-                  border: "1px solid #333",
-                  fontSize: "11px",
-                  fontWeight: 600,
-                  padding: "3px 10px",
-                  borderRadius: "9999px",
-                  marginBottom: "10px",
-                }}>
-                  {tipo.label}
-                </span>
-              )}
-              <h1 style={{ fontSize: "26px", fontWeight: 700, color: "#111111", marginTop: "4px" }}>
-                {vaga.titulo}
-              </h1>
-            </div>
+        <div style={{ backgroundColor: "#fff", border: "1px solid #e5e7eb", borderRadius: "16px", overflow: "hidden", marginBottom: "24px" }}>
+          {/* Cabeçalho padronizado — modalidade de contratação (R&S/MOT/Terceirização) não
+              aparece pro candidato aqui de propósito: essa informação fica reservada pro
+              contato posterior da Salmazos com ele, não pra esta tela pública. */}
+          <div style={{ backgroundColor: "#000", padding: "22px 24px", textAlign: "center" }}>
+            <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#FFD700", margin: 0 }}>
+              {vaga.titulo}
+            </h1>
+          </div>
+
+          <div style={{ padding: "24px" }}>
             {encerrada && (
-              <span style={{ fontSize: "11px", fontWeight: 600, padding: "4px 12px", borderRadius: "9999px", backgroundColor: "#f3f4f6", color: "#6b7280", border: "1px solid #e5e7eb" }}>
-                Vaga encerrada
-              </span>
+              <div style={{ textAlign: "right", marginBottom: "16px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 600, padding: "4px 12px", borderRadius: "9999px", backgroundColor: "#f3f4f6", color: "#6b7280", border: "1px solid #e5e7eb" }}>
+                  Vaga encerrada
+                </span>
+              </div>
+            )}
+
+            {/* Info grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              {(vaga.cidade || vaga.estado) && (
+                <InfoItem label="Local" value={[vaga.cidade, vaga.estado].filter(Boolean).join(" / ")} />
+              )}
+              <InfoItem label="Salário" value={formatarSalario(vaga.salario)} sub={vaga.adicionais_salariais} />
+              {vaga.horario && <InfoItem label="Horário" value={vaga.horario} />}
+            </div>
+
+            {vaga.requisitos && (
+              <div style={{ marginTop: "16px", borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
+                <p style={{ fontSize: "10px", fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
+                  Requisitos
+                </p>
+                <p style={{ fontSize: "14px", color: "#374151", lineHeight: 1.7, whiteSpace: "pre-line" }}>
+                  {vaga.requisitos}
+                </p>
+              </div>
+            )}
+
+            {vaga.beneficios && (
+              <div style={{ marginTop: "16px", borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
+                <p style={{ fontSize: "10px", fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
+                  Benefícios
+                </p>
+                <p style={{ fontSize: "14px", color: "#374151", lineHeight: 1.7, whiteSpace: "pre-line" }}>
+                  {vaga.beneficios}
+                </p>
+              </div>
             )}
           </div>
-
-          {/* Info grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4" style={{ borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
-            {(vaga.cidade || vaga.estado) && (
-              <InfoItem label="Local" value={[vaga.cidade, vaga.estado].filter(Boolean).join(" / ")} />
-            )}
-            <InfoItem label="Salário" value={formatarSalario(vaga.salario)} sub={vaga.adicionais_salariais} />
-            {vaga.horario && <InfoItem label="Horário" value={vaga.horario} />}
-          </div>
-
-          {vaga.requisitos && (
-            <div style={{ marginTop: "16px", borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
-              <p style={{ fontSize: "10px", fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
-                Requisitos
-              </p>
-              <p style={{ fontSize: "14px", color: "#374151", lineHeight: 1.7, whiteSpace: "pre-line" }}>
-                {vaga.requisitos}
-              </p>
-            </div>
-          )}
-
-          {vaga.beneficios && (
-            <div style={{ marginTop: "16px", borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
-              <p style={{ fontSize: "10px", fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
-                Benefícios
-              </p>
-              <p style={{ fontSize: "14px", color: "#374151", lineHeight: 1.7, whiteSpace: "pre-line" }}>
-                {vaga.beneficios}
-              </p>
-            </div>
-          )}
         </div>
 
         {encerrada ? (
