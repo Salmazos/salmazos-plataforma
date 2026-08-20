@@ -11,6 +11,7 @@ interface VagaItem {
   cidade: string | null;
   estado: string | null;
   salario: string | null;
+  adicionaisSalariais: string | null;
   tipoServico: string | null;
   tipoLabel: string | null;
   salarioFormatado: string;
@@ -100,6 +101,7 @@ export default function VagasListaClient({ vagas }: Props) {
               cidade={v.cidade}
               estado={v.estado}
               salario={v.salario}
+              adicionaisSalariais={v.adicionaisSalariais}
               tipoServico={v.tipoServico}
               tipoLabel={v.tipoLabel}
               salarioFormatado={v.salarioFormatado}

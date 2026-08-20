@@ -77,7 +77,7 @@ const CORES_TIPO: Record<string, { bg: string; color: string }> = {
 const FORM_VAZIO = {
   titulo: "", cliente_id: "", tipo_servico: "", num_posicoes: "",
   prazo: "", cidade: "", estado: "",
-  salario: "", observacoes: "", responsavel: "",
+  salario: "", adicionais_salariais: "", observacoes: "", responsavel: "",
   fee_rs_percentual: "", fee_rs_prazo_cobranca: "",
   confidencial: false,
   taxa_cancelamento: false, taxa_cancelamento_percentual: "",
@@ -167,6 +167,7 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props)
         cidade:       vaga.cidade ?? "",
         estado:       vaga.estado ?? "",
         salario:      vaga.salario ?? "",
+        adicionais_salariais: vaga.adicionais_salariais ?? "",
         observacoes:  vaga.observacoes ?? "",
         responsavel:  vaga.responsavel,
         fee_rs_percentual: vaga.fee_rs_percentual != null ? String(vaga.fee_rs_percentual) : "",
@@ -470,12 +471,25 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props)
               ))}
             </div>
             {salarioModo === "fixo" && (
-              <CampoMoeda
-                value={form.salario}
-                onChange={(v) => set("salario", v > 0 ? String(v) : "")}
-                placeholder="Ex: 2.500,00"
-                className="input-field"
-              />
+              <>
+                <CampoMoeda
+                  value={form.salario}
+                  onChange={(v) => set("salario", v > 0 ? String(v) : "")}
+                  placeholder="Ex: 2.500,00"
+                  className="input-field"
+                />
+                <div className="mt-2">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    Adicionais salariais (opcional)
+                  </label>
+                  <input
+                    value={form.adicionais_salariais}
+                    onChange={(e) => set("adicionais_salariais", e.target.value)}
+                    placeholder="Ex: + Insalubridade 30%, + Periculosidade"
+                    className="input-field"
+                  />
+                </div>
+              </>
             )}
           </div>
 

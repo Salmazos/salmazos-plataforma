@@ -91,6 +91,7 @@ export const vagaCreateSchema = z.object({
   cidade: z.string().optional().nullable(),
   estado: z.string().max(2).optional().nullable(),
   salario: z.string().optional().nullable(),
+  adicionais_salariais: z.string().optional().nullable(),
   requisitos: z.string().optional().nullable(),
   beneficios: z.string().optional().nullable(),
   horario: z.string().optional().nullable(),

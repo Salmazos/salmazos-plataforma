@@ -330,6 +330,7 @@ export interface Vaga {
   cidade: string | null;
   estado: string | null;
   salario: string | null;
+  adicionais_salariais?: string | null;
   requisitos: string | null;
   beneficios: string | null;
   horario: string | null;

@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
         cidade: body.cidade || null,
         estado: body.estado || null,
         salario: body.salario || null,
+        adicionais_salariais: body.adicionais_salariais || null,
         requisitos: body.requisitos || null,
         beneficios: body.beneficios || null,
         horario: body.horario || null,

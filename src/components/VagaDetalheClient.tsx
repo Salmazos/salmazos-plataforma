@@ -551,7 +551,14 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
                 <DetalheItem label="Prazo">{formatarData(vaga.prazo)}</DetalheItem>
               )}
               {vaga.salario && (
-                <DetalheItem label="Salário">{formatarSalario(vaga.salario)}</DetalheItem>
+                <DetalheItem label="Salário">
+                  {formatarSalario(vaga.salario)}
+                  {vaga.adicionais_salariais && (
+                    <span className="block text-xs font-normal text-gray-400 mt-0.5">
+                      {vaga.adicionais_salariais}
+                    </span>
+                  )}
+                </DetalheItem>
               )}
               {vaga.horario && (
                 <DetalheItem label="Horário" fullWidth>{vaga.horario}</DetalheItem>

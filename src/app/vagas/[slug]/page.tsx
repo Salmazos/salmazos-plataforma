@@ -25,13 +25,16 @@ function formatarSalario(valor: string | number | null | undefined): string {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function InfoItem({ label, value }: { label: string; value: string }) {
+function InfoItem({ label, value, sub }: { label: string; value: string; sub?: string | null }) {
   return (
     <div>
       <dt style={{ fontSize: "10px", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "2px" }}>
         {label}
       </dt>
       <dd style={{ fontSize: "14px", fontWeight: 600, color: "#111827" }}>{value}</dd>
+      {sub && (
+        <dd style={{ fontSize: "12px", fontWeight: 400, color: "#6b7280", marginTop: "2px" }}>{sub}</dd>
+      )}
     </div>
   );
 }
@@ -42,14 +45,14 @@ export default async function VagaPublicaPage({ params }: Props) {
 
   let { data: vaga } = await supabase
     .from("vagas")
-    .select("id, titulo, cidade, estado, salario, tipo_servico, requisitos, beneficios, horario, observacoes, status")
+    .select("id, titulo, cidade, estado, salario, adicionais_salariais, tipo_servico, requisitos, beneficios, horario, observacoes, status")
     .eq("slug", slug)
     .maybeSingle();
 
   if (!vaga) {
     const { data: vagaById } = await supabase
       .from("vagas")
-      .select("id, titulo, cidade, estado, salario, tipo_servico, requisitos, beneficios, horario, observacoes, status, slug")
+      .select("id, titulo, cidade, estado, salario, adicionais_salariais, tipo_servico, requisitos, beneficios, horario, observacoes, status, slug")
       .eq("id", slug)
       .maybeSingle();
     if (vagaById?.slug) {
@@ -119,7 +122,7 @@ export default async function VagaPublicaPage({ params }: Props) {
             {(vaga.cidade || vaga.estado) && (
               <InfoItem label="Local" value={[vaga.cidade, vaga.estado].filter(Boolean).join(" / ")} />
             )}
-            <InfoItem label="Salário" value={formatarSalario(vaga.salario)} />
+            <InfoItem label="Salário" value={formatarSalario(vaga.salario)} sub={vaga.adicionais_salariais} />
             {vaga.horario && <InfoItem label="Horário" value={vaga.horario} />}
           </div>
 

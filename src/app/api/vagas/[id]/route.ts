@@ -46,6 +46,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (body.cidade !== undefined)              campos.cidade = body.cidade || null;
     if (body.estado !== undefined)              campos.estado = body.estado || null;
     if (body.salario !== undefined)             campos.salario = body.salario || null;
+    if (body.adicionais_salariais !== undefined) campos.adicionais_salariais = body.adicionais_salariais || null;
     if (body.requisitos !== undefined)          campos.requisitos = body.requisitos || null;
     if (body.beneficios !== undefined)          campos.beneficios = body.beneficios || null;
     if (body.horario !== undefined)             campos.horario = body.horario || null;

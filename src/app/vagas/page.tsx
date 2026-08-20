@@ -22,7 +22,7 @@ export default async function VagasPublicaPage() {
   const supabase = createServiceClient();
   const { data: vagas } = await supabase
     .from("vagas")
-    .select("id, titulo, cidade, estado, salario, tipo_servico, slug")
+    .select("id, titulo, cidade, estado, salario, adicionais_salariais, tipo_servico, slug")
     .eq("status", "aberta")
     .eq("visivel_publicamente", true)
     .order("titulo", { ascending: true });
@@ -37,6 +37,7 @@ export default async function VagasPublicaPage() {
       cidade: v.cidade,
       estado: v.estado,
       salario: v.salario,
+      adicionaisSalariais: v.adicionais_salariais ?? null,
       tipoServico: v.tipo_servico ?? null,
       tipoLabel: tipo?.label ?? null,
       salarioFormatado: formatarSalario(v.salario),
