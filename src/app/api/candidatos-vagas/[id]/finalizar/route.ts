@@ -6,6 +6,7 @@ import { parseBody, candidatoVagaFinalizarSchema } from "@/lib/schemas";
 import { gerarCobrancaRSSeAplicavel } from "@/lib/cobrancaRS";
 import { notificarVagaEncerrada } from "@/lib/notificarVagaEncerrada";
 import { resolverTipoServicoVigente } from "@/lib/tipoServicoVigente";
+import { sincronizarEncaminhamentoComEtapa } from "@/lib/sincronizarEncaminhamento";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -142,6 +143,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         .update(cvFields)
         .eq("id", id);
 
+      void sincronizarEncaminhamentoComEtapa(cv.candidato_id, vaga?.cliente_id ?? null, "contratado", supabase);
+
       if (tipoServicoFinal === "recrutamento_selecao") {
         registrarAuditoria({
           acao: "cobranca_rs_decisao",
@@ -257,6 +260,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         observacoes: observacoes || null,
       })
       .eq("id", id);
+
+    void sincronizarEncaminhamentoComEtapa(cv.candidato_id, vaga?.cliente_id ?? null, "reprovado_final", supabase);
 
     await supabase
       .from("candidatos")

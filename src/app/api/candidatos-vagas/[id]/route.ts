@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { parseBody, candidatoVagaUpdateSchema } from "@/lib/schemas";
+import { sincronizarEncaminhamentoComEtapa } from "@/lib/sincronizarEncaminhamento";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -39,7 +40,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       .from("candidatos_vagas")
       .update(campos)
       .eq("id", id)
-      .select("*, candidatos(id, nome_completo)")
+      .select("*, candidatos(id, nome_completo), vagas(cliente_id)")
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -54,6 +55,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         metadata: { etapa: parsed.data.etapa, observacoes: parsed.data.observacoes || null },
         criado_por: null,
       });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const clienteId = (data as any).vagas?.cliente_id ?? null;
+      void sincronizarEncaminhamentoComEtapa(candidatoId, clienteId, parsed.data.etapa, supabase);
     }
 
     if (parsed.data.etapa === "reprovado") {

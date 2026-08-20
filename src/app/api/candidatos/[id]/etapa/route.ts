@@ -6,6 +6,7 @@ import type { EmailTemplateName } from "@/lib/emailTemplates";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, candidatoEtapaSchema } from "@/lib/schemas";
+import { sincronizarEncaminhamentoComEtapa } from "@/lib/sincronizarEncaminhamento";
 
 const ETAPA_LABEL: Record<string, string> = {
   triagem: "Triagem",
@@ -78,6 +79,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   // Update candidatos_vagas etapa
+  const etapaGravada = isRemoval ? etapa_kanban : dbEtapa;
   if (isRemoval) {
     await svc
       .from("candidatos_vagas")
@@ -94,6 +96,24 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         ...(comentario ? { observacoes: comentario } : {}),
       })
       .eq("candidato_id", id);
+  }
+
+  // Update de candidatos_vagas acima não é escopado por vaga — afeta todas as
+  // candidaturas ativas desse candidato de uma vez. Sincroniza o encaminhamento
+  // 'aguardando' (se existir) de cada cliente distinto entre elas.
+  {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: cvsAfetados } = await svc
+      .from("candidatos_vagas")
+      .select("vagas(cliente_id)")
+      .eq("candidato_id", id);
+    const clienteIds = new Set(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (cvsAfetados ?? []).map((cv: any) => cv.vagas?.cliente_id).filter(Boolean)
+    );
+    for (const clienteId of clienteIds) {
+      void sincronizarEncaminhamentoComEtapa(id, clienteId as string, etapaGravada, svc);
+    }
   }
 
   const templateName = ETAPA_TEMPLATE[dbEtapa];

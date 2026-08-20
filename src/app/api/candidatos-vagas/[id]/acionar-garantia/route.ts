@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
+import { sincronizarEncaminhamentoComEtapa } from "@/lib/sincronizarEncaminhamento";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -55,6 +56,8 @@ export async function PATCH(_request: NextRequest, { params }: Params) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const vo = vagaOriginal as any;
     const clienteNome = vo?.clientes?.nome ?? "Cliente";
+
+    void sincronizarEncaminhamentoComEtapa(cv.candidato_id, vo?.cliente_id ?? null, "reprovado_final", supabase);
 
     if (vo) {
       const obsReposicao = `Reposição gratuita — candidato anterior: ${candidatoNome}${vo.observacoes ? ` | ${vo.observacoes}` : ""}`;

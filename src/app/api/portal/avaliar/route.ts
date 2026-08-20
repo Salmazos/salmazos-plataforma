@@ -69,10 +69,14 @@ export async function PATCH(request: NextRequest) {
         .update({ etapa_kanban: "aprovado_cliente" })
         .eq("id", enc.candidato_id);
 
+      // Nunca move pra trás: se o analista já tiver avançado essa candidatura pra
+      // "contratado" por fora do portal (único estágio depois de aprovado_cliente no
+      // funil), a avaliação do cliente chegando agora não deve reabrir/regredir isso.
       const cvQuery = service
         .from("candidatos_vagas")
         .update({ etapa: "aprovado_cliente" })
-        .eq("candidato_id", enc.candidato_id);
+        .eq("candidato_id", enc.candidato_id)
+        .neq("etapa", "contratado");
       await (enc.vaga_id ? cvQuery.eq("vaga_id", enc.vaga_id) : cvQuery);
 
       // Save admission data if provided
