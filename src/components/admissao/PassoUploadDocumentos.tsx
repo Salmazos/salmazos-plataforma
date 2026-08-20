@@ -20,6 +20,7 @@ interface Props {
   sexo: string;
   isMotorista: boolean;
   possuiDependentes: boolean;
+  errosVisiveis: Set<string>;
 }
 
 const TAMANHO_MAX = 10 * 1024 * 1024; // 10MB
@@ -95,7 +96,7 @@ async function enviarArquivo(
   }
 }
 
-function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; token: string; onAtualizado: (doc: DocumentoToken) => void }) {
+function DocumentoCard({ doc, token, onAtualizado, faltando }: { doc: DocumentoToken; token: string; onAtualizado: (doc: DocumentoToken) => void; faltando: boolean }) {
   const def = DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === doc.tipo_documento);
   const nota = NOTAS_DOCUMENTO[doc.tipo_documento];
   const inputRef = useRef<HTMLInputElement>(null);
@@ -169,7 +170,7 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
   }
 
   return (
-    <div style={{ ...cardStyle, marginBottom: 12, border: rejeitado ? "2px solid #DC2626" : cardStyle.border }}>
+    <div style={{ ...cardStyle, marginBottom: 12, border: rejeitado || faltando ? "2px solid #DC2626" : cardStyle.border }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
         <p style={{ fontSize: 15, fontWeight: 700, color: "#111827", margin: 0 }}>{label}</p>
         <span
@@ -198,6 +199,12 @@ function DocumentoCard({ doc, token, onAtualizado }: { doc: DocumentoToken; toke
         <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
           <p style={{ fontSize: 12, color: "#991B1B", margin: 0, fontWeight: 600 }}>⚠️ Reenvio necessário</p>
           {doc.motivo_rejeicao && <p style={{ fontSize: 12, color: "#991B1B", margin: "2px 0 0" }}>{doc.motivo_rejeicao}</p>}
+        </div>
+      )}
+
+      {faltando && !rejeitado && (
+        <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
+          <p style={{ fontSize: 12, color: "#991B1B", margin: 0, fontWeight: 600 }}>⚠️ Este documento é obrigatório</p>
         </div>
       )}
 
@@ -372,9 +379,9 @@ function ArquivoEnviadoLinha({ doc, index, token, onAtualizado, enquadramento, t
 // nominal entre arquivo e dependente específico. Arquivos novos ficam num staging local
 // (com preview e opção de remover) antes de serem efetivamente enviados.
 function DocumentoMultiCard({
-  def, rows, token, onAtualizado,
+  def, rows, token, onAtualizado, faltando,
 }: {
-  def: DocumentoAdmissaoDef; rows: DocumentoToken[]; token: string; onAtualizado: (doc: DocumentoToken) => void;
+  def: DocumentoAdmissaoDef; rows: DocumentoToken[]; token: string; onAtualizado: (doc: DocumentoToken) => void; faltando: boolean;
 }) {
   const nota = NOTAS_DOCUMENTO[def.tipo_documento];
   const inputRef = useRef<HTMLInputElement>(null);
@@ -458,7 +465,7 @@ function DocumentoMultiCard({
   }
 
   return (
-    <div style={{ ...cardStyle, marginBottom: 12, border: temRejeitado ? "2px solid #DC2626" : cardStyle.border }}>
+    <div style={{ ...cardStyle, marginBottom: 12, border: temRejeitado || faltando ? "2px solid #DC2626" : cardStyle.border }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
         <p style={{ fontSize: 15, fontWeight: 700, color: "#111827", margin: 0 }}>{def.label}</p>
         <span
@@ -478,6 +485,12 @@ function DocumentoMultiCard({
 
       {enviados.length === 0 && staged.length === 0 && (
         <p style={{ fontSize: 13, color: "#9CA3AF", margin: "0 0 10px" }}>Nenhum arquivo enviado ainda.</p>
+      )}
+
+      {faltando && !temRejeitado && (
+        <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
+          <p style={{ fontSize: 12, color: "#991B1B", margin: 0, fontWeight: 600 }}>⚠️ Este documento é obrigatório</p>
+        </div>
       )}
 
       {enviados.map((doc, idx) => (
@@ -540,7 +553,7 @@ function DocumentoMultiCard({
   );
 }
 
-export default function PassoUploadDocumentos({ token, documentos, setDocumentos, sexo, isMotorista, possuiDependentes }: Props) {
+export default function PassoUploadDocumentos({ token, documentos, setDocumentos, sexo, isMotorista, possuiDependentes, errosVisiveis }: Props) {
   // apenasPainel é exclusivo do upload manual pela equipe — nunca aparece aqui, mesmo
   // defensivamente (a linha em admissao_documentos nem chega a existir pra um tipo assim,
   // já que o seed automático da criação também o exclui). Hoje nenhum tipo usa isso.
@@ -553,6 +566,10 @@ export default function PassoUploadDocumentos({ token, documentos, setDocumentos
     });
   };
 
+  const labelsFaltando = tiposVisiveis
+    .filter((def) => errosVisiveis.has(`doc_${def.tipo_documento}`))
+    .map((def) => def.label);
+
   return (
     <div>
       <div style={cardStyle}>
@@ -560,15 +577,29 @@ export default function PassoUploadDocumentos({ token, documentos, setDocumentos
         <p style={{ fontSize: 13, color: "#9CA3AF", margin: 0 }}>Envie os arquivos dos documentos abaixo (imagem ou PDF, até 10MB cada).</p>
       </div>
 
+      {labelsFaltando.length > 0 && (
+        <div style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "10px 12px", marginTop: 12 }}>
+          <p style={{ fontSize: 13, color: "#991B1B", margin: 0, fontWeight: 700 }}>
+            ⚠️ Envie os documentos obrigatórios antes de continuar:
+          </p>
+          <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+            {labelsFaltando.map((label) => (
+              <li key={label} style={{ fontSize: 12, color: "#991B1B" }}>{label}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div style={{ marginTop: 12 }}>
         {tiposVisiveis.map((def) => {
           const rows = documentos.filter((d) => d.tipo_documento === def.tipo_documento);
+          const faltando = errosVisiveis.has(`doc_${def.tipo_documento}`);
           if (def.multiArquivo) {
-            return <DocumentoMultiCard key={def.tipo_documento} def={def} rows={rows} token={token} onAtualizado={handleAtualizado} />;
+            return <DocumentoMultiCard key={def.tipo_documento} def={def} rows={rows} token={token} onAtualizado={handleAtualizado} faltando={faltando} />;
           }
           const doc = rows[0];
           if (!doc) return null;
-          return <DocumentoCard key={doc.id} doc={doc} token={token} onAtualizado={handleAtualizado} />;
+          return <DocumentoCard key={doc.id} doc={doc} token={token} onAtualizado={handleAtualizado} faltando={faltando} />;
         })}
       </div>
     </div>

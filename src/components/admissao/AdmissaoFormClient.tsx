@@ -16,6 +16,7 @@ import PassoRevisao from "./PassoRevisao";
 import { botaoPrimarioStyle, botaoSecundarioStyle } from "./styles";
 import { WHATSAPP_SUPORTE } from "@/lib/admissaoConstants";
 import { STATUS_JA_ENVIADO } from "@/lib/admissaoStatus";
+import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
 
 const TOTAL_PASSOS = 9;
 
@@ -213,10 +214,36 @@ function sanitizarSituacaoTrabalhista(st: SituacaoTrabalhistaState): Record<stri
   };
 }
 
+// Mesmo critério de "enviado" usado nos cards (PassoUploadDocumentos.tsx: `doc.status ===
+// "enviado" || doc.status === "aprovado"`) — um documento rejeitado exige reenvio, então
+// não conta como cumprido aqui.
+//
+// def.obrigatorio (DOCUMENTOS_ADMISSAO) NÃO é a fonte de verdade pra "masculino": o
+// Reservista nasce com obrigatorio:false na definição estática e só vira obrigatório de
+// fato quando o sexo é confirmado — o backend sincroniza isso na LINHA do banco (ver
+// api/admissoes/token/[token]/route.ts, bloco "tiposMasculino"), nunca no array estático.
+// Por isso aqui a obrigatoriedade de "masculino" é decidida pelo próprio `sexo` do form,
+// não por def.obrigatorio. "motorista" já nasce obrigatorio:true na definição, então o
+// condicional só decide a visibilidade. "dependente" nunca é obrigatório (obrigatorio:false
+// pra todos os tipos desse grupo), então nunca entra na lista de faltando.
+function documentosObrigatoriosFaltando(
+  documentos: DocumentoToken[], sexo: string, isMotorista: boolean, possuiDependentes: boolean,
+): string[] {
+  return DOCUMENTOS_ADMISSAO.filter((def) => {
+    if (def.condicional === "masculino") { if (sexo !== "M") return false; }
+    else if (def.condicional === "motorista") { if (!def.obrigatorio || !isMotorista) return false; }
+    else if (def.condicional === "dependente") { if (!def.obrigatorio || !possuiDependentes) return false; }
+    else if (!def.obrigatorio) return false;
+    const rows = documentos.filter((d) => d.tipo_documento === def.tipo_documento);
+    return !rows.some((d) => d.status === "enviado" || d.status === "aprovado");
+  }).map((def) => `doc_${def.tipo_documento}`);
+}
+
 function validarPasso(
   passo: number, form: FormState, isMotorista: boolean, possuiDependentes: boolean, dependentesCount: number,
   valeTransporte: ValeTransporteState,
   situacaoTrabalhista: SituacaoTrabalhistaState,
+  documentos: DocumentoToken[],
 ): string[] {
   const faltando: string[] = [];
   const req = (campo: keyof FormState) => {
@@ -253,6 +280,8 @@ function validarPasso(
       if (!linhaValida) faltando.push("vt_linhas");
       if (!valeTransporte.termos_aceitos) faltando.push("vt_termos_aceitos");
     }
+  } else if (passo === 8) {
+    faltando.push(...documentosObrigatoriosFaltando(documentos, form.sexo, isMotorista, possuiDependentes));
   }
   return faltando;
 }
@@ -269,7 +298,7 @@ function calcularPassoInicial(
   if (documentos.some((d) => d.status === "rejeitado")) return 8;
 
   for (let p = 1; p <= 7; p++) {
-    if (validarPasso(p, form, isMotorista, possuiDependentes, dependentesCount, valeTransporte, situacaoTrabalhista).length > 0) {
+    if (validarPasso(p, form, isMotorista, possuiDependentes, dependentesCount, valeTransporte, situacaoTrabalhista, documentos).length > 0) {
       return p;
     }
   }
@@ -483,7 +512,7 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
   }, [token, form, valeTransporte, situacaoTrabalhista]);
 
   const avancar = async () => {
-    const faltando = validarPasso(passo, form, isMotorista, possuiDependentes, dependentes.length, valeTransporte, situacaoTrabalhista);
+    const faltando = validarPasso(passo, form, isMotorista, possuiDependentes, dependentes.length, valeTransporte, situacaoTrabalhista, documentos);
     if (faltando.length > 0) {
       setErrosVisiveis(new Set(faltando));
       return;
@@ -501,6 +530,12 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
   };
 
   const enviarParaAnalise = async () => {
+    // Segunda trava, além do botão desabilitado em PassoRevisao — evita envio caso o
+    // estado de `documentos` fique dessincronizado do que a tela mostra no momento do clique.
+    if (documentosObrigatoriosFaltando(documentos, form.sexo, isMotorista, possuiDependentes).length > 0) {
+      setErroEnvio("Envie todos os documentos obrigatórios antes de enviar para análise.");
+      return;
+    }
     setEnviando(true);
     setErroEnvio("");
     try {
@@ -662,6 +697,7 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
             token={token}
             documentos={documentos} setDocumentos={setDocumentos}
             sexo={form.sexo} isMotorista={isMotorista} possuiDependentes={possuiDependentes}
+            errosVisiveis={errosVisiveis}
           />
         )}
         {passo === 9 && (

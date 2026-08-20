@@ -128,6 +128,34 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const statusUpdates: Record<string, unknown> = {};
   if (submit) {
+    // Trava server-side pra fechar a lacuna de um PATCH forjado direto (bypassando o
+    // frontend, que já bloqueia isso em AdmissaoFormClient/PassoRevisao). Confia no campo
+    // `obrigatorio` já persistido em admissao_documentos pra tudo, EXCETO o condicional
+    // "motorista" (cnh/cnh_verso): diferente de "masculino" (sincronizado dinamicamente no
+    // bloco "tiposMasculino" acima), não existe sync equivalente pra motorista — essas duas
+    // linhas nascem obrigatorio:true no seed (api/admissoes/route.ts) e ficam assim pra
+    // sempre, mesmo pra quem nunca dirige. Confirmado com dado real: a maioria das
+    // admissões em produção tem cnh/cnh_verso obrigatorio=true e pendente mesmo sem
+    // cnh_numero preenchido. Por isso esse condicional é recalculado aqui do mesmo jeito
+    // que o client faz (AdmissaoFormClient.tsx: isMotoristaCalc = !!cnh_numero).
+    const [{ data: documentosObrigatorios, error: docsCheckError }, { data: dadosPessoaisCheck }] = await Promise.all([
+      svc.from("admissao_documentos").select("tipo_documento, status, condicional").eq("admissao_id", admissaoId).eq("obrigatorio", true),
+      svc.from("admissao_dados_pessoais").select("cnh_numero").eq("admissao_id", admissaoId).maybeSingle(),
+    ]);
+    if (docsCheckError) return NextResponse.json({ error: docsCheckError.message }, { status: 400 });
+
+    const isMotorista = !!dadosPessoaisCheck?.cnh_numero;
+    const faltando = (documentosObrigatorios ?? [])
+      .filter((d) => d.condicional !== "motorista" || isMotorista)
+      .filter((d) => d.status !== "enviado" && d.status !== "aprovado")
+      .map((d) => d.tipo_documento);
+    if (faltando.length > 0) {
+      return NextResponse.json(
+        { error: `Documentos obrigatórios pendentes: ${faltando.join(", ")}` },
+        { status: 400 }
+      );
+    }
+
     // A schema já garante lgpd_aceite === true quando submit === true (ver admissaoTokenUpdateSchema).
     statusUpdates.status = "aguardando_analise";
     statusUpdates.lgpd_aceite_em = new Date().toISOString();

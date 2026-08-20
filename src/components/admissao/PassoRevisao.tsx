@@ -178,11 +178,16 @@ export default function PassoRevisao({ form, dependentes, documentos, valeTransp
 
       <button
         onClick={onEnviar}
-        disabled={!lgpdAceite || enviando}
-        style={{ ...botaoPrimarioStyle, opacity: !lgpdAceite || enviando ? 0.5 : 1, cursor: !lgpdAceite || enviando ? "not-allowed" : "pointer" }}
+        disabled={!lgpdAceite || enviando || pendentesObrigatorios.length > 0}
+        style={{ ...botaoPrimarioStyle, opacity: !lgpdAceite || enviando || pendentesObrigatorios.length > 0 ? 0.5 : 1, cursor: !lgpdAceite || enviando || pendentesObrigatorios.length > 0 ? "not-allowed" : "pointer" }}
       >
         {enviando ? "Enviando..." : "Enviar para análise"}
       </button>
+      {pendentesObrigatorios.length > 0 && (
+        <p style={{ fontSize: 12, color: "#DC2626", marginTop: 6 }}>
+          ⚠️ Envie todos os documentos obrigatórios antes de enviar para análise.
+        </p>
+      )}
       {!lgpdAceite && (
         <p style={{ fontSize: 12, color: "#DC2626", marginTop: 6 }}>
           ⚠️ Você precisa ler e aceitar a Política de Privacidade (LGPD) para enviar seus dados.
