@@ -406,19 +406,23 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                     {vencimentoSalvo && <p className="text-green-700 text-xs mt-1">Vencimento salvo!</p>}
                   </div>
 
-                  {acessoAmplo && (
-                    <button onClick={handleMarcarPaga} disabled={marcandoPaga} className="btn-primary w-full disabled:opacity-50">
-                      {marcandoPaga ? "Marcando..." : "Marcar como paga"}
-                    </button>
-                  )}
-
                   {isFullAccess && (
-                    <div className="mt-3">
+                    <div>
                       <button onClick={handleReenviar} disabled={reenviando} className="btn-outline w-full disabled:opacity-50">
                         {reenviando ? "Reenviando..." : "Reenviar notificação"}
                       </button>
                       {reenviado && <p className="text-green-700 text-xs mt-1">Notificação reenviada!</p>}
                     </div>
+                  )}
+
+                  {/* Estilo discreto (não mais btn-primary preto/amarelo) e posicionado por
+                      último, depois de "Reenviar notificação" — reflete a ordem real do
+                      processo (salvar vencimento → aguardar pagamento, possivelmente
+                      reenviar → só então marcar como paga) e evita clique fora de ordem. */}
+                  {acessoAmplo && (
+                    <button onClick={handleMarcarPaga} disabled={marcandoPaga} className={`btn-outline w-full disabled:opacity-50 ${isFullAccess ? "mt-3" : ""}`}>
+                      {marcandoPaga ? "Marcando..." : "Marcar como paga"}
+                    </button>
                   )}
                 </div>
               )}

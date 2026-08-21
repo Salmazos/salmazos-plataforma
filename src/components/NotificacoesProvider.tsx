@@ -25,6 +25,7 @@ interface NotificacoesContextValue {
   notificacoes: Notificacao[];
   naoLidas: number;
   abrirNotificacao: (n: Notificacao) => void;
+  marcarTodasComoLidas: () => void;
 }
 
 const NotificacoesContext = createContext<NotificacoesContextValue | null>(null);
@@ -106,6 +107,11 @@ export default function NotificacoesProvider({ children }: { children: React.Rea
     fetch(`/api/notificacoes/${id}`, { method: "PATCH" }).catch(() => {});
   }, []);
 
+  const marcarTodasComoLidas = useCallback(() => {
+    setNotificacoes((prev) => prev.map((n) => (n.lida ? n : { ...n, lida: true })));
+    fetch("/api/notificacoes/limpar-todas", { method: "POST" }).catch(() => {});
+  }, []);
+
   const abrirNotificacao = useCallback((n: Notificacao) => {
     if (!n.lida) marcarComoLida(n.id);
     // vaga_id checado antes de candidato_id de propósito: hoje só o tipo
@@ -133,7 +139,7 @@ export default function NotificacoesProvider({ children }: { children: React.Rea
   const naoLidas = notificacoes.filter((n) => !n.lida).length;
 
   return (
-    <NotificacoesContext.Provider value={{ notificacoes, naoLidas, abrirNotificacao }}>
+    <NotificacoesContext.Provider value={{ notificacoes, naoLidas, abrirNotificacao, marcarTodasComoLidas }}>
       {children}
       <ToastStack toasts={toasts} onDismiss={dismissToast} onOpen={abrirToast} />
     </NotificacoesContext.Provider>

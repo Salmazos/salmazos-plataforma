@@ -94,6 +94,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       feeRsPrazoCobranca: cobranca.prazo_cobranca,
       feeValor,
       tipoCobrancaRS: ehCancelamento ? "cancelamento" : "contratacao",
+      cobrancaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/cobrancas-rs?abrir=${id}`,
     });
 
     const resultados = await Promise.all(

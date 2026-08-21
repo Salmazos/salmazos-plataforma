@@ -13,6 +13,7 @@ export type EmailTemplateName =
   | "cobranca_rs_gerada"
   | "cobranca_rs_atrasada"
   | "cobranca_rs_paga"
+  | "cobranca_rs_validada_diretoria"
   | "supervisao_cliente_atrasada";
 
 interface TemplateData {
@@ -55,6 +56,10 @@ interface TemplateData {
   dataInicio?: string;
   feeValor?: number | null;
   tipoCobrancaRS?: "contratacao" | "cancelamento";
+  // Link direto pra essa cobrança específica no painel (/painel/cobrancas-rs?abrir={id}) —
+  // usado em "cobranca_rs_gerada" pra levar a diretoria direto pro modal de revisão, sem
+  // precisar procurar a cobrança na lista.
+  cobrancaUrl?: string | null;
   // Cobrança R&S atrasada (case "cobranca_rs_atrasada").
   dataVencimento?: string;
   diasAtraso?: number;
@@ -118,7 +123,7 @@ const BANNER_CONFIDENCIAL = `<div style="background:#fef2f2;border:2px solid #fc
 
 export function getEmailTemplate(
   name: EmailTemplateName,
-  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor, tipoCobrancaRS, dataVencimento, diasAtraso, dataPagamento, diasSemSupervisao, frequenciaDiasSupervisao, supervisaoUrl }: TemplateData
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor, tipoCobrancaRS, cobrancaUrl, dataVencimento, diasAtraso, dataPagamento, diasSemSupervisao, frequenciaDiasSupervisao, supervisaoUrl }: TemplateData
 ): EmailTemplate {
   switch (name) {
     case "entrevista_salmazos":
@@ -549,6 +554,11 @@ export function getEmailTemplate(
               <li><strong>Valor total:</strong> ${feeValorFmt}</li>
               ${feeRsPrazoCobranca ? `<li><strong>Prazo de cobrança:</strong> ${feeRsPrazoCobranca}</li>` : ""}
             </ul>
+          </div>
+          <div style="text-align:center;margin-top:24px;">
+            <a href="${cobrancaUrl ?? "#"}" style="display:inline-block;background:#000000;color:#FFD700;font-weight:700;font-size:15px;padding:14px 32px;border-radius:8px;text-decoration:none;">
+              Revisar e Validar Cobrança
+            </a>
           </div>`
         ),
       };
@@ -610,6 +620,30 @@ export function getEmailTemplate(
               <li><strong>Valor:</strong> ${feeValorFmt}</li>
             </ul>
           </div>`
+        ),
+      };
+    }
+
+    case "cobranca_rs_validada_diretoria": {
+      const ehCancelamento = tipoCobrancaRS === "cancelamento";
+      const feeValorFmt =
+        feeValor != null
+          ? feeValor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+          : "—";
+
+      return {
+        subject: `✅ Sua cobrança R&S foi validada — ${nomeCliente ?? "Cliente"}`,
+        descricao: `Confirmação para o analista de que a revisão da cobrança R&S foi validada pela diretoria e enviada ao cliente (${nomeCliente ?? "cliente"}).`,
+        html: layout(
+          "Cobrança R&S Validada pela Diretoria",
+          `<div style="background:#F0FDF4;border-left:4px solid #22c55e;border-radius:4px;padding:14px 16px;margin:0 0 20px;">
+            <p style="margin:0;color:#166534;font-size:14px;font-weight:700">Sua revisão foi aprovada e a cobrança já foi enviada ao cliente.</p>
+          </div>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Sua revisão referente à cobrança do cliente <strong>${nomeCliente ?? "—"}</strong>${!ehCancelamento && nomeCandidato ? `, candidato <strong>${nomeCandidato}</strong>,` : ","}
+            taxa <strong>${feeRsPercentual != null ? `${feeRsPercentual}%` : "—"}</strong>, no valor de <strong>${feeValorFmt}</strong>,
+            foi aprovada e a cobrança foi enviada ao cliente.
+          </p>`
         ),
       };
     }

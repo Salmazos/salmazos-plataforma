@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import ModalRevisaoCobrancaRS from "./ModalRevisaoCobrancaRS";
 
 export interface CobrancaRSRow {
@@ -60,9 +61,28 @@ function estaAtrasada(row: CobrancaRSRow): boolean {
 type FiltroTab = "pendente_revisao" | "aprovada_enviada" | "paga" | "todas";
 
 export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess, acessoAmplo }: Props) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [rows, setRows] = useState(rowsIniciais);
   const [tab, setTab] = useState<FiltroTab>("pendente_revisao");
   const [cobrancaAberta, setCobrancaAberta] = useState<CobrancaRSRow | null>(null);
+
+  // Link direto do e-mail "Enviar para validação da diretoria" (?abrir={id}) — abre o modal
+  // já carregado com essa cobrança específica, sem a diretoria precisar procurar na lista.
+  // Roda só uma vez (não depende de `rows` no array de deps de propósito): `rows` só muda
+  // localmente após uma ação no modal, e essa mudança não deve reabrir o modal sozinha.
+  useEffect(() => {
+    const abrirId = searchParams.get("abrir");
+    if (!abrirId) return;
+    const row = rows.find((r) => r.id === abrirId);
+    if (row) {
+      setCobrancaAberta(row);
+      setTab(row.status === "paga" ? "paga" : row.status === "aprovada_enviada" ? "aprovada_enviada" : "pendente_revisao");
+    }
+    // Limpa o parâmetro da URL pra não reabrir o modal num refresh manual da página.
+    router.replace("/painel/cobrancas-rs");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const contagens = useMemo(
     () => ({

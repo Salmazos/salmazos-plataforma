@@ -18,7 +18,7 @@ const PANEL_WIDTH = 340;
 const VIEWPORT_MARGIN = 8;
 
 export default function NotificacoesBell() {
-  const { notificacoes, naoLidas, abrirNotificacao } = useNotificacoes();
+  const { notificacoes, naoLidas, abrirNotificacao, marcarTodasComoLidas } = useNotificacoes();
   const [aberto, setAberto] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -138,25 +138,45 @@ export default function NotificacoesBell() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
+                gap: "8px",
               }}
             >
               <span style={{ fontWeight: 700, fontSize: "14px", color: "#111827" }}>
                 Notificações
               </span>
-              {naoLidas > 0 && (
-                <span
-                  style={{
-                    backgroundColor: "#ef4444",
-                    color: "#fff",
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    padding: "2px 8px",
-                    borderRadius: "9999px",
-                  }}
-                >
-                  {naoLidas} nova{naoLidas > 1 ? "s" : ""}
-                </span>
-              )}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                {naoLidas > 0 && (
+                  <span
+                    style={{
+                      backgroundColor: "#ef4444",
+                      color: "#fff",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      padding: "2px 8px",
+                      borderRadius: "9999px",
+                    }}
+                  >
+                    {naoLidas} nova{naoLidas > 1 ? "s" : ""}
+                  </span>
+                )}
+                {notificacoes.length > 0 && (
+                  <button
+                    onClick={marcarTodasComoLidas}
+                    disabled={naoLidas === 0}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: naoLidas === 0 ? "default" : "pointer",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      color: naoLidas === 0 ? "#d1d5db" : "#B45309",
+                      padding: "2px 0",
+                    }}
+                  >
+                    Limpar todas
+                  </button>
+                )}
+              </div>
             </div>
 
             <div style={{ maxHeight: "380px", overflowY: "auto" }}>
