@@ -1024,6 +1024,12 @@ export const cobrancaRsNotificacaoEnviadaUpdateSchema = z.object({
   ativo: z.boolean(),
 });
 
+// ── Destinatários do popup "Fatura vencida" — lista separada tanto da revisão quanto do
+// popup "Cobrança enviada" acima; ver cobranca_rs_destinatarios_popup_vencida.
+export const cobrancaRsNotificacaoVencidaUpdateSchema = z.object({
+  ativo: z.boolean(),
+});
+
 // ── Sistema central de exceção de acesso por pessoa × aba (Fase 2a) ───────────────
 // liberado: true/false grava a exceção; null volta pro estado "sem exceção" (comportamento
 // de papel padrão), fazendo a rota deletar a linha em vez de gravar.

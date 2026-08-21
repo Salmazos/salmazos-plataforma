@@ -174,7 +174,7 @@ const menuItems: MenuItemDef[] = [
       { label: "Avisos de Rescisão", href: "/painel/rescisoes-avisos-config", icon: Megaphone, requireSuperuser: true },
       { label: "Avisos de Cobrança R&S", href: "/painel/cobranca-rs-avisos-config", icon: Megaphone, requireSuperuser: true },
       { label: "Acesso à Cobrança R&S", href: "/painel/cobranca-rs-acesso-config", icon: Banknote, requireSuperuser: true },
-      { label: "Notificação de Cobrança Enviada", href: "/painel/configuracoes/cobranca-rs-notificacao-enviada", icon: Megaphone, requireSuperuser: true },
+      { label: "Notificações de Cobrança R&S", href: "/painel/configuracoes/cobranca-rs-notificacao-enviada", icon: Megaphone, requireSuperuser: true },
       { label: "Avisos de ASO Periódico", href: "/painel/funcionario-aso-avisos-config", icon: Stethoscope, requireSuperuser: true },
       { label: "Configuração de Supervisão", href: "/painel/supervisao-config", icon: ShieldCheck, requireSuperuser: true },
       { label: "Usuários", href: "/painel/usuarios", icon: Users, requireSuperuser: true },

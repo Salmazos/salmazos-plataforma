@@ -30,20 +30,28 @@ export default async function CobrancaRSNotificacaoEnviadaConfigPage() {
     .eq("ativo", true)
     .order("nome_completo");
 
-  const { data: destinatarios } = await svc
-    .from("cobranca_rs_destinatarios_popup_enviada")
-    .select("analista_perfil_id, ativo");
+  const [{ data: destinatariosEnviada }, { data: destinatariosVencida }] = await Promise.all([
+    svc.from("cobranca_rs_destinatarios_popup_enviada").select("analista_perfil_id, ativo"),
+    svc.from("cobranca_rs_destinatarios_popup_vencida").select("analista_perfil_id, ativo"),
+  ]);
 
-  const ativoPorAnalista = new Map((destinatarios ?? []).map((d) => [d.analista_perfil_id, d.ativo]));
+  const ativoEnviadaPorAnalista = new Map((destinatariosEnviada ?? []).map((d) => [d.analista_perfil_id, d.ativo]));
+  const ativoVencidaPorAnalista = new Map((destinatariosVencida ?? []).map((d) => [d.analista_perfil_id, d.ativo]));
 
-  const rows: AnalistaNotificacaoRow[] = (analistas ?? []).map((a) => ({
-    analistaPerfilId: a.id,
-    nomeCompleto: a.nome_completo,
-    email: a.email,
-    cargo: a.cargo,
-    nivelAcesso: a.nivel_acesso,
-    recebeNotificacao: ativoPorAnalista.get(a.id) ?? false,
-  }));
+  const paraLinhas = (ativoPorAnalista: Map<string, boolean>): AnalistaNotificacaoRow[] =>
+    (analistas ?? []).map((a) => ({
+      analistaPerfilId: a.id,
+      nomeCompleto: a.nome_completo,
+      email: a.email,
+      cargo: a.cargo,
+      nivelAcesso: a.nivel_acesso,
+      recebeNotificacao: ativoPorAnalista.get(a.id) ?? false,
+    }));
 
-  return <CobrancaRSNotificacaoEnviadaConfigClient analistasIniciais={rows} />;
+  return (
+    <CobrancaRSNotificacaoEnviadaConfigClient
+      enviadaIniciais={paraLinhas(ativoEnviadaPorAnalista)}
+      vencidaIniciais={paraLinhas(ativoVencidaPorAnalista)}
+    />
+  );
 }
