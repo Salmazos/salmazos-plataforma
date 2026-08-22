@@ -49,6 +49,11 @@ const MODALIDADE_BADGE: Record<string, { label: string; bg: string; text: string
   terceirizacao: { label: "Terc.", bg: "#F5F3FF", text: "#6D28D9" },
 };
 
+// Sentinela pro filtro de modalidade quando o card de aviso é clicado — não é um valor
+// real de tipo_servico, só um marcador pra filtrados() saber que deve mostrar quem está
+// com tipo_servico nulo (resíduo de antes da validação obrigatória existir).
+const SEM_MODALIDADE = "__sem_modalidade__";
+
 export default function FuncionariosPageClient({ funcionariosIniciais, clientes, clientesFiltro }: Props) {
   const router = useRouter();
   const [filtroStatus, setFiltroStatus] = useState<string>("ativo");
@@ -62,15 +67,19 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
   // tela) — mesmo raciocínio dos cards de resumo em Admissões (CARDS_RESUMO), que também
   // contam sobre a lista cheia, não sobre o resultado já filtrado.
   const ativos = useMemo(() => funcionariosIniciais.filter((f) => f.status === "ativo"), [funcionariosIniciais]);
+  const totalAtivos = ativos.length;
   const totalMot = useMemo(() => ativos.filter((f) => f.tipo_servico === "mao_obra_temporaria").length, [ativos]);
   const totalTerc = useMemo(() => ativos.filter((f) => f.tipo_servico === "terceirizacao").length, [ativos]);
+  const totalSemModalidade = useMemo(() => ativos.filter((f) => !f.tipo_servico).length, [ativos]);
 
   const filtrados = useMemo(() => {
     const buscaLower = busca.trim().toLowerCase();
     return funcionariosIniciais.filter((f) => {
       if (filtroStatus !== "todos" && f.status !== filtroStatus) return false;
       if (filtroClienteId && f.cliente_id !== filtroClienteId) return false;
-      if (filtroModalidade && f.tipo_servico !== filtroModalidade) return false;
+      if (filtroModalidade === SEM_MODALIDADE) {
+        if (f.tipo_servico) return false;
+      } else if (filtroModalidade && f.tipo_servico !== filtroModalidade) return false;
       if (buscaLower && !f.nome_completo.toLowerCase().includes(buscaLower)) return false;
       return true;
     });
@@ -88,6 +97,20 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
       {/* Cards de contagem por modalidade — sobre os ativos atuais, clicáveis como
           atalho de filtro (mesmo padrão dos cards de resumo em Admissões). */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 16 }}>
+        <button
+          onClick={() => setFiltroModalidade("")}
+          style={{
+            textAlign: "left",
+            background: "#F9FAFB",
+            border: filtroModalidade === "" ? "2px solid #374151" : "2px solid transparent",
+            borderRadius: 12,
+            padding: "14px 16px",
+            cursor: "pointer",
+          }}
+        >
+          <p style={{ fontSize: 26, fontWeight: 800, color: "#111827", margin: 0 }}>{totalAtivos}</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#111827", margin: "2px 0 0" }}>Total de funcionários</p>
+        </button>
         <button
           onClick={() => setFiltroModalidade(filtroModalidade === "mao_obra_temporaria" ? "" : "mao_obra_temporaria")}
           style={{
@@ -116,6 +139,22 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
           <p style={{ fontSize: 26, fontWeight: 800, color: MODALIDADE_BADGE.terceirizacao.text, margin: 0 }}>{totalTerc}</p>
           <p style={{ fontSize: 12, fontWeight: 600, color: MODALIDADE_BADGE.terceirizacao.text, margin: "2px 0 0" }}>Terceirização</p>
         </button>
+        {totalSemModalidade > 0 && (
+          <button
+            onClick={() => setFiltroModalidade(filtroModalidade === SEM_MODALIDADE ? "" : SEM_MODALIDADE)}
+            style={{
+              textAlign: "left",
+              background: "#FFFBEB",
+              border: filtroModalidade === SEM_MODALIDADE ? "2px solid #B45309" : "2px solid transparent",
+              borderRadius: 12,
+              padding: "14px 16px",
+              cursor: "pointer",
+            }}
+          >
+            <p style={{ fontSize: 26, fontWeight: 800, color: "#B45309", margin: 0 }}>⚠ {totalSemModalidade}</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: "#B45309", margin: "2px 0 0" }}>Sem modalidade definida</p>
+          </button>
+        )}
       </div>
 
       <div className="flex gap-3 mb-4 flex-wrap">
