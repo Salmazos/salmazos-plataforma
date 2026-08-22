@@ -217,11 +217,9 @@ export default function SidebarMenu({
   const router = useRouter();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  // Um Set de hrefs de grupo (não um boolean por grupo) — generalização do antigo
-  // `configOpen` (único useState boolean, só existia 1 grupo colapsável). Não persiste em
-  // localStorage de propósito: mesmo comportamento que "Configurações" sempre teve, reseta
-  // fechado a cada reload.
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  // Comportamento de sanfona: só um grupo aberto por vez (href do grupo, ou null se nenhum).
+  // Não persiste em localStorage de propósito: reseta fechado a cada reload.
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -440,36 +438,13 @@ export default function SidebarMenu({
               <div key={item.href}>
                 <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "8px 0" }} />
                 {item.submenu ? (
-                  <div
-                    // Hover abre o grupo (procura de aba sem precisar clicar) e fecha ao sair da
-                    // área inteira (botão + submenu) — só no desktop expandido, onde faz sentido
-                    // como affordance de mouse. onClick abaixo continua funcionando à parte (toggle),
-                    // que é o único jeito de abrir/fechar em touch (mobile não dispara mouseenter).
-                    onMouseEnter={() => {
-                      if (isCollapsedView) return;
-                      setOpenGroups((prev) => (prev.has(item.href) ? prev : new Set(prev).add(item.href)));
-                    }}
-                    onMouseLeave={() => {
-                      if (isCollapsedView) return;
-                      setOpenGroups((prev) => {
-                        if (!prev.has(item.href)) return prev;
-                        const next = new Set(prev);
-                        next.delete(item.href);
-                        return next;
-                      });
-                    }}
-                  >
+                  <div>
                     <button
                       onClick={() => {
                         if (isCollapsedView) {
                           router.push(item.submenu![0].href);
                         } else {
-                          setOpenGroups((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(item.href)) next.delete(item.href);
-                            else next.add(item.href);
-                            return next;
-                          });
+                          setOpenGroup((prev) => (prev === item.href ? null : item.href));
                         }
                       }}
                       className="group relative flex items-center w-full rounded-lg transition-colors"
@@ -493,7 +468,7 @@ export default function SidebarMenu({
                             size={14}
                             style={{
                               transition: "transform 0.2s",
-                              transform: openGroups.has(item.href) ? "rotate(180deg)" : "rotate(0)",
+                              transform: openGroup === item.href ? "rotate(180deg)" : "rotate(0)",
                             }}
                           />
                         </>
@@ -504,7 +479,7 @@ export default function SidebarMenu({
                         </span>
                       )}
                     </button>
-                    {openGroups.has(item.href) && !isCollapsedView && (
+                    {openGroup === item.href && !isCollapsedView && (
                       <div className="ml-4 mt-1 flex flex-col gap-0.5">
                         {item.submenu!.map((sub) => {
                           const SubIcon = sub.icon;
