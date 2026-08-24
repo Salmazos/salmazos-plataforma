@@ -35,6 +35,7 @@ interface PastaSalmazos {
   id: string;
   nome: string;
   parent_id: string | null;
+  protegida: boolean;
 }
 
 interface Documento {
@@ -328,6 +329,21 @@ export default function DocumentosPageClient({
       setDocumentos((prev) => prev.filter((d) => d.id !== doc.id));
     } catch {
       alert("Erro ao excluir documento.");
+    }
+  }
+
+  // Pastas protegidas nem oferecem o botão (ver render), mas o backend também recusa —
+  // a mensagem de erro do servidor (conteúdo não vazio, ou pasta protegida) é repassada
+  // direto pro alert, já vem pronta pra leitura.
+  async function handleDeletePastaSalmazos(pasta: PastaSalmazos) {
+    if (!confirm(`Excluir a pasta "${pasta.nome}"?`)) return;
+    try {
+      const res = await fetch(`/api/documentos-pastas-salmazos/${pasta.id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Erro ao excluir pasta.");
+      setSubpastasSalmazos((prev) => prev.filter((p) => p.id !== pasta.id));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Erro ao excluir pasta.");
     }
   }
 
@@ -708,6 +724,7 @@ export default function DocumentosPageClient({
               key={pasta.id}
               label={pasta.nome}
               onClick={() => handleSelectPastaSalmazos(pasta)}
+              onDelete={canDelete && !pasta.protegida ? () => handleDeletePastaSalmazos(pasta) : undefined}
             />
           ))}
         </div>
@@ -1296,10 +1313,27 @@ export default function DocumentosPageClient({
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function CategoryCard({ label, onClick, tag }: { label: string; onClick: () => void; tag?: string }) {
+function CategoryCard({
+  label,
+  onClick,
+  tag,
+  onDelete,
+}: {
+  label: string;
+  onClick: () => void;
+  tag?: string;
+  // Presente só quando a pasta pode ser excluída (canDelete && !protegida) — pastas
+  // protegidas nunca recebem essa prop, então o botão de lixeira nem aparece pra elas.
+  onDelete?: () => void;
+}) {
   return (
-    <button
+    <div
       onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onClick();
+      }}
       style={{
         position: "relative",
         display: "flex",
@@ -1342,6 +1376,30 @@ function CategoryCard({ label, onClick, tag }: { label: string; onClick: () => v
           {tag}
         </span>
       )}
+      {onDelete && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          title="Excluir pasta"
+          style={{
+            position: "absolute",
+            top: 8,
+            left: 8,
+            border: "none",
+            background: "transparent",
+            color: "#9CA3AF",
+            cursor: "pointer",
+            padding: 4,
+            display: "flex",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "#DC2626")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "#9CA3AF")}
+        >
+          <Trash2 size={14} />
+        </button>
+      )}
       <div
         style={{
           width: 48,
@@ -1358,7 +1416,7 @@ function CategoryCard({ label, onClick, tag }: { label: string; onClick: () => v
       <span style={{ fontSize: 14, fontWeight: 600, color: "#111827" }}>
         {label}
       </span>
-    </button>
+    </div>
   );
 }
 

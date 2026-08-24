@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   const svc = createServiceClient();
   let query = svc
     .from("documentos_pastas_salmazos")
-    .select("id, nome, parent_id")
+    .select("id, nome, parent_id, protegida")
     .order("criado_em", { ascending: true });
   query = parentId ? query.eq("parent_id", parentId) : query.is("parent_id", null);
 
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       parent_id: parsed.data.parent_id ?? null,
       criado_por_user_id: user.id,
     })
-    .select("id, nome, parent_id")
+    .select("id, nome, parent_id, protegida")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
