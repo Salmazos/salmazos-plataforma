@@ -49,6 +49,9 @@ export interface FinalizarResult {
   resultado: "contratado" | "reprovado_final";
   vaga_encerrada?: boolean;
   vaga_reaberta?: boolean;
+  // Preenchido só quando a decisão foi gerar cobrança R&S e a criação deu certo — quem
+  // trata onConfirmar usa isso pra redirecionar direto pra revisão dela.
+  cobranca_rs_id?: string | null;
 }
 
 // Soma dias em uma data "YYYY-MM-DD" usando componentes locais (evita
@@ -325,6 +328,7 @@ export default function ModalFinalizarProcesso({
         resultado,
         vaga_encerrada: json.vaga_encerrada,
         vaga_reaberta: json.vaga_reaberta,
+        cobranca_rs_id: json.cobranca_rs_id ?? null,
       });
     } catch {
       setErro("Erro de conexão.");

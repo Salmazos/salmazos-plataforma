@@ -499,6 +499,13 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
         onClose={() => setPendingFinalizar(null)}
         onConfirmar={(res: FinalizarResult) => {
           setPendingFinalizar(null);
+          // Cobrança R&S recém-criada (decisão "Sim" na finalização) — leva o analista
+          // direto pra revisão dela em vez de só atualizar o Kanban, pra não depender de
+          // ele lembrar de ir em Cobranças R&S depois (já aconteceu de ficar esquecida).
+          if (res.cobranca_rs_id) {
+            router.push(`/painel/cobrancas-rs?abrir=${res.cobranca_rs_id}`);
+            return;
+          }
           router.refresh();
           if (res.resultado === "contratado") {
             showToast(

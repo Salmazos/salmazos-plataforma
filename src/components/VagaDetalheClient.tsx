@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import ModalEditarVaga from "./ModalEditarVaga";
 import ModalAdicionarCandidatoVaga from "./ModalAdicionarCandidatoVaga";
@@ -69,6 +69,7 @@ interface Props {
 export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inicialCv }: Props) {
   useAutoRefresh(30000);
   const searchParams = useSearchParams();
+  const router = useRouter();
   const origem = searchParams.get("origem");
   const voltar = (origem && ORIGEM_VOLTAR[origem]) || VOLTAR_PADRAO;
   const [vaga, setVaga] = useState<Vaga>(inicial);
@@ -312,6 +313,13 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
     if (!pendingFinalizar) return;
     handleEtapaAtualizada(pendingFinalizar.cvId, resultado.resultado);
     setPendingFinalizar(null);
+    // Cobrança R&S recém-criada (decisão "Sim" na finalização) — leva o analista direto
+    // pra revisão dela em vez de só atualizar a tela da vaga, pra não depender de ele
+    // lembrar de ir em Cobranças R&S depois (já aconteceu de ficar esquecida).
+    if (resultado.cobranca_rs_id) {
+      router.push(`/painel/cobrancas-rs?abrir=${resultado.cobranca_rs_id}`);
+      return;
+    }
     if (resultado.vaga_encerrada || resultado.vaga_reaberta) {
       fetch(`/api/vagas/${vaga.id}`)
         .then((r) => (r.ok ? r.json() : null))

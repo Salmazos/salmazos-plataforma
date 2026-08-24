@@ -3,8 +3,11 @@ import { parseSalarioFixo } from "@/lib/constants";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
-interface ResultadoCobranca {
+export interface ResultadoCobranca {
   criada: boolean;
+  // Só preenchido quando criada === true — usado pra redirecionar o analista direto pra
+  // revisão desta cobrança específica (?abrir={id}) logo após finalizar a contratação.
+  id?: string;
   motivo?:
     | "ja_existe"
     | "nao_e_rs"
@@ -96,26 +99,30 @@ export async function gerarCobrancaRSSeAplicavel(
 
   const candidatoNome = row.candidatos?.nome_completo ?? "—";
 
-  const { error } = await svc.from("cobrancas_rs").insert({
-    vaga_id: vaga.id,
-    candidato_id: row.candidato_id,
-    candidato_vaga_id: row.id,
-    cliente_id: vaga.cliente_id,
+  const { data: inserida, error } = await svc
+    .from("cobrancas_rs")
+    .insert({
+      vaga_id: vaga.id,
+      candidato_id: row.candidato_id,
+      candidato_vaga_id: row.id,
+      cliente_id: vaga.cliente_id,
 
-    cliente_nome_snapshot: clienteNome,
-    cliente_cnpj_snapshot: vaga.clientes?.cnpj ?? null,
-    cliente_endereco_snapshot: vaga.clientes?.endereco ?? null,
-    cliente_telefone_snapshot: vaga.clientes?.contato_telefone ?? null,
-    cliente_email_snapshot: vaga.clientes?.contato_email ?? null,
+      cliente_nome_snapshot: clienteNome,
+      cliente_cnpj_snapshot: vaga.clientes?.cnpj ?? null,
+      cliente_endereco_snapshot: vaga.clientes?.endereco ?? null,
+      cliente_telefone_snapshot: vaga.clientes?.contato_telefone ?? null,
+      cliente_email_snapshot: vaga.clientes?.contato_email ?? null,
 
-    candidato_nome_snapshot: candidatoNome,
+      candidato_nome_snapshot: candidatoNome,
 
-    fee_percentual: vaga.fee_rs_percentual,
-    prazo_cobranca: vaga.fee_rs_prazo_cobranca,
+      fee_percentual: vaga.fee_rs_percentual,
+      prazo_cobranca: vaga.fee_rs_prazo_cobranca,
 
-    status: "pendente_revisao",
-    gerado_por_user_id: geradoPorUserId ?? null,
-  });
+      status: "pendente_revisao",
+      gerado_por_user_id: geradoPorUserId ?? null,
+    })
+    .select("id")
+    .single();
 
   if (error) {
     // UNIQUE(candidato_vaga_id) pode disparar em corrida entre chamadas concorrentes —
@@ -126,7 +133,7 @@ export async function gerarCobrancaRSSeAplicavel(
     return { criada: false };
   }
 
-  return { criada: true };
+  return { criada: true, id: inserida.id };
 }
 
 export interface ContratacaoAnteriorRecente {

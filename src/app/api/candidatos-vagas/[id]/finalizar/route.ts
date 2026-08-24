@@ -145,6 +145,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
       void sincronizarEncaminhamentoComEtapa(cv.candidato_id, vaga?.cliente_id ?? null, "contratado", supabase);
 
+      // Preenchido só quando a cobrança é criada com sucesso — usado pra redirecionar o
+      // analista direto pra revisão dela (?abrir={id}) na resposta desta rota. Precisa ser
+      // aguardado de verdade (não fire-and-forget) porque o id só existe depois do insert
+      // completar; se a criação falhar, loga o erro mas não quebra a finalização do
+      // candidato em si — ele já foi gravado como contratado acima.
+      let cobrancaRsId: string | null = null;
+
       if (tipoServicoFinal === "recrutamento_selecao") {
         registrarAuditoria({
           acao: "cobranca_rs_decisao",
@@ -155,9 +162,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
         // Gera na hora, não espera a vaga fechar — cada contratação decide por si.
         if (gerar_cobranca_rs === true) {
-          await gerarCobrancaRSSeAplicavel(cv.vaga_id, id, supabase, user?.id ?? null).catch((err) =>
-            console.error("[finalizar] Erro ao gerar cobrança R&S:", err)
-          );
+          try {
+            const resultadoCobranca = await gerarCobrancaRSSeAplicavel(cv.vaga_id, id, supabase, user?.id ?? null);
+            if (resultadoCobranca.criada) cobrancaRsId = resultadoCobranca.id ?? null;
+          } catch (err) {
+            console.error("[finalizar] Erro ao gerar cobrança R&S:", err);
+          }
         }
       }
 
@@ -242,7 +252,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         detalhes: { resultado: "contratado", candidato_id: cv.candidato_id, vaga_id: cv.vaga_id, data_inicio },
       });
 
-      return NextResponse.json({ resultado: "contratado", vaga_encerrada: vagaEncerrada });
+      return NextResponse.json({ resultado: "contratado", vaga_encerrada: vagaEncerrada, cobranca_rs_id: cobrancaRsId });
     }
 
     // reprovado_final
