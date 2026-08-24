@@ -121,12 +121,6 @@ export default function PopupCobrancaVencida() {
             </button>
           ))}
         </div>
-
-        <div className="px-6 pb-6">
-          <button onClick={marcarVisto} className="btn-primary w-full">
-            Ok, entendi!
-          </button>
-        </div>
       </div>
     </div>
   );
