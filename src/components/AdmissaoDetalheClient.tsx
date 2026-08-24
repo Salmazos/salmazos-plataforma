@@ -11,7 +11,7 @@ import {
   ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, OPCAO_VALE_TRANSPORTE_LABEL,
   COR_RACA_OPTIONS, PARENTESCO_OPTIONS, CNH_CATEGORIAS,
 } from "@/lib/admissaoConstants";
-import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
+import { ENTIDADES_CONTRATANTES, TURNOS_FUNCIONARIO } from "@/lib/constants";
 import ModalContaSalario from "@/components/ModalContaSalario";
 import ModalAssinaturaEletronica from "@/components/ModalAssinaturaEletronica";
 import ModalUploadDocumentosContabilidade from "@/components/ModalUploadDocumentosContabilidade";
@@ -55,6 +55,7 @@ interface AdmissaoFull {
   salario: number | null;
   tipo_salario: "mensal" | "hora";
   horario_trabalho: string | null;
+  turno: string | null;
   data_admissao: string | null;
   entidade_contratante: string | null;
   observacoes_internas: string | null;
@@ -500,9 +501,10 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [salarioAtual, setSalarioAtual] = useState(admissao.salario);
   const [tipoSalarioAtual, setTipoSalarioAtual] = useState(admissao.tipo_salario);
   const [horarioAtual, setHorarioAtual] = useState(admissao.horario_trabalho);
+  const [turnoAtual, setTurnoAtual] = useState(admissao.turno);
   const [entidadeAtual, setEntidadeAtual] = useState(admissao.entidade_contratante);
   const [editandoDadosAdmissao, setEditandoDadosAdmissao] = useState(false);
-  const [formDadosAdmissao, setFormDadosAdmissao] = useState({ vagaId: "", funcao: "", salario: "", tipoSalario: "mensal" as "mensal" | "hora", horario: "", entidade: "" });
+  const [formDadosAdmissao, setFormDadosAdmissao] = useState({ vagaId: "", funcao: "", salario: "", tipoSalario: "mensal" as "mensal" | "hora", horario: "", turno: "", entidade: "" });
   const [vagasDisponiveis, setVagasDisponiveis] = useState<VagaOpcao[]>([]);
   const [carregandoVagas, setCarregandoVagas] = useState(false);
   const [buscaVaga, setBuscaVaga] = useState("");
@@ -559,6 +561,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       salario: salarioAtual != null ? String(salarioAtual) : "",
       tipoSalario: tipoSalarioAtual,
       horario: horarioAtual ?? "",
+      turno: turnoAtual ?? "",
       entidade: entidadeAtual ?? "",
     });
     setBuscaVaga("");
@@ -593,6 +596,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       if (salarioNum > 0) payload.salario = salarioNum;
       payload.tipo_salario = formDadosAdmissao.tipoSalario;
       if (formDadosAdmissao.horario.trim()) payload.horario_trabalho = formDadosAdmissao.horario.trim();
+      payload.turno = formDadosAdmissao.turno || null;
       if (formDadosAdmissao.entidade) payload.entidade_contratante = formDadosAdmissao.entidade;
 
       const res = await fetch(`/api/admissoes/${admissao.id}/dados-admissao`, {
@@ -614,6 +618,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       setSalarioAtual(json.data.salario);
       setTipoSalarioAtual(json.data.tipo_salario);
       setHorarioAtual(json.data.horario_trabalho);
+      setTurnoAtual(json.data.turno);
       setEntidadeAtual(json.data.entidade_contratante);
       setEditandoDadosAdmissao(false);
       router.refresh();
@@ -1580,9 +1585,20 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                     </div>
                   </div>
                 </div>
-                <div className="mb-2">
-                  <label className="block text-xs text-gray-500 mb-1">Horário de trabalho</label>
-                  <input type="text" value={formDadosAdmissao.horario} onChange={(e) => atualizarCampoDadosAdmissao("horario", e.target.value)} className="input-field text-sm" />
+                <div className="mb-2 flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-xs text-gray-500 mb-1">Horário de trabalho</label>
+                    <input type="text" value={formDadosAdmissao.horario} onChange={(e) => atualizarCampoDadosAdmissao("horario", e.target.value)} className="input-field text-sm" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs text-gray-500 mb-1">Turno</label>
+                    <select value={formDadosAdmissao.turno} onChange={(e) => atualizarCampoDadosAdmissao("turno", e.target.value)} className="input-field text-sm">
+                      <option value="">Selecione</option>
+                      {TURNOS_FUNCIONARIO.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <div className="mb-3">
                   <label className="block text-xs text-gray-500 mb-1">Entidade Contratante (CNPJ)</label>
@@ -1615,6 +1631,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                     : null}
                 />
                 <Linha label="Horário de trabalho" value={horarioAtual} />
+                <Linha label="Turno" value={turnoAtual} />
                 <Linha label="Entidade Contratante" value={ENTIDADES_CONTRATANTES.find((e) => e.value === entidadeAtual)?.razaoSocial ?? entidadeAtual} />
               </>
             )}

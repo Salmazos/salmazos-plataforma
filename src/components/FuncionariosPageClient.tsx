@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatarDataSemFuso } from "@/lib/utils";
 import { calcularStatusAso, ASO_STATUS_INFO } from "@/lib/asoStatus";
+import { TURNOS_FUNCIONARIO } from "@/lib/constants";
 import ModalAdicionarFuncionario from "./ModalAdicionarFuncionario";
 import ModalLancarRescisao from "./ModalLancarRescisao";
 
@@ -21,7 +22,8 @@ export interface FuncionarioRow {
   clientes: { nome: string } | null;
   aso_data_exame_mais_recente: string | null;
   tipo_servico: string | null;
-  turno_trabalho: string | null;
+  horario_trabalho: string | null;
+  turno: string | null;
 }
 
 interface ClienteOption {
@@ -63,6 +65,30 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
   const [busca, setBusca] = useState("");
   const [modalAberto, setModalAberto] = useState(false);
   const [funcionarioRescisao, setFuncionarioRescisao] = useState<FuncionarioRow | null>(null);
+  const [salvandoTurnoId, setSalvandoTurnoId] = useState<string | null>(null);
+  const [erroTurnoId, setErroTurnoId] = useState<string | null>(null);
+
+  // Edição inline do Turno direto na listagem — cobre os funcionários legados/manuais que
+  // nunca passaram pela tela de Admissão e não têm esse dado ainda. router.refresh() busca
+  // a lista atualizada do servidor (mesmo padrão já usado no resto do arquivo), então a
+  // linha reflete o novo valor assim que a resposta chega.
+  const handleTurnoChange = async (id: string, novoTurno: string) => {
+    setSalvandoTurnoId(id);
+    setErroTurnoId(null);
+    try {
+      const res = await fetch(`/api/funcionarios/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ turno: novoTurno || null }),
+      });
+      if (!res.ok) { setErroTurnoId(id); return; }
+      router.refresh();
+    } catch {
+      setErroTurnoId(id);
+    } finally {
+      setSalvandoTurnoId(null);
+    }
+  };
 
   // Contagem por modalidade sempre sobre ativos "atuais" (independente dos filtros da
   // tela) — mesmo raciocínio dos cards de resumo em Admissões (CARDS_RESUMO), que também
@@ -184,7 +210,7 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-              {["Nome", "Empresa", "Cargo", "Modalidade", "Turno", "Data de admissão", "Status", "ASO", "Origem", "Ações"].map((h) => (
+              {["Nome", "Empresa", "Cargo", "Modalidade", "Horário de Trabalho", "Turno", "Data de admissão", "Status", "ASO", "Origem", "Ações"].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>
                   {h}
                 </th>
@@ -194,7 +220,7 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
           <tbody>
             {filtrados.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF" }}>
+                <td colSpan={11} style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF" }}>
                   Nenhum funcionário encontrado.
                 </td>
               </tr>
@@ -217,8 +243,21 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
                         <span style={{ color: "#D1D5DB" }}>—</span>
                       )}
                     </td>
-                    <td style={{ padding: "10px 12px", color: f.turno_trabalho === "Não identificado" ? "#B45309" : "#374151" }}>
-                      {f.turno_trabalho ?? "—"}
+                    <td style={{ padding: "10px 12px", color: "#374151" }}>{f.horario_trabalho ?? "—"}</td>
+                    <td style={{ padding: "10px 12px" }}>
+                      <select
+                        value={f.turno ?? ""}
+                        onChange={(e) => handleTurnoChange(f.id, e.target.value)}
+                        disabled={salvandoTurnoId === f.id}
+                        className="input-field"
+                        style={{ fontSize: 12, padding: "4px 8px", minWidth: 130 }}
+                      >
+                        <option value="">—</option>
+                        {TURNOS_FUNCIONARIO.map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                      {erroTurnoId === f.id && <p style={{ color: "#DC2626", fontSize: 11, margin: "2px 0 0" }}>Erro ao salvar</p>}
                     </td>
                     <td style={{ padding: "10px 12px", color: "#6B7280" }}>{f.data_admissao ? formatarDataSemFuso(f.data_admissao) : "—"}</td>
                     <td style={{ padding: "10px 12px" }}>

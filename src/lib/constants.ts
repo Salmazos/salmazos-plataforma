@@ -145,6 +145,13 @@ export const ENTIDADES_CONTRATANTES = [
   },
 ] as const;
 
+// Turno de trabalho do funcionário — menu fixo (não texto livre), preenchido pelo RH junto
+// com o Horário de trabalho na tela de Admissão (admissoes.turno), propagado pra
+// funcionarios.turno quando a admissão vira funcionário, editável depois pra casos legados.
+// Não confundir com TURNOS acima, que é a preferência de turno do CANDIDATO no formulário de
+// candidatura (candidatos.turno_disponivel) — conceito completamente diferente.
+export const TURNOS_FUNCIONARIO = ["Turno A", "Turno B", "Turno C", "Turno D", "Adm", "12x36 Noite", "12x36 Dia"] as const;
+
 export const STATUS_ENCAMINHAMENTO: Record<string, { label: string; bg: string; text: string }> = {
   aguardando: { label: "Aguardando", bg: "bg-yellow-100", text: "text-yellow-800" },
   aprovado:   { label: "Aprovado",   bg: "bg-green-100",  text: "text-green-800"  },

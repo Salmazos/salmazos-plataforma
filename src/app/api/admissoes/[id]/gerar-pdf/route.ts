@@ -329,6 +329,8 @@ export async function POST(request: NextRequest, { params }: Params) {
           empresa: vagaCliente?.nome ?? null,
           data_admissao: admissao.data_admissao ?? null,
           tipo_servico: tipoServicoVaga,
+          horario_trabalho: admissao.horario_trabalho ?? null,
+          turno: admissao.turno ?? null,
           status: "ativo",
         })
         .select("id")

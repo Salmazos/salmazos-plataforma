@@ -51,7 +51,7 @@ export default async function PortalFuncionariosPage() {
   // tipo_servico, só por cliente_id + status ativo.
   const { data: funcionarios } = await service
     .from("funcionarios")
-    .select("id, nome_completo, cargo, data_admissao, admissao_id, turno_trabalho")
+    .select("id, nome_completo, cargo, data_admissao, admissao_id, turno")
     .eq("cliente_id", clienteUsuario.cliente_id)
     .eq("status", "ativo")
     .order("nome_completo");
@@ -178,7 +178,7 @@ export default async function PortalFuncionariosPage() {
                         {f.data_admissao ? formatarDataSemFuso(f.data_admissao) : "—"}
                       </td>
                       <td style={{ padding: "10px 12px", color: "#374151" }}>{f.cargo ?? "—"}</td>
-                      <td style={{ padding: "10px 12px", color: "#374151", whiteSpace: "nowrap" }}>{f.turno_trabalho ?? "—"}</td>
+                      <td style={{ padding: "10px 12px", color: "#374151", whiteSpace: "nowrap" }}>{f.turno ?? "—"}</td>
                       <td style={{ padding: "10px 12px" }}>
                         <PortalDocumentoBadge label={badgeAso.label} bg={badgeAso.bg} text={badgeAso.text} url={urlAso} />
                       </td>

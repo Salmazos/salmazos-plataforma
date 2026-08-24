@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { FuncionarioDetalhe } from "./FuncionarioDetalheClient";
-import { classificarTurno, TURNOS_OVERRIDE } from "@/lib/classificarTurno";
+import { TURNOS_FUNCIONARIO } from "@/lib/constants";
 
 interface ClienteOption {
   id: string;
@@ -29,9 +29,8 @@ export default function ModalEditarFuncionario({ isOpen, funcionario, clientes, 
   const [empresaLivre, setEmpresaLivre] = useState("");
   const [clienteId, setClienteId] = useState("");
   const [tipoServico, setTipoServico] = useState("");
-  const [turnoHoraInicio, setTurnoHoraInicio] = useState("");
-  const [turnoHoraFim, setTurnoHoraFim] = useState("");
-  const [turnoOverride, setTurnoOverride] = useState("");
+  const [horarioTrabalho, setHorarioTrabalho] = useState("");
+  const [turno, setTurno] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -47,26 +46,10 @@ export default function ModalEditarFuncionario({ isOpen, funcionario, clientes, 
     setEmpresaLivre(funcionario.empresa ?? "");
     setClienteId(funcionario.cliente_id ?? "");
     setTipoServico(funcionario.tipo_servico ?? "");
-    // <input type="time"> só aceita "HH:MM" — o banco pode devolver "HH:MM:SS", corta os
-    // segundos.
-    const horaInicio = funcionario.turno_hora_inicio ? funcionario.turno_hora_inicio.slice(0, 5) : "";
-    const horaFim = funcionario.turno_hora_fim ? funcionario.turno_hora_fim.slice(0, 5) : "";
-    setTurnoHoraInicio(horaInicio);
-    setTurnoHoraFim(horaFim);
-    // Se o turno_trabalho salvo é uma das 6 classificações válidas mas diverge do que os
-    // horários salvos calculariam, foi definido por override manual — repopula o dropdown
-    // com ele pra não perder essa escolha ao reabrir o modal.
-    const calculadoAtual = classificarTurno(horaInicio || null, horaFim || null);
-    const turnoAtual = funcionario.turno_trabalho;
-    const ehOverrideValido = turnoAtual && (TURNOS_OVERRIDE as readonly string[]).includes(turnoAtual);
-    setTurnoOverride(ehOverrideValido && turnoAtual !== calculadoAtual ? turnoAtual! : "");
+    setHorarioTrabalho(funcionario.horario_trabalho ?? "");
+    setTurno(funcionario.turno ?? "");
     setErro("");
   }, [isOpen, funcionario]);
-
-  const turnoCalculado = useMemo(
-    () => classificarTurno(turnoHoraInicio || null, turnoHoraFim || null),
-    [turnoHoraInicio, turnoHoraFim]
-  );
 
   if (!isOpen) return null;
 
@@ -90,9 +73,8 @@ export default function ModalEditarFuncionario({ isOpen, funcionario, clientes, 
       // Deixado sem seleção = não mexe no valor atual (mantém null se ainda pendente de
       // preenchimento retroativo) — diferente do cadastro manual, aqui não é obrigatório.
       if (tipoServico) payload.tipo_servico = tipoServico;
-      payload.turno_hora_inicio = turnoHoraInicio || null;
-      payload.turno_hora_fim = turnoHoraFim || null;
-      payload.turno_trabalho_override = turnoOverride || null;
+      payload.horario_trabalho = horarioTrabalho.trim() || null;
+      payload.turno = turno || null;
 
       const res = await fetch(`/api/funcionarios/${funcionario.id}`, {
         method: "PATCH",
@@ -186,38 +168,25 @@ export default function ModalEditarFuncionario({ isOpen, funcionario, clientes, 
           </select>
         </div>
 
-        <div className="mb-3 flex gap-3">
+        <div className="mb-4 flex gap-3">
           <div className="flex-1">
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Início do turno</label>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Horário de trabalho</label>
             <input
-              type="time" value={turnoHoraInicio}
-              onChange={(e) => setTurnoHoraInicio(e.target.value)}
+              type="text" value={horarioTrabalho}
+              onChange={(e) => setHorarioTrabalho(e.target.value)}
+              placeholder="Ex: 06h às 15h"
               className="input-field"
             />
           </div>
           <div className="flex-1">
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Fim do turno</label>
-            <input
-              type="time" value={turnoHoraFim}
-              onChange={(e) => setTurnoHoraFim(e.target.value)}
-              className="input-field"
-            />
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Turno</label>
+            <select value={turno} onChange={(e) => setTurno(e.target.value)} className="input-field">
+              <option value="">Não informado</option>
+              {TURNOS_FUNCIONARIO.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
           </div>
-        </div>
-
-        <div className="mb-4">
-          <p className="text-xs text-gray-500 mb-2">
-            Turno calculado: <span className="font-semibold text-gray-700">{turnoCalculado ?? "—"}</span>
-          </p>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-            Ajuste manual do turno {turnoOverride && "(sobrepõe o cálculo)"}
-          </label>
-          <select value={turnoOverride} onChange={(e) => setTurnoOverride(e.target.value)} className="input-field">
-            <option value="">Usar cálculo automático</option>
-            {TURNOS_OVERRIDE.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
         </div>
 
         {erro && <p className="text-red-600 text-sm mb-3">{erro}</p>}

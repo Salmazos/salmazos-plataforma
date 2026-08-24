@@ -3,7 +3,6 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, funcionarioUpdateSchema } from "@/lib/schemas";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
 import { registrarAuditoria, diffCampos } from "@/lib/audit";
-import { classificarTurno } from "@/lib/classificarTurno";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -39,22 +38,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (parsed.data.cargo !== undefined) campos.cargo = parsed.data.cargo;
   if (parsed.data.data_admissao !== undefined) campos.data_admissao = parsed.data.data_admissao;
   if (parsed.data.tipo_servico !== undefined) campos.tipo_servico = parsed.data.tipo_servico;
-
-  // turno_trabalho só é recalculado quando um dos três campos de turno vem no body — edições
-  // que não mexem em turno (ex: só cargo) não devem tocar na classificação já salva. O
-  // cálculo usa hora_inicio/hora_fim já mesclados (novo valor enviado, ou o que já estava
-  // salvo), porque o RH pode editar só um dos dois horários por vez.
-  const tocaTurno =
-    parsed.data.turno_hora_inicio !== undefined ||
-    parsed.data.turno_hora_fim !== undefined ||
-    parsed.data.turno_trabalho_override !== undefined;
-  if (tocaTurno) {
-    const turnoHoraInicio = parsed.data.turno_hora_inicio !== undefined ? parsed.data.turno_hora_inicio : antes.turno_hora_inicio;
-    const turnoHoraFim = parsed.data.turno_hora_fim !== undefined ? parsed.data.turno_hora_fim : antes.turno_hora_fim;
-    campos.turno_hora_inicio = turnoHoraInicio ?? null;
-    campos.turno_hora_fim = turnoHoraFim ?? null;
-    campos.turno_trabalho = parsed.data.turno_trabalho_override ?? classificarTurno(turnoHoraInicio, turnoHoraFim);
-  }
+  if (parsed.data.horario_trabalho !== undefined) campos.horario_trabalho = parsed.data.horario_trabalho;
+  if (parsed.data.turno !== undefined) campos.turno = parsed.data.turno;
 
   const { data, error } = await svc
     .from("funcionarios")
