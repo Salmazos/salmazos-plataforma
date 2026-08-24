@@ -26,6 +26,12 @@ const AREAS = [
 
 const GENERO_OPCOES = ["Masculino", "Feminino", "Outro", "Prefiro não informar"];
 
+// Mesma regra de formato do candidatoCreateSchema (z.string().email()) — usada aqui pra
+// nunca deixar um e-mail malformado (extraído pela IA ou digitado) travar o cadastro: campo
+// é opcional no sistema, então um valor inválido deve simplesmente ser descartado, não
+// bloquear o envio inteiro.
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const MAPA_AREAS: Record<string, string> = {
   "rh": "Recursos Humanos",
   "recursos humanos": "Recursos Humanos",
@@ -147,7 +153,7 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
       const extraido = await response.json();
       if (extraido.nome && !nome) setNome(extraido.nome);
       if (extraido.telefone && !telefone) setTelefone(formatarTelefone(extraido.telefone));
-      if (extraido.email && !email) setEmail(extraido.email);
+      if (extraido.email && !email) setEmail(extraido.email.trim());
       if (extraido.cpf && !cpf) setCpf(formatarCpf(extraido.cpf));
       if (extraido.cidade) setCidade(extraido.cidade);
       if (extraido.estado) setEstado(extraido.estado);
@@ -196,6 +202,11 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
         const { path } = await resUpload.json();
         curriculo_url = path;
       }
+      // E-mail é opcional no sistema — nunca deve travar o cadastro por formato inválido
+      // (extraído errado pela IA, ou digitado errado no campo abaixo). Se não bater no
+      // formato esperado pelo schema do servidor, simplesmente não envia, em vez de deixar
+      // o candidato inteiro travado num erro cru de validação.
+      const emailValido = email.trim() && EMAIL_REGEX.test(email.trim()) ? email.trim() : "";
       const res = await fetch("/api/candidatos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -203,7 +214,7 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
           nome_completo: nome.trim(),
           telefone: telefone.trim(),
           cargo_pretendido: area,
-          email: email || "",
+          email: emailValido,
           cpf: cpf || `TEMP-${Date.now()}`,
           cidade: cidade || "",
           estado: estado || "",
@@ -392,6 +403,24 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
               placeholder="(00) 00000-0000"
               className="input-field"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              E-mail (opcional)
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="candidato@exemplo.com"
+              className="input-field"
+            />
+            {email.trim() && !EMAIL_REGEX.test(email.trim()) && (
+              <p className="text-xs text-amber-600 mt-1">
+                Formato de e-mail inválido — não será salvo se enviado assim.
+              </p>
+            )}
           </div>
 
           <div>
