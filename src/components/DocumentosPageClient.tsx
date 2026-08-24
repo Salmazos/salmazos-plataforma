@@ -16,7 +16,7 @@ import {
   File,
   Search,
 } from "lucide-react";
-import { SALMAZOS_CATEGORIAS, CLIENTE_CATEGORIAS } from "@/lib/documentosCategorias";
+import { CLIENTE_CATEGORIAS } from "@/lib/documentosCategorias";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,11 +31,18 @@ interface CategoriaCustomizada {
   label: string;
 }
 
+interface PastaSalmazos {
+  id: string;
+  nome: string;
+  parent_id: string | null;
+}
+
 interface Documento {
   id: string;
   nome: string;
   descricao: string | null;
-  categoria: string;
+  categoria: string | null;
+  pasta_id: string | null;
   tipo: string;
   cliente_id: string | null;
   storage_path: string;
@@ -109,6 +116,12 @@ export default function DocumentosPageClient({
   const [clienteSel, setClienteSel] = useState<ClienteRef | null>(null);
   const [clienteSearch, setClienteSearch] = useState("");
 
+  // Navegação em árvore da aba Salmazos — pilha de pastas visitadas (última = pasta atual,
+  // vazia = raiz). Diferente da aba Clientes (categoria fixa, um nível só), aqui o
+  // aninhamento é múltiplo, então a "categoria atual" precisa ser um caminho, não uma chave.
+  const [pastaPath, setPastaPath] = useState<PastaSalmazos[]>([]);
+  const [subpastasSalmazos, setSubpastasSalmazos] = useState<PastaSalmazos[]>([]);
+
   // Document list
   const [documentos, setDocumentos] = useState<Documento[]>([]);
   const [loading, setLoading] = useState(false);
@@ -122,7 +135,9 @@ export default function DocumentosPageClient({
   const [uploadErro, setUploadErro] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Categorias customizadas do cliente selecionado (pasta "Criar Novo")
+  // Categorias customizadas do cliente selecionado / nova pasta (aba Clientes) OU nova
+  // subpasta (aba Salmazos) — mesmo modal "Criar Novo" reaproveitado pras duas abas, o
+  // submit decide o endpoint certo com base em `tab` (ver handleCriarNovo).
   const [customCategorias, setCustomCategorias] = useState<CategoriaCustomizada[]>([]);
   const [showCriarCategoria, setShowCriarCategoria] = useState(false);
   const [novaCategoriaLabel, setNovaCategoriaLabel] = useState("");
@@ -131,7 +146,9 @@ export default function DocumentosPageClient({
 
   // ── Derived state ──────────────────────────────────────────────────────────
 
-  const isInsideCategoria = categoria !== null;
+  const pastaAtual = pastaPath[pastaPath.length - 1] ?? null;
+
+  const isInsideCategoria = tab === "salmazos" ? pastaAtual !== null : categoria !== null;
   const isInsideCliente = clienteSel !== null;
 
   const categoriasClienteTodas: { key: string; label: string; custom?: boolean }[] = [
@@ -139,10 +156,7 @@ export default function DocumentosPageClient({
     ...customCategorias.map((c) => ({ key: c.chave, label: c.label, custom: true })),
   ];
 
-  const categoriaLabel =
-    tab === "salmazos"
-      ? SALMAZOS_CATEGORIAS.find((c) => c.key === categoria)?.label
-      : categoriasClienteTodas.find((c) => c.key === categoria)?.label;
+  const categoriaLabel = categoriasClienteTodas.find((c) => c.key === categoria)?.label;
 
   const filteredClientes = clientes.filter((c) =>
     c.nome.toLowerCase().includes(clienteSearch.toLowerCase())
@@ -165,19 +179,41 @@ export default function DocumentosPageClient({
     else setCustomCategorias([]);
   }, [clienteSel, fetchCustomCategorias]);
 
+  // ── Fetch subpastas (árvore Salmazos) ──────────────────────────────────────
+
+  const fetchSubpastasSalmazos = useCallback(async (parentId: string | null) => {
+    try {
+      const params = new URLSearchParams();
+      if (parentId) params.set("parent_id", parentId);
+      const res = await fetch(`/api/documentos/pastas?${params}`);
+      const json = await res.json();
+      if (res.ok) setSubpastasSalmazos(json.data ?? []);
+    } catch {
+      setSubpastasSalmazos([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab !== "salmazos") return;
+    fetchSubpastasSalmazos(pastaAtual?.id ?? null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, pastaAtual?.id, fetchSubpastasSalmazos]);
+
   // ── Fetch documents ────────────────────────────────────────────────────────
 
   const fetchDocumentos = useCallback(async () => {
-    if (!categoria) return;
+    if (tab === "clientes" && !categoria) return;
+    if (tab === "salmazos" && !pastaAtual) return;
     setLoading(true);
     setErro("");
     try {
-      const tipoParam = tab === "clientes" ? "cliente" : "salmazos";
-      const params = new URLSearchParams({ tipo: tipoParam, categoria });
-      if (tab === "clientes" && clienteSel) {
-        params.set("cliente_id", clienteSel.id);
+      const params = new URLSearchParams({ tipo: tab === "clientes" ? "cliente" : "salmazos" });
+      if (tab === "clientes") {
+        params.set("categoria", categoria!);
+        if (clienteSel) params.set("cliente_id", clienteSel.id);
+      } else {
+        params.set("pasta_id", pastaAtual!.id);
       }
-      console.log("[fetchDocumentos] params →", Object.fromEntries(params));
       const res = await fetch(`/api/documentos?${params}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Erro ao carregar documentos");
@@ -187,11 +223,14 @@ export default function DocumentosPageClient({
     } finally {
       setLoading(false);
     }
-  }, [tab, categoria, clienteSel]);
+  }, [tab, categoria, clienteSel, pastaAtual]);
 
   useEffect(() => {
-    if (categoria) fetchDocumentos();
-  }, [categoria, fetchDocumentos]);
+    if (tab === "clientes" && categoria) fetchDocumentos();
+    else if (tab === "salmazos" && pastaAtual) fetchDocumentos();
+    else setDocumentos([]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoria, pastaAtual?.id, fetchDocumentos]);
 
   // ── Navigation handlers ────────────────────────────────────────────────────
 
@@ -200,11 +239,23 @@ export default function DocumentosPageClient({
     setCategoria(null);
     setClienteSel(null);
     setClienteSearch("");
+    setPastaPath([]);
     setDocumentos([]);
   }
 
   function handleSelectCategoria(key: string) {
     setCategoria(key);
+  }
+
+  function handleSelectPastaSalmazos(pasta: PastaSalmazos) {
+    setPastaPath((prev) => [...prev, pasta]);
+  }
+
+  // Clique num nível intermediário do breadcrumb — pula direto pra ele, descartando os
+  // níveis mais fundos (mesmo comportamento de navegar por breadcrumb num explorador de
+  // arquivos comum).
+  function handleJumpPastaSalmazos(index: number) {
+    setPastaPath((prev) => prev.slice(0, index + 1));
   }
 
   function handleSelectCliente(c: ClienteRef) {
@@ -213,7 +264,9 @@ export default function DocumentosPageClient({
 
   function handleBack() {
     if (tab === "salmazos") {
-      setCategoria(null);
+      // Sobe um nível na árvore — de dentro de uma subpasta funda, volta pra pasta pai;
+      // da raiz não há pra onde voltar dentro desta aba (botão nem aparece nesse caso).
+      setPastaPath((prev) => prev.slice(0, -1));
       setDocumentos([]);
     } else {
       if (categoria) {
@@ -290,7 +343,9 @@ export default function DocumentosPageClient({
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
-    if (!uploadFile || !categoria) return;
+    if (!uploadFile) return;
+    if (tab === "clientes" && !categoria) return;
+    if (tab === "salmazos" && !pastaAtual) return;
     const nomeDocumento = uploadFile.name.replace(/\.[^/.]+$/, "");
 
     setUploading(true);
@@ -304,7 +359,7 @@ export default function DocumentosPageClient({
       let storagePath: string;
 
       if (tab === "salmazos") {
-        storagePath = `salmazos/${categoria}/${timestamp}_${safeName}`;
+        storagePath = `salmazos/${pastaAtual!.id}/${timestamp}_${safeName}`;
       } else {
         storagePath = `clientes/${clienteSel!.id}/${categoria}/${timestamp}_${safeName}`;
       }
@@ -347,7 +402,8 @@ export default function DocumentosPageClient({
         body: JSON.stringify({
           nome: nomeDocumento,
           descricao: null,
-          categoria,
+          categoria: tab === "clientes" ? categoria : null,
+          pasta_id: tab === "salmazos" ? pastaAtual!.id : null,
           tipo: tab === "clientes" ? "cliente" : "salmazos",
           cliente_id: tab === "clientes" ? clienteSel!.id : null,
           storage_path: storagePath,
@@ -369,7 +425,7 @@ export default function DocumentosPageClient({
     }
   }
 
-  // ── Criar categoria customizada ────────────────────────────────────────────
+  // ── Criar Novo (categoria customizada na aba Clientes, ou subpasta na árvore Salmazos) ──
 
   function openCriarCategoriaModal() {
     setNovaCategoriaLabel("");
@@ -380,18 +436,30 @@ export default function DocumentosPageClient({
 
   async function handleCriarCategoria(e: React.FormEvent) {
     e.preventDefault();
-    if (!novaCategoriaLabel.trim() || !clienteSel) return;
+    if (!novaCategoriaLabel.trim()) return;
+    if (tab === "clientes" && !clienteSel) return;
     setCriandoCategoria(true);
     setCriarCategoriaErro("");
     try {
-      const res = await fetch("/api/documentos/categorias", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cliente_id: clienteSel.id, label: novaCategoriaLabel.trim() }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Erro ao criar categoria");
-      setCustomCategorias((prev) => [...prev, json.data]);
+      if (tab === "clientes") {
+        const res = await fetch("/api/documentos/categorias", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cliente_id: clienteSel!.id, label: novaCategoriaLabel.trim() }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? "Erro ao criar categoria");
+        setCustomCategorias((prev) => [...prev, json.data]);
+      } else {
+        const res = await fetch("/api/documentos/pastas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nome: novaCategoriaLabel.trim(), parent_id: pastaAtual?.id ?? null }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? "Erro ao criar pasta");
+        setSubpastasSalmazos((prev) => [...prev, json.data]);
+      }
       setShowCriarCategoria(false);
     } catch (err) {
       setCriarCategoriaErro(err instanceof Error ? err.message : "Erro desconhecido");
@@ -437,8 +505,8 @@ export default function DocumentosPageClient({
         ))}
       </div>
 
-      {/* Breadcrumb + Upload button */}
-      {(isInsideCategoria || isInsideCliente) && (
+      {/* Breadcrumb + Upload/Criar Novo buttons */}
+      {(isInsideCategoria || isInsideCliente || tab === "salmazos") && (
         <div
           style={{
             display: "flex",
@@ -450,29 +518,38 @@ export default function DocumentosPageClient({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <button
-              onClick={handleBack}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "6px 12px",
-                borderRadius: 8,
-                border: "1px solid #E5E7EB",
-                background: "#fff",
-                color: "#374151",
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: "pointer",
-                marginRight: 8,
-              }}
-            >
-              <ArrowLeft size={14} />
-              Voltar
-            </button>
+            {((tab === "salmazos" && pastaPath.length > 0) ||
+              (tab === "clientes" && (isInsideCategoria || isInsideCliente))) && (
+              <button
+                onClick={handleBack}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  border: "1px solid #E5E7EB",
+                  background: "#fff",
+                  color: "#374151",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  marginRight: 8,
+                }}
+              >
+                <ArrowLeft size={14} />
+                Voltar
+              </button>
+            )}
             <span style={{ fontSize: 13, color: "#9CA3AF" }}>Documentos</span>
             <ChevronRight size={12} style={{ color: "#D1D5DB" }} />
-            <span style={{ fontSize: 13, color: "#9CA3AF" }}>
+            <span
+              style={{
+                fontSize: 13,
+                color: tab === "salmazos" && pastaPath.length === 0 ? "#111827" : "#9CA3AF",
+                fontWeight: tab === "salmazos" && pastaPath.length === 0 ? 600 : 400,
+              }}
+            >
               {tab === "salmazos" ? "Salmazos" : "Clientes"}
             </span>
             {tab === "clientes" && clienteSel && (
@@ -489,7 +566,7 @@ export default function DocumentosPageClient({
                 </span>
               </>
             )}
-            {isInsideCategoria && (
+            {tab === "clientes" && isInsideCategoria && (
               <>
                 <ChevronRight size={12} style={{ color: "#D1D5DB" }} />
                 <span style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>
@@ -497,9 +574,80 @@ export default function DocumentosPageClient({
                 </span>
               </>
             )}
+            {tab === "salmazos" && pastaPath.map((p, i) => {
+              const ehUltimo = i === pastaPath.length - 1;
+              return (
+                <span key={p.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <ChevronRight size={12} style={{ color: "#D1D5DB" }} />
+                  {ehUltimo ? (
+                    <span style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>{p.nome}</span>
+                  ) : (
+                    <button
+                      onClick={() => handleJumpPastaSalmazos(i)}
+                      style={{
+                        fontSize: 13,
+                        color: "#9CA3AF",
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                      }}
+                    >
+                      {p.nome}
+                    </button>
+                  )}
+                </span>
+              );
+            })}
           </div>
 
-          {canUpload && isInsideCategoria && (
+          {canUpload && tab === "salmazos" && (
+            <div style={{ display: "flex", gap: 8 }}>
+              {isInsideCategoria && (
+                <button
+                  onClick={openUploadModal}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "8px 16px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "#111827",
+                    color: "#FFD700",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  <Upload size={15} />
+                  Upload
+                </button>
+              )}
+              <button
+                onClick={openCriarCategoriaModal}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  border: "none",
+                  background: "#111827",
+                  color: "#FFD700",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                <FolderPlus size={15} />
+                Criar Novo
+              </button>
+            </div>
+          )}
+
+          {canUpload && tab === "clientes" && isInsideCategoria && (
             <button
               onClick={openUploadModal}
               style={{
@@ -545,23 +693,29 @@ export default function DocumentosPageClient({
         </div>
       )}
 
-      {/* ── Tab: Salmazos ───────────────────────────────────────────────────── */}
-      {tab === "salmazos" && !isInsideCategoria && (
+      {/* ── Tab: Salmazos ─ árvore de pastas (raiz ou dentro de uma pasta) ──────── */}
+      {tab === "salmazos" && subpastasSalmazos.length > 0 && (
         <div
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
             gap: 16,
+            marginBottom: isInsideCategoria ? 24 : 0,
           }}
         >
-          {SALMAZOS_CATEGORIAS.map((cat) => (
+          {subpastasSalmazos.map((pasta) => (
             <CategoryCard
-              key={cat.key}
-              label={cat.label}
-              onClick={() => handleSelectCategoria(cat.key)}
+              key={pasta.id}
+              label={pasta.nome}
+              onClick={() => handleSelectPastaSalmazos(pasta)}
             />
           ))}
         </div>
+      )}
+      {tab === "salmazos" && !isInsideCategoria && subpastasSalmazos.length === 0 && (
+        <p style={{ fontSize: 14, color: "#9CA3AF", textAlign: "center", padding: "32px 0" }}>
+          Nenhuma pasta ainda.
+        </p>
       )}
 
       {/* ── Tab: Clientes ─ list ────────────────────────────────────────────── */}
@@ -1074,7 +1228,11 @@ export default function DocumentosPageClient({
                   }}
                 />
                 <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4, marginBottom: 0 }}>
-                  Essa pasta fica disponível só pra este cliente, ao lado das 5 pastas padrão.
+                  {tab === "clientes"
+                    ? "Essa pasta fica disponível só pra este cliente, ao lado das 5 pastas padrão."
+                    : pastaAtual
+                      ? `Criada dentro de "${pastaAtual.nome}".`
+                      : "Criada na raiz da aba Salmazos."}
                 </p>
               </div>
 

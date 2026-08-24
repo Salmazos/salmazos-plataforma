@@ -1,14 +1,13 @@
-// Categorias fixas de Documentos — únicas pra todo cliente/Salmazos, sempre existem mesmo
-// sem nenhum arquivo enviado ainda. Fonte única usada tanto no painel interno
+// Categorias fixas da aba "Clientes" de Documentos — únicas pra todo cliente, sempre
+// existem mesmo sem nenhum arquivo enviado ainda. Fonte única usada tanto no painel interno
 // (DocumentosPageClient.tsx) quanto no portal do cliente (PortalDocumentosPageClient.tsx) —
 // evita as duas telas divergirem se uma categoria for renomeada.
-export const SALMAZOS_CATEGORIAS = [
-  { key: "manuais", label: "Manuais e Procedimentos" },
-  { key: "politicas", label: "Políticas da Empresa" },
-  { key: "formularios", label: "Formulários" },
-  { key: "treinamentos", label: "Treinamentos" },
-];
-
+//
+// A aba "Salmazos" NÃO usa mais este padrão flat — virou árvore de pastas de verdade
+// (documentos_pastas_salmazos, com aninhamento múltiplo via parent_id), as 4 categorias que
+// existiam aqui antes (Manuais e Procedimentos/Políticas da Empresa/Formulários/
+// Treinamentos) foram migradas como pastas de raiz nessa tabela — ver
+// supabase/migration_documentos_pastas_salmazos.sql.
 export const CLIENTE_CATEGORIAS = [
   { key: "limpeza", label: "Limpeza e Higienização" },
   { key: "checklists", label: "Checklists" },

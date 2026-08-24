@@ -17,8 +17,9 @@ export async function GET(request: NextRequest) {
     const tipo = searchParams.get("tipo");
     const categoria = searchParams.get("categoria");
     const cliente_id = searchParams.get("cliente_id");
+    const pasta_id = searchParams.get("pasta_id");
 
-    console.log("[GET /api/documentos] params →", { tipo, categoria, cliente_id });
+    console.log("[GET /api/documentos] params →", { tipo, categoria, cliente_id, pasta_id });
 
     const supabase = createServiceClient();
     let query = supabase
@@ -29,6 +30,7 @@ export async function GET(request: NextRequest) {
     if (tipo) query = query.eq("tipo", tipo);
     if (categoria) query = query.eq("categoria", categoria);
     if (cliente_id) query = query.eq("cliente_id", cliente_id);
+    if (pasta_id) query = query.eq("pasta_id", pasta_id);
 
     const { data, error } = await query;
 
@@ -63,6 +65,18 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    if (parsed.data.tipo === "cliente" && !parsed.data.categoria) {
+      return NextResponse.json(
+        { error: "categoria é obrigatória para documentos do tipo 'cliente'." },
+        { status: 400 }
+      );
+    }
+    if (parsed.data.tipo === "salmazos" && !parsed.data.pasta_id) {
+      return NextResponse.json(
+        { error: "pasta_id é obrigatório para documentos do tipo 'salmazos'." },
+        { status: 400 }
+      );
+    }
 
     const supabase = createServiceClient();
     const { data, error } = await supabase
@@ -70,9 +84,10 @@ export async function POST(request: NextRequest) {
       .insert({
         nome: parsed.data.nome,
         descricao: parsed.data.descricao ?? null,
-        categoria: parsed.data.categoria,
+        categoria: parsed.data.categoria ?? null,
         tipo: parsed.data.tipo,
         cliente_id: parsed.data.cliente_id ?? null,
+        pasta_id: parsed.data.pasta_id ?? null,
         storage_path: parsed.data.storage_path,
         tamanho_bytes: parsed.data.tamanho_bytes ?? null,
         extensao: parsed.data.extensao ?? null,

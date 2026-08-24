@@ -317,11 +317,14 @@ export const meuPerfilSenhaSchema = z.object({
 
 export const documentoCreateSchema = z.object({
   nome: z.string().min(1),
-  categoria: z.string().min(1),
+  // Só obrigatória de fato pra tipo="cliente" (checado no route.ts, mesmo padrão do check
+  // de cliente_id) — tipo="salmazos" usa pasta_id em vez de categoria.
+  categoria: z.string().min(1).optional().nullable(),
   tipo: z.enum(["salmazos", "cliente"]),
   storage_path: z.string().min(1),
   descricao: z.string().nullable().optional(),
   cliente_id: z.string().uuid().optional().nullable(),
+  pasta_id: z.string().uuid().optional().nullable(),
   tamanho_bytes: coerceNumberOptional,
   extensao: z.string().optional(),
   uploaded_by: z.string().optional(),
@@ -330,6 +333,11 @@ export const documentoCreateSchema = z.object({
 export const documentoCategoriaCustomizadaCreateSchema = z.object({
   cliente_id: z.string().uuid(),
   label: z.string().trim().min(1, "Nome da pasta é obrigatório"),
+});
+
+export const documentoPastaSalmazosCreateSchema = z.object({
+  nome: z.string().trim().min(1, "Nome da pasta é obrigatório"),
+  parent_id: z.string().uuid().optional().nullable(),
 });
 
 // ── Candidatos-Vagas ─────────────────────────────────────────────────────────
