@@ -206,91 +206,96 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
         </select>
       </div>
 
-      <div className="card" style={{ padding: 0, overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-              {["Nome", "Empresa", "Cargo", "Modalidade", "Horário de Trabalho", "Turno", "Data de admissão", "Status", "ASO", "Origem", "Ações"].map((h) => (
-                <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtrados.length === 0 ? (
-              <tr>
-                <td colSpan={11} style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF" }}>
-                  Nenhum funcionário encontrado.
-                </td>
-              </tr>
-            ) : (
-              filtrados.map((f) => {
-                const badge = STATUS_BADGE[f.status] ?? { label: f.status, bg: "#F3F4F6", text: "#374151" };
-                const badgeAso = ASO_STATUS_INFO[calcularStatusAso(f.aso_data_exame_mais_recente)];
-                const badgeModalidade = f.tipo_servico ? MODALIDADE_BADGE[f.tipo_servico] : null;
-                return (
-                  <tr key={f.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                    <td style={{ padding: "10px 12px", fontWeight: 600, color: "#111827" }}>{f.nome_completo}</td>
-                    <td style={{ padding: "10px 12px", color: "#374151" }}>{f.clientes?.nome ?? f.empresa ?? "—"}</td>
-                    <td style={{ padding: "10px 12px", color: "#374151" }}>{f.cargo ?? "—"}</td>
-                    <td style={{ padding: "10px 12px" }}>
-                      {badgeModalidade ? (
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: badgeModalidade.bg, color: badgeModalidade.text }}>
-                          {badgeModalidade.label}
-                        </span>
-                      ) : (
-                        <span style={{ color: "#D1D5DB" }}>—</span>
-                      )}
-                    </td>
-                    <td style={{ padding: "10px 12px", color: "#374151" }}>{f.horario_trabalho ?? "—"}</td>
-                    <td style={{ padding: "10px 12px" }}>
-                      <select
-                        value={f.turno ?? ""}
-                        onChange={(e) => handleTurnoChange(f.id, e.target.value)}
-                        disabled={salvandoTurnoId === f.id}
-                        className="input-field"
-                        style={{ fontSize: 12, padding: "4px 8px", minWidth: 130 }}
+      <div className="card" style={{ padding: 0 }}>
+        {filtrados.length === 0 ? (
+          <p style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF", margin: 0 }}>
+            Nenhum funcionário encontrado.
+          </p>
+        ) : (
+          filtrados.map((f, i) => {
+            const badge = STATUS_BADGE[f.status] ?? { label: f.status, bg: "#F3F4F6", text: "#374151" };
+            const badgeAso = ASO_STATUS_INFO[calcularStatusAso(f.aso_data_exame_mais_recente)];
+            const badgeModalidade = f.tipo_servico ? MODALIDADE_BADGE[f.tipo_servico] : null;
+            return (
+              <div
+                key={f.id}
+                style={{
+                  padding: "16px 20px",
+                  borderBottom: i < filtrados.length - 1 ? "1px solid #F3F4F6" : "none",
+                }}
+              >
+                {/* Linha 1: nome em destaque, ações à direita */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+                  <p
+                    style={{
+                      fontSize: 16,
+                      fontWeight: 700,
+                      color: "#111827",
+                      textDecoration: "underline",
+                      textDecorationThickness: 1,
+                      margin: 0,
+                    }}
+                  >
+                    {f.nome_completo}
+                  </p>
+                  <div className="flex gap-2" style={{ flexShrink: 0 }}>
+                    <Link
+                      href={`/painel/funcionarios/${f.id}`}
+                      style={{ padding: "4px 10px", fontSize: 12, fontWeight: 700, color: "#FFD700", background: "#111827", borderRadius: 8, textDecoration: "none" }}
+                    >
+                      Ver detalhes
+                    </Link>
+                    {f.status === "ativo" && (
+                      <button
+                        onClick={() => setFuncionarioRescisao(f)}
+                        style={{ padding: "4px 10px", fontSize: 12, fontWeight: 700, color: "#FFD700", background: "#111827", border: "none", borderRadius: 8, cursor: "pointer" }}
                       >
-                        <option value="">—</option>
-                        {TURNOS_FUNCIONARIO.map((t) => (
-                          <option key={t} value={t}>{t}</option>
-                        ))}
-                      </select>
-                      {erroTurnoId === f.id && <p style={{ color: "#DC2626", fontSize: 11, margin: "2px 0 0" }}>Erro ao salvar</p>}
-                    </td>
-                    <td style={{ padding: "10px 12px", color: "#6B7280" }}>{f.data_admissao ? formatarDataSemFuso(f.data_admissao) : "—"}</td>
-                    <td style={{ padding: "10px 12px" }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: badge.bg, color: badge.text }}>
-                        {badge.label}
-                      </span>
-                    </td>
-                    <td style={{ padding: "10px 12px" }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: badgeAso.bg, color: badgeAso.text }}>
-                        {badgeAso.label}
-                      </span>
-                    </td>
-                    <td style={{ padding: "10px 12px", color: "#9CA3AF", fontSize: 12 }}>
-                      {f.admissao_id ? "Admissão digital" : "Cadastro manual"}
-                    </td>
-                    <td style={{ padding: "10px 12px" }}>
-                      <div className="flex gap-2">
-                        <Link href={`/painel/funcionarios/${f.id}`} className="btn-outline" style={{ padding: "4px 10px", fontSize: 12 }}>
-                          Ver detalhes
-                        </Link>
-                        {f.status === "ativo" && (
-                          <button onClick={() => setFuncionarioRescisao(f)} className="btn-outline" style={{ padding: "4px 10px", fontSize: 12 }}>
-                            Lançar rescisão
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+                        Lançar rescisão
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Linha 2: demais campos em grupos rótulo/valor, flex-wrap */}
+                <div style={{ display: "flex", flexWrap: "wrap", columnGap: 28, rowGap: 14 }}>
+                  <Campo label="Empresa">{f.clientes?.nome ?? f.empresa ?? "—"}</Campo>
+                  <Campo label="Cargo">{f.cargo ?? "—"}</Campo>
+                  <Campo label="Modalidade">
+                    {badgeModalidade ? (
+                      <Badge bg={badgeModalidade.bg} text={badgeModalidade.text} label={badgeModalidade.label} />
+                    ) : (
+                      <span style={{ color: "#D1D5DB" }}>—</span>
+                    )}
+                  </Campo>
+                  <Campo label="Horário de trabalho">{f.horario_trabalho ?? "—"}</Campo>
+                  <Campo label="Turno">
+                    <select
+                      value={f.turno ?? ""}
+                      onChange={(e) => handleTurnoChange(f.id, e.target.value)}
+                      disabled={salvandoTurnoId === f.id}
+                      className="input-field"
+                      style={{ fontSize: 12, padding: "4px 8px", minWidth: 130 }}
+                    >
+                      <option value="">—</option>
+                      {TURNOS_FUNCIONARIO.map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                    {erroTurnoId === f.id && <p style={{ color: "#DC2626", fontSize: 11, margin: "2px 0 0" }}>Erro ao salvar</p>}
+                  </Campo>
+                  <Campo label="Data de admissão">{f.data_admissao ? formatarDataSemFuso(f.data_admissao) : "—"}</Campo>
+                  <Campo label="Status">
+                    <Badge bg={badge.bg} text={badge.text} label={badge.label} />
+                  </Campo>
+                  <Campo label="ASO">
+                    <Badge bg={badgeAso.bg} text={badgeAso.text} label={badgeAso.label} />
+                  </Campo>
+                  <Campo label="Origem">{f.admissao_id ? "Admissão digital" : "Cadastro manual"}</Campo>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       <ModalAdicionarFuncionario
@@ -307,5 +312,27 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
         onLancado={() => { setFuncionarioRescisao(null); router.refresh(); }}
       />
     </div>
+  );
+}
+
+// Grupo "rótulo em cima, valor embaixo" — bloco atômico do novo layout de linha em duas
+// camadas. minWidth evita que o valor (ou o próprio rótulo) quebre uma palavra no meio; a
+// quebra que acontece é sempre do grupo inteiro pra próxima linha (via flex-wrap no pai).
+function Campo({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ minWidth: 90 }}>
+      <p style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.3, margin: "0 0 3px", whiteSpace: "nowrap" }}>
+        {label}
+      </p>
+      <div style={{ fontSize: 13, color: "#111827", fontWeight: 500 }}>{children}</div>
+    </div>
+  );
+}
+
+function Badge({ label, bg, text }: { label: string; bg: string; text: string }) {
+  return (
+    <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: bg, color: text, whiteSpace: "nowrap" }}>
+      {label}
+    </span>
   );
 }

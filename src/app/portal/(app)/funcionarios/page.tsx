@@ -14,21 +14,20 @@ const CONTRATO_STATUS_INFO = {
   pendente: { label: "Pendente", bg: "#FEF3C7", text: "#92400E" },
 };
 
-// `nowrap: true` só nas colunas de valor curto e previsível (datas, RG, CPF, PIS) — evita
-// quebra de linha feia nelas. "Nome completo" fica de fora de propósito (varia bastante de
-// tamanho, quebrar é o comportamento certo ali).
-const COLUNAS = [
-  { label: "Nome completo", nowrap: false },
-  { label: "Data de nascimento", nowrap: true },
-  { label: "RG", nowrap: true },
-  { label: "CPF", nowrap: true },
-  { label: "PIS", nowrap: true },
-  { label: "Data de admissão", nowrap: true },
-  { label: "Função", nowrap: false },
-  { label: "Turno de trabalho", nowrap: true },
-  { label: "ASO Periódico", nowrap: false },
-  { label: "Contrato", nowrap: false },
-] as const;
+// Grupo "rótulo em cima, valor embaixo" — mesmo padrão de layout usado no painel interno
+// (ver Campo em FuncionariosPageClient.tsx), duplicado aqui de propósito: telas com campos
+// diferentes (portal não tem Empresa/Modalidade/Status/Ações do RH), não vale a pena
+// compartilhar um componente só pra isso.
+function Campo({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ minWidth: 90 }}>
+      <p style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.3, margin: "0 0 3px", whiteSpace: "nowrap" }}>
+        {label}
+      </p>
+      <div style={{ fontSize: 13, color: "#111827", fontWeight: 500 }}>{children}</div>
+    </div>
+  );
+}
 
 export default async function PortalFuncionariosPage() {
   const supabase = await createPortalClient();
@@ -121,77 +120,64 @@ export default async function PortalFuncionariosPage() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-                {COLUNAS.map((c) => (
-                  <th
-                    key={c.label}
-                    style={{
-                      textAlign: "left",
-                      padding: "10px 12px",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: "#6B7280",
-                      textTransform: "uppercase",
-                      whiteSpace: c.nowrap ? "nowrap" : undefined,
-                    }}
-                  >
-                    {c.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {(funcionarios ?? []).length === 0 ? (
-                <tr>
-                  <td colSpan={COLUNAS.length} style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF" }}>
-                    Nenhum funcionário ativo encontrado.
-                  </td>
-                </tr>
-              ) : (
-                (funcionarios ?? []).map((f) => {
-                  const badgeAso = ASO_STATUS_INFO[calcularStatusAso(dataExameMaisRecentePorFuncionario.get(f.id) ?? null)];
-                  const badgeContrato = funcionarioIdsComContrato.has(f.id)
-                    ? CONTRATO_STATUS_INFO.assinado
-                    : CONTRATO_STATUS_INFO.pendente;
-                  const urlAso = arquivoAsoMaisRecentePorFuncionario.get(f.id)
-                    ? `/api/portal/funcionarios/${f.id}/aso-url`
-                    : null;
-                  const urlContrato = arquivoContratoMaisRecentePorFuncionario.get(f.id)
-                    ? `/api/portal/funcionarios/${f.id}/contrato-url`
-                    : null;
-                  const dadosPessoais = f.admissao_id ? dadosPessoaisPorAdmissao.get(f.admissao_id) : undefined;
-                  return (
-                    <tr key={f.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                      <td style={{ padding: "10px 12px", fontWeight: 600, color: "#111827" }}>{f.nome_completo}</td>
-                      <td style={{ padding: "10px 12px", color: "#6B7280", whiteSpace: "nowrap" }}>
-                        {dadosPessoais?.data_nascimento ? formatarDataSemFuso(dadosPessoais.data_nascimento) : "—"}
-                      </td>
-                      <td style={{ padding: "10px 12px", color: "#374151", whiteSpace: "nowrap" }}>{dadosPessoais?.rg_numero ?? "—"}</td>
-                      <td style={{ padding: "10px 12px", color: "#374151", whiteSpace: "nowrap" }}>
-                        {dadosPessoais?.cpf ? formatarCPF(dadosPessoais.cpf) : "—"}
-                      </td>
-                      <td style={{ padding: "10px 12px", color: "#374151", whiteSpace: "nowrap" }}>{dadosPessoais?.pis_pasep ?? "—"}</td>
-                      <td style={{ padding: "10px 12px", color: "#6B7280", whiteSpace: "nowrap" }}>
-                        {f.data_admissao ? formatarDataSemFuso(f.data_admissao) : "—"}
-                      </td>
-                      <td style={{ padding: "10px 12px", color: "#374151" }}>{f.cargo ?? "—"}</td>
-                      <td style={{ padding: "10px 12px", color: "#374151", whiteSpace: "nowrap" }}>{f.turno ?? "—"}</td>
-                      <td style={{ padding: "10px 12px" }}>
-                        <PortalDocumentoBadge label={badgeAso.label} bg={badgeAso.bg} text={badgeAso.text} url={urlAso} />
-                      </td>
-                      <td style={{ padding: "10px 12px" }}>
-                        <PortalDocumentoBadge label={badgeContrato.label} bg={badgeContrato.bg} text={badgeContrato.text} url={urlContrato} />
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+        {(funcionarios ?? []).length === 0 ? (
+          <p style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF", margin: 0 }}>
+            Nenhum funcionário ativo encontrado.
+          </p>
+        ) : (
+          (funcionarios ?? []).map((f, i) => {
+            const badgeAso = ASO_STATUS_INFO[calcularStatusAso(dataExameMaisRecentePorFuncionario.get(f.id) ?? null)];
+            const badgeContrato = funcionarioIdsComContrato.has(f.id)
+              ? CONTRATO_STATUS_INFO.assinado
+              : CONTRATO_STATUS_INFO.pendente;
+            const urlAso = arquivoAsoMaisRecentePorFuncionario.get(f.id)
+              ? `/api/portal/funcionarios/${f.id}/aso-url`
+              : null;
+            const urlContrato = arquivoContratoMaisRecentePorFuncionario.get(f.id)
+              ? `/api/portal/funcionarios/${f.id}/contrato-url`
+              : null;
+            const dadosPessoais = f.admissao_id ? dadosPessoaisPorAdmissao.get(f.admissao_id) : undefined;
+            return (
+              <div
+                key={f.id}
+                style={{
+                  padding: "16px 20px",
+                  borderBottom: i < (funcionarios ?? []).length - 1 ? "1px solid #F3F4F6" : "none",
+                }}
+              >
+                <p
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 700,
+                    color: "#111827",
+                    textDecoration: "underline",
+                    textDecorationThickness: 1,
+                    margin: "0 0 12px",
+                  }}
+                >
+                  {f.nome_completo}
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", columnGap: 28, rowGap: 14 }}>
+                  <Campo label="Data de nascimento">
+                    {dadosPessoais?.data_nascimento ? formatarDataSemFuso(dadosPessoais.data_nascimento) : "—"}
+                  </Campo>
+                  <Campo label="RG">{dadosPessoais?.rg_numero ?? "—"}</Campo>
+                  <Campo label="CPF">{dadosPessoais?.cpf ? formatarCPF(dadosPessoais.cpf) : "—"}</Campo>
+                  <Campo label="PIS">{dadosPessoais?.pis_pasep ?? "—"}</Campo>
+                  <Campo label="Data de admissão">{f.data_admissao ? formatarDataSemFuso(f.data_admissao) : "—"}</Campo>
+                  <Campo label="Função">{f.cargo ?? "—"}</Campo>
+                  <Campo label="Turno de trabalho">{f.turno ?? "—"}</Campo>
+                  <Campo label="ASO Periódico">
+                    <PortalDocumentoBadge label={badgeAso.label} bg={badgeAso.bg} text={badgeAso.text} url={urlAso} />
+                  </Campo>
+                  <Campo label="Contrato">
+                    <PortalDocumentoBadge label={badgeContrato.label} bg={badgeContrato.bg} text={badgeContrato.text} url={urlContrato} />
+                  </Campo>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );
