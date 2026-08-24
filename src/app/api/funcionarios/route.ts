@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, funcionarioCreateSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
+import { classificarTurno } from "@/lib/classificarTurno";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -41,6 +42,12 @@ export async function POST(request: NextRequest) {
   const parsed = parseBody(funcionarioCreateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
+  const turnoHoraInicio = parsed.data.turno_hora_inicio ?? null;
+  const turnoHoraFim = parsed.data.turno_hora_fim ?? null;
+  // Override manual prevalece sobre o cálculo — mas hora_inicio/hora_fim são sempre salvos
+  // como o dado bruto informado, independente de haver override.
+  const turnoTrabalho = parsed.data.turno_trabalho_override ?? classificarTurno(turnoHoraInicio, turnoHoraFim);
+
   const svc = createServiceClient();
   const { data, error } = await svc
     .from("funcionarios")
@@ -51,6 +58,9 @@ export async function POST(request: NextRequest) {
       cargo: parsed.data.cargo ?? null,
       data_admissao: parsed.data.data_admissao ?? null,
       tipo_servico: parsed.data.tipo_servico,
+      turno_hora_inicio: turnoHoraInicio,
+      turno_hora_fim: turnoHoraFim,
+      turno_trabalho: turnoTrabalho,
       status: "ativo",
     })
     .select()

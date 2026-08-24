@@ -25,6 +25,7 @@ const COLUNAS = [
   { label: "PIS", nowrap: true },
   { label: "Data de admissão", nowrap: true },
   { label: "Função", nowrap: false },
+  { label: "Turno de trabalho", nowrap: true },
   { label: "ASO Periódico", nowrap: false },
   { label: "Contrato", nowrap: false },
 ] as const;
@@ -50,7 +51,7 @@ export default async function PortalFuncionariosPage() {
   // tipo_servico, só por cliente_id + status ativo.
   const { data: funcionarios } = await service
     .from("funcionarios")
-    .select("id, nome_completo, cargo, data_admissao, admissao_id")
+    .select("id, nome_completo, cargo, data_admissao, admissao_id, turno_trabalho")
     .eq("cliente_id", clienteUsuario.cliente_id)
     .eq("status", "ativo")
     .order("nome_completo");
@@ -177,6 +178,7 @@ export default async function PortalFuncionariosPage() {
                         {f.data_admissao ? formatarDataSemFuso(f.data_admissao) : "—"}
                       </td>
                       <td style={{ padding: "10px 12px", color: "#374151" }}>{f.cargo ?? "—"}</td>
+                      <td style={{ padding: "10px 12px", color: "#374151", whiteSpace: "nowrap" }}>{f.turno_trabalho ?? "—"}</td>
                       <td style={{ padding: "10px 12px" }}>
                         <PortalDocumentoBadge label={badgeAso.label} bg={badgeAso.bg} text={badgeAso.text} url={urlAso} />
                       </td>

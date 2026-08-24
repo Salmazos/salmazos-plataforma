@@ -20,6 +20,9 @@ export interface FuncionarioDetalhe {
   empresa: string | null;
   data_admissao: string | null;
   tipo_servico: string | null;
+  turno_trabalho: string | null;
+  turno_hora_inicio: string | null;
+  turno_hora_fim: string | null;
   status: string;
   criado_em: string;
   clientes: { nome: string } | null;
@@ -156,6 +159,15 @@ export default function FuncionarioDetalheClient({ funcionario: funcionarioInici
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Tipo de serviço</p>
             <p className="text-gray-900">{tipoServicoLabel}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Turno de trabalho</p>
+            <p className="text-gray-900">
+              {funcionario.turno_trabalho ?? "—"}
+              {funcionario.turno_hora_inicio && funcionario.turno_hora_fim && (
+                <span className="text-gray-400"> ({funcionario.turno_hora_inicio.slice(0, 5)}–{funcionario.turno_hora_fim.slice(0, 5)})</span>
+              )}
+            </p>
           </div>
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Origem</p>

@@ -891,6 +891,15 @@ export const assinaturaClicksignCriarSchema = z.object({
 
 // ── Funcionários ─────────────────────────────────────────────────────────────
 
+// Formato de <input type="time"> ("HH:MM"), aceito com ou sem segundos.
+const horaSchema = z
+  .string()
+  .regex(/^\d{2}:\d{2}(:\d{2})?$/, "Horário inválido")
+  .optional()
+  .nullable();
+
+export const TURNO_TRABALHO_OVERRIDE_VALUES = ["1º Turno", "2º Turno", "3º Turno", "ADM", "Dia", "Noite"] as const;
+
 export const funcionarioCreateSchema = z.object({
   nome_completo: z.string().trim().min(1, "Nome completo é obrigatório"),
   cliente_id: z.string().uuid().optional().nullable(),
@@ -902,6 +911,12 @@ export const funcionarioCreateSchema = z.object({
   tipo_servico: z.enum(["mao_obra_temporaria", "terceirizacao"], {
     message: "Tipo de serviço é obrigatório",
   }),
+  // Dado bruto do turno — a classificação final (turno_trabalho) é sempre recalculada no
+  // servidor a partir destes dois campos, nunca recebida pronta do client (só o override
+  // manual, quando o RH escolhe explicitamente, prevalece sobre o cálculo).
+  turno_hora_inicio: horaSchema,
+  turno_hora_fim: horaSchema,
+  turno_trabalho_override: z.enum(TURNO_TRABALHO_OVERRIDE_VALUES).optional().nullable(),
 });
 
 // Edição — mesmo padrão de vagaUpdateSchema (.partial() sobre o schema de criação): cada
