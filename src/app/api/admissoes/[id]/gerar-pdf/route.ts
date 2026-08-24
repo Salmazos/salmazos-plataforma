@@ -351,6 +351,32 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
   } catch (err) {
     console.error(`[gerar-pdf] Falha ao criar funcionário automaticamente — admissao_id=${id}`, err);
+    // Nunca mais silencioso: antes, uma falha aqui (transitória ou não) deixava a admissão
+    // "concluída" sem ninguém perceber que o funcionário correspondente não foi criado — só
+    // descoberto meses depois cruzando manualmente admissão × funcionário (caso real: Erik
+    // Alves Santos, ago/2026, 6 casos no total até este ponto). Auditoria + notificação
+    // tornam a falha visível na hora, pro RH decidir se cria manualmente (e agora sabe que
+    // precisa) ou investigar.
+    registrarAuditoria({
+      usuario_id: user.id,
+      usuario_nome: user.email ?? null,
+      acao: "funcionario_nao_criado_automaticamente",
+      entidade: "admissoes",
+      entidade_id: id,
+      detalhes: { erro: err instanceof Error ? err.message : String(err) },
+    });
+    try {
+      await svc.from("notificacoes_analista").insert({
+        tipo: "funcionario_nao_criado_automaticamente",
+        titulo: "Funcionário não foi criado automaticamente",
+        mensagem: `O pacote de admissão de "${candidatoNome}" foi gerado, mas o registro em Funcionários não foi criado automaticamente. Verifique e crie manualmente se necessário.`,
+        user_id: null,
+        candidato_id: admissao.candidato_id,
+        vaga_id: admissao.vaga_id,
+      });
+    } catch (notifErr) {
+      console.error(`[gerar-pdf] Falha ao notificar falha de criação de funcionário — admissao_id=${id}`, notifErr);
+    }
   }
 
   registrarAuditoria({
