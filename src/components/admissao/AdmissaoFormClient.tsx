@@ -226,7 +226,7 @@ function sanitizarSituacaoTrabalhista(st: SituacaoTrabalhistaState): Record<stri
 // não por def.obrigatorio. "motorista" já nasce obrigatorio:true na definição, então o
 // condicional só decide a visibilidade. "dependente" nunca é obrigatório (obrigatorio:false
 // pra todos os tipos desse grupo), então nunca entra na lista de faltando.
-function documentosObrigatoriosFaltando(
+export function documentosObrigatoriosFaltando(
   documentos: DocumentoToken[], sexo: string, isMotorista: boolean, possuiDependentes: boolean,
 ): string[] {
   return DOCUMENTOS_ADMISSAO.filter((def) => {
@@ -303,14 +303,10 @@ function calcularPassoInicial(
     }
   }
 
-  const obrigatoriosVisiveis = documentos.filter((d) => {
-    if (!d.obrigatorio) return false;
-    if (d.condicional === "masculino") return form.sexo === "M";
-    if (d.condicional === "motorista") return isMotorista;
-    if (d.condicional === "dependente") return possuiDependentes;
-    return true;
-  });
-  if (obrigatoriosVisiveis.some((d) => d.status === "pendente")) return 8;
+  // Mesma função usada na validação do Passo 8 e na Revisão (Passo 9) — única fonte de
+  // verdade sobre obrigatoriedade, nunca lê d.obrigatorio (campo do banco, não resincronizado
+  // dinamicamente para todos os condicionais) diretamente aqui.
+  if (documentosObrigatoriosFaltando(documentos, form.sexo, isMotorista, possuiDependentes).length > 0) return 8;
 
   return 9;
 }

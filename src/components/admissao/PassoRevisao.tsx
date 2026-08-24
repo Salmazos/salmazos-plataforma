@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { AdmissaoDependente } from "@/types";
 import type { FormState, DocumentoToken, ValeTransporteState, SituacaoTrabalhistaState } from "./AdmissaoFormClient";
+import { documentosObrigatoriosFaltando } from "./AdmissaoFormClient";
 import { cardStyle, botaoPrimarioStyle } from "./styles";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
 import { ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, PARENTESCO_OPTIONS, OPCAO_VALE_TRANSPORTE_LABEL } from "@/lib/admissaoConstants";
@@ -22,12 +23,16 @@ interface Props {
   enviando: boolean;
 }
 
+// Condicionais SEMPRE checados antes de doc.obrigatorio (campo do banco, resincronizado
+// dinamicamente só pra "masculino" — "motorista" nasce obrigatorio:true no seed e nunca
+// muda, então usá-lo como atalho aqui escondia o condicional e mostrava CNH como
+// obrigatória mesmo pra quem não é motorista — bug real, caso Carlos Henrique da Silva,
+// ago/2026). Mesmo padrão de tipoVisivel() em PassoUploadDocumentos.tsx.
 function docVisivel(doc: DocumentoToken, sexo: string, isMotorista: boolean, possuiDependentes: boolean): boolean {
-  if (doc.obrigatorio) return true;
   if (doc.condicional === "masculino") return sexo === "M";
   if (doc.condicional === "motorista") return isMotorista;
   if (doc.condicional === "dependente") return possuiDependentes;
-  return true;
+  return doc.obrigatorio;
 }
 
 function Secao({ titulo, children }: { titulo: string; children: React.ReactNode }) {
@@ -60,7 +65,9 @@ const SIM_NAO_LABEL: Record<string, string> = { sim: "Sim", nao: "Não" };
 
 export default function PassoRevisao({ form, dependentes, documentos, valeTransporte, situacaoTrabalhista, sexo, isMotorista, possuiDependentes, lgpdAceite, setLgpdAceite, onEnviar, enviando }: Props) {
   const visiveis = documentos.filter((d) => docVisivel(d, sexo, isMotorista, possuiDependentes));
-  const pendentesObrigatorios = visiveis.filter((d) => d.obrigatorio && d.status !== "enviado" && d.status !== "aprovado");
+  // Mesma função usada na validação do Passo 8 e em calcularPassoInicial (AdmissaoFormClient.tsx)
+  // — única fonte de verdade sobre obrigatoriedade, nunca lê d.obrigatorio diretamente aqui.
+  const pendentesObrigatorios = documentosObrigatoriosFaltando(documentos, sexo, isMotorista, possuiDependentes);
 
   const estadoCivilLabel = ESTADO_CIVIL_OPTIONS.find((o) => o.value === form.estado_civil)?.label ?? form.estado_civil;
   const grauInstrucaoLabel = GRAU_INSTRUCAO_OPTIONS.find((o) => o.value === form.grau_instrucao)?.label ?? form.grau_instrucao;
