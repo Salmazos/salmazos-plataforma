@@ -1,3 +1,16 @@
+// Gera a `chave` de uma categoria customizada de Documentos a partir do label digitado
+// pelo RH (ex: "Indicadores" → "indicadores", "Ações Trabalhistas" → "acoes-trabalhistas") —
+// minúsculo, sem acento, espaços viram hífen, só [a-z0-9-] sobrevive.
+export function slugify(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export function formatarCPF(valor: string): string {
   const d = valor.replace(/\D/g, "").slice(0, 11);
   if (d.length <= 3) return d;

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   FolderOpen,
+  FolderPlus,
   ChevronRight,
   ArrowLeft,
   Upload,
@@ -15,12 +16,19 @@ import {
   File,
   Search,
 } from "lucide-react";
+import { SALMAZOS_CATEGORIAS, CLIENTE_CATEGORIAS } from "@/lib/documentosCategorias";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface ClienteRef {
   id: string;
   nome: string;
+}
+
+interface CategoriaCustomizada {
+  id: string;
+  chave: string;
+  label: string;
 }
 
 interface Documento {
@@ -46,21 +54,6 @@ interface Props {
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
-
-const SALMAZOS_CATEGORIAS = [
-  { key: "manuais", label: "Manuais e Procedimentos" },
-  { key: "politicas", label: "Políticas da Empresa" },
-  { key: "formularios", label: "Formulários" },
-  { key: "treinamentos", label: "Treinamentos" },
-];
-
-const CLIENTE_CATEGORIAS = [
-  { key: "limpeza", label: "Limpeza e Higienização" },
-  { key: "checklists", label: "Checklists" },
-  { key: "cronogramas", label: "Cronogramas" },
-  { key: "seguranca", label: "Segurança" },
-  { key: "contratos", label: "Contratos" },
-];
 
 const ACCEPTED_EXTENSIONS = ".pdf,.docx,.xlsx,.xls,.doc";
 
@@ -129,19 +122,48 @@ export default function DocumentosPageClient({
   const [uploadErro, setUploadErro] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Categorias customizadas do cliente selecionado (pasta "Criar Novo")
+  const [customCategorias, setCustomCategorias] = useState<CategoriaCustomizada[]>([]);
+  const [showCriarCategoria, setShowCriarCategoria] = useState(false);
+  const [novaCategoriaLabel, setNovaCategoriaLabel] = useState("");
+  const [criandoCategoria, setCriandoCategoria] = useState(false);
+  const [criarCategoriaErro, setCriarCategoriaErro] = useState("");
+
   // ── Derived state ──────────────────────────────────────────────────────────
 
   const isInsideCategoria = categoria !== null;
   const isInsideCliente = clienteSel !== null;
 
+  const categoriasClienteTodas: { key: string; label: string; custom?: boolean }[] = [
+    ...CLIENTE_CATEGORIAS,
+    ...customCategorias.map((c) => ({ key: c.chave, label: c.label, custom: true })),
+  ];
+
   const categoriaLabel =
     tab === "salmazos"
       ? SALMAZOS_CATEGORIAS.find((c) => c.key === categoria)?.label
-      : CLIENTE_CATEGORIAS.find((c) => c.key === categoria)?.label;
+      : categoriasClienteTodas.find((c) => c.key === categoria)?.label;
 
   const filteredClientes = clientes.filter((c) =>
     c.nome.toLowerCase().includes(clienteSearch.toLowerCase())
   );
+
+  // ── Fetch custom categories for the selected client ───────────────────────
+
+  const fetchCustomCategorias = useCallback(async (clienteId: string) => {
+    try {
+      const res = await fetch(`/api/documentos/categorias?cliente_id=${clienteId}`);
+      const json = await res.json();
+      if (res.ok) setCustomCategorias(json.data ?? []);
+    } catch {
+      // silencioso — pior caso, o cliente só vê as 5 categorias fixas
+    }
+  }, []);
+
+  useEffect(() => {
+    if (clienteSel) fetchCustomCategorias(clienteSel.id);
+    else setCustomCategorias([]);
+  }, [clienteSel, fetchCustomCategorias]);
 
   // ── Fetch documents ────────────────────────────────────────────────────────
 
@@ -347,6 +369,37 @@ export default function DocumentosPageClient({
     }
   }
 
+  // ── Criar categoria customizada ────────────────────────────────────────────
+
+  function openCriarCategoriaModal() {
+    setNovaCategoriaLabel("");
+    setCriarCategoriaErro("");
+    setCriandoCategoria(false);
+    setShowCriarCategoria(true);
+  }
+
+  async function handleCriarCategoria(e: React.FormEvent) {
+    e.preventDefault();
+    if (!novaCategoriaLabel.trim() || !clienteSel) return;
+    setCriandoCategoria(true);
+    setCriarCategoriaErro("");
+    try {
+      const res = await fetch("/api/documentos/categorias", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cliente_id: clienteSel.id, label: novaCategoriaLabel.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Erro ao criar categoria");
+      setCustomCategorias((prev) => [...prev, json.data]);
+      setShowCriarCategoria(false);
+    } catch (err) {
+      setCriarCategoriaErro(err instanceof Error ? err.message : "Erro desconhecido");
+    } finally {
+      setCriandoCategoria(false);
+    }
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -465,6 +518,28 @@ export default function DocumentosPageClient({
             >
               <Upload size={15} />
               Upload
+            </button>
+          )}
+
+          {canUpload && tab === "clientes" && isInsideCliente && !isInsideCategoria && (
+            <button
+              onClick={openCriarCategoriaModal}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 16px",
+                borderRadius: 8,
+                border: "none",
+                background: "#111827",
+                color: "#FFD700",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              <FolderPlus size={15} />
+              Criar Novo
             </button>
           )}
         </div>
@@ -587,10 +662,11 @@ export default function DocumentosPageClient({
             gap: 16,
           }}
         >
-          {CLIENTE_CATEGORIAS.map((cat) => (
+          {categoriasClienteTodas.map((cat) => (
             <CategoryCard
               key={cat.key}
               label={cat.label}
+              tag={cat.custom ? "Personalizada" : undefined}
               onClick={() => handleSelectCategoria(cat.key)}
             />
           ))}
@@ -915,17 +991,159 @@ export default function DocumentosPageClient({
           </div>
         </div>
       )}
+
+      {/* ── Criar Categoria Modal ───────────────────────────────────────────── */}
+      {showCriarCategoria && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 100,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.5)",
+          }}
+          onClick={() => !criandoCategoria && setShowCriarCategoria(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              width: "100%",
+              maxWidth: 420,
+              margin: "0 16px",
+              padding: 24,
+              boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 20,
+              }}
+            >
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: "#111827", margin: 0 }}>
+                Criar Nova Pasta
+              </h2>
+              <button
+                onClick={() => !criandoCategoria && setShowCriarCategoria(false)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  cursor: criandoCategoria ? "not-allowed" : "pointer",
+                  color: "#9CA3AF",
+                  padding: 4,
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCriarCategoria}>
+              <div style={{ marginBottom: 20 }}>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "#374151",
+                    marginBottom: 4,
+                  }}
+                >
+                  Nome da pasta *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  disabled={criandoCategoria}
+                  value={novaCategoriaLabel}
+                  onChange={(e) => setNovaCategoriaLabel(e.target.value)}
+                  placeholder="Ex: Indicadores"
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    border: "1px solid #E5E7EB",
+                    fontSize: 13,
+                    boxSizing: "border-box",
+                  }}
+                />
+                <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4, marginBottom: 0 }}>
+                  Essa pasta fica disponível só pra este cliente, ao lado das 5 pastas padrão.
+                </p>
+              </div>
+
+              {criarCategoriaErro && (
+                <p
+                  style={{
+                    fontSize: 13,
+                    color: "#DC2626",
+                    marginBottom: 12,
+                    background: "#FEE2E2",
+                    padding: "8px 12px",
+                    borderRadius: 6,
+                  }}
+                >
+                  {criarCategoriaErro}
+                </p>
+              )}
+
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowCriarCategoria(false)}
+                  disabled={criandoCategoria}
+                  style={{
+                    padding: "8px 18px",
+                    borderRadius: 8,
+                    border: "1px solid #E5E7EB",
+                    background: "#fff",
+                    color: "#374151",
+                    fontSize: 14,
+                    fontWeight: 500,
+                    cursor: criandoCategoria ? "not-allowed" : "pointer",
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={criandoCategoria || !novaCategoriaLabel.trim()}
+                  style={{
+                    padding: "8px 20px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: criandoCategoria || !novaCategoriaLabel.trim() ? "#D1D5DB" : "#111827",
+                    color: criandoCategoria || !novaCategoriaLabel.trim() ? "#9CA3AF" : "#FFD700",
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: criandoCategoria || !novaCategoriaLabel.trim() ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {criandoCategoria ? "Criando…" : "Criar"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 
-function CategoryCard({ label, onClick }: { label: string; onClick: () => void }) {
+function CategoryCard({ label, onClick, tag }: { label: string; onClick: () => void; tag?: string }) {
   return (
     <button
       onClick={onClick}
       style={{
+        position: "relative",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -948,6 +1166,24 @@ function CategoryCard({ label, onClick }: { label: string; onClick: () => void }
         e.currentTarget.style.boxShadow = "none";
       }}
     >
+      {tag && (
+        <span
+          style={{
+            position: "absolute",
+            top: 10,
+            right: 10,
+            fontSize: 9,
+            fontWeight: 700,
+            padding: "2px 6px",
+            borderRadius: 999,
+            background: "#F3F4F6",
+            color: "#6B7280",
+            textTransform: "uppercase",
+          }}
+        >
+          {tag}
+        </span>
+      )}
       <div
         style={{
           width: 48,

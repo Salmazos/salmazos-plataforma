@@ -327,6 +327,11 @@ export const documentoCreateSchema = z.object({
   uploaded_by: z.string().optional(),
 });
 
+export const documentoCategoriaCustomizadaCreateSchema = z.object({
+  cliente_id: z.string().uuid(),
+  label: z.string().trim().min(1, "Nome da pasta é obrigatório"),
+});
+
 // ── Candidatos-Vagas ─────────────────────────────────────────────────────────
 
 export const candidatoVagaCreateSchema = z.object({

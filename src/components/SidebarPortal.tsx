@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
-import { Home, ClipboardList, Calendar, IdCard, PlusCircle, LogOut, Menu } from "lucide-react";
+import { Home, ClipboardList, Calendar, IdCard, FolderOpen, PlusCircle, LogOut, Menu } from "lucide-react";
 
 interface Props {
   userEmail: string;
@@ -29,6 +29,9 @@ const menuItems: MenuItemDef[] = [
   { label: "Início", href: "/portal", icon: Home },
   { label: "Minhas Solicitações", href: "/portal/solicitacoes", icon: ClipboardList },
   { label: "Agenda", href: "/portal/agenda", icon: Calendar },
+  // Sempre visível — as 5 categorias fixas existem por padrão pra todo cliente, mesmo sem
+  // nenhum arquivo enviado ainda (a tela mostra estado vazio por pasta, não esconde nada).
+  { label: "Documentos", href: "/portal/documentos", icon: FolderOpen },
 ];
 
 const FUNCIONARIOS_ITEM: MenuItemDef = { label: "Funcionários", href: "/portal/funcionarios", icon: IdCard };
