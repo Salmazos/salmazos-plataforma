@@ -205,8 +205,10 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
       const json = await res.json();
       if (!res.ok) { setErro(json.error || "Erro ao salvar vencimento."); return; }
       setCobranca(json.data);
+      // Persiste até o usuário editar o campo de novo ou fechar o modal — diferente dos
+      // outros banners "some sozinho" desta tela (salvo/reenviado), este já passou
+      // despercebido por ser pequeno e efêmero.
       setVencimentoSalvo(true);
-      setTimeout(() => setVencimentoSalvo(false), 2500);
     } catch {
       setErro("Erro de conexão. Tente novamente.");
     } finally {
@@ -391,7 +393,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                       <input
                         type="date"
                         value={dataVencimento}
-                        onChange={(e) => setDataVencimento(e.target.value)}
+                        onChange={(e) => { setDataVencimento(e.target.value); setVencimentoSalvo(false); }}
                         className="input-field"
                       />
                       <button
@@ -403,7 +405,15 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                         {salvandoVencimento ? "Salvando..." : "Salvar"}
                       </button>
                     </div>
-                    {vencimentoSalvo && <p className="text-green-700 text-xs mt-1">Vencimento salvo!</p>}
+                    {vencimentoSalvo && (
+                      <div className="mt-2 flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm font-medium text-green-800">
+                        <span>✅</span>
+                        <span>
+                          Vencimento salvo com sucesso
+                          {dataVencimento ? ` em ${dataVencimento.split("-").reverse().join("/")}` : ""}.
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {isFullAccess && (
