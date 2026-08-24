@@ -150,7 +150,7 @@ export const ENTIDADES_CONTRATANTES = [
 // funcionarios.turno quando a admissão vira funcionário, editável depois pra casos legados.
 // Não confundir com TURNOS acima, que é a preferência de turno do CANDIDATO no formulário de
 // candidatura (candidatos.turno_disponivel) — conceito completamente diferente.
-export const TURNOS_FUNCIONARIO = ["Turno A", "Turno B", "Turno C", "Turno D", "Adm", "12x36 Noite", "12x36 Dia"] as const;
+export const TURNOS_FUNCIONARIO = ["Turno A", "Turno B", "Turno C", "Turno D", "Adm", "12x36 Noite", "12x36 Dia", "Meio Período"] as const;
 
 export const STATUS_ENCAMINHAMENTO: Record<string, { label: string; bg: string; text: string }> = {
   aguardando: { label: "Aguardando", bg: "bg-yellow-100", text: "text-yellow-800" },
