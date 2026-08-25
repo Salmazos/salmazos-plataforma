@@ -297,6 +297,7 @@ export interface Cliente {
   cnpj?: string | null;
   endereco?: string | null;
   processo_simplificado?: boolean;
+  logo_url?: string | null;
   created_at: string;
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Upload } from "lucide-react";
 import { SEGMENTOS_CLIENTE, TIPOS_SERVICO, ANALISTAS, ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import type { Cliente } from "@/types";
 import CampoTelefone from "@/components/ui/CampoTelefone";
@@ -44,6 +44,10 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
   const [erro, setErro] = useState("");
   const [confirmandoInativar, setConfirmandoInativar] = useState(false);
 
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [enviandoLogo, setEnviandoLogo] = useState(false);
+  const [erroLogo, setErroLogo] = useState("");
+
   const [usuariosPortal, setUsuariosPortal] = useState<UsuarioPortal[]>([]);
   const [carregandoUsuariosPortal, setCarregandoUsuariosPortal] = useState(false);
   const [mostrarFormNovoUsuario, setMostrarFormNovoUsuario] = useState(false);
@@ -76,6 +80,8 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
       );
       setServicos(cliente?.servicos ?? []);
       setProcessoSimplificado(cliente?.processo_simplificado ?? false);
+      setLogoUrl(cliente?.logo_url ?? null);
+      setErroLogo("");
       setErro("");
       setConfirmandoInativar(false);
       setUsuariosPortal([]);
@@ -116,6 +122,47 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
     setServicos((prev) =>
       prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
     );
+
+  // Upload do logo — só disponível editando (precisa de cliente.id pra saber onde salvar);
+  // sobe direto ao selecionar o arquivo, não espera o "Salvar alterações" do resto do form.
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !cliente) return;
+
+    const permitidos = ["image/jpeg", "image/png", "image/svg+xml", "image/webp"];
+    if (!permitidos.includes(file.type)) {
+      setErroLogo("Use JPG, PNG, SVG ou WEBP.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setErroLogo("Imagem muito grande. Máximo 2MB.");
+      return;
+    }
+
+    setErroLogo("");
+    setEnviandoLogo(true);
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve) => {
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.readAsDataURL(file);
+      });
+
+      const res = await fetch(`/api/clientes/${cliente.id}/logo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64, contentType: file.type }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Erro ao enviar logo.");
+      setLogoUrl(json.data.logo_url);
+    } catch (err) {
+      setErroLogo((err as Error).message);
+    } finally {
+      setEnviandoLogo(false);
+      e.target.value = "";
+    }
+  };
 
   const handleSalvar = async () => {
     setSalvando(true);
@@ -257,6 +304,44 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
               className="input-field"
             />
           </div>
+
+          {/* Logo do cliente — só disponível editando (upload precisa de cliente.id pra
+              saber onde salvar); exibido no cabeçalho do portal do cliente. */}
+          {editando && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                Logo do cliente
+              </label>
+              <div className="flex items-center gap-3">
+                <div
+                  className="flex items-center justify-center rounded-lg border border-gray-200 bg-gray-50 overflow-hidden shrink-0"
+                  style={{ width: 56, height: 56 }}
+                >
+                  {logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                  ) : (
+                    <Upload size={18} className="text-gray-300" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-semibold text-gray-700 cursor-pointer hover:bg-gray-50 transition-colors">
+                    <Upload size={14} />
+                    {enviandoLogo ? "Enviando..." : logoUrl ? "Trocar logo" : "Enviar logo"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/svg+xml,image/webp"
+                      onChange={handleLogoUpload}
+                      disabled={enviandoLogo}
+                      className="hidden"
+                    />
+                  </label>
+                  <p className="text-[11px] text-gray-400 mt-1">JPG, PNG, SVG ou WEBP — máx. 2MB.</p>
+                  {erroLogo && <p className="text-[11px] text-red-500 mt-1">{erroLogo}</p>}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div>

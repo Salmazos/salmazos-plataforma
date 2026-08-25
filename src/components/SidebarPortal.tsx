@@ -14,9 +14,10 @@ interface Props {
 // Mesma identidade visual de SidebarMenu.tsx (plataforma interna) — preto/amarelo, mesmo
 // comportamento de colapsar/mobile — mas com o conjunto de itens do portal do cliente, sem
 // nada da plataforma interna (grupos, submenu, sino de notificações etc. não existem aqui).
-// Item próprio pra "Solicitar Vaga" continua com destaque visual (pill amarelo) — mesmo
-// tratamento que o antigo header horizontal (NavbarPortal, removido nesta troca) já dava a
-// esse item.
+// "Solicitar Vaga" era um pill fixo sempre amarelo acima da lista — o Olver reportou que
+// isso confundia com o destaque da aba selecionada (mesmo amarelo pros dois estados, com
+// significados diferentes). Virou um item normal da lista, ordem definida por ele (ago/2026):
+// Início, Funcionários, Solicitar Vaga, Minhas Solicitações, Documentos, Agenda.
 const STORAGE_KEY = "sidebar-portal-collapsed";
 
 interface MenuItemDef {
@@ -25,17 +26,16 @@ interface MenuItemDef {
   icon: React.ElementType;
 }
 
-const menuItems: MenuItemDef[] = [
-  { label: "Início", href: "/portal", icon: Home },
+const INICIO_ITEM: MenuItemDef = { label: "Início", href: "/portal", icon: Home };
+const FUNCIONARIOS_ITEM: MenuItemDef = { label: "Funcionários", href: "/portal/funcionarios", icon: IdCard };
+const SOLICITAR_VAGA_ITEM: MenuItemDef = { label: "Solicitar Vaga", href: "/portal/solicitar-vaga", icon: PlusCircle };
+const RESTANTE_ITEMS: MenuItemDef[] = [
   { label: "Minhas Solicitações", href: "/portal/solicitacoes", icon: ClipboardList },
-  { label: "Agenda", href: "/portal/agenda", icon: Calendar },
   // Sempre visível — as 5 categorias fixas existem por padrão pra todo cliente, mesmo sem
   // nenhum arquivo enviado ainda (a tela mostra estado vazio por pasta, não esconde nada).
   { label: "Documentos", href: "/portal/documentos", icon: FolderOpen },
+  { label: "Agenda", href: "/portal/agenda", icon: Calendar },
 ];
-
-const FUNCIONARIOS_ITEM: MenuItemDef = { label: "Funcionários", href: "/portal/funcionarios", icon: IdCard };
-const SOLICITAR_VAGA_ITEM: MenuItemDef = { label: "Solicitar Vaga", href: "/portal/solicitar-vaga", icon: PlusCircle };
 
 export default function SidebarPortal({ userEmail, mostrarFuncionarios }: Props) {
   const router = useRouter();
@@ -75,7 +75,12 @@ export default function SidebarPortal({ userEmail, mostrarFuncionarios }: Props)
     return href === "/portal" ? pathname === "/portal" : pathname.startsWith(href);
   }
 
-  const items = mostrarFuncionarios ? [...menuItems, FUNCIONARIOS_ITEM] : menuItems;
+  const items = [
+    INICIO_ITEM,
+    ...(mostrarFuncionarios ? [FUNCIONARIOS_ITEM] : []),
+    SOLICITAR_VAGA_ITEM,
+    ...RESTANTE_ITEMS,
+  ];
   const isCollapsedView = collapsed && !mobileOpen;
   const sidebarWidth = collapsed ? 64 : 240;
 
@@ -168,35 +173,8 @@ export default function SidebarPortal({ userEmail, mostrarFuncionarios }: Props)
         )}
       </div>
 
-      {/* Solicitar Vaga — CTA em destaque */}
-      <div className="shrink-0 px-2 pt-3">
-        <Link
-          href={SOLICITAR_VAGA_ITEM.href}
-          className="group relative flex items-center w-full rounded-lg transition-colors"
-          style={{
-            padding: isCollapsedView ? "8px 0" : "8px 10px",
-            justifyContent: isCollapsedView ? "center" : "flex-start",
-            gap: isCollapsedView ? 0 : 10,
-            background: "#FFD700",
-            color: "#000",
-            textDecoration: "none",
-            fontSize: 13,
-            fontWeight: 700,
-            marginBottom: 8,
-          }}
-        >
-          <PlusCircle size={18} style={{ flexShrink: 0 }} />
-          {!isCollapsedView && <span>Solicitar Vaga</span>}
-          {isCollapsedView && (
-            <span className="pointer-events-none absolute left-full ml-2 rounded-md bg-gray-900 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 transition-opacity">
-              Solicitar Vaga
-            </span>
-          )}
-        </Link>
-      </div>
-
       {/* Menu items */}
-      <nav className="flex-1 overflow-y-auto py-1 px-2" style={{ scrollbarWidth: "thin" }}>
+      <nav className="flex-1 overflow-y-auto py-1 px-2 pt-3" style={{ scrollbarWidth: "thin" }}>
         {items.map((item) => {
           const active = hrefMatches(item.href);
           return <SidebarPortalLink key={item.href} item={item} active={active} isCollapsedView={isCollapsedView} />;

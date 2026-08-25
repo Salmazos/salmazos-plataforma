@@ -25,7 +25,7 @@ export default async function PortalAppLayout({
 
   const { data: cliente } = await service
     .from("clientes")
-    .select("ativo")
+    .select("ativo, logo_url")
     .eq("id", clienteUsuario.cliente_id)
     .single();
 
@@ -45,7 +45,22 @@ export default async function PortalAppLayout({
     <div className="min-h-screen bg-gray-50 flex">
       <SidebarPortal userEmail={user.email ?? ""} mostrarFuncionarios={!!funcionarioAtivo} />
       <main className="flex-1 min-w-0 px-4 py-8">
-        <div className="max-w-5xl mx-auto">{children}</div>
+        <div className="max-w-5xl mx-auto">
+          {/* Logo do cliente — cabeçalho compartilhado em toda página do portal (área
+              branca de conteúdo, distinto do logo Salmazos na sidebar preta). Só renderiza
+              se o cliente tiver logo cadastrado (upload em /painel/clientes). */}
+          {cliente?.logo_url && (
+            <div className="flex justify-end mb-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={cliente.logo_url}
+                alt="Logo da empresa"
+                style={{ height: 48, width: "auto", maxWidth: 180, objectFit: "contain" }}
+              />
+            </div>
+          )}
+          {children}
+        </div>
       </main>
     </div>
   );
