@@ -1,68 +1,24 @@
-"use client";
-
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { ETAPAS_KANBAN } from "@/lib/constants";
-import type { EtapaKanban } from "@/types";
+import { getEtapaInfo } from "@/lib/etapasCandidatura";
 
 interface Props {
-  candidatoId: string;
-  etapaAtual: EtapaKanban;
+  etapaAtual: string;
 }
 
-export default function PerfilEtapaSelector({ candidatoId, etapaAtual }: Props) {
-  const router = useRouter();
-  const [etapa, setEtapa] = useState<EtapaKanban>(etapaAtual);
-  const [salvando, setSalvando] = useState(false);
-  const [salvo, setSalvo] = useState(false);
-
-  const handleChange = async (novaEtapa: EtapaKanban) => {
-    setEtapa(novaEtapa);
-    setSalvando(true);
-    setSalvo(false);
-
-    await fetch(`/api/candidatos/${candidatoId}/etapa`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ etapa_kanban: novaEtapa }),
-    });
-
-    setSalvando(false);
-    setSalvo(true);
-    setTimeout(() => setSalvo(false), 2500);
-    router.refresh();
-  };
-
-  const etapaObj = ETAPAS_KANBAN.find((e) => e.id === etapa);
+// Só exibe a fase atual — NÃO é mais editável aqui (era um <select> solto que
+// mudava a etapa direto por /api/candidatos/[id]/etapa, sem passar pelas travas do
+// Kanban/tela de Vaga: pulava o modal de encaminhamento e o de finalização,
+// deixando candidato virar "Contratado" sem nunca gerar o registro que o portal do
+// cliente lê — ver correção de ago/2026). Mover um candidato de etapa agora só é
+// possível pelo Kanban ou pela tela de Vaga, que têm a lógica correta.
+export default function PerfilEtapaSelector({ etapaAtual }: Props) {
+  const etapa = getEtapaInfo(etapaAtual);
 
   return (
-    <div>
-      <select
-        value={etapa}
-        onChange={(e) => handleChange(e.target.value as EtapaKanban)}
-        disabled={salvando}
-        className="input-field mb-2"
-      >
-        {ETAPAS_KANBAN.map((e) => (
-          <option key={e.id} value={e.id}>
-            {e.label}
-          </option>
-        ))}
-      </select>
-
-      <div className="flex items-center gap-2">
-        <span
-          className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${etapaObj?.badgeBg} ${etapaObj?.badgeText}`}
-        >
-          {etapaObj?.label}
-        </span>
-        {salvando && (
-          <span className="text-xs text-gray-400 animate-pulse">Salvando...</span>
-        )}
-        {salvo && (
-          <span className="text-xs text-green-600 font-medium">✓ Salvo</span>
-        )}
-      </div>
-    </div>
+    <span
+      className="inline-block px-3 py-1 rounded-full text-xs font-semibold"
+      style={{ backgroundColor: etapa.bg, color: etapa.color }}
+    >
+      {etapa.label}
+    </span>
   );
 }

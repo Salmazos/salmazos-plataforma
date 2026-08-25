@@ -21,10 +21,12 @@ const FEEDBACK_SINCRONIZACAO = "Avaliação registrada internamente pelo analist
 // aparecendo como "aguardando avaliação" pro cliente muito depois de já ter sido
 // contratado/reprovado internamente.
 //
-// Idempotente por design: se não houver encaminhamento 'aguardando' pra esse par
-// candidato+cliente, ou se a etapa não indicar avaliação concluída (ex: triagem,
+// Idempotente por design: se a etapa não indicar avaliação concluída (ex: triagem,
 // entrevista_cliente, nao_compareceu, nao_tem_interesse, bloqueado — fora do escopo desta
-// sincronização), não faz nada — nunca lança erro, nunca bloqueia o caller.
+// sincronização), não faz nada — nunca lança erro, nunca bloqueia o caller. Se já existe
+// um encaminhamento (aguardando ou já avaliado) pra esse par, só atualiza o 'aguardando'
+// e nunca sobrescreve um que já foi avaliado. Se nunca existiu nenhum, cria um novo já
+// fechado — mas só pra aprovação, nunca pra reprovação (ver comentário mais abaixo).
 //
 // Trava de corrida com o sentido 1: o update final tem WHERE status='aguardando' de novo
 // (não só a leitura anterior) — se o cliente avaliou pelo portal entre a leitura e a
@@ -46,23 +48,52 @@ export async function sincronizarEncaminhamentoComEtapa(
 
   const { data: encaminhamento } = await svc
     .from("encaminhamentos")
-    .select("id")
+    .select("id, status")
     .eq("candidato_id", candidatoId)
     .eq("cliente_id", clienteId)
-    .eq("status", "aguardando")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (!encaminhamento) return;
+  if (encaminhamento) {
+    if (encaminhamento.status !== "aguardando") return;
+    await svc
+      .from("encaminhamentos")
+      .update({
+        status: novoStatus,
+        feedback_cliente: FEEDBACK_SINCRONIZACAO,
+        avaliado_em: new Date().toISOString(),
+      })
+      .eq("id", encaminhamento.id)
+      .eq("status", "aguardando");
+    return;
+  }
 
-  await svc
-    .from("encaminhamentos")
-    .update({
-      status: novoStatus,
-      feedback_cliente: FEEDBACK_SINCRONIZACAO,
-      avaliado_em: new Date().toISOString(),
-    })
-    .eq("id", encaminhamento.id)
-    .eq("status", "aguardando");
+  // Nunca existiu nenhum encaminhamento pra esse par candidato+cliente — só cria um
+  // já fechado quando a etapa é de APROVAÇÃO. Regra de negócio confirmada com o
+  // Olver: "contratado" só existe se o cliente aprovou, então o registro que o
+  // portal do cliente lê precisa existir, nem que seja retroativo (ver caso real do
+  // Carlos Henrique/Embalatec, ago/2026). Nunca faz o mesmo pra reprovação: um
+  // candidato reprovado internamente ANTES de ser mostrado ao cliente (ex: descartado
+  // ainda na triagem) não pode ganhar um "reprovado" fantasma no portal dele — criaria
+  // a impressão de que o cliente rejeitou alguém que nunca chegou a ver.
+  if (novoStatus !== "aprovado") return;
+
+  const { data: vagaCv } = await svc
+    .from("candidatos_vagas")
+    .select("vaga_id")
+    .eq("candidato_id", candidatoId)
+    .eq("cliente_id", clienteId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  await svc.from("encaminhamentos").insert({
+    candidato_id: candidatoId,
+    cliente_id: clienteId,
+    vaga_id: vagaCv?.vaga_id ?? null,
+    status: "aprovado",
+    feedback_cliente: FEEDBACK_SINCRONIZACAO,
+    avaliado_em: new Date().toISOString(),
+  });
 }

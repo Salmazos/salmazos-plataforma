@@ -36,6 +36,14 @@ export default async function CandidatoPerfilPage({ params }: Props) {
     .eq("candidato_id", id)
     .order("created_at", { ascending: false });
 
+  // Etapa real do Kanban pra exibir no perfil (só leitura — ver PerfilEtapaSelector).
+  // candidato.etapa_kanban é um espelho que fica desatualizado quando a movimentação
+  // acontece pela tela de Vaga (candidatos-vagas/[id]/route.ts não grava lá) — a fonte
+  // de verdade de "em que fase o candidato está no Kanban" é candidatos_vagas.etapa,
+  // não o campo em candidatos. Como um candidato pode ter mais de uma candidatura,
+  // usa a mais recente (cvRows já vem ordenado por created_at desc).
+  const etapaKanbanReal = cvRows?.[0]?.etapa ?? candidato.etapa_kanban ?? "triagem";
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const garantiaRow = (cvRows ?? []).find((r: any) => r.garantia_data_fim != null)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -85,7 +93,13 @@ export default async function CandidatoPerfilPage({ params }: Props) {
         <BotaoVoltarPainel />
       </div>
 
-      <CandidatoPerfilTabs candidato={candidato} garantiaInfo={garantiaInfo} melhorRetencao={melhorRetencao} role={role} />
+      <CandidatoPerfilTabs
+        candidato={candidato}
+        garantiaInfo={garantiaInfo}
+        melhorRetencao={melhorRetencao}
+        role={role}
+        etapaKanbanReal={etapaKanbanReal}
+      />
     </div>
   );
 }

@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatarData } from "@/lib/utils";
-import { ETAPAS_KANBAN, ORIGEM_LABELS } from "@/lib/constants";
+import { ORIGEM_LABELS } from "@/lib/constants";
+import { getEtapaInfo } from "@/lib/etapasCandidatura";
 import { TEMPLATE_OPTIONS } from "@/lib/emailTemplates";
 import type { EmailTemplateName } from "@/lib/emailTemplates";
 import PerfilEtapaSelector from "@/components/PerfilEtapaSelector";
@@ -21,6 +22,7 @@ interface Props {
   garantiaInfo?: GarantiaInfo | null;
   melhorRetencao?: MelhorRetencao | null;
   role: string;
+  etapaKanbanReal: string;
 }
 
 const TURNOS = ["Integral", "Manhã", "Tarde", "Noite", "Flexível"];
@@ -84,9 +86,12 @@ function formatarCpf(v: string): string {
   return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6, 9)}-${nums.slice(9)}`;
 }
 
-export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, role }: Props) {
+export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, role, etapaKanbanReal }: Props) {
   const router = useRouter();
-  const etapa = ETAPAS_KANBAN.find((e) => e.id === candidato.etapa_kanban);
+  // Fonte: candidatos_vagas.etapa (a mesma que o Kanban lê), não candidato.etapa_kanban
+  // — ver comentário em painel/candidato/[id]/page.tsx sobre por que esse espelho pode
+  // ficar desatualizado.
+  const etapa = getEtapaInfo(etapaKanbanReal);
   const podeRemoverReprovacao = ["superuser", "diretoria"].includes(role);
 
   const [editando, setEditando] = useState(false);
@@ -545,8 +550,11 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, 
               </>
             )}
 
-            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${etapa?.badgeBg} ${etapa?.badgeText}`}>
-              {etapa?.label}
+            <span
+              className="px-3 py-1 rounded-full text-xs font-semibold"
+              style={{ backgroundColor: etapa.bg, color: etapa.color }}
+            >
+              {etapa.label}
             </span>
           </div>
         </div>
@@ -1219,10 +1227,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, 
         <div className="space-y-6">
           <div className="card">
             <p className="section-title">Etapa no Pipeline</p>
-            <PerfilEtapaSelector
-              candidatoId={candidato.id}
-              etapaAtual={candidato.etapa_kanban}
-            />
+            <PerfilEtapaSelector etapaAtual={etapaKanbanReal} />
           </div>
 
           <div className="card">

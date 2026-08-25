@@ -41,9 +41,10 @@ interface Props {
   garantiaInfo?: GarantiaInfo | null;
   melhorRetencao?: MelhorRetencao | null;
   role: string;
+  etapaKanbanReal: string;
 }
 
-export default function CandidatoPerfilTabs({ candidato, garantiaInfo, melhorRetencao, role }: Props) {
+export default function CandidatoPerfilTabs({ candidato, garantiaInfo, melhorRetencao, role, etapaKanbanReal }: Props) {
   const [tab, setTab] = useState<Tab>("perfil");
 
   return (
@@ -106,7 +107,13 @@ export default function CandidatoPerfilTabs({ candidato, garantiaInfo, melhorRet
 
       {tab === "perfil" && (
         <>
-          <PerfilEdicao candidato={candidato} garantiaInfo={garantiaInfo} melhorRetencao={melhorRetencao} role={role} />
+          <PerfilEdicao
+            candidato={candidato}
+            garantiaInfo={garantiaInfo}
+            melhorRetencao={melhorRetencao}
+            role={role}
+            etapaKanbanReal={etapaKanbanReal}
+          />
           <div className="mt-6">
             <EncaminhamentosSection candidatoId={candidato.id} />
           </div>
