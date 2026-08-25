@@ -63,6 +63,7 @@ export default async function VagaPublicaPage({ params }: Props) {
   if (!vaga) notFound();
 
   const encerrada = vaga.status === "fechada" || vaga.status === "cancelada";
+  const pausada = vaga.status === "pausada";
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "#000" }}>
@@ -104,6 +105,13 @@ export default async function VagaPublicaPage({ params }: Props) {
                 </span>
               </div>
             )}
+            {pausada && (
+              <div style={{ textAlign: "right", marginBottom: "16px" }}>
+                <span style={{ fontSize: "11px", fontWeight: 600, padding: "4px 12px", borderRadius: "9999px", backgroundColor: "#fef3c7", color: "#b45309", border: "1px solid #fde68a" }}>
+                  Vaga pausada
+                </span>
+              </div>
+            )}
 
             {/* Info grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -138,7 +146,14 @@ export default async function VagaPublicaPage({ params }: Props) {
           </div>
         </div>
 
-        {encerrada ? (
+        {pausada ? (
+          <div style={{ backgroundColor: "#fff", border: "1px solid #e5e7eb", borderRadius: "16px", padding: "32px", textAlign: "center" }}>
+            <p style={{ color: "#6b7280", fontWeight: 500 }}>Esta vaga está temporariamente pausada.</p>
+            <Link href="/vagas" style={{ display: "inline-block", marginTop: "12px", fontSize: "14px", fontWeight: 600, color: "#FFD700" }}>
+              Ver outras vagas →
+            </Link>
+          </div>
+        ) : encerrada ? (
           <div style={{ backgroundColor: "#fff", border: "1px solid #e5e7eb", borderRadius: "16px", padding: "32px", textAlign: "center" }}>
             <p style={{ color: "#6b7280", fontWeight: 500 }}>Esta vaga não está mais recebendo candidaturas.</p>
             <Link href="/vagas" style={{ display: "inline-block", marginTop: "12px", fontSize: "14px", fontWeight: 600, color: "#FFD700" }}>

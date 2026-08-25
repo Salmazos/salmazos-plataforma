@@ -21,11 +21,12 @@ const CORES_TIPO: Record<string, { bg: string; color: string }> = {
 
 const STATUS_VAGA: Record<string, { label: string; bg: string; color: string }> = {
   aberta:    { label: "Aberta",    bg: "#dcfce7", color: "#22c55e" },
+  pausada:   { label: "Pausada",   bg: "#fef3c7", color: "#d97706" },
   fechada:   { label: "Fechada",   bg: "#f3f4f6", color: "#6b7280" },
   cancelada: { label: "Cancelada", bg: "#fee2e2", color: "#ef4444" },
 };
 
-type FiltroStatus = "todas" | "aberta" | "fechada" | "cancelada";
+type FiltroStatus = "todas" | "aberta" | "pausada" | "fechada" | "cancelada";
 
 interface Props {
   vagas: Vaga[];
@@ -133,6 +134,7 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
 
   const totais = {
     abertas:       vagas.filter((v) => v.status === "aberta").length,
+    pausadas:      vagas.filter((v) => v.status === "pausada").length,
     fechadas:      vagas.filter((v) => v.status === "fechada").length,
     canceladas:    vagas.filter((v) => v.status === "cancelada").length,
     total_posicoes: vagas.filter((v) => v.status === "aberta").reduce((s, v) => s + (v.num_posicoes ?? 0), 0),
@@ -141,6 +143,7 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
   const FILTROS: { value: FiltroStatus; label: string }[] = [
     { value: "todas",     label: "Todas" },
     { value: "aberta",    label: "Abertas" },
+    { value: "pausada",   label: "Pausadas" },
     { value: "fechada",   label: "Fechadas" },
     { value: "cancelada", label: "Canceladas" },
   ];
@@ -284,10 +287,14 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
       ) : (
         <>
           {/* Métricas */}
-          <div className="grid grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-5 gap-4 mb-6">
             <div className="card text-center py-4">
               <p className="text-3xl font-bold text-[#22c55e]">{totais.abertas}</p>
               <p className="text-xs text-gray-500 mt-1">Total abertas</p>
+            </div>
+            <div className="card text-center py-4">
+              <p className="text-3xl font-bold text-[#d97706]">{totais.pausadas}</p>
+              <p className="text-xs text-gray-500 mt-1">Pausadas</p>
             </div>
             <div className="card text-center py-4">
               <p className="text-3xl font-bold text-gray-400">{totais.fechadas}</p>
@@ -520,7 +527,7 @@ function VagaCard({ vaga }: { vaga: Vaga }) {
         </div>
         {vaga.data_abertura && (
           <div className="text-xs text-gray-400 mt-1">
-            {vaga.status === "aberta" ? (
+            {vaga.status === "aberta" || vaga.status === "pausada" ? (
               <>{"📅"} Aberta em: {formatDateBR(vaga.data_abertura)}</>
             ) : (
               <>{"📅"} Aberta em: {formatDateBR(vaga.data_abertura)} → {statusLabel} em: {formatDateBR(vaga.data_fechamento)}{dias !== null && ` (${dias} dias)`}</>

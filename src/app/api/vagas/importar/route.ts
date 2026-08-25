@@ -15,7 +15,8 @@ function mapStatus(s: string): string {
   if (v === "aberto" || v === "aberta") return "aberta";
   if (v === "fechado" || v === "fechada" || v === "encerrado" || v === "encerrada") return "fechada";
   if (v === "cancelado" || v === "cancelada") return "cancelada";
-  if (v === "pausado" || v === "pausada" || v === "em andamento") return "aberta";
+  if (v === "pausado" || v === "pausada") return "pausada";
+  if (v === "em andamento") return "aberta";
   return "aberta";
 }
 

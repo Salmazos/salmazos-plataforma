@@ -41,6 +41,19 @@ export async function POST(request: NextRequest) {
     const { vaga_id, candidato_id, etapa = null, responsavel = null } = parsed.data;
     const supabase = createServiceClient();
 
+    const { data: vagaStatus } = await supabase
+      .from("vagas")
+      .select("status")
+      .eq("id", vaga_id)
+      .single();
+
+    if (vagaStatus?.status === "pausada") {
+      return NextResponse.json(
+        { error: "Esta vaga está pausada e não aceita novos candidatos no momento." },
+        { status: 409 }
+      );
+    }
+
     const { data: existente } = await supabase
       .from("candidatos_vagas")
       .select("id")

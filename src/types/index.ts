@@ -318,7 +318,7 @@ export interface AniversarianteContato {
   clientes: { id: string; nome: string } | null;
 }
 
-export type StatusVaga = "aberta" | "fechada" | "cancelada";
+export type StatusVaga = "aberta" | "fechada" | "cancelada" | "pausada";
 
 export interface Vaga {
   id: string;

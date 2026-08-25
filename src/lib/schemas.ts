@@ -88,7 +88,7 @@ export const vagaCreateSchema = z.object({
   responsavel: z.string().min(2),
   cliente_id: z.string().uuid().optional().nullable(),
   prazo: z.string().optional().nullable(),
-  status: z.enum(["aberta", "fechada", "cancelada"]).optional(),
+  status: z.enum(["aberta", "fechada", "cancelada", "pausada"]).optional(),
   cidade: z.string().optional().nullable(),
   estado: z.string().max(2).optional().nullable(),
   salario: z.string().optional().nullable(),

@@ -48,6 +48,7 @@ const CORES_TIPO: Record<string, { bg: string; color: string }> = {
 
 const STATUS_VAGA: Record<string, { label: string; bg: string; color: string }> = {
   aberta:    { label: "Aberta",    bg: "#dcfce7", color: "#22c55e" },
+  pausada:   { label: "Pausada",   bg: "#fef3c7", color: "#d97706" },
   fechada:   { label: "Fechada",   bg: "#f3f4f6", color: "#6b7280" },
   cancelada: { label: "Cancelada", bg: "#fee2e2", color: "#ef4444" },
 };
@@ -182,7 +183,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
   const tipoInfo   = TIPOS_SERVICO.find((t) => t.id === vaga.tipo_servico);
   const coresTipo  = vaga.tipo_servico ? CORES_TIPO[vaga.tipo_servico] : null;
 
-  const handleEncerrarConfirm = async (status: "fechada" | "cancelada") => {
+  const handleEncerrarConfirm = async (status: "fechada" | "cancelada" | "pausada") => {
     setEncerrando(true);
     const res = await fetch(`/api/vagas/${vaga.id}`, {
       method: "PATCH",
@@ -192,11 +193,15 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
     if (res.ok) {
       const json = await res.json();
       setVaga(json.data);
-      fetch(`/api/vagas/${vaga.id}/notificar-encerramento`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      }).catch(() => {});
+      // Pausar não é um encerramento definitivo (a vaga volta depois), então não
+      // dispara o e-mail/sino de "vaga encerrada" usado para fechada/cancelada.
+      if (status !== "pausada") {
+        fetch(`/api/vagas/${vaga.id}/notificar-encerramento`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        }).catch(() => {});
+      }
     }
     setEncerrando(false);
     setModalEncerrar(false);
@@ -422,7 +427,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
             >
               Editar
             </button>
-            {vaga.status !== "fechada" && vaga.status !== "cancelada" ? (
+            {vaga.status === "aberta" ? (
               <button
                 onClick={() => setModalEncerrar(true)}
                 className="text-sm px-3 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
@@ -637,7 +642,9 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
               </div>
               <button
                 onClick={() => setModalAdicionar(true)}
-                className="btn-primary text-xs px-3 py-1.5"
+                disabled={vaga.status === "pausada"}
+                title={vaga.status === "pausada" ? "Vaga pausada — reative para adicionar candidatos" : undefined}
+                className="btn-primary text-xs px-3 py-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 + Adicionar
               </button>
@@ -763,6 +770,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
       <ModalAdicionarCandidatoVaga
         isOpen={modalAdicionar}
         vagaId={vaga.id}
+        vagaPausada={vaga.status === "pausada"}
         candidatosVinculadosIds={candidatosVaga.map((cv) => cv.candidato_id)}
         onClose={() => setModalAdicionar(false)}
         onAdicionado={(cv) => {
@@ -785,7 +793,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
               <div style={{ display: "flex", alignItems: "start", justifyContent: "space-between", marginBottom: "20px" }}>
                 <div>
                   <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#111827" }}>Encerrar vaga</h2>
-                  <p style={{ fontSize: "14px", color: "#6b7280", marginTop: "4px" }}>Selecione o motivo do encerramento:</p>
+                  <p style={{ fontSize: "14px", color: "#6b7280", marginTop: "4px" }}>Selecione uma opção:</p>
                 </div>
                 <button
                   onClick={() => setModalEncerrar(false)}
@@ -798,7 +806,27 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
                 </button>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+                {/* Pausada */}
+                <button
+                  onClick={() => handleEncerrarConfirm("pausada")}
+                  disabled={encerrando}
+                  style={{
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: "8px",
+                    padding: "20px 16px", borderRadius: "12px", border: "1px solid #fde68a",
+                    backgroundColor: "#fffbeb", cursor: encerrando ? "not-allowed" : "pointer",
+                    opacity: encerrando ? 0.6 : 1, transition: "all 0.15s",
+                  }}
+                >
+                  <svg width="28" height="28" fill="none" stroke="#d97706" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span style={{ fontSize: "14px", fontWeight: 700, color: "#b45309" }}>Pausada</span>
+                  <span style={{ fontSize: "12px", color: "#9ca3af", lineHeight: "1.4" }}>
+                    Vaga em standby, volta depois
+                  </span>
+                </button>
+
                 {/* Cancelada */}
                 <button
                   onClick={() => handleEncerrarConfirm("cancelada")}

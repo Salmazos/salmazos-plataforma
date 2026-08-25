@@ -19,6 +19,7 @@ interface CandidatoBusca {
 interface Props {
   isOpen: boolean;
   vagaId: string;
+  vagaPausada?: boolean;
   candidatosVinculadosIds: string[];
   onClose: () => void;
   onAdicionado: (cv: CandidatoVaga) => void;
@@ -27,6 +28,7 @@ interface Props {
 export default function ModalAdicionarCandidatoVaga({
   isOpen,
   vagaId,
+  vagaPausada = false,
   candidatosVinculadosIds,
   onClose,
   onAdicionado,
@@ -119,23 +121,25 @@ export default function ModalAdicionarCandidatoVaga({
         </div>
 
         {/* Search */}
-        <div className="p-4 border-b shrink-0">
-          <div className="relative">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
-              fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              autoFocus
-              type="text"
-              placeholder="Buscar candidato por nome..."
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              className="input-field pl-9"
-            />
+        {!vagaPausada && (
+          <div className="p-4 border-b shrink-0">
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                autoFocus
+                type="text"
+                placeholder="Buscar candidato por nome..."
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                className="input-field pl-9"
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Feedback */}
         {(erro || sucesso) && (
@@ -150,7 +154,14 @@ export default function ModalAdicionarCandidatoVaga({
 
         {/* Results */}
         <div className="overflow-y-auto flex-1 p-4 space-y-2">
-          {carregando ? (
+          {vagaPausada ? (
+            <div className="text-center py-8">
+              <p className="text-sm font-medium text-amber-700">Esta vaga está pausada.</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Reative a vaga para poder adicionar novos candidatos.
+              </p>
+            </div>
+          ) : carregando ? (
             <p className="text-sm text-gray-400 text-center py-8">Buscando...</p>
           ) : disponiveis.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-8">
