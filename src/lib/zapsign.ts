@@ -76,6 +76,7 @@ export interface ZapSignSignerInput {
   email: string;
   cpf?: string;
   auth_mode?: string;
+  send_automatic_email?: boolean;
 }
 
 export interface ZapSignSignerResult {
@@ -192,8 +193,8 @@ export async function criarDocumentoComPosicionamento(
     name: params.nomeDocumento,
     base64Pdf,
     signers: [
-      { name: params.contratante.nome, email: params.contratante.email, cpf: params.contratante.cpf },
-      { name: params.contratado.nome, email: params.contratado.email, cpf: params.contratado.cpf },
+      { name: params.contratante.nome, email: params.contratante.email, cpf: params.contratante.cpf, send_automatic_email: true },
+      { name: params.contratado.nome, email: params.contratado.email, cpf: params.contratado.cpf, send_automatic_email: true },
     ],
   });
 
