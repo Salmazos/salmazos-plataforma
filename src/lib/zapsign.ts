@@ -77,6 +77,9 @@ export interface ZapSignSignerInput {
   cpf?: string;
   auth_mode?: string;
   send_automatic_email?: boolean;
+  require_selfie_photo?: boolean;
+  require_document_photo?: boolean;
+  selfie_validation_type?: string;
 }
 
 export interface ZapSignSignerResult {
@@ -194,7 +197,18 @@ export async function criarDocumentoComPosicionamento(
     base64Pdf,
     signers: [
       { name: params.contratante.nome, email: params.contratante.email, cpf: params.contratante.cpf, send_automatic_email: true },
-      { name: params.contratado.nome, email: params.contratado.email, cpf: params.contratado.cpf, send_automatic_email: true },
+      // Reconhecimento facial (selfie + foto de documento) exigido SÓ do contratado
+      // (candidato) — o contratante (analista/diretor que assina pela empresa) não passa
+      // por essa validação.
+      {
+        name: params.contratado.nome,
+        email: params.contratado.email,
+        cpf: params.contratado.cpf,
+        send_automatic_email: true,
+        require_selfie_photo: true,
+        require_document_photo: true,
+        selfie_validation_type: "liveness-document-match",
+      },
     ],
   });
 
