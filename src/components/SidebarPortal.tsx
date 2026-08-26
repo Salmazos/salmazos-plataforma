@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
-import { Home, ClipboardList, Calendar, IdCard, FolderOpen, PlusCircle, LogOut, Menu } from "lucide-react";
+import { Home, ClipboardList, Calendar, IdCard, FolderOpen, LogOut, Menu } from "lucide-react";
 
 interface Props {
   userEmail: string;
@@ -14,10 +14,9 @@ interface Props {
 // Mesma identidade visual de SidebarMenu.tsx (plataforma interna) — preto/amarelo, mesmo
 // comportamento de colapsar/mobile — mas com o conjunto de itens do portal do cliente, sem
 // nada da plataforma interna (grupos, submenu, sino de notificações etc. não existem aqui).
-// "Solicitar Vaga" era um pill fixo sempre amarelo acima da lista — o Olver reportou que
-// isso confundia com o destaque da aba selecionada (mesmo amarelo pros dois estados, com
-// significados diferentes). Virou um item normal da lista, ordem definida por ele (ago/2026):
-// Início, Funcionários, Solicitar Vaga, Minhas Solicitações, Documentos, Agenda.
+// "Solicitar Vaga" saiu daqui (era um item normal da lista) e virou botão no cabeçalho
+// compartilhado (PortalAppLayout), amarelo/preto e centralizado, visível em toda página —
+// pedido do Olver pra dar mais destaque do que um item a mais no meio da lista.
 const STORAGE_KEY = "sidebar-portal-collapsed";
 
 interface MenuItemDef {
@@ -28,7 +27,6 @@ interface MenuItemDef {
 
 const INICIO_ITEM: MenuItemDef = { label: "Início", href: "/portal", icon: Home };
 const FUNCIONARIOS_ITEM: MenuItemDef = { label: "Funcionários", href: "/portal/funcionarios", icon: IdCard };
-const SOLICITAR_VAGA_ITEM: MenuItemDef = { label: "Solicitar Vaga", href: "/portal/solicitar-vaga", icon: PlusCircle };
 const RESTANTE_ITEMS: MenuItemDef[] = [
   { label: "Minhas Solicitações", href: "/portal/solicitacoes", icon: ClipboardList },
   // Sempre visível — as 5 categorias fixas existem por padrão pra todo cliente, mesmo sem
@@ -78,7 +76,6 @@ export default function SidebarPortal({ userEmail, mostrarFuncionarios }: Props)
   const items = [
     INICIO_ITEM,
     ...(mostrarFuncionarios ? [FUNCIONARIOS_ITEM] : []),
-    SOLICITAR_VAGA_ITEM,
     ...RESTANTE_ITEMS,
   ];
   const isCollapsedView = collapsed && !mobileOpen;

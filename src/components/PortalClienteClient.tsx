@@ -95,7 +95,7 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos, emAv
                 </div>
               </div>
             </div>
-            {/* Atalho extra pro mesmo destino do botão da sidebar (SidebarPortal) — não
+            {/* Atalho extra pro mesmo destino do botão do cabeçalho (PortalAppLayout) — não
                 substitui aquele, é um chamariz a mais dentro do banner, já que quem tem
                 entrevista hoje é um momento natural pra lembrar que dá pra abrir outra vaga. */}
             <Link

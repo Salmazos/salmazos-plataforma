@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { PlusCircle } from "lucide-react";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import SidebarPortal from "@/components/SidebarPortal";
 
@@ -46,9 +48,31 @@ export default async function PortalAppLayout({
       <SidebarPortal userEmail={user.email ?? ""} mostrarFuncionarios={!!funcionarioAtivo} />
       <main className="flex-1 min-w-0 px-4 py-8">
         <div className="max-w-5xl mx-auto">
-          {/* Logo do cliente — cabeçalho compartilhado em toda página do portal (área
-              branca de conteúdo, distinto do logo Salmazos na sidebar preta). Só renderiza
-              se o cliente tiver logo cadastrado (upload em /painel/clientes). */}
+          {/* Cabeçalho compartilhado em toda página do portal (área branca de conteúdo,
+              distinto do logo Salmazos na sidebar preta). "Solicitar Vaga" morava como item
+              do menu lateral (SidebarPortal); saiu de lá e virou este botão centralizado,
+              mesmo destino, visível em toda página. */}
+          <div className="flex justify-center mb-6">
+            <Link
+              href="/portal/solicitar-vaga"
+              className="inline-flex items-center gap-1.5 transition-opacity hover:opacity-90"
+              style={{
+                backgroundColor: "#FFD700",
+                color: "#000",
+                fontWeight: 700,
+                padding: "10px 24px",
+                borderRadius: 8,
+                textDecoration: "none",
+                fontSize: 14,
+              }}
+            >
+              <PlusCircle size={16} />
+              Solicitar Vaga
+            </Link>
+          </div>
+
+          {/* Logo do cliente — só renderiza se o cliente tiver logo cadastrado (upload em
+              /painel/clientes). */}
           {cliente?.logo_url && (
             <div className="flex justify-end mb-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
