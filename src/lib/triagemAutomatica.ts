@@ -6,18 +6,28 @@ interface TriagemResult {
   resumo: string;
 }
 
+// Proteção contra recálculo duplicado (retry, duplo submit) disparando a IA de novo
+// pro mesmo candidato em sequência rápida. Janela curta o suficiente pra não interferir
+// no recálculo legítimo de "candidato duplicado atualizou currículo" (candidatos/route.ts).
+const IDEMPOTENCIA_JANELA_MS = 60_000;
+
 export async function calcularTriagem(candidatoId: string): Promise<void> {
   const supabase = createServiceClient();
 
   const { data: c, error } = await supabase
     .from("candidatos")
     .select(
-      "nome_completo, cargo_pretendido, tempo_experiencia, formacao_academica, habilidades, resumo_candidato, resumo_profissional, experiencias_profissionais, idade, email, telefone, cidade"
+      "nome_completo, cargo_pretendido, tempo_experiencia, formacao_academica, habilidades, resumo_candidato, resumo_profissional, experiencias_profissionais, idade, email, telefone, cidade, triagem_calculada_em"
     )
     .eq("id", candidatoId)
     .single();
 
   if (error || !c) throw new Error(`Candidato ${candidatoId} não encontrado`);
+
+  if (c.triagem_calculada_em) {
+    const decorrido = Date.now() - new Date(c.triagem_calculada_em as string).getTime();
+    if (decorrido < IDEMPOTENCIA_JANELA_MS) return;
+  }
 
   const campos = [
     `cargo: ${c.cargo_pretendido ?? "não informado"}`,
