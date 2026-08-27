@@ -62,21 +62,21 @@ export default function PortalFuncionariosListClient({ funcionarios }: Props) {
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
-        <div className="relative flex-1">
+        <div className="relative w-full sm:w-56">
           <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#9CA3AF" }} />
           <input
             type="text"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar funcionário por nome..."
+            placeholder="Buscar por nome..."
             className="w-full rounded-lg border border-gray-200 text-sm text-gray-900 focus:outline-none"
             style={{ padding: "9px 12px 9px 36px" }}
             onFocus={(e) => (e.currentTarget.style.borderColor = "#FFD700")}
             onBlur={(e) => (e.currentTarget.style.borderColor = "")}
           />
         </div>
-        <p style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", whiteSpace: "nowrap" }}>
-          {buscaAtiva ? `${filtrados.length} de ${totalGeral} funcionários` : `${totalGeral} funcionários`}
+        <p style={{ fontSize: 15, fontWeight: 700, color: "#6B7280", whiteSpace: "nowrap" }}>
+          {buscaAtiva ? `Funcionários encontrados  [ ${filtrados.length} ]` : `Total Funcionários  [ ${totalGeral} ]`}
         </p>
       </div>
 
