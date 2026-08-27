@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { formatarDataSemFuso, formatarCPF, formatarTelefone } from "@/lib/utils";
 import { calcularStatusAso, ASO_STATUS_INFO } from "@/lib/asoStatus";
-import PortalDocumentoBadge from "@/components/PortalDocumentoBadge";
+import PortalFuncionariosListClient, { type FuncionarioPortalRow } from "@/components/PortalFuncionariosListClient";
 
 export const dynamic = "force-dynamic";
 
@@ -13,21 +13,6 @@ const CONTRATO_STATUS_INFO = {
   assinado: { label: "Assinado", bg: "#D1FAE5", text: "#166534" },
   pendente: { label: "Pendente", bg: "#FEF3C7", text: "#92400E" },
 };
-
-// Grupo "rótulo em cima, valor embaixo" — mesmo padrão de layout usado no painel interno
-// (ver Campo em FuncionariosPageClient.tsx), duplicado aqui de propósito: telas com campos
-// diferentes (portal não tem Empresa/Modalidade/Status/Ações do RH), não vale a pena
-// compartilhar um componente só pra isso.
-function Campo({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div style={{ minWidth: 90 }}>
-      <p style={{ fontSize: 10, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.3, margin: "0 0 3px", whiteSpace: "nowrap" }}>
-        {label}
-      </p>
-      <div style={{ fontSize: 13, color: "#111827", fontWeight: 500 }}>{children}</div>
-    </div>
-  );
-}
 
 export default async function PortalFuncionariosPage() {
   const supabase = await createPortalClient();
@@ -124,6 +109,46 @@ export default async function PortalFuncionariosPage() {
     }
   }
 
+  // Monta as linhas já com tudo resolvido/formatado no servidor — o componente client
+  // (PortalFuncionariosListClient) só filtra por nome e renderiza, sem repetir nenhuma
+  // lógica de negócio nem fazer chamada de API adicional.
+  const linhas: FuncionarioPortalRow[] = (funcionarios ?? []).map((f) => {
+    const badgeAso = ASO_STATUS_INFO[calcularStatusAso(dataExameMaisRecentePorFuncionario.get(f.id) ?? null)];
+    const badgeContrato = funcionarioIdsComContrato.has(f.id)
+      ? CONTRATO_STATUS_INFO.assinado
+      : CONTRATO_STATUS_INFO.pendente;
+    const urlAso = arquivoAsoMaisRecentePorFuncionario.get(f.id)
+      ? `/api/portal/funcionarios/${f.id}/aso-url`
+      : null;
+    const urlContrato = arquivoContratoMaisRecentePorFuncionario.get(f.id)
+      ? `/api/portal/funcionarios/${f.id}/contrato-url`
+      : null;
+    const dadosPessoais = f.admissao_id ? dadosPessoaisPorAdmissao.get(f.admissao_id) : undefined;
+    const candidatoId = f.admissao_id ? candidatoIdPorAdmissao.get(f.admissao_id) : undefined;
+    const telefone = candidatoId ? telefonePorCandidato.get(candidatoId) : undefined;
+    // Só vira link quando existe encaminhamento pra esse cliente+candidato — funcionário
+    // de R&S puro ou dado legado sem encaminhamento retroativo não tem perfil de portal
+    // pra abrir (ver checklist ambiguidade FK no CLAUDE.md sobre o histórico desse
+    // relacionamento).
+    const encaminhamentoId = candidatoId ? (encaminhamentoPorCandidato.get(candidatoId) ?? null) : null;
+
+    return {
+      id: f.id,
+      nomeCompleto: f.nome_completo,
+      encaminhamentoId,
+      dataNascimento: dadosPessoais?.data_nascimento ? formatarDataSemFuso(dadosPessoais.data_nascimento) : "—",
+      rg: dadosPessoais?.rg_numero ?? "—",
+      cpf: dadosPessoais?.cpf ? formatarCPF(dadosPessoais.cpf) : "—",
+      pis: dadosPessoais?.pis_pasep ?? "—",
+      dataAdmissao: f.data_admissao ? formatarDataSemFuso(f.data_admissao) : "—",
+      cargo: f.cargo ?? "—",
+      turno: f.turno ?? "—",
+      celular: telefone ? formatarTelefone(telefone) : "—",
+      badgeAso: { ...badgeAso, url: urlAso },
+      badgeContrato: { ...badgeContrato, url: urlContrato },
+    };
+  });
+
   return (
     <div>
       <Link
@@ -141,81 +166,7 @@ export default async function PortalFuncionariosPage() {
         </p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-        {(funcionarios ?? []).length === 0 ? (
-          <p style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF", margin: 0 }}>
-            Nenhum funcionário ativo encontrado.
-          </p>
-        ) : (
-          (funcionarios ?? []).map((f, i) => {
-            const badgeAso = ASO_STATUS_INFO[calcularStatusAso(dataExameMaisRecentePorFuncionario.get(f.id) ?? null)];
-            const badgeContrato = funcionarioIdsComContrato.has(f.id)
-              ? CONTRATO_STATUS_INFO.assinado
-              : CONTRATO_STATUS_INFO.pendente;
-            const urlAso = arquivoAsoMaisRecentePorFuncionario.get(f.id)
-              ? `/api/portal/funcionarios/${f.id}/aso-url`
-              : null;
-            const urlContrato = arquivoContratoMaisRecentePorFuncionario.get(f.id)
-              ? `/api/portal/funcionarios/${f.id}/contrato-url`
-              : null;
-            const dadosPessoais = f.admissao_id ? dadosPessoaisPorAdmissao.get(f.admissao_id) : undefined;
-            const candidatoId = f.admissao_id ? candidatoIdPorAdmissao.get(f.admissao_id) : undefined;
-            const telefone = candidatoId ? telefonePorCandidato.get(candidatoId) : undefined;
-            const encaminhamentoId = candidatoId ? encaminhamentoPorCandidato.get(candidatoId) : undefined;
-            const nomeStyle: React.CSSProperties = {
-              fontSize: 16,
-              fontWeight: 700,
-              color: "#111827",
-              textDecoration: "underline",
-              textDecorationThickness: 1,
-              margin: "0 0 12px",
-            };
-            return (
-              <div
-                key={f.id}
-                style={{
-                  padding: "16px 20px",
-                  borderBottom: i < (funcionarios ?? []).length - 1 ? "1px solid #F3F4F6" : "none",
-                }}
-              >
-                {/* Só vira link quando existe encaminhamento pra esse cliente+candidato —
-                    funcionário de R&S puro ou dado legado sem encaminhamento retroativo não
-                    tem perfil de portal pra abrir (ver checklist ambiguidade FK no CLAUDE.md
-                    sobre o histórico desse relacionamento). */}
-                {encaminhamentoId ? (
-                  <Link
-                    href={`/portal/candidato/${encaminhamentoId}`}
-                    style={{ ...nomeStyle, display: "inline-block" }}
-                    className="hover:text-[#92400E] transition-colors"
-                  >
-                    {f.nome_completo}
-                  </Link>
-                ) : (
-                  <p style={nomeStyle}>{f.nome_completo}</p>
-                )}
-                <div style={{ display: "flex", flexWrap: "wrap", columnGap: 28, rowGap: 14 }}>
-                  <Campo label="Data de nascimento">
-                    {dadosPessoais?.data_nascimento ? formatarDataSemFuso(dadosPessoais.data_nascimento) : "—"}
-                  </Campo>
-                  <Campo label="RG">{dadosPessoais?.rg_numero ?? "—"}</Campo>
-                  <Campo label="CPF">{dadosPessoais?.cpf ? formatarCPF(dadosPessoais.cpf) : "—"}</Campo>
-                  <Campo label="PIS">{dadosPessoais?.pis_pasep ?? "—"}</Campo>
-                  <Campo label="Data de admissão">{f.data_admissao ? formatarDataSemFuso(f.data_admissao) : "—"}</Campo>
-                  <Campo label="Função">{f.cargo ?? "—"}</Campo>
-                  <Campo label="Turno de trabalho">{f.turno ?? "—"}</Campo>
-                  <Campo label="Celular">{telefone ? formatarTelefone(telefone) : "—"}</Campo>
-                  <Campo label="ASO Periódico">
-                    <PortalDocumentoBadge label={badgeAso.label} bg={badgeAso.bg} text={badgeAso.text} url={urlAso} />
-                  </Campo>
-                  <Campo label="Contrato">
-                    <PortalDocumentoBadge label={badgeContrato.label} bg={badgeContrato.bg} text={badgeContrato.text} url={urlContrato} />
-                  </Campo>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+      <PortalFuncionariosListClient funcionarios={linhas} />
     </div>
   );
 }
