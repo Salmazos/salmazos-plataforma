@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { parseBody, admissaoTokenUpdateSchema } from "@/lib/schemas";
 import { resolveAdmissaoByToken } from "@/lib/admissaoToken";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
+import { registrarAuditoria, diffCampos } from "@/lib/audit";
 
 interface Params {
   params: Promise<{ token: string }>;
@@ -72,10 +73,33 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   }
 
   if (dados_pessoais && Object.keys(dados_pessoais).length > 0) {
+    // Isolado em try/catch: essa é a rota pública do candidato, sem fallback — uma falha
+    // aqui não pode nunca impedir o upsert dos dados do formulário logo abaixo.
+    let dadosAntes: Record<string, unknown> | null = null;
+    try {
+      const { data } = await svc
+        .from("admissao_dados_pessoais")
+        .select("*")
+        .eq("admissao_id", admissaoId)
+        .maybeSingle();
+      dadosAntes = data;
+    } catch (err) {
+      console.error("[PATCH /api/admissoes/token/[token]] falha ao buscar snapshot pré-upsert", err);
+    }
+
     const { error: upsertError } = await svc
       .from("admissao_dados_pessoais")
       .upsert({ admissao_id: admissaoId, ...dados_pessoais }, { onConflict: "admissao_id" });
     if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 400 });
+
+    registrarAuditoria({
+      usuario_id: null,
+      usuario_nome: "Candidato (formulário público)",
+      acao: "admissao_dados_pessoais_editados_pelo_candidato",
+      entidade: "admissoes",
+      entidade_id: admissaoId,
+      detalhes: { diff: diffCampos(dadosAntes, dados_pessoais) },
+    });
 
     // O sexo só é conhecido depois que o candidato preenche esse passo do
     // formulário — os documentos condicionados a "masculino" (ex.: Reservista)

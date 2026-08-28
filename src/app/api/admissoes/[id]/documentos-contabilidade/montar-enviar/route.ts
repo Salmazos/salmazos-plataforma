@@ -262,6 +262,12 @@ export async function POST(request: NextRequest, { params }: Params) {
       contratante_nome: contratanteDinamico.nome,
       contratante_delegado: !operadorEhContratante,
       ...(operadorEhContratante ? {} : { contratante_analista_id: contratanteSelecionadoId }),
+      // Nome/e-mail exatos submetidos como "contratado" à ZapSign — sem isso não dava pra
+      // confirmar depois qual e-mail foi de fato enviado (caso real: divergência entre
+      // candidatos.email e admissao_dados_pessoais.email só foi possível reconstituir
+      // comparando com o estado atual do banco, não com o que foi realmente submetido).
+      contratado_nome: nomeCandidato,
+      contratado_email: emailCandidato,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro ao criar documento na ZapSign.";

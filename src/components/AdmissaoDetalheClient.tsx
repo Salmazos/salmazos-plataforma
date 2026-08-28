@@ -107,6 +107,7 @@ const ACAO_LABEL: Record<string, string> = {
   admissao_pacote_gerado_forcado: "Pacote gerado com pendências (forçado)",
   admissao_documento_upload_pela_equipe: "Documento enviado pela equipe",
   admissao_dados_pessoais_editados_pelo_analista: "Dados pessoais editados pelo analista",
+  admissao_dados_pessoais_editados_pelo_candidato: "Dados pessoais editados pelo candidato (link público)",
   admissao_dependente_criado_pelo_analista: "Dependente adicionado pelo analista",
   admissao_dependente_editado_pelo_analista: "Dependente editado pelo analista",
   admissao_dependente_removido_pelo_analista: "Dependente removido pelo analista",
