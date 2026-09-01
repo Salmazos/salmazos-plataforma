@@ -1079,6 +1079,13 @@ export const cobrancaRsVencimentoSchema = z.object({
   data_vencimento: z.string().nullable(),
 });
 
+// ── Cobrança R&S — cancelamento via justificativa (rota dedicada, ver POST
+// /api/cobrancas-rs/[id]/cancelar). Caso de negociação com a diretoria em que a cobrança
+// deixa de ser cobrada — sempre exige justificativa registrada, nunca cancelamento silencioso.
+export const cobrancaRsCancelarSchema = z.object({
+  justificativa: z.string().trim().min(1, "Justificativa é obrigatória"),
+});
+
 // ── Faturamento R&S — percentual de imposto informado manualmente por mês/ano
 // (upsert em faturamento_rs_impostos_mensais, ver PATCH /api/faturamento-rs/imposto).
 export const faturamentoRsImpostoSchema = z.object({

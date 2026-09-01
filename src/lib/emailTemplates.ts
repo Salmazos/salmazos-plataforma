@@ -13,6 +13,7 @@ export type EmailTemplateName =
   | "cobranca_rs_gerada"
   | "cobranca_rs_atrasada"
   | "cobranca_rs_paga"
+  | "cobranca_rs_cancelada"
   | "cobranca_rs_validada_diretoria"
   | "supervisao_cliente_atrasada";
 
@@ -65,6 +66,8 @@ interface TemplateData {
   diasAtraso?: number;
   // Cobrança R&S marcada como paga (case "cobranca_rs_paga").
   dataPagamento?: string;
+  // Cobrança R&S cancelada via justificativa (case "cobranca_rs_cancelada").
+  justificativaCancelamento?: string;
   // Supervisão de posto atrasada/nunca supervisionada (case "supervisao_cliente_atrasada").
   // diasSemSupervisao null/undefined = nunca teve nenhuma supervisão registrada.
   diasSemSupervisao?: number | null;
@@ -123,7 +126,7 @@ const BANNER_CONFIDENCIAL = `<div style="background:#fef2f2;border:2px solid #fc
 
 export function getEmailTemplate(
   name: EmailTemplateName,
-  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor, tipoCobrancaRS, cobrancaUrl, dataVencimento, diasAtraso, dataPagamento, diasSemSupervisao, frequenciaDiasSupervisao, supervisaoUrl }: TemplateData
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor, tipoCobrancaRS, cobrancaUrl, dataVencimento, diasAtraso, dataPagamento, justificativaCancelamento, diasSemSupervisao, frequenciaDiasSupervisao, supervisaoUrl }: TemplateData
 ): EmailTemplate {
   switch (name) {
     case "entrevista_salmazos":
@@ -619,6 +622,38 @@ export function getEmailTemplate(
               <li><strong>Vaga:</strong> ${cargo ?? "—"}</li>
               <li><strong>Valor:</strong> ${feeValorFmt}</li>
             </ul>
+          </div>`
+        ),
+      };
+    }
+
+    case "cobranca_rs_cancelada": {
+      const ehCancelamento = tipoCobrancaRS === "cancelamento";
+      const feeValorFmt =
+        feeValor != null
+          ? feeValor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+          : "—";
+
+      return {
+        subject: `🚫 Cobrança R&S cancelada — ${nomeCliente ?? "Cliente"}`,
+        descricao: `Cobrança R&S cancelada via justificativa (${nomeCliente ?? "cliente"}).`,
+        html: layout(
+          "Cobrança R&S Cancelada",
+          `<div style="background:#F3F4F6;border-left:4px solid #6B7280;border-radius:4px;padding:14px 16px;margin:0 0 20px;">
+            <p style="margin:0;color:#374151;font-size:14px;font-weight:700">Esta cobrança foi cancelada e não será mais enviada/cobrada do cliente.</p>
+          </div>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados da cobrança:</p>
+            <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              <li><strong>Empresa:</strong> ${nomeCliente ?? "—"}</li>
+              ${!ehCancelamento ? `<li><strong>Candidato:</strong> ${nomeCandidato ?? "—"}</li>` : ""}
+              <li><strong>Vaga:</strong> ${cargo ?? "—"}</li>
+              <li><strong>Valor:</strong> ${feeValorFmt}</li>
+            </ul>
+          </div>
+          <div style="background:#FEF2F2;border-left:4px solid #DC2626;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 8px;color:#991B1B;font-weight:700;font-size:14px;">Justificativa do cancelamento:</p>
+            <p style="margin:0;color:#7F1D1D;font-size:14px;line-height:1.7;white-space:pre-wrap;">${justificativaCancelamento ?? "—"}</p>
           </div>`
         ),
       };

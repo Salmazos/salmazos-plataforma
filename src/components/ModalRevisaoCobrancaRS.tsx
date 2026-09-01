@@ -27,6 +27,9 @@ interface CobrancaDetalhe {
   pago_em: string | null;
   data_vencimento: string | null;
   created_at: string;
+  cancelado_por: string | null;
+  cancelado_em: string | null;
+  justificativa_cancelamento: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   vagas: { titulo: string } | any;
 }
@@ -92,6 +95,11 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
   const [vencimentoSalvo, setVencimentoSalvo] = useState(false);
   const [reenviando, setReenviando] = useState(false);
   const [reenviado, setReenviado] = useState(false);
+
+  const [cancelando, setCancelando] = useState(false);
+  const [justificativaCancelamento, setJustificativaCancelamento] = useState("");
+  const [enviandoCancelamento, setEnviandoCancelamento] = useState(false);
+  const [erroCancelamento, setErroCancelamento] = useState("");
 
   useEffect(() => {
     setCarregando(true);
@@ -248,6 +256,32 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
     }
   };
 
+  // Cancelamento via justificativa — caso de negociação com a diretoria em que a cobrança
+  // deixa de ser cobrada. Disponível em 'pendente_revisao' e 'aprovada_enviada' (ver botão
+  // condicional abaixo); a rota já valida de novo do lado do servidor.
+  const handleCancelarCobranca = async () => {
+    if (!justificativaCancelamento.trim()) return;
+    setEnviandoCancelamento(true);
+    setErroCancelamento("");
+    try {
+      const res = await fetch(`/api/cobrancas-rs/${cobrancaId}/cancelar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ justificativa: justificativaCancelamento.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setErroCancelamento(json.error || "Erro ao cancelar cobrança."); return; }
+      onAtualizada(paraLinha(json.data));
+    } catch {
+      setErroCancelamento("Erro de conexão. Tente novamente.");
+    } finally {
+      setEnviandoCancelamento(false);
+    }
+  };
+
+  const podeCancelar =
+    cobranca != null && (cobranca.status === "pendente_revisao" || cobranca.status === "aprovada_enviada");
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -364,6 +398,67 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
 
               {erro && <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">{erro}</p>}
               {salvo && !erro && <p className="text-green-700 text-sm">Rascunho salvo!</p>}
+
+              {cobranca.status === "cancelada" && (
+                <div className="rounded-lg p-3 border" style={{ background: "#F3F4F6", borderColor: "#D1D5DB" }}>
+                  <p className="text-xs font-semibold text-gray-700">🚫 Cobrança cancelada</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Em {cobranca.cancelado_em ? new Date(cobranca.cancelado_em).toLocaleString("pt-BR") : "—"}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-2">
+                    <span className="font-semibold">Justificativa:</span> {cobranca.justificativa_cancelamento ?? "—"}
+                  </p>
+                </div>
+              )}
+
+              {podeCancelar && !cancelando && (
+                <div>
+                  <button
+                    onClick={() => setCancelando(true)}
+                    className="text-xs font-semibold"
+                    style={{ color: "#DC2626" }}
+                  >
+                    Cancelar cobrança
+                  </button>
+                </div>
+              )}
+
+              {podeCancelar && cancelando && (
+                <div className="rounded-lg p-3 border" style={{ borderColor: "#FECACA", background: "#FEF2F2" }}>
+                  <p className="text-sm font-bold mb-1" style={{ color: "#991B1B" }}>⚠️ Cancelar esta cobrança</p>
+                  <p className="text-xs mb-2" style={{ color: "#991B1B" }}>
+                    Uso típico: negociado com a diretoria que a cobrança não será mais cobrada. A cobrança fica marcada
+                    como cancelada permanentemente — não volta a ficar pendente.
+                  </p>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    Justificativa (obrigatória) *
+                  </label>
+                  <textarea
+                    value={justificativaCancelamento}
+                    onChange={(e) => setJustificativaCancelamento(e.target.value)}
+                    rows={2}
+                    placeholder="Ex: Negociado com a diretoria — cliente não será cobrado neste caso"
+                    className="input-field resize-none"
+                  />
+                  {erroCancelamento && <p className="text-xs text-red-600 mt-1">{erroCancelamento}</p>}
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => { setCancelando(false); setErroCancelamento(""); setJustificativaCancelamento(""); }}
+                      className="btn-outline text-sm"
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      onClick={handleCancelarCobranca}
+                      disabled={!justificativaCancelamento.trim() || enviandoCancelamento}
+                      className="text-sm font-semibold text-white px-4 py-2 rounded-lg disabled:opacity-50"
+                      style={{ background: "#DC2626" }}
+                    >
+                      {enviandoCancelamento ? "Cancelando..." : "Confirmar cancelamento"}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {cobranca.status === "pendente_revisao" && (
                 <div className="pt-2 border-t">
