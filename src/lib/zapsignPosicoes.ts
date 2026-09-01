@@ -71,8 +71,13 @@ export const POSICOES_POR_TIPO_DOCUMENTO: Partial<Record<TipoDocumentoContabilid
     },
     {
       tipo: "assinatura",
-      contratante: { relative_position_left: 5.1, relative_position_bottom: 19.3 },
-      contratado: { relative_position_left: 5.1, relative_position_bottom: 29.0 },
+      // Recalibrado contra o pacote real do candidato Gustavo Henrique (2026-08-31,
+      // admissão 0721b031-9ed5-4a70-9d93-0b79aa6268e2): as duas assinaturas ficavam
+      // sobrepostas ao nome impresso abaixo delas — subidas em ~3,5mm (1,18% da altura
+      // A4, 841,92pt). Vale pra qualquer admissão, não só a do Gustavo (acordo_hs_vt não
+      // tem cliente_id).
+      contratante: { relative_position_left: 5.1, relative_position_bottom: 20.48 },
+      contratado: { relative_position_left: 5.1, relative_position_bottom: 30.18 },
     },
   ],
   termo_lgpd: [
@@ -80,14 +85,20 @@ export const POSICOES_POR_TIPO_DOCUMENTO: Partial<Record<TipoDocumentoContabilid
     {
       tipo: "assinatura",
       contratante: { relative_position_left: 5.0, relative_position_bottom: 27.54 },
-      contratado: { relative_position_left: 50.24, relative_position_bottom: 34.28 },
+      // Recalibrado contra o pacote real do Gustavo (2026-08-31): só o contratado
+      // (candidato) estava sobreposto ao nome impresso — descido 10mm (3,37% da altura
+      // A4). Contratante não mudou, já estava bem posicionado. Vale pra qualquer
+      // admissão (termo_lgpd não tem cliente_id).
+      contratado: { relative_position_left: 50.24, relative_position_bottom: 30.91 },
     },
   ],
   ficha_ir: [
     { tipo: "assinatura", contratado: { relative_position_left: 25.0, relative_position_bottom: 56.0 } },
   ],
   salario_familia: [
-    { tipo: "assinatura", contratado: { relative_position_left: 40.0, relative_position_bottom: 73.5 } },
+    // Recalibrado contra o pacote real do Gustavo (2026-08-31): descido 15mm (5,05% da
+    // altura A4). Vale pra qualquer admissão (salario_familia não tem cliente_id).
+    { tipo: "assinatura", contratado: { relative_position_left: 40.0, relative_position_bottom: 68.45 } },
   ],
   termo_responsabilidade: [
     { tipo: "assinatura", contratado: { relative_position_left: 27.0, relative_position_bottom: 24.0 } },
@@ -125,25 +136,34 @@ export const POSICOES_POR_TIPO_DOCUMENTO: Partial<Record<TipoDocumentoContabilid
   // um override por página (rubricasExtras em lib/zapsign.ts) já que RUBRICA_POSICAO_PADRAO
   // é compartilhado com modelo_contrato e termo_lgpd (genérico) — não pode ser alterado
   // globalmente só por causa deste documento.
+  // Recalibrado contra o pacote real do Gustavo Henrique (2026-08-31, admissão
+  // 0721b031-9ed5-4a70-9d93-0b79aa6268e2):
+  // - Rubrica do contratante removida das 3 páginas abaixo (não mais exigida nessas
+  //   páginas do LGPD Novacki — decisão confirmada com o negócio; mantém só a do
+  //   contratado). Seguro remover: quando existe QUALQUER override em rubricasExtras pra
+  //   uma página, lib/zapsign.ts usa só o que foi passado e não cai no fallback
+  //   RUBRICA_POSICAO_PADRAO (ver criarDocumentoComPosicionamento) — não sobra rubrica
+  //   de contratante "fantasma" nessas páginas.
+  // - Carimbo de assinatura do contratado (imagem + texto "Assinado digitalmente via
+  //   ZapSign...") nas 2 últimas páginas (15-16) estava estourando a borda direita da
+  //   página (chegava a ~599pt numa página de 595,32pt) — deslocado ~15pt (2,52% da
+  //   largura A4, 595,32pt) pra esquerda.
   termo_lgpd_novacki: [
     {
       tipo: "rubrica",
-      contratante: { relative_position_left: 46, relative_position_bottom: 2.5 },
       contratado: { relative_position_left: 70, relative_position_bottom: 2.5 },
     },
     {
       tipo: "rubrica",
-      contratante: { relative_position_left: 46, relative_position_bottom: 2.5 },
       contratado: { relative_position_left: 70, relative_position_bottom: 2.5 },
     },
     {
       tipo: "rubrica",
-      contratante: { relative_position_left: 46, relative_position_bottom: 2.5 },
       contratado: { relative_position_left: 70, relative_position_bottom: 2.5 },
     },
-    { tipo: "assinatura", contratado: { relative_position_left: 67, relative_position_bottom: 11 } },
+    { tipo: "assinatura", contratado: { relative_position_left: 63.6, relative_position_bottom: 11 } },
   ],
   termo_confidencialidade_novacki: [
-    { tipo: "assinatura", contratado: { relative_position_left: 67, relative_position_bottom: 14 } },
+    { tipo: "assinatura", contratado: { relative_position_left: 63.6, relative_position_bottom: 14 } },
   ],
 };
