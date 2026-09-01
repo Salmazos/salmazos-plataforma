@@ -20,6 +20,11 @@ interface Props {
   documentosIniciais: AdmissaoDocumentoContabilidade[];
   nomeInicial: string;
   emailInicial: string;
+  // Se já existe envelope de assinatura do pacote da contabilidade pra esta admissão —
+  // enquanto existir, documentos já enviados não podem mais ser substituídos (o PDF final
+  // já foi montado a partir do que estava lá). Vem de admissao_envelopes_assinatura via
+  // AdmissaoDetalheClient, sem precisar de fetch extra aqui.
+  envelopeExiste: boolean;
   onEnviado: () => void;
 }
 
@@ -44,7 +49,7 @@ async function enviarArquivoContabilidade(
   admissaoId: string,
   tipo: TipoDocumentoContabilidade,
   file: File
-): Promise<{ ok: true } | { ok: false; erro: string }> {
+): Promise<{ ok: true; documento: AdmissaoDocumentoContabilidade } | { ok: false; erro: string }> {
   try {
     const urlRes = await fetch(`/api/admissoes/${admissaoId}/documentos-contabilidade/${tipo}`, {
       method: "POST",
@@ -69,7 +74,21 @@ async function enviarArquivoContabilidade(
     const confirmJson = await confirmRes.json();
     if (!confirmRes.ok) return { ok: false, erro: confirmJson.error || "Erro ao confirmar envio." };
 
-    return { ok: true };
+    return { ok: true, documento: confirmJson.data as AdmissaoDocumentoContabilidade };
+  } catch {
+    return { ok: false, erro: "Erro de conexão. Tente novamente." };
+  }
+}
+
+async function visualizarArquivoContabilidade(
+  admissaoId: string,
+  tipo: TipoDocumentoContabilidade
+): Promise<{ ok: true; signedUrl: string } | { ok: false; erro: string }> {
+  try {
+    const res = await fetch(`/api/admissoes/${admissaoId}/documentos-contabilidade/${tipo}`);
+    const json = await res.json();
+    if (!res.ok) return { ok: false, erro: json.error || "Erro ao gerar visualização." };
+    return { ok: true, signedUrl: json.signedUrl };
   } catch {
     return { ok: false, erro: "Erro de conexão. Tente novamente." };
   }
@@ -102,6 +121,7 @@ export default function ModalUploadDocumentosContabilidade({
   documentosIniciais,
   nomeInicial,
   emailInicial,
+  envelopeExiste,
   onEnviado,
 }: Props) {
   const [etapa, setEtapa] = useState<1 | 2>(1);
@@ -116,6 +136,8 @@ export default function ModalUploadDocumentosContabilidade({
   const [email, setEmail] = useState("");
   const [enviandoFinal, setEnviandoFinal] = useState(false);
   const [erroFinal, setErroFinal] = useState("");
+  const [substituindoTipo, setSubstituindoTipo] = useState<TipoDocumentoContabilidade | null>(null);
+  const [visualizandoTipo, setVisualizandoTipo] = useState<TipoDocumentoContabilidade | null>(null);
 
   // Ver bloqueio de segurança em montar-enviar/route.ts: só quem tem cargo de diretoria
   // pode assinar pela empresa via ZapSign — quem não é diretor precisa escolher um
@@ -136,6 +158,8 @@ export default function ModalUploadDocumentosContabilidade({
     setNome(nomeInicial);
     setEmail(emailInicial);
     setErroFinal("");
+    setSubstituindoTipo(null);
+    setVisualizandoTipo(null);
     setSouDiretor(null);
     setDiretores([]);
     setDiretorSelecionadoId("");
@@ -162,14 +186,23 @@ export default function ModalUploadDocumentosContabilidade({
   const podeEnviarFinal = faltando.length === 0 && nome.trim().length > 0 && email.trim().length > 0;
 
   const estaConfirmado = (tipo: TipoDocumentoContabilidade) => documentos.some((doc) => doc.tipo_documento === tipo);
-  const obrigatoriosOk = listaCompleta.filter((d) => d.obrigatorio).every((d) => estaConfirmado(d.tipo_documento));
+  // Só os 4 documentos base destravam os opcionais (Ficha de IR/Salário Família/Termo de
+  // Responsabilidade) — documentos condicionais de cliente (ex: os 2 da Novacki) não têm
+  // relação com esse grupo e não podem bloqueá-lo (bug real, corrigido a partir do caso
+  // da admissão 0721b031-9ed5-4a70-9d93-0b79aa6268e2).
+  const obrigatoriosBaseOk = listaCompleta
+    .filter((d) => d.obrigatorio && !d.cliente_id)
+    .every((d) => estaConfirmado(d.tipo_documento));
+  // Todos os obrigatórios (base + condicionais de cliente) — continua exigido pra avançar
+  // pra etapa 2 e pro envio final.
+  const todosObrigatoriosOk = listaCompleta.filter((d) => d.obrigatorio).every((d) => estaConfirmado(d.tipo_documento));
   const opcionais = listaCompleta.filter((d) => !d.obrigatorio); // [Ficha de IR, Salário Família, Termo de Responsabilidade]
   const primeiroOpcional = opcionais[0];
   // O grupo "iniciou" assim que o 5º (Ficha de IR) é confirmado — a partir daí os outros
   // 2 são obrigatórios, não têm mais opção de pular individualmente.
   const grupoOpcionalIniciado = primeiroOpcional ? estaConfirmado(primeiroOpcional.tipo_documento) : false;
   const opcionaisResolvidos = pulouOpcionais || opcionais.every((d) => estaConfirmado(d.tipo_documento));
-  const podeAvancarEtapa1 = obrigatoriosOk && opcionaisResolvidos;
+  const podeAvancarEtapa1 = todosObrigatoriosOk && opcionaisResolvidos;
 
   // Trava sequencial: obrigatório só destrava depois do obrigatório anterior confirmado.
   // Nos opcionais, só o 1º (Ficha de IR) tem decisão real de enviar/pular; se ele foi
@@ -183,7 +216,7 @@ export default function ModalUploadDocumentosContabilidade({
       const anterioresOk = anteriores.every((d) => estaConfirmado(d.tipo_documento));
       return anterioresOk ? "pending" : "locked";
     }
-    if (!obrigatoriosOk) return "locked";
+    if (!obrigatoriosBaseOk) return "locked";
     const indexOpcional = opcionais.findIndex((o) => o.tipo_documento === def.tipo_documento);
     if (indexOpcional === 0) return pulouOpcionais ? "pulado" : "pending";
     if (pulouOpcionais) return "pulado";
@@ -221,16 +254,30 @@ export default function ModalUploadDocumentosContabilidade({
     } else {
       setDocumentos((prev) => {
         const semEsseTipo = prev.filter((d) => d.tipo_documento !== tipo);
-        return [
-          ...semEsseTipo,
-          { id: `local-${tipo}`, admissao_id: admissaoId, tipo_documento: tipo, storage_path: "", criado_em: new Date().toISOString() },
-        ];
+        return [...semEsseTipo, resultado.documento];
       });
       // Se o 5º tinha sido pulado e o usuário mudou de ideia e enviou um arquivo pra ele,
       // isso reabre o grupo inteiro (6º e 7º voltam a ser obrigatórios).
       setPulouOpcionais((prev) => (prev ? false : prev));
     }
     setEnviandoTipo(null);
+    setSubstituindoTipo(null);
+  };
+
+  const handleVisualizarLinha = async (tipo: TipoDocumentoContabilidade) => {
+    setErroPorTipo((prev) => {
+      const next = { ...prev };
+      delete next[tipo];
+      return next;
+    });
+    setVisualizandoTipo(tipo);
+    const resultado = await visualizarArquivoContabilidade(admissaoId, tipo);
+    if (!resultado.ok) {
+      setErroPorTipo((prev) => ({ ...prev, [tipo]: resultado.erro }));
+    } else {
+      window.open(resultado.signedUrl, "_blank");
+    }
+    setVisualizandoTipo(null);
   };
 
   // Keyword-matching agora só CONFIRMA — roda contra o único arquivo desta linha e compara
@@ -310,7 +357,7 @@ export default function ModalUploadDocumentosContabilidade({
                   switch (status) {
                     case "locked":
                       if (d.obrigatorio) return { texto: "⏳ Aguardando documento anterior", cor: "#9CA3AF" };
-                      if (!obrigatoriosOk) return { texto: "⏳ Aguardando obrigatórios", cor: "#9CA3AF" };
+                      if (!obrigatoriosBaseOk) return { texto: "⏳ Aguardando obrigatórios", cor: "#9CA3AF" };
                       return { texto: "⏳ Aguardando decisão da Ficha de IR", cor: "#9CA3AF" };
                     case "pending":
                       if (ehPrimeiroOpcional) return { texto: "— Envie ou pule (define os 2 últimos)", cor: "#B45309" };
@@ -353,6 +400,45 @@ export default function ModalUploadDocumentosContabilidade({
                         {ehPrimeiroOpcional && status === "pending" && (
                           <button onClick={handlePularOpcionais} className="text-xs" style={{ color: "#9CA3AF" }}>
                             Pular
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {status === "done" && (
+                      <div className="flex items-center gap-3 mt-2">
+                        <button
+                          onClick={() => handleVisualizarLinha(d.tipo_documento)}
+                          disabled={visualizandoTipo === d.tipo_documento}
+                          className="btn-outline text-xs px-3 py-1.5"
+                          style={{ opacity: visualizandoTipo === d.tipo_documento ? 0.5 : 1 }}
+                        >
+                          {visualizandoTipo === d.tipo_documento ? "Abrindo..." : "Visualizar"}
+                        </button>
+                        {envelopeExiste ? (
+                          <span className="text-xs" style={{ color: "#9CA3AF" }}>
+                            Pacote já enviado para assinatura — não é mais possível substituir
+                          </span>
+                        ) : substituindoTipo === d.tipo_documento ? (
+                          <label className="btn-outline text-xs cursor-pointer inline-block px-3 py-1.5">
+                            Selecionar novo PDF
+                            <input
+                              type="file"
+                              accept="application/pdf"
+                              className="hidden"
+                              onChange={(e) => {
+                                if (e.target.files && e.target.files.length > 0) handleSelecionarParaLinha(d, e.target.files);
+                                e.target.value = "";
+                              }}
+                            />
+                          </label>
+                        ) : (
+                          <button
+                            onClick={() => setSubstituindoTipo(d.tipo_documento)}
+                            className="text-xs"
+                            style={{ color: "#B45309" }}
+                          >
+                            Substituir
                           </button>
                         )}
                       </div>

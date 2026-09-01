@@ -119,6 +119,10 @@ export interface DocumentoObrigatoriedade {
   tipo_documento: TipoDocumentoContabilidade;
   label: string;
   obrigatorio: boolean;
+  // Ausente/null = documento base (bloqueia avanço normal). Preenchido = obrigatório só
+  // por ser condicional de um cliente específico (ex: Novacki) — não deve gatear os
+  // opcionais (Ficha de IR/Salário Família/Termo de Responsabilidade), só o envio final.
+  cliente_id?: string | null;
 }
 
 // Os tipos aplicáveis à admissão (os 7 padrão + os condicionais do cliente da vaga, se
@@ -133,5 +137,6 @@ export function documentosObrigatorios(clienteId: string | null = null): Documen
     tipo_documento: def.tipo_documento,
     label: def.label,
     obrigatorio: def.obrigatorio,
+    cliente_id: def.cliente_id ?? null,
   }));
 }

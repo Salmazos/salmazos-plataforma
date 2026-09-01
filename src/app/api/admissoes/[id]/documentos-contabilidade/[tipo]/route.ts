@@ -10,9 +10,52 @@ interface Params {
 }
 
 const BUCKET = "admissao-docs";
+const SIGNED_URL_TTL_SECONDS = 900;
+const TIPO_PACOTE_CONTABILIDADE = "contabilidade" as const;
 
 function isTipoValido(tipo: string): tipo is TipoDocumentoContabilidade {
   return DOCUMENTOS_CONTABILIDADE.some((d) => d.tipo_documento === tipo);
+}
+
+// Signed URL para o time interno visualizar um documento da contabilidade já enviado
+// (mesmo padrão de admissoes/[id]/documentos/[docId]/route.ts).
+export async function GET(_request: NextRequest, { params }: Params) {
+  const { id, tipo } = await params;
+  if (!isTipoValido(tipo)) return NextResponse.json({ error: "Tipo de documento inválido." }, { status: 400 });
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const acessoNegado = await checarPapelAdmissoes(user);
+  if (acessoNegado) return acessoNegado;
+
+  const svc = createServiceClient();
+
+  const { data: doc, error } = await svc
+    .from("admissao_documentos_contabilidade")
+    .select("storage_path")
+    .eq("admissao_id", id)
+    .eq("tipo_documento", tipo)
+    .single();
+  if (error) return NextResponse.json({ error: "Documento ainda não enviado." }, { status: 404 });
+
+  const { data, error: signError } = await svc.storage
+    .from(BUCKET)
+    .createSignedUrl(doc.storage_path, SIGNED_URL_TTL_SECONDS);
+  if (signError) return NextResponse.json({ error: signError.message }, { status: 500 });
+
+  registrarAuditoria({
+    usuario_id: user.id,
+    usuario_nome: user.email ?? null,
+    acao: "admissao_documento_contabilidade_visualizado",
+    entidade: "admissao_documentos_contabilidade",
+    entidade_id: id,
+    detalhes: { admissao_id: id, tipo_documento: tipo },
+  });
+
+  return NextResponse.json({ signedUrl: data.signedUrl });
 }
 
 // Mesmo mecanismo de signed URL já usado no upload de documentos do candidato (ver
@@ -63,6 +106,31 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const svc = createServiceClient();
 
+  const { data: existente } = await svc
+    .from("admissao_documentos_contabilidade")
+    .select("id, storage_path")
+    .eq("admissao_id", id)
+    .eq("tipo_documento", tipo)
+    .maybeSingle();
+
+  // Substituição de um documento já enviado: só permitida enquanto não existir envelope
+  // de assinatura do pacote da contabilidade pra esta admissão — depois de montado e
+  // enviado pra assinatura, o PDF final já foi gerado a partir do arquivo antigo.
+  if (existente) {
+    const { data: envelope } = await svc
+      .from("admissao_envelopes_assinatura")
+      .select("id")
+      .eq("admissao_id", id)
+      .eq("tipo_pacote", TIPO_PACOTE_CONTABILIDADE)
+      .maybeSingle();
+    if (envelope) {
+      return NextResponse.json(
+        { error: "Este documento já foi incluído em um pacote enviado para assinatura — não é mais possível substituí-lo." },
+        { status: 409 }
+      );
+    }
+  }
+
   const { data, error } = await svc
     .from("admissao_documentos_contabilidade")
     .upsert(
@@ -76,10 +144,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   registrarAuditoria({
     usuario_id: user.id,
     usuario_nome: user.email ?? null,
-    acao: "admissao_documento_contabilidade_enviado",
+    acao: existente ? "admissao_documento_contabilidade_substituido" : "admissao_documento_contabilidade_enviado",
     entidade: "admissao_documentos_contabilidade",
     entidade_id: data.id,
-    detalhes: { admissao_id: id, tipo_documento: tipo },
+    detalhes: existente
+      ? { admissao_id: id, tipo_documento: tipo, storage_path_antigo: existente.storage_path, storage_path_novo: parsed.data.storage_path }
+      : { admissao_id: id, tipo_documento: tipo },
   });
 
   return NextResponse.json({ data });

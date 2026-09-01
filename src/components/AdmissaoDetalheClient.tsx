@@ -2404,6 +2404,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           documentosIniciais={documentosContabilidade}
           nomeInicial={dp?.nome_completo ?? ""}
           emailInicial={dp?.email ?? ""}
+          envelopeExiste={envelopeContabilidade !== null}
           onEnviado={() => {
             showToast("Documentos da contabilidade montados e enviados para assinatura com sucesso.");
             router.refresh();
