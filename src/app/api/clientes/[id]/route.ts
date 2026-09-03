@@ -49,6 +49,21 @@ export async function PATCH(
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
+    // Decisão de negócio confirmada com o usuário (caso real: cliente Novacki, e antes
+    // CBP Brasil corrigido manualmente) — cliente_email_snapshot em cobrancas_rs nasce como
+    // uma cópia do e-mail do cliente no momento da geração da cobrança (rastreabilidade:
+    // saber pra qual endereço aquela cobrança específica foi enviada). Mas o usuário quer o
+    // e-mail de cobrança sob seu controle a partir do cadastro do cliente: toda edição do
+    // e-mail aqui deve corrigir o snapshot de TODAS as cobranças desse cliente (independente
+    // do status — não reenvia nada, só corrige o dado exibido/usado numa ação futura, como
+    // "Reenviar notificação").
+    if (campos.contato_email !== undefined) {
+      await supabase
+        .from("cobrancas_rs")
+        .update({ cliente_email_snapshot: campos.contato_email })
+        .eq("cliente_id", id);
+    }
+
     if (body.ativo !== undefined) {
       const { data: usuarios } = await supabase
         .from("cliente_usuarios")
