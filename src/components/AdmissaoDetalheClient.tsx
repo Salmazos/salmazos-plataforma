@@ -57,6 +57,11 @@ interface AdmissaoFull {
   horario_trabalho: string | null;
   turno: string | null;
   data_admissao: string | null;
+  // Snapshot de data_admissao no momento em que o pacote da contabilidade foi montado/
+  // enviado (ver montar-enviar/route.ts) — null se o pacote nunca foi enviado. Divergindo
+  // de data_admissao, indica que a data mudou depois do envio (ver aviso na seção "Dados
+  // da Admissão").
+  data_admissao_documentos_gerados: string | null;
   entidade_contratante: string | null;
   observacoes_internas: string | null;
   pdf_pacote_path: string | null;
@@ -504,8 +509,9 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [horarioAtual, setHorarioAtual] = useState(admissao.horario_trabalho);
   const [turnoAtual, setTurnoAtual] = useState(admissao.turno);
   const [entidadeAtual, setEntidadeAtual] = useState(admissao.entidade_contratante);
+  const [dataAdmissaoAtual, setDataAdmissaoAtual] = useState(admissao.data_admissao);
   const [editandoDadosAdmissao, setEditandoDadosAdmissao] = useState(false);
-  const [formDadosAdmissao, setFormDadosAdmissao] = useState({ vagaId: "", funcao: "", salario: "", tipoSalario: "mensal" as "mensal" | "hora", horario: "", turno: "", entidade: "" });
+  const [formDadosAdmissao, setFormDadosAdmissao] = useState({ vagaId: "", funcao: "", salario: "", tipoSalario: "mensal" as "mensal" | "hora", horario: "", turno: "", entidade: "", dataAdmissao: "" });
   const [vagasDisponiveis, setVagasDisponiveis] = useState<VagaOpcao[]>([]);
   const [carregandoVagas, setCarregandoVagas] = useState(false);
   const [buscaVaga, setBuscaVaga] = useState("");
@@ -564,6 +570,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       horario: horarioAtual ?? "",
       turno: turnoAtual ?? "",
       entidade: entidadeAtual ?? "",
+      dataAdmissao: dataAdmissaoAtual ?? "",
     });
     setBuscaVaga("");
     setEditandoDadosAdmissao(true);
@@ -599,6 +606,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       if (formDadosAdmissao.horario.trim()) payload.horario_trabalho = formDadosAdmissao.horario.trim();
       payload.turno = formDadosAdmissao.turno || null;
       if (formDadosAdmissao.entidade) payload.entidade_contratante = formDadosAdmissao.entidade;
+      if (formDadosAdmissao.dataAdmissao) payload.data_admissao = formDadosAdmissao.dataAdmissao;
 
       const res = await fetch(`/api/admissoes/${admissao.id}/dados-admissao`, {
         method: "PATCH",
@@ -621,6 +629,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       setHorarioAtual(json.data.horario_trabalho);
       setTurnoAtual(json.data.turno);
       setEntidadeAtual(json.data.entidade_contratante);
+      setDataAdmissaoAtual(json.data.data_admissao);
       setEditandoDadosAdmissao(false);
       router.refresh();
     } catch {
@@ -1610,6 +1619,20 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                     ))}
                   </select>
                 </div>
+                <div className="mb-3">
+                  <label className="block text-xs text-gray-500 mb-1">Data de admissão</label>
+                  <input
+                    type="date"
+                    value={formDadosAdmissao.dataAdmissao}
+                    onChange={(e) => atualizarCampoDadosAdmissao("dataAdmissao", e.target.value)}
+                    className="input-field text-sm"
+                  />
+                  {documentosContabilidade.length > 0 && (
+                    <p className="text-xs mt-1" style={{ color: "#B45309" }}>
+                      ⚠️ O pacote da contabilidade já tem documentos gerados — mudar a data aqui não regenera nem reenvia nada automaticamente.
+                    </p>
+                  )}
+                </div>
 
                 <div className="flex gap-2 justify-end">
                   <button onClick={cancelarEdicaoDadosAdmissao} className="btn-outline" style={{ padding: "5px 12px", fontSize: 12 }} disabled={salvandoDadosAdmissao}>
@@ -1634,10 +1657,17 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                 <Linha label="Horário de trabalho" value={horarioAtual} />
                 <Linha label="Turno" value={turnoAtual} />
                 <Linha label="Entidade Contratante" value={ENTIDADES_CONTRATANTES.find((e) => e.value === entidadeAtual)?.razaoSocial ?? entidadeAtual} />
+                <Linha label="Data de admissão" value={dataAdmissaoAtual && formatarDataSemFuso(dataAdmissaoAtual)} />
               </>
             )}
 
-            <Linha label="Data de admissão" value={admissao.data_admissao && formatarDataSemFuso(admissao.data_admissao)} />
+            {admissao.data_admissao_documentos_gerados && admissao.data_admissao_documentos_gerados !== dataAdmissaoAtual && (
+              <div className="rounded-lg p-3 mb-2" style={{ background: "#FEF2F2", border: "1px solid #FECACA" }}>
+                <p className="text-xs font-semibold" style={{ color: "#991B1B" }}>
+                  ⚠️ Documentos da contabilidade foram gerados com a data anterior ({formatarDataSemFuso(admissao.data_admissao_documentos_gerados)}) — revise antes de reenviar para assinatura.
+                </p>
+              </div>
+            )}
             <div className="flex justify-between items-center py-1.5 border-b border-gray-50 text-sm">
               <span className="text-gray-500">Data do exame admissional</span>
               <div className="flex items-center gap-2">

@@ -35,7 +35,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const { data: admissao, error: admError } = await svc
     .from("admissoes")
-    .select("id, vaga_id, vagas(cliente_id)")
+    .select("id, vaga_id, data_admissao, vagas(cliente_id)")
     .eq("id", id)
     .single();
   if (admError || !admissao) return NextResponse.json({ error: "Admissão não encontrada." }, { status: 404 });
@@ -290,6 +290,13 @@ export async function POST(request: NextRequest, { params }: Params) {
       { onConflict: "admissao_id,tipo_pacote" }
     );
   if (upsertError) return NextResponse.json({ error: upsertError.message }, { status: 500 });
+
+  // Snapshot da data usada neste envio — permite a tela de detalhe avisar se
+  // admissoes.data_admissao for editada depois (ver PATCH /dados-admissao) sem essa
+  // reenvio ter acontecido de novo. Reenviar o pacote (chamando esta rota outra vez)
+  // atualiza o snapshot e o aviso desaparece sozinho, sem precisar de ação manual extra.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await svc.from("admissoes").update({ data_admissao_documentos_gerados: (admissao as any).data_admissao ?? null }).eq("id", id);
 
   registrarAuditoria({
     usuario_id: user.id,

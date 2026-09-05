@@ -428,6 +428,11 @@ export const admissaoDadosAdmissaoUpdateSchema = z.object({
   horario_trabalho: z.string().min(1, "Horário de trabalho é obrigatório").optional(),
   turno: z.enum(TURNOS_FUNCIONARIO).optional().nullable(),
   entidade_contratante: z.string().min(1, "Entidade contratante é obrigatória").optional(),
+  // Editável em qualquer status exceto 'cancelada' (checado na rota, não aqui — motivo:
+  // caso real em que o pacote da contabilidade já tinha sido montado/assinado com a data
+  // errada, ver admissao_data_admissao_documentos_gerados). Nunca bloqueado por já existir
+  // envelope de assinatura — cancelar/invalidar o envelope no provedor é ação manual.
+  data_admissao: z.string().min(1, "Data de admissão é obrigatória").optional(),
 });
 
 export const admissaoUpdateSchema = z.object({
