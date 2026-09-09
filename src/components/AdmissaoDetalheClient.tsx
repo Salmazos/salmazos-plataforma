@@ -480,6 +480,11 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [motivoCancelamento, setMotivoCancelamento] = useState("");
   const [enviandoCancelamento, setEnviandoCancelamento] = useState(false);
   const [erroCancelamento, setErroCancelamento] = useState("");
+  const [cancelandoEnvelopeContabilidade, setCancelandoEnvelopeContabilidade] = useState(false);
+  const [motivoCancelamentoEnvelope, setMotivoCancelamentoEnvelope] = useState("");
+  const [confirmarCancelamentoManualEnvelope, setConfirmarCancelamentoManualEnvelope] = useState(false);
+  const [enviandoCancelamentoEnvelope, setEnviandoCancelamentoEnvelope] = useState(false);
+  const [erroCancelamentoEnvelope, setErroCancelamentoEnvelope] = useState("");
   const [avisoCancelamento, setAvisoCancelamento] = useState("");
   const [canceladaInfo, setCanceladaInfo] = useState(
     admissao.cancelada_em ? { em: admissao.cancelada_em, motivo: admissao.cancelada_motivo ?? "" } : null
@@ -1334,6 +1339,41 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const contabilidadeAssinaturaConcluida = envelopeContabilidade?.status === "assinado";
   const contabilidadeAssinaturaEmAndamento = envelopeContabilidade?.status === "pendente";
   const logAssinaturaCriada = auditLogs.find((l) => l.acao === "admissao_assinatura_clicksign_criada");
+
+  // Cancelamento do envelope PENDENTE do pacote da contabilidade — ver
+  // cancelar-envelope/route.ts. A rota chama a ZapSign (POST /api/v1/refuse/) e só cai no
+  // fallback manual (confirmarCancelamentoManualEnvelope) quando a chamada falha por um
+  // motivo que não é "documento já assinado" — nesse caso a própria rota bloqueia sempre,
+  // não tem fallback que contorne isso.
+  const handleCancelarEnvelopeContabilidade = async () => {
+    if (!motivoCancelamentoEnvelope.trim()) return;
+    setEnviandoCancelamentoEnvelope(true);
+    setErroCancelamentoEnvelope("");
+    try {
+      const res = await fetch(`/api/admissoes/${admissao.id}/documentos-contabilidade/cancelar-envelope`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          motivo: motivoCancelamentoEnvelope.trim(),
+          confirmarCancelamentoManual: confirmarCancelamentoManualEnvelope,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErroCancelamentoEnvelope(json.error || "Erro ao cancelar o envelope.");
+        return;
+      }
+      setCancelandoEnvelopeContabilidade(false);
+      setMotivoCancelamentoEnvelope("");
+      setConfirmarCancelamentoManualEnvelope(false);
+      showToast("Envelope cancelado — os documentos já enviados podem ser substituídos e o pacote pode ser reenviado.");
+      router.refresh();
+    } catch {
+      setErroCancelamentoEnvelope("Erro de conexão. Tente novamente.");
+    } finally {
+      setEnviandoCancelamentoEnvelope(false);
+    }
+  };
   const logContabilidadeEnviado = auditLogs.find((l) => l.acao === "admissao_documentos_contabilidade_montado_e_enviado");
 
   return (
@@ -2370,16 +2410,86 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
         <div className="card mt-3">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Assinatura Contrato</p>
           {contabilidadeAssinaturaConcluida ? (
-            <p className="text-sm text-gray-600 mb-0">
-              ✅ Pacote da contabilidade assinado eletronicamente em{" "}
-              {envelopeContabilidade?.assinado_em ? formatarData(envelopeContabilidade.assinado_em) : "—"}
-            </p>
+            <>
+              <p className="text-sm text-gray-600 mb-0">
+                ✅ Pacote da contabilidade assinado eletronicamente em{" "}
+                {envelopeContabilidade?.assinado_em ? formatarData(envelopeContabilidade.assinado_em) : "—"}
+              </p>
+              <p className="text-xs text-gray-500 mt-2">
+                Este pacote já foi assinado. Para corrigir algo aqui, cancele o contrato no painel do ZapSign e
+                contate o suporte técnico para reabrir o pacote manualmente.
+              </p>
+            </>
           ) : contabilidadeAssinaturaEmAndamento ? (
-            <p className="text-sm text-gray-600 mb-0">
-              ⏳ Aguardando assinatura eletrônica
-              {logContabilidadeEnviado?.created_at ? ` — enviado em ${formatarData(logContabilidadeEnviado.created_at)}` : ""}
-              {logContabilidadeEnviado?.usuario_nome ? ` por ${logContabilidadeEnviado.usuario_nome}` : ""}
-            </p>
+            <>
+              <p className="text-sm text-gray-600 mb-0">
+                ⏳ Aguardando assinatura eletrônica
+                {logContabilidadeEnviado?.created_at ? ` — enviado em ${formatarData(logContabilidadeEnviado.created_at)}` : ""}
+                {logContabilidadeEnviado?.usuario_nome ? ` por ${logContabilidadeEnviado.usuario_nome}` : ""}
+              </p>
+              {!cancelandoEnvelopeContabilidade ? (
+                <button
+                  onClick={() => setCancelandoEnvelopeContabilidade(true)}
+                  className="text-xs font-semibold mt-2"
+                  style={{ color: "#DC2626" }}
+                >
+                  Cancelar envelope e permitir novo envio
+                </button>
+              ) : (
+                <div className="rounded-lg p-3 border mt-2" style={{ borderColor: "#FECACA", background: "#FEF2F2" }}>
+                  <p className="text-sm font-bold mb-1" style={{ color: "#991B1B" }}>⚠️ Cancelar este envelope</p>
+                  <p className="text-xs mb-2" style={{ color: "#991B1B" }}>
+                    Cancela o documento na ZapSign (ninguém mais consegue assinar o link atual) e libera a
+                    substituição de todos os documentos já enviados neste pacote. Só funciona enquanto ninguém tiver
+                    assinado ainda.
+                  </p>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    Motivo do cancelamento (obrigatório) *
+                  </label>
+                  <textarea
+                    value={motivoCancelamentoEnvelope}
+                    onChange={(e) => setMotivoCancelamentoEnvelope(e.target.value)}
+                    rows={2}
+                    placeholder="Ex: documento errado incluído no pacote, precisa reenviar"
+                    className="input-field resize-none"
+                  />
+                  {erroCancelamentoEnvelope && (
+                    <div className="mt-1">
+                      <p className="text-xs text-red-600">{erroCancelamentoEnvelope}</p>
+                      <label className="flex items-center gap-2 text-xs text-gray-600 mt-1">
+                        <input
+                          type="checkbox"
+                          checked={confirmarCancelamentoManualEnvelope}
+                          onChange={(e) => setConfirmarCancelamentoManualEnvelope(e.target.checked)}
+                        />
+                        Confirmo que já cancelei este documento manualmente pelo painel da ZapSign
+                      </label>
+                    </div>
+                  )}
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => {
+                        setCancelandoEnvelopeContabilidade(false);
+                        setErroCancelamentoEnvelope("");
+                        setMotivoCancelamentoEnvelope("");
+                        setConfirmarCancelamentoManualEnvelope(false);
+                      }}
+                      className="btn-outline text-sm"
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      onClick={handleCancelarEnvelopeContabilidade}
+                      disabled={!motivoCancelamentoEnvelope.trim() || enviandoCancelamentoEnvelope}
+                      className="text-sm font-semibold text-white px-4 py-2 rounded-lg disabled:opacity-50"
+                      style={{ background: "#DC2626" }}
+                    >
+                      {enviandoCancelamentoEnvelope ? "Cancelando..." : "Confirmar cancelamento"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
             <p className="text-sm text-gray-600 mb-0">
               {documentosContabilidade.length} de 7 documentos possíveis já confirmados. Use o botão acima para enviar
@@ -2434,7 +2544,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           documentosIniciais={documentosContabilidade}
           nomeInicial={dp?.nome_completo ?? ""}
           emailInicial={dp?.email ?? ""}
-          envelopeExiste={envelopeContabilidade !== null}
+          envelopeExiste={envelopeContabilidade !== null && envelopeContabilidade.status !== "cancelado"}
           onEnviado={() => {
             showToast("Documentos da contabilidade montados e enviados para assinatura com sucesso.");
             router.refresh();

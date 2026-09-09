@@ -644,6 +644,14 @@ export const admissaoDocumentoContabilidadeConfirmarSchema = z.object({
   storage_path: z.string().min(1),
 });
 
+export const admissaoContabilidadeCancelarEnvelopeSchema = z.object({
+  motivo: z.string().trim().min(1),
+  // Fallback só usado quando a chamada à API da ZapSign falha por um motivo que NÃO é
+  // "documento já assinado" (ex: token não encontrado porque alguém já cancelou/excluiu
+  // manualmente no painel da ZapSign) — ver cancelar-envelope/route.ts.
+  confirmarCancelamentoManual: z.boolean().optional(),
+});
+
 export const admissaoContabilidadeMontarEnviarSchema = z.object({
   nomeCandidato: z.string().trim().min(1),
   emailCandidato: z.string().email(),

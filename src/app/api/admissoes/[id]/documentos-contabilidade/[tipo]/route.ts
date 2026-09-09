@@ -114,14 +114,17 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .maybeSingle();
 
   // Substituição de um documento já enviado: só permitida enquanto não existir envelope
-  // de assinatura do pacote da contabilidade pra esta admissão — depois de montado e
-  // enviado pra assinatura, o PDF final já foi gerado a partir do arquivo antigo.
+  // ATIVO (pendente ou assinado) de assinatura do pacote da contabilidade pra esta
+  // admissão — depois de montado e enviado pra assinatura, o PDF final já foi gerado a
+  // partir do arquivo antigo. Um envelope 'cancelado' (ver cancelar-envelope/route.ts)
+  // NÃO bloqueia mais — é exatamente o objetivo do cancelamento: destravar reenvio.
   if (existente) {
     const { data: envelope } = await svc
       .from("admissao_envelopes_assinatura")
       .select("id")
       .eq("admissao_id", id)
       .eq("tipo_pacote", TIPO_PACOTE_CONTABILIDADE)
+      .neq("status", "cancelado")
       .maybeSingle();
     if (envelope) {
       return NextResponse.json(

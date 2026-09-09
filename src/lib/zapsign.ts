@@ -279,6 +279,45 @@ export async function obterDocumento(docToken: string): Promise<ZapSignDocumento
   return zapsignFetch<ZapSignDocumento>(`/api/v1/docs/${docToken}/`, { method: "GET" });
 }
 
+// ── Cancelamento ─────────────────────────────────────────────────────────────
+//
+// POST /api/v1/refuse/ (docs.zapsign.com.br/documentos/cancelar-documentos, consultado
+// em 2026-09-09) — interrompe o fluxo de assinatura. NÃO usa zapsignFetch genérico de
+// propósito: precisamos distinguir o 403 `document_already_signed` (documento já
+// assinado por completo — a ZapSign se recusa a cancelar, e é exatamente esse sinal do
+// próprio servidor que usamos pra nunca deixar cancelar um documento com validade
+// jurídica já firmada) de qualquer outra falha (rede, token inválido, documento já
+// removido do lado da ZapSign etc.), que o chamador trata como caso de fallback manual.
+export type CancelarDocumentoResultado =
+  | { ok: true }
+  | { ok: false; jaAssinado: true }
+  | { ok: false; jaAssinado: false; erro: string };
+
+export async function cancelarDocumento(docToken: string, motivo: string): Promise<CancelarDocumentoResultado> {
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl()}/api/v1/refuse/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiToken()}` },
+      body: JSON.stringify({ doc_token: docToken, rejected_reason: motivo, notify_signer: false }),
+    });
+  } catch (err) {
+    return { ok: false, jaAssinado: false, erro: err instanceof Error ? err.message : "Falha de rede." };
+  }
+
+  if (res.ok) return { ok: true };
+
+  const json = await res.json().catch(() => null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const codigo = (json as any)?.error ?? (json as any)?.code;
+  if (res.status === 403 && codigo === "document_already_signed") {
+    return { ok: false, jaAssinado: true };
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const detail = (json as any)?.detail ?? (json as any)?.message ?? codigo ?? `HTTP ${res.status}`;
+  return { ok: false, jaAssinado: false, erro: String(detail) };
+}
+
 // ── Webhook: registro + validação de segurança ───────────────────────────────
 //
 // AVISO DE SEGURANÇA: a ZapSign NÃO oferece HMAC real no webhook — só permite
