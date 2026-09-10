@@ -493,6 +493,8 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [modalAssinaturaAberto, setModalAssinaturaAberto] = useState(false);
   const [abrindoAssinatura, setAbrindoAssinatura] = useState(false);
   const [modalContabilidadeAberto, setModalContabilidadeAberto] = useState(false);
+  const [abrindoCarta, setAbrindoCarta] = useState(false);
+  const [abrindoContrato, setAbrindoContrato] = useState(false);
 
   // ── Edição total pelo analista ──────────────────────────────────────────
   const [dp, setDp] = useState(dadosPessoais);
@@ -1296,6 +1298,30 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
     }
   };
 
+  const handleVerCarta = async () => {
+    setAbrindoCarta(true);
+    try {
+      const res = await fetch(`/api/admissoes/${admissao.id}/carta-conta-salario`);
+      const json = await res.json();
+      if (res.ok && json.signedUrl) window.open(json.signedUrl, "_blank");
+      else showToast(json.error || "Erro ao abrir a carta.");
+    } finally {
+      setAbrindoCarta(false);
+    }
+  };
+
+  const handleVerContrato = async () => {
+    setAbrindoContrato(true);
+    try {
+      const res = await fetch(`/api/admissoes/${admissao.id}/documentos-contabilidade/envelope`);
+      const json = await res.json();
+      if (res.ok && json.signedUrl) window.open(json.signedUrl, "_blank");
+      else showToast(json.error || "Erro ao abrir o documento assinado.");
+    } finally {
+      setAbrindoContrato(false);
+    }
+  };
+
   // A liberação do botão depende EXCLUSIVAMENTE dos documentos obrigatórios aprovados
   // em admissao_documentos — o campo admissoes.status (editável manualmente pela equipe)
   // nunca deve entrar nessa conta, para não abrir um atalho de aprovação sem revisão.
@@ -1451,52 +1477,120 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       )}
 
       {/* Ações principais */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div className="card">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Pacote para contabilidade</p>
-          <button
-            onClick={handleGerarPdf}
-            disabled={!podeGerarPdf || gerandoPdf}
-            title={tituloBotaoPdf}
-            className="btn-primary w-full"
-            style={{ opacity: !podeGerarPdf || gerandoPdf ? 0.5 : 1 }}
-          >
-            {gerandoPdf ? "Gerando PDF..." : "Gerar pacote para contabilidade"}
-          </button>
-          {nomesDocsPendentes.length > 0 && (
-            <p style={{ fontSize: 12, color: "#DC2626", marginTop: 8 }}>
-              ⚠️ Aprove antes: {nomesDocsPendentes.join(", ")}
-            </p>
-          )}
-          {!podeGerarPdf && !forcandoPacote && (
-            <button
-              onClick={() => setForcandoPacote(true)}
-              className="text-xs font-semibold mt-2"
-              style={{ color: "#DC2626" }}
-            >
-              Forçar geração do pacote
-            </button>
+          {admissao.pdf_pacote_path ? (
+            <>
+              <p className="text-sm text-gray-600 mb-2">
+                ✅ Gerado em {admissao.pdf_pacote_gerado_em ? formatarData(admissao.pdf_pacote_gerado_em) : "—"}
+              </p>
+              <button onClick={handleVerPacote} disabled={abrindoPacote} className="btn-outline w-full">
+                {abrindoPacote ? "Abrindo..." : "Visualizar"}
+              </button>
+              <button
+                onClick={handleGerarPdf}
+                disabled={!podeGerarPdf || gerandoPdf}
+                title={tituloBotaoPdf}
+                className="text-xs font-semibold mt-2"
+                style={{ color: "#6B7280", opacity: !podeGerarPdf || gerandoPdf ? 0.5 : 1 }}
+              >
+                {gerandoPdf ? "Gerando..." : "Gerar novamente"}
+              </button>
+              {nomesDocsPendentes.length > 0 && (
+                <p style={{ fontSize: 12, color: "#DC2626", marginTop: 8 }}>
+                  ⚠️ Aprove antes: {nomesDocsPendentes.join(", ")}
+                </p>
+              )}
+              {!podeGerarPdf && !forcandoPacote && (
+                <button
+                  onClick={() => setForcandoPacote(true)}
+                  className="text-xs font-semibold mt-2 block"
+                  style={{ color: "#DC2626" }}
+                >
+                  Forçar geração do pacote
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button
+                onClick={handleGerarPdf}
+                disabled={!podeGerarPdf || gerandoPdf}
+                title={tituloBotaoPdf}
+                className="btn-primary w-full"
+                style={{ opacity: !podeGerarPdf || gerandoPdf ? 0.5 : 1 }}
+              >
+                {gerandoPdf ? "Gerando PDF..." : "Gerar pacote para contabilidade"}
+              </button>
+              {nomesDocsPendentes.length > 0 && (
+                <p style={{ fontSize: 12, color: "#DC2626", marginTop: 8 }}>
+                  ⚠️ Aprove antes: {nomesDocsPendentes.join(", ")}
+                </p>
+              )}
+              {!podeGerarPdf && !forcandoPacote && (
+                <button
+                  onClick={() => setForcandoPacote(true)}
+                  className="text-xs font-semibold mt-2"
+                  style={{ color: "#DC2626" }}
+                >
+                  Forçar geração do pacote
+                </button>
+              )}
+            </>
           )}
         </div>
 
         {podeAbrirContaSalario && (
           <div className="card">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Carta de abertura de conta</p>
-            <button
-              onClick={() => setModalContaSalarioAberto(true)}
-              disabled={cartaBancoDesabilitada}
-              title={tituloBotaoCartaBanco}
-              className="w-full font-semibold px-6 py-2.5 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#FFB800]/30 bg-[#1F2937] hover:bg-[#374151] text-[#FDE68A]"
-            >
-              🏦 Gerar e enviar carta de abertura de conta
-            </button>
+            {admissao.carta_banco_enviada_em ? (
+              <>
+                <p className="text-sm text-gray-600 mb-2">
+                  ✅ Enviada em {formatarData(admissao.carta_banco_enviada_em)}
+                  {admissao.carta_banco_nome ? ` (banco: ${admissao.carta_banco_nome})` : ""}
+                </p>
+                {admissao.carta_banco_path && (
+                  <button onClick={handleVerCarta} disabled={abrindoCarta} className="btn-outline w-full">
+                    {abrindoCarta ? "Abrindo..." : "Visualizar"}
+                  </button>
+                )}
+                <button
+                  onClick={() => setModalContaSalarioAberto(true)}
+                  disabled={cartaBancoDesabilitada}
+                  title={tituloBotaoCartaBanco}
+                  className="text-xs font-semibold mt-2"
+                  style={{ color: "#6B7280", opacity: cartaBancoDesabilitada ? 0.5 : 1 }}
+                >
+                  Reenviar
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setModalContaSalarioAberto(true)}
+                disabled={cartaBancoDesabilitada}
+                title={tituloBotaoCartaBanco}
+                className="w-full font-semibold px-6 py-2.5 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#FFB800]/30 bg-[#1F2937] hover:bg-[#374151] text-[#FDE68A]"
+              >
+                🏦 Gerar e enviar carta de abertura de conta
+              </button>
+            )}
           </div>
         )}
 
-        {admissao.pdf_pacote_path && !assinaturaConcluida && (
+        {admissao.pdf_pacote_path && (
           <div className="card">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Assinatura Admissão</p>
-            {assinaturaEmAndamento ? (
+            {assinaturaConcluida ? (
+              <>
+                <p className="text-sm text-gray-600 mb-2">
+                  ✅ Assinado em {envelopeInterno?.assinado_em ? formatarData(envelopeInterno.assinado_em) : "—"}
+                </p>
+                <button onClick={handleVerAssinatura} disabled={abrindoAssinatura} className="btn-outline w-full">
+                  {abrindoAssinatura ? "Abrindo..." : "Visualizar"}
+                </button>
+              </>
+            ) : assinaturaEmAndamento ? (
               <p className="text-sm text-gray-600">⏳ Aguardando assinatura eletrônica</p>
             ) : (
               <button
@@ -1509,10 +1603,19 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           </div>
         )}
 
-        {admissao.pdf_pacote_path && !contabilidadeAssinaturaConcluida && (
+        {admissao.pdf_pacote_path && (
           <div className="card">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Assinatura Contrato</p>
-            {contabilidadeAssinaturaEmAndamento ? (
+            {contabilidadeAssinaturaConcluida ? (
+              <>
+                <p className="text-sm text-gray-600 mb-2">
+                  ✅ Assinado em {envelopeContabilidade?.assinado_em ? formatarData(envelopeContabilidade.assinado_em) : "—"}
+                </p>
+                <button onClick={handleVerContrato} disabled={abrindoContrato} className="btn-outline w-full">
+                  {abrindoContrato ? "Abrindo..." : "Visualizar"}
+                </button>
+              </>
+            ) : contabilidadeAssinaturaEmAndamento ? (
               <p className="text-sm text-gray-600">⏳ Aguardando assinatura eletrônica</p>
             ) : (
               <button
@@ -2411,10 +2514,13 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Assinatura Contrato</p>
           {contabilidadeAssinaturaConcluida ? (
             <>
-              <p className="text-sm text-gray-600 mb-0">
+              <p className="text-sm text-gray-600 mb-2">
                 ✅ Pacote da contabilidade assinado eletronicamente em{" "}
                 {envelopeContabilidade?.assinado_em ? formatarData(envelopeContabilidade.assinado_em) : "—"}
               </p>
+              <button onClick={handleVerContrato} disabled={abrindoContrato} className="btn-outline">
+                {abrindoContrato ? "Abrindo..." : "Ver documento assinado"}
+              </button>
               <p className="text-xs text-gray-500 mt-2">
                 Este pacote já foi assinado. Para corrigir algo aqui, cancele o contrato no painel do ZapSign e
                 contate o suporte técnico para reabrir o pacote manualmente.

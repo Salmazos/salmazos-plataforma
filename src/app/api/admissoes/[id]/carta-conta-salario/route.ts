@@ -17,6 +17,41 @@ interface Params { params: Promise<{ id: string }> }
 
 const BUCKET = "admissao-docs";
 const CHAVE_RESPONSAVEL_RH = "carta_conta_salario_responsavel_rh_user_id";
+// Carta contém dados sensíveis (LGPD) — signed URL de no máximo 15 minutos, mesmo padrão
+// de /api/admissoes/[id]/pacote e /api/admissoes/[id]/assinatura.
+const SIGNED_URL_TTL_SECONDS = 900;
+
+// Signed URL para reabrir a carta de abertura de conta salário já enviada para esta admissão.
+export async function GET(_request: NextRequest, { params }: Params) {
+  const { id } = await params;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const acessoNegado = await checarPapelAdmissoes(user);
+  if (acessoNegado) return acessoNegado;
+
+  const svc = createServiceClient();
+
+  const { data: admissao, error } = await svc
+    .from("admissoes")
+    .select("carta_banco_path")
+    .eq("id", id)
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 404 });
+  if (!admissao.carta_banco_path) return NextResponse.json({ error: "Nenhuma carta foi enviada ainda para esta admissão." }, { status: 400 });
+
+  const { data, error: signError } = await svc.storage
+    .from(BUCKET)
+    .createSignedUrl(admissao.carta_banco_path, SIGNED_URL_TTL_SECONDS);
+
+  if (signError) return NextResponse.json({ error: signError.message }, { status: 500 });
+
+  return NextResponse.json({ signedUrl: data.signedUrl });
+}
 
 // Busca o responsável pelo RH designado em Configurações e embute a assinatura dele
 // (PNG enviado em Meu Perfil) no PDFDocument — retorna null (sem quebrar a carta) se
