@@ -449,14 +449,32 @@ function inputStyle(extra?: React.CSSProperties): React.CSSProperties {
   };
 }
 
+export type ContagensAbas = {
+  todos: number;
+  disponivel: number;
+  alocado_mot: number;
+  alocado_rs: number;
+  alocado_terceirizacao: number;
+};
+
 export default function BancoCandidatosClient({
   candidatos,
   analista,
   idsEmProcesso,
+  totalGeral,
+  totalFiltrado,
+  contagensAbas,
+  pagina,
+  pageSize,
 }: {
   candidatos: CandidatoRow[];
   analista: string;
   idsEmProcesso: string[];
+  totalGeral: number;
+  totalFiltrado: number;
+  contagensAbas: ContagensAbas;
+  pagina: number;
+  pageSize: number;
 }) {
   const searchParams = useSearchParams();
   const [filtroAlocacao, setFiltroAlocacao] = useState(() => searchParams.get("alocacao") ?? "disponivel");
@@ -471,7 +489,10 @@ export default function BancoCandidatosClient({
   const [filtroOrigem, setFiltroOrigem] = useState(() => searchParams.get("origem") ?? "");
   const [filtroGenero, setFiltroGenero] = useState(() => searchParams.get("genero") ?? "");
   const [filtroSemGenero, setFiltroSemGenero] = useState(() => searchParams.get("semGenero") === "1");
-  const [ordemNome, setOrdemNome] = useState<"asc" | "desc" | null>(null);
+  const [ordemNome, setOrdemNome] = useState<"nome_asc" | "nome_desc" | null>(() => {
+    const s = searchParams.get("sort");
+    return s === "nome_asc" || s === "nome_desc" ? s : null;
+  });
 
   const [matchMap, setMatchMap] = useState<Record<string, MatchEntry[]>>({});
 
@@ -491,16 +512,10 @@ export default function BancoCandidatosClient({
 
   const { scrollRef: tableScrollRef, floatScrollRef, floatBar, handleScroll: handleTableScroll, handleFloatScroll } = useScrollHorizontalSincronizado();
 
-  // Sincroniza os filtros com a URL (debounced) pra sobreviver a navegação
-  // (ex: abrir um perfil e voltar) sem precisar guardar estado em outro lugar.
-  // Pula a primeira execução pra não disparar um replace redundante no mount,
-  // já que os valores iniciais vêm da própria URL.
-  const primeiraSincronizacao = useRef(true);
-  useEffect(() => {
-    if (primeiraSincronizacao.current) {
-      primeiraSincronizacao.current = false;
-      return;
-    }
+// Filtros agora batem no banco (ver page.tsx) -- qualquer mudança de filtro
+// precisa reiniciar a paginação na página 1, senão o usuário pode ficar
+// numa página que não existe mais pro novo conjunto de resultados.
+  function construirQueryString(overrides: { page?: number; pageSize?: number; sort?: "nome_asc" | "nome_desc" | null } = {}) {
     const params = new URLSearchParams();
     if (filtroAlocacao !== "disponivel") params.set("alocacao", filtroAlocacao);
     if (nome) params.set("nome", nome);
@@ -515,11 +530,48 @@ export default function BancoCandidatosClient({
     if (filtroGenero) params.set("genero", filtroGenero);
     if (filtroSemGenero) params.set("semGenero", "1");
 
-    const qs = params.toString();
+    const sortEfetivo = overrides.sort !== undefined ? overrides.sort : ordemNome;
+    if (sortEfetivo) params.set("sort", sortEfetivo);
+
+    const paginaEfetiva = overrides.page ?? pagina;
+    if (paginaEfetiva !== 1) params.set("page", String(paginaEfetiva));
+
+    const pageSizeEfetivo = overrides.pageSize ?? pageSize;
+    if (pageSizeEfetivo !== 20) params.set("pageSize", String(pageSizeEfetivo));
+
+    return params.toString();
+  }
+
+  function irParaPagina(novaPagina: number) {
+    router.replace(`/painel/banco-candidatos?${construirQueryString({ page: novaPagina })}`, { scroll: false });
+  }
+
+  function mudarPageSize(novoTamanho: number) {
+    router.replace(`/painel/banco-candidatos?${construirQueryString({ page: 1, pageSize: novoTamanho })}`, { scroll: false });
+  }
+
+  function alternarOrdemNome() {
+    const proximo: "nome_asc" | "nome_desc" = ordemNome === "nome_asc" ? "nome_desc" : "nome_asc";
+    setOrdemNome(proximo);
+    router.replace(`/painel/banco-candidatos?${construirQueryString({ sort: proximo, page: 1 })}`, { scroll: false });
+  }
+
+  // Sincroniza os filtros de texto/select com a URL (debounced), reiniciando
+  // a paginação na página 1 -- página e ordenação de nome são navegadas à
+  // parte (irParaPagina/alternarOrdemNome), por isso não entram nas
+  // dependências abaixo (senão qualquer clique de paginação re-disparava
+  // este efeito e brigava com a navegação direta).
+  const primeiraSincronizacao = useRef(true);
+  useEffect(() => {
+    if (primeiraSincronizacao.current) {
+      primeiraSincronizacao.current = false;
+      return;
+    }
     const timeout = setTimeout(() => {
-      router.replace(`/painel/banco-candidatos${qs ? `?${qs}` : ""}`, { scroll: false });
+      router.replace(`/painel/banco-candidatos?${construirQueryString({ page: 1 })}`, { scroll: false });
     }, 400);
     return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroAlocacao, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, keyword, filtroOrigem, filtroGenero, filtroSemGenero, router]);
 
   useEffect(() => {
@@ -681,58 +733,8 @@ export default function BancoCandidatosClient({
     }
   }, []);
 
-  const filtered = useMemo(() => {
-    const nomeQ = nome.trim().toLowerCase();
-    const cargoQ = cargo.trim().toLowerCase();
-    const cidadeQ = cidade.trim().toLowerCase();
-    const kwQ = keyword.trim().toLowerCase();
-    const minAge = idadeMin !== "" ? parseInt(idadeMin, 10) : null;
-    const maxAge = idadeMax !== "" ? parseInt(idadeMax, 10) : null;
-    const notaIaThreshold = notaIaMin !== "" ? parseInt(notaIaMin, 10) : null;
-    const matchThreshold = matchMin !== "" ? parseInt(matchMin, 10) : null;
-
-    return candidatos.filter((c) => {
-      const sa = c.status_alocacao ?? "disponivel";
-      if (filtroAlocacao === "disponivel" && sa !== "disponivel") return false;
-      if (filtroAlocacao === "alocado_mot" && sa !== "alocado_mot") return false;
-      if (filtroAlocacao === "alocado_rs" && sa !== "alocado_rs") return false;
-      if (filtroAlocacao === "alocado_terceirizacao" && sa !== "alocado_terceirizacao") return false;
-      if (nomeQ && !c.nome_completo.toLowerCase().includes(nomeQ)) return false;
-      if (cargoQ && !(c.cargo_pretendido ?? "").toLowerCase().includes(cargoQ)) return false;
-      if (cidadeQ && !(c.cidade ?? "").toLowerCase().includes(cidadeQ)) return false;
-      if (minAge !== null && (c.idade === null || c.idade < minAge)) return false;
-      if (maxAge !== null && (c.idade === null || c.idade > maxAge)) return false;
-      if (notaIaThreshold !== null && (c.triagem_score === null || c.triagem_score < notaIaThreshold)) return false;
-      if (matchThreshold !== null) {
-        const bestMatch = matchMap[c.id]?.[0]?.score ?? c.melhor_match_score;
-        if (bestMatch === null || bestMatch === undefined || bestMatch < matchThreshold) return false;
-      }
-      if (filtroOrigem && (c.origem ?? "cadastro_rapido") !== filtroOrigem) return false;
-      if (filtroGenero && c.genero !== filtroGenero) return false;
-      if (filtroSemGenero && c.genero !== null) return false;
-      if (kwQ) {
-        const haystack = [
-          c.nome_completo,
-          c.cargo_pretendido,
-          c.resumo_profissional,
-          c.resumo_candidato,
-          c.experiencias_profissionais,
-          c.formacao_academica,
-          Array.isArray(c.habilidades) ? c.habilidades.join(" ") : c.habilidades,
-        ].filter(Boolean).join(" ").toLowerCase();
-        if (!haystack.includes(kwQ)) return false;
-      }
-      return true;
-    });
-  }, [candidatos, nome, cargo, cidade, idadeMin, idadeMax, notaIaMin, matchMin, matchMap, filtroAlocacao, keyword, filtroOrigem, filtroGenero, filtroSemGenero]);
-
-  const sorted = useMemo(() => {
-    if (!ordemNome) return filtered;
-    const copia = [...filtered];
-    copia.sort((a, b) => a.nome_completo.localeCompare(b.nome_completo, "pt-BR"));
-    if (ordemNome === "desc") copia.reverse();
-    return copia;
-  }, [filtered, ordemNome]);
+  const totalPaginas = Math.max(1, Math.ceil(totalFiltrado / pageSize));
+  const filtrosAtivos = Boolean(nome || cargo || cidade || idadeMin || idadeMax || notaIaMin || matchMin || keyword || filtroOrigem || filtroGenero || filtroSemGenero);
 
   return (
     <div>
@@ -795,21 +797,21 @@ export default function BancoCandidatosClient({
         style={{ marginBottom: 20, display: "inline-flex", alignItems: "center", gap: 10 }}
       >
         <span style={{ fontSize: 36, fontWeight: 800, color: "#111827", lineHeight: 1 }}>
-          {candidatos.length}
+          {totalGeral}
         </span>
         <span style={{ fontSize: 14, color: "#6B7280" }}>
-          {candidatos.length === 1 ? "currículo cadastrado" : "currículos cadastrados"}
+          {totalGeral === 1 ? "currículo cadastrado" : "currículos cadastrados"}
         </span>
       </div>
 
       {/* Alocação filter tabs */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
         {([
-          { id: "todos", label: "Todos", count: candidatos.length },
-          { id: "disponivel", label: "Disponíveis", count: candidatos.filter((c) => (c.status_alocacao ?? "disponivel") === "disponivel").length },
-          { id: "alocado_mot", label: "🏢 MOT", count: candidatos.filter((c) => c.status_alocacao === "alocado_mot").length },
-          { id: "alocado_rs", label: "🏢 R&S", count: candidatos.filter((c) => c.status_alocacao === "alocado_rs").length },
-          { id: "alocado_terceirizacao", label: "🏢 Terc.", count: candidatos.filter((c) => c.status_alocacao === "alocado_terceirizacao").length },
+          { id: "todos", label: "Todos", count: contagensAbas.todos },
+          { id: "disponivel", label: "Disponíveis", count: contagensAbas.disponivel },
+          { id: "alocado_mot", label: "🏢 MOT", count: contagensAbas.alocado_mot },
+          { id: "alocado_rs", label: "🏢 R&S", count: contagensAbas.alocado_rs },
+          { id: "alocado_terceirizacao", label: "🏢 Terc.", count: contagensAbas.alocado_terceirizacao },
         ] as const).map((tab) => {
           const active = filtroAlocacao === tab.id;
           return (
@@ -1015,11 +1017,11 @@ export default function BancoCandidatosClient({
           />
         </div>
 
-        {(nome || cargo || cidade || idadeMin || idadeMax || notaIaMin || matchMin || keyword || filtroOrigem || filtroGenero || filtroSemGenero) && (
+        {filtrosAtivos && (
           <div style={{ marginTop: 10, fontSize: 13, color: "#6B7280" }}>
             Exibindo{" "}
-            <strong style={{ color: "#111827" }}>{filtered.length}</strong> de{" "}
-            {candidatos.length} candidatos
+            <strong style={{ color: "#111827" }}>{totalFiltrado}</strong> de{" "}
+            {totalGeral} candidatos
             {" · "}
             <button
               onClick={() => { setNome(""); setCargo(""); setCidade(""); setIdadeMin(""); setIdadeMax(""); setNotaIaMin(""); setMatchMin(""); setKeyword(""); setFiltroOrigem(""); setFiltroGenero(""); setFiltroSemGenero(false); }}
@@ -1039,9 +1041,9 @@ export default function BancoCandidatosClient({
               <tr>
                 <th
                   style={{ ...thStyle, cursor: "pointer", userSelect: "none" }}
-                  onClick={() => setOrdemNome((o) => (o === "asc" ? "desc" : "asc"))}
+                  onClick={alternarOrdemNome}
                 >
-                  Nome {ordemNome === "asc" ? "▲" : ordemNome === "desc" ? "▼" : ""}
+                  Nome {ordemNome === "nome_asc" ? "▲" : ordemNome === "nome_desc" ? "▼" : ""}
                 </th>
                 <th style={{ ...thStyle, textAlign: "center" }}>Idade</th>
                 <th style={thStyle}>Cargo Pretendido</th>
@@ -1054,19 +1056,21 @@ export default function BancoCandidatosClient({
               </tr>
             </thead>
             <tbody>
-              {sorted.length === 0 ? (
+              {candidatos.length === 0 ? (
                 <tr>
                   <td
                     colSpan={9}
                     style={{ padding: "48px 24px", textAlign: "center", color: "#9CA3AF", fontSize: 14 }}
                   >
-                    {candidatos.length === 0
+                    {totalGeral === 0
                       ? "Nenhum candidato cadastrado ainda."
-                      : "Nenhum candidato encontrado com os filtros aplicados."}
+                      : totalFiltrado === 0
+                      ? "Nenhum candidato encontrado com os filtros aplicados."
+                      : "Nenhum candidato nesta página."}
                   </td>
                 </tr>
               ) : (
-                sorted.map((c) => (
+                candidatos.map((c) => (
                   <tr
                     key={c.id}
                     style={{
@@ -1325,6 +1329,60 @@ export default function BancoCandidatosClient({
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Paginação */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginTop: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#6B7280" }}>
+          <span>Por página:</span>
+          <select
+            value={pageSize}
+            onChange={(e) => mudarPageSize(Number(e.target.value))}
+            style={inputStyle({ width: "auto", background: "#fff", cursor: "pointer", padding: "5px 10px" })}
+          >
+            <option value={20}>20</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            onClick={() => irParaPagina(pagina - 1)}
+            disabled={pagina <= 1}
+            style={{
+              padding: "6px 14px",
+              borderRadius: 8,
+              border: "1px solid #E5E7EB",
+              background: "#fff",
+              color: pagina <= 1 ? "#D1D5DB" : "#374151",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: pagina <= 1 ? "not-allowed" : "pointer",
+            }}
+          >
+            {"←"} Anterior
+          </button>
+          <span style={{ fontSize: 13, color: "#374151" }}>
+            Página <strong>{pagina}</strong> de <strong>{totalPaginas}</strong>
+          </span>
+          <button
+            onClick={() => irParaPagina(pagina + 1)}
+            disabled={pagina >= totalPaginas}
+            style={{
+              padding: "6px 14px",
+              borderRadius: 8,
+              border: "1px solid #E5E7EB",
+              background: "#fff",
+              color: pagina >= totalPaginas ? "#D1D5DB" : "#374151",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: pagina >= totalPaginas ? "not-allowed" : "pointer",
+            }}
+          >
+            Próxima {"→"}
+          </button>
         </div>
       </div>
 
