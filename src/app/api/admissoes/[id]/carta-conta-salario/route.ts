@@ -226,12 +226,15 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "O comprovante de endereço desta admissão ainda não foi aprovado." }, { status: 400 });
   }
 
-  // Nome e telefone SEMPRE de admissao_dados_pessoais — é o dado oficial confirmado
-  // pelo candidato no formulário de admissão. candidatos.nome_completo/telefone podem
-  // vir de extração automática de currículo (não confiável para um documento formal
-  // enviado a terceiros) e por isso nunca são usados aqui, mesmo como fallback.
+  // Nome, telefone e e-mail SEMPRE de admissao_dados_pessoais — é o dado oficial
+  // confirmado pelo candidato no formulário de admissão. candidatos.nome_completo/
+  // telefone/email podem vir de extração automática de currículo (não confiável para um
+  // documento formal enviado a terceiros) e por isso nunca são usados aqui, mesmo como
+  // fallback — mesma razão pela qual o fluxo de assinatura ZapSign também usa
+  // admissao_dados_pessoais.email em vez de candidatos.email.
   const nomeCompleto = dp.nome_completo || "—";
   const telefone = dp.telefone || null;
+  const email = dp.email || null;
 
   if (!preview && admissao.carta_banco_enviada_em && !forcar) {
     return NextResponse.json(
@@ -278,6 +281,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   desenharCartaAberturaContaSalario(w, {
     nome_completo: nomeCompleto,
     telefone,
+    email,
     data_admissao: admissao.data_admissao,
     funcao: admissao.funcao,
     entidade_razao_social: entidade?.razaoSocial ?? null,

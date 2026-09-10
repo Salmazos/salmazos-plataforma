@@ -532,6 +532,7 @@ function dataBR(iso: string | null | undefined): string {
 export interface CartaContaSalarioDados {
   nome_completo: string;
   telefone?: string | null;
+  email?: string | null;
   data_admissao?: string | null;
   funcao: string;
   // Resolvidos pelo chamador a partir de admissoes.entidade_contratante (ver
@@ -569,6 +570,11 @@ export function desenharCartaAberturaContaSalario(w: PdfWriter, d: CartaContaSal
   w.drawText("Solicitação", w.bold, 13, DARK);
   w.y -= 10;
 
+  // E-mail só entra no parágrafo quando preenchido — admissões antigas podem não ter
+  // admissao_dados_pessoais.email, e a frase precisa continuar fazendo sentido sem ele
+  // (não pode sobrar "e-mail ," ou similar).
+  const emailTrim = d.email?.trim();
+
   w.richParagraph(
     [
       { text: "Venho, por meio desta, solicitar a abertura de " },
@@ -577,6 +583,7 @@ export function desenharCartaAberturaContaSalario(w: PdfWriter, d: CartaContaSal
       { text: d.nome_completo, bold: true },
       { text: ", " },
       { text: `celular ${d.telefone?.trim() || "—"}`, bold: true },
+      ...(emailTrim ? [{ text: ", " }, { text: `e-mail ${emailTrim}`, bold: true }] : []),
       { text: ", admitido em " },
       { text: dataBR(d.data_admissao), bold: true },
       { text: ` para exercer a função de ${d.funcao}.` },
