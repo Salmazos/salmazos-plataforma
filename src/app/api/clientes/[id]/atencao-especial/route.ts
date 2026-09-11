@@ -58,10 +58,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  // NOTA: registrarAuditoria é fire-and-forget (sem waitUntil) — ver observação
-  // reportada separadamente sobre possível perda silenciosa de escritas em audit_logs.
-  // A leitura de "quem marcou" nesta feature NÃO depende de audit_logs (usa
-  // atencao_especial_marcado_por + analistas_perfil), então não é afetada por isso.
+  // registrarAuditoria agora usa waitUntil internamente (10/09/2026) — a perda silenciosa
+  // de escritas em serverless que motivava esta nota foi corrigida em src/lib/audit.ts.
   registrarAuditoria({
     usuario_id: user.id,
     usuario_nome: user.email ?? null,

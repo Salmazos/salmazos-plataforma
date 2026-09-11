@@ -1,3 +1,4 @@
+import { waitUntil } from "@vercel/functions";
 import { createServiceClient } from "@/lib/supabase/server";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -47,9 +48,18 @@ export function diffCampos(
   return diff;
 }
 
+// Fire-and-forget de propósito (todos os ~80 chamadores no projeto esperam void, sem
+// await, pra não atrasar a resposta da rota por causa de auditoria). O RISCO disso em
+// serverless é a Vercel congelar/encerrar a function assim que a resposta HTTP é
+// devolvida, matando esse insert em segundo plano antes de terminar — foi exatamente o
+// que aconteceu com o webhook da ZapSign (reenvio do Carlos Henrique Da Silva, 04/09/2026:
+// PDF baixado e status atualizado com sucesso, mas o audit_logs correspondente nunca foi
+// gravado). `waitUntil` resolve isso sem mudar a assinatura da função nem exigir `await`
+// em nenhum dos chamadores: ele avisa a Vercel pra manter a function viva até essa
+// promise terminar, mesmo depois do response já ter sido enviado.
 export function registrarAuditoria(params: AuditoriaParams): void {
   const supabase = createServiceClient();
-  void (async () => {
+  const promise = (async () => {
     try {
       await supabase.from("audit_logs").insert({
         usuario_id: params.usuario_id ?? null,
@@ -64,4 +74,5 @@ export function registrarAuditoria(params: AuditoriaParams): void {
       console.error("[audit]", err);
     }
   })();
+  waitUntil(promise);
 }
