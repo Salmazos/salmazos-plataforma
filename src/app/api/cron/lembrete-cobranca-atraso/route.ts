@@ -23,7 +23,7 @@ export async function GET(request: Request) {
       .select(
         "id, tipo, cliente_nome_snapshot, candidato_nome_snapshot, cargo, fee_valor, data_vencimento, revisado_por, vagas(titulo)"
       )
-      .eq("status", "aprovada_enviada")
+      .eq("status", "validada")
       .lt("data_vencimento", hojeISO)
       .or(`ultimo_lembrete_atraso_em.is.null,ultimo_lembrete_atraso_em.lte.${corte}`);
 

@@ -30,7 +30,10 @@ export async function POST(_request: NextRequest, { params }: Params) {
     .single();
 
   if (atualErr || !atual) return NextResponse.json({ error: "Cobrança não encontrada." }, { status: 404 });
-  if (atual.status !== "aprovada_enviada") {
+  // Aceita tanto 'validada' (fluxo normal: diretoria já definiu vencimento) quanto
+  // 'aprovada_enviada' (caso raro de marcar como paga sem nunca ter preenchido a data de
+  // vencimento) — preserva comportamento que já existia antes da separação desses dois status.
+  if (atual.status !== "aprovada_enviada" && atual.status !== "validada") {
     return NextResponse.json({ error: "Só é possível marcar como paga uma cobrança já enviada." }, { status: 400 });
   }
 

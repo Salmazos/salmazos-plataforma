@@ -44,9 +44,9 @@ export async function POST(request: NextRequest, { params }: Params) {
   const pode = await podeRevisarCobranca(user, cobranca);
   if (!pode) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
 
-  if (cobranca.status !== "pendente_revisao" && cobranca.status !== "aprovada_enviada") {
+  if (cobranca.status !== "pendente_revisao" && cobranca.status !== "aprovada_enviada" && cobranca.status !== "validada") {
     return NextResponse.json(
-      { error: "Só é possível cancelar uma cobrança pendente de revisão ou aguardando validação." },
+      { error: "Só é possível cancelar uma cobrança pendente de revisão, aguardando validação ou aguardando pagamento." },
       { status: 400 }
     );
   }

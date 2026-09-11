@@ -45,9 +45,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Esta cobrança já foi paga — o vencimento não pode mais ser alterado." }, { status: 400 });
   }
 
+  // Definir a data de vencimento É o ato de "validação da diretoria" neste fluxo — por isso
+  // essa é a única rota que faz a transição aprovada_enviada -> validada (adicionado em
+  // set/2026, ver histórico da migração cobranca_rs_status_validada). Simétrico: se a data for
+  // apagada (voltando a null) enquanto ainda está 'validada', volta pra 'aprovada_enviada' —
+  // não deveria existir cobrança "validada" sem data de vencimento preenchida.
+  const novaData = data_vencimento || null;
+  let novoStatus: "validada" | "aprovada_enviada" | undefined;
+  if (novaData && atual.status === "aprovada_enviada") novoStatus = "validada";
+  else if (!novaData && atual.status === "validada") novoStatus = "aprovada_enviada";
+
   const { data, error } = await svc
     .from("cobrancas_rs")
-    .update({ data_vencimento: data_vencimento || null })
+    .update({ data_vencimento: novaData, ...(novoStatus ? { status: novoStatus } : {}) })
     .eq("id", id)
     .select()
     .single();
@@ -73,7 +83,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   // definido (atual.data_vencimento era null): correções posteriores da data (typo, cliente
   // pediu prazo diferente) não devem reenviar "sua revisão foi aprovada" de novo — o evento
   // que importa aqui é a validação inicial da diretoria, não cada edição do campo.
-  if (!atual.data_vencimento && data.data_vencimento && data.status === "aprovada_enviada" && data.revisado_por) {
+  if (!atual.data_vencimento && data.data_vencimento && data.status === "validada" && data.revisado_por) {
     after(async () => {
       try {
         const { data: analista } = await svc

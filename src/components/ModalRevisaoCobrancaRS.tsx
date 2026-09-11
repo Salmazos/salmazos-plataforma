@@ -22,7 +22,7 @@ interface CobrancaDetalhe {
   fee_percentual: number | null;
   fee_valor: number | null;
   prazo_cobranca: string | null;
-  status: "pendente_revisao" | "aprovada_enviada" | "paga" | "cancelada";
+  status: "pendente_revisao" | "aprovada_enviada" | "validada" | "paga" | "cancelada";
   enviado_em: string | null;
   pago_em: string | null;
   data_vencimento: string | null;
@@ -280,7 +280,8 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
   };
 
   const podeCancelar =
-    cobranca != null && (cobranca.status === "pendente_revisao" || cobranca.status === "aprovada_enviada");
+    cobranca != null &&
+    (cobranca.status === "pendente_revisao" || cobranca.status === "aprovada_enviada" || cobranca.status === "validada");
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -478,9 +479,18 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                 </div>
               )}
 
-              {cobranca.status === "aprovada_enviada" && (
+              {(cobranca.status === "aprovada_enviada" || cobranca.status === "validada") && (
                 <div className="pt-2 border-t">
                   <p className="text-xs text-gray-400 mb-3">Enviada para validação da diretoria em {cobranca.enviado_em ? new Date(cobranca.enviado_em).toLocaleString("pt-BR") : "—"}</p>
+                  {/* "validada" só existe depois que a diretoria define a data de vencimento
+                      abaixo (essa definição É a validação, ver vencimento/route.ts) — aqui só
+                      confirmamos visualmente que esse passo já aconteceu, sem duplicar a
+                      lógica de estaAtrasada() da listagem. */}
+                  {cobranca.status === "validada" && (
+                    <p className="text-xs font-semibold mb-3" style={{ color: "#5B21B6" }}>
+                      ✅ Validada pela diretoria — aguardando pagamento.
+                    </p>
+                  )}
 
                   <div className="mb-4">
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Data de vencimento</label>
@@ -511,7 +521,10 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                     )}
                   </div>
 
-                  {isFullAccess && (
+                  {/* Reenviar continua restrito a 'aprovada_enviada' (decisão explícita:
+                      depois de validada — data já definida — reenviar notificação de envio
+                      inicial não faz sentido; se precisar, o cliente já tem a data). */}
+                  {isFullAccess && cobranca.status === "aprovada_enviada" && (
                     <div>
                       <button onClick={handleReenviar} disabled={reenviando} className="btn-outline w-full disabled:opacity-50">
                         {reenviando ? "Reenviando..." : "Reenviar notificação"}
@@ -525,7 +538,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                       processo (salvar vencimento → aguardar pagamento, possivelmente
                       reenviar → só então marcar como paga) e evita clique fora de ordem. */}
                   {acessoAmplo && (
-                    <button onClick={handleMarcarPaga} disabled={marcandoPaga} className={`btn-outline w-full disabled:opacity-50 ${isFullAccess ? "mt-3" : ""}`}>
+                    <button onClick={handleMarcarPaga} disabled={marcandoPaga} className={`btn-outline w-full disabled:opacity-50 ${isFullAccess && cobranca.status === "aprovada_enviada" ? "mt-3" : ""}`}>
                       {marcandoPaga ? "Marcando..." : "Marcar como paga"}
                     </button>
                   )}

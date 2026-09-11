@@ -50,7 +50,7 @@ export async function GET() {
   const { data: vencidasRaw, error } = await svc
     .from("cobrancas_rs")
     .select("id, tipo, cliente_nome_snapshot, candidato_nome_snapshot, fee_valor, data_vencimento")
-    .eq("status", "aprovada_enviada")
+    .eq("status", "validada")
     .lt("data_vencimento", hojeISO)
     .order("data_vencimento", { ascending: true });
 

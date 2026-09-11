@@ -19,7 +19,7 @@ export interface CobrancaRSRow {
   dataInicio: string | null;
   feePercentual: number | null;
   feeValor: number | null;
-  status: "pendente_revisao" | "aprovada_enviada" | "paga" | "cancelada";
+  status: "pendente_revisao" | "aprovada_enviada" | "validada" | "paga" | "cancelada";
   createdAt: string;
   enviadoEm: string | null;
   pagoEm: string | null;
@@ -39,6 +39,7 @@ interface Props {
 const STATUS_LABEL: Record<string, { label: string; bg: string; color: string }> = {
   pendente_revisao: { label: "Pendente de revisão", bg: "#FEF3C7", color: "#92400E" },
   aprovada_enviada: { label: "Aguardando validação", bg: "#DBEAFE", color: "#1D4ED8" },
+  validada: { label: "Aguardando pagamento", bg: "#EDE9FE", color: "#5B21B6" },
   paga: { label: "Paga", bg: "#DCFCE7", color: "#166534" },
   cancelada: { label: "Cancelada", bg: "#F3F4F6", color: "#6B7280" },
 };
@@ -53,12 +54,12 @@ function formatarData(iso: string): string {
 }
 
 function estaAtrasada(row: CobrancaRSRow): boolean {
-  if (row.status !== "aprovada_enviada" || !row.dataVencimento) return false;
+  if (row.status !== "validada" || !row.dataVencimento) return false;
   const hojeISO = new Date().toISOString().split("T")[0];
   return row.dataVencimento < hojeISO;
 }
 
-type FiltroTab = "pendente_revisao" | "aprovada_enviada" | "paga" | "todas";
+type FiltroTab = "pendente_revisao" | "aprovada_enviada" | "validada" | "paga" | "todas";
 
 export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess, acessoAmplo }: Props) {
   const router = useRouter();
@@ -77,7 +78,15 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess
     const row = rows.find((r) => r.id === abrirId);
     if (row) {
       setCobrancaAberta(row);
-      setTab(row.status === "paga" ? "paga" : row.status === "aprovada_enviada" ? "aprovada_enviada" : "pendente_revisao");
+      setTab(
+        row.status === "paga"
+          ? "paga"
+          : row.status === "validada"
+            ? "validada"
+            : row.status === "aprovada_enviada"
+              ? "aprovada_enviada"
+              : "pendente_revisao"
+      );
     }
     // Limpa o parâmetro da URL pra não reabrir o modal num refresh manual da página.
     router.replace("/painel/cobrancas-rs");
@@ -88,6 +97,7 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess
     () => ({
       pendente_revisao: rows.filter((r) => r.status === "pendente_revisao").length,
       aprovada_enviada: rows.filter((r) => r.status === "aprovada_enviada").length,
+      validada: rows.filter((r) => r.status === "validada").length,
       paga: rows.filter((r) => r.status === "paga").length,
     }),
     [rows]
@@ -111,11 +121,12 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         {(
           [
             { key: "pendente_revisao" as const, label: "Pendentes de revisão", valor: contagens.pendente_revisao },
             { key: "aprovada_enviada" as const, label: "Aguardando validação", valor: contagens.aprovada_enviada },
+            { key: "validada" as const, label: "Aguardando pagamento", valor: contagens.validada },
             { key: "paga" as const, label: "Pagas", valor: contagens.paga },
           ]
         ).map((c) => (
@@ -136,6 +147,7 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess
           [
             { id: "pendente_revisao" as const, label: "Pendentes de revisão" },
             { id: "aprovada_enviada" as const, label: "Aguardando validação" },
+            { id: "validada" as const, label: "Aguardando pagamento" },
             { id: "paga" as const, label: "Pagas" },
             { id: "todas" as const, label: "Todas" },
           ]
