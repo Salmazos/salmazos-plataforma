@@ -66,7 +66,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (body.status !== undefined) {
       const { data: current } = await supabase
         .from("vagas")
-        .select("status")
+        .select("status, num_posicoes, num_posicoes_abertas")
         .eq("id", id)
         .single();
       if (current && current.status !== body.status) {
@@ -76,6 +76,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         if (body.status === "aberta") {
           campos.data_abertura = new Date().toISOString();
           campos.data_fechamento = null;
+          // Reabertura manual (ex: vaga com várias posições que fechou errado — ver nota
+          // de memória de 14/09) restaura o contador de posições em aberto pro total da
+          // vaga. Sem isso o contador ficava travado no valor de quando fechou (0), e a
+          // vaga voltava "aberta" mas com nenhuma posição de verdade disponível.
+          campos.num_posicoes_abertas = current.num_posicoes;
         } else if (body.status === "fechada" || body.status === "cancelada") {
           campos.data_fechamento = new Date().toISOString();
         }

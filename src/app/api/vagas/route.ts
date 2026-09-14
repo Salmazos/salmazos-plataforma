@@ -39,6 +39,11 @@ export async function POST(request: NextRequest) {
         cliente_id: body.cliente_id ?? null,
         tipo_servico: body.tipo_servico,
         num_posicoes: Number(body.num_posicoes),
+        // Nasce igual a num_posicoes — sem isso a coluna fica null e a vaga fecha (some
+        // do site) já na primeira contratação, mesmo tendo várias posições (ver
+        // finalizar/route.ts, que decrementa esse contador). Mesmo padrão já usado na
+        // criação da vaga de reposição de garantia (acionar-garantia/route.ts).
+        num_posicoes_abertas: Number(body.num_posicoes),
         prazo: body.prazo || null,
         status: body.status ?? "aberta",
         cidade: body.cidade || null,

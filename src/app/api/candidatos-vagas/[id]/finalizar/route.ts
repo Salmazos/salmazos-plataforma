@@ -209,7 +209,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       // Decrement positions
       let vagaEncerrada = false;
       if (vaga) {
-        const current = vaga.num_posicoes_abertas ?? 1;
+        // Fallback pra num_posicoes (não pra 1 fixo, como era antes): vagas criadas antes
+        // dessa coluna nascer preenchida na criação (ver vagas/route.ts) ainda têm
+        // num_posicoes_abertas null hoje, e cair pra "1" fechava a vaga inteira já na
+        // primeira contratação mesmo com várias posições configuradas — bug real,
+        // confirmado em produção (TRATADOR I e Ajudante de Produção fecharam com 1 de 2
+        // posições preenchidas). Ver nota de memória de 14/09.
+        const current = vaga.num_posicoes_abertas ?? vaga.num_posicoes;
         const novas = Math.max(current - 1, 0);
         const updateFields: Record<string, unknown> = { num_posicoes_abertas: novas };
         if (novas === 0) {
