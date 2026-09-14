@@ -26,24 +26,22 @@ interface NotifyResult {
 export async function notifyAllAnalysts({ subject, html, tipo, candidato_id, vaga_id, excluirNiveisAcesso }: NotifyOpts): Promise<NotifyResult> {
   const supabase = createServiceClient();
 
-  let query = supabase
+  const { data: analistas, error } = await supabase
     .from("analistas_perfil")
     .select("email, nivel_acesso")
     .eq("ativo", true)
     .not("email", "is", null);
-
-  if (excluirNiveisAcesso && excluirNiveisAcesso.length > 0) {
-    query = query.not("nivel_acesso", "in", `(${excluirNiveisAcesso.join(",")})`);
-  }
-
-  const { data: analistas, error } = await query;
 
   if (error) {
     console.error(`[notifyAllAnalysts] Erro ao buscar destinatários (tipo="${tipo}"):`, error.message);
     return { attempted: 0, succeeded: 0, failed: 0 };
   }
 
-  const destinatarios = (analistas ?? []).map((a) => a.email).filter((email): email is string => !!email);
+  const analistasFiltrados = excluirNiveisAcesso && excluirNiveisAcesso.length > 0
+    ? (analistas ?? []).filter((a) => !excluirNiveisAcesso.includes(a.nivel_acesso))
+    : (analistas ?? []);
+
+  const destinatarios = analistasFiltrados.map((a) => a.email).filter((email): email is string => !!email);
   if (destinatarios.length === 0) {
     console.error(`[notifyAllAnalysts] Nenhum analista ativo com e-mail cadastrado — notificação (tipo="${tipo}") não foi enviada a ninguém.`);
     return { attempted: 0, succeeded: 0, failed: 0 };
