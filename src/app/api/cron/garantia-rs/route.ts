@@ -77,12 +77,15 @@ export async function GET(request: Request) {
 </div>
 </body></html>`;
 
+      // E-mail não vai pra diretoria/superuser (pedido explícito do Ölver, 14/09) — só pra
+      // analistas/supervisor. O sino acima continua chegando pra todo mundo, sem alteração.
       const resultado = await notifyAllAnalysts({
         subject: `⚠️ Hoje é o último dia da garantia de ${candidatoNome} — ${clienteNome}`,
         html,
         tipo: "alerta_garantia_rs",
         candidato_id: r.candidato_id,
         vaga_id: r.vaga_id,
+        excluirNiveisAcesso: ["diretoria", "superuser"],
       });
 
       if (resultado.attempted > 0) {

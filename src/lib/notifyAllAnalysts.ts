@@ -7,6 +7,11 @@ interface NotifyOpts {
   tipo: string;
   candidato_id?: string;
   vaga_id?: string;
+  // Níveis de acesso a excluir do broadcast por e-mail (ex: ["diretoria", "superuser"]).
+  // Opcional e aditivo — sem isso, comportamento idêntico ao anterior (todo analista
+  // ativo com e-mail recebe). Não afeta sino/notificacoes_analista, que continua sendo
+  // gravado separadamente pelo chamador quando aplicável.
+  excluirNiveisAcesso?: string[];
 }
 
 interface NotifyResult {
@@ -18,14 +23,20 @@ interface NotifyResult {
 // Precisa ser aguardada pelo chamador até o fim: se o handler retornar a resposta HTTP
 // antes disso, a função serverless pode congelar com os envios ainda pendentes — e nem
 // sucesso nem erro chegam a ser gravados em email_logs.
-export async function notifyAllAnalysts({ subject, html, tipo, candidato_id, vaga_id }: NotifyOpts): Promise<NotifyResult> {
+export async function notifyAllAnalysts({ subject, html, tipo, candidato_id, vaga_id, excluirNiveisAcesso }: NotifyOpts): Promise<NotifyResult> {
   const supabase = createServiceClient();
 
-  const { data: analistas, error } = await supabase
+  let query = supabase
     .from("analistas_perfil")
-    .select("email")
+    .select("email, nivel_acesso")
     .eq("ativo", true)
     .not("email", "is", null);
+
+  if (excluirNiveisAcesso && excluirNiveisAcesso.length > 0) {
+    query = query.not("nivel_acesso", "in", `(${excluirNiveisAcesso.join(",")})`);
+  }
+
+  const { data: analistas, error } = await query;
 
   if (error) {
     console.error(`[notifyAllAnalysts] Erro ao buscar destinatários (tipo="${tipo}"):`, error.message);
