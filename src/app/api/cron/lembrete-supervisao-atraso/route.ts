@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { obterDestinatariosSupervisaoAtraso } from "@/lib/supervisaoAvisos";
+import { obterDestinatariosSupervisaoAtraso, obterDestinatarioEmailSupervisaoAtraso } from "@/lib/supervisaoAvisos";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { sendEmail } from "@/lib/sendEmail";
 import { obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
@@ -72,12 +72,22 @@ export async function GET(request: Request) {
       processadas++;
       const clienteNome = (m.clientes as { nome: string }).nome;
 
-      const destinatarios = await obterDestinatariosSupervisaoAtraso(m.supervisor_responsavel_id, supabase);
-      if (destinatarios.length === 0) {
+      // Dois resolvers separados de propósito (ver comentário em supervisaoAvisos.ts):
+      // o sino continua indo pra diretoria/superuser + supervisor responsável, mas o e-mail
+      // (decisão de negócio 14/09, alto volume) passa a ir só pro supervisor responsável.
+      const destinatariosSino = await obterDestinatariosSupervisaoAtraso(m.supervisor_responsavel_id, supabase);
+      const destinatariosEmail = await obterDestinatarioEmailSupervisaoAtraso(m.supervisor_responsavel_id, supabase);
+
+      if (destinatariosSino.length === 0 && destinatariosEmail.length === 0) {
         console.error(
           `[cron/lembrete-supervisao-atraso] Nenhum destinatário resolvido (meta_id=${m.id}) — aviso não enviado.`
         );
         continue;
+      }
+      if (destinatariosEmail.length === 0) {
+        console.error(
+          `[cron/lembrete-supervisao-atraso] Cliente sem supervisor responsável ativo (meta_id=${m.id}) — e-mail não enviado, só sino.`
+        );
       }
 
       const template = getEmailTemplate("supervisao_cliente_atrasada", {
@@ -90,17 +100,17 @@ export async function GET(request: Request) {
       });
 
       const resultados = await Promise.all(
-        destinatarios.map((d) =>
+        destinatariosEmail.map((d) =>
           sendEmail({ to: d.email, subject: template.subject, html: template.html, tipo: "supervisao_cliente_atrasada" })
         )
       );
       const algumEnviado = resultados.some((res) => res.success);
-      if (!algumEnviado) {
+      if (destinatariosEmail.length > 0 && !algumEnviado) {
         console.error(`[cron/lembrete-supervisao-atraso] Todos os e-mails falharam (meta_id=${m.id}).`);
       }
 
       const diasLabel = diasDesde == null ? "sem registro" : `atrasado há ${diasDesde} dia${diasDesde !== 1 ? "s" : ""}`;
-      const notificacoesSino = destinatarios.map((d) => ({
+      const notificacoesSino = destinatariosSino.map((d) => ({
         tipo: "supervisao_cliente_atrasada",
         titulo: `🔴 Supervisão pendente — ${clienteNome}`,
         mensagem: `${clienteNome} — ${diasLabel}.`,
@@ -114,8 +124,10 @@ export async function GET(request: Request) {
 
       // Só marca como avisado depois de confirmar que pelo menos um e-mail saiu de verdade —
       // mesmo cuidado do cron de referência (lembrete-cobranca-atraso): nunca gravar dedup
-      // sem confirmar a tentativa real.
-      if (algumEnviado) {
+      // sem confirmar a tentativa real. Sino sem supervisor definido (destinatariosEmail
+      // vazio) ainda marca dedup normalmente, já que o sino em si já foi entregue acima —
+      // não há e-mail pra confirmar nesse caso.
+      if (algumEnviado || destinatariosEmail.length === 0) {
         const { error: updateErr } = await supabase
           .from("clientes_meta_supervisao")
           .update({ ultimo_aviso_atraso_em: new Date().toISOString() })

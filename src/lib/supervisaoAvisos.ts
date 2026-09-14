@@ -40,3 +40,33 @@ export async function obterDestinatariosSupervisaoAtraso(
 
   return Array.from(destinatarios.values());
 }
+
+/**
+ * Destinatários do E-MAIL de supervisão atrasada — só o supervisor responsável do cliente
+ * (clientes_meta_supervisao.supervisor_responsavel_id), sem incluir diretoria/superuser
+ * automaticamente (decisão de negócio 14/09: e-mail de todo cliente pra todo full-access
+ * gerava volume excessivo). Diferente de obterDestinatariosSupervisaoAtraso (usada pro sino
+ * dentro da plataforma, que continua incluindo diretoria/superuser) — dois resolvers
+ * separados de propósito, não uma flag na mesma função, porque os dois canais têm regras de
+ * negócio independentes agora. Retorna lista vazia se o cliente não tiver supervisor
+ * definido (não há fallback pra diretoria aqui).
+ */
+export async function obterDestinatarioEmailSupervisaoAtraso(
+  supervisorResponsavelId: string | null,
+  supabase?: ServiceClient
+): Promise<DestinatarioSupervisao[]> {
+  if (!supervisorResponsavelId) return [];
+
+  const svc = supabase ?? createServiceClient();
+
+  const { data: analista } = await svc
+    .from("analistas_perfil")
+    .select("id, user_id, email, nome_completo")
+    .eq("id", supervisorResponsavelId)
+    .eq("ativo", true)
+    .maybeSingle();
+
+  if (!analista?.user_id || !analista.email) return [];
+
+  return [{ user_id: analista.user_id, email: analista.email, nome_completo: analista.nome_completo }];
+}
