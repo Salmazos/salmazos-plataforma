@@ -10,6 +10,23 @@ export const ANALISTAS = [
 
 export type Analista = (typeof ANALISTAS)[number];
 
+// Mapa fixo nome curto (ANALISTAS, o que o <select> de Responsável Comercial grava) →
+// analistas_perfil.nome_completo. Existe porque clientes.responsavel_comercial tem hoje
+// registros inconsistentes (legado gravou nome completo, ex: "Lucas Miguel"; cadastros
+// atuais gravam só o nome curto, ex: "Lucas") e um match parcial por string arriscaria
+// confundir gente com nome parecido (ex: "Bete" é substring de "Elizabete" mas também
+// poderia bater errado num nome futuro) — nunca decide no escuro, usa este mapa explícito.
+// Atualizar manualmente se a lista de ANALISTAS mudar.
+export const ANALISTAS_NOME_COMPLETO: Record<Analista, string> = {
+  Giovanni: "Giovanni Prado",
+  Rebecca: "Rebecca Zambonini",
+  Andreza: "Andreza Salmazo",
+  Lucas: "Lucas Miguel",
+  Edivan: "Edivan Souza Silva",
+  Bete: "Elizabete Salmazo",
+  Olver: "Olver Pereira dos Santos",
+};
+
 export const HABILIDADES = [
   "Atendimento ao cliente",
   "Pacote Office",
