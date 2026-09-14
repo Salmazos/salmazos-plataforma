@@ -127,7 +127,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         cvFields.admissao_fee_valor = admissao_salario * feeRsPercentual / 100;
         cvFields.admissao_fee_prazo = vaga?.fee_rs_prazo_cobranca ?? null;
         cvFields.admissao_fee_origem = "analista_interno";
+      }
 
+      // Garantia é sempre 30 dias a partir da data de início do candidato, independente
+      // de a taxa/fee ter sido calculada nesta contratação (ex: "sem taxa configurada" com
+      // justificativa) — antes esse cálculo só rodava dentro do bloco de fee acima, e
+      // contratações sem fee calculado ficavam sem garantia registrada mesmo tendo data de
+      // início. Ver nota de memória de 14/09.
+      if (tipoServicoFinal === "recrutamento_selecao") {
         const inicioGarantia = new Date(data_inicio + "T00:00:00");
         inicioGarantia.setDate(inicioGarantia.getDate() + 30);
         cvFields.garantia_data_fim = inicioGarantia.toISOString().split("T")[0];

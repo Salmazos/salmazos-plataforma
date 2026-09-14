@@ -114,15 +114,20 @@ export async function PATCH(request: NextRequest) {
               admFields.admissao_fee_valor = Number(body.admissao_salario) * pct / 100;
               admFields.admissao_fee_prazo = v.fee_rs_prazo_cobranca ?? null;
               admFields.admissao_fee_origem = "cliente_portal";
-
-              if (body.admissao_data_inicio) {
-                const inicio = new Date(body.admissao_data_inicio + "T00:00:00");
-                inicio.setDate(inicio.getDate() + 30);
-                admFields.garantia_data_fim = inicio.toISOString().split("T")[0];
-              }
             } else if (pct == null) {
               feeRsAusente = true;
             }
+          }
+
+          // Garantia é sempre 30 dias a partir da data de início, independente de a taxa/
+          // fee ter sido calculada acima (vaga sem taxa configurada, ou cliente ainda não
+          // informou o salário) — antes esse cálculo só rodava dentro do bloco de fee, e
+          // ficava sem garantia registrada mesmo com data de início preenchida. Ver nota
+          // de memória de 14/09.
+          if (body.admissao_data_inicio) {
+            const inicio = new Date(body.admissao_data_inicio + "T00:00:00");
+            inicio.setDate(inicio.getDate() + 30);
+            admFields.garantia_data_fim = inicio.toISOString().split("T")[0];
           }
         }
 
