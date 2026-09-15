@@ -161,7 +161,7 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
           <button onClick={handleImprimirFormularios} disabled={gerandoFormularios} className="btn-outline" style={{ opacity: gerandoFormularios ? 0.6 : 1 }}>
             {gerandoFormularios ? "Gerando..." : "🖨️ Imprimir formulário em branco"}
           </button>
-          <button onClick={() => setModalRapidoAberto(true)} className="btn-outline">
+          <button onClick={() => setModalRapidoAberto(true)} className="btn-primary">
             + Admissão Rápida
           </button>
           <button onClick={abrirModalManual} className="btn-primary">
