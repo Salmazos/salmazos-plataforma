@@ -39,6 +39,7 @@ import {
   Search,
   Wallet,
   KeyRound,
+  FileSpreadsheet,
 } from "lucide-react";
 
 interface Props {
@@ -62,6 +63,7 @@ interface Props {
   canAccessSupervisao: boolean;
   canAccessFinanceiroRs: boolean;
   canAccessFaturamentoRs: boolean;
+  canAccessFaturamentoHortolandia: boolean;
   canAccessRelatorios: boolean;
   canAccessDashboard: boolean;
   canAccessClientes: boolean;
@@ -96,6 +98,7 @@ interface MenuLeafDef {
   requireAniversarios?: boolean;
   requireFinanceiroRs?: boolean;
   requireFaturamentoRs?: boolean;
+  requireFaturamentoHortolandia?: boolean;
   requireRelatorios?: boolean;
   requireDashboard?: boolean;
   requireClientes?: boolean;
@@ -154,6 +157,12 @@ const menuItems: MenuItemDef[] = [
     submenu: [
       { label: "Financeiro R&S", href: "/painel/financeiro-rs", icon: DollarSign, requireFinanceiroRs: true },
       { label: "Faturamento R&S", href: "/painel/faturamento-rs", icon: Landmark, requireFaturamentoRs: true },
+      {
+        label: "Faturamento Hortolândia",
+        href: "/painel/faturamento-hortolandia",
+        icon: FileSpreadsheet,
+        requireFaturamentoHortolandia: true,
+      },
       { label: "Cobranças R&S", href: "/painel/cobrancas-rs", icon: Banknote, requireCobrancasRS: true },
     ],
   },
@@ -206,6 +215,7 @@ export default function SidebarMenu({
   canAccessSupervisao,
   canAccessFinanceiroRs,
   canAccessFaturamentoRs,
+  canAccessFaturamentoHortolandia,
   canAccessRelatorios,
   canAccessDashboard,
   canAccessClientes,
@@ -276,6 +286,7 @@ export default function SidebarMenu({
     if (def.requireSupervisao && !canAccessSupervisao) return false;
     if (def.requireFinanceiroRs && !canAccessFinanceiroRs) return false;
     if (def.requireFaturamentoRs && !canAccessFaturamentoRs) return false;
+    if (def.requireFaturamentoHortolandia && !canAccessFaturamentoHortolandia) return false;
     if (def.requireRelatorios && !canAccessRelatorios) return false;
     if (def.requireDashboard && !canAccessDashboard) return false;
     if (def.requireClientes && !canAccessClientes) return false;

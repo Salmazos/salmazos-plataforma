@@ -1137,6 +1137,23 @@ export const faturamentoRsAjusteCreateSchema = z.object({
   descricao: z.string().trim().min(1, "Descrição é obrigatória"),
 });
 
+// ── Faturamento Hortolândia — contas a receber, planilha manual (ver
+// /api/faturamento-hortolandia). cliente_id sempre obrigatório e vinculado a um cliente já
+// cadastrado (decisão explícita do usuário — sem snapshot de texto livre como cobrancas_rs).
+export const contaReceberHortolandiaCreateSchema = z.object({
+  cliente_id: z.string().uuid("Selecione um cliente"),
+  numero_nf: z.string().trim().optional().nullable(),
+  valor_bruto: coerceNumberNullable.optional(),
+  valor_liquido: coerceNumber,
+  data_vencimento: z.string().min(1, "Vencimento é obrigatório"),
+  data_pagamento: z.string().optional().nullable(),
+  data_emissao_nf: z.string().optional().nullable(),
+  status: z.enum(["pendente", "pago", "cancelado"]).optional(),
+  observacoes: z.string().trim().optional().nullable(),
+});
+
+export const contaReceberHortolandiaUpdateSchema = contaReceberHortolandiaCreateSchema.partial();
+
 export const rescisaoAvisoPlataformaCreateSchema = z.object({
   usuario_id: z.string().uuid(),
 });

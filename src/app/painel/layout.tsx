@@ -17,6 +17,7 @@ import { checarAcessoSupervisao } from "@/lib/supervisaoAuth";
 import { podeAcessarAniversarios } from "@/lib/aniversariosAuth";
 import { podeAcessarFinanceiroRs } from "@/lib/financeiroRsAuth";
 import { podeAcessarFaturamentoRs } from "@/lib/faturamentoRsAuth";
+import { podeAcessarFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaAuth";
 import { podeAcessarRelatorios } from "@/lib/relatoriosAuth";
 import { podeAcessarDashboard } from "@/lib/dashboardAuth";
 import { podeAcessarClientes, podeAcessarCarteiraClientes, podeAcessarGestaoClientes } from "@/lib/comercialAuth";
@@ -67,6 +68,7 @@ export default async function PainelLayout({
   const canAccessAniversarios = await podeAcessarAniversarios(user);
   const canAccessFinanceiroRs = await podeAcessarFinanceiroRs(user);
   const canAccessFaturamentoRs = await podeAcessarFaturamentoRs(user);
+  const canAccessFaturamentoHortolandia = await podeAcessarFaturamentoHortolandia(user);
   const canAccessRelatorios = await podeAcessarRelatorios(user);
   const canAccessDashboard = await podeAcessarDashboard(user);
   const canAccessClientes = await podeAcessarClientes(user);
@@ -99,6 +101,7 @@ export default async function PainelLayout({
           canAccessSupervisao={canAccessSupervisao}
           canAccessFinanceiroRs={canAccessFinanceiroRs}
           canAccessFaturamentoRs={canAccessFaturamentoRs}
+          canAccessFaturamentoHortolandia={canAccessFaturamentoHortolandia}
           canAccessRelatorios={canAccessRelatorios}
           canAccessDashboard={canAccessDashboard}
           canAccessClientes={canAccessClientes}
