@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import ModalContaReceberHortolandia from "./ModalContaReceberHortolandia";
 
 export interface ContaReceberRow {
@@ -68,9 +69,25 @@ export default function FaturamentoHortolandiaPageClient({
   mesInicial,
   impostoInicial,
 }: Props) {
+  const searchParams = useSearchParams();
   const [rows, setRows] = useState(rowsIniciais);
   const [tab, setTab] = useState<FiltroTab>("pendente");
   const [contaAberta, setContaAberta] = useState<ContaReceberRow | null | "novo">(null);
+
+  // Deep-link ?abrir={id} do popup de vencidas (PopupContaReceberHortolandiaVencida) —
+  // mesmo padrão de CobrancasRSPageClient. Roda só uma vez de propósito (rows não entra
+  // nas deps): rows só muda localmente após uma ação no modal, e essa mudança não deve
+  // reabrir o modal sozinha.
+  useEffect(() => {
+    const abrirId = searchParams.get("abrir");
+    if (!abrirId) return;
+    const row = rows.find((r) => r.id === abrirId);
+    if (row) {
+      setContaAberta(row);
+      setTab("todas");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const [ano, setAno] = useState(anoInicial);
   const [mes, setMes] = useState(mesInicial);

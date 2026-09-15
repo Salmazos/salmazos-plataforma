@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/pos-venda-rs",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/lembrete-hortolandia-atraso",
+      "schedule": "0 9 * * *"
     }
   ]
 }

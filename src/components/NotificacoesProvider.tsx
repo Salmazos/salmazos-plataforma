@@ -17,6 +17,7 @@ export interface Notificacao {
   vaga_id: string | null;
   cobranca_rs_id: string | null;
   cliente_meta_supervisao_id: string | null;
+  conta_receber_hortolandia_id: string | null;
   lida: boolean;
   created_at: string;
 }
@@ -125,6 +126,8 @@ export default function NotificacoesProvider({ children }: { children: React.Rea
     else if (n.funcionario_id) router.push(`/painel/funcionarios/${n.funcionario_id}`);
     else if (n.cobranca_rs_id) router.push(`/painel/cobrancas-rs`);
     else if (n.cliente_meta_supervisao_id) router.push(`/painel/supervisao`);
+    else if (n.conta_receber_hortolandia_id)
+      router.push(`/painel/faturamento-hortolandia?abrir=${n.conta_receber_hortolandia_id}`);
   }, [marcarComoLida, router]);
 
   const dismissToast = useCallback((id: string) => {
