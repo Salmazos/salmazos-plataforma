@@ -7,6 +7,7 @@ import { formatarData } from "@/lib/utils";
 import { ADMISSAO_STATUS_BADGE, MODALIDADE_LABEL } from "@/lib/admissaoStatus";
 import { linkAdmissaoWhatsapp } from "@/lib/waLinks";
 import ModalIniciarAdmissao, { type CandidatoElegivel } from "./ModalIniciarAdmissao";
+import ModalAdmissaoRapida from "./ModalAdmissaoRapida";
 
 export interface AdmissaoRow {
   id: string;
@@ -53,7 +54,12 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
   const [filtroStatus, setFiltroStatus] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
   const [modalAberto, setModalAberto] = useState(false);
-  const [preSelecionado, setPreSelecionado] = useState<DisponivelAdmissao | null>(null);
+  const [modalRapidoAberto, setModalRapidoAberto] = useState(false);
+  // Tipo mais amplo (CandidatoElegivel, não DisponivelAdmissao) porque também recebe o
+  // retorno de ModalAdmissaoRapida — que não passa por historico_candidato a tempo de ter
+  // um data_contratado, e não precisa: ModalIniciarAdmissao só lê os campos de
+  // CandidatoElegivel, data_contratado é usado só na listagem "Aguardando início" abaixo.
+  const [preSelecionado, setPreSelecionado] = useState<CandidatoElegivel | null>(null);
   const [toast, setToast] = useState("");
   const [gerandoFormularios, setGerandoFormularios] = useState(false);
 
@@ -67,6 +73,17 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
 
   const abrirModalManual = () => {
     setPreSelecionado(null);
+    setModalAberto(true);
+  };
+
+  // Vaga casada: ModalAdmissaoRapida cria a vaga (fechada, invisível no site) e o
+  // candidato/vínculo (já 'contratado') no backend, e devolve o mesmo formato de
+  // CandidatoElegivel que a lista "Aguardando início" usa — só entao abre
+  // ModalIniciarAdmissao direto na etapa de dados, reaproveitando o passo final
+  // ("Criar admissão") sem duplicar nenhuma tela.
+  const handleAdmissaoRapidaCriada = (candidato: CandidatoElegivel) => {
+    setModalRapidoAberto(false);
+    setPreSelecionado(candidato);
     setModalAberto(true);
   };
 
@@ -143,6 +160,9 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
         <div className="flex gap-2">
           <button onClick={handleImprimirFormularios} disabled={gerandoFormularios} className="btn-outline" style={{ opacity: gerandoFormularios ? 0.6 : 1 }}>
             {gerandoFormularios ? "Gerando..." : "🖨️ Imprimir formulário em branco"}
+          </button>
+          <button onClick={() => setModalRapidoAberto(true)} className="btn-outline">
+            + Admissão Rápida
           </button>
           <button onClick={abrirModalManual} className="btn-primary">
             + Iniciar admissão
@@ -316,6 +336,12 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
         preSelecionado={preSelecionado}
         onClose={() => { setModalAberto(false); setPreSelecionado(null); }}
         onCriado={() => { setModalAberto(false); setPreSelecionado(null); router.refresh(); }}
+      />
+
+      <ModalAdmissaoRapida
+        isOpen={modalRapidoAberto}
+        onClose={() => setModalRapidoAberto(false)}
+        onCriado={handleAdmissaoRapidaCriada}
       />
     </div>
   );

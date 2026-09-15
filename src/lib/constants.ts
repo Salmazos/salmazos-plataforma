@@ -250,6 +250,7 @@ export const ORIGEM_LABELS: Record<string, string> = {
   cadastro_rapido: "Cadastro Rápido",
   vaga_especifica: "Vaga Específica",
   banco_talentos: "Banco de Talentos",
+  admissao_rapida: "Admissão Rápida (vaga casada)",
 };
 
 // Valores-sentinela salvos no campo salario (texto livre) quando o modo não é "valor fixo".

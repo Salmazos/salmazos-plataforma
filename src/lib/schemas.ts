@@ -416,6 +416,26 @@ export const admissaoCreateSchema = z.object({
   autorizacao_sindical: admissaoAutorizacaoSindicalCreateSchema.optional(),
 });
 
+// "Vaga casada" (cliente já traz o próprio candidato pra registrar, sem processo seletivo
+// real) — ver POST /api/admissoes/admissao-rapida. Cliente sempre precisa já existir
+// (decisão confirmada com o Olver, 15/09: nunca cadastra cliente novo por aqui, foge do
+// propósito de um formulário rápido) e tipo_servico fica restrito a MOT/Terceirização —
+// R&S "vaga casada" não faz sentido (o cliente contrata direto, a Salmazos não guarda
+// garantia/fee de uma seleção que nunca existiu) e Avaliação Psicológica não gera admissão.
+export const admissaoRapidaSchema = z.object({
+  cliente_id: z.string().uuid("Selecione um cliente já cadastrado."),
+  tipo_servico: z.enum(["mao_obra_temporaria", "terceirizacao"]),
+  funcao: z.string().min(2, "Informe a função/cargo."),
+  candidato_nome: z.string().min(2, "Informe o nome do candidato."),
+  candidato_telefone: z.string().optional(),
+  candidato_email: z.string().email().optional().or(z.literal("")),
+  candidato_cpf: z.string().optional(),
+  // true só na re-submissão depois que o RH confirmou, na tela, que quer reaproveitar o
+  // candidato já cadastrado com esse CPF (ver fluxo de "jaExiste" em ModalCadastroRapido,
+  // mesmo padrão) — nunca decide isso no escuro/automaticamente.
+  confirmar_duplicata: z.boolean().optional(),
+});
+
 // Edição pelo analista da vaga vinculada + campos que dependem dela (função/salário/
 // horário/entidade contratante) — pra corrigir admissões cujo candidato foi reencaminhado
 // pra outra vaga/cliente depois de criada. Todos opcionais (edição parcial); a UI sempre
