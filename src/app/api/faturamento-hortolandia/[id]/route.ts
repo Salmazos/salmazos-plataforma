@@ -57,7 +57,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
 
   const { data: atual } = await svc
     .from("contas_receber_hortolandia")
-    .select("cliente_id, valor_liquido")
+    .select("cliente_id, valor")
     .eq("id", id)
     .maybeSingle();
 

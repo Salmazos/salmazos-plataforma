@@ -8,8 +8,7 @@ export interface ContaReceberRow {
   clienteId: string;
   clienteNome: string;
   numeroNf: string | null;
-  valorBruto: number | null;
-  valorLiquido: number;
+  valor: number;
   dataVencimento: string;
   dataPagamento: string | null;
   dataEmissaoNf: string | null;
@@ -19,6 +18,9 @@ export interface ContaReceberRow {
 
 interface Props {
   rowsIniciais: ContaReceberRow[];
+  anoInicial: number;
+  mesInicial: number;
+  impostoInicial: number | null;
 }
 
 const STATUS_LABEL: Record<string, { label: string; bg: string; color: string }> = {
@@ -54,19 +56,95 @@ function statusEfetivo(row: ContaReceberRow): string {
   return row.status;
 }
 
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
 type FiltroTab = "pendente" | "pago" | "cancelado" | "todas";
 
-export default function FaturamentoHortolandiaPageClient({ rowsIniciais }: Props) {
+export default function FaturamentoHortolandiaPageClient({
+  rowsIniciais,
+  anoInicial,
+  mesInicial,
+  impostoInicial,
+}: Props) {
   const [rows, setRows] = useState(rowsIniciais);
   const [tab, setTab] = useState<FiltroTab>("pendente");
   const [contaAberta, setContaAberta] = useState<ContaReceberRow | null | "novo">(null);
+
+  const [ano, setAno] = useState(anoInicial);
+  const [mes, setMes] = useState(mesInicial);
+  const [percentualImposto, setPercentualImposto] = useState<number | null>(impostoInicial);
+  const [percentualInput, setPercentualInput] = useState(impostoInicial?.toString() ?? "");
+  const [salvandoImposto, setSalvandoImposto] = useState(false);
+  const [impostoSalvo, setImpostoSalvo] = useState(false);
+  const [erroImposto, setErroImposto] = useState("");
 
   const rowsFiltradas = useMemo(() => {
     if (tab === "todas") return rows;
     return rows.filter((r) => r.status === tab);
   }, [rows, tab]);
 
-  const totalLiquidoFiltrado = rowsFiltradas.reduce((soma, r) => soma + r.valorLiquido, 0);
+  const totalFiltrado = rowsFiltradas.reduce((soma, r) => soma + r.valor, 0);
+
+  // Total do mês selecionado — pelo vencimento, independente de status/aba, pra bater com o
+  // que a planilha manual do Olver já mostrava (ele mesmo apura o líquido informando o
+  // imposto do mês, igual já funciona em Faturamento R&S).
+  const chaveMes = `${ano}-${pad2(mes)}`;
+  const totalMes = useMemo(
+    () => rows.filter((r) => r.dataVencimento.startsWith(chaveMes)).reduce((soma, r) => soma + r.valor, 0),
+    [rows, chaveMes]
+  );
+  const liquidoMes = percentualImposto != null ? totalMes - (totalMes * percentualImposto) / 100 : null;
+
+  async function handleMesChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const valor = e.target.value; // "YYYY-MM"
+    if (!valor) return;
+    const [novoAnoStr, novoMesStr] = valor.split("-");
+    const novoAno = Number(novoAnoStr);
+    const novoMes = Number(novoMesStr);
+    setAno(novoAno);
+    setMes(novoMes);
+    setErroImposto("");
+    try {
+      const res = await fetch(`/api/faturamento-hortolandia/imposto?ano=${novoAno}&mes=${novoMes}`);
+      const json = await res.json();
+      setPercentualImposto(json.data?.percentual ?? null);
+      setPercentualInput(json.data?.percentual?.toString() ?? "");
+    } catch {
+      setErroImposto("Erro ao carregar imposto do mês.");
+    }
+  }
+
+  async function handleSalvarImposto() {
+    const percentual = Number(percentualInput.replace(",", "."));
+    if (percentualInput.trim() === "" || isNaN(percentual) || percentual < 0 || percentual > 100) {
+      setErroImposto("Informe um percentual válido entre 0 e 100.");
+      return;
+    }
+    setSalvandoImposto(true);
+    setErroImposto("");
+    setImpostoSalvo(false);
+    try {
+      const res = await fetch("/api/faturamento-hortolandia/imposto", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ano, mes, percentual }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setErroImposto(json.error || "Erro ao salvar imposto.");
+        return;
+      }
+      setPercentualImposto(json.data.percentual);
+      setImpostoSalvo(true);
+      setTimeout(() => setImpostoSalvo(false), 2500);
+    } catch {
+      setErroImposto("Erro de conexão. Tente novamente.");
+    } finally {
+      setSalvandoImposto(false);
+    }
+  }
 
   function handleSalva(row: ContaReceberRow) {
     setRows((prev) => {
@@ -93,6 +171,73 @@ export default function FaturamentoHortolandiaPageClient({ rowsIniciais }: Props
         </button>
       </div>
 
+      <div className="mb-5 flex justify-end">
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Mês</label>
+          <input type="month" value={chaveMes} onChange={handleMesChange} className="input-field" />
+        </div>
+      </div>
+
+      {erroImposto && (
+        <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{erroImposto}</p>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div style={{ background: "#D1FAE5", border: "2px solid #166534", borderRadius: 12, padding: "14px 16px" }}>
+          <p style={{ fontSize: 22, fontWeight: 800, color: "#166534", margin: 0 }}>{formatarMoeda(totalMes)}</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#166534", margin: "2px 0 0" }}>
+            Valor total do mês (por vencimento)
+          </p>
+        </div>
+
+        <div style={{ background: "#F3F4F6", border: "2px solid transparent", borderRadius: 12, padding: "14px 16px" }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>Imposto do mês (%)</p>
+          <div className="flex gap-2 items-center">
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              value={percentualInput}
+              onChange={(e) => setPercentualInput(e.target.value)}
+              placeholder="Ex: 6,5"
+              className="input-field"
+              style={{ maxWidth: 100 }}
+            />
+            <button
+              onClick={handleSalvarImposto}
+              disabled={salvandoImposto}
+              className="btn-outline disabled:opacity-50"
+              style={{ whiteSpace: "nowrap", padding: "6px 12px", fontSize: 12 }}
+            >
+              {salvandoImposto ? "Salvando..." : "Salvar"}
+            </button>
+          </div>
+          {impostoSalvo && <p className="text-green-700 text-xs mt-1">Imposto salvo!</p>}
+        </div>
+      </div>
+
+      {liquidoMes != null ? (
+        <div
+          className="mb-6"
+          style={{ background: "#DBEAFE", border: "2px solid transparent", borderRadius: 12, padding: "14px 16px" }}
+        >
+          <p style={{ fontSize: 22, fontWeight: 800, color: "#1D4ED8", margin: 0 }}>{formatarMoeda(liquidoMes)}</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#1D4ED8", margin: "2px 0 0" }}>
+            Valor líquido do mês ({percentualImposto}% de imposto)
+          </p>
+        </div>
+      ) : (
+        <div
+          className="mb-6"
+          style={{ background: "#FEF3C7", border: "2px solid transparent", borderRadius: 12, padding: "14px 16px" }}
+        >
+          <p style={{ fontSize: 13, fontWeight: 600, color: "#92400E", margin: 0 }}>
+            ⚠ Informe o imposto do mês para calcular o líquido.
+          </p>
+        </div>
+      )}
+
       <div className="flex gap-2 mb-4 border-b border-gray-200">
         {(["pendente", "pago", "cancelado", "todas"] as FiltroTab[]).map((t) => (
           <button
@@ -114,8 +259,7 @@ export default function FaturamentoHortolandiaPageClient({ rowsIniciais }: Props
               <th className="py-2 px-3">Vencimento</th>
               <th className="py-2 px-3">Cliente</th>
               <th className="py-2 px-3">Nº NF</th>
-              <th className="py-2 px-3 text-right">Bruto</th>
-              <th className="py-2 px-3 text-right">Valor Líq.</th>
+              <th className="py-2 px-3 text-right">Valor R$</th>
               <th className="py-2 px-3 text-center">Dias p/ venc.</th>
               <th className="py-2 px-3">Pagamento</th>
               <th className="py-2 px-3">Status</th>
@@ -136,8 +280,7 @@ export default function FaturamentoHortolandiaPageClient({ rowsIniciais }: Props
                   <td className="py-2 px-3">{formatarData(row.dataVencimento)}</td>
                   <td className="py-2 px-3 font-medium text-gray-900">{row.clienteNome}</td>
                   <td className="py-2 px-3 text-gray-500">{row.numeroNf ?? "—"}</td>
-                  <td className="py-2 px-3 text-right">{formatarMoeda(row.valorBruto)}</td>
-                  <td className="py-2 px-3 text-right font-medium">{formatarMoeda(row.valorLiquido)}</td>
+                  <td className="py-2 px-3 text-right font-medium">{formatarMoeda(row.valor)}</td>
                   <td className="py-2 px-3 text-center text-gray-500">
                     {row.status === "pendente" ? dias : "—"}
                   </td>
@@ -156,7 +299,7 @@ export default function FaturamentoHortolandiaPageClient({ rowsIniciais }: Props
             })}
             {rowsFiltradas.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-8 text-center text-gray-400">
+                <td colSpan={8} className="py-8 text-center text-gray-400">
                   Nenhum lançamento nessa visão.
                 </td>
               </tr>
@@ -165,10 +308,10 @@ export default function FaturamentoHortolandiaPageClient({ rowsIniciais }: Props
           {rowsFiltradas.length > 0 && (
             <tfoot>
               <tr className="border-t border-gray-200 font-semibold text-gray-900">
-                <td className="py-2 px-3" colSpan={4}>
+                <td className="py-2 px-3" colSpan={3}>
                   Total ({rowsFiltradas.length})
                 </td>
-                <td className="py-2 px-3 text-right">{formatarMoeda(totalLiquidoFiltrado)}</td>
+                <td className="py-2 px-3 text-right">{formatarMoeda(totalFiltrado)}</td>
                 <td className="py-2 px-3" colSpan={4} />
               </tr>
             </tfoot>

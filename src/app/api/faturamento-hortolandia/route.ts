@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     acao: "conta_receber_hortolandia_criada",
     entidade: "contas_receber_hortolandia",
     entidade_id: data.id,
-    detalhes: { cliente_id: data.cliente_id, valor_liquido: data.valor_liquido, data_vencimento: data.data_vencimento },
+    detalhes: { cliente_id: data.cliente_id, valor: data.valor, data_vencimento: data.data_vencimento },
   });
 
   return NextResponse.json({ data });

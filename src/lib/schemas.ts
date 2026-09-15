@@ -1140,11 +1140,12 @@ export const faturamentoRsAjusteCreateSchema = z.object({
 // ── Faturamento Hortolândia — contas a receber, planilha manual (ver
 // /api/faturamento-hortolandia). cliente_id sempre obrigatório e vinculado a um cliente já
 // cadastrado (decisão explícita do usuário — sem snapshot de texto livre como cobrancas_rs).
+// Valor único por lançamento (sem bruto/líquido) — o líquido depende do imposto do MÊS,
+// não de cada lançamento (ver faturamentoHortolandiaImpostoSchema).
 export const contaReceberHortolandiaCreateSchema = z.object({
   cliente_id: z.string().uuid("Selecione um cliente"),
   numero_nf: z.string().trim().optional().nullable(),
-  valor_bruto: coerceNumberNullable.optional(),
-  valor_liquido: coerceNumber,
+  valor: coerceNumber,
   data_vencimento: z.string().min(1, "Vencimento é obrigatório"),
   data_pagamento: z.string().optional().nullable(),
   data_emissao_nf: z.string().optional().nullable(),
@@ -1153,6 +1154,15 @@ export const contaReceberHortolandiaCreateSchema = z.object({
 });
 
 export const contaReceberHortolandiaUpdateSchema = contaReceberHortolandiaCreateSchema.partial();
+
+// ── Faturamento Hortolândia — percentual de imposto informado manualmente por mês/ano
+// (upsert em faturamento_hortolandia_impostos_mensais, ver PATCH
+// /api/faturamento-hortolandia/imposto) — mesmo padrão de faturamentoRsImpostoSchema.
+export const faturamentoHortolandiaImpostoSchema = z.object({
+  ano: z.number().int().min(2000).max(2100),
+  mes: z.number().int().min(1).max(12),
+  percentual: z.number().min(0).max(100),
+});
 
 export const rescisaoAvisoPlataformaCreateSchema = z.object({
   usuario_id: z.string().uuid(),

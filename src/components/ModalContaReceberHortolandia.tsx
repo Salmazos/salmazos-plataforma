@@ -20,8 +20,7 @@ interface Props {
 interface FormState {
   cliente_id: string;
   numero_nf: string;
-  valor_bruto: number | null;
-  valor_liquido: number;
+  valor: number;
   data_vencimento: string;
   data_pagamento: string;
   data_emissao_nf: string;
@@ -33,8 +32,7 @@ function estadoInicial(conta: ContaReceberRow | null): FormState {
   return {
     cliente_id: conta?.clienteId ?? "",
     numero_nf: conta?.numeroNf ?? "",
-    valor_bruto: conta?.valorBruto ?? null,
-    valor_liquido: conta?.valorLiquido ?? 0,
+    valor: conta?.valor ?? 0,
     data_vencimento: conta?.dataVencimento ?? "",
     data_pagamento: conta?.dataPagamento ?? "",
     data_emissao_nf: conta?.dataEmissaoNf ?? "",
@@ -70,8 +68,7 @@ export default function ModalContaReceberHortolandia({ conta, onClose, onSalva, 
       const payload = {
         cliente_id: form.cliente_id,
         numero_nf: form.numero_nf || null,
-        valor_bruto: form.valor_bruto,
-        valor_liquido: form.valor_liquido,
+        valor: form.valor,
         data_vencimento: form.data_vencimento,
         data_pagamento: form.data_pagamento || null,
         data_emissao_nf: form.data_emissao_nf || null,
@@ -94,8 +91,7 @@ export default function ModalContaReceberHortolandia({ conta, onClose, onSalva, 
         clienteId: c.cliente_id,
         clienteNome: (Array.isArray(c.clientes) ? c.clientes[0]?.nome : c.clientes?.nome) ?? "—",
         numeroNf: c.numero_nf,
-        valorBruto: c.valor_bruto,
-        valorLiquido: c.valor_liquido,
+        valor: c.valor,
         dataVencimento: c.data_vencimento,
         dataPagamento: c.data_pagamento,
         dataEmissaoNf: c.data_emissao_nf,
@@ -180,25 +176,14 @@ export default function ModalContaReceberHortolandia({ conta, onClose, onSalva, 
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Bruto</label>
-              <CampoMoeda
-                value={form.valor_bruto}
-                onChange={(v) => set("valor_bruto", v)}
-                className="input-field"
-                placeholder="0,00"
-              />
-            </div>
-            <div>
-              <label className="label">Valor Líquido *</label>
-              <CampoMoeda
-                value={form.valor_liquido}
-                onChange={(v) => set("valor_liquido", v)}
-                className="input-field"
-                placeholder="0,00"
-              />
-            </div>
+          <div>
+            <label className="label">Valor (R$) *</label>
+            <CampoMoeda
+              value={form.valor}
+              onChange={(v) => set("valor", v)}
+              className="input-field"
+              placeholder="0,00"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
