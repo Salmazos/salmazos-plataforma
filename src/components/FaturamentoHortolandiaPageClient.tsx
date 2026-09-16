@@ -22,6 +22,7 @@ interface Props {
   anoInicial: number;
   mesInicial: number;
   impostoInicial: number | null;
+  impostosPorMesInicial: Record<string, number>;
 }
 
 const STATUS_LABEL: Record<string, { label: string; bg: string; color: string }> = {
@@ -68,6 +69,7 @@ export default function FaturamentoHortolandiaPageClient({
   anoInicial,
   mesInicial,
   impostoInicial,
+  impostosPorMesInicial,
 }: Props) {
   const searchParams = useSearchParams();
   const [rows, setRows] = useState(rowsIniciais);
@@ -97,12 +99,30 @@ export default function FaturamentoHortolandiaPageClient({
   const [impostoSalvo, setImpostoSalvo] = useState(false);
   const [erroImposto, setErroImposto] = useState("");
 
+  // Percentual de imposto por "YYYY-MM" de TODOS os meses já lançados — diferente de
+  // percentualImposto (só o mês selecionado no seletor), usado pra calcular o Valor
+  // Líquido de cada linha da tabela abaixo, que mistura lançamentos de vários meses.
+  const [impostosPorMes, setImpostosPorMes] = useState<Record<string, number>>(impostosPorMesInicial);
+
+  function valorLiquidoRow(row: ContaReceberRow): number | null {
+    const percentual = impostosPorMes[row.dataVencimento.slice(0, 7)];
+    return percentual != null ? row.valor - (row.valor * percentual) / 100 : null;
+  }
+
   const rowsFiltradas = useMemo(() => {
     if (tab === "todas") return rows;
     return rows.filter((r) => r.status === tab);
   }, [rows, tab]);
 
   const totalFiltrado = rowsFiltradas.reduce((soma, r) => soma + r.valor, 0);
+
+  // Soma só dos lançamentos cujo mês de vencimento já tem imposto informado — quando nenhum
+  // tem, mostra "—" em vez de R$ 0,00 (que passaria a falsa impressão de líquido zerado).
+  const totalLiquidoFiltrado = rowsFiltradas.reduce((soma, r) => {
+    const liquido = valorLiquidoRow(r);
+    return liquido != null ? soma + liquido : soma;
+  }, 0);
+  const existeLiquidoConhecido = rowsFiltradas.some((r) => valorLiquidoRow(r) != null);
 
   // Total do mês selecionado — pelo vencimento, independente de status/aba, pra bater com o
   // que a planilha manual do Olver já mostrava (ele mesmo apura o líquido informando o
@@ -128,6 +148,10 @@ export default function FaturamentoHortolandiaPageClient({
       const json = await res.json();
       setPercentualImposto(json.data?.percentual ?? null);
       setPercentualInput(json.data?.percentual?.toString() ?? "");
+      if (json.data?.percentual != null) {
+        const chave = `${novoAno}-${pad2(novoMes)}`;
+        setImpostosPorMes((prev) => ({ ...prev, [chave]: json.data.percentual }));
+      }
     } catch {
       setErroImposto("Erro ao carregar imposto do mês.");
     }
@@ -154,6 +178,7 @@ export default function FaturamentoHortolandiaPageClient({
         return;
       }
       setPercentualImposto(json.data.percentual);
+      setImpostosPorMes((prev) => ({ ...prev, [chaveMes]: json.data.percentual }));
       setImpostoSalvo(true);
       setTimeout(() => setImpostoSalvo(false), 2500);
     } catch {
@@ -277,6 +302,7 @@ export default function FaturamentoHortolandiaPageClient({
               <th className="py-2 px-3">Cliente</th>
               <th className="py-2 px-3">Nº NF</th>
               <th className="py-2 px-3 text-right">Valor R$</th>
+              <th className="py-2 px-3 text-right">Valor Líquido</th>
               <th className="py-2 px-3 text-center">Dias p/ venc.</th>
               <th className="py-2 px-3">Pagamento</th>
               <th className="py-2 px-3">Status</th>
@@ -298,6 +324,7 @@ export default function FaturamentoHortolandiaPageClient({
                   <td className="py-2 px-3 font-medium text-gray-900">{row.clienteNome}</td>
                   <td className="py-2 px-3 text-gray-500">{row.numeroNf ?? "—"}</td>
                   <td className="py-2 px-3 text-right font-medium">{formatarMoeda(row.valor)}</td>
+                  <td className="py-2 px-3 text-right text-gray-600">{formatarMoeda(valorLiquidoRow(row))}</td>
                   <td className="py-2 px-3 text-center text-gray-500">
                     {row.status === "pendente" ? dias : "—"}
                   </td>
@@ -316,7 +343,7 @@ export default function FaturamentoHortolandiaPageClient({
             })}
             {rowsFiltradas.length === 0 && (
               <tr>
-                <td colSpan={8} className="py-8 text-center text-gray-400">
+                <td colSpan={9} className="py-8 text-center text-gray-400">
                   Nenhum lançamento nessa visão.
                 </td>
               </tr>
@@ -329,6 +356,9 @@ export default function FaturamentoHortolandiaPageClient({
                   Total ({rowsFiltradas.length})
                 </td>
                 <td className="py-2 px-3 text-right">{formatarMoeda(totalFiltrado)}</td>
+                <td className="py-2 px-3 text-right">
+                  {existeLiquidoConhecido ? formatarMoeda(totalLiquidoFiltrado) : "—"}
+                </td>
                 <td className="py-2 px-3" colSpan={4} />
               </tr>
             </tfoot>

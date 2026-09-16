@@ -21,7 +21,7 @@ export default async function FaturamentoHortolandiaPage() {
   const ano = hoje.getFullYear();
   const mes = hoje.getMonth() + 1;
 
-  const [{ data }, { data: imposto }] = await Promise.all([
+  const [{ data }, { data: imposto }, { data: todosImpostos }] = await Promise.all([
     svc
       .from("contas_receber_hortolandia")
       .select("*, clientes(id, nome)")
@@ -32,7 +32,15 @@ export default async function FaturamentoHortolandiaPage() {
       .eq("ano", ano)
       .eq("mes", mes)
       .maybeSingle(),
+    // Todos os meses já lançados — pra calcular o Valor Líquido por lançamento na tabela,
+    // que mostra lançamentos de vários meses ao mesmo tempo (não só o mês selecionado acima).
+    svc.from("faturamento_hortolandia_impostos_mensais").select("ano, mes, percentual"),
   ]);
+
+  const impostosPorMesInicial: Record<string, number> = {};
+  for (const i of todosImpostos ?? []) {
+    impostosPorMesInicial[`${i.ano}-${String(i.mes).padStart(2, "0")}`] = i.percentual;
+  }
 
   const rows: ContaReceberRow[] = (data ?? []).map((r) => ({
     id: r.id,
@@ -53,6 +61,7 @@ export default async function FaturamentoHortolandiaPage() {
       anoInicial={ano}
       mesInicial={mes}
       impostoInicial={imposto?.percentual ?? null}
+      impostosPorMesInicial={impostosPorMesInicial}
     />
   );
 }
