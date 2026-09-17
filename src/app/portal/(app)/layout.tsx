@@ -33,13 +33,16 @@ export default async function PortalAppLayout({
 
   if (!cliente?.ativo) redirect("/portal/login?suspenso=1");
 
-  // Item "Funcionários" só aparece pra quem tem pelo menos 1 funcionário ativo — não faz
-  // sentido mostrar uma lista vazia pra cliente que nunca teve alocação via MOT/Terceirização.
+  // Item "Funcionários" só aparece pra quem tem pelo menos 1 funcionário (ativo OU
+  // desligado) — não faz sentido mostrar uma lista vazia pra cliente que nunca teve
+  // alocação via MOT/Terceirização. Inclui desligado desde que a tela ganhou a aba
+  // "Rescindidos": cliente com todo o quadro desligado ainda precisa enxergar o menu pra
+  // chegar nesse histórico.
   const { data: funcionarioAtivo } = await service
     .from("funcionarios")
     .select("id")
     .eq("cliente_id", clienteUsuario.cliente_id)
-    .eq("status", "ativo")
+    .in("status", ["ativo", "desligado"])
     .limit(1)
     .maybeSingle();
 

@@ -32,12 +32,13 @@ export default async function PortalFuncionariosPage() {
 
   // Por construção, toda linha em `funcionarios` já é MOT ou Terceirização — R&S nunca
   // gera registro aqui (bloqueado desde a Fase 1) — não há necessidade de filtrar por
-  // tipo_servico, só por cliente_id + status ativo.
+  // tipo_servico. Traz ativo + desligado juntos (pedido do cliente: alternar entre os
+  // dois no próprio portal) — o toggle é só front-end, sem rota nova.
   const { data: funcionarios } = await service
     .from("funcionarios")
-    .select("id, nome_completo, cargo, data_admissao, admissao_id, turno")
+    .select("id, nome_completo, cargo, data_admissao, admissao_id, turno, status")
     .eq("cliente_id", clienteUsuario.cliente_id)
-    .eq("status", "ativo")
+    .in("status", ["ativo", "desligado"])
     .order("nome_completo");
 
   const funcionarioIds = (funcionarios ?? []).map((f) => f.id);
@@ -71,20 +72,39 @@ export default async function PortalFuncionariosPage() {
   const candidatoIdPorAdmissao = new Map((admissoes ?? []).map((a) => [a.id, a.candidato_id]));
   const candidatoIds = [...new Set((admissoes ?? []).map((a) => a.candidato_id).filter(Boolean))];
 
+  const funcionarioIdsDesligados = (funcionarios ?? []).filter((f) => f.status === "desligado").map((f) => f.id);
+
   // Telefone do candidato + o encaminhamento que abre o perfil dele dentro do portal
   // (rota /portal/candidato/[id] espera o id do ENCAMINHAMENTO, não do candidato — é ela
   // que valida que o encaminhamento pertence a este cliente antes de mostrar o perfil).
-  const [{ data: candidatos }, { data: encaminhamentos }] = await Promise.all([
+  const [{ data: candidatos }, { data: encaminhamentos }, { data: rescisoes }] = await Promise.all([
     candidatoIds.length
       ? service.from("candidatos").select("id, telefone").in("id", candidatoIds)
       : Promise.resolve({ data: [] as { id: string; telefone: string | null }[] }),
     candidatoIds.length
       ? service.from("encaminhamentos").select("id, candidato_id").in("candidato_id", candidatoIds).eq("cliente_id", clienteUsuario.cliente_id)
       : Promise.resolve({ data: [] as { id: string; candidato_id: string }[] }),
+    // Data de desligamento só existe em `rescisoes`, não em `funcionarios` — mesma
+    // separação de responsabilidade do painel interno (ver api/rescisoes/route.ts).
+    funcionarioIdsDesligados.length
+      ? service
+          .from("rescisoes")
+          .select("funcionario_id, data_desligamento")
+          .in("funcionario_id", funcionarioIdsDesligados)
+          .order("data_desligamento", { ascending: false })
+      : Promise.resolve({ data: [] as { funcionario_id: string; data_desligamento: string }[] }),
   ]);
 
   const telefonePorCandidato = new Map((candidatos ?? []).map((c) => [c.id, c.telefone]));
   const encaminhamentoPorCandidato = new Map((encaminhamentos ?? []).map((e) => [e.candidato_id, e.id]));
+  // Já ordenado por data_desligamento desc — primeiro encontro de cada funcionario_id é a
+  // rescisão mais recente (mesma técnica usada acima pra ASO/contrato mais recente).
+  const dataDesligamentoPorFuncionario = new Map<string, string>();
+  for (const r of rescisoes ?? []) {
+    if (!dataDesligamentoPorFuncionario.has(r.funcionario_id)) {
+      dataDesligamentoPorFuncionario.set(r.funcionario_id, r.data_desligamento);
+    }
+  }
 
   // Já ordenado por data_exame desc — o primeiro encontro de cada funcionario_id é o
   // exame mais recente (mesma técnica já usada no painel interno). arquivo_path do exame
@@ -117,12 +137,19 @@ export default async function PortalFuncionariosPage() {
     const badgeContrato = funcionarioIdsComContrato.has(f.id)
       ? CONTRATO_STATUS_INFO.assinado
       : CONTRATO_STATUS_INFO.pendente;
-    const urlAso = arquivoAsoMaisRecentePorFuncionario.get(f.id)
-      ? `/api/portal/funcionarios/${f.id}/aso-url`
-      : null;
-    const urlContrato = arquivoContratoMaisRecentePorFuncionario.get(f.id)
-      ? `/api/portal/funcionarios/${f.id}/contrato-url`
-      : null;
+    // ASSUNÇÃO DE NEGÓCIO CONFIRMADA COM O OLVER: a aba "Rescindidos" mostra só dado
+    // cadastral, sem acesso a documento — as rotas de aso-url/contrato-url/documentos
+    // continuam travadas a status='ativo' de propósito (funcionário desligado não pode
+    // ter ASO/Contrato/Documentos da admissão consultados pelo cliente), então a URL nunca
+    // é montada aqui pra desligado, mesmo quando existe arquivo.
+    const urlAso =
+      f.status === "ativo" && arquivoAsoMaisRecentePorFuncionario.get(f.id)
+        ? `/api/portal/funcionarios/${f.id}/aso-url`
+        : null;
+    const urlContrato =
+      f.status === "ativo" && arquivoContratoMaisRecentePorFuncionario.get(f.id)
+        ? `/api/portal/funcionarios/${f.id}/contrato-url`
+        : null;
     const dadosPessoais = f.admissao_id ? dadosPessoaisPorAdmissao.get(f.admissao_id) : undefined;
     const candidatoId = f.admissao_id ? candidatoIdPorAdmissao.get(f.admissao_id) : undefined;
     const telefone = candidatoId ? telefonePorCandidato.get(candidatoId) : undefined;
@@ -135,12 +162,16 @@ export default async function PortalFuncionariosPage() {
     return {
       id: f.id,
       nomeCompleto: f.nome_completo,
+      status: f.status as "ativo" | "desligado",
       encaminhamentoId,
       dataNascimento: dadosPessoais?.data_nascimento ? formatarDataSemFuso(dadosPessoais.data_nascimento) : "—",
       rg: dadosPessoais?.rg_numero ?? "—",
       cpf: dadosPessoais?.cpf ? formatarCPF(dadosPessoais.cpf) : "—",
       pis: dadosPessoais?.pis_pasep ?? "—",
       dataAdmissao: f.data_admissao ? formatarDataSemFuso(f.data_admissao) : "—",
+      dataDesligamento: dataDesligamentoPorFuncionario.has(f.id)
+        ? formatarDataSemFuso(dataDesligamentoPorFuncionario.get(f.id)!)
+        : null,
       cargo: f.cargo ?? "—",
       turno: f.turno ?? "—",
       celular: telefone ? formatarTelefone(telefone) : "—",
@@ -162,7 +193,7 @@ export default async function PortalFuncionariosPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Funcionários</h1>
         <p className="text-gray-500 text-sm mt-1">
-          Funcionários ativos alocados na sua empresa. Somente leitura.
+          Funcionários alocados na sua empresa. Somente leitura.
         </p>
       </div>
 
