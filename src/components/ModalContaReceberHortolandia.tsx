@@ -97,6 +97,7 @@ export default function ModalContaReceberHortolandia({ conta, onClose, onSalva, 
         dataEmissaoNf: c.data_emissao_nf,
         status: c.status,
         observacoes: c.observacoes,
+        impostoPercentualManual: c.imposto_percentual_manual,
       });
     } finally {
       setSalvando(false);

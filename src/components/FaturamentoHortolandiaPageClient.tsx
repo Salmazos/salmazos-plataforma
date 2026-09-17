@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ModalContaReceberHortolandia from "./ModalContaReceberHortolandia";
+import ImpostoLinhaCelula from "./ImpostoLinhaCelula";
 
 export interface ContaReceberRow {
   id: string;
@@ -15,6 +16,9 @@ export interface ContaReceberRow {
   dataEmissaoNf: string | null;
   status: "pendente" | "pago" | "cancelado";
   observacoes: string | null;
+  // Exceção por lançamento ao imposto do mês — null segue o imposto do mês normalmente
+  // (ver valorLiquidoRow); preenchido, trava esse lançamento nessa alíquota própria.
+  impostoPercentualManual: number | null;
 }
 
 interface Props {
@@ -104,13 +108,19 @@ export default function FaturamentoHortolandiaPageClient({
   // Líquido de cada linha da tabela abaixo, que mistura lançamentos de vários meses.
   const [impostosPorMes, setImpostosPorMes] = useState<Record<string, number>>(impostosPorMesInicial);
 
-  function valorLiquidoRow(row: ContaReceberRow): number | null {
-    // ASSUNÇÃO DE NEGÓCIO CONFIRMADA COM O OLVER: o imposto incide sobre o mês de emissão
-    // da NF/Acordo, não sobre o mês de vencimento do lançamento (que pode cair no mês
-    // seguinte) — por isso a chave usada aqui é dataEmissaoNf, não dataVencimento. Sem
-    // emissão lançada ainda, não dá pra saber o mês certo, então fica "—" (null).
+  // ASSUNÇÃO DE NEGÓCIO CONFIRMADA COM O OLVER: a maioria dos lançamentos segue o imposto
+  // do mês de emissão da NF/Acordo, mas alguns clientes têm alíquota própria — quando
+  // impostoPercentualManual está preenchido, ele SEMPRE vence, mesmo que o imposto do mês
+  // mude depois (é uma trava por lançamento, não um valor calculado). Null (o padrão) volta
+  // a seguir o mês normalmente.
+  function percentualEfetivoRow(row: ContaReceberRow): number | null {
+    if (row.impostoPercentualManual != null) return row.impostoPercentualManual;
     if (!row.dataEmissaoNf) return null;
-    const percentual = impostosPorMes[row.dataEmissaoNf.slice(0, 7)];
+    return impostosPorMes[row.dataEmissaoNf.slice(0, 7)] ?? null;
+  }
+
+  function valorLiquidoRow(row: ContaReceberRow): number | null {
+    const percentual = percentualEfetivoRow(row);
     return percentual != null ? row.valor - (row.valor * percentual) / 100 : null;
   }
 
@@ -204,6 +214,22 @@ export default function FaturamentoHortolandiaPageClient({
   function handleExcluida(id: string) {
     setRows((prev) => prev.filter((r) => r.id !== id));
     setContaAberta(null);
+  }
+
+  // Edição inline do imposto por linha (ImpostoLinhaCelula) — PATCH direto, sem passar pelo
+  // modal de editar lançamento, pra corrigir uma exceção pontual com o mínimo de cliques.
+  async function handleSalvarImpostoLinha(id: string, novoValor: number | null): Promise<boolean> {
+    const res = await fetch(`/api/faturamento-hortolandia/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imposto_percentual_manual: novoValor }),
+    });
+    const json = await res.json();
+    if (!res.ok) return false;
+    setRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, impostoPercentualManual: json.data.imposto_percentual_manual } : r))
+    );
+    return true;
   }
 
   return (
@@ -307,6 +333,7 @@ export default function FaturamentoHortolandiaPageClient({
               <th className="py-2 px-3">Cliente</th>
               <th className="py-2 px-3">Nº NF</th>
               <th className="py-2 px-3 text-right">Valor R$</th>
+              <th className="py-2 px-3 text-right">Imposto (%)</th>
               <th className="py-2 px-3 text-right">Valor Líquido</th>
               <th className="py-2 px-3 text-center">Dias p/ venc.</th>
               <th className="py-2 px-3">Pagamento</th>
@@ -329,6 +356,13 @@ export default function FaturamentoHortolandiaPageClient({
                   <td className="py-2 px-3 font-medium text-gray-900">{row.clienteNome}</td>
                   <td className="py-2 px-3 text-gray-500">{row.numeroNf ?? "—"}</td>
                   <td className="py-2 px-3 text-right font-medium">{formatarMoeda(row.valor)}</td>
+                  <td className="py-2 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+                    <ImpostoLinhaCelula
+                      percentualEfetivo={percentualEfetivoRow(row)}
+                      valorProprio={row.impostoPercentualManual}
+                      onSalvar={(novoValor) => handleSalvarImpostoLinha(row.id, novoValor)}
+                    />
+                  </td>
                   <td className="py-2 px-3 text-right text-gray-600">{formatarMoeda(valorLiquidoRow(row))}</td>
                   <td className="py-2 px-3 text-center text-gray-500">
                     {row.status === "pendente" ? dias : "—"}
@@ -348,7 +382,7 @@ export default function FaturamentoHortolandiaPageClient({
             })}
             {rowsFiltradas.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-8 text-center text-gray-400">
+                <td colSpan={10} className="py-8 text-center text-gray-400">
                   Nenhum lançamento nessa visão.
                 </td>
               </tr>
@@ -361,6 +395,7 @@ export default function FaturamentoHortolandiaPageClient({
                   Total ({rowsFiltradas.length})
                 </td>
                 <td className="py-2 px-3 text-right">{formatarMoeda(totalFiltrado)}</td>
+                <td className="py-2 px-3" />
                 <td className="py-2 px-3 text-right">
                   {existeLiquidoConhecido ? formatarMoeda(totalLiquidoFiltrado) : "—"}
                 </td>

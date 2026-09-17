@@ -1153,7 +1153,13 @@ export const contaReceberHortolandiaCreateSchema = z.object({
   observacoes: z.string().trim().optional().nullable(),
 });
 
-export const contaReceberHortolandiaUpdateSchema = contaReceberHortolandiaCreateSchema.partial();
+export const contaReceberHortolandiaUpdateSchema = contaReceberHortolandiaCreateSchema.partial().extend({
+  // ASSUNÇÃO DE NEGÓCIO CONFIRMADA COM O OLVER: exceção por lançamento ao imposto do mês
+  // (que fica em faturamento_hortolandia_impostos_mensais) — null (ou omitido) faz o
+  // lançamento seguir o imposto do mês normalmente; um valor aqui trava esse lançamento
+  // nessa alíquota, mesmo que o imposto do mês mude depois.
+  imposto_percentual_manual: z.number().min(0).max(100).nullable().optional(),
+});
 
 // ── Faturamento Hortolândia — percentual de imposto informado manualmente por mês/ano
 // (upsert em faturamento_hortolandia_impostos_mensais, ver PATCH

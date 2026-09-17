@@ -53,6 +53,7 @@ export default async function FaturamentoHortolandiaPage() {
     dataEmissaoNf: r.data_emissao_nf,
     status: r.status,
     observacoes: r.observacoes,
+    impostoPercentualManual: r.imposto_percentual_manual,
   }));
 
   return (
