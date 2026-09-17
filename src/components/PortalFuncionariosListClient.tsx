@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import PortalDocumentoBadge from "@/components/PortalDocumentoBadge";
+import PortalDocumentosFuncionarioModal from "@/components/PortalDocumentosFuncionarioModal";
 
 // Rótulo em cima, valor embaixo — mesmo padrão visual da tela (ver Campo em
 // funcionarios/page.tsx), duplicado aqui só porque virou componente client separado.
@@ -49,6 +50,7 @@ interface Props {
 
 export default function PortalFuncionariosListClient({ funcionarios }: Props) {
   const [busca, setBusca] = useState("");
+  const [funcionarioDocsAberto, setFuncionarioDocsAberto] = useState<{ id: string; nome: string } | null>(null);
 
   const filtrados = useMemo(() => {
     const termo = normalizarBusca(busca.trim());
@@ -103,17 +105,27 @@ export default function PortalFuncionariosListClient({ funcionarios }: Props) {
                   borderBottom: i < filtrados.length - 1 ? "1px solid #F3F4F6" : "none",
                 }}
               >
-                {f.encaminhamentoId ? (
-                  <Link
-                    href={`/portal/candidato/${f.encaminhamentoId}`}
-                    style={{ ...nomeStyle, display: "inline-block" }}
-                    className="hover:text-[#92400E] transition-colors"
+                <div className="flex items-start justify-between gap-3">
+                  {f.encaminhamentoId ? (
+                    <Link
+                      href={`/portal/candidato/${f.encaminhamentoId}`}
+                      style={{ ...nomeStyle, display: "inline-block" }}
+                      className="hover:text-[#92400E] transition-colors"
+                    >
+                      {f.nomeCompleto}
+                    </Link>
+                  ) : (
+                    <p style={nomeStyle}>{f.nomeCompleto}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setFuncionarioDocsAberto({ id: f.id, nome: f.nomeCompleto })}
+                    className="btn-outline flex-shrink-0"
+                    style={{ padding: "5px 12px", fontSize: 12 }}
                   >
-                    {f.nomeCompleto}
-                  </Link>
-                ) : (
-                  <p style={nomeStyle}>{f.nomeCompleto}</p>
-                )}
+                    Ver documentos
+                  </button>
+                </div>
                 <div style={{ display: "flex", flexWrap: "wrap", columnGap: 28, rowGap: 14 }}>
                   <Campo label="Data de nascimento">{f.dataNascimento}</Campo>
                   <Campo label="RG">{f.rg}</Campo>
@@ -135,6 +147,14 @@ export default function PortalFuncionariosListClient({ funcionarios }: Props) {
           })
         )}
       </div>
+
+      {funcionarioDocsAberto && (
+        <PortalDocumentosFuncionarioModal
+          funcionarioId={funcionarioDocsAberto.id}
+          nomeFuncionario={funcionarioDocsAberto.nome}
+          onClose={() => setFuncionarioDocsAberto(null)}
+        />
+      )}
     </div>
   );
 }
