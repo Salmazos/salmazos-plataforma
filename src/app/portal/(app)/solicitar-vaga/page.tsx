@@ -819,20 +819,24 @@ export default function SolicitarVagaPage() {
         )}
 
         {/* ── Save as template ── */}
-        {!usandoTemplate && (
-          <div className="bg-white rounded-2xl shadow-sm p-5">
-            <label className="flex items-center gap-2.5 text-sm text-gray-700 cursor-pointer">
-              <input type="checkbox" checked={salvarComoTemplate} onChange={(e) => setSalvarComoTemplate(e.target.checked)} className="rounded" />
-              Salvar como template para uso futuro
-            </label>
-            {salvarComoTemplate && (
-              <div className="mt-3">
-                <label style={labelStyle}>Nome do template *</label>
-                <input value={nomeTemplate} onChange={(e) => setNomeTemplate(e.target.value)} placeholder="Ex: Operador de Produção — Unidade SP" style={inputStyle} />
-              </div>
-            )}
-          </div>
-        )}
+        {/* ASSUNÇÃO DE NEGÓCIO CONFIRMADA COM O OLVER: essa opção também deve aparecer
+            mesmo quando a solicitação partiu de um template existente (usandoTemplate) —
+            os requisitos podem ter sido ajustados aqui e servir de base pra OUTRA vaga
+            recorrente da mesma empresa (ex.: cargo diferente, mesmos requisitos). O POST
+            em /api/portal/templates sempre cria um template novo (nunca sobrescreve o
+            original usado), então não há risco de o cliente perder o template de origem. */}
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <label className="flex items-center gap-2.5 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" checked={salvarComoTemplate} onChange={(e) => setSalvarComoTemplate(e.target.checked)} className="rounded" />
+            Salvar como {usandoTemplate ? "novo " : ""}template para uso futuro
+          </label>
+          {salvarComoTemplate && (
+            <div className="mt-3">
+              <label style={labelStyle}>Nome do template *</label>
+              <input value={nomeTemplate} onChange={(e) => setNomeTemplate(e.target.value)} placeholder="Ex: Operador de Produção — Unidade SP" style={inputStyle} />
+            </div>
+          )}
+        </div>
 
         {/* ── Submit ── */}
         <button
