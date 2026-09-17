@@ -79,7 +79,9 @@ export default async function PortalAppLayout({
               <img
                 src={cliente.logo_url}
                 alt="Logo da empresa"
-                style={{ height: 48, width: "auto", maxWidth: 180, objectFit: "contain" }}
+                // ASSUNÇÃO DE NEGÓCIO CONFIRMADA COM O OLVER: logo pequeno demais na tela do
+                // cliente (48px) — aumentado mantendo a proporção original da imagem.
+                style={{ height: 72, width: "auto", maxWidth: 260, objectFit: "contain" }}
               />
             </div>
           )}
