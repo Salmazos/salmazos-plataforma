@@ -105,7 +105,12 @@ export default function FaturamentoHortolandiaPageClient({
   const [impostosPorMes, setImpostosPorMes] = useState<Record<string, number>>(impostosPorMesInicial);
 
   function valorLiquidoRow(row: ContaReceberRow): number | null {
-    const percentual = impostosPorMes[row.dataVencimento.slice(0, 7)];
+    // ASSUNÇÃO DE NEGÓCIO CONFIRMADA COM O OLVER: o imposto incide sobre o mês de emissão
+    // da NF/Acordo, não sobre o mês de vencimento do lançamento (que pode cair no mês
+    // seguinte) — por isso a chave usada aqui é dataEmissaoNf, não dataVencimento. Sem
+    // emissão lançada ainda, não dá pra saber o mês certo, então fica "—" (null).
+    if (!row.dataEmissaoNf) return null;
+    const percentual = impostosPorMes[row.dataEmissaoNf.slice(0, 7)];
     return percentual != null ? row.valor - (row.valor * percentual) / 100 : null;
   }
 
