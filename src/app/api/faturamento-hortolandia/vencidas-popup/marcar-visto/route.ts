@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { checarAcessoFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,13 @@ export async function POST(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+
+  // Faltava aqui — era a única rota do módulo sem essa trava (auditoria de acesso,
+  // set/2026). Não expõe dado financeiro (é só escrita, marca popup como visto), mas
+  // permitia qualquer usuário autenticado gravar linhas em conta_receber_hortolandia_
+  // popup_vistos, inconsistente com o restante do módulo ser diretoria/superuser-only.
+  const acessoNegado = await checarAcessoFaturamentoHortolandia(user);
+  if (acessoNegado) return acessoNegado;
 
   const body = await request.json().catch(() => ({}));
   const ids: string[] = Array.isArray(body?.ids) ? body.ids.filter((id: unknown) => typeof id === "string") : [];
