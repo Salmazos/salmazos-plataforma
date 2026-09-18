@@ -348,7 +348,7 @@ export default function FaturamentoHortolandiaPageClient({
         </div>
 
         {liquidoMes != null ? (
-          <div style={{ background: "#DBEAFE", border: "2px solid transparent", borderRadius: 12, padding: "14px 16px" }}>
+          <div style={{ background: "#DBEAFE", border: "2px solid #1D4ED8", borderRadius: 12, padding: "14px 16px" }}>
             <p style={{ fontSize: 22, fontWeight: 800, color: "#1D4ED8", margin: 0 }}>{formatarMoeda(liquidoMes)}</p>
             <p style={{ fontSize: 12, fontWeight: 600, color: "#1D4ED8", margin: "2px 0 0" }}>
               Total Líquido — entrada do mês ({percentualImposto}% de imposto)
