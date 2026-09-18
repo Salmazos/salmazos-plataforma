@@ -37,11 +37,14 @@ export default async function VencimentoContratoPage() {
   const linhas: VencimentoContratoRow[] = (funcionarios ?? [])
     .map((f) => {
       const v = calcularVencimentoContratoMot(f.data_admissao as string);
+      // O embed clientes(nome) pode vir como objeto ou array conforme a inferência do
+      // supabase-js — cast explícito pra as duas formas em vez de depender da inferência.
+      const cliente = f.clientes as { nome: string } | { nome: string }[] | null;
       return {
         id: f.id,
         nomeCompleto: f.nome_completo,
         clienteId: f.cliente_id,
-        empresa: (Array.isArray(f.clientes) ? f.clientes[0]?.nome : f.clientes?.nome) ?? f.empresa ?? "—",
+        empresa: (Array.isArray(cliente) ? cliente[0]?.nome : cliente?.nome) ?? f.empresa ?? "—",
         dataAdmissao: f.data_admissao as string,
         ...v,
       };
