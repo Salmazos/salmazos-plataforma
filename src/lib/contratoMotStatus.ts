@@ -1,4 +1,5 @@
 export type ContratoMotFaixa =
+  | "data_futura"
   | "renovacao_automatica"
   | "aprovacao_continuidade"
   | "proximo_limite"
@@ -27,22 +28,33 @@ function hojeUTC(): Date {
 // mostrado na tela como "Data de admissão". Se a Salmazos passar a rastrear uma data de
 // início de contrato MOT separada da admissão (ex: em renovações formais futuras), este é
 // o único ponto a ajustar.
+//
+// Sem clamp em 0: um resultado negativo (data de admissão no futuro) é sinal de erro de
+// cadastro, não "contrato começando hoje" — precisa aparecer como está pra calcularFaixaContratoMot
+// decidir o que fazer (ver caso real: dois funcionários cadastrados com data_admissao em
+// 2027 por erro de digitação do ano, encontrado em set/2026).
 export function calcularDiasContratoMot(dataAdmissao: string | null): number | null {
   if (!dataAdmissao) return null;
   const [ano, mes, dia] = dataAdmissao.split("-").map(Number);
   const inicio = new Date(Date.UTC(ano, mes - 1, dia));
   const diffMs = hojeUTC().getTime() - inicio.getTime();
-  return Math.max(0, Math.floor(diffMs / 86400000));
+  return Math.floor(diffMs / 86400000);
 }
 
 export function calcularFaixaContratoMot(dias: number): ContratoMotFaixa {
+  if (dias < 0) return "data_futura";
   if (dias <= LIMITE_RENOVACAO_AUTOMATICA) return "renovacao_automatica";
   if (dias <= LIMITE_APROVACAO_CONTINUIDADE) return "aprovacao_continuidade";
   if (dias <= LIMITE_LEGAL_MAXIMO) return "proximo_limite";
   return "limite_excedido";
 }
 
+// Cor roxa pra "data_futura" pelo mesmo motivo de ASO_STATUS_INFO.sem_registro (asoStatus.ts):
+// é um problema de CADASTRO (data errada), não um problema de PRAZO — nunca reaproveitar
+// vermelho/âmbar/laranja, que aqui significam "prazo avançando", pra não confundir as duas
+// categorias de alerta.
 export const CONTRATO_MOT_FAIXA_INFO: Record<ContratoMotFaixa, { bg: string; text: string; sufixo: string }> = {
+  data_futura: { bg: "#EDE9FE", text: "#5B21B6", sufixo: "data de admissão no futuro — verificar cadastro" },
   renovacao_automatica: { bg: "#EFF6FF", text: "#1D4ED8", sufixo: "renovação automática" },
   aprovacao_continuidade: { bg: "#FEF3C7", text: "#92400E", sufixo: "requer aprovação de continuidade" },
   proximo_limite: { bg: "#FFEDD5", text: "#C2410C", sufixo: "próximo do limite legal" },
@@ -60,15 +72,21 @@ export function calcularContadorContratoMot(
 
   const faixa = calcularFaixaContratoMot(dias);
   const info = CONTRATO_MOT_FAIXA_INFO[faixa];
-  const limite =
-    faixa === "renovacao_automatica"
-      ? LIMITE_RENOVACAO_AUTOMATICA
-      : faixa === "aprovacao_continuidade"
-        ? LIMITE_APROVACAO_CONTINUIDADE
-        : faixa === "proximo_limite"
-          ? LIMITE_LEGAL_MAXIMO
-          : null;
-  const label = limite !== null ? `Dia ${dias}/${limite} — ${info.sufixo}` : `Dia ${dias} — ${info.sufixo} (270)`;
+
+  let label: string;
+  if (faixa === "data_futura") {
+    label = info.sufixo.charAt(0).toUpperCase() + info.sufixo.slice(1);
+  } else {
+    const limite =
+      faixa === "renovacao_automatica"
+        ? LIMITE_RENOVACAO_AUTOMATICA
+        : faixa === "aprovacao_continuidade"
+          ? LIMITE_APROVACAO_CONTINUIDADE
+          : faixa === "proximo_limite"
+            ? LIMITE_LEGAL_MAXIMO
+            : null;
+    label = limite !== null ? `Dia ${dias}/${limite} — ${info.sufixo}` : `Dia ${dias} — ${info.sufixo} (270)`;
+  }
 
   return { dias, faixa, label, bg: info.bg, text: info.text };
 }
