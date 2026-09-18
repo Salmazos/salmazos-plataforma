@@ -13,18 +13,20 @@ create table public.funcionario_vencimento_mot_popup_visualizacoes (
 
 alter table public.funcionario_vencimento_mot_popup_visualizacoes enable row level security;
 
+-- "to <role>" é obrigatório: sem ele a policy vale pra public (inclui anon) — mesmo padrão de
+-- funcionario_aso_popup_visualizacoes (service_role / authenticated / authenticated).
 create policy "Usuario le seu proprio registro vencimento_mot_popup"
   on public.funcionario_vencimento_mot_popup_visualizacoes
-  for select
+  for select to authenticated
   using (usuario_id = auth.uid());
 
 create policy "Usuario insere seu proprio registro vencimento_mot_popup"
   on public.funcionario_vencimento_mot_popup_visualizacoes
-  for insert
+  for insert to authenticated
   with check (usuario_id = auth.uid());
 
 create policy "Service role acesso total vencimento_mot_popup_visualizacoes"
   on public.funcionario_vencimento_mot_popup_visualizacoes
-  for all
+  for all to service_role
   using (true)
   with check (true);
