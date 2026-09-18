@@ -145,6 +145,7 @@ const menuItems: MenuItemDef[] = [
     submenu: [
       { label: "Admissões", href: "/painel/admissoes", icon: FileCheck, requireAdmissoes: true },
       { label: "Funcionários", href: "/painel/funcionarios", icon: IdCard, requireFuncionarios: true },
+      { label: "Vencimento de Contrato", href: "/painel/vencimento-contrato", icon: Clock, requireFuncionarios: true },
       { label: "Rescisões", href: "/painel/rescisoes", icon: UserMinus, requireFuncionarios: true },
       { label: "Aniversários", href: "/painel/aniversarios", icon: Cake, requireAniversarios: true },
     ],

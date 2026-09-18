@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PlusCircle } from "lucide-react";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import SidebarPortal from "@/components/SidebarPortal";
+import PopupVencimentoContratoMotPortal from "@/components/PopupVencimentoContratoMotPortal";
 
 export default async function PortalAppLayout({
   children,
@@ -46,9 +47,26 @@ export default async function PortalAppLayout({
     .limit(1)
     .maybeSingle();
 
+  // Item "Vencimento de Contrato" só aparece pra quem tem pelo menos 1 funcionário MOT
+  // ativo — é a única modalidade com o limite legal de 90/180/270 dias (Lei 6.019/74).
+  // Flag própria e mais estreita que mostrarFuncionarios (que também conta Terceirização e
+  // desligado, que não têm essa contagem).
+  const { data: funcionarioMotAtivo } = await service
+    .from("funcionarios")
+    .select("id")
+    .eq("cliente_id", clienteUsuario.cliente_id)
+    .eq("tipo_servico", "mao_obra_temporaria")
+    .eq("status", "ativo")
+    .limit(1)
+    .maybeSingle();
+
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      <SidebarPortal userEmail={user.email ?? ""} mostrarFuncionarios={!!funcionarioAtivo} />
+      <SidebarPortal
+        userEmail={user.email ?? ""}
+        mostrarFuncionarios={!!funcionarioAtivo}
+        mostrarVencimentoContrato={!!funcionarioMotAtivo}
+      />
       <main className="flex-1 min-w-0 px-4 py-8">
         <div className="max-w-5xl mx-auto">
           {/* Cabeçalho compartilhado em toda página do portal (área branca de conteúdo,
@@ -91,6 +109,7 @@ export default async function PortalAppLayout({
           {children}
         </div>
       </main>
+      <PopupVencimentoContratoMotPortal />
     </div>
   );
 }

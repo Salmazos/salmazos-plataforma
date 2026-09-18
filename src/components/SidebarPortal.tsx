@@ -4,11 +4,12 @@ import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
-import { Home, ClipboardList, Calendar, IdCard, FolderOpen, LogOut, Menu } from "lucide-react";
+import { Home, ClipboardList, Calendar, IdCard, FolderOpen, LogOut, Menu, Clock } from "lucide-react";
 
 interface Props {
   userEmail: string;
   mostrarFuncionarios: boolean;
+  mostrarVencimentoContrato: boolean;
 }
 
 // Mesma identidade visual de SidebarMenu.tsx (plataforma interna) — preto/amarelo, mesmo
@@ -27,6 +28,7 @@ interface MenuItemDef {
 
 const INICIO_ITEM: MenuItemDef = { label: "Início", href: "/portal", icon: Home };
 const FUNCIONARIOS_ITEM: MenuItemDef = { label: "Funcionários", href: "/portal/funcionarios", icon: IdCard };
+const VENCIMENTO_CONTRATO_ITEM: MenuItemDef = { label: "Vencimento de Contrato", href: "/portal/vencimento-contrato", icon: Clock };
 const RESTANTE_ITEMS: MenuItemDef[] = [
   { label: "Minhas Solicitações", href: "/portal/solicitacoes", icon: ClipboardList },
   // Sempre visível — as 5 categorias fixas existem por padrão pra todo cliente, mesmo sem
@@ -35,7 +37,7 @@ const RESTANTE_ITEMS: MenuItemDef[] = [
   { label: "Agenda", href: "/portal/agenda", icon: Calendar },
 ];
 
-export default function SidebarPortal({ userEmail, mostrarFuncionarios }: Props) {
+export default function SidebarPortal({ userEmail, mostrarFuncionarios, mostrarVencimentoContrato }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -76,6 +78,7 @@ export default function SidebarPortal({ userEmail, mostrarFuncionarios }: Props)
   const items = [
     INICIO_ITEM,
     ...(mostrarFuncionarios ? [FUNCIONARIOS_ITEM] : []),
+    ...(mostrarVencimentoContrato ? [VENCIMENTO_CONTRATO_ITEM] : []),
     ...RESTANTE_ITEMS,
   ];
   const isCollapsedView = collapsed && !mobileOpen;
