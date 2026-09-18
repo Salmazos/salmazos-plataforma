@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatarDataSemFuso } from "@/lib/utils";
 import { calcularStatusAso, ASO_STATUS_INFO } from "@/lib/asoStatus";
+import { calcularContadorContratoMot } from "@/lib/contratoMotStatus";
 import { TURNOS_FUNCIONARIO } from "@/lib/constants";
 import ModalAdicionarFuncionario from "./ModalAdicionarFuncionario";
 import ModalLancarRescisao from "./ModalLancarRescisao";
@@ -24,6 +25,7 @@ export interface FuncionarioRow {
   tipo_servico: string | null;
   horario_trabalho: string | null;
   turno: string | null;
+  tem_contrato: boolean;
 }
 
 interface ClienteOption {
@@ -67,6 +69,8 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
   const [funcionarioRescisao, setFuncionarioRescisao] = useState<FuncionarioRow | null>(null);
   const [salvandoTurnoId, setSalvandoTurnoId] = useState<string | null>(null);
   const [erroTurnoId, setErroTurnoId] = useState<string | null>(null);
+  const [carregandoContratoId, setCarregandoContratoId] = useState<string | null>(null);
+  const [erroContratoId, setErroContratoId] = useState<string | null>(null);
 
   // Edição inline do Turno direto na listagem — cobre os funcionários legados/manuais que
   // nunca passaram pela tela de Admissão e não têm esse dado ainda. router.refresh() busca
@@ -87,6 +91,25 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
       setErroTurnoId(id);
     } finally {
       setSalvandoTurnoId(null);
+    }
+  };
+
+  // Mesmo padrão de handleVerArquivoContrato (tela de detalhe do funcionário): busca o
+  // signed URL do contrato mais recente e abre em nova aba. Aqui na listagem só existe o
+  // funcionario_id (o id da linha de funcionario_contratos não é exposto), então a rota
+  // resolve o "mais recente" por conta própria (/api/funcionarios/[id]/contrato-url).
+  const handleVerContrato = async (id: string) => {
+    setCarregandoContratoId(id);
+    setErroContratoId(null);
+    try {
+      const res = await fetch(`/api/funcionarios/${id}/contrato-url`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Erro ao abrir contrato.");
+      window.open(json.signedUrl, "_blank");
+    } catch {
+      setErroContratoId(id);
+    } finally {
+      setCarregandoContratoId(null);
     }
   };
 
@@ -216,6 +239,13 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
             const badge = STATUS_BADGE[f.status] ?? { label: f.status, bg: "#F3F4F6", text: "#374151" };
             const badgeAso = ASO_STATUS_INFO[calcularStatusAso(f.aso_data_exame_mais_recente)];
             const badgeModalidade = f.tipo_servico ? MODALIDADE_BADGE[f.tipo_servico] : null;
+            // Contador de dias de contrato (regra 90/180/270 dias, CLT/Lei 6.019/74) só faz
+            // sentido pra MOT ativo — Terceirização e R&S não têm esse limite, e desligado
+            // não tem contrato em contagem.
+            const contadorMot =
+              f.tipo_servico === "mao_obra_temporaria" && f.status === "ativo"
+                ? calcularContadorContratoMot(f.data_admissao)
+                : null;
             return (
               <div
                 key={f.id}
@@ -290,6 +320,37 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
                   <Campo label="ASO">
                     <Badge bg={badgeAso.bg} text={badgeAso.text} label={badgeAso.label} />
                   </Campo>
+                  <Campo label="Contrato">
+                    {f.tem_contrato ? (
+                      <button
+                        type="button"
+                        onClick={() => handleVerContrato(f.id)}
+                        disabled={carregandoContratoId === f.id}
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          background: "#D1FAE5",
+                          color: "#166534",
+                          border: "none",
+                          textDecoration: "underline",
+                          cursor: carregandoContratoId === f.id ? "wait" : "pointer",
+                          opacity: carregandoContratoId === f.id ? 0.6 : 1,
+                        }}
+                      >
+                        {carregandoContratoId === f.id ? "Abrindo..." : "Sim"}
+                      </button>
+                    ) : (
+                      <Badge bg="#FEE2E2" text="#991B1B" label="Não" />
+                    )}
+                    {erroContratoId === f.id && <p style={{ color: "#DC2626", fontSize: 11, margin: "2px 0 0" }}>Erro ao abrir</p>}
+                  </Campo>
+                  {contadorMot && (
+                    <Campo label="Contrato MOT">
+                      <Badge bg={contadorMot.bg} text={contadorMot.text} label={contadorMot.label} />
+                    </Campo>
+                  )}
                   <Campo label="Origem">{f.admissao_id ? "Admissão digital" : "Cadastro manual"}</Campo>
                 </div>
               </div>

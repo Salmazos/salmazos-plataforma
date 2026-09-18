@@ -16,10 +16,11 @@ export default async function FuncionariosPage() {
 
   const svc = createServiceClient();
 
-  const [{ data: funcionarios }, { data: clientes }, { data: asos }] = await Promise.all([
+  const [{ data: funcionarios }, { data: clientes }, { data: asos }, { data: contratos }] = await Promise.all([
     svc.from("funcionarios").select("*, clientes(nome)").order("criado_em", { ascending: false }),
     svc.from("clientes").select("id, nome").eq("ativo", true).order("nome"),
     svc.from("funcionario_asos").select("funcionario_id, data_exame").is("excluido_em", null).order("data_exame", { ascending: false }),
+    svc.from("funcionario_contratos").select("funcionario_id").is("excluido_em", null),
   ]);
 
   // Filtro da listagem só deve oferecer empresas com funcionário cadastrado (evita uma
@@ -37,9 +38,16 @@ export default async function FuncionariosPage() {
       asoMaisRecentePorFuncionario.set(a.funcionario_id, a.data_exame);
     }
   }
+  // Contrato aqui é binário (Sim/Não) — só indica se existe pelo menos 1 registro em
+  // funcionario_contratos, não excluído. O arquivo a abrir (o mais recente) é resolvido
+  // pela própria rota /api/funcionarios/[id]/contrato-url, então não precisamos do
+  // arquivo_path aqui na listagem.
+  const funcionarioIdsComContrato = new Set((contratos ?? []).map((c) => c.funcionario_id));
+
   const funcionariosComAso = (funcionarios ?? []).map((f) => ({
     ...f,
     aso_data_exame_mais_recente: asoMaisRecentePorFuncionario.get(f.id) ?? null,
+    tem_contrato: funcionarioIdsComContrato.has(f.id),
   }));
 
   return (

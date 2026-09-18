@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { formatarDataSemFuso, formatarCPF, formatarTelefone } from "@/lib/utils";
 import { calcularStatusAso, ASO_STATUS_INFO } from "@/lib/asoStatus";
+import { calcularContadorContratoMot } from "@/lib/contratoMotStatus";
 import PortalFuncionariosListClient, { type FuncionarioPortalRow } from "@/components/PortalFuncionariosListClient";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,7 @@ export default async function PortalFuncionariosPage() {
   // dois no próprio portal) — o toggle é só front-end, sem rota nova.
   const { data: funcionarios } = await service
     .from("funcionarios")
-    .select("id, nome_completo, cargo, data_admissao, admissao_id, turno, status")
+    .select("id, nome_completo, cargo, data_admissao, admissao_id, turno, status, tipo_servico")
     .eq("cliente_id", clienteUsuario.cliente_id)
     .in("status", ["ativo", "desligado"])
     .order("nome_completo");
@@ -159,6 +160,15 @@ export default async function PortalFuncionariosPage() {
     // relacionamento).
     const encaminhamentoId = candidatoId ? (encaminhamentoPorCandidato.get(candidatoId) ?? null) : null;
 
+    // Contador de dias de contrato (regra 90/180/270 dias, CLT/Lei 6.019/74) — mesma lógica
+    // do painel interno (ver contratoMotStatus.ts), só pra MOT ativo. Calculado aqui no
+    // servidor, junto com os outros badges, seguindo o padrão já usado nesta página (o
+    // client só renderiza, sem repetir regra de negócio).
+    const contadorContratoMot =
+      f.tipo_servico === "mao_obra_temporaria" && f.status === "ativo"
+        ? calcularContadorContratoMot(f.data_admissao)
+        : null;
+
     return {
       id: f.id,
       nomeCompleto: f.nome_completo,
@@ -177,6 +187,7 @@ export default async function PortalFuncionariosPage() {
       celular: telefone ? formatarTelefone(telefone) : "—",
       badgeAso: { ...badgeAso, url: urlAso },
       badgeContrato: { ...badgeContrato, url: urlContrato },
+      contadorContratoMot,
     };
   });
 

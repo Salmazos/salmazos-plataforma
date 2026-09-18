@@ -44,6 +44,7 @@ export interface FuncionarioPortalRow {
   celular: string;
   badgeAso: { label: string; bg: string; text: string; url: string | null };
   badgeContrato: { label: string; bg: string; text: string; url: string | null };
+  contadorContratoMot: { dias: number; faixa: string; label: string; bg: string; text: string } | null;
 }
 
 interface Props {
@@ -188,6 +189,23 @@ export default function PortalFuncionariosListClient({ funcionarios }: Props) {
                   <Campo label="Contrato">
                     <PortalDocumentoBadge label={f.badgeContrato.label} bg={f.badgeContrato.bg} text={f.badgeContrato.text} url={f.badgeContrato.url} />
                   </Campo>
+                  {f.contadorContratoMot && (
+                    <Campo label="Contrato MOT">
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          background: f.contadorContratoMot.bg,
+                          color: f.contadorContratoMot.text,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {f.contadorContratoMot.label}
+                      </span>
+                    </Campo>
+                  )}
                 </div>
               </div>
             );
