@@ -4,6 +4,7 @@ import { podeAcessarFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaA
 import { obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
 import FaturamentoHortolandiaPageClient, {
   type ContaReceberRow,
+  type ContaPagarRow,
 } from "@/components/FaturamentoHortolandiaPageClient";
 
 export const dynamic = "force-dynamic";
@@ -21,11 +22,12 @@ export default async function FaturamentoHortolandiaPage() {
   const ano = hoje.getFullYear();
   const mes = hoje.getMonth() + 1;
 
-  const [{ data }, { data: imposto }, { data: todosImpostos }] = await Promise.all([
+  const [{ data }, { data: saidas }, { data: imposto }, { data: todosImpostos }] = await Promise.all([
     svc
       .from("contas_receber_hortolandia")
       .select("*, clientes(id, nome)")
       .order("data_vencimento", { ascending: true }),
+    svc.from("contas_pagar_hortolandia").select("*").order("data_pagamento", { ascending: false }),
     svc
       .from("faturamento_hortolandia_impostos_mensais")
       .select("ano, mes, percentual, atualizado_em")
@@ -56,9 +58,18 @@ export default async function FaturamentoHortolandiaPage() {
     impostoPercentualManual: r.imposto_percentual_manual,
   }));
 
+  const saidasRows: ContaPagarRow[] = (saidas ?? []).map((s) => ({
+    id: s.id,
+    dataPagamento: s.data_pagamento,
+    descricao: s.descricao,
+    valor: s.valor,
+    responsavel: s.responsavel,
+  }));
+
   return (
     <FaturamentoHortolandiaPageClient
       rowsIniciais={rows}
+      saidasIniciais={saidasRows}
       anoInicial={ano}
       mesInicial={mes}
       impostoInicial={imposto?.percentual ?? null}

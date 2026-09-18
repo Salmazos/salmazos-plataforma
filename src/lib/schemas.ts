@@ -1170,6 +1170,20 @@ export const faturamentoHortolandiaImpostoSchema = z.object({
   percentual: z.number().min(0).max(100),
 });
 
+// ── Faturamento Hortolândia — contas a pagar (saída), contraparte de
+// contaReceberHortolandiaCreateSchema acima. Sem cliente_id/status/vencimento — a saída já
+// nasce paga (planilha manual do Olver só tem Data de Pagamento, Descrição, Valor,
+// Responsável), diferente da entrada que nasce como expectativa (ver migration
+// contas_pagar_hortolandia.sql).
+export const contaPagarHortolandiaCreateSchema = z.object({
+  data_pagamento: z.string().min(1, "Data de pagamento é obrigatória"),
+  descricao: z.string().trim().min(1, "Descrição é obrigatória"),
+  valor: coerceNumber,
+  responsavel: z.string().trim().min(1, "Responsável é obrigatório"),
+});
+
+export const contaPagarHortolandiaUpdateSchema = contaPagarHortolandiaCreateSchema.partial();
+
 export const rescisaoAvisoPlataformaCreateSchema = z.object({
   usuario_id: z.string().uuid(),
 });

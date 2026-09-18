@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ModalContaReceberHortolandia from "./ModalContaReceberHortolandia";
+import ModalContaPagarHortolandia from "./ModalContaPagarHortolandia";
 import ImpostoLinhaCelula from "./ImpostoLinhaCelula";
 
 export interface ContaReceberRow {
@@ -21,13 +22,26 @@ export interface ContaReceberRow {
   impostoPercentualManual: number | null;
 }
 
+// Contas a pagar (saída) — contraparte de ContaReceberRow. Sem cliente/status/vencimento:
+// a saída já nasce paga (ver comentário em contaPagarHortolandiaCreateSchema).
+export interface ContaPagarRow {
+  id: string;
+  dataPagamento: string;
+  descricao: string;
+  valor: number;
+  responsavel: string;
+}
+
 interface Props {
   rowsIniciais: ContaReceberRow[];
+  saidasIniciais: ContaPagarRow[];
   anoInicial: number;
   mesInicial: number;
   impostoInicial: number | null;
   impostosPorMesInicial: Record<string, number>;
 }
+
+type Visao = "entradas" | "saidas";
 
 const STATUS_LABEL: Record<string, { label: string; bg: string; color: string }> = {
   pendente: { label: "Pendente", bg: "#FEF3C7", color: "#92400E" },
@@ -70,6 +84,7 @@ type FiltroTab = "pendente" | "pago" | "cancelado" | "todas";
 
 export default function FaturamentoHortolandiaPageClient({
   rowsIniciais,
+  saidasIniciais,
   anoInicial,
   mesInicial,
   impostoInicial,
@@ -77,8 +92,11 @@ export default function FaturamentoHortolandiaPageClient({
 }: Props) {
   const searchParams = useSearchParams();
   const [rows, setRows] = useState(rowsIniciais);
+  const [saidas, setSaidas] = useState(saidasIniciais);
+  const [visao, setVisao] = useState<Visao>("entradas");
   const [tab, setTab] = useState<FiltroTab>("pendente");
   const [contaAberta, setContaAberta] = useState<ContaReceberRow | null | "novo">(null);
+  const [contaPagarAberta, setContaPagarAberta] = useState<ContaPagarRow | null | "novo">(null);
 
   // Deep-link ?abrir={id} do popup de vencidas (PopupContaReceberHortolandiaVencida) —
   // mesmo padrão de CobrancasRSPageClient. Roda só uma vez de propósito (rows não entra
@@ -149,6 +167,18 @@ export default function FaturamentoHortolandiaPageClient({
   );
   const liquidoMes = percentualImposto != null ? totalMes - (totalMes * percentualImposto) / 100 : null;
 
+  // Total Saída (mês) — mesma lógica de totalMes, mas por data_pagamento (a saída só tem
+  // essa data, já nasce paga) em vez de data_vencimento.
+  const totalSaidaMes = useMemo(
+    () => saidas.filter((s) => s.dataPagamento.startsWith(chaveMes)).reduce((soma, s) => soma + s.valor, 0),
+    [saidas, chaveMes]
+  );
+  // Saldo Líquido = o número que realmente importa pro CEO: quanto sobrou da unidade depois
+  // do imposto E das despesas do mês. Só existe quando liquidoMes existe (precisa do imposto
+  // do mês informado) — sem imposto, mostrar um saldo enganaria o Olver com um valor que
+  // ainda não é o líquido de verdade.
+  const saldoLiquidoMes = liquidoMes != null ? liquidoMes - totalSaidaMes : null;
+
   async function handleMesChange(e: React.ChangeEvent<HTMLInputElement>) {
     const valor = e.target.value; // "YYYY-MM"
     if (!valor) return;
@@ -216,6 +246,19 @@ export default function FaturamentoHortolandiaPageClient({
     setContaAberta(null);
   }
 
+  function handleSalvaSaida(row: ContaPagarRow) {
+    setSaidas((prev) => {
+      const existe = prev.some((s) => s.id === row.id);
+      return existe ? prev.map((s) => (s.id === row.id ? row : s)) : [row, ...prev];
+    });
+    setContaPagarAberta(null);
+  }
+
+  function handleExcluidaSaida(id: string) {
+    setSaidas((prev) => prev.filter((s) => s.id !== id));
+    setContaPagarAberta(null);
+  }
+
   // Edição inline do imposto por linha (ImpostoLinhaCelula) — PATCH direto, sem passar pelo
   // modal de editar lançamento, pra corrigir uma exceção pontual com o mínimo de cliques.
   async function handleSalvarImpostoLinha(id: string, novoValor: number | null): Promise<boolean> {
@@ -237,10 +280,15 @@ export default function FaturamentoHortolandiaPageClient({
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Faturamento Hortolândia</h1>
-          <p className="text-sm text-gray-500 mt-1">Contas a receber — controle manual da unidade Hortolândia.</p>
+          <p className="text-sm text-gray-500 mt-1">Contas a receber e a pagar — controle manual da unidade Hortolândia.</p>
         </div>
-        <button onClick={() => setContaAberta("novo")} className="btn-primary">
-          + Novo lançamento
+        {/* Contextual à visão ativa (Entradas/Saídas) — mesmo botão, destino diferente,
+            pra não duplicar "+ Novo lançamento" na tela. */}
+        <button
+          onClick={() => (visao === "entradas" ? setContaAberta("novo") : setContaPagarAberta("novo"))}
+          className="btn-primary"
+        >
+          + Novo lançamento {visao === "entradas" ? "(entrada)" : "(saída)"}
         </button>
       </div>
 
@@ -255,11 +303,14 @@ export default function FaturamentoHortolandiaPageClient({
         <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{erroImposto}</p>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      {/* Grid 3 colunas: Entrada/Imposto/Saída na linha de cima, Líquido/(vazio)/Saldo na de
+          baixo — Saldo Líquido é o número que fecha a leitura do mês (líquido de imposto
+          menos despesa), por isso fica embaixo do Total Líquido, não ao lado da Saída. */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <div style={{ background: "#D1FAE5", border: "2px solid #166534", borderRadius: 12, padding: "14px 16px" }}>
           <p style={{ fontSize: 22, fontWeight: 800, color: "#166534", margin: 0 }}>{formatarMoeda(totalMes)}</p>
           <p style={{ fontSize: 12, fontWeight: 600, color: "#166534", margin: "2px 0 0" }}>
-            Valor total do mês (por vencimento)
+            Total Entrada — valor do mês (por vencimento)
           </p>
         </div>
 
@@ -288,123 +339,236 @@ export default function FaturamentoHortolandiaPageClient({
           </div>
           {impostoSalvo && <p className="text-green-700 text-xs mt-1">Imposto salvo!</p>}
         </div>
+
+        <div style={{ background: "#FEE2E2", border: "2px solid #991B1B", borderRadius: 12, padding: "14px 16px" }}>
+          <p style={{ fontSize: 22, fontWeight: 800, color: "#991B1B", margin: 0 }}>{formatarMoeda(totalSaidaMes)}</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#991B1B", margin: "2px 0 0" }}>
+            Total Saída — valor do mês (por pagamento)
+          </p>
+        </div>
+
+        {liquidoMes != null ? (
+          <div style={{ background: "#DBEAFE", border: "2px solid transparent", borderRadius: 12, padding: "14px 16px" }}>
+            <p style={{ fontSize: 22, fontWeight: 800, color: "#1D4ED8", margin: 0 }}>{formatarMoeda(liquidoMes)}</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: "#1D4ED8", margin: "2px 0 0" }}>
+              Total Líquido — entrada do mês ({percentualImposto}% de imposto)
+            </p>
+          </div>
+        ) : (
+          <div style={{ background: "#FEF3C7", border: "2px solid transparent", borderRadius: 12, padding: "14px 16px" }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: "#92400E", margin: 0 }}>
+              ⚠ Informe o imposto do mês para calcular o líquido.
+            </p>
+          </div>
+        )}
+
+        <div />
+
+        <div
+          style={{
+            background: saldoLiquidoMes != null && saldoLiquidoMes < 0 ? "#FEE2E2" : "#EDE9FE",
+            border: `2px solid ${saldoLiquidoMes != null && saldoLiquidoMes < 0 ? "#991B1B" : "#5B21B6"}`,
+            borderRadius: 12,
+            padding: "14px 16px",
+          }}
+        >
+          <p
+            style={{
+              fontSize: 22,
+              fontWeight: 800,
+              color: saldoLiquidoMes != null && saldoLiquidoMes < 0 ? "#991B1B" : "#5B21B6",
+              margin: 0,
+            }}
+          >
+            {saldoLiquidoMes != null ? formatarMoeda(saldoLiquidoMes) : "—"}
+          </p>
+          <p
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: saldoLiquidoMes != null && saldoLiquidoMes < 0 ? "#991B1B" : "#5B21B6",
+              margin: "2px 0 0",
+            }}
+          >
+            Saldo Líquido — entrada líquida menos saída do mês
+          </p>
+        </div>
       </div>
 
-      {liquidoMes != null ? (
-        <div
-          className="mb-6"
-          style={{ background: "#DBEAFE", border: "2px solid transparent", borderRadius: 12, padding: "14px 16px" }}
-        >
-          <p style={{ fontSize: 22, fontWeight: 800, color: "#1D4ED8", margin: 0 }}>{formatarMoeda(liquidoMes)}</p>
-          <p style={{ fontSize: 12, fontWeight: 600, color: "#1D4ED8", margin: "2px 0 0" }}>
-            Valor líquido do mês ({percentualImposto}% de imposto)
-          </p>
-        </div>
-      ) : (
-        <div
-          className="mb-6"
-          style={{ background: "#FEF3C7", border: "2px solid transparent", borderRadius: 12, padding: "14px 16px" }}
-        >
-          <p style={{ fontSize: 13, fontWeight: 600, color: "#92400E", margin: 0 }}>
-            ⚠ Informe o imposto do mês para calcular o líquido.
-          </p>
-        </div>
-      )}
-
-      <div className="flex gap-2 mb-4 border-b border-gray-200">
-        {(["pendente", "pago", "cancelado", "todas"] as FiltroTab[]).map((t) => (
+      {/* Visão Entradas/Saídas — troca a tabela abaixo, os totais acima sempre mostram os
+          dois lados juntos independente da aba selecionada. */}
+      <div className="flex gap-2 mb-4">
+        {(
+          [
+            { valor: "entradas" as const, label: "Entradas" },
+            { valor: "saidas" as const, label: "Saídas" },
+          ]
+        ).map((opcao) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              tab === t ? "border-[#FFB800] text-gray-900" : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
+            key={opcao.valor}
+            type="button"
+            onClick={() => setVisao(opcao.valor)}
+            style={{
+              padding: "8px 18px",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 700,
+              border: visao === opcao.valor ? "1px solid #FFD700" : "1px solid #E5E7EB",
+              background: visao === opcao.valor ? "#FFD700" : "#FFFFFF",
+              color: visao === opcao.valor ? "#111827" : "#6B7280",
+              transition: "all .15s",
+            }}
           >
-            {t === "pendente" ? "Pendentes" : t === "pago" ? "Pagos" : t === "cancelado" ? "Cancelados" : "Todas"}
+            {opcao.label}
           </button>
         ))}
       </div>
 
-      <div className="card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-500 border-b border-gray-200">
-              <th className="py-2 px-3">Vencimento</th>
-              <th className="py-2 px-3">Cliente</th>
-              <th className="py-2 px-3">Nº NF</th>
-              <th className="py-2 px-3 text-right">Valor R$</th>
-              <th className="py-2 px-3 text-right">Imposto (%)</th>
-              <th className="py-2 px-3 text-right">Valor Líquido</th>
-              <th className="py-2 px-3 text-center">Dias p/ venc.</th>
-              <th className="py-2 px-3">Pagamento</th>
-              <th className="py-2 px-3">Status</th>
-              <th className="py-2 px-3">Emissão NF/Acordo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rowsFiltradas.map((row) => {
-              const status = statusEfetivo(row);
-              const s = STATUS_LABEL[status];
-              const dias = diasParaVencimento(row.dataVencimento);
-              return (
+      {visao === "entradas" ? (
+        <>
+          <div className="flex gap-2 mb-4 border-b border-gray-200">
+            {(["pendente", "pago", "cancelado", "todas"] as FiltroTab[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                  tab === t ? "border-[#FFB800] text-gray-900" : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {t === "pendente" ? "Pendentes" : t === "pago" ? "Pagos" : t === "cancelado" ? "Cancelados" : "Todas"}
+              </button>
+            ))}
+          </div>
+
+          <div className="card overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 border-b border-gray-200">
+                  <th className="py-2 px-3">Vencimento</th>
+                  <th className="py-2 px-3">Cliente</th>
+                  <th className="py-2 px-3">Nº NF</th>
+                  <th className="py-2 px-3 text-right">Valor R$</th>
+                  <th className="py-2 px-3 text-right">Imposto (%)</th>
+                  <th className="py-2 px-3 text-right">Valor Líquido</th>
+                  <th className="py-2 px-3 text-center">Dias p/ venc.</th>
+                  <th className="py-2 px-3">Pagamento</th>
+                  <th className="py-2 px-3">Status</th>
+                  <th className="py-2 px-3">Emissão NF/Acordo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rowsFiltradas.map((row) => {
+                  const status = statusEfetivo(row);
+                  const s = STATUS_LABEL[status];
+                  const dias = diasParaVencimento(row.dataVencimento);
+                  return (
+                    <tr
+                      key={row.id}
+                      onClick={() => setContaAberta(row)}
+                      className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                    >
+                      <td className="py-2 px-3">{formatarData(row.dataVencimento)}</td>
+                      <td className="py-2 px-3 font-medium text-gray-900">{row.clienteNome}</td>
+                      <td className="py-2 px-3 text-gray-500">{row.numeroNf ?? "—"}</td>
+                      <td className="py-2 px-3 text-right font-medium">{formatarMoeda(row.valor)}</td>
+                      <td className="py-2 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        <ImpostoLinhaCelula
+                          percentualEfetivo={percentualEfetivoRow(row)}
+                          valorProprio={row.impostoPercentualManual}
+                          onSalvar={(novoValor) => handleSalvarImpostoLinha(row.id, novoValor)}
+                        />
+                      </td>
+                      <td className="py-2 px-3 text-right text-gray-600">{formatarMoeda(valorLiquidoRow(row))}</td>
+                      <td className="py-2 px-3 text-center text-gray-500">
+                        {row.status === "pendente" ? dias : "—"}
+                      </td>
+                      <td className="py-2 px-3">{formatarData(row.dataPagamento)}</td>
+                      <td className="py-2 px-3">
+                        <span
+                          className="px-2 py-1 rounded-full text-xs font-medium"
+                          style={{ backgroundColor: s.bg, color: s.color }}
+                        >
+                          {s.label}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3">{formatarData(row.dataEmissaoNf)}</td>
+                    </tr>
+                  );
+                })}
+                {rowsFiltradas.length === 0 && (
+                  <tr>
+                    <td colSpan={10} className="py-8 text-center text-gray-400">
+                      Nenhum lançamento nessa visão.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+              {rowsFiltradas.length > 0 && (
+                <tfoot>
+                  <tr className="border-t border-gray-200 font-semibold text-gray-900">
+                    <td className="py-2 px-3" colSpan={3}>
+                      Total ({rowsFiltradas.length})
+                    </td>
+                    <td className="py-2 px-3 text-right">{formatarMoeda(totalFiltrado)}</td>
+                    <td className="py-2 px-3" />
+                    <td className="py-2 px-3 text-right">
+                      {existeLiquidoConhecido ? formatarMoeda(totalLiquidoFiltrado) : "—"}
+                    </td>
+                    <td className="py-2 px-3" colSpan={4} />
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </>
+      ) : (
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-500 border-b border-gray-200">
+                <th className="py-2 px-3">Data de Pagamento</th>
+                <th className="py-2 px-3">Descrição Pagamento</th>
+                <th className="py-2 px-3 text-right">Valor</th>
+                <th className="py-2 px-3">Responsável</th>
+              </tr>
+            </thead>
+            <tbody>
+              {saidas.map((s) => (
                 <tr
-                  key={row.id}
-                  onClick={() => setContaAberta(row)}
+                  key={s.id}
+                  onClick={() => setContaPagarAberta(s)}
                   className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
                 >
-                  <td className="py-2 px-3">{formatarData(row.dataVencimento)}</td>
-                  <td className="py-2 px-3 font-medium text-gray-900">{row.clienteNome}</td>
-                  <td className="py-2 px-3 text-gray-500">{row.numeroNf ?? "—"}</td>
-                  <td className="py-2 px-3 text-right font-medium">{formatarMoeda(row.valor)}</td>
-                  <td className="py-2 px-3 text-right" onClick={(e) => e.stopPropagation()}>
-                    <ImpostoLinhaCelula
-                      percentualEfetivo={percentualEfetivoRow(row)}
-                      valorProprio={row.impostoPercentualManual}
-                      onSalvar={(novoValor) => handleSalvarImpostoLinha(row.id, novoValor)}
-                    />
-                  </td>
-                  <td className="py-2 px-3 text-right text-gray-600">{formatarMoeda(valorLiquidoRow(row))}</td>
-                  <td className="py-2 px-3 text-center text-gray-500">
-                    {row.status === "pendente" ? dias : "—"}
-                  </td>
-                  <td className="py-2 px-3">{formatarData(row.dataPagamento)}</td>
-                  <td className="py-2 px-3">
-                    <span
-                      className="px-2 py-1 rounded-full text-xs font-medium"
-                      style={{ backgroundColor: s.bg, color: s.color }}
-                    >
-                      {s.label}
-                    </span>
-                  </td>
-                  <td className="py-2 px-3">{formatarData(row.dataEmissaoNf)}</td>
+                  <td className="py-2 px-3">{formatarData(s.dataPagamento)}</td>
+                  <td className="py-2 px-3 font-medium text-gray-900">{s.descricao}</td>
+                  <td className="py-2 px-3 text-right font-medium text-[#991B1B]">{formatarMoeda(s.valor)}</td>
+                  <td className="py-2 px-3 text-gray-600">{s.responsavel}</td>
                 </tr>
-              );
-            })}
-            {rowsFiltradas.length === 0 && (
-              <tr>
-                <td colSpan={10} className="py-8 text-center text-gray-400">
-                  Nenhum lançamento nessa visão.
-                </td>
-              </tr>
+              ))}
+              {saidas.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-8 text-center text-gray-400">
+                    Nenhuma saída lançada ainda.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+            {saidas.length > 0 && (
+              <tfoot>
+                <tr className="border-t border-gray-200 font-semibold text-gray-900">
+                  <td className="py-2 px-3" colSpan={2}>
+                    Total ({saidas.length})
+                  </td>
+                  <td className="py-2 px-3 text-right">
+                    {formatarMoeda(saidas.reduce((soma, s) => soma + s.valor, 0))}
+                  </td>
+                  <td className="py-2 px-3" />
+                </tr>
+              </tfoot>
             )}
-          </tbody>
-          {rowsFiltradas.length > 0 && (
-            <tfoot>
-              <tr className="border-t border-gray-200 font-semibold text-gray-900">
-                <td className="py-2 px-3" colSpan={3}>
-                  Total ({rowsFiltradas.length})
-                </td>
-                <td className="py-2 px-3 text-right">{formatarMoeda(totalFiltrado)}</td>
-                <td className="py-2 px-3" />
-                <td className="py-2 px-3 text-right">
-                  {existeLiquidoConhecido ? formatarMoeda(totalLiquidoFiltrado) : "—"}
-                </td>
-                <td className="py-2 px-3" colSpan={4} />
-              </tr>
-            </tfoot>
-          )}
-        </table>
-      </div>
+          </table>
+        </div>
+      )}
 
       {contaAberta && (
         <ModalContaReceberHortolandia
@@ -412,6 +576,15 @@ export default function FaturamentoHortolandiaPageClient({
           onClose={() => setContaAberta(null)}
           onSalva={handleSalva}
           onExcluida={handleExcluida}
+        />
+      )}
+
+      {contaPagarAberta && (
+        <ModalContaPagarHortolandia
+          conta={contaPagarAberta === "novo" ? null : contaPagarAberta}
+          onClose={() => setContaPagarAberta(null)}
+          onSalva={handleSalvaSaida}
+          onExcluida={handleExcluidaSaida}
         />
       )}
     </div>
