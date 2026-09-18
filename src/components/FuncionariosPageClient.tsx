@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatarDataSemFuso } from "@/lib/utils";
 import { calcularStatusAso, ASO_STATUS_INFO } from "@/lib/asoStatus";
-import { calcularContadorContratoMot } from "@/lib/contratoMotStatus";
 import { TURNOS_FUNCIONARIO } from "@/lib/constants";
 import ModalAdicionarFuncionario from "./ModalAdicionarFuncionario";
 import ModalLancarRescisao from "./ModalLancarRescisao";
@@ -239,13 +238,6 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
             const badge = STATUS_BADGE[f.status] ?? { label: f.status, bg: "#F3F4F6", text: "#374151" };
             const badgeAso = ASO_STATUS_INFO[calcularStatusAso(f.aso_data_exame_mais_recente)];
             const badgeModalidade = f.tipo_servico ? MODALIDADE_BADGE[f.tipo_servico] : null;
-            // Contador de dias de contrato (regra 90/180/270 dias, CLT/Lei 6.019/74) só faz
-            // sentido pra MOT ativo — Terceirização e R&S não têm esse limite, e desligado
-            // não tem contrato em contagem.
-            const contadorMot =
-              f.tipo_servico === "mao_obra_temporaria" && f.status === "ativo"
-                ? calcularContadorContratoMot(f.data_admissao)
-                : null;
             return (
               <div
                 key={f.id}
@@ -346,11 +338,6 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
                     )}
                     {erroContratoId === f.id && <p style={{ color: "#DC2626", fontSize: 11, margin: "2px 0 0" }}>Erro ao abrir</p>}
                   </Campo>
-                  {contadorMot && (
-                    <Campo label="Contrato MOT">
-                      <Badge bg={contadorMot.bg} text={contadorMot.text} label={contadorMot.label} />
-                    </Campo>
-                  )}
                   <Campo label="Origem">{f.admissao_id ? "Admissão digital" : "Cadastro manual"}</Campo>
                 </div>
               </div>
