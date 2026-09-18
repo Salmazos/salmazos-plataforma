@@ -75,15 +75,24 @@ export function calcularFaixaContratoMot(dias: number): ContratoMotFaixa {
 
 // Cor roxa pra "data_futura" pelo mesmo motivo de ASO_STATUS_INFO.sem_registro (asoStatus.ts):
 // é um problema de CADASTRO (data errada), não um problema de PRAZO — nunca reaproveitar
-// vermelho/âmbar/laranja, que aqui significam "prazo avançando", pra não confundir as duas
-// categorias de alerta. Cores de faixa de prazo confirmadas com o Olver: verde (até 90),
-// âmbar (até 180), laranja (até 270), vermelho (acima de 270).
+// verde/âmbar/laranja/vermelho, que aqui significam "prazo avançando", pra não confundir as
+// duas categorias de alerta. Cores de faixa de prazo confirmadas com o Olver: verde (até
+// 90), âmbar (até 180), laranja (até 270), vermelho (acima de 270) — o verde usa a mesma
+// paleta de ASO_STATUS_INFO.em_dia (asoStatus.ts), pra manter consistência entre os dois
+// indicadores de prazo do app.
+//
+// Rótulos revisados (pediu pra pensar como RH, evitando assustar o cliente que só está
+// acompanhando o próprio quadro): a versão original usava termos de processo interno
+// ("Requer aprovação de continuidade", "Próximo do limite legal") que soavam a burocracia
+// jurídica pro cliente. Vocabulário único (mesmo texto no painel e no portal) — RH abre mão
+// de um pouco de precisão na palavra em troca de nunca ter dois textos pra manter
+// sincronizados.
 export const CONTRATO_MOT_FAIXA_INFO: Record<ContratoMotFaixa, { bg: string; text: string; label: string }> = {
   data_futura: { bg: "#EDE9FE", text: "#5B21B6", label: "Data de admissão no futuro — verificar cadastro" },
-  renovacao_automatica: { bg: "#EFF6FF", text: "#1D4ED8", label: "Renovação automática" },
-  aprovacao_continuidade: { bg: "#FEF3C7", text: "#92400E", label: "Requer aprovação de continuidade" },
-  proximo_limite: { bg: "#FFEDD5", text: "#C2410C", label: "Próximo do limite legal" },
-  limite_excedido: { bg: "#FEE2E2", text: "#991B1B", label: "Limite legal excedido" },
+  renovacao_automatica: { bg: "#D1FAE5", text: "#166534", label: "Dentro do prazo" },
+  aprovacao_continuidade: { bg: "#FEF3C7", text: "#92400E", label: "Atenção" },
+  proximo_limite: { bg: "#FFEDD5", text: "#C2410C", label: "Atenção prioritária" },
+  limite_excedido: { bg: "#FEE2E2", text: "#991B1B", label: "Vencido" },
 };
 
 export interface VencimentoContratoMot {
