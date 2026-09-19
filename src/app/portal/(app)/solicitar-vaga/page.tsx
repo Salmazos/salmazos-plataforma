@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import CampoMoeda from "@/components/ui/CampoMoeda";
-import { SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, detectarModoSalario, type SalarioModo } from "@/lib/constants";
+import { SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, detectarModoSalario, extrairSalarioHora, formatarSalarioHora, type SalarioModo } from "@/lib/constants";
 
 const ESTADOS = [
   "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG",
@@ -98,6 +98,9 @@ export default function SolicitarVagaPage() {
   const [salario, setSalario] = useState("");
   const [adicionaisSalariais, setAdicionaisSalariais] = useState("");
   const [salarioModo, setSalarioModo] = useState<SalarioModo>("fixo");
+  // Só faz sentido quando salarioModo === "fixo" — "hora" grava o valor como "R$ 9,50/hora"
+  // (ver formatarSalarioHora); "mes" mantém o formato de sempre (número puro).
+  const [salarioPeriodo, setSalarioPeriodo] = useState<"mes" | "hora">("mes");
   const [previsaoInicio, setPrevisaoInicio] = useState("");
   const [observacoes, setObservacoes] = useState("");
 
@@ -151,8 +154,16 @@ export default function SolicitarVagaPage() {
     setTipoServico(tpl.tipo_servico);
     setCidade(tpl.cidade ?? "");
     setEstado(tpl.estado ?? "");
-    setSalario(tpl.salario ?? "");
-    setSalarioModo(detectarModoSalario(tpl.salario ?? ""));
+    const salarioHoraTpl = extrairSalarioHora(tpl.salario ?? "");
+    if (salarioHoraTpl !== null) {
+      setSalario(String(salarioHoraTpl));
+      setSalarioModo("fixo");
+      setSalarioPeriodo("hora");
+    } else {
+      setSalario(tpl.salario ?? "");
+      setSalarioModo(detectarModoSalario(tpl.salario ?? ""));
+      setSalarioPeriodo("mes");
+    }
     // Templates (vaga_templates_cliente) não têm conceito de adicionais salariais ainda —
     // sempre reseta ao aplicar um template, pra não carregar valor de uma solicitação
     // anterior sem querer.
@@ -230,11 +241,24 @@ export default function SolicitarVagaPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSalarioModoChange = (modo: SalarioModo) => {
+  const handleSalarioModoChange = (modo: SalarioModo, periodo: "mes" | "hora" = "mes") => {
     setSalarioModo(modo);
+    setSalarioPeriodo(periodo);
     if (modo === "a_combinar") setSalario(SALARIO_A_COMBINAR);
     else if (modo === "pretensao") setSalario(SALARIO_ENVIAR_PRETENSAO);
     else setSalario("");
+  };
+
+  // Valor que vai pro banco: por hora vira "R$ 9,50/hora"; por mês (e À combinar/Pretensão)
+  // seguem exatamente como sempre foram.
+  const salarioParaEnvio = (): string | null => {
+    const valor = salario.trim();
+    if (!valor) return null;
+    if (salarioModo === "fixo" && salarioPeriodo === "hora") {
+      const num = Number(valor);
+      return num > 0 ? formatarSalarioHora(num) : null;
+    }
+    return valor;
   };
 
   const toggleReq = (chip: string) =>
@@ -376,7 +400,7 @@ export default function SolicitarVagaPage() {
           num_posicoes: Number(numPosicoes) || 1,
           cidade: cidade.trim(),
           estado,
-          salario: salario.trim() || null,
+          salario: salarioParaEnvio(),
           adicionais_salariais: adicionaisSalariais.trim() || null,
           horario_tipo: horarioTipo || null,
           horario_texto: horarioTexto || null,
@@ -403,7 +427,7 @@ export default function SolicitarVagaPage() {
             tipo_servico: tipoServico,
             cidade: cidade.trim() || null,
             estado: estado || null,
-            salario: salario.trim() || null,
+            salario: salarioParaEnvio(),
             horario_tipo: horarioTipo || null,
             horario_texto: horarioTexto || null,
             horario_padrao: horPadrao,
@@ -540,9 +564,9 @@ export default function SolicitarVagaPage() {
                 <input type="date" value={previsaoInicio} onChange={(e) => setPrevisaoInicio(e.target.value)} style={inputStyle} />
               </div>
               <div>
-                <label style={labelStyle}>Salário</label>
+                <label style={labelStyle}>Salário{salarioModo === "fixo" ? (salarioPeriodo === "hora" ? " (por hora)" : " (por mês)") : ""}</label>
                 {salarioModo === "fixo" ? (
-                  <CampoMoeda value={salario} onChange={(v) => setSalario(v > 0 ? String(v) : "")} placeholder="Ex: 2.000,00" style={inputStyle} />
+                  <CampoMoeda value={salario} onChange={(v) => setSalario(v > 0 ? String(v) : "")} placeholder={salarioPeriodo === "hora" ? "Ex: 12,50" : "Ex: 2.000,00"} style={inputStyle} />
                 ) : (
                   <p className="text-sm text-gray-500 pt-1.5">{salario || "—"} <span className="text-xs text-gray-400">(ajustável abaixo)</span></p>
                 )}
@@ -606,16 +630,17 @@ export default function SolicitarVagaPage() {
             <label style={labelStyle}>Salário</label>
             <div className="flex flex-wrap gap-2 mb-2">
               {([
-                ["fixo", "Valor fixo"],
-                ["a_combinar", "À combinar"],
-                ["pretensao", "Enviar Pretensão Salarial"],
-              ] as const).map(([modo, label]) => (
+                ["fixo", "mes", "Valor por mês"],
+                ["fixo", "hora", "Valor por hora"],
+                ["a_combinar", "mes", "À combinar"],
+                ["pretensao", "mes", "Enviar Pretensão Salarial"],
+              ] as const).map(([modo, periodo, label]) => (
                 <button
-                  key={modo}
+                  key={label}
                   type="button"
-                  onClick={() => handleSalarioModoChange(modo)}
+                  onClick={() => handleSalarioModoChange(modo, periodo)}
                   className="text-xs px-3 py-1.5 rounded-full font-medium transition-all"
-                  style={salarioModo === modo ? CHIP_ON : CHIP_OFF}
+                  style={salarioModo === modo && (modo !== "fixo" || salarioPeriodo === periodo) ? CHIP_ON : CHIP_OFF}
                 >
                   {label}
                 </button>
@@ -623,7 +648,7 @@ export default function SolicitarVagaPage() {
             </div>
             {salarioModo === "fixo" && (
               <>
-                <CampoMoeda value={salario} onChange={(v) => setSalario(v > 0 ? String(v) : "")} placeholder="Ex: 2.000,00" style={{ ...inputStyle, maxWidth: 240 }} />
+                <CampoMoeda value={salario} onChange={(v) => setSalario(v > 0 ? String(v) : "")} placeholder={salarioPeriodo === "hora" ? "Ex: 12,50 (por hora)" : "Ex: 2.000,00 (por mês)"} style={{ ...inputStyle, maxWidth: 240 }} />
                 <div className="mt-3" style={{ maxWidth: 400 }}>
                   <label style={labelStyle}>Adicionais salariais (opcional)</label>
                   <input

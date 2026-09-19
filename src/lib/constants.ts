@@ -266,6 +266,26 @@ export function detectarModoSalario(raw: string): SalarioModo {
   return "fixo";
 }
 
+// Salário por hora nas solicitações do Portal do Cliente: guardado no mesmo campo de texto
+// (solicitacoes_vagas/vaga_templates_cliente/vagas.salario) como "R$ 9,50/hora" — mesmo
+// formato já usado no e-mail de aprovação do cliente (api/portal/avaliar, "Horista"), e
+// exibido como está pelas telas, que repassam qualquer texto começando com "R$". Salário por
+// mês continua exatamente como sempre foi (número puro), pra não alterar nada do que já existe.
+export const SALARIO_SUFIXO_HORA = "/hora";
+const SALARIO_SUFIXO_HORA_REGEX = /\/hora\s*$/i;
+
+export function formatarSalarioHora(valor: number): string {
+  const texto = valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `R$ ${texto}${SALARIO_SUFIXO_HORA}`;
+}
+
+// Valor numérico de um salário por hora já formatado (ou null se o texto não for por hora) —
+// usado pra reabrir um template/solicitação salvo com "Valor por hora" no formulário.
+export function extrairSalarioHora(raw: string): number | null {
+  if (!SALARIO_SUFIXO_HORA_REGEX.test(raw)) return null;
+  return parseSalarioFixo(raw.replace(SALARIO_SUFIXO_HORA_REGEX, ""));
+}
+
 // vagas.salario mistura dois formatos reais em produção: número puro sem separador de
 // milhar (ex.: "2500.4", vindo do CampoMoeda em ModalNovaVaga/ModalEditarVaga) e moeda
 // formatada em pt-BR com prefixo (ex.: "R$ 3.500,00", vindo de outros fluxos como
@@ -273,6 +293,10 @@ export function detectarModoSalario(raw: string): SalarioModo {
 // R&S, geração de cobrança de cancelamento) — se tiver vírgula, assume pt-BR (ponto =
 // milhar, vírgula = decimal); senão, assume ponto decimal direto.
 export function parseSalarioFixo(raw: string): number | null {
+  // Salário por hora ("R$ 9,50/hora", ver formatarSalarioHora) nunca pode ser lido como
+  // valor mensal — sem essa trava, parseFloat("9.50/hora") devolveria 9.5 e a taxa de R&S /
+  // cobrança de cancelamento seria calculada em cima de um "salário" de R$ 9,50.
+  if (SALARIO_SUFIXO_HORA_REGEX.test(raw)) return null;
   const semPrefixo = raw.replace(/^R\$\s?/, "").trim();
   const normalizado = semPrefixo.includes(",")
     ? semPrefixo.replace(/\./g, "").replace(",", ".")
