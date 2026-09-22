@@ -4,6 +4,7 @@ import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, vagaUpdateSchema } from "@/lib/schemas";
 import { generateUniqueSlug } from "@/lib/slug";
 import { gerarCobrancaCancelamentoRSSeAplicavel } from "@/lib/cobrancaRS";
+import { sincronizarPosicoesAbertas } from "@/lib/vagaPosicoes";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -76,11 +77,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         if (body.status === "aberta") {
           campos.data_abertura = new Date().toISOString();
           campos.data_fechamento = null;
-          // Reabertura manual (ex: vaga com várias posições que fechou errado — ver nota
-          // de memória de 14/09) restaura o contador de posições em aberto pro total da
-          // vaga. Sem isso o contador ficava travado no valor de quando fechou (0), e a
-          // vaga voltava "aberta" mas com nenhuma posição de verdade disponível.
-          campos.num_posicoes_abertas = current.num_posicoes;
+          // num_posicoes_abertas é recalculado depois do update principal, a partir da
+          // contagem real de contratados (ver sincronizarPosicoesAbertas mais abaixo) — não
+          // resetar pro total aqui: essa vaga pode já ter posições de verdade preenchidas,
+          // e resetar pro total "esquecia" delas (causa raiz do caso real da vaga Auxiliar
+          // de Produção/Novacki de 21-22/09, ver nota de memória de 22/09).
         } else if (body.status === "fechada" || body.status === "cancelada") {
           campos.data_fechamento = new Date().toISOString();
         }
@@ -155,7 +156,24 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       }
     }
 
-    return NextResponse.json({ data });
+    // Recalcula num_posicoes_abertas sempre que o total de posições muda ou a vaga é
+    // reaberta manualmente — nos dois casos o valor anterior desse contador não é mais
+    // confiável (ver vagaPosicoes.ts). Refaz a busca depois, porque `data` acima já foi
+    // capturado antes dessa correção e ficaria com o contador (e possivelmente o status,
+    // se a vaga acabar re-fechando por já estar com todas as posições preenchidas)
+    // desatualizado na resposta.
+    let dataFinal = data;
+    if (body.num_posicoes !== undefined || (statusAlterado && body.status === "aberta")) {
+      await sincronizarPosicoesAbertas(id, supabase);
+      const { data: recarregada } = await supabase
+        .from("vagas")
+        .select("*, clientes(id, nome, processo_simplificado)")
+        .eq("id", id)
+        .single();
+      if (recarregada) dataFinal = recarregada;
+    }
+
+    return NextResponse.json({ data: dataFinal });
   } catch (err) {
     console.error("[PATCH /api/vagas/[id]]", err);
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });

@@ -4,9 +4,9 @@ import { registrarHistorico } from "@/lib/registrarHistorico";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, candidatoVagaFinalizarSchema } from "@/lib/schemas";
 import { gerarCobrancaRSSeAplicavel } from "@/lib/cobrancaRS";
-import { notificarVagaEncerrada } from "@/lib/notificarVagaEncerrada";
 import { resolverTipoServicoVigente } from "@/lib/tipoServicoVigente";
 import { sincronizarEncaminhamentoComEtapa } from "@/lib/sincronizarEncaminhamento";
+import { sincronizarPosicoesAbertas } from "@/lib/vagaPosicoes";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -46,7 +46,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const { data: cv, error: cvErr } = await supabase
       .from("candidatos_vagas")
-      .select("id, candidato_id, vaga_id, admissao_fee_valor, vagas!candidatos_vagas_vaga_id_fkey(id, titulo, status, tipo_servico, num_posicoes_abertas, num_posicoes, cliente_id, fee_rs_percentual, fee_rs_prazo_cobranca, clientes(nome))")
+      .select("id, candidato_id, vaga_id, admissao_fee_valor, vagas!candidatos_vagas_vaga_id_fkey(id, titulo, status, tipo_servico, num_posicoes, cliente_id, fee_rs_percentual, fee_rs_prazo_cobranca, clientes(nome))")
       .eq("id", id)
       .single();
 
@@ -55,7 +55,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const vaga = (cv as any).vagas as {
-      id: string; titulo: string; status: string; tipo_servico: string; num_posicoes_abertas: number | null;
+      id: string; titulo: string; status: string; tipo_servico: string;
       num_posicoes: number; cliente_id: string | null; clientes: { nome: string } | null;
       fee_rs_percentual: number | null; fee_rs_prazo_cobranca: string | null;
     } | null;
@@ -206,47 +206,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         })
         .eq("id", cv.candidato_id);
 
-      // Decrement positions
+      // Recalcula num_posicoes_abertas a partir da contagem real de contratados (nunca
+      // mais decrementa "no escuro" um contador solto — ver vagaPosicoes.ts pro histórico
+      // completo dos bugs que esse padrão antigo causou, incluindo o caso real da vaga
+      // Auxiliar de Produção/Novacki de 21-22/09). Fecha a vaga automaticamente quando a
+      // contagem real bate com o total de posições, e já cuida do e-mail/audit_log de
+      // encerramento.
       let vagaEncerrada = false;
       if (vaga) {
-        // Fallback pra num_posicoes (não pra 1 fixo, como era antes): vagas criadas antes
-        // dessa coluna nascer preenchida na criação (ver vagas/route.ts) ainda têm
-        // num_posicoes_abertas null hoje, e cair pra "1" fechava a vaga inteira já na
-        // primeira contratação mesmo com várias posições configuradas — bug real,
-        // confirmado em produção (TRATADOR I e Ajudante de Produção fecharam com 1 de 2
-        // posições preenchidas). Ver nota de memória de 14/09.
-        const current = vaga.num_posicoes_abertas ?? vaga.num_posicoes;
-        const novas = Math.max(current - 1, 0);
-        const updateFields: Record<string, unknown> = { num_posicoes_abertas: novas };
-        if (novas === 0) {
-          updateFields.status = "fechada";
-          updateFields.data_fechamento = new Date().toISOString();
-          vagaEncerrada = true;
-        }
-        await supabase.from("vagas").update(updateFields).eq("id", vaga.id);
-
-        if (vagaEncerrada) {
-          // Cobrança R&S da contratação que motivou esse fechamento já foi decidida e
-          // gerada (ou não) logo acima, no momento da finalização — fechar a vaga aqui
-          // não mexe em cobrança.
-
-          // Fechamento automático (última posição preenchida) atualiza a tabela `vagas`
-          // direto aqui em vez de passar por PATCH /api/vagas/[id] — por isso precisa
-          // replicar manualmente o e-mail de encerramento e o audit_log que aquele
-          // endpoint registra no fechamento manual (ver route.ts:128-152). `origem`
-          // extra no detalhes só marca a procedência, sem remover os campos que o
-          // fechamento manual já grava (status_anterior/status_novo).
-          await notificarVagaEncerrada(vaga.id, "fechada", supabase).catch((err) =>
-            console.error("[finalizar] Erro ao notificar encerramento de vaga:", err)
-          );
-
-          registrarAuditoria({
-            acao: "vaga_atualizada",
-            entidade: "vagas",
-            entidade_id: vaga.id,
-            detalhes: { status_anterior: vaga.status, status_novo: "fechada", origem: "fechamento_automatico_finalizar" },
-          });
-        }
+        // Cobrança R&S da contratação que motivou esse fechamento já foi decidida e
+        // gerada (ou não) logo acima, no momento da finalização — fechar a vaga aqui não
+        // mexe em cobrança.
+        const resultado = await sincronizarPosicoesAbertas(vaga.id, supabase);
+        vagaEncerrada = resultado?.vagaFechadaAgora ?? false;
       }
 
       const dataFmt = data_inicio.split("-").reverse().join("/");
@@ -295,8 +267,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (vaga_cancelada_cliente && vaga) {
       await supabase
         .from("vagas")
-        .update({ status: "aberta", num_posicoes_abertas: vaga.num_posicoes })
+        .update({ status: "aberta" })
         .eq("id", vaga.id);
+      // Recalcula a partir da contagem real de contratados, em vez de resetar pro total —
+      // essa vaga pode já ter outras posições preenchidas além dessa que acabou de ser
+      // reprovada (ver vagaPosicoes.ts).
+      await sincronizarPosicoesAbertas(vaga.id, supabase);
       vagaReaberta = true;
       void registrarHistorico({
         candidato_id: cv.candidato_id,
