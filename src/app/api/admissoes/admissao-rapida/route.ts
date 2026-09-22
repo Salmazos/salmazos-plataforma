@@ -90,10 +90,17 @@ export async function POST(request: NextRequest) {
         .from("candidatos")
         .insert({
           nome_completo: candidato_nome.trim(),
-          // telefone/email são NOT NULL no banco (sem default) — "" é o vazio válido usado
-          // em todo o resto do app quando o dado é opcional na tela (ver ModalCadastroRapido).
+          // telefone/email/cidade/estado são NOT NULL no banco (sem default) — "" é o vazio
+          // válido usado em todo o resto do app quando o dado é opcional na tela (ver
+          // ModalCadastroRapido). cidade/estado faltavam aqui — a Admissão Rápida não coleta
+          // esses dois campos (o cliente só indica nome/telefone/e-mail/CPF), e o insert
+          // quebrava com "null value in column cidade violates not-null constraint" sempre
+          // que o candidato indicado não tinha CPF cadastrado antes (bug real em produção,
+          // 22/09).
           telefone: candidato_telefone?.trim() || "",
           email: candidato_email?.trim() || "",
+          cidade: "",
+          estado: "",
           cpf: cpfLimpo || `TEMP-${Date.now()}`,
           cargo_pretendido: funcao.trim(),
           etapa_kanban: "triagem",
