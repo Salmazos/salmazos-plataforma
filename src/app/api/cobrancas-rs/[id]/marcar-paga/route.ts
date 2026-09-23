@@ -67,7 +67,16 @@ export async function POST(_request: NextRequest, { params }: Params) {
   // sair — mesmo padrão já usado em notificar-encerramento/route.ts.
   after(async () => {
     try {
-      const destinatarios = await obterDestinatariosCobrancaRS(data.revisado_por ?? null, svc);
+      // Elizabete, Andreza e Ölver são excluídos só deste e-mail (pagamento confirmado):
+      // Elizabete é quem autoriza e realiza a cobrança, e ele e a Andreza decidiram que
+      // também não precisam de confirmação de um pagamento que a própria diretoria fez —
+      // pedido do Olver, 23/09. Os outros e-mails de Cobrança R&S (gerada, aprovada,
+      // cancelada, atraso, reenvio) continuam chegando pra todos eles normalmente.
+      const destinatarios = await obterDestinatariosCobrancaRS(data.revisado_por ?? null, svc, [
+        "consultoria@salmazos.com.br",
+        "rh@salmazos.com.br",
+        "olver@salmazos.com.br",
+      ]);
       if (destinatarios.length === 0) {
         console.error(`[marcar-paga] Nenhum destinatário resolvido pro e-mail de pagamento (cobranca_id=${id}).`);
         return;

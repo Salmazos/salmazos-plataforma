@@ -311,10 +311,20 @@ export interface DestinatarioAtrasoCobranca {
  * ser null (cobrança ainda não tem revisor — ex: cron de atraso processando uma cobrança cujo
  * revisor nunca foi setado por algum motivo): nesse caso nenhum analista extra entra, só a base
  * fixa, sem quebrar nem cair pra broadcast geral.
+ *
+ * excluirEmails (opcional, aditivo): remove analista(s) específico(s) do resultado final pelo
+ * e-mail cadastrado — usado só pelo e-mail de "cobrança paga" (marcar-paga/route.ts) pra tirar
+ * Elizabete Salmazo, Andreza Salmazo e Ölver (pedido do Olver, 23/09): Elizabete é quem
+ * autoriza/realiza o pagamento, e ele e a Andreza decidiram que também não precisam da
+ * confirmação por e-mail desse pagamento específico. Os outros 4 pontos que chamam esta
+ * função (gerada, atraso, aprovar, cancelar, reenviar) não passam esse parâmetro e continuam
+ * recebendo a base cheia, sem exceção — mesmo padrão de "uma exceção por canal/fluxo, nunca
+ * uma flag genérica" já usado em obterDestinatarioEmailSupervisaoAtraso.
  */
 export async function obterDestinatariosCobrancaRS(
   revisadoPor: string | null,
-  supabase?: ServiceClient
+  supabase?: ServiceClient,
+  excluirEmails?: string[]
 ): Promise<DestinatarioAtrasoCobranca[]> {
   const svc = supabase ?? createServiceClient();
 
@@ -329,10 +339,12 @@ export async function obterDestinatariosCobrancaRS(
     .eq("ativo", true);
 
   const acessoIds = new Set((acessos ?? []).map((a) => a.analista_perfil_id));
+  const excluirSet = new Set((excluirEmails ?? []).map((e) => e.toLowerCase()));
   const destinatarios = new Map<string, DestinatarioAtrasoCobranca>();
 
   for (const a of analistas ?? []) {
     if (!a.user_id || !a.email) continue;
+    if (excluirSet.has(a.email.toLowerCase())) continue;
     const ehFullAccess = a.nivel_acesso === "diretoria" || a.nivel_acesso === "superuser";
     const ehRevisorComAcesso = revisadoPor != null && a.user_id === revisadoPor && acessoIds.has(a.id);
     if (ehFullAccess || ehRevisorComAcesso) {
