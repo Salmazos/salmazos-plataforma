@@ -95,6 +95,7 @@ export default function FaturamentoHortolandiaPageClient({
   const [saidas, setSaidas] = useState(saidasIniciais);
   const [visao, setVisao] = useState<Visao>("entradas");
   const [tab, setTab] = useState<FiltroTab>("pendente");
+  const [responsavelFiltro, setResponsavelFiltro] = useState<string>("todos");
   const [contaAberta, setContaAberta] = useState<ContaReceberRow | null | "novo">(null);
   const [contaPagarAberta, setContaPagarAberta] = useState<ContaPagarRow | null | "novo">(null);
 
@@ -146,6 +147,21 @@ export default function FaturamentoHortolandiaPageClient({
     if (tab === "todas") return rows;
     return rows.filter((r) => r.status === tab);
   }, [rows, tab]);
+
+  // Lista de responsáveis pro filtro da aba Saídas, derivada dos lançamentos já carregados
+  // (mesmo padrão do resto da tela: sem chamada extra à API só pra popular um <select>).
+  const responsaveisDisponiveis = useMemo(
+    () => Array.from(new Set(saidas.map((s) => s.responsavel))).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [saidas]
+  );
+
+  // Filtro por responsável é só da tabela de Saídas — os cards de totais do topo (Total
+  // Saída, Saldo Líquido) continuam somando TODAS as saídas do mês, igual o filtro por
+  // status de Entradas já não afeta o Total Entrada/Líquido lá em cima.
+  const saidasFiltradas = useMemo(
+    () => (responsavelFiltro === "todos" ? saidas : saidas.filter((s) => s.responsavel === responsavelFiltro)),
+    [saidas, responsavelFiltro]
+  );
 
   const totalFiltrado = rowsFiltradas.reduce((soma, r) => soma + r.valor, 0);
 
@@ -522,52 +538,74 @@ export default function FaturamentoHortolandiaPageClient({
           </div>
         </>
       ) : (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-gray-500 border-b border-gray-200">
-                <th className="py-2 px-3">Data de Pagamento</th>
-                <th className="py-2 px-3">Descrição Pagamento</th>
-                <th className="py-2 px-3 text-right">Valor</th>
-                <th className="py-2 px-3">Responsável</th>
-              </tr>
-            </thead>
-            <tbody>
-              {saidas.map((s) => (
-                <tr
-                  key={s.id}
-                  onClick={() => setContaPagarAberta(s)}
-                  className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
-                >
-                  <td className="py-2 px-3">{formatarData(s.dataPagamento)}</td>
-                  <td className="py-2 px-3 font-medium text-gray-900">{s.descricao}</td>
-                  <td className="py-2 px-3 text-right font-medium text-[#991B1B]">{formatarMoeda(s.valor)}</td>
-                  <td className="py-2 px-3 text-gray-600">{s.responsavel}</td>
+        <>
+          <div className="mb-4 flex justify-end">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                Responsável
+              </label>
+              <select
+                value={responsavelFiltro}
+                onChange={(e) => setResponsavelFiltro(e.target.value)}
+                className="input-field"
+              >
+                <option value="todos">Todos</option>
+                {responsaveisDisponiveis.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="card overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 border-b border-gray-200">
+                  <th className="py-2 px-3">Data de Pagamento</th>
+                  <th className="py-2 px-3">Descrição Pagamento</th>
+                  <th className="py-2 px-3 text-right">Valor</th>
+                  <th className="py-2 px-3">Responsável</th>
                 </tr>
-              ))}
-              {saidas.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="py-8 text-center text-gray-400">
-                    Nenhuma saída lançada ainda.
-                  </td>
-                </tr>
+              </thead>
+              <tbody>
+                {saidasFiltradas.map((s) => (
+                  <tr
+                    key={s.id}
+                    onClick={() => setContaPagarAberta(s)}
+                    className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                  >
+                    <td className="py-2 px-3">{formatarData(s.dataPagamento)}</td>
+                    <td className="py-2 px-3 font-medium text-gray-900">{s.descricao}</td>
+                    <td className="py-2 px-3 text-right font-medium text-[#991B1B]">{formatarMoeda(s.valor)}</td>
+                    <td className="py-2 px-3 text-gray-600">{s.responsavel}</td>
+                  </tr>
+                ))}
+                {saidasFiltradas.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center text-gray-400">
+                      Nenhuma saída lançada {responsavelFiltro === "todos" ? "ainda" : "para esse responsável"}.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+              {saidasFiltradas.length > 0 && (
+                <tfoot>
+                  <tr className="border-t border-gray-200 font-semibold text-gray-900">
+                    <td className="py-2 px-3" colSpan={2}>
+                      Total ({saidasFiltradas.length})
+                    </td>
+                    <td className="py-2 px-3 text-right">
+                      {formatarMoeda(saidasFiltradas.reduce((soma, s) => soma + s.valor, 0))}
+                    </td>
+                    <td className="py-2 px-3" />
+                  </tr>
+                </tfoot>
               )}
-            </tbody>
-            {saidas.length > 0 && (
-              <tfoot>
-                <tr className="border-t border-gray-200 font-semibold text-gray-900">
-                  <td className="py-2 px-3" colSpan={2}>
-                    Total ({saidas.length})
-                  </td>
-                  <td className="py-2 px-3 text-right">
-                    {formatarMoeda(saidas.reduce((soma, s) => soma + s.valor, 0))}
-                  </td>
-                  <td className="py-2 px-3" />
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
+            </table>
+          </div>
+        </>
       )}
 
       {contaAberta && (
