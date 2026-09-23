@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServiceClient } from "@/lib/supabase/server";
+import { exigirContextoUnidade } from "@/lib/unidadeAuth";
 
 const anthropic = new Anthropic();
 
@@ -103,6 +104,9 @@ function sleep(ms: number) {
 
 export async function POST(request: NextRequest) {
   try {
+    const { ctx, erro } = await exigirContextoUnidade();
+    if (erro) return erro;
+
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     if (!file) {
@@ -249,9 +253,16 @@ export async function POST(request: NextRequest) {
     }
     const deduplicadas = Array.from(seen.values());
 
+    // Unidade explícita (não o DEFAULT do banco): vagas importadas entram na unidade de quem
+    // importou. ⚠️ O upsert casa por titulo+cliente_nome sem olhar unidade — uma vaga de
+    // outra unidade com o mesmo título e cliente seria sobrescrita (e mudaria de unidade).
+    // Hoje não acontece (só existe Monte Mor/Hortolândia); rever antes de ativar SBC.
     const { data, error } = await supabase
       .from("vagas")
-      .upsert(deduplicadas, { onConflict: "titulo,cliente_nome" })
+      .upsert(
+        deduplicadas.map((v) => ({ ...v, unidade_id: ctx.unidadeId })),
+        { onConflict: "titulo,cliente_nome" }
+      )
       .select("id");
 
     if (error) {

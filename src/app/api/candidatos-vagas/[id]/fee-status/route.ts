@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { parseBody, feeStatusSchema } from "@/lib/schemas";
+import { exigirAcessoCandidatoVaga } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -16,6 +17,8 @@ const LABELS: Record<string, string> = {
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
+    const bloqueio = await exigirAcessoCandidatoVaga(id);
+    if (bloqueio) return bloqueio;
     const body = await request.json();
     const parsed = parseBody(feeStatusSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });

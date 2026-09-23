@@ -7,6 +7,7 @@ import { gerarCobrancaRSSeAplicavel } from "@/lib/cobrancaRS";
 import { resolverTipoServicoVigente } from "@/lib/tipoServicoVigente";
 import { sincronizarEncaminhamentoComEtapa } from "@/lib/sincronizarEncaminhamento";
 import { sincronizarPosicoesAbertas } from "@/lib/vagaPosicoes";
+import { checarAcessoCandidatoVaga } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -43,6 +44,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     // cobrança simplesmente nasce sem "dono" e só quem tem acesso amplo revisa.
     const authClient = await createClient();
     const { data: { user } } = await authClient.auth.getUser();
+
+    // Trava de unidade só quando há usuário — mantém a regra acima de nunca bloquear a
+    // finalização por falta de sessão resolvida.
+    if (user) {
+      const bloqueio = await checarAcessoCandidatoVaga(user, id);
+      if (bloqueio) return bloqueio;
+    }
 
     const { data: cv, error: cvErr } = await supabase
       .from("candidatos_vagas")

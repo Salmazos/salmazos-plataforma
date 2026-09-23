@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { calcularScoreRetencao } from "@/lib/calcularScoreRetencao";
 import { registrarHistorico } from "@/lib/registrarHistorico";
+import { exigirAcessoCandidatoVaga } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -9,6 +10,8 @@ interface Params {
 
 export async function POST(_req: Request, { params }: Params) {
   const { id } = await params;
+  const bloqueio = await exigirAcessoCandidatoVaga(id);
+  if (bloqueio) return bloqueio;
   const supabase = createServiceClient();
 
   const { data: cv } = await supabase

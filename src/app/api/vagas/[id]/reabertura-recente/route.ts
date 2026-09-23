@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { buscarContratacaoAnteriorRecente } from "@/lib/cobrancaRS";
+import { exigirAcessoVaga } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -15,6 +16,8 @@ const DIAS_GARANTIA = 30;
 // acionar-garantia) ou por reabertura manual da mesma vaga (detectado pelo histórico).
 export async function GET(_request: NextRequest, { params }: Params) {
   const { id } = await params;
+  const bloqueio = await exigirAcessoVaga(id);
+  if (bloqueio) return bloqueio;
   const supabase = createServiceClient();
 
   const { data: vaga, error } = await supabase

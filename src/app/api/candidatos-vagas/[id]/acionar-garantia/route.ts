@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
 import { sincronizarEncaminhamentoComEtapa } from "@/lib/sincronizarEncaminhamento";
+import { exigirAcessoCandidatoVaga } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -11,6 +12,8 @@ interface Params {
 export async function PATCH(_request: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
+    const bloqueio = await exigirAcessoCandidatoVaga(id);
+    if (bloqueio) return bloqueio;
     const supabase = createServiceClient();
 
     const { data: cv, error: cvErr } = await supabase
@@ -83,6 +86,9 @@ export async function PATCH(_request: NextRequest, { params }: Params) {
           fee_rs_percentual: vo.fee_rs_percentual,
           fee_rs_prazo_cobranca: vo.fee_rs_prazo_cobranca,
           reposicao_de_candidato_vaga_id: cv.id,
+          // Reposição é da mesma unidade da vaga original (mesmo cliente, mesma operação) —
+          // explícito, não o DEFAULT do banco.
+          unidade_id: vo.unidade_id,
         })
         .select("id")
         .single();

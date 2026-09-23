@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { parseBody, candidatoVagaCreateSchema } from "@/lib/schemas";
+import { exigirAcessoCandidatoVaga, exigirAcessoVaga, exigirContextoUnidade } from "@/lib/unidadeAuth";
 
 export async function GET(request: NextRequest) {
   const vagaId = request.nextUrl.searchParams.get("vaga_id");
@@ -13,15 +14,25 @@ export async function GET(request: NextRequest) {
   const supabase = createServiceClient();
 
   if (candidatoId) {
-    const { data, error } = await supabase
+    const { ctx, erro } = await exigirContextoUnidade();
+    if (erro) return erro;
+
+    // Candidato é compartilhado entre unidades, mas as candidaturas dele que aparecem são só
+    // as de vagas da unidade de quem consulta (!inner pra o filtro na vaga valer).
+    let query = supabase
       .from("candidatos_vagas")
-      .select("*, vagas!candidatos_vagas_vaga_id_fkey(id, titulo, cidade, estado)")
+      .select("*, vagas!candidatos_vagas_vaga_id_fkey!inner(id, titulo, cidade, estado)")
       .eq("candidato_id", candidatoId)
       .order("created_at", { ascending: false });
+    if (!ctx.todasUnidades) query = query.eq("vagas.unidade_id", ctx.unidadeId);
+    const { data, error } = await query;
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ data });
   }
+
+  const bloqueio = await exigirAcessoVaga(vagaId!);
+  if (bloqueio) return bloqueio;
 
   const { data, error } = await supabase
     .from("candidatos_vagas")
@@ -39,6 +50,8 @@ export async function POST(request: NextRequest) {
     const parsed = parseBody(candidatoVagaCreateSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const { vaga_id, candidato_id, etapa = null, responsavel = null } = parsed.data;
+    const bloqueio = await exigirAcessoVaga(vaga_id);
+    if (bloqueio) return bloqueio;
     const supabase = createServiceClient();
 
     const { data: vagaStatus } = await supabase
@@ -116,6 +129,8 @@ export async function DELETE(request: NextRequest) {
   try {
     const { id } = await request.json();
     if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 });
+    const bloqueio = await exigirAcessoCandidatoVaga(id);
+    if (bloqueio) return bloqueio;
     const supabase = createServiceClient();
     const { error } = await supabase.from("candidatos_vagas").delete().eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

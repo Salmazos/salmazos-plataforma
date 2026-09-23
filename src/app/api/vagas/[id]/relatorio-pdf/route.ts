@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { exigirAcessoVaga } from "@/lib/unidadeAuth";
 import { PDFDocument, PDFPage, rgb, StandardFonts, PageSizes } from "pdf-lib";
 
 interface Params { params: Promise<{ id: string }> }
@@ -39,6 +40,8 @@ function validarPeriodo(periodo: string): string {
 
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id: vagaId } = await params;
+  const bloqueio = await exigirAcessoVaga(vagaId);
+  if (bloqueio) return bloqueio;
   const supabase = createServiceClient();
 
   const [{ data: vaga }, { data: cvRows }] = await Promise.all([

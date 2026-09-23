@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { exigirAcessoVaga } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -7,6 +8,8 @@ interface Params {
 
 export async function GET(_request: NextRequest, { params }: Params) {
   const { id } = await params;
+  const bloqueio = await exigirAcessoVaga(id);
+  if (bloqueio) return bloqueio;
   const supabase = createServiceClient();
 
   const { data, error } = await supabase

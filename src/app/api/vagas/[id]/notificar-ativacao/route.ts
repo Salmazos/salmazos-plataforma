@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
+import { exigirAcessoVaga } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -16,6 +17,8 @@ const TIPO_LABELS: Record<string, string> = {
 
 export async function POST(_request: NextRequest, { params }: Params) {
   const { id } = await params;
+  const bloqueio = await exigirAcessoVaga(id);
+  if (bloqueio) return bloqueio;
 
   after(async () => {
     console.log(`[notificar-ativacao] Enviando emails para vaga ${id}`);

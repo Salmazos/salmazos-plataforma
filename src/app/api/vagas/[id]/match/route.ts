@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { calcularMatch } from "@/lib/matchCalculation";
+import { exigirAcessoVaga } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -8,6 +9,8 @@ interface Params {
 export async function POST(request: NextRequest, { params }: Params) {
   try {
     const { id: vagaId } = await params;
+    const bloqueio = await exigirAcessoVaga(vagaId);
+    if (bloqueio) return bloqueio;
     const { candidato_id } = await request.json();
 
     if (!candidato_id)

@@ -220,6 +220,9 @@ export async function POST(request: NextRequest) {
       resumo_candidato = calcularDuracaoResumo(resumo_candidato);
     }
 
+    // candidatos.unidade_id fica no DEFAULT do banco de propósito: o banco de candidatos é
+    // compartilhado entre unidades (decisão do Olver, 23/09) e essa coluna não é usada pra
+    // filtrar acesso — a unidade de um processo vem sempre da vaga (candidatos_vagas → vagas).
     const { data, error } = await supabase
       .from("candidatos")
       .insert({

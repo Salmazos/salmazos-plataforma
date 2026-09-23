@@ -5,6 +5,7 @@ import { parseBody, vagaUpdateSchema } from "@/lib/schemas";
 import { generateUniqueSlug } from "@/lib/slug";
 import { gerarCobrancaCancelamentoRSSeAplicavel } from "@/lib/cobrancaRS";
 import { sincronizarPosicoesAbertas } from "@/lib/vagaPosicoes";
+import { exigirAcessoVaga } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -12,6 +13,8 @@ interface Params {
 
 export async function GET(_request: NextRequest, { params }: Params) {
   const { id } = await params;
+  const bloqueio = await exigirAcessoVaga(id);
+  if (bloqueio) return bloqueio;
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("vagas")
@@ -25,6 +28,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
+    const bloqueio = await exigirAcessoVaga(id);
+    if (bloqueio) return bloqueio;
     const body = await request.json();
 
     const parsed = parseBody(vagaUpdateSchema, body);

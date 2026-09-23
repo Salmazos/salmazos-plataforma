@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { exigirContextoUnidade } from "@/lib/unidadeAuth";
 
 type VagaAbertaRow = {
   id: string;
@@ -12,13 +13,20 @@ type VagaAbertaRow = {
 const SEM_CLIENTE_SORT_KEY = "￿";
 
 export async function GET() {
+  const { ctx, erro } = await exigirContextoUnidade();
+  if (erro) return erro;
+
   const supabase = createServiceClient();
 
-  const { data, error } = await supabase
+  // Banco de candidatos é compartilhado entre unidades, mas as vagas oferecidas pra
+  // vincular um candidato são só as da unidade de quem está vinculando.
+  let query = supabase
     .from("vagas")
     .select("id, titulo, cliente_id, cidade, clientes(nome)")
     .eq("status", "aberta")
     .order("titulo", { ascending: true });
+  if (!ctx.todasUnidades) query = query.eq("unidade_id", ctx.unidadeId);
+  const { data, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

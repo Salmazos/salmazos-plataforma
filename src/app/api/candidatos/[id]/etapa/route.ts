@@ -7,6 +7,7 @@ import { registrarHistorico } from "@/lib/registrarHistorico";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, candidatoEtapaSchema } from "@/lib/schemas";
 import { sincronizarEncaminhamentoComEtapa } from "@/lib/sincronizarEncaminhamento";
+import { idsCandidaturasDaUnidade, resolverUnidadeUsuario } from "@/lib/unidadeAuth";
 
 const ETAPA_LABEL: Record<string, string> = {
   triagem: "Triagem",
@@ -47,6 +48,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const svc = createServiceClient();
 
+  const ctx = await resolverUnidadeUsuario(user);
+  if (!ctx) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
+  // As atualizações de candidatos_vagas abaixo pegam todas as candidaturas do candidato de
+  // uma vez; com o banco de candidatos compartilhado entre unidades, ficam restritas às
+  // candidaturas em vagas da unidade de quem move o card (null = todas as unidades).
+  const cvIdsDaUnidade = await idsCandidaturasDaUnidade(ctx, id);
+
   // Map entrevista_rh to the DB value entrevista_salmazos
   const dbEtapa = etapa_kanban === "entrevista_rh" ? "entrevista_salmazos" : etapa_kanban;
 
@@ -80,26 +88,21 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   // Update candidatos_vagas etapa
   const etapaGravada = isRemoval ? etapa_kanban : dbEtapa;
-  if (isRemoval) {
-    await svc
+  {
+    let updateCvs = svc
       .from("candidatos_vagas")
       .update({
-        etapa: etapa_kanban,
+        etapa: isRemoval ? etapa_kanban : dbEtapa,
         ...(comentario ? { observacoes: comentario } : {}),
       })
       .eq("candidato_id", id);
-  } else {
-    await svc
-      .from("candidatos_vagas")
-      .update({
-        etapa: dbEtapa,
-        ...(comentario ? { observacoes: comentario } : {}),
-      })
-      .eq("candidato_id", id);
+    if (cvIdsDaUnidade) updateCvs = updateCvs.in("id", cvIdsDaUnidade);
+    await updateCvs;
   }
 
   // Update de candidatos_vagas acima não é escopado por vaga — afeta todas as
-  // candidaturas ativas desse candidato de uma vez. Sincroniza o encaminhamento
+  // candidaturas ativas desse candidato de uma vez (dentro da unidade de quem move, ver
+  // cvIdsDaUnidade). Sincroniza o encaminhamento
   // 'aguardando' (se existir) de cada cliente distinto entre elas.
   {
     // ⚠️ ATENÇÃO: existe uma segunda FK entre vagas e candidatos_vagas
@@ -108,10 +111,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     // vagas!candidatos_vagas_vaga_id_fkey(...), senão quebra com erro de
     // "more than one relationship" do PostgREST. Já aconteceu 2x (ago/2026).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: cvsAfetados } = await svc
+    let queryCvsAfetados = svc
       .from("candidatos_vagas")
       .select("vagas!candidatos_vagas_vaga_id_fkey(cliente_id)")
       .eq("candidato_id", id);
+    if (cvIdsDaUnidade) queryCvsAfetados = queryCvsAfetados.in("id", cvIdsDaUnidade);
+    const { data: cvsAfetados } = await queryCvsAfetados;
     const clienteIds = new Set(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (cvsAfetados ?? []).map((cv: any) => cv.vagas?.cliente_id).filter(Boolean)
@@ -140,12 +145,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     // vagas(...) a partir de candidatos_vagas DEVE especificar
     // vagas!candidatos_vagas_vaga_id_fkey(...), senão quebra com erro de
     // "more than one relationship" do PostgREST. Já aconteceu 2x (ago/2026).
-    const { data: cv } = await svc
+    let queryCvCliente = svc
       .from("candidatos_vagas")
       .select("vaga_id, vagas!candidatos_vagas_vaga_id_fkey(cliente_id, clientes(nome, contato_email))")
-      .eq("candidato_id", id)
-      .limit(1)
-      .single();
+      .eq("candidato_id", id);
+    if (cvIdsDaUnidade) queryCvCliente = queryCvCliente.in("id", cvIdsDaUnidade);
+    const { data: cv } = await queryCvCliente.limit(1).single();
 
     const cliente = (cv?.vagas as any)?.clientes;
     if (cliente?.contato_email) {

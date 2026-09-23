@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import CandidatoPerfilTabs from "@/components/CandidatoPerfilTabs";
 import BotaoVoltarPainel from "@/components/BotaoVoltarPainel";
+import { resolverUnidadeUsuario } from "@/lib/unidadeAuth";
 import type { Candidato } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -29,12 +30,20 @@ export default async function CandidatoPerfilPage({ params }: Props) {
 
   const candidato = data as Candidato;
 
+  // Candidato é compartilhado entre unidades, mas os dados de candidatura (vaga, garantia,
+  // fee, retenção, etapa real) mostrados no perfil são só os de vagas da unidade de quem
+  // está vendo.
+  const ctx = user ? await resolverUnidadeUsuario(user) : null;
+  if (!ctx) notFound();
+
   // Fetch candidatos_vagas with guarantee OR fee data
-  const { data: cvRows } = await supabase
+  let cvQuery = supabase
     .from("candidatos_vagas")
-    .select("id, vaga_id, etapa, garantia_data_fim, garantia_acionada, garantia_acionada_em, admissao_fee_percentual, admissao_fee_valor, admissao_fee_prazo, fee_status, vagas!candidatos_vagas_vaga_id_fkey(titulo)")
+    .select("id, vaga_id, etapa, garantia_data_fim, garantia_acionada, garantia_acionada_em, admissao_fee_percentual, admissao_fee_valor, admissao_fee_prazo, fee_status, vagas!candidatos_vagas_vaga_id_fkey!inner(titulo)")
     .eq("candidato_id", id)
     .order("created_at", { ascending: false });
+  if (!ctx.todasUnidades) cvQuery = cvQuery.eq("vagas.unidade_id", ctx.unidadeId);
+  const { data: cvRows } = await cvQuery;
 
   // Etapa real do Kanban pra exibir no perfil (só leitura — ver PerfilEtapaSelector).
   // candidato.etapa_kanban é um espelho que fica desatualizado quando a movimentação
@@ -51,11 +60,13 @@ export default async function CandidatoPerfilPage({ params }: Props) {
     ?? null;
 
   // Best retention score from candidatos_vagas
-  const { data: retencaoRow } = await supabase
+  let retencaoQuery = supabase
     .from("candidatos_vagas")
-    .select("retencao_score, retencao_label, retencao_resumo")
+    .select("retencao_score, retencao_label, retencao_resumo, vagas!candidatos_vagas_vaga_id_fkey!inner(unidade_id)")
     .eq("candidato_id", id)
-    .not("retencao_score", "is", null)
+    .not("retencao_score", "is", null);
+  if (!ctx.todasUnidades) retencaoQuery = retencaoQuery.eq("vagas.unidade_id", ctx.unidadeId);
+  const { data: retencaoRow } = await retencaoQuery
     .order("retencao_score", { ascending: false })
     .limit(1)
     .maybeSingle();

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { exigirAcessoCandidatoVaga } from "@/lib/unidadeAuth";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const bloqueio = await exigirAcessoCandidatoVaga(id);
+  if (bloqueio) return bloqueio;
   const supabase = createServiceClient();
 
   const { data: cv, error } = await supabase

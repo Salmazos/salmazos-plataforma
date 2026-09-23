@@ -2,16 +2,22 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { calcularIndicadoresVaga } from "@/lib/indicadoresVaga";
 import type { IndicadoresVaga, NivelAlerta } from "@/lib/indicadoresVaga";
+import { exigirContextoUnidade } from "@/lib/unidadeAuth";
 
 const ORDEM_ALERTA: Record<NivelAlerta, number> = { vermelho: 0, amarelo: 1, verde: 2 };
 
 export async function GET() {
+  const { ctx, erro } = await exigirContextoUnidade();
+  if (erro) return erro;
+
   const supabase = createServiceClient();
 
-  const { data: vagas, error } = await supabase
+  let query = supabase
     .from("vagas")
     .select("id, titulo, slug, status, created_at, num_posicoes, clientes(nome)")
     .eq("status", "aberta");
+  if (!ctx.todasUnidades) query = query.eq("unidade_id", ctx.unidadeId);
+  const { data: vagas, error } = await query;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!vagas || vagas.length === 0) return NextResponse.json({ data: [] });

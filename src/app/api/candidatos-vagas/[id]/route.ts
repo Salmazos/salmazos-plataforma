@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { parseBody, candidatoVagaUpdateSchema } from "@/lib/schemas";
 import { sincronizarEncaminhamentoComEtapa } from "@/lib/sincronizarEncaminhamento";
+import { exigirAcessoCandidatoVaga } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -25,6 +26,8 @@ const ETAPA_LABEL: Record<string, string> = {
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
+    const bloqueio = await exigirAcessoCandidatoVaga(id);
+    if (bloqueio) return bloqueio;
     const body = await request.json();
     const parsed = parseBody(candidatoVagaUpdateSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });

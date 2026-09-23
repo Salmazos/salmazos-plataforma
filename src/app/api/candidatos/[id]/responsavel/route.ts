@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { parseBody, candidatoResponsavelSchema } from "@/lib/schemas";
+import { idsCandidaturasDaUnidade, resolverUnidadeUsuario } from "@/lib/unidadeAuth";
 
 const ETAPAS_ATIVAS = ["triagem", "entrevista_salmazos", "entrevista_cliente", "aprovado_cliente"];
 
@@ -15,6 +16,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+
+  // Mesmo gate de etapa/route.ts: sem perfil de analista não há unidade pra escopar as
+  // candidaturas, então nega antes de alterar qualquer coisa.
+  const ctx = await resolverUnidadeUsuario(user);
+  if (!ctx) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
 
   const body = await request.json();
   const parsed = parseBody(candidatoResponsavelSchema, body);
@@ -55,11 +61,17 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  await svc
+  // Candidato é compartilhado entre unidades, mas o responsável das candidaturas só muda nas
+  // vagas da unidade de quem está alterando. null = acesso a todas as unidades (sócios) =
+  // sem filtro; array (mesmo vazio) = só essas candidaturas.
+  const cvIdsDaUnidade = await idsCandidaturasDaUnidade(ctx, id);
+  let updateCvs = svc
     .from("candidatos_vagas")
     .update({ responsavel: newResponsavel })
     .eq("candidato_id", id)
     .in("etapa", ETAPAS_ATIVAS);
+  if (cvIdsDaUnidade) updateCvs = updateCvs.in("id", cvIdsDaUnidade);
+  await updateCvs;
 
   if (oldResponsavel !== newResponsavel) {
     const oldLabel = oldResponsavel ?? "Sem responsável";

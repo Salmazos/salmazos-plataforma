@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase/server";
 import VagaDetalheClient from "@/components/VagaDetalheClient";
 import { ETAPAS_SAIDA_VAGA } from "@/lib/constants";
+import { contextoUnidadeDaSessao, podeVerUnidade } from "@/lib/unidadeAuth";
 import type { Vaga, CandidatoVaga } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,8 @@ interface Props {
 
 export default async function VagaDetalhePage({ params }: Props) {
   const { id } = await params;
+  const ctx = await contextoUnidadeDaSessao();
+  if (!ctx) notFound();
   const supabase = createServiceClient();
 
   const [{ data: vaga }, { data: candidatosVaga }] = await Promise.all([
@@ -29,7 +32,8 @@ export default async function VagaDetalhePage({ params }: Props) {
       .order("created_at", { ascending: false }),
   ]);
 
-  if (!vaga) notFound();
+  // Vaga de outra unidade responde igual a vaga inexistente (não confirma que o id existe).
+  if (!vaga || !podeVerUnidade(ctx, vaga.unidade_id)) notFound();
 
   return (
     <VagaDetalheClient

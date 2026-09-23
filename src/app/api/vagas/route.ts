@@ -5,8 +5,12 @@ import { getEmailTemplate } from "@/lib/emailTemplates";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, vagaCreateSchema } from "@/lib/schemas";
 import { generateUniqueSlug } from "@/lib/slug";
+import { exigirContextoUnidade } from "@/lib/unidadeAuth";
 
 export async function GET(request: NextRequest) {
+  const { ctx, erro } = await exigirContextoUnidade();
+  if (erro) return erro;
+
   const { searchParams } = new URL(request.url);
   const cliente_id = searchParams.get("cliente_id");
   const status = searchParams.get("status");
@@ -15,6 +19,7 @@ export async function GET(request: NextRequest) {
     .from("vagas")
     .select("*, clientes(id, nome)")
     .order("created_at", { ascending: false });
+  if (!ctx.todasUnidades) query = query.eq("unidade_id", ctx.unidadeId);
   if (cliente_id) query = query.eq("cliente_id", cliente_id);
   if (status) query = query.eq("status", status);
   const { data, error } = await query;
@@ -24,6 +29,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const { ctx, erro } = await exigirContextoUnidade();
+    if (erro) return erro;
+
     const body = await request.json();
     const parsed = parseBody(vagaCreateSchema, body);
     if (!parsed.success) {
@@ -65,6 +73,10 @@ export async function POST(request: NextRequest) {
         taxa_cancelamento_percentual: body.taxa_cancelamento_percentual !== "" && body.taxa_cancelamento_percentual != null ? Number(body.taxa_cancelamento_percentual) : null,
         visivel_publicamente: body.visivel_publicamente !== false,
         data_abertura: new Date().toISOString(),
+        // Explícito, não o DEFAULT do banco (que é só rede de segurança e sempre cai em
+        // Monte Mor/Hortolândia). Quem tem acesso a todas as unidades cria na própria
+        // unidade do perfil — ainda não existe seletor de unidade no formulário.
+        unidade_id: ctx.unidadeId,
       })
       .select("*, clientes(id, nome)")
       .single();

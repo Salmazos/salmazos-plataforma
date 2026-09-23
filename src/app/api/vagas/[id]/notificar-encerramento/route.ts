@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { parseBody, vagaNotificarEncerramentoSchema } from "@/lib/schemas";
 import { notificarVagaEncerrada } from "@/lib/notificarVagaEncerrada";
+import { exigirAcessoVaga } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -8,6 +9,8 @@ interface Params {
 
 export async function POST(request: NextRequest, { params }: Params) {
   const { id } = await params;
+  const bloqueio = await exigirAcessoVaga(id);
+  if (bloqueio) return bloqueio;
   const body = await request.json();
   const parsed = parseBody(vagaNotificarEncerramentoSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });

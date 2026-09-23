@@ -48,7 +48,7 @@ export async function gerarCobrancaRSSeAplicavel(
   const { data: cv } = await svc
     .from("candidatos_vagas")
     .select(
-      "id, candidato_id, vaga_id, candidatos(nome_completo), vagas!candidatos_vagas_vaga_id_fkey(id, titulo, tipo_servico, fee_rs_percentual, fee_rs_prazo_cobranca, cliente_id, cliente_nome, clientes(nome, cnpj, endereco, contato_telefone, contato_email))"
+      "id, candidato_id, vaga_id, candidatos(nome_completo), vagas!candidatos_vagas_vaga_id_fkey(id, titulo, tipo_servico, fee_rs_percentual, fee_rs_prazo_cobranca, cliente_id, cliente_nome, unidade_id, clientes(nome, cnpj, endereco, contato_telefone, contato_email))"
     )
     .eq("id", candidatoVagaId)
     .single();
@@ -59,7 +59,7 @@ export async function gerarCobrancaRSSeAplicavel(
   const vaga = row.vagas as {
     id: string; titulo: string; tipo_servico: string; fee_rs_percentual: number | null;
     fee_rs_prazo_cobranca: string | null;
-    cliente_id: string | null; cliente_nome: string | null;
+    cliente_id: string | null; cliente_nome: string | null; unidade_id: string;
     clientes: { nome: string; cnpj: string | null; endereco: string | null; contato_telefone: string | null; contato_email: string | null } | null;
   } | null;
 
@@ -120,6 +120,8 @@ export async function gerarCobrancaRSSeAplicavel(
 
       status: "pendente_revisao",
       gerado_por_user_id: geradoPorUserId ?? null,
+      // Cobrança herda a unidade da vaga (explícito, não o DEFAULT do banco).
+      unidade_id: vaga.unidade_id,
     })
     .select("id")
     .single();
@@ -202,7 +204,7 @@ export async function gerarCobrancaCancelamentoRSSeAplicavel(
   const { data: vaga } = await svc
     .from("vagas")
     .select(
-      "id, titulo, tipo_servico, taxa_cancelamento, taxa_cancelamento_percentual, salario, fee_rs_prazo_cobranca, cliente_id, cliente_nome, clientes(nome, cnpj, endereco, contato_telefone, contato_email)"
+      "id, titulo, tipo_servico, taxa_cancelamento, taxa_cancelamento_percentual, salario, fee_rs_prazo_cobranca, cliente_id, cliente_nome, unidade_id, clientes(nome, cnpj, endereco, contato_telefone, contato_email)"
     )
     .eq("id", vagaId)
     .single();
@@ -282,6 +284,8 @@ export async function gerarCobrancaCancelamentoRSSeAplicavel(
     prazo_cobranca: vaga.fee_rs_prazo_cobranca,
 
     status: "pendente_revisao",
+    // Cobrança herda a unidade da vaga (explícito, não o DEFAULT do banco).
+    unidade_id: vaga.unidade_id,
   });
 
   if (error) {

@@ -1,4 +1,6 @@
+import { notFound } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { contextoUnidadeDaSessao } from "@/lib/unidadeAuth";
 import PainelLayout from "@/components/PainelLayout";
 import type { KanbanCard } from "@/types";
 import { ETAPAS_KANBAN_VISIVEIS } from "@/lib/constants";
@@ -10,7 +12,12 @@ export default async function PainelPage() {
   const supabase = createServiceClient();
   const authClient = await createClient();
 
-  const { data: cvData, error: cvError } = await supabase
+  const ctx = await contextoUnidadeDaSessao();
+  if (!ctx) notFound();
+
+  // Kanban só com candidaturas em vagas da unidade de quem está logado — o vagas!inner
+  // abaixo já existia, então o filtro na vaga descarta as candidaturas de outra unidade.
+  let cvQuery = supabase
     .from("candidatos_vagas")
     .select(`
       id, etapa, vaga_id, cliente_id, observacoes, created_at,
@@ -20,6 +27,8 @@ export default async function PainelPage() {
     `)
     .in("etapa", ETAPAS_KANBAN_VISIVEIS)
     .order("created_at", { ascending: false });
+  if (!ctx.todasUnidades) cvQuery = cvQuery.eq("vagas.unidade_id", ctx.unidadeId);
+  const { data: cvData, error: cvError } = await cvQuery;
 
   // Mesma fonte usada em Gestão de Clientes e Relatórios — não a constante ANALISTAS
   // (nomes curtos, usada só para responsavel_comercial de clientes/vagas).
