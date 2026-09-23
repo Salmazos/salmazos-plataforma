@@ -11,9 +11,10 @@ export type ContratoMotFaixa =
 // de continuidade; de 181 a 270 dias já está próximo do limite legal; acima de 270 dias o
 // contrato já excedeu o máximo legal permitido. Só se aplica a funcionários MOT
 // (tipo_servico = "mao_obra_temporaria") — Terceirização e R&S não têm esse limite.
-const DIAS_RENOVACAO_AUTOMATICA = 90;
-const DIAS_APROVACAO_CONTINUIDADE = 180;
-const DIAS_LIMITE_LEGAL = 270;
+const DIAS_RENOVACAO_AUTOMATICA = 89;
+const DIAS_APROVACAO_CONTINUIDADE = 179;
+const DIAS_LIMITE_LEGAL = 269;
+
 
 // Antecedência do popup de aviso (painel + Portal do Cliente): 10 dias corridos antes de
 // um vencimento que exige ação humana — 180 (aprovação de continuidade) e 270 (limite
