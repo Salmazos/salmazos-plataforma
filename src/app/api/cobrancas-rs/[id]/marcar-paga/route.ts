@@ -70,15 +70,19 @@ export async function POST(_request: NextRequest, { params }: Params) {
       // Toda a diretoria/superuser (Elizabete, Andreza, Lucas Miguel e Olver) é excluída só
       // deste e-mail (pagamento confirmado): Elizabete é quem autoriza e realiza a cobrança, e
       // os demais decidiram que também não precisam de confirmação de um pagamento que a
-      // própria diretoria fez — pedido do Olver, 23/09. Sobra só o analista com acesso
-      // configurável quando ele for o revisor da cobrança. Os outros e-mails de Cobrança R&S
-      // (gerada, aprovada, cancelada, atraso, reenvio) continuam chegando pra todos normalmente.
-      const destinatarios = await obterDestinatariosCobrancaRS(data.revisado_por ?? null, svc, [
-        "consultoria@salmazos.com.br",
-        "rh@salmazos.com.br",
-        "comercial@salmazos.com.br",
-        "olver@salmazos.com.br",
-      ]);
+      // própria diretoria fez — pedido do Olver, 23/09. Em troca, o revisor da cobrança
+      // (sempreIncluirRevisor=true) sempre recebe, mesmo sem o toggle de acesso configurável
+      // ativo nas outras telas de Cobrança R&S — qualquer analista que revisa é comissionado
+      // pela vaga fechada, precisa saber quando o pagamento sai (mesmo pedido, 23/09). Os
+      // outros e-mails de Cobrança R&S (gerada, aprovada, cancelada, atraso, reenvio)
+      // continuam chegando pra diretoria/superuser normalmente e exigindo o toggle pro
+      // revisor, sem essas duas exceções.
+      const destinatarios = await obterDestinatariosCobrancaRS(
+        data.revisado_por ?? null,
+        svc,
+        ["consultoria@salmazos.com.br", "rh@salmazos.com.br", "comercial@salmazos.com.br", "olver@salmazos.com.br"],
+        true
+      );
       if (destinatarios.length === 0) {
         console.error(`[marcar-paga] Nenhum destinatário resolvido pro e-mail de pagamento (cobranca_id=${id}).`);
         return;

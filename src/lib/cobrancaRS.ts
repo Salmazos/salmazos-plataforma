@@ -320,11 +320,20 @@ export interface DestinatarioAtrasoCobranca {
  * função (gerada, atraso, aprovar, cancelar, reenviar) não passam esse parâmetro e continuam
  * recebendo a base cheia, sem exceção — mesmo padrão de "uma exceção por canal/fluxo, nunca
  * uma flag genérica" já usado em obterDestinatarioEmailSupervisaoAtraso.
+ *
+ * sempreIncluirRevisor (opcional): quando true, o revisor da cobrança (revisadoPor) entra no
+ * resultado mesmo sem o toggle de acesso configurável em cobranca_rs_analistas_acesso — só
+ * usado pelo e-mail de "cobrança paga" (pedido do Olver, 23/09): qualquer analista que revisar
+ * uma cobrança é comissionado por aquela vaga fechada, então precisa saber quando o pagamento
+ * sai, independente de ter o acesso amplo configurado nas outras telas de Cobrança R&S. Os
+ * outros 4 pontos que chamam esta função não passam esse parâmetro e continuam exigindo o
+ * toggle pra incluir o revisor, sem exceção.
  */
 export async function obterDestinatariosCobrancaRS(
   revisadoPor: string | null,
   supabase?: ServiceClient,
-  excluirEmails?: string[]
+  excluirEmails?: string[],
+  sempreIncluirRevisor?: boolean
 ): Promise<DestinatarioAtrasoCobranca[]> {
   const svc = supabase ?? createServiceClient();
 
@@ -346,8 +355,10 @@ export async function obterDestinatariosCobrancaRS(
     if (!a.user_id || !a.email) continue;
     if (excluirSet.has(a.email.toLowerCase())) continue;
     const ehFullAccess = a.nivel_acesso === "diretoria" || a.nivel_acesso === "superuser";
-    const ehRevisorComAcesso = revisadoPor != null && a.user_id === revisadoPor && acessoIds.has(a.id);
-    if (ehFullAccess || ehRevisorComAcesso) {
+    const ehRevisor = revisadoPor != null && a.user_id === revisadoPor;
+    const ehRevisorComAcesso = ehRevisor && acessoIds.has(a.id);
+    const ehRevisorSempre = ehRevisor && sempreIncluirRevisor === true;
+    if (ehFullAccess || ehRevisorComAcesso || ehRevisorSempre) {
       destinatarios.set(a.user_id, { user_id: a.user_id, email: a.email, nome_completo: a.nome_completo });
     }
   }
