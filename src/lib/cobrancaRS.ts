@@ -314,9 +314,9 @@ export interface DestinatarioAtrasoCobranca {
  *
  * excluirEmails (opcional, aditivo): remove analista(s) específico(s) do resultado final pelo
  * e-mail cadastrado — usado só pelo e-mail de "cobrança paga" (marcar-paga/route.ts) pra tirar
- * Elizabete Salmazo, Andreza Salmazo e Ölver (pedido do Olver, 23/09): Elizabete é quem
- * autoriza/realiza o pagamento, e ele e a Andreza decidiram que também não precisam da
- * confirmação por e-mail desse pagamento específico. Os outros 4 pontos que chamam esta
+ * toda a diretoria/superuser — Elizabete Salmazo, Andreza Salmazo, Lucas Miguel e Olver
+ * (pedido do Olver, 23/09): Elizabete é quem autoriza/realiza o pagamento, e os demais
+ * decidiram que também não precisam da confirmação por e-mail desse pagamento específico. Os outros 4 pontos que chamam esta
  * função (gerada, atraso, aprovar, cancelar, reenviar) não passam esse parâmetro e continuam
  * recebendo a base cheia, sem exceção — mesmo padrão de "uma exceção por canal/fluxo, nunca
  * uma flag genérica" já usado em obterDestinatarioEmailSupervisaoAtraso.

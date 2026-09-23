@@ -67,14 +67,16 @@ export async function POST(_request: NextRequest, { params }: Params) {
   // sair — mesmo padrão já usado em notificar-encerramento/route.ts.
   after(async () => {
     try {
-      // Elizabete, Andreza e Ölver são excluídos só deste e-mail (pagamento confirmado):
-      // Elizabete é quem autoriza e realiza a cobrança, e ele e a Andreza decidiram que
-      // também não precisam de confirmação de um pagamento que a própria diretoria fez —
-      // pedido do Olver, 23/09. Os outros e-mails de Cobrança R&S (gerada, aprovada,
-      // cancelada, atraso, reenvio) continuam chegando pra todos eles normalmente.
+      // Toda a diretoria/superuser (Elizabete, Andreza, Lucas Miguel e Olver) é excluída só
+      // deste e-mail (pagamento confirmado): Elizabete é quem autoriza e realiza a cobrança, e
+      // os demais decidiram que também não precisam de confirmação de um pagamento que a
+      // própria diretoria fez — pedido do Olver, 23/09. Sobra só o analista com acesso
+      // configurável quando ele for o revisor da cobrança. Os outros e-mails de Cobrança R&S
+      // (gerada, aprovada, cancelada, atraso, reenvio) continuam chegando pra todos normalmente.
       const destinatarios = await obterDestinatariosCobrancaRS(data.revisado_por ?? null, svc, [
         "consultoria@salmazos.com.br",
         "rh@salmazos.com.br",
+        "comercial@salmazos.com.br",
         "olver@salmazos.com.br",
       ]);
       if (destinatarios.length === 0) {
