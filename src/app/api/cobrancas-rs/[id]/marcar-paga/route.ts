@@ -83,8 +83,10 @@ export async function POST(_request: NextRequest, { params }: Params) {
         ["consultoria@salmazos.com.br", "rh@salmazos.com.br", "comercial@salmazos.com.br", "olver@salmazos.com.br"],
         true
       );
+      // Lista vazia é esperada, não erro: com toda a diretoria/superuser excluída, cobrança sem
+      // revisor (ou revisada por alguém da diretoria) simplesmente não gera este e-mail.
       if (destinatarios.length === 0) {
-        console.error(`[marcar-paga] Nenhum destinatário resolvido pro e-mail de pagamento (cobranca_id=${id}).`);
+        console.log(`[marcar-paga] Nenhum destinatário pro e-mail de pagamento, envio pulado (cobranca_id=${id}).`);
         return;
       }
 
