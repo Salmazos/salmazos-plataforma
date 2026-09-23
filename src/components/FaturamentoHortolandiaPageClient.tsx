@@ -155,6 +155,16 @@ export default function FaturamentoHortolandiaPageClient({
     [saidas]
   );
 
+  // Se a última saída do responsável filtrado for editada/apagada, ele some das opções — volta
+  // pra "Todos" em vez de deixar a tabela vazia com um filtro que não aparece mais no <select>.
+  // Reset no estado (não só derivado na renderização) pra que o filtro não se reaplique sozinho
+  // se uma saída nova desse mesmo responsável for lançada depois.
+  useEffect(() => {
+    if (responsavelFiltro !== "todos" && !responsaveisDisponiveis.includes(responsavelFiltro)) {
+      setResponsavelFiltro("todos");
+    }
+  }, [responsaveisDisponiveis, responsavelFiltro]);
+
   // Filtro por responsável é só da tabela de Saídas — os cards de totais do topo (Total
   // Saída, Saldo Líquido) continuam somando TODAS as saídas do mês, igual o filtro por
   // status de Entradas já não afeta o Total Entrada/Líquido lá em cima.
