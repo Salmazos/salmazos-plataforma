@@ -29,7 +29,13 @@ ALTER TABLE analistas_perfil
   ALTER COLUMN unidade_id SET NOT NULL;
 
 -- Diretoria e superuser sempre enxergam todas as unidades — regra de acesso corporativo,
--- nao uma lista fixa de nomes (assim um futuro membro de diretoria ja nasce com o acesso).
+-- nao uma lista fixa de nomes. CORRECAO (achada pela sessao que aplicou o patch, 23/09):
+-- isso e so um UPDATE de uma vez so, nao um trigger — um analista que VIRAR diretoria ou
+-- superuser depois desta migracao nasce com acesso_todas_unidades=false (o default da
+-- coluna), e fica assim ate alguem mudar manualmente. Decidir o mecanismo certo (trigger no
+-- banco vs. o proprio codigo de mudanca de nivel_acesso marcando o campo) fica pra Fase 3,
+-- junto com o resto da filtragem por unidade — nao e uma correcao pontual de infra como o
+-- DEFAULT/RLS que ja foi aplicado.
 UPDATE analistas_perfil
 SET acesso_todas_unidades = true
 WHERE nivel_acesso IN ('diretoria', 'superuser');
