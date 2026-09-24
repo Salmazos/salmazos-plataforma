@@ -167,7 +167,7 @@ export default function CamposRescisaoForm({
       <div className="mb-3">
         <label className="flex items-center gap-2 text-sm text-gray-700">
           <input type="checkbox" checked={valores.faturado} onChange={(e) => onAlterar("faturado", e.target.checked)} />
-          Faturado
+          Pago
         </label>
       </div>
 

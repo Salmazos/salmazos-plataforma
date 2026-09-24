@@ -132,9 +132,9 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes, isFul
           ))}
         </select>
         <select value={filtroFaturado} onChange={(e) => setFiltroFaturado(e.target.value)} className="input-field" style={{ maxWidth: 180 }}>
-          <option value="todos">Todos (faturado)</option>
-          <option value="sim">Faturado</option>
-          <option value="nao">Não faturado</option>
+          <option value="todos">Todos (pago)</option>
+          <option value="sim">Pago</option>
+          <option value="nao">Não pago</option>
         </select>
         <div className="flex items-center gap-2">
           <label className="text-xs text-gray-500">De</label>
@@ -148,7 +148,7 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes, isFul
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-              {["Funcionário", "Empresa", "Data desligamento", "Modalidade", "Valor rescisão", "Data Pag. Rescisão", "Data Pag. Guia", "Faturado", "ASO"].map((h) => (
+              {["Funcionário", "Empresa", "Data desligamento", "Modalidade", "Valor rescisão", "Data Pag. Rescisão", "Data Pag. Guia", "Pago", "ASO"].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>
                   {h}
                 </th>
@@ -196,7 +196,9 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes, isFul
                       }}
                       title="Clique para alternar"
                     >
-                      {r.faturado ? "Faturado" : "Pendente"}
+                      {/* Pedido do Olver (24/09): o rótulo na tela é "Pago" — a coluna no banco continua
+                          `faturado` (mesmo dado, só o nome mostrado mudou). */}
+                      {r.faturado ? "Pago" : "Pendente"}
                     </button>
                   </td>
                   <td style={{ padding: "10px 12px" }}>
