@@ -8,9 +8,11 @@ interface ClienteOpcao {
   id: string;
   nome: string;
   ativo?: boolean;
+  unidade_id?: string;
 }
 
 interface Props {
+  unidadeId: string;
   conta: ContaReceberRow | null;
   onClose: () => void;
   onSalva: (row: ContaReceberRow) => void;
@@ -41,7 +43,7 @@ function estadoInicial(conta: ContaReceberRow | null): FormState {
   };
 }
 
-export default function ModalContaReceberHortolandia({ conta, onClose, onSalva, onExcluida }: Props) {
+export default function ModalContaReceberHortolandia({ unidadeId, conta, onClose, onSalva, onExcluida }: Props) {
   const [clientes, setClientes] = useState<ClienteOpcao[]>([]);
   const [form, setForm] = useState<FormState>(estadoInicial(conta));
   const [salvando, setSalvando] = useState(false);
@@ -51,9 +53,10 @@ export default function ModalContaReceberHortolandia({ conta, onClose, onSalva, 
   useEffect(() => {
     fetch("/api/clientes")
       .then((r) => r.json())
-      .then((j) => setClientes((j.data ?? []).filter((c: ClienteOpcao) => c.ativo !== false)))
+      // Só clientes da unidade do faturamento aberto — a API recusa cliente de outra unidade.
+      .then((j) => setClientes((j.data ?? []).filter((c: ClienteOpcao) => c.ativo !== false && c.unidade_id === unidadeId)))
       .catch(() => setClientes([]));
-  }, []);
+  }, [unidadeId]);
 
   function set<K extends keyof FormState>(campo: K, valor: FormState[K]) {
     setForm((f) => ({ ...f, [campo]: valor }));
@@ -78,7 +81,8 @@ export default function ModalContaReceberHortolandia({ conta, onClose, onSalva, 
       const res = await fetch(conta ? `/api/faturamento-hortolandia/${conta.id}` : "/api/faturamento-hortolandia", {
         method: conta ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        // Unidade só na criação — a edição nunca troca a unidade do lançamento.
+        body: JSON.stringify(conta ? payload : { ...payload, unidade_id: unidadeId }),
       });
       const json = await res.json();
       if (!res.ok) {

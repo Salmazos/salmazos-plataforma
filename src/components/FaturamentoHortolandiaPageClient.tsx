@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ModalContaReceberHortolandia from "./ModalContaReceberHortolandia";
 import ModalContaPagarHortolandia from "./ModalContaPagarHortolandia";
+import SeletorUnidade from "./SeletorUnidade";
 import ImpostoLinhaCelula from "./ImpostoLinhaCelula";
 
 export interface ContaReceberRow {
@@ -33,6 +34,10 @@ export interface ContaPagarRow {
 }
 
 interface Props {
+  // Faturamento Unidades: a tela sempre opera numa unidade só (ver painel/faturamento-hortolandia/page.tsx).
+  unidadeId: string;
+  nomeUnidade: string;
+  unidadesOpcoes: { id: string; nome: string }[];
   rowsIniciais: ContaReceberRow[];
   saidasIniciais: ContaPagarRow[];
   anoInicial: number;
@@ -83,6 +88,9 @@ function pad2(n: number): string {
 type FiltroTab = "pendente" | "pago" | "cancelado" | "todas";
 
 export default function FaturamentoHortolandiaPageClient({
+  unidadeId,
+  nomeUnidade,
+  unidadesOpcoes,
   rowsIniciais,
   saidasIniciais,
   anoInicial,
@@ -215,7 +223,7 @@ export default function FaturamentoHortolandiaPageClient({
     setMes(novoMes);
     setErroImposto("");
     try {
-      const res = await fetch(`/api/faturamento-hortolandia/imposto?ano=${novoAno}&mes=${novoMes}`);
+      const res = await fetch(`/api/faturamento-hortolandia/imposto?ano=${novoAno}&mes=${novoMes}&unidade=${unidadeId}`);
       const json = await res.json();
       setPercentualImposto(json.data?.percentual ?? null);
       setPercentualInput(json.data?.percentual?.toString() ?? "");
@@ -241,7 +249,7 @@ export default function FaturamentoHortolandiaPageClient({
       const res = await fetch("/api/faturamento-hortolandia/imposto", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ano, mes, percentual }),
+        body: JSON.stringify({ unidade_id: unidadeId, ano, mes, percentual }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -305,8 +313,9 @@ export default function FaturamentoHortolandiaPageClient({
     <div className="p-6 md:p-8 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Faturamento Hortolândia</h1>
-          <p className="text-sm text-gray-500 mt-1">Contas a receber e a pagar — controle manual da unidade Hortolândia.</p>
+          <h1 className="text-2xl font-bold text-gray-900">Faturamento Unidades — {nomeUnidade}</h1>
+          <p className="text-sm text-gray-500 mt-1 mb-3">Contas a receber e a pagar — controle manual por unidade.</p>
+          <SeletorUnidade unidades={unidadesOpcoes} unidadeSel={unidadeId} basePath="/painel/faturamento-hortolandia" semTodas />
         </div>
         {/* Contextual à visão ativa (Entradas/Saídas) — mesmo botão, destino diferente,
             pra não duplicar "+ Novo lançamento" na tela. */}
@@ -622,6 +631,7 @@ export default function FaturamentoHortolandiaPageClient({
 
       {contaAberta && (
         <ModalContaReceberHortolandia
+          unidadeId={unidadeId}
           conta={contaAberta === "novo" ? null : contaAberta}
           onClose={() => setContaAberta(null)}
           onSalva={handleSalva}
@@ -631,6 +641,7 @@ export default function FaturamentoHortolandiaPageClient({
 
       {contaPagarAberta && (
         <ModalContaPagarHortolandia
+          unidadeId={unidadeId}
           conta={contaPagarAberta === "novo" ? null : contaPagarAberta}
           onClose={() => setContaPagarAberta(null)}
           onSalva={handleSalvaSaida}

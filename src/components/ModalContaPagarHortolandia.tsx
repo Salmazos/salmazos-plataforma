@@ -5,6 +5,7 @@ import CampoMoeda from "@/components/ui/CampoMoeda";
 import type { ContaPagarRow } from "./FaturamentoHortolandiaPageClient";
 
 interface Props {
+  unidadeId: string;
   conta: ContaPagarRow | null;
   onClose: () => void;
   onSalva: (row: ContaPagarRow) => void;
@@ -27,7 +28,7 @@ function estadoInicial(conta: ContaPagarRow | null): FormState {
   };
 }
 
-export default function ModalContaPagarHortolandia({ conta, onClose, onSalva, onExcluida }: Props) {
+export default function ModalContaPagarHortolandia({ unidadeId, conta, onClose, onSalva, onExcluida }: Props) {
   const [form, setForm] = useState<FormState>(estadoInicial(conta));
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
@@ -55,7 +56,8 @@ export default function ModalContaPagarHortolandia({ conta, onClose, onSalva, on
         {
           method: conta ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          // Unidade só na criação — a edição nunca troca a unidade do lançamento.
+          body: JSON.stringify(conta ? payload : { ...payload, unidade_id: unidadeId }),
         }
       );
       const json = await res.json();

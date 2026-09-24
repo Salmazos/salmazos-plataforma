@@ -5,15 +5,19 @@ export default function SeletorUnidade({
   unidades,
   unidadeSel,
   basePath,
+  semTodas = false,
 }: {
   unidades: { id: string; nome: string }[];
   unidadeSel: string | null;
   basePath: string;
+  // Telas que sempre operam numa unidade só (Faturamento Unidades) não têm a opção "Todas".
+  semTodas?: boolean;
 }) {
   if (unidades.length < 2) return null;
+  const opcoes = semTodas ? unidades : [{ id: null as string | null, nome: "Todas as unidades" }, ...unidades];
   return (
     <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-      {[{ id: null as string | null, nome: "Todas as unidades" }, ...unidades].map((u) => {
+      {opcoes.map((u) => {
         const ativo = u.id === unidadeSel;
         return (
           <a

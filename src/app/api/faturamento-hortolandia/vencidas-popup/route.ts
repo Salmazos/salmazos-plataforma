@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaAuth";
 import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
+import { resolverUnidadeUsuario, podeVerUnidade } from "@/lib/unidadeAuth";
+import { nomeUnidadeFaturamento } from "@/lib/faturamentoUnidades";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,7 @@ interface ContaVencidaRow {
   numero_nf: string | null;
   valor: number;
   data_vencimento: string;
+  unidade_id: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   clientes: any;
 }
@@ -28,19 +31,23 @@ export async function GET() {
   const acessoNegado = await checarAcessoFaturamentoHortolandia(user);
   if (acessoNegado) return NextResponse.json({ data: [] });
 
+  const ctx = await resolverUnidadeUsuario(user);
+  if (!ctx) return NextResponse.json({ data: [] });
+
   const svc = createServiceClient();
   const hojeISO = formatarDataISO(obterDataHojeBrasil());
 
   const { data: vencidasRaw, error } = await svc
     .from("contas_receber_hortolandia")
-    .select("id, cliente_id, numero_nf, valor, data_vencimento, clientes(nome)")
+    .select("id, cliente_id, numero_nf, valor, data_vencimento, unidade_id, clientes(nome)")
     .eq("status", "pendente")
     .lt("data_vencimento", hojeISO)
     .order("data_vencimento", { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const vencidas = (vencidasRaw ?? []) as ContaVencidaRow[];
+  // Faturamento Unidades: só lançamentos das unidades que a pessoa vê (sócios: todas).
+  const vencidas = ((vencidasRaw ?? []) as ContaVencidaRow[]).filter((c) => podeVerUnidade(ctx, c.unidade_id));
   if (vencidas.length === 0) return NextResponse.json({ data: [] });
 
   const { data: vistas } = await svc
@@ -51,6 +58,9 @@ export async function GET() {
 
   const idsVistos = new Set((vistas ?? []).map((v) => v.conta_id));
   const naoVistas = vencidas.filter((c) => !idsVistos.has(c.id));
+
+  const { data: unidades } = await svc.from("unidades").select("id, slug, nome");
+  const unidadePorId = new Map((unidades ?? []).map((u) => [u.id, u]));
 
   const hoje = obterDataHojeBrasil();
   const data = naoVistas.map((c) => {
@@ -64,6 +74,7 @@ export async function GET() {
       valor: c.valor,
       dataVencimento: c.data_vencimento,
       diasAtraso,
+      unidadeNome: nomeUnidadeFaturamento(unidadePorId.get(c.unidade_id)),
     };
   });
 

@@ -159,7 +159,7 @@ const menuItems: MenuItemDef[] = [
       { label: "Financeiro R&S", href: "/painel/financeiro-rs", icon: DollarSign, requireFinanceiroRs: true },
       { label: "Faturamento R&S", href: "/painel/faturamento-rs", icon: Landmark, requireFaturamentoRs: true },
       {
-        label: "Faturamento Hortolândia",
+        label: "Faturamento Unidades",
         href: "/painel/faturamento-hortolandia",
         icon: FileSpreadsheet,
         requireFaturamentoHortolandia: true,

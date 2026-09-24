@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
 import { obterDestinatariosFaturamentoHortolandiaAtraso } from "@/lib/faturamentoHortolandiaAvisos";
+import { nomeUnidadeFaturamento } from "@/lib/faturamentoUnidades";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
     // só "ainda não avisado" (IS NULL), não "não avisado nos últimos N dias".
     const { data: rows, error } = await supabase
       .from("contas_receber_hortolandia")
-      .select("id, numero_nf, valor, data_vencimento, clientes(nome)")
+      .select("id, numero_nf, valor, data_vencimento, unidade_id, clientes(nome)")
       .eq("status", "pendente")
       .lt("data_vencimento", hojeISO)
       .is("ultimo_lembrete_atraso_em", null);
@@ -32,6 +33,9 @@ export async function GET(request: Request) {
     }
 
     const destinatarios = await obterDestinatariosFaturamentoHortolandiaAtraso(supabase);
+    // Faturamento Unidades: o aviso diz de qual unidade é o lançamento atrasado.
+    const { data: unidades } = await supabase.from("unidades").select("id, slug, nome");
+    const unidadePorId = new Map((unidades ?? []).map((u) => [u.id, u]));
     let lembretesEnviados = 0;
 
     for (const row of rows ?? []) {
@@ -51,7 +55,7 @@ export async function GET(request: Request) {
 
       const notificacoesSino = destinatarios.map((d) => ({
         tipo: "conta_receber_hortolandia_atrasada",
-        titulo: `🔴 Faturamento Hortolândia atrasado há ${diasAtraso} dia${diasAtraso !== 1 ? "s" : ""}`,
+        titulo: `🔴 Faturamento ${nomeUnidadeFaturamento(unidadePorId.get(r.unidade_id))} atrasado há ${diasAtraso} dia${diasAtraso !== 1 ? "s" : ""}`,
         mensagem: `${clienteNome}${r.numero_nf ? ` — NF ${r.numero_nf}` : ""} — vencida em ${r.data_vencimento
           .split("-")
           .reverse()

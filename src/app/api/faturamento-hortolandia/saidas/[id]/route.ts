@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaAuth";
 import { parseBody, contaPagarHortolandiaUpdateSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
+import { checarUnidadeLancamento } from "@/lib/faturamentoUnidades";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -23,6 +24,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const svc = createServiceClient();
+  const { data: lancamento } = await svc.from("contas_pagar_hortolandia").select("unidade_id").eq("id", id).maybeSingle();
+  const bloqueio = await checarUnidadeLancamento(user, lancamento?.unidade_id);
+  if (bloqueio) return bloqueio;
+
   const { data, error } = await svc
     .from("contas_pagar_hortolandia")
     .update({ ...parsed.data, atualizado_em: new Date().toISOString() })
@@ -57,9 +62,11 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
 
   const { data: atual } = await svc
     .from("contas_pagar_hortolandia")
-    .select("descricao, valor")
+    .select("descricao, valor, unidade_id")
     .eq("id", id)
     .maybeSingle();
+  const bloqueio = await checarUnidadeLancamento(user, atual?.unidade_id);
+  if (bloqueio) return bloqueio;
 
   const { error } = await svc.from("contas_pagar_hortolandia").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

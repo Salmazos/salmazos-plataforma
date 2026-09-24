@@ -1154,7 +1154,9 @@ export const faturamentoRsAjusteCreateSchema = z.object({
 // cadastrado (decisão explícita do usuário — sem snapshot de texto livre como cobrancas_rs).
 // Valor único por lançamento (sem bruto/líquido) — o líquido depende do imposto do MÊS,
 // não de cada lançamento (ver faturamentoHortolandiaImpostoSchema).
-export const contaReceberHortolandiaCreateSchema = z.object({
+// Unidade fica fora da base de propósito: entra só na criação (Faturamento Unidades, decisão
+// do Olver 24/09) — a edição de um lançamento nunca troca a unidade dele.
+const contaReceberHortolandiaBase = z.object({
   cliente_id: z.string().uuid("Selecione um cliente"),
   numero_nf: z.string().trim().optional().nullable(),
   valor: coerceNumber,
@@ -1165,7 +1167,11 @@ export const contaReceberHortolandiaCreateSchema = z.object({
   observacoes: z.string().trim().optional().nullable(),
 });
 
-export const contaReceberHortolandiaUpdateSchema = contaReceberHortolandiaCreateSchema.partial().extend({
+export const contaReceberHortolandiaCreateSchema = contaReceberHortolandiaBase.extend({
+  unidade_id: z.string().uuid("Unidade é obrigatória"),
+});
+
+export const contaReceberHortolandiaUpdateSchema = contaReceberHortolandiaBase.partial().extend({
   // ASSUNÇÃO DE NEGÓCIO CONFIRMADA COM O OLVER: exceção por lançamento ao imposto do mês
   // (que fica em faturamento_hortolandia_impostos_mensais) — null (ou omitido) faz o
   // lançamento seguir o imposto do mês normalmente; um valor aqui trava esse lançamento
@@ -1177,6 +1183,8 @@ export const contaReceberHortolandiaUpdateSchema = contaReceberHortolandiaCreate
 // (upsert em faturamento_hortolandia_impostos_mensais, ver PATCH
 // /api/faturamento-hortolandia/imposto) — mesmo padrão de faturamentoRsImpostoSchema.
 export const faturamentoHortolandiaImpostoSchema = z.object({
+  // Imposto do mês é por unidade (UNIQUE unidade_id+ano+mes, Faturamento Unidades).
+  unidade_id: z.string().uuid("Unidade é obrigatória"),
   ano: z.number().int().min(2000).max(2100),
   mes: z.number().int().min(1).max(12),
   percentual: z.number().min(0).max(100),
@@ -1187,14 +1195,19 @@ export const faturamentoHortolandiaImpostoSchema = z.object({
 // nasce paga (planilha manual do Olver só tem Data de Pagamento, Descrição, Valor,
 // Responsável), diferente da entrada que nasce como expectativa (ver migration
 // contas_pagar_hortolandia.sql).
-export const contaPagarHortolandiaCreateSchema = z.object({
+const contaPagarHortolandiaBase = z.object({
   data_pagamento: z.string().min(1, "Data de pagamento é obrigatória"),
   descricao: z.string().trim().min(1, "Descrição é obrigatória"),
   valor: coerceNumber,
   responsavel: z.string().trim().min(1, "Responsável é obrigatório"),
 });
 
-export const contaPagarHortolandiaUpdateSchema = contaPagarHortolandiaCreateSchema.partial();
+// Mesma regra da entrada: unidade só na criação, a edição nunca troca.
+export const contaPagarHortolandiaCreateSchema = contaPagarHortolandiaBase.extend({
+  unidade_id: z.string().uuid("Unidade é obrigatória"),
+});
+
+export const contaPagarHortolandiaUpdateSchema = contaPagarHortolandiaBase.partial();
 
 export const rescisaoAvisoPlataformaCreateSchema = z.object({
   usuario_id: z.string().uuid(),

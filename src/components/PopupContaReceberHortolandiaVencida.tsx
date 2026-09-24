@@ -10,6 +10,7 @@ interface ContaVencida {
   valor: number;
   dataVencimento: string;
   diasAtraso: number;
+  unidadeNome: string;
 }
 
 function formatarMoeda(v: number): string {
@@ -84,7 +85,7 @@ export default function PopupContaReceberHortolandiaVencida() {
             <h2 className="text-lg font-bold text-red-400">
               ⚠️ Lançamento{vencidas.length > 1 ? "s" : ""} vencido{vencidas.length > 1 ? "s" : ""}
             </h2>
-            <p className="text-xs text-gray-300 mt-0.5">Faturamento Hortolândia — contas a receber vencidas, ainda não pagas</p>
+            <p className="text-xs text-gray-300 mt-0.5">Faturamento Unidades — contas a receber vencidas, ainda não pagas</p>
           </div>
           <button
             onClick={marcarVisto}
@@ -110,7 +111,7 @@ export default function PopupContaReceberHortolandiaVencida() {
                   {c.clienteNome} — {labelAtraso(c.diasAtraso)}
                 </p>
                 <p className="text-xs text-gray-600">
-                  {formatarMoeda(c.valor)}
+                  {c.unidadeNome} · {formatarMoeda(c.valor)}
                   {c.numeroNf ? ` · NF ${c.numeroNf}` : ""}
                 </p>
               </div>
