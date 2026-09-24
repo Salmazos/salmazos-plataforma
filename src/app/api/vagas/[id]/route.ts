@@ -5,7 +5,7 @@ import { parseBody, vagaUpdateSchema } from "@/lib/schemas";
 import { generateUniqueSlug } from "@/lib/slug";
 import { gerarCobrancaCancelamentoRSSeAplicavel } from "@/lib/cobrancaRS";
 import { sincronizarPosicoesAbertas } from "@/lib/vagaPosicoes";
-import { exigirAcessoVaga } from "@/lib/unidadeAuth";
+import { exigirAcessoVaga, resolverUnidadeCliente } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -38,6 +38,22 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
 
     const supabase = createServiceClient();
+
+    // DECISÃO DO OLVER (24/09): trocar o cliente só pra outro da MESMA unidade da vaga.
+    // Mover a vaga de unidade junto levaria os candidatos do Kanban dela pra outra equipe —
+    // fica fora do painel por enquanto.
+    if (body.cliente_id) {
+      const [{ data: vagaAtual }, unidadeCliente] = await Promise.all([
+        supabase.from("vagas").select("unidade_id").eq("id", id).maybeSingle(),
+        resolverUnidadeCliente(body.cliente_id),
+      ]);
+      if (!vagaAtual || !unidadeCliente || unidadeCliente !== vagaAtual.unidade_id) {
+        return NextResponse.json(
+          { error: "O cliente escolhido é de outra unidade. A vaga só pode ser vinculada a um cliente da mesma unidade." },
+          { status: 400 }
+        );
+      }
+    }
 
     const campos: Record<string, unknown> = {};
     if (body.titulo !== undefined) {

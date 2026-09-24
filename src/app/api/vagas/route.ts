@@ -5,7 +5,7 @@ import { getEmailTemplate } from "@/lib/emailTemplates";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, vagaCreateSchema } from "@/lib/schemas";
 import { generateUniqueSlug } from "@/lib/slug";
-import { exigirContextoUnidade } from "@/lib/unidadeAuth";
+import { exigirContextoUnidade, podeVerUnidade, resolverUnidadeCliente } from "@/lib/unidadeAuth";
 import { analistaAtendeUnidade } from "@/lib/notifyAllAnalysts";
 
 export async function GET(request: NextRequest) {
@@ -39,6 +39,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
     const supabase = createServiceClient();
+
+    // DECISÃO DO OLVER (24/09): vaga com cliente fica SEMPRE na unidade do cliente — mesma
+    // regra da solicitação do portal e dos encaminhamentos; vaga e cliente nunca ficam em
+    // unidades diferentes. Sem cliente, quem tem acesso a todas as unidades escolhe a
+    // unidade no formulário (obrigatório, nunca assume); os demais criam na própria.
+    let unidadeId: string;
+    if (body.cliente_id) {
+      const unidadeCliente = await resolverUnidadeCliente(body.cliente_id);
+      if (!unidadeCliente || !podeVerUnidade(ctx, unidadeCliente)) {
+        return NextResponse.json({ error: "Cliente não encontrado." }, { status: 400 });
+      }
+      unidadeId = unidadeCliente;
+    } else if (ctx.todasUnidades) {
+      if (!body.unidade_id) {
+        return NextResponse.json({ error: "Escolha a unidade da vaga." }, { status: 400 });
+      }
+      const { data: unidade } = await supabase
+        .from("unidades")
+        .select("id")
+        .eq("id", body.unidade_id)
+        .eq("ativa", true)
+        .maybeSingle();
+      if (!unidade) return NextResponse.json({ error: "Unidade inválida." }, { status: 400 });
+      unidadeId = unidade.id;
+    } else {
+      unidadeId = ctx.unidadeId;
+    }
+
     const slug = await generateUniqueSlug(body.titulo, supabase);
     const { data, error } = await supabase
       .from("vagas")
@@ -75,9 +103,8 @@ export async function POST(request: NextRequest) {
         visivel_publicamente: body.visivel_publicamente !== false,
         data_abertura: new Date().toISOString(),
         // Explícito, não o DEFAULT do banco (que é só rede de segurança e sempre cai em
-        // Monte Mor/Hortolândia). Quem tem acesso a todas as unidades cria na própria
-        // unidade do perfil — ainda não existe seletor de unidade no formulário.
-        unidade_id: ctx.unidadeId,
+        // Monte Mor/Hortolândia).
+        unidade_id: unidadeId,
       })
       .select("*, clientes(id, nome)")
       .single();

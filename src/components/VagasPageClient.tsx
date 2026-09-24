@@ -31,9 +31,11 @@ type FiltroStatus = "todas" | "aberta" | "pausada" | "fechada" | "cancelada";
 interface Props {
   vagas: Vaga[];
   pendingCount: number;
+  // Só vem pra quem tem acesso a todas as unidades (ver painel/vagas/page.tsx).
+  unidades?: { id: string; nome: string }[];
 }
 
-export default function VagasPageClient({ vagas: inicial, pendingCount }: Props) {
+export default function VagasPageClient({ vagas: inicial, pendingCount, unidades }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const solicitacaoFocoId = searchParams.get("solicitacao");
@@ -394,6 +396,7 @@ export default function VagasPageClient({ vagas: inicial, pendingCount }: Props)
 
       <ModalNovaVaga
         isOpen={modalAberto}
+        unidades={unidades}
         onClose={() => setModalAberto(false)}
         onSalvo={handleSalvo}
       />

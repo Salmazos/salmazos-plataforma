@@ -345,6 +345,7 @@ export interface Vaga {
   taxa_cancelamento?: boolean;
   taxa_cancelamento_percentual?: number | null;
   visivel_publicamente?: boolean;
+  unidade_id?: string;
   reposicao_de_candidato_vaga_id?: string | null;
   tipo_servico_original?: string | null;
   tipo_servico_alterado_em?: string | null;

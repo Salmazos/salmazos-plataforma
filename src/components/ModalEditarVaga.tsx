@@ -15,6 +15,7 @@ const IMPACTO_TIPO: Record<string, string> = {
 interface ClienteOpcao {
   id: string;
   nome: string;
+  unidade_id: string;
 }
 
 interface Props {
@@ -357,7 +358,11 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
               </label>
               <select value={form.cliente_id} onChange={(e) => set("cliente_id", e.target.value)} className="input-field">
                 <option value="">Banco de Talentos</option>
-                {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                {/* Só clientes da unidade da vaga — trocar pra cliente de outra unidade é
+                    bloqueado no PATCH /api/vagas/[id] (decisão do Olver, 24/09). */}
+                {clientes
+                  .filter((c) => !vaga.unidade_id || c.unidade_id === vaga.unidade_id)
+                  .map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
             </div>
             <div>

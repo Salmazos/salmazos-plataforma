@@ -25,7 +25,20 @@ export default async function VagasPage() {
     solicitacoesQuery = solicitacoesQuery.eq("unidade_id", ctx.unidadeId);
   }
 
-  const [{ data: vagas }, { count: pendingCount }] = await Promise.all([vagasQuery, solicitacoesQuery]);
+  const [{ data: vagas }, { count: pendingCount }, { data: unidades }] = await Promise.all([
+    vagasQuery,
+    solicitacoesQuery,
+    // Só quem vê todas as unidades escolhe a unidade de vaga sem cliente no formulário.
+    ctx.todasUnidades
+      ? supabase.from("unidades").select("id, nome").eq("ativa", true).order("nome")
+      : Promise.resolve({ data: null }),
+  ]);
 
-  return <VagasPageClient vagas={(vagas ?? []) as Vaga[]} pendingCount={pendingCount ?? 0} />;
+  return (
+    <VagasPageClient
+      vagas={(vagas ?? []) as Vaga[]}
+      pendingCount={pendingCount ?? 0}
+      unidades={(unidades as { id: string; nome: string }[] | null) ?? undefined}
+    />
+  );
 }

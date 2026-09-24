@@ -104,6 +104,9 @@ export const vagaCreateSchema = z.object({
   taxa_cancelamento: z.boolean().default(false),
   taxa_cancelamento_percentual: coerceNumberOptional.pipe(z.number().min(0).max(100).optional()),
   visivel_publicamente: z.boolean().default(true),
+  // Só considerado pra quem tem acesso a todas as unidades criando vaga SEM cliente — com
+  // cliente, a unidade vem sempre do cliente (ver POST /api/vagas).
+  unidade_id: z.string().uuid().optional().nullable(),
 });
 
 export const vagaUpdateSchema = vagaCreateSchema.partial().extend({

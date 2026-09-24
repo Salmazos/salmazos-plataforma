@@ -9,6 +9,7 @@ import CampoMoeda from "@/components/ui/CampoMoeda";
 interface ClienteOpcao {
   id: string;
   nome: string;
+  unidade_id: string;
 }
 
 interface Props {
@@ -16,6 +17,10 @@ interface Props {
   vaga?: Vaga | null;
   onClose: () => void;
   onSalvo: (vaga: Vaga) => void;
+  // Presente só pra quem tem acesso a todas as unidades: mostra a unidade da vaga e, na
+  // vaga sem cliente, o seletor obrigatório. Com cliente, a unidade é sempre a do cliente
+  // (regra aplicada no POST /api/vagas).
+  unidades?: { id: string; nome: string }[];
 }
 
 // ── chip data ─────────────────────────────────────────────────────────────────
@@ -125,11 +130,13 @@ function maskHora(raw: string): string {
 
 // ── component ─────────────────────────────────────────────────────────────────
 
-export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props) {
+export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades }: Props) {
   const router = useRouter();
   const editando = !!vaga;
+  const escolheUnidade = !editando && !!unidades;
 
   const [form, setForm]           = useState(FORM_VAZIO);
+  const [unidadeId, setUnidadeId] = useState("");
   const [habilidades, setHabilidades] = useState<string[]>([]);
   const [clientes, setClientes]   = useState<ClienteOpcao[]>([]);
   const [salvando, setSalvando]   = useState(false);
@@ -204,12 +211,15 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props)
       setReqChips([]); setReqTexto({}); setReqCustom([]); setReqInput("");
     }
     setErro("");
+    setUnidadeId("");
     fetch("/api/clientes")
       .then((r) => r.json())
       .then((j) => setClientes(j.data ?? []));
   }, [isOpen, vaga]);
 
   if (!isOpen) return null;
+
+  const nomeUnidade = (id: string | undefined) => unidades?.find((u) => u.id === id)?.nome ?? "—";
 
   const set = (field: string, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
@@ -295,6 +305,7 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props)
           requisitos:            assembleRequisitos(),
           fee_rs_percentual:     form.fee_rs_percentual,
           fee_rs_prazo_cobranca: form.fee_rs_prazo_cobranca,
+          unidade_id:            escolheUnidade && !form.cliente_id ? unidadeId || null : undefined,
         }),
       });
       const json = await res.json();
@@ -344,8 +355,18 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props)
               </label>
               <select value={form.cliente_id} onChange={(e) => set("cliente_id", e.target.value)} className="input-field">
                 <option value="">Banco de Talentos</option>
-                {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                {clientes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome}
+                    {escolheUnidade ? ` — ${nomeUnidade(c.unidade_id)}` : ""}
+                  </option>
+                ))}
               </select>
+              {escolheUnidade && form.cliente_id && (
+                <p className="text-[11px] text-gray-500 mt-1">
+                  Unidade da vaga: <strong>{nomeUnidade(clientes.find((c) => c.id === form.cliente_id)?.unidade_id)}</strong> (a do cliente)
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
@@ -357,6 +378,18 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo }: Props)
               </select>
             </div>
           </div>
+
+          {escolheUnidade && !form.cliente_id && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                Unidade da vaga *
+              </label>
+              <select value={unidadeId} onChange={(e) => setUnidadeId(e.target.value)} className="input-field">
+                <option value="">Selecione...</option>
+                {unidades!.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
+              </select>
+            </div>
+          )}
 
           {/* Tipo de serviço */}
           <div className="border-t pt-4">
