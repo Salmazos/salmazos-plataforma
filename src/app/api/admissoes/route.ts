@@ -3,6 +3,8 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, admissaoCreateSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
 import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
+import { contextoRH } from "@/lib/rhUnidadeAuth";
+import { podeVerUnidade } from "@/lib/unidadeAuth";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
@@ -33,6 +35,9 @@ export async function POST(request: NextRequest) {
   if (!vaga_id) return NextResponse.json({ error: "Admissão precisa estar vinculada a uma vaga." }, { status: 400 });
   const { data: vaga } = await svc.from("vagas").select("unidade_id").eq("id", vaga_id).maybeSingle();
   if (!vaga) return NextResponse.json({ error: "Vaga não encontrada." }, { status: 400 });
+  // RH por unidade: supervisor só inicia admissão em vaga da própria unidade.
+  const ctxRH = await contextoRH(user);
+  if (!ctxRH || !podeVerUnidade(ctxRH, vaga.unidade_id)) return NextResponse.json({ error: "Vaga não encontrada." }, { status: 400 });
 
   const tokenExpiraEm = new Date(Date.now() + TOKEN_VALIDADE_DIAS * 24 * 60 * 60 * 1000).toISOString();
 
@@ -148,6 +153,10 @@ export async function GET(request: NextRequest) {
     .from("admissoes")
     .select("*, candidatos(id, nome_completo, cargo_pretendido), vagas(id, titulo)")
     .order("criado_em", { ascending: false });
+  // RH por unidade: supervisor só lista as admissões da própria unidade.
+  const ctx = await contextoRH(user);
+  if (!ctx) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
+  if (!ctx.todasUnidades) query = query.eq("unidade_id", ctx.unidadeId);
 
   if (status) query = query.eq("status", status);
   if (modalidade) query = query.eq("modalidade", modalidade);

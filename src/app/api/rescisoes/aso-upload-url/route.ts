@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
+import { checarAcessoFuncionarioRH } from "@/lib/rhUnidadeAuth";
 
 // Reaproveita o bucket privado "admissao-docs" (já usado pelo módulo de Admissão Digital)
 // em vez de criar um bucket novo só pro ASO — mesmo padrão de pastas por categoria dentro
@@ -22,6 +23,8 @@ export async function POST(request: NextRequest) {
   const funcionarioId = typeof body.funcionario_id === "string" ? body.funcionario_id.trim() : "";
   const nomeArquivo = typeof body.nome_arquivo === "string" ? body.nome_arquivo : "aso";
   if (!funcionarioId) return NextResponse.json({ error: "funcionario_id é obrigatório." }, { status: 400 });
+  const bloqueioUnidade = await checarAcessoFuncionarioRH(user, funcionarioId);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const safeFilename = nomeArquivo.replace(/[^a-zA-Z0-9._-]/g, "_");
   const path = `rescisoes-aso/${funcionarioId}/aso-${Date.now()}-${safeFilename}`;

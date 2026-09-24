@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
+import { checarAcessoAdmissaoRH } from "@/lib/rhUnidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -23,6 +24,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarPapelAdmissoes(user);
   if (acessoNegado) return acessoNegado;
+  const bloqueioUnidade = await checarAcessoAdmissaoRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const svc = createServiceClient();
 

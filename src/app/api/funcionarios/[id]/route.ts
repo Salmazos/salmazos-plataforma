@@ -3,7 +3,8 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, funcionarioUpdateSchema } from "@/lib/schemas";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
 import { registrarAuditoria, diffCampos } from "@/lib/audit";
-import { resolverUnidadeCliente } from "@/lib/unidadeAuth";
+import { resolverUnidadeCliente, podeVerUnidade } from "@/lib/unidadeAuth";
+import { checarAcessoFuncionarioRH, contextoRH } from "@/lib/rhUnidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -19,6 +20,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (acessoNegado) return acessoNegado;
 
   const { id } = await params;
+  const bloqueioUnidade = await checarAcessoFuncionarioRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
   const body = await request.json();
   const parsed = parseBody(funcionarioUpdateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
@@ -40,6 +43,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (parsed.data.cliente_id && parsed.data.cliente_id !== antes.cliente_id) {
     const unidadeCliente = await resolverUnidadeCliente(parsed.data.cliente_id);
     if (!unidadeCliente) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 400 });
+    // Supervisor (RH por unidade) não pode mandar o funcionário pra outra unidade.
+    const ctxRH = await contextoRH(user);
+    if (!ctxRH || !podeVerUnidade(ctxRH, unidadeCliente)) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 400 });
     campos.unidade_id = unidadeCliente;
   }
   if (parsed.data.empresa !== undefined) campos.empresa = parsed.data.empresa;

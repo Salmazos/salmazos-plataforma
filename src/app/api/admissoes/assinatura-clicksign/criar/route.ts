@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
+import { checarAcessoAdmissaoRH } from "@/lib/rhUnidadeAuth";
 import { parseBody, assinaturaClicksignCriarSchema } from "@/lib/schemas";
 import { criarEnvelopeDeAssinatura } from "@/lib/clicksign";
 import { registrarAuditoria } from "@/lib/audit";
@@ -24,6 +25,8 @@ export async function POST(request: NextRequest) {
   // Sindical + Solicitação de VT). O pacote da contabilidade cria sua própria linha
   // (tipo_pacote='contabilidade') na mesma tabela, por outra rota.
   const tipoPacote = "interno" as const;
+  const bloqueioUnidade = await checarAcessoAdmissaoRH(user, admissaoId);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const svc = createServiceClient();
 

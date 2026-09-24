@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, funcionarioAsoCreateSchema } from "@/lib/schemas";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
 import { registrarAuditoria } from "@/lib/audit";
+import { checarAcessoFuncionarioRH } from "@/lib/rhUnidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -18,6 +19,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
   if (acessoNegado) return acessoNegado;
 
   const { id } = await params;
+  const bloqueioUnidade = await checarAcessoFuncionarioRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
   const svc = createServiceClient();
 
   const { data: asos, error } = await svc
@@ -56,6 +59,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (acessoNegado) return acessoNegado;
 
   const { id } = await params;
+  const bloqueioUnidade = await checarAcessoFuncionarioRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
   const body = await request.json();
   const parsed = parseBody(funcionarioAsoCreateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });

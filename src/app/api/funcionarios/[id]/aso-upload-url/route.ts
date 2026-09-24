@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
+import { checarAcessoFuncionarioRH } from "@/lib/rhUnidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -21,6 +22,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (acessoNegado) return acessoNegado;
 
   const { id: funcionarioId } = await params;
+  const bloqueioUnidade = await checarAcessoFuncionarioRH(user, funcionarioId);
+  if (bloqueioUnidade) return bloqueioUnidade;
   const body = await request.json().catch(() => ({}));
   const nomeArquivo = typeof body.nome_arquivo === "string" ? body.nome_arquivo : "aso";
 

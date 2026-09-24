@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import FuncionariosPageClient from "@/components/FuncionariosPageClient";
 import { podeAcessarFuncionarios } from "@/lib/funcionariosAuth";
+import { contextoRH } from "@/lib/rhUnidadeAuth";
+import SemAcessoPainel from "@/components/SemAcessoPainel";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +15,22 @@ export default async function FuncionariosPage() {
   if (!user) redirect("/login");
 
   if (!(await podeAcessarFuncionarios(user))) redirect("/painel");
+  // RH por unidade (decisão do Olver, 24/09): supervisor só vê a própria unidade; sócios, todas.
+  const ctxRH = await contextoRH(user);
+  if (!ctxRH) return <SemAcessoPainel />;
+  const unidadeRH = ctxRH.todasUnidades ? null : ctxRH.unidadeId;
 
   const svc = createServiceClient();
+  let funcionariosQuery = svc.from("funcionarios").select("*, clientes(nome)").order("criado_em", { ascending: false });
+  let clientesQuery = svc.from("clientes").select("id, nome").eq("ativo", true).order("nome");
+  if (unidadeRH) {
+    funcionariosQuery = funcionariosQuery.eq("unidade_id", unidadeRH);
+    clientesQuery = clientesQuery.eq("unidade_id", unidadeRH);
+  }
 
   const [{ data: funcionarios }, { data: clientes }, { data: asos }, { data: contratos }] = await Promise.all([
-    svc.from("funcionarios").select("*, clientes(nome)").order("criado_em", { ascending: false }),
-    svc.from("clientes").select("id, nome").eq("ativo", true).order("nome"),
+    funcionariosQuery,
+    clientesQuery,
     svc.from("funcionario_asos").select("funcionario_id, data_exame").is("excluido_em", null).order("data_exame", { ascending: false }),
     svc.from("funcionario_contratos").select("funcionario_id").is("excluido_em", null),
   ]);

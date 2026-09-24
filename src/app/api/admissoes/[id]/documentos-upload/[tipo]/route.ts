@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
 import { registrarAuditoria } from "@/lib/audit";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
+import { checarAcessoAdmissaoRH } from "@/lib/rhUnidadeAuth";
 
 interface Params {
   params: Promise<{ id: string; tipo: string }>;
@@ -37,6 +38,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarPapelAdmissoes(user);
   if (acessoNegado) return acessoNegado;
+  const bloqueioUnidade = await checarAcessoAdmissaoRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const formData = await request.formData();
   const arquivo = formData.get("arquivo");

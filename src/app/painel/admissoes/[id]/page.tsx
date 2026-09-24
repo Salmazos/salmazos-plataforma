@@ -2,6 +2,8 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import AdmissaoDetalheClient from "@/components/AdmissaoDetalheClient";
+import { contextoRH } from "@/lib/rhUnidadeAuth";
+import { podeVerUnidade } from "@/lib/unidadeAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +30,9 @@ export default async function AdmissaoDetalhePage({ params }: Props) {
     .single();
 
   if (!admissao) notFound();
+  // RH por unidade: admissão de outra unidade responde como inexistente pro supervisor.
+  const ctxRH = user ? await contextoRH(user) : null;
+  if (!ctxRH || !podeVerUnidade(ctxRH, admissao.unidade_id)) notFound();
 
   const [{ data: dadosPessoais }, { data: dependentes }, { data: documentos }, { data: adicionais }, { data: auditLogs }, { data: valeTransporte }, { data: autorizacaoSindical }, { data: envelopeInterno }, { data: envelopeContabilidade }, { data: documentosContabilidade }] = await Promise.all([
     svc.from("admissao_dados_pessoais").select("*").eq("admissao_id", id).maybeSingle(),

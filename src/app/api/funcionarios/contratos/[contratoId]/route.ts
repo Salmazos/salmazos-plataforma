@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelFullAccess } from "@/lib/fullAccessAuth";
 import { parseBody, funcionarioDocumentoExcluirSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
+import { checarAcessoContratoRH } from "@/lib/rhUnidadeAuth";
 
 interface Params {
   params: Promise<{ contratoId: string }>;
@@ -21,6 +22,8 @@ export async function DELETE(request: NextRequest, { params }: Params) {
   if (acessoNegado) return acessoNegado;
 
   const { contratoId } = await params;
+  const bloqueioUnidade = await checarAcessoContratoRH(user, contratoId);
+  if (bloqueioUnidade) return bloqueioUnidade;
   const body = await request.json().catch(() => ({}));
   const parsed = parseBody(funcionarioDocumentoExcluirSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });

@@ -3,7 +3,8 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, funcionarioCreateSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
-import { resolverUnidadeCliente, resolverUnidadeUsuario } from "@/lib/unidadeAuth";
+import { contextoRH } from "@/lib/rhUnidadeAuth";
+import { resolverUnidadeCliente, resolverUnidadeUsuario, podeVerUnidade } from "@/lib/unidadeAuth";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -20,6 +21,10 @@ export async function GET(request: NextRequest) {
 
   const svc = createServiceClient();
   let query = svc.from("funcionarios").select("*, clientes(nome)").order("criado_em", { ascending: false });
+  // RH por unidade: supervisor só lista os funcionários da própria unidade.
+  const ctx = await contextoRH(user);
+  if (!ctx) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
+  if (!ctx.todasUnidades) query = query.eq("unidade_id", ctx.unidadeId);
   if (status) query = query.eq("status", status);
   if (clienteId) query = query.eq("cliente_id", clienteId);
 
@@ -49,6 +54,9 @@ export async function POST(request: NextRequest) {
   if (parsed.data.cliente_id) {
     unidadeId = await resolverUnidadeCliente(parsed.data.cliente_id);
     if (!unidadeId) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 400 });
+    // RH por unidade: supervisor só cadastra funcionário de cliente da própria unidade.
+    const ctxRH = await contextoRH(user);
+    if (!ctxRH || !podeVerUnidade(ctxRH, unidadeId)) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 400 });
   } else {
     unidadeId = (await resolverUnidadeUsuario(user))?.unidadeId ?? null;
     if (!unidadeId) return NextResponse.json({ error: "Não foi possível identificar sua unidade." }, { status: 403 });

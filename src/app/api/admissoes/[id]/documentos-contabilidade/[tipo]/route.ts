@@ -4,6 +4,7 @@ import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
 import { parseBody, admissaoDocumentoContabilidadeConfirmarSchema } from "@/lib/schemas";
 import { DOCUMENTOS_CONTABILIDADE, type TipoDocumentoContabilidade } from "@/lib/contabilidadeDocumentosMatch";
 import { registrarAuditoria } from "@/lib/audit";
+import { checarAcessoAdmissaoRH } from "@/lib/rhUnidadeAuth";
 
 interface Params {
   params: Promise<{ id: string; tipo: string }>;
@@ -30,6 +31,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarPapelAdmissoes(user);
   if (acessoNegado) return acessoNegado;
+  const bloqueioUnidade = await checarAcessoAdmissaoRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const svc = createServiceClient();
 
@@ -74,6 +77,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarPapelAdmissoes(user);
   if (acessoNegado) return acessoNegado;
+  const bloqueioUnidade = await checarAcessoAdmissaoRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const svc = createServiceClient();
 
@@ -99,6 +104,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarPapelAdmissoes(user);
   if (acessoNegado) return acessoNegado;
+  const bloqueioUnidade = await checarAcessoAdmissaoRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const body = await request.json().catch(() => ({}));
   const parsed = parseBody(admissaoDocumentoContabilidadeConfirmarSchema, body);

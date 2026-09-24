@@ -12,6 +12,7 @@ import { sendEmail } from "@/lib/sendEmail";
 import { escapeHtml } from "@/lib/emailAniversarioTemplate";
 import { getConfiguracoesGerais } from "@/lib/configuracoesGerais";
 import type { AdmissaoDadosPessoais, AdmissaoDocumento } from "@/types";
+import { checarAcessoAdmissaoRH } from "@/lib/rhUnidadeAuth";
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -32,6 +33,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarPapelAdmissoes(user);
   if (acessoNegado) return acessoNegado;
+  const bloqueioUnidade = await checarAcessoAdmissaoRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const svc = createServiceClient();
 
@@ -160,6 +163,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarPapelAdmissoes(user);
   if (acessoNegado) return acessoNegado;
+  const bloqueioUnidade = await checarAcessoAdmissaoRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const body = await request.json().catch(() => ({}));
   const parsed = parseBody(admissaoCartaBancoSchema, body);

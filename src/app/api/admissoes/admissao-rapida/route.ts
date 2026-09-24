@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
+import { contextoRH } from "@/lib/rhUnidadeAuth";
+import { podeVerUnidade } from "@/lib/unidadeAuth";
 import { parseBody, admissaoRapidaSchema } from "@/lib/schemas";
 import { generateUniqueSlug } from "@/lib/slug";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
@@ -41,6 +43,9 @@ export async function POST(request: NextRequest) {
       .eq("id", cliente_id)
       .maybeSingle();
     if (!cliente) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 400 });
+    // RH por unidade: supervisor só faz admissão rápida pra cliente da própria unidade.
+    const ctxRH = await contextoRH(user);
+    if (!ctxRH || !podeVerUnidade(ctxRH, cliente.unidade_id)) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 400 });
 
     // Match de CPF exato (nunca nome/telefone aproximado — "nunca decide no escuro"): só
     // trava aqui porque candidatos.cpf tem constraint UNIQUE no banco, então um CPF que já

@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, admissaoUpdateSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
 import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
+import { checarAcessoAdmissaoRH } from "@/lib/rhUnidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -18,6 +19,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarPapelAdmissoes(user);
   if (acessoNegado) return acessoNegado;
+  const bloqueioUnidade = await checarAcessoAdmissaoRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const svc = createServiceClient();
 
@@ -59,6 +62,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarPapelAdmissoes(user);
   if (acessoNegado) return acessoNegado;
+  const bloqueioUnidade = await checarAcessoAdmissaoRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const body = await request.json();
   const parsed = parseBody(admissaoUpdateSchema, body);

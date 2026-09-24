@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
+import { checarAcessoFuncionarioRH } from "@/lib/rhUnidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -21,6 +22,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
   if (acessoNegado) return acessoNegado;
 
   const { id } = await params;
+  const bloqueioUnidade = await checarAcessoFuncionarioRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
   const svc = createServiceClient();
 
   const { data: contrato } = await svc

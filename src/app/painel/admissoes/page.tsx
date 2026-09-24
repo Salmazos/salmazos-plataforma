@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import AdmissoesClient from "@/components/AdmissoesClient";
+import { contextoRH } from "@/lib/rhUnidadeAuth";
+import { podeVerUnidade } from "@/lib/unidadeAuth";
+import SemAcessoPainel from "@/components/SemAcessoPainel";
 
 export const dynamic = "force-dynamic";
 
@@ -17,12 +20,18 @@ export default async function AdmissoesPage() {
   const role = user?.app_metadata?.role ?? "analista";
   if (!["superuser", "diretoria", "supervisor", "dp"].includes(role)) redirect("/painel");
 
+  // RH por unidade (decisão do Olver, 24/09): supervisor só vê a própria unidade; sócios, todas.
+  const ctxRH = user ? await contextoRH(user) : null;
+  if (!ctxRH) return <SemAcessoPainel />;
+
   const svc = createServiceClient();
 
-  const { data: admissoes } = await svc
+  let admissoesQuery = svc
     .from("admissoes")
     .select("*, candidatos(id, nome_completo, cargo_pretendido, telefone), vagas(id, titulo)")
     .order("criado_em", { ascending: false });
+  if (!ctxRH.todasUnidades) admissoesQuery = admissoesQuery.eq("unidade_id", ctxRH.unidadeId);
+  const { data: admissoes } = await admissoesQuery;
 
   const ids = (admissoes ?? []).map((a) => a.id);
   const { data: docs } = ids.length
@@ -49,7 +58,7 @@ export default async function AdmissoesPage() {
   // 'contratado' — é uma lista de "ação pendente", não de elegibilidade ampla.
   const { data: contratadosSemAdmissao } = await svc
     .from("candidatos_vagas")
-    .select("id, candidato_id, vaga_id, updated_at, candidatos(id, nome_completo, cargo_pretendido, telefone), vagas!candidatos_vagas_vaga_id_fkey(id, titulo, tipo_servico, cliente_id, clientes(nome, entidade_contratante))")
+    .select("id, candidato_id, vaga_id, updated_at, candidatos(id, nome_completo, cargo_pretendido, telefone), vagas!candidatos_vagas_vaga_id_fkey(id, titulo, tipo_servico, cliente_id, unidade_id, clientes(nome, entidade_contratante))")
     .eq("etapa", "contratado")
     .order("updated_at", { ascending: false });
 
@@ -60,6 +69,7 @@ export default async function AdmissoesPage() {
   const disponiveisBrutos = (contratadosSemAdmissao ?? []).filter((cv: any) => {
     const tipoServico = cv.vagas?.tipo_servico;
     if (!tipoServico || !MODALIDADES_ELEGIVEIS.includes(tipoServico)) return false;
+    if (!podeVerUnidade(ctxRH, cv.vagas?.unidade_id)) return false;
     return !admissaoExistenteSet.has(`${cv.candidato_id}|${cv.vaga_id ?? ""}`);
   });
 

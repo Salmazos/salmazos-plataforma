@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, rescisaoCreateSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
+import { contextoRH, checarAcessoFuncionarioRH } from "@/lib/rhUnidadeAuth";
 import { dispararAvisosRescisao } from "@/lib/dispararAvisosRescisao";
 
 export async function GET(request: NextRequest) {
@@ -25,6 +26,10 @@ export async function GET(request: NextRequest) {
     .from("rescisoes")
     .select("*, funcionarios(nome_completo, cargo)")
     .order("data_desligamento", { ascending: false });
+  // RH por unidade: supervisor só lista as rescisões da própria unidade.
+  const ctx = await contextoRH(user);
+  if (!ctx) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
+  if (!ctx.todasUnidades) query = query.eq("unidade_id", ctx.unidadeId);
 
   if (empresa) query = query.eq("empresa", empresa);
   if (faturado === "true") query = query.eq("faturado", true);
@@ -50,6 +55,9 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const parsed = parseBody(rescisaoCreateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  // Supervisor só lança rescisão de funcionário da própria unidade.
+  const bloqueioUnidade = await checarAcessoFuncionarioRH(user, parsed.data.funcionario_id);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const svc = createServiceClient();
 

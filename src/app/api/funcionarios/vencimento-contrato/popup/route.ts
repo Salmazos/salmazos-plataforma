@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
+import { contextoRH } from "@/lib/rhUnidadeAuth";
 import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
 import { calcularVencimentoContratoMot, precisaAvisoPopupVencimentoMot, mensagemAvisoPopupVencimentoMot } from "@/lib/contratoMotStatus";
 
@@ -27,13 +28,18 @@ export async function GET() {
   if (acessoNegado) return acessoNegado;
 
   const svc = createServiceClient();
+  // RH por unidade: supervisor só é avisado dos funcionários da própria unidade.
+  const ctx = await contextoRH(user);
+  if (!ctx) return NextResponse.json({ data: [] });
 
-  const { data: funcionarios } = await svc
+  let funcionariosQuery = svc
     .from("funcionarios")
     .select("id, nome_completo, data_admissao")
     .eq("tipo_servico", "mao_obra_temporaria")
     .eq("status", "ativo")
     .not("data_admissao", "is", null);
+  if (!ctx.todasUnidades) funcionariosQuery = funcionariosQuery.eq("unidade_id", ctx.unidadeId);
+  const { data: funcionarios } = await funcionariosQuery;
 
   const avisos: AvisoVencimentoMot[] = [];
   for (const f of funcionarios ?? []) {

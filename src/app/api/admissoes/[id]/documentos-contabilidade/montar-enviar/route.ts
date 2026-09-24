@@ -9,6 +9,7 @@ import { POSICOES_POR_TIPO_DOCUMENTO } from "@/lib/zapsignPosicoes";
 import type { AncoraDetectada } from "@/lib/pdfAnchors";
 import { registrarAuditoria } from "@/lib/audit";
 import type { AdmissaoDocumentoContabilidade } from "@/types";
+import { checarAcessoAdmissaoRH } from "@/lib/rhUnidadeAuth";
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -25,6 +26,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarPapelAdmissoes(user);
   if (acessoNegado) return acessoNegado;
+  const bloqueioUnidade = await checarAcessoAdmissaoRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const body = await request.json().catch(() => ({}));
   const parsed = parseBody(admissaoContabilidadeMontarEnviarSchema, body);

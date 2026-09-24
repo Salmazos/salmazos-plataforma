@@ -9,6 +9,7 @@ import { PdfWriter, PW, PH, ML, safe, BLACK, YELLOW, DARK, GRAY, embutirImagemCo
 import { desenharFichaCadastral, desenharAutorizacaoSindical, desenharSolicitacaoValeTransporte } from "@/lib/admissaoDocumentosPdf";
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import type { AdmissaoAdicional, AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
+import { checarAcessoAdmissaoRH } from "@/lib/rhUnidadeAuth";
 
 interface Params { params: Promise<{ id: string }> }
 
@@ -24,6 +25,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarPapelAdmissoes(user);
   if (acessoNegado) return acessoNegado;
+  const bloqueioUnidade = await checarAcessoAdmissaoRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const body = await request.json().catch(() => ({}));
   const parsedForcar = parseBody(admissaoGerarPdfSchema, body);

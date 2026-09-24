@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, rescisaoFaturadoSchema } from "@/lib/schemas";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
+import { checarAcessoRescisaoRH } from "@/lib/rhUnidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -23,6 +24,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (acessoNegado) return acessoNegado;
 
   const { id } = await params;
+  const bloqueioUnidade = await checarAcessoRescisaoRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
   const body = await request.json();
   const parsed = parseBody(rescisaoFaturadoSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
