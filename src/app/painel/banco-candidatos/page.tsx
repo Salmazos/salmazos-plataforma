@@ -1,6 +1,7 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import BancoCandidatosClient from "@/components/BancoCandidatosClient";
-import type { CandidatoRow } from "@/components/BancoCandidatosClient";
+import type { CandidatoRow, VagaInteresseInfo } from "@/components/BancoCandidatosClient";
+import { contextoUnidadeDaSessao, podeVerUnidade } from "@/lib/unidadeAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -130,11 +131,34 @@ export default async function BancoCandidatosPage({
   const analistaNome = analistaPerfil.data?.nome_completo ?? "";
   const idsEmProcesso = [...new Set((ativosResult.data ?? []).map((r: { candidato_id: string }) => r.candidato_id))];
 
+  // Títulos das vagas em que os candidatos desta página se inscreveram (chip "vaga de
+  // interesse"), com QUALQUER status — antes o chip só achava o título entre as vagas
+  // abertas e, com a vaga pausada/fechada, mostrava o começo do id. Vaga de outra unidade
+  // não expõe o título (mesma regra de unidade do resto do Recrutamento).
+  const idsInteresse = [
+    ...new Set(((data ?? []) as CandidatoRow[]).flatMap((c) => c.vagas_interesse ?? [])),
+  ];
+  const vagasInteresse: Record<string, VagaInteresseInfo> = {};
+  if (idsInteresse.length > 0) {
+    const ctx = await contextoUnidadeDaSessao();
+    const { data: vagasRows } = await supabase
+      .from("vagas")
+      .select("id, titulo, status, unidade_id")
+      .in("id", idsInteresse);
+    for (const v of vagasRows ?? []) {
+      const visivel = ctx ? podeVerUnidade(ctx, v.unidade_id) : false;
+      vagasInteresse[v.id] = visivel
+        ? { titulo: v.titulo, status: v.status }
+        : { titulo: "Vaga de outra unidade", status: null };
+    }
+  }
+
   return (
     <BancoCandidatosClient
       candidatos={(data ?? []) as CandidatoRow[]}
       analista={analistaNome}
       idsEmProcesso={idsEmProcesso}
+      vagasInteresse={vagasInteresse}
       totalGeral={totalGeral ?? 0}
       totalFiltrado={totalFiltrado ?? 0}
       contagensAbas={{

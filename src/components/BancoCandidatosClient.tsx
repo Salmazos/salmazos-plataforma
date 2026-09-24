@@ -457,10 +457,21 @@ export type ContagensAbas = {
   alocado_terceirizacao: number;
 };
 
+// Título/status das vagas em que o candidato se inscreveu, resolvido no servidor pra
+// QUALQUER status (ver banco-candidatos/page.tsx). status null = vaga de outra unidade.
+export type VagaInteresseInfo = { titulo: string; status: string | null };
+
+const STATUS_VAGA_LABEL: Record<string, string> = {
+  pausada: "pausada",
+  fechada: "fechada",
+  cancelada: "cancelada",
+};
+
 export default function BancoCandidatosClient({
   candidatos,
   analista,
   idsEmProcesso,
+  vagasInteresse,
   totalGeral,
   totalFiltrado,
   contagensAbas,
@@ -470,6 +481,7 @@ export default function BancoCandidatosClient({
   candidatos: CandidatoRow[];
   analista: string;
   idsEmProcesso: string[];
+  vagasInteresse: Record<string, VagaInteresseInfo>;
   totalGeral: number;
   totalFiltrado: number;
   contagensAbas: ContagensAbas;
@@ -498,6 +510,25 @@ export default function BancoCandidatosClient({
 
   const [vagasAbertas, setVagasAbertas] = useState<VagaAberta[]>([]);
   const emProcessoSet = useMemo(() => new Set(idsEmProcesso), [idsEmProcesso]);
+
+  // Rótulo do chip/botão de vaga de interesse: título de qualquer vaga (não só das abertas),
+  // com o status quando não está aberta. Id que não existe mais em vagas = vaga apagada.
+  function rotuloVagaInteresse(vid: string): string {
+    const info = vagasInteresse[vid];
+    if (info) {
+      const statusLabel = info.status ? STATUS_VAGA_LABEL[info.status] : undefined;
+      return statusLabel ? `${info.titulo} (${statusLabel})` : info.titulo;
+    }
+    return vagasAbertas.find((v) => v.id === vid)?.titulo ?? "Vaga removida";
+  }
+
+  // Só vaga aberta aceita encaminhamento pra Triagem — pausada/fechada/cancelada, removida ou
+  // de outra unidade ficam desabilitadas no modal (o analista usa "Escolher outra vaga...").
+  function vagaInteresseAberta(vid: string): boolean {
+    const info = vagasInteresse[vid];
+    if (info) return info.status === "aberta";
+    return vagasAbertas.some((v) => v.id === vid);
+  }
   const [encaminhadoIds, setEncaminhadoIds] = useState<Set<string>>(new Set());
   const [modal, setModal] = useState<ModalState | null>(null);
   const [alertaProcesso, setAlertaProcesso] = useState<AlertaProcessoState | null>(null);
@@ -1114,7 +1145,6 @@ export default function BancoCandidatosClient({
                       {c.vagas_interesse && c.vagas_interesse.length > 0 && (
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
                           {c.vagas_interesse.map((vid) => {
-                            const vaga = vagasAbertas.find((v) => v.id === vid);
                             return (
                               <span
                                 key={vid}
@@ -1130,7 +1160,7 @@ export default function BancoCandidatosClient({
                                   whiteSpace: "nowrap",
                                 }}
                               >
-                                {vaga ? vaga.titulo : vid.slice(0, 8) + "…"}
+                                {rotuloVagaInteresse(vid)}
                               </span>
                             );
                           })}
@@ -1766,31 +1796,32 @@ export default function BancoCandidatosClient({
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
               {interesseModal.candidato.vagas_interesse!.map((vid) => {
-                const vaga = vagasAbertas.find((v) => v.id === vid);
                 const isLoading = interesseModal.loading === vid;
+                const aberta = vagaInteresseAberta(vid);
                 return (
                   <button
                     key={vid}
                     onClick={() => handleInteresseEncaminhar(vid)}
-                    disabled={!!interesseModal.loading}
+                    disabled={!!interesseModal.loading || !aberta}
+                    title={aberta ? undefined : "Só é possível encaminhar para vagas abertas"}
                     style={{
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
                       padding: "10px 14px",
                       borderRadius: 8,
-                      border: "1px solid #FCD34D",
-                      background: isLoading ? "#FEF3C7" : "#FFFBEB",
-                      cursor: interesseModal.loading ? "not-allowed" : "pointer",
+                      border: `1px solid ${aberta ? "#FCD34D" : "#E5E7EB"}`,
+                      background: !aberta ? "#F9FAFB" : isLoading ? "#FEF3C7" : "#FFFBEB",
+                      cursor: interesseModal.loading || !aberta ? "not-allowed" : "pointer",
                       opacity: interesseModal.loading && !isLoading ? 0.5 : 1,
                       transition: "all 0.15s",
                     }}
                   >
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "#92400E" }}>
-                      {vaga ? vaga.titulo : vid.slice(0, 8) + "…"}
+                    <span style={{ fontSize: 13, fontWeight: 600, color: aberta ? "#92400E" : "#9CA3AF" }}>
+                      {rotuloVagaInteresse(vid)}
                     </span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "#92400E" }}>
-                      {isLoading ? "Encaminhando..." : "→ Triagem"}
+                    <span style={{ fontSize: 12, fontWeight: 700, color: aberta ? "#92400E" : "#9CA3AF" }}>
+                      {!aberta ? "Vaga não aberta" : isLoading ? "Encaminhando..." : "→ Triagem"}
                     </span>
                   </button>
                 );
