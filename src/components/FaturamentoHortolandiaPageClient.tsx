@@ -38,6 +38,9 @@ interface Props {
   unidadeId: string;
   nomeUnidade: string;
   unidadesOpcoes: { id: string; nome: string }[];
+  // Não-sócio liberado pelo acesso customizado (ex: supervisor de SBC) só visualiza — a API
+  // recusa qualquer escrita (checarEscritaFaturamento); aqui só some com os controles.
+  somenteLeitura: boolean;
   rowsIniciais: ContaReceberRow[];
   saidasIniciais: ContaPagarRow[];
   anoInicial: number;
@@ -91,6 +94,7 @@ export default function FaturamentoHortolandiaPageClient({
   unidadeId,
   nomeUnidade,
   unidadesOpcoes,
+  somenteLeitura,
   rowsIniciais,
   saidasIniciais,
   anoInicial,
@@ -116,7 +120,8 @@ export default function FaturamentoHortolandiaPageClient({
     if (!abrirId) return;
     const row = rows.find((r) => r.id === abrirId);
     if (row) {
-      setContaAberta(row);
+      // Só visualização: mostra na lista (aba Todas), sem abrir o modal de edição.
+      if (!somenteLeitura) setContaAberta(row);
       setTab("todas");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -319,12 +324,14 @@ export default function FaturamentoHortolandiaPageClient({
         </div>
         {/* Contextual à visão ativa (Entradas/Saídas) — mesmo botão, destino diferente,
             pra não duplicar "+ Novo lançamento" na tela. */}
+        {!somenteLeitura && (
         <button
           onClick={() => (visao === "entradas" ? setContaAberta("novo") : setContaPagarAberta("novo"))}
           className="btn-primary"
         >
           + Novo lançamento {visao === "entradas" ? "(entrada)" : "(saída)"}
         </button>
+        )}
       </div>
 
       {erroImposto && (
@@ -344,6 +351,11 @@ export default function FaturamentoHortolandiaPageClient({
 
         <div style={{ background: "#F3F4F6", border: "2px solid transparent", borderRadius: 12, padding: "14px 16px" }}>
           <p style={{ fontSize: 12, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>Imposto do mês (%)</p>
+          {somenteLeitura ? (
+            <p style={{ fontSize: 20, fontWeight: 800, color: "#374151", margin: 0 }}>
+              {percentualImposto != null ? `${percentualImposto}%` : "—"}
+            </p>
+          ) : (
           <div className="flex gap-2 items-center">
             <input
               type="number"
@@ -365,6 +377,7 @@ export default function FaturamentoHortolandiaPageClient({
               {salvandoImposto ? "Salvando..." : "Salvar"}
             </button>
           </div>
+          )}
           {impostoSalvo && <p className="text-green-700 text-xs mt-1">Imposto salvo!</p>}
         </div>
 
@@ -521,19 +534,23 @@ export default function FaturamentoHortolandiaPageClient({
                   return (
                     <tr
                       key={row.id}
-                      onClick={() => setContaAberta(row)}
-                      className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                      onClick={somenteLeitura ? undefined : () => setContaAberta(row)}
+                      className={`border-b border-gray-100 hover:bg-gray-50 ${somenteLeitura ? "" : "cursor-pointer"}`}
                     >
                       <td className="py-2 px-3">{formatarData(row.dataVencimento)}</td>
                       <td className="py-2 px-3 font-medium text-gray-900">{row.clienteNome}</td>
                       <td className="py-2 px-3 text-gray-500">{row.numeroNf ?? "—"}</td>
                       <td className="py-2 px-3 text-right font-medium">{formatarMoeda(row.valor)}</td>
                       <td className="py-2 px-3 text-right" onClick={(e) => e.stopPropagation()}>
+                        {somenteLeitura ? (
+                          <span className="text-gray-500">{percentualEfetivoRow(row) != null ? `${percentualEfetivoRow(row)}%` : "—"}</span>
+                        ) : (
                         <ImpostoLinhaCelula
                           percentualEfetivo={percentualEfetivoRow(row)}
                           valorProprio={row.impostoPercentualManual}
                           onSalvar={(novoValor) => handleSalvarImpostoLinha(row.id, novoValor)}
                         />
+                        )}
                       </td>
                       <td className="py-2 px-3 text-right text-gray-600">{formatarMoeda(valorLiquidoRow(row))}</td>
                       <td className="py-2 px-3 text-center text-gray-500">
@@ -594,8 +611,8 @@ export default function FaturamentoHortolandiaPageClient({
                 {saidasFiltradas.map((s) => (
                   <tr
                     key={s.id}
-                    onClick={() => setContaPagarAberta(s)}
-                    className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                    onClick={somenteLeitura ? undefined : () => setContaPagarAberta(s)}
+                    className={`border-b border-gray-100 hover:bg-gray-50 ${somenteLeitura ? "" : "cursor-pointer"}`}
                   >
                     <td className="py-2 px-3">{formatarData(s.dataPagamento)}</td>
                     <td className="py-2 px-3 font-medium text-gray-900">{s.descricao}</td>

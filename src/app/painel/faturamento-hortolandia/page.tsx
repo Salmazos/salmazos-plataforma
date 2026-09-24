@@ -102,6 +102,7 @@ export default async function FaturamentoHortolandiaPage({
       unidadeId={unidadeId}
       nomeUnidade={nomeUnidadeFaturamento(unidadeAtual)}
       unidadesOpcoes={unidades.map((u) => ({ id: u.id, nome: nomeUnidadeFaturamento(u) }))}
+      somenteLeitura={!ctx.todasUnidades}
       rowsIniciais={rows}
       saidasIniciais={saidasRows}
       anoInicial={ano}

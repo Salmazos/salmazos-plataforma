@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoFaturamentoRs } from "@/lib/faturamentoRsAuth";
 import { parseBody, faturamentoRsAjusteCreateSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
+import { checarEscritaFaturamento } from "@/lib/faturamentoUnidades";
 
 // Ajustes são imutáveis — sem PATCH/DELETE. Um lançamento errado se corrige com um novo
 // ajuste de sinal oposto, nunca apagando o original (rastro de auditoria tipo livro-razão).
@@ -14,6 +15,8 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarAcessoFaturamentoRs(user);
   if (acessoNegado) return acessoNegado;
+  const somenteLeitura = await checarEscritaFaturamento(user);
+  if (somenteLeitura) return somenteLeitura;
 
   const body = await request.json();
   const parsed = parseBody(faturamentoRsAjusteCreateSchema, body);

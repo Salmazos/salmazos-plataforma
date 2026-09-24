@@ -3,7 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaAuth";
 import { parseBody, faturamentoHortolandiaImpostoSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
-import { resolverUnidadeFaturamento } from "@/lib/faturamentoUnidades";
+import { resolverUnidadeFaturamento, checarEscritaFaturamento } from "@/lib/faturamentoUnidades";
 
 export async function PATCH(request: NextRequest) {
   const supabase = await createClient();
@@ -13,6 +13,8 @@ export async function PATCH(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarAcessoFaturamentoHortolandia(user);
   if (acessoNegado) return acessoNegado;
+  const somenteLeitura = await checarEscritaFaturamento(user);
+  if (somenteLeitura) return somenteLeitura;
 
   const body = await request.json();
   const parsed = parseBody(faturamentoHortolandiaImpostoSchema, body);

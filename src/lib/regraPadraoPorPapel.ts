@@ -52,6 +52,10 @@ const REGRA_POR_CHAVE: Record<string, Regra> = {
   // comportamentoPadrao real (podeAcessarFinanceiroRs/podeAcessarFaturamentoRs).
   financeiro_rs: PAPEIS_FULL_ACCESS,
   faturamento_rs: PAPEIS_FULL_ACCESS,
+  // Faturamento Unidades (chave antiga, tela ex-"Faturamento Hortolândia") — mesma regra de
+  // podeAcessarFaturamentoHortolandia. Liberação individual pra não-sócio (ex: supervisor de
+  // SBC) é só de visualização, da própria unidade (ver checarEscritaFaturamento).
+  faturamento_hortolandia: PAPEIS_FULL_ACCESS,
   // Cobranças R&S tem exceção própria e separada (tabela cobranca_rs_analistas_acesso, fora
   // deste sistema): checarAcessoCobrancaRS = PAPEIS_FULL_ACCESS OU liberação individual
   // nessa outra tabela — mais complexo que só nivel_acesso. Pra esta matriz, mostra só o

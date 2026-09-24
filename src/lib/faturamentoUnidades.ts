@@ -40,6 +40,18 @@ export async function resolverUnidadeFaturamento(
   return { unidadeId: data.id, erro: null };
 }
 
+// Somente sócios (acesso a todas as unidades) lançam/editam/excluem no faturamento. DECISÃO
+// DO OLVER (24/09): supervisor de SBC pode ser liberado (acesso customizado) só pra VER o
+// faturamento da própria unidade — Faturamento Unidades e Faturamento R&S. Vale também pro
+// imposto e ajustes do Faturamento R&S, que são da empresa inteira.
+export async function checarEscritaFaturamento(user: User): Promise<NextResponse | null> {
+  const ctx = await resolverUnidadeUsuario(user);
+  if (!ctx?.todasUnidades) {
+    return NextResponse.json({ error: "Acesso somente de visualização." }, { status: 403 });
+  }
+  return null;
+}
+
 // Pra rotas por id (editar/excluir um lançamento): a unidade é a do próprio lançamento.
 export async function checarUnidadeLancamento(user: User, unidadeIdDoLancamento: string | null | undefined): Promise<NextResponse | null> {
   const ctx = await resolverUnidadeUsuario(user);

@@ -3,7 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaAuth";
 import { parseBody, contaPagarHortolandiaCreateSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
-import { resolverUnidadeFaturamento } from "@/lib/faturamentoUnidades";
+import { resolverUnidadeFaturamento, checarEscritaFaturamento } from "@/lib/faturamentoUnidades";
 
 // Mesmo gate de acesso de /api/faturamento-hortolandia (contas a receber) — saída é dado
 // financeiro da mesma unidade, sem motivo pra ter um nível de acesso diferente.
@@ -37,6 +37,8 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarAcessoFaturamentoHortolandia(user);
   if (acessoNegado) return acessoNegado;
+  const somenteLeitura = await checarEscritaFaturamento(user);
+  if (somenteLeitura) return somenteLeitura;
 
   const body = await request.json();
   const parsed = parseBody(contaPagarHortolandiaCreateSchema, body);

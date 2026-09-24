@@ -26,6 +26,7 @@ export const ABAS_CONFIG: AbaConfig[] = [
 
   { chave: "financeiro_rs", rotulo: "Financeiro R&S", grupo: "Financeiro" },
   { chave: "faturamento_rs", rotulo: "Faturamento R&S", grupo: "Financeiro" },
+  { chave: "faturamento_hortolandia", rotulo: "Faturamento Unidades", grupo: "Financeiro" },
   { chave: "cobrancas_rs", rotulo: "Cobranças R&S", grupo: "Financeiro" },
 
   { chave: "configuracoes", rotulo: "Configurações (grupo)", grupo: "Configurações" },

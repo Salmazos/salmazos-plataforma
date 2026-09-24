@@ -3,7 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaAuth";
 import { parseBody, contaPagarHortolandiaUpdateSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
-import { checarUnidadeLancamento } from "@/lib/faturamentoUnidades";
+import { checarUnidadeLancamento, checarEscritaFaturamento } from "@/lib/faturamentoUnidades";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -17,6 +17,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarAcessoFaturamentoHortolandia(user);
   if (acessoNegado) return acessoNegado;
+  const somenteLeitura = await checarEscritaFaturamento(user);
+  if (somenteLeitura) return somenteLeitura;
 
   const { id } = await params;
   const body = await request.json();
@@ -56,6 +58,8 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarAcessoFaturamentoHortolandia(user);
   if (acessoNegado) return acessoNegado;
+  const somenteLeitura = await checarEscritaFaturamento(user);
+  if (somenteLeitura) return somenteLeitura;
 
   const { id } = await params;
   const svc = createServiceClient();
