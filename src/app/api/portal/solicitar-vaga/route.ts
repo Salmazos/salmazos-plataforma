@@ -126,6 +126,7 @@ export async function POST(request: NextRequest) {
         user_id: null,
         candidato_id: null,
         solicitacao_vaga_id: solicitacao.id,
+        unidade_id: unidadeId,
       });
     }
 
@@ -200,6 +201,7 @@ export async function POST(request: NextRequest) {
       subject: `🔔 Nova Solicitação de Vaga — ${clienteNome}`,
       html,
       tipo: "solicitacao_vaga",
+      unidadeId,
     });
 
     // E-mail e sino são canais independentes (o sino já foi inserido acima antes

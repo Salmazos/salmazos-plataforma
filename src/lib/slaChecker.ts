@@ -16,7 +16,7 @@ interface CandidatoVaga {
   etapa: string;
   updated_at: string;
   candidatos: { nome_completo: string } | null;
-  vagas: { id: string; titulo: string; status: string } | null;
+  vagas: { id: string; titulo: string; status: string; unidade_id: string } | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ export async function verificarSLA(): Promise<void> {
   // 2. Fetch active candidatos_vagas with joins
   const { data: rows, error: cvErr } = await supabase
     .from("candidatos_vagas")
-    .select("id, candidato_id, vaga_id, etapa, updated_at, candidatos(nome_completo), vagas!candidatos_vagas_vaga_id_fkey(id, titulo, status)")
+    .select("id, candidato_id, vaga_id, etapa, updated_at, candidatos(nome_completo), vagas!candidatos_vagas_vaga_id_fkey(id, titulo, status, unidade_id)")
     .not("etapa", "in", `(${ETAPAS_EXCLUIDAS.join(",")})`);
 
   if (cvErr) {
@@ -122,6 +122,7 @@ export async function verificarSLA(): Promise<void> {
       titulo: `⚠️ SLA excedido: ${nomeCandidato}`,
       mensagem: `${nomeCandidato} está na etapa "${cv.etapa}" da vaga "${tituloVaga}" há ${dias} dia(s) útil(eis) (limite: ${prazo}).`,
       candidato_id: cv.candidato_id,
+      unidade_id: cv.vagas?.unidade_id ?? null,
     });
 
     if (notifErr) {
@@ -166,6 +167,7 @@ export async function verificarSLA(): Promise<void> {
       tipo: "alerta_sla",
       candidato_id: cv.candidato_id,
       vaga_id: cv.vagas?.id,
+      unidadeId: cv.vagas?.unidade_id ?? null,
     });
 
     if (resultado.attempted > 0) {

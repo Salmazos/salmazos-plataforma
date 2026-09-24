@@ -145,6 +145,15 @@ export async function idsCandidaturasDaUnidade(ctx: ContextoUnidade, candidatoId
   return (data ?? []).map((r) => r.id as string);
 }
 
+// Filtro PostgREST (.or) das notificações do sino que um usuário enxerga: as direcionadas a
+// ele + os avisos gerais (user_id nulo) sem unidade ou da unidade dele. Sem contexto (sem
+// perfil de analista) só vê os gerais sem unidade; acesso a todas as unidades vê todos.
+export function filtroNotificacoesVisiveis(userId: string, ctx: ContextoUnidade | null): string {
+  if (ctx?.todasUnidades) return `user_id.eq.${userId},user_id.is.null`;
+  const geraisDaUnidade = ctx ? `,and(user_id.is.null,unidade_id.eq.${ctx.unidadeId})` : "";
+  return `user_id.eq.${userId},and(user_id.is.null,unidade_id.is.null)${geraisDaUnidade}`;
+}
+
 // Atalhos pras rotas que ainda não resolviam o usuário logado: o middleware já exige
 // sessão em /api (fora das rotas públicas), mas a rota precisa do User pra saber a unidade.
 async function usuarioDaSessao(): Promise<User | null> {

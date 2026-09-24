@@ -180,7 +180,7 @@ export async function PATCH(request: NextRequest) {
     try {
       const [{ data: candNotif }, { data: cliNotif }, vagaNotif] = await Promise.all([
         service.from("candidatos").select("nome_completo, responsavel").eq("id", enc.candidato_id).single(),
-        service.from("clientes").select("nome").eq("id", clienteUsuario.cliente_id).single(),
+        service.from("clientes").select("nome, unidade_id").eq("id", clienteUsuario.cliente_id).single(),
         enc.vaga_id
           ? service.from("vagas").select("titulo").eq("id", enc.vaga_id).single()
           : Promise.resolve({ data: null as { titulo: string } | null }),
@@ -212,6 +212,8 @@ export async function PATCH(request: NextRequest) {
         mensagem: mensagemNotif,
         user_id: userIdDestino,
         candidato_id: enc.candidato_id,
+        // Só pesa quando cai no broadcast (sem responsável): vai pra unidade do cliente.
+        unidade_id: cliNotif?.unidade_id ?? null,
       });
 
       // Vaga R&S sem fee_rs_percentual configurado — o cliente aprova normalmente (não
@@ -230,6 +232,7 @@ export async function PATCH(request: NextRequest) {
             user_id: null,
             candidato_id: enc.candidato_id,
             vaga_id: enc.vaga_id,
+            unidade_id: cliNotif?.unidade_id ?? null,
           });
         } catch (feeNotifErr) {
           console.error("[avaliar] Erro ao criar notificação de fee ausente:", feeNotifErr);

@@ -79,6 +79,7 @@ export async function gerarCobrancaRSSeAplicavel(
         user_id: null,
         candidato_id: row.candidato_id,
         vaga_id: vaga.id,
+        unidade_id: vaga.unidade_id,
       });
     } catch (err) {
       console.error("[gerarCobrancaRSSeAplicavel] Erro ao notificar taxa ausente:", err);
@@ -224,6 +225,7 @@ export async function gerarCobrancaCancelamentoRSSeAplicavel(
         user_id: null,
         candidato_id: null,
         vaga_id: vaga.id,
+        unidade_id: vaga.unidade_id,
       });
     } catch (err) {
       console.error("[gerarCobrancaCancelamentoRSSeAplicavel] Erro ao notificar taxa ausente:", err);

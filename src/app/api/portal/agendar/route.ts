@@ -58,7 +58,7 @@ export async function PATCH(request: NextRequest) {
 
     const [{ data: candidato }, { data: cliente }] = await Promise.all([
       service.from("candidatos").select("nome_completo, responsavel, cargo_pretendido").eq("id", enc.candidato_id).single(),
-      service.from("clientes").select("nome").eq("id", clienteUsuario.cliente_id).single(),
+      service.from("clientes").select("nome, unidade_id").eq("id", clienteUsuario.cliente_id).single(),
     ]);
 
     const candidatoNome = candidato?.nome_completo ?? "Candidato";
@@ -110,6 +110,8 @@ export async function PATCH(request: NextRequest) {
       mensagem: `${clienteNome} agendou a entrevista de ${candidatoNome} para ${dataFormatada}`,
       candidato_id: enc.candidato_id,
       vaga_id: enc.vaga_id ?? undefined,
+      // Sem responsável resolvido, o aviso vai pra equipe da unidade do cliente.
+      unidadeId: cliente?.unidade_id ?? null,
     });
 
     return NextResponse.json({ data: updated });

@@ -12,6 +12,20 @@ interface NotifyOpts {
   // ativo com e-mail recebe). Não afeta sino/notificacoes_analista, que continua sendo
   // gravado separadamente pelo chamador quando aplicável.
   excluirNiveisAcesso?: string[];
+  // Unidade do assunto (vaga/cliente/solicitação). Com unidade, só recebem os analistas
+  // dela + quem tem acesso a todas as unidades (sócios). null/ausente = todos os analistas
+  // (assunto sem unidade, ex: candidato, que é compartilhado).
+  unidadeId?: string | null;
+}
+
+// Filtro de destinatários por unidade, compartilhado pelos envios em massa (e-mail) — mesma
+// regra de ContextoUnidade em unidadeAuth.ts.
+export function analistaAtendeUnidade(
+  a: { unidade_id: string | null; acesso_todas_unidades: boolean | null },
+  unidadeId: string | null | undefined
+): boolean {
+  if (!unidadeId) return true;
+  return a.acesso_todas_unidades === true || a.unidade_id === unidadeId;
 }
 
 interface NotifyResult {
@@ -23,14 +37,15 @@ interface NotifyResult {
 // Precisa ser aguardada pelo chamador até o fim: se o handler retornar a resposta HTTP
 // antes disso, a função serverless pode congelar com os envios ainda pendentes — e nem
 // sucesso nem erro chegam a ser gravados em email_logs.
-export async function notifyAllAnalysts({ subject, html, tipo, candidato_id, vaga_id, excluirNiveisAcesso }: NotifyOpts): Promise<NotifyResult> {
+export async function notifyAllAnalysts({ subject, html, tipo, candidato_id, vaga_id, excluirNiveisAcesso, unidadeId }: NotifyOpts): Promise<NotifyResult> {
   const supabase = createServiceClient();
 
-  const { data: analistas, error } = await supabase
+  const { data: analistasTodos, error } = await supabase
     .from("analistas_perfil")
-    .select("email, nivel_acesso")
+    .select("email, nivel_acesso, unidade_id, acesso_todas_unidades")
     .eq("ativo", true)
     .not("email", "is", null);
+  const analistas = (analistasTodos ?? []).filter((a) => analistaAtendeUnidade(a, unidadeId));
 
   if (error) {
     console.error(`[notifyAllAnalysts] Erro ao buscar destinatários (tipo="${tipo}"):`, error.message);
@@ -69,6 +84,9 @@ interface NotifyResponsibleOpts {
   mensagem: string;
   candidato_id?: string;
   vaga_id?: string;
+  // Usado só no broadcast de fallback (sem responsável resolvido): sino e e-mail vão pra
+  // unidade do assunto, não pra todo mundo.
+  unidadeId?: string | null;
 }
 
 interface NotifyResponsibleResult extends NotifyResult {
@@ -124,6 +142,7 @@ export async function notifyResponsibleOrAll(opts: NotifyResponsibleOpts): Promi
     mensagem: opts.mensagem,
     user_id: null,
     candidato_id: opts.candidato_id ?? null,
+    unidade_id: opts.unidadeId ?? null,
   });
 
   const resultado = await notifyAllAnalysts({
@@ -132,6 +151,7 @@ export async function notifyResponsibleOrAll(opts: NotifyResponsibleOpts): Promi
     tipo: opts.tipo,
     candidato_id: opts.candidato_id,
     vaga_id: opts.vaga_id,
+    unidadeId: opts.unidadeId,
   });
 
   return { targeted: false, ...resultado };

@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     const { data: rows, error } = await supabase
       .from("encaminhamentos")
       .select(
-        "id, candidato_id, cliente_id, vaga_id, created_at, candidatos(nome_completo, responsavel), clientes(nome, contato_email)"
+        "id, candidato_id, cliente_id, vaga_id, created_at, candidatos(nome_completo, responsavel), clientes(nome, contato_email, unidade_id)"
       )
       .eq("status", "aguardando_agendamento_cliente")
       .or(`and(ultimo_lembrete_agendamento_em.is.null,created_at.lte.${corte}),ultimo_lembrete_agendamento_em.lte.${corte}`);
@@ -76,6 +76,8 @@ export async function GET(request: Request) {
         mensagem: `${clienteNome} ainda não marcou a entrevista de ${candidatoNome} — aguardando há ${diasLabel}.`,
         candidato_id: r.candidato_id,
         vaga_id: r.vaga_id ?? undefined,
+        // Sem responsável resolvido, o lembrete vai pra equipe da unidade do cliente.
+        unidadeId: r.clientes?.unidade_id ?? null,
       });
 
       if (resultadoAnalista.attempted === 0) {

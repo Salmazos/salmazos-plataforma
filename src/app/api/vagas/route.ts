@@ -6,6 +6,7 @@ import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, vagaCreateSchema } from "@/lib/schemas";
 import { generateUniqueSlug } from "@/lib/slug";
 import { exigirContextoUnidade } from "@/lib/unidadeAuth";
+import { analistaAtendeUnidade } from "@/lib/notifyAllAnalysts";
 
 export async function GET(request: NextRequest) {
   const { ctx, erro } = await exigirContextoUnidade();
@@ -107,6 +108,7 @@ export async function POST(request: NextRequest) {
     const vagaTaxaCancelamento = data.taxa_cancelamento === true;
     const vagaTaxaCancelamentoPercentual = data.taxa_cancelamento_percentual;
     const vagaClienteNome = (data.clientes as any)?.nome ?? null;
+    const vagaUnidadeId = data.unidade_id as string;
 
     after(async () => {
       console.log(`[POST /api/vagas] Notificando analistas sobre nova vaga ${vagaId}`);
@@ -117,12 +119,14 @@ export async function POST(request: NextRequest) {
         avaliacao_psicologica: "Avaliação Psicológica",
       };
       const svcAfter = createServiceClient();
-      const { data: analistas } = await svcAfter
+      // Só a equipe da unidade da vaga (+ sócios com acesso a todas) recebe.
+      const { data: analistasTodos } = await svcAfter
         .from("analistas_perfil")
-        .select("email, nome_completo")
+        .select("email, nome_completo, unidade_id, acesso_todas_unidades")
         .eq("ativo", true);
+      const analistas = (analistasTodos ?? []).filter((a) => analistaAtendeUnidade(a, vagaUnidadeId));
 
-      if (!analistas?.length) return;
+      if (!analistas.length) return;
 
       const vagaUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas/${vagaId}`;
       const template = getEmailTemplate("nova_vaga_criada", {
@@ -167,6 +171,7 @@ export async function POST(request: NextRequest) {
         titulo: `${vagaConfidencial ? "🔴 [CONFIDENCIAL] " : ""}Nova vaga criada: ${vagaTitulo}`,
         mensagem: `Vaga "${vagaTitulo}" (${TIPO_LABELS[vagaTipo] ?? vagaTipo}) foi criada e está aberta.`,
         vaga_id: vagaId,
+        unidade_id: vagaUnidadeId,
       });
       if (errNotifSino) console.error("[POST /api/vagas] Erro ao registrar notificação de sino:", errNotifSino.message);
     });

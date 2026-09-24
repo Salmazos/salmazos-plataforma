@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { filtroNotificacoesVisiveis, resolverUnidadeUsuario } from "@/lib/unidadeAuth";
 
 export async function GET() {
   const supabase = await createClient();
@@ -9,13 +10,15 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const svc = createServiceClient();
+  const ctx = await resolverUnidadeUsuario(user);
   const { data, error } = await svc
     .from("notificacoes_analista")
     .select("*")
     // user_id nulo = notificação de broadcast (ex: nova solicitação de vaga,
-    // atualização de currículo), visível a todos; as demais são direcionadas
-    // a um analista específico e usam a coluna `lida` normalmente.
-    .or(`user_id.eq.${user.id},user_id.is.null`)
+    // atualização de currículo); as demais são direcionadas a um analista específico e
+    // usam a coluna `lida` normalmente. Broadcast com unidade_id só aparece pra equipe
+    // daquela unidade (sócios veem todas); sem unidade_id, pra todos.
+    .or(filtroNotificacoesVisiveis(user.id, ctx))
     .order("created_at", { ascending: false })
     .limit(20);
 

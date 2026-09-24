@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
+import { analistaAtendeUnidade } from "@/lib/notifyAllAnalysts";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -25,7 +26,7 @@ export async function notificarVagaEncerrada(
 
   const { data: vaga } = await svc
     .from("vagas")
-    .select("id, titulo, tipo_servico, cidade, estado, responsavel, confidencial, cliente_id, clientes(nome)")
+    .select("id, titulo, tipo_servico, cidade, estado, responsavel, confidencial, cliente_id, unidade_id, clientes(nome)")
     .eq("id", vagaId)
     .single();
 
@@ -34,12 +35,14 @@ export async function notificarVagaEncerrada(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vagaClienteNome = (vaga.clientes as any)?.nome ?? null;
 
-  const { data: analistas } = await svc
+  // Só a equipe da unidade da vaga (+ sócios com acesso a todas) recebe.
+  const { data: analistasTodos } = await svc
     .from("analistas_perfil")
-    .select("email, nome_completo")
+    .select("email, nome_completo, unidade_id, acesso_todas_unidades")
     .eq("ativo", true);
+  const analistas = (analistasTodos ?? []).filter((a) => analistaAtendeUnidade(a, vaga.unidade_id));
 
-  if (!analistas?.length) { console.log("[notificarVagaEncerrada] Nenhum analista ativo"); return; }
+  if (!analistas.length) { console.log("[notificarVagaEncerrada] Nenhum analista ativo"); return; }
 
   const vagaUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas/${vagaId}`;
   const template = getEmailTemplate("vaga_encerrada", {
@@ -76,6 +79,7 @@ export async function notificarVagaEncerrada(
     titulo: `${vagaConfidencial ? "🔴 [CONFIDENCIAL] " : ""}Vaga encerrada: ${vaga.titulo}`,
     mensagem: `Vaga "${vaga.titulo}" (${TIPO_LABELS[vaga.tipo_servico] ?? vaga.tipo_servico}) foi encerrada (${status}).`,
     vaga_id: vagaId,
+    unidade_id: vaga.unidade_id,
   });
   if (errNotifSino) console.error("[notificarVagaEncerrada] Erro ao registrar notificação de sino:", errNotifSino.message);
 }

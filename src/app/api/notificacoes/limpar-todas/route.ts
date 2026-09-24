@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { filtroNotificacoesVisiveis, resolverUnidadeUsuario } from "@/lib/unidadeAuth";
 
 // Marca como lida toda notificação visível pro usuário autenticado — mesma distinção de
 // /api/notificacoes/[id]/route.ts: direcionada (user_id próprio) atualiza `lida` direto;
@@ -21,10 +22,14 @@ export async function POST() {
     .eq("lida", false);
   if (erroDirecionadas) return NextResponse.json({ error: erroDirecionadas.message }, { status: 500 });
 
+  // Só os avisos gerais que este usuário enxerga (mesmo filtro de GET /api/notificacoes) —
+  // não faz sentido registrar leitura de aviso de outra unidade.
+  const ctx = await resolverUnidadeUsuario(user);
   const { data: broadcasts, error: erroBroadcasts } = await svc
     .from("notificacoes_analista")
     .select("id")
-    .is("user_id", null);
+    .is("user_id", null)
+    .or(filtroNotificacoesVisiveis(user.id, ctx));
   if (erroBroadcasts) return NextResponse.json({ error: erroBroadcasts.message }, { status: 500 });
 
   const idsBroadcast = (broadcasts ?? []).map((n) => n.id);

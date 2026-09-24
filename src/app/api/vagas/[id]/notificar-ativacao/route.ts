@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { exigirAcessoVaga } from "@/lib/unidadeAuth";
+import { analistaAtendeUnidade } from "@/lib/notifyAllAnalysts";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -26,7 +27,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
 
     const { data: vaga } = await supabase
       .from("vagas")
-      .select("id, titulo, tipo_servico, cidade, estado, responsavel, num_posicoes, salario, horario, requisitos, beneficios, confidencial, fee_rs_percentual, fee_rs_prazo_cobranca, taxa_cancelamento, taxa_cancelamento_percentual, cliente_id, clientes(nome)")
+      .select("id, titulo, tipo_servico, cidade, estado, responsavel, num_posicoes, salario, horario, requisitos, beneficios, confidencial, fee_rs_percentual, fee_rs_prazo_cobranca, taxa_cancelamento, taxa_cancelamento_percentual, cliente_id, unidade_id, clientes(nome)")
       .eq("id", id)
       .single();
 
@@ -34,12 +35,14 @@ export async function POST(_request: NextRequest, { params }: Params) {
 
     const vagaClienteNome = (vaga.clientes as any)?.nome ?? null;
 
-    const { data: analistas } = await supabase
+    // Só a equipe da unidade da vaga (+ sócios com acesso a todas) recebe.
+    const { data: analistasTodos } = await supabase
       .from("analistas_perfil")
-      .select("email, nome_completo")
+      .select("email, nome_completo, unidade_id, acesso_todas_unidades")
       .eq("ativo", true);
+    const analistas = (analistasTodos ?? []).filter((a) => analistaAtendeUnidade(a, vaga.unidade_id));
 
-    if (!analistas?.length) { console.log("[notificar-ativacao] Nenhum analista ativo"); return; }
+    if (!analistas.length) { console.log("[notificar-ativacao] Nenhum analista ativo"); return; }
 
     const vagaUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas/${id}`;
     const template = getEmailTemplate("nova_vaga_criada", {
@@ -86,6 +89,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       titulo: `${vagaConfidencial ? "🔴 [CONFIDENCIAL] " : ""}Vaga reativada: ${vaga.titulo}`,
       mensagem: `Vaga "${vaga.titulo}" (${TIPO_LABELS[vaga.tipo_servico] ?? vaga.tipo_servico}) foi reativada.`,
       vaga_id: id,
+      unidade_id: vaga.unidade_id,
     });
     if (errNotifSino) console.error("[notificar-ativacao] Erro ao registrar notificação de sino:", errNotifSino.message);
   });

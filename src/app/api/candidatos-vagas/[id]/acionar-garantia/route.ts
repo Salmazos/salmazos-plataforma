@@ -140,6 +140,7 @@ export async function PATCH(_request: NextRequest, { params }: Params) {
       tipo: "garantia_acionada",
       candidato_id: cv.candidato_id,
       vaga_id: cv.vaga_id,
+      unidadeId: vo?.unidade_id ?? null,
     });
 
     if (resultadoNotify.attempted === 0) {
@@ -154,6 +155,7 @@ export async function PATCH(_request: NextRequest, { params }: Params) {
       titulo: `🔄 Garantia acionada: ${candidatoNome}`,
       mensagem: `Reposição gratuita iniciada para ${vo?.titulo ?? "vaga"} (${clienteNome}). Nova vaga aberta.`,
       candidato_id: cv.candidato_id,
+      unidade_id: vo?.unidade_id ?? null,
     });
 
     if (errInsertNotificacao) {
