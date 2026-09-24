@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoFaturamentoRs } from "@/lib/faturamentoRsAuth";
 import { limitesMesBrasil } from "@/lib/faturamentoRS";
 import { obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
+import { obterContextoUnidade, resolverFiltroUnidade } from "@/lib/unidadeAuth";
 
 interface MesBucket {
   ano: number;
@@ -32,6 +33,8 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarAcessoFaturamentoRs(user);
   if (acessoNegado) return acessoNegado;
+  const { ctx, erro } = await obterContextoUnidade(user);
+  if (erro) return erro;
 
   const { searchParams } = new URL(request.url);
   const mesesParam = Number(searchParams.get("meses"));
@@ -43,18 +46,25 @@ export async function GET(request: NextRequest) {
 
   const svc = createServiceClient();
   const anosEnvolvidos = [...new Set(buckets.map((b) => b.ano))];
+  // Mesmo recorte de obterReceitaMes: com unidade, só as cobranças dela; ajustes (da empresa,
+  // sem unidade) só na visão "Todas"; imposto do mês vale pra qualquer recorte.
+  const unidadeId = await resolverFiltroUnidade(ctx, searchParams.get("unidade"));
+  let cobrancasQuery = svc
+    .from("cobrancas_rs")
+    .select("fee_valor, pago_em")
+    .eq("status", "paga")
+    .gte("pago_em", primeiro.inicio)
+    .lt("pago_em", ultimo.fim);
+  if (unidadeId) cobrancasQuery = cobrancasQuery.eq("unidade_id", unidadeId);
 
   const [{ data: cobrancas }, { data: ajustes }, { data: impostos }] = await Promise.all([
-    svc
-      .from("cobrancas_rs")
-      .select("fee_valor, pago_em")
-      .eq("status", "paga")
-      .gte("pago_em", primeiro.inicio)
-      .lt("pago_em", ultimo.fim),
-    svc
-      .from("faturamento_rs_ajustes_manuais")
-      .select("ano, mes, valor")
-      .in("ano", anosEnvolvidos),
+    cobrancasQuery,
+    unidadeId
+      ? Promise.resolve({ data: [] as { ano: number; mes: number; valor: number }[] })
+      : svc
+          .from("faturamento_rs_ajustes_manuais")
+          .select("ano, mes, valor")
+          .in("ano", anosEnvolvidos),
     svc
       .from("faturamento_rs_impostos_mensais")
       .select("ano, mes, percentual")

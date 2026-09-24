@@ -25,23 +25,33 @@ export interface ReceitaMes {
 
 // Monta os 3 componentes (cobranças pagas, ajustes manuais, imposto) de um mês/ano —
 // reaproveitado por GET /api/faturamento-rs e pelo SSR inicial da página.
-export async function obterReceitaMes(svc: ServiceClient, ano: number, mes: number): Promise<ReceitaMes> {
+//
+// unidadeId (seletor de unidade, decisão do Olver 24/09 — SBC é a mesma empresa): filtra só
+// as cobranças (que herdam a unidade da vaga). Imposto e ajustes são da empresa inteira: o
+// percentual do mês vale igual pra qualquer recorte, e os ajustes manuais (sem unidade) só
+// entram na visão "Todas".
+export async function obterReceitaMes(svc: ServiceClient, ano: number, mes: number, unidadeId: string | null = null): Promise<ReceitaMes> {
   const { inicio, fim } = limitesMesBrasil(ano, mes);
 
+  let cobrancasQuery = svc
+    .from("cobrancas_rs")
+    .select("id, cliente_nome_snapshot, candidato_nome_snapshot, tipo, fee_valor, pago_em")
+    .eq("status", "paga")
+    .gte("pago_em", inicio)
+    .lt("pago_em", fim)
+    .order("pago_em", { ascending: false });
+  if (unidadeId) cobrancasQuery = cobrancasQuery.eq("unidade_id", unidadeId);
+
   const [{ data: cobrancas }, { data: ajustesRaw }, { data: imposto }] = await Promise.all([
-    svc
-      .from("cobrancas_rs")
-      .select("id, cliente_nome_snapshot, candidato_nome_snapshot, tipo, fee_valor, pago_em")
-      .eq("status", "paga")
-      .gte("pago_em", inicio)
-      .lt("pago_em", fim)
-      .order("pago_em", { ascending: false }),
-    svc
-      .from("faturamento_rs_ajustes_manuais")
-      .select("id, valor, descricao, criado_por, criado_em")
-      .eq("ano", ano)
-      .eq("mes", mes)
-      .order("criado_em", { ascending: false }),
+    cobrancasQuery,
+    unidadeId
+      ? Promise.resolve({ data: [] as { id: string; valor: number; descricao: string; criado_por: string | null; criado_em: string }[] })
+      : svc
+          .from("faturamento_rs_ajustes_manuais")
+          .select("id, valor, descricao, criado_por, criado_em")
+          .eq("ano", ano)
+          .eq("mes", mes)
+          .order("criado_em", { ascending: false }),
     svc
       .from("faturamento_rs_impostos_mensais")
       .select("ano, mes, percentual, atualizado_em")

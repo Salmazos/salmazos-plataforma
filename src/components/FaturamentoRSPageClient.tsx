@@ -60,6 +60,10 @@ interface Props {
   anoInicial: number;
   mesInicial: number;
   dadosIniciais: DadosMesFaturamento;
+  // Recorte por unidade (null = todas). Imposto e ajustes são da empresa inteira — só se
+  // lançam na visão "Todas" (ver obterReceitaMes).
+  unidadeId: string | null;
+  nomeUnidade: string | null;
 }
 
 const TIPO_LABEL: Record<string, { label: string; bg: string; color: string }> = {
@@ -90,7 +94,8 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosIniciais }: Props) {
+export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosIniciais, unidadeId, nomeUnidade }: Props) {
+  const filtroUnidade = unidadeId ? `&unidade=${unidadeId}` : "";
   const [ano, setAno] = useState(anoInicial);
   const [mes, setMes] = useState(mesInicial);
   const [dados, setDados] = useState(dadosIniciais);
@@ -115,7 +120,7 @@ export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosI
     setCarregando(true);
     setErro("");
     try {
-      const res = await fetch(`/api/faturamento-rs?ano=${novoAno}&mes=${novoMes}`);
+      const res = await fetch(`/api/faturamento-rs?ano=${novoAno}&mes=${novoMes}${filtroUnidade}`);
       const json = await res.json();
       if (!res.ok) { setErro(json.error || "Erro ao carregar faturamento do mês."); return; }
       setDados(json);
@@ -201,7 +206,7 @@ export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosI
     setCarregandoHistorico(true);
     setErroHistorico("");
     try {
-      const res = await fetch("/api/faturamento-rs/historico?meses=12");
+      const res = await fetch(`/api/faturamento-rs/historico?meses=12${filtroUnidade}`);
       const json = await res.json();
       if (!res.ok) { setErroHistorico(json.error || "Erro ao carregar histórico."); return; }
       setHistorico(json.data ?? []);
@@ -266,6 +271,13 @@ export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosI
           <p className="text-gray-500 text-sm mt-0.5">
             Receita real (cobranças já pagas + ajustes manuais) por mês, com imposto informado manualmente.
           </p>
+          {nomeUnidade && (
+            <p className="text-gray-500 text-xs mt-1">
+              Mostrando só as cobranças de <strong>{nomeUnidade}</strong>. Imposto e ajustes manuais são da
+              empresa inteira: o percentual do mês é aplicado sobre essa receita, e os ajustes só entram (e só se
+              lançam) em &quot;Todas as unidades&quot;.
+            </p>
+          )}
         </div>
       </div>
 
@@ -325,6 +337,11 @@ export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosI
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div style={{ background: "#F3F4F6", border: "2px solid transparent", borderRadius: 12, padding: "14px 16px" }}>
               <p style={{ fontSize: 12, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>Imposto do mês (%)</p>
+              {unidadeId ? (
+                <p style={{ fontSize: 20, fontWeight: 800, color: "#374151", margin: 0 }}>
+                  {dados.imposto != null ? `${dados.imposto.percentual}%` : "—"}
+                </p>
+              ) : (
               <div className="flex gap-2 items-center">
                 <input
                   type="number"
@@ -346,6 +363,7 @@ export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosI
                   {salvandoImposto ? "Salvando..." : "Salvar"}
                 </button>
               </div>
+              )}
               {impostoSalvo && <p className="text-green-700 text-xs mt-1">Imposto salvo!</p>}
             </div>
 
@@ -363,6 +381,7 @@ export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosI
             )}
           </div>
 
+          {!unidadeId && (
           <div className="card mb-6">
             <p className="section-title mb-3">Ajustes manuais do mês</p>
 
@@ -412,6 +431,7 @@ export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosI
             {erroAjuste && <p className="text-red-600 text-sm mt-2">{erroAjuste}</p>}
             <p className="text-xs text-gray-400 mt-2">Ajustes são permanentes — pra corrigir um lançamento errado, adicione um novo ajuste de sinal oposto.</p>
           </div>
+          )}
 
           <div className="card" style={{ padding: 0, overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>

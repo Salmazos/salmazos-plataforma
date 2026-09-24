@@ -158,6 +158,17 @@ export async function idsCandidaturasDaUnidade(ctx: ContextoUnidade, candidatoId
   return (data ?? []).map((r) => r.id as string);
 }
 
+// Unidade de um filtro de tela gerencial (Dashboard, Relatórios, Financeiro): quem vê todas as
+// unidades escolhe (?unidade=<id>; ausente ou inválido = null = todas); os demais ficam
+// sempre na própria unidade, independente do que vier na URL.
+export async function resolverFiltroUnidade(ctx: ContextoUnidade, unidadeParam: string | null | undefined): Promise<string | null> {
+  if (!ctx.todasUnidades) return ctx.unidadeId;
+  if (!unidadeParam) return null;
+  const svc = createServiceClient();
+  const { data } = await svc.from("unidades").select("id").eq("id", unidadeParam).maybeSingle();
+  return data?.id ?? null;
+}
+
 // Filtro PostgREST (.or) das notificações do sino que um usuário enxerga: as direcionadas a
 // ele + os avisos gerais (user_id nulo) sem unidade ou da unidade dele. Sem contexto (sem
 // perfil de analista) só vê os gerais sem unidade; acesso a todas as unidades vê todos.

@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import FinanceiroRSPageClient, { type VagaFinanceiraRow } from "@/components/FinanceiroRSPageClient";
 import { podeAcessarFinanceiroRs } from "@/lib/financeiroRsAuth";
+import { resolverFiltroUnidade, resolverUnidadeUsuario } from "@/lib/unidadeAuth";
+import SemAcessoPainel from "@/components/SemAcessoPainel";
+import SeletorUnidade from "@/components/SeletorUnidade";
 import { ETAPAS_KANBAN, ETAPAS_KANBAN_VISIVEIS, detectarModoSalario, parseSalarioFixo } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
@@ -18,30 +21,40 @@ interface VagaRow {
   clientes: { nome: string } | { nome: string }[] | null;
 }
 
-export default async function FinanceiroRSPage() {
+export default async function FinanceiroRSPage({ searchParams }: { searchParams: Promise<{ unidade?: string }> }) {
   const supabaseAuth = await createClient();
   const {
     data: { user },
   } = await supabaseAuth.auth.getUser();
   if (!user) redirect("/login");
   if (!(await podeAcessarFinanceiroRs(user))) redirect("/painel");
+  const ctx = await resolverUnidadeUsuario(user);
+  if (!ctx) return <SemAcessoPainel />;
 
   const svc = createServiceClient();
 
-  const [{ data: vagas }, { data: candidatosVagas }] = await Promise.all([
-    svc
-      .from("vagas")
-      .select(
-        "id, titulo, salario, fee_rs_percentual, taxa_cancelamento, taxa_cancelamento_percentual, data_abertura, created_at, clientes(nome)"
-      )
-      .eq("status", "aberta")
-      .eq("tipo_servico", "recrutamento_selecao"),
+  // Seletor de unidade (decisão do Olver, 24/09): as vagas R&S abertas filtram pela unidade;
+  // as candidaturas só entram via vaga, então não precisam de filtro próprio.
+  const { unidade: unidadeParam } = await searchParams;
+  const unidadeId = await resolverFiltroUnidade(ctx, unidadeParam);
+  let vagasQuery = svc
+    .from("vagas")
+    .select(
+      "id, titulo, salario, fee_rs_percentual, taxa_cancelamento, taxa_cancelamento_percentual, data_abertura, created_at, clientes(nome)"
+    )
+    .eq("status", "aberta")
+    .eq("tipo_servico", "recrutamento_selecao");
+  if (unidadeId) vagasQuery = vagasQuery.eq("unidade_id", unidadeId);
+
+  const [{ data: vagas }, { data: candidatosVagas }, { data: unidades }] = await Promise.all([
+    vagasQuery,
     // Mesma fonte de verdade de etapa ativa usada em Relatórios/Dashboard — não
     // candidatos.etapa_kanban, que não é atualizada de forma confiável.
     svc
       .from("candidatos_vagas")
       .select("vaga_id, etapa")
       .in("etapa", ETAPAS_KANBAN_VISIVEIS),
+    svc.from("unidades").select("id, nome").order("nome"),
   ]);
 
   // Índice de cada etapa dentro de ETAPAS_KANBAN = ordem de avanço no funil (maior índice
@@ -109,5 +122,12 @@ export default async function FinanceiroRSPage() {
     };
   });
 
-  return <FinanceiroRSPageClient rows={rows} />;
+  return (
+    <>
+      {ctx.todasUnidades && (
+        <SeletorUnidade unidades={unidades ?? []} unidadeSel={unidadeId} basePath="/painel/financeiro-rs" />
+      )}
+      <FinanceiroRSPageClient rows={rows} />
+    </>
+  );
 }

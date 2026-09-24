@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoFaturamentoRs } from "@/lib/faturamentoRsAuth";
 import { obterReceitaMes } from "@/lib/faturamentoRS";
+import { obterContextoUnidade, resolverFiltroUnidade } from "@/lib/unidadeAuth";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -11,6 +12,8 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarAcessoFaturamentoRs(user);
   if (acessoNegado) return acessoNegado;
+  const { ctx, erro } = await obterContextoUnidade(user);
+  if (erro) return erro;
 
   const { searchParams } = new URL(request.url);
   const ano = Number(searchParams.get("ano"));
@@ -20,7 +23,8 @@ export async function GET(request: NextRequest) {
   }
 
   const svc = createServiceClient();
-  const dados = await obterReceitaMes(svc, ano, mes);
+  const unidadeId = await resolverFiltroUnidade(ctx, searchParams.get("unidade"));
+  const dados = await obterReceitaMes(svc, ano, mes, unidadeId);
 
   return NextResponse.json(dados);
 }
