@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { checarAcessoDocumentos } from "@/lib/documentosAuth";
+import { checarAcessoDocumentos, checarAcessoCaminhoDocumento } from "@/lib/documentosAuth";
 
 export async function DELETE(
   _request: NextRequest,
@@ -31,6 +31,9 @@ export async function DELETE(
         { status: 404 }
       );
     }
+
+    const bloqueioCaminho = await checarAcessoCaminhoDocumento(user, doc.storage_path);
+    if (bloqueioCaminho) return bloqueioCaminho;
 
     const { error: storageError } = await supabase.storage
       .from("documentos")

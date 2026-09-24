@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, storagePathSchema } from "@/lib/schemas";
-import { checarAcessoDocumentos } from "@/lib/documentosAuth";
+import { checarAcessoDocumentos, checarAcessoCaminhoDocumento } from "@/lib/documentosAuth";
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,6 +17,8 @@ export async function POST(request: NextRequest) {
     const parsed = parseBody(storagePathSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const { path } = parsed.data;
+    const bloqueioCaminho = await checarAcessoCaminhoDocumento(user, path);
+    if (bloqueioCaminho) return bloqueioCaminho;
 
     const supabase = createServiceClient();
 

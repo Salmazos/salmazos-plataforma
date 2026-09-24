@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, documentoCreateSchema } from "@/lib/schemas";
-import { checarAcessoDocumentos } from "@/lib/documentosAuth";
+import { checarAcessoDocumentos, checarAcessoCaminhoDocumento } from "@/lib/documentosAuth";
+import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,13 +19,15 @@ export async function GET(request: NextRequest) {
     const categoria = searchParams.get("categoria");
     const cliente_id = searchParams.get("cliente_id");
     const pasta_id = searchParams.get("pasta_id");
+    const { ctx, erro } = await obterContextoUnidade(user);
+    if (erro) return erro;
 
     console.log("[GET /api/documentos] params →", { tipo, categoria, cliente_id, pasta_id });
 
     const supabase = createServiceClient();
     let query = supabase
       .from("documentos")
-      .select("*, clientes(nome)")
+      .select("*, clientes(nome, unidade_id)")
       .order("created_at", { ascending: false });
 
     if (tipo) query = query.eq("tipo", tipo);
@@ -38,7 +41,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ data });
+    // Documento de cliente só aparece pra unidade do cliente (sócios veem todos); documento
+    // interno da Salmazos (sem cliente) é compartilhado. Ver checarAcessoCaminhoDocumento.
+    const visiveis = (data ?? []).filter((d) => {
+      if (!d.cliente_id) return true;
+      // PostgREST devolve o embed many-to-one como objeto, mas o tipo inferido é array.
+      const cliente = d.clientes as unknown as { unidade_id: string } | null;
+      return podeVerUnidade(ctx, cliente?.unidade_id);
+    });
+
+    return NextResponse.json({ data: visiveis });
   } catch (err) {
     console.error("[GET /api/documentos]", err);
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });
@@ -77,6 +89,16 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // O arquivo tem que estar na pasta do próprio cliente (ou nas pastas internas, pra doc da
+    // Salmazos) — senão daria pra registrar um documento apontando pro arquivo de outro cliente.
+    const pastaEsperada =
+      parsed.data.tipo === "cliente" ? `clientes/${parsed.data.cliente_id}/` : "salmazos/";
+    if (!parsed.data.storage_path.startsWith(pastaEsperada)) {
+      return NextResponse.json({ error: "Caminho do arquivo não confere com o documento." }, { status: 400 });
+    }
+    const bloqueioCaminho = await checarAcessoCaminhoDocumento(user, parsed.data.storage_path);
+    if (bloqueioCaminho) return bloqueioCaminho;
 
     const supabase = createServiceClient();
     const { data, error } = await supabase

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, documentoCategoriaCustomizadaCreateSchema } from "@/lib/schemas";
 import { checarAcessoDocumentos } from "@/lib/documentosAuth";
+import { checarAcessoCliente } from "@/lib/unidadeAuth";
 import { slugify } from "@/lib/utils";
 import { CHAVES_CLIENTE_CATEGORIAS_FIXAS } from "@/lib/documentosCategorias";
 
@@ -22,6 +23,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const clienteId = searchParams.get("cliente_id");
   if (!clienteId) return NextResponse.json({ error: "cliente_id é obrigatório." }, { status: 400 });
+  const bloqueioCliente = await checarAcessoCliente(user, clienteId);
+  if (bloqueioCliente) return bloqueioCliente;
 
   const svc = createServiceClient();
   const { data, error } = await svc
@@ -46,6 +49,8 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const parsed = parseBody(documentoCategoriaCustomizadaCreateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const bloqueioCliente = await checarAcessoCliente(user, parsed.data.cliente_id);
+  if (bloqueioCliente) return bloqueioCliente;
 
   const chave = slugify(parsed.data.label);
   if (!chave) return NextResponse.json({ error: "Nome de pasta inválido." }, { status: 400 });
