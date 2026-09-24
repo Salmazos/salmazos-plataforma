@@ -32,17 +32,20 @@ export async function GET() {
 
   const { data: perfil } = await svc
     .from("analistas_perfil")
-    .select("id")
+    .select("id, unidade_id, acesso_todas_unidades")
     .eq("user_id", user.id)
     .eq("ativo", true)
     .maybeSingle();
   if (!perfil) return NextResponse.json({ data: [], temNovas: false });
 
-  const { data: pendentesRaw, error } = await svc
+  // Só as solicitações da unidade do analista (sócios com acesso a todas veem todas).
+  let pendentesQuery = svc
     .from("solicitacoes_vagas")
     .select("id, cliente_nome, cargo, num_posicoes, created_at")
     .eq("status", "pendente")
     .order("created_at", { ascending: true });
+  if (perfil.acesso_todas_unidades !== true) pendentesQuery = pendentesQuery.eq("unidade_id", perfil.unidade_id);
+  const { data: pendentesRaw, error } = await pendentesQuery;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const pendentes = (pendentesRaw ?? []) as SolicitacaoPendenteRow[];

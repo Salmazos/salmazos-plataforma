@@ -132,10 +132,16 @@ export async function PATCH(request: NextRequest) {
         }
 
         if (Object.keys(admFields).length > 0) {
-          await service
+          // cv_id vem do corpo da requisição — só grava se a candidatura for mesmo a deste
+          // encaminhamento (mesmo candidato e mesma vaga), senão um cliente do portal
+          // conseguiria gravar dados de admissão na candidatura de outro cliente/unidade.
+          let admQuery = service
             .from("candidatos_vagas")
             .update(admFields)
-            .eq("id", cvId);
+            .eq("id", cvId)
+            .eq("candidato_id", enc.candidato_id);
+          if (enc.vaga_id) admQuery = admQuery.eq("vaga_id", enc.vaga_id);
+          await admQuery;
         }
       }
     }

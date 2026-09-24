@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -15,6 +16,9 @@ export async function GET(request: NextRequest, { params }: Params) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
 
+  const { ctx, erro } = await obterContextoUnidade(user);
+  if (erro) return erro;
+
   const service = createServiceClient();
   const { data, error } = await service
     .from("solicitacoes_vagas")
@@ -22,6 +26,9 @@ export async function GET(request: NextRequest, { params }: Params) {
     .eq("id", id)
     .single();
 
-  if (error || !data) return NextResponse.json({ error: "Solicitação não encontrada." }, { status: 404 });
+  // Solicitação de outra unidade responde igual a inexistente.
+  if (error || !data || !podeVerUnidade(ctx, data.unidade_id)) {
+    return NextResponse.json({ error: "Solicitação não encontrada." }, { status: 404 });
+  }
   return NextResponse.json({ data });
 }

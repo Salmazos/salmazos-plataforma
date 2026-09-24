@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
 import { parseBody, portalSolicitarVagaSchema } from "@/lib/schemas";
+import { resolverUnidadeCliente } from "@/lib/unidadeAuth";
 
 const TIPO_LABEL: Record<string, string> = {
   recrutamento_selecao: "Recrutamento e Seleção",
@@ -61,9 +62,18 @@ export async function POST(request: NextRequest) {
     const parsed = parseBody(portalSolicitarVagaSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
+    // Solicitação nasce na unidade do cliente que pediu (explícito, não o DEFAULT do banco) —
+    // é daqui que a vaga criada depois herda a unidade (ver vagas/from-solicitacao).
+    const unidadeId = await resolverUnidadeCliente(cu.cliente_id);
+    if (!unidadeId) {
+      console.error(`[portal/solicitar-vaga] Cliente sem unidade resolvida (cliente_id=${cu.cliente_id}).`);
+      return NextResponse.json({ error: "Não foi possível registrar a solicitação." }, { status: 500 });
+    }
+
     const { data: solicitacao, error } = await service
       .from("solicitacoes_vagas")
       .insert({
+        unidade_id: unidadeId,
         cliente_id: cu.cliente_id,
         cliente_nome: clienteNome,
         solicitado_por_user_id: user.id,

@@ -4,6 +4,7 @@ import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { parseBody, fromSolicitacaoSchema } from "@/lib/schemas";
 import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
+import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,6 +17,9 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const { solicitacao_id } = parsed.data;
 
+    const { ctx, erro } = await obterContextoUnidade(user);
+    if (erro) return erro;
+
     const service = createServiceClient();
 
     const { data: sol, error: solErr } = await service
@@ -24,7 +28,7 @@ export async function POST(request: NextRequest) {
       .eq("id", solicitacao_id)
       .single();
 
-    if (solErr || !sol) {
+    if (solErr || !sol || !podeVerUnidade(ctx, sol.unidade_id)) {
       return NextResponse.json({ error: "Solicitação não encontrada." }, { status: 404 });
     }
 
@@ -59,6 +63,10 @@ export async function POST(request: NextRequest) {
         responsavel: analistaNome,
         observacoes: sol.observacoes ?? null,
         cliente_nome_temp: sol.cliente_nome ?? null,
+        // Vaga herda a unidade do cliente que pediu (gravada na solicitação a partir de
+        // clientes.unidade_id no portal), não a de quem aprova no painel — um sócio com
+        // acesso a todas as unidades aprovando pedido de cliente SBC cria vaga de SBC.
+        unidade_id: sol.unidade_id,
       })
       .select("id")
       .single();

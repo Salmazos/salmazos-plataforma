@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
+import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -23,15 +24,20 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Motivo da recusa é obrigatório." }, { status: 400 });
     }
 
+    const { ctx, erro } = await obterContextoUnidade(user);
+    if (erro) return erro;
+
     const service = createServiceClient();
 
     const { data: solAtual } = await service
       .from("solicitacoes_vagas")
-      .select("status, aprovada_por, aprovada_em, motivo_recusa")
+      .select("status, aprovada_por, aprovada_em, motivo_recusa, unidade_id")
       .eq("id", id)
       .single();
 
-    if (!solAtual) return NextResponse.json({ error: "Solicitação não encontrada." }, { status: 404 });
+    if (!solAtual || !podeVerUnidade(ctx, solAtual.unidade_id)) {
+      return NextResponse.json({ error: "Solicitação não encontrada." }, { status: 404 });
+    }
     if (solAtual.status !== "pendente") {
       return NextResponse.json({ error: mensagemDecisaoSolicitacao(solAtual) }, { status: 409 });
     }
