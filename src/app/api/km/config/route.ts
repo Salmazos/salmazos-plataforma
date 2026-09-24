@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, kmConfigSchema } from "@/lib/schemas";
-import { autorizarAnalistaId } from "@/lib/kmAuth";
+import { autorizarAnalistaId, resolverAcessoKm } from "@/lib/kmAuth";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -52,6 +52,12 @@ export async function POST(request: NextRequest) {
   const svc = createServiceClient();
 
   if (is_global) {
+    // Valor global vale pra todos os analistas das duas unidades — antes não tinha checagem
+    // nenhuma aqui (qualquer login alterava o reembolso de todo mundo pela API). Só gestor sem
+    // restrição de unidade (sócios), igual à tela (isGestor em quilometragem/page.tsx).
+    const { gestor, unidadeRestrita } = await resolverAcessoKm(user);
+    if (!gestor || unidadeRestrita) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
+
     // Always UPDATE the existing global row — never insert a duplicate
     const { data, error } = await svc
       .from("km_config")

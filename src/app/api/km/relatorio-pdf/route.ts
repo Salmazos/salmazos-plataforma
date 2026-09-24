@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
 
   // Sem analista_id = relatório consolidado de todos — só gestor (full access/supervisor)
   // pode pedir esse modo; analista comum sempre cai pro próprio relatório.
-  const { analistaId: analista_id, erro } = await autorizarAnalistaId(user, body.analista_id ?? null, {
+  const { analistaId: analista_id, unidadeRestrita, erro } = await autorizarAnalistaId(user, body.analista_id ?? null, {
     permitirTodosSemId: true,
   });
   if (erro) return erro;
@@ -107,7 +107,10 @@ export async function POST(request: NextRequest) {
     const { data } = await q;
     registros = (data ?? []) as Registro[];
   } else {
-    const { data: analistas } = await svc.from("analistas_perfil").select("id").eq("ativo", true);
+    // Consolidado de gestor com unidade restrita (supervisor) = só os analistas da unidade dele.
+    let analistasQuery = svc.from("analistas_perfil").select("id").eq("ativo", true);
+    if (unidadeRestrita) analistasQuery = analistasQuery.eq("unidade_id", unidadeRestrita);
+    const { data: analistas } = await analistasQuery;
     const results = await Promise.all(
       (analistas ?? []).map(async (a) => {
         let q = svc.from("km_registros").select("*").eq("analista_id", a.id).neq("status", "incompleto").order("data", { ascending: false });

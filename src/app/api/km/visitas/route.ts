@@ -92,21 +92,27 @@ export async function POST(request: NextRequest) {
 
     let analistaNome: string | null = null;
     let analistaUserId: string | null = null;
+    let analistaUnidadeId: string | null = null;
     if (registro?.analista_id) {
       const { data: perfil } = await svc
         .from("analistas_perfil")
-        .select("nome_completo, user_id")
+        .select("nome_completo, user_id, unidade_id")
         .eq("id", registro.analista_id)
         .single();
       analistaNome = perfil?.nome_completo ?? null;
       analistaUserId = perfil?.user_id ?? null;
+      analistaUnidadeId = perfil?.unidade_id ?? null;
     }
+    // Carteira é separada por unidade (decisão do Olver, 24/09): a empresa fica na unidade de
+    // quem visitou. Sem unidade conhecida não grava na carteira — a visita em si já foi salva.
+    if (!analistaUnidadeId) throw new Error(`analista sem unidade (registro_id=${registro_id})`);
 
-    // Look for existing empresa (case-insensitive)
+    // Look for existing empresa (case-insensitive), só na carteira da mesma unidade
     const { data: existing } = await svc
       .from("empresas_visitadas")
       .select("id, contato_nome, contato_telefone, contato_email, cliente_id, total_visitas")
       .ilike("nome", empresa)
+      .eq("unidade_id", analistaUnidadeId)
       .limit(1)
       .maybeSingle();
 
@@ -133,6 +139,7 @@ export async function POST(request: NextRequest) {
           .from("clientes")
           .select("id")
           .ilike("nome", empresa)
+          .eq("unidade_id", analistaUnidadeId)
           .limit(1)
           .maybeSingle();
         if (cliente) empresaClienteId = cliente.id;
@@ -150,10 +157,12 @@ export async function POST(request: NextRequest) {
         ultimo_visitante_id: analistaUserId,
         ultimo_visitante_nome: analistaNome,
         created_by: analistaUserId,
+        unidade_id: analistaUnidadeId,
       });
     }
-  } catch {
+  } catch (err) {
     // Upsert is best-effort — don't fail the visita save
+    console.error("[POST /api/km/visitas] Carteira não atualizada:", err);
   }
 
   return NextResponse.json({ data }, { status: 201 });

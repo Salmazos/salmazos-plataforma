@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoCarteiraClientes } from "@/lib/comercialAuth";
+import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -8,6 +9,9 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarAcessoCarteiraClientes(user);
   if (acessoNegado) return acessoNegado;
+  // Carteira separada por unidade (decisão do Olver, 24/09); sócios veem todas.
+  const { ctx, erro } = await obterContextoUnidade(user);
+  if (erro) return erro;
 
   const params = request.nextUrl.searchParams;
   const q = params.get("q");
@@ -22,11 +26,11 @@ export async function GET(request: NextRequest) {
   if (empresaId) {
     const { data: empresa } = await svc
       .from("empresas_visitadas")
-      .select("nome")
+      .select("nome, unidade_id")
       .eq("id", empresaId)
       .single();
 
-    if (!empresa) return NextResponse.json({ data: [] });
+    if (!empresa || !podeVerUnidade(ctx, empresa.unidade_id)) return NextResponse.json({ data: [] });
 
     const { data: visitas, error } = await svc
       .from("km_visitas")
@@ -48,13 +52,19 @@ export async function GET(request: NextRequest) {
     const analistaIds = [...new Set((registros ?? []).map((r) => r.analista_id).filter(Boolean))];
     const { data: perfis } = await svc
       .from("analistas_perfil")
-      .select("id, nome_completo")
+      .select("id, nome_completo, unidade_id")
       .in("id", analistaIds);
 
     const registroMap = new Map((registros ?? []).map((r) => [r.id, r]));
     const perfilMap = new Map((perfis ?? []).map((p) => [p.id, p.nome_completo]));
+    // O histórico casa as visitas pelo NOME da empresa — sem isso, uma empresa com o mesmo
+    // nome na carteira da outra unidade traria as visitas de lá junto.
+    const unidadePorAnalista = new Map((perfis ?? []).map((p) => [p.id, p.unidade_id]));
 
-    const enriched = visitas.map((v) => {
+    const enriched = visitas.filter((v) => {
+      const reg = registroMap.get(v.registro_id);
+      return !!reg && unidadePorAnalista.get(reg.analista_id) === empresa.unidade_id;
+    }).map((v) => {
       const reg = registroMap.get(v.registro_id);
       return {
         ...v,
@@ -73,6 +83,7 @@ export async function GET(request: NextRequest) {
     .order("ultima_visita_em", { ascending: false })
     .limit(limit);
 
+  if (!ctx.todasUnidades) query = query.eq("unidade_id", ctx.unidadeId);
   if (q) query = query.ilike("nome", `%${q}%`);
   if (from) query = query.gte("ultima_visita_em", from);
   if (to) query = query.lte("ultima_visita_em", to);
