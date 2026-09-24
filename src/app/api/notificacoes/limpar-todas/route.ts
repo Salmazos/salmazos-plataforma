@@ -29,7 +29,7 @@ export async function POST() {
     .from("notificacoes_analista")
     .select("id")
     .is("user_id", null)
-    .or(filtroNotificacoesVisiveis(user.id, ctx));
+    .or(filtroNotificacoesVisiveis(user.id, ctx, user.created_at));
   if (erroBroadcasts) return NextResponse.json({ error: erroBroadcasts.message }, { status: 500 });
 
   const idsBroadcast = (broadcasts ?? []).map((n) => n.id);

@@ -18,7 +18,7 @@ export async function GET() {
     // atualização de currículo); as demais são direcionadas a um analista específico e
     // usam a coluna `lida` normalmente. Broadcast com unidade_id só aparece pra equipe
     // daquela unidade (sócios veem todas); sem unidade_id, pra todos.
-    .or(filtroNotificacoesVisiveis(user.id, ctx))
+    .or(filtroNotificacoesVisiveis(user.id, ctx, user.created_at))
     .order("created_at", { ascending: false })
     .limit(20);
 

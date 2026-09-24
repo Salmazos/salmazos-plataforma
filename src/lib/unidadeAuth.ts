@@ -172,10 +172,20 @@ export async function resolverFiltroUnidade(ctx: ContextoUnidade, unidadeParam: 
 // Filtro PostgREST (.or) das notificações do sino que um usuário enxerga: as direcionadas a
 // ele + os avisos gerais (user_id nulo) sem unidade ou da unidade dele. Sem contexto (sem
 // perfil de analista) só vê os gerais sem unidade; acesso a todas as unidades vê todos.
-export function filtroNotificacoesVisiveis(userId: string, ctx: ContextoUnidade | null): string {
-  if (ctx?.todasUnidades) return `user_id.eq.${userId},user_id.is.null`;
-  const geraisDaUnidade = ctx ? `,and(user_id.is.null,unidade_id.eq.${ctx.unidadeId})` : "";
-  return `user_id.eq.${userId},and(user_id.is.null,unidade_id.is.null)${geraisDaUnidade}`;
+//
+// usuarioCriadoEm (auth.users.created_at): aviso GERAL só aparece se foi criado depois da
+// conta existir — pedido do Olver (24/09) quando os primeiros logins de SBC abriram o sino
+// com 56 "atualização de currículo" antigos, de antes de eles entrarem na empresa. Aviso
+// direcionado à pessoa (user_id) aparece sempre.
+export function filtroNotificacoesVisiveis(
+  userId: string,
+  ctx: ContextoUnidade | null,
+  usuarioCriadoEm?: string | null
+): string {
+  const desde = usuarioCriadoEm ? `,created_at.gte."${usuarioCriadoEm}"` : "";
+  if (ctx?.todasUnidades) return `user_id.eq.${userId},and(user_id.is.null${desde})`;
+  const geraisDaUnidade = ctx ? `,and(user_id.is.null,unidade_id.eq.${ctx.unidadeId}${desde})` : "";
+  return `user_id.eq.${userId},and(user_id.is.null,unidade_id.is.null${desde})${geraisDaUnidade}`;
 }
 
 // Atalhos pras rotas que ainda não resolviam o usuário logado: o middleware já exige
