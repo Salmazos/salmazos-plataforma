@@ -52,6 +52,10 @@ const thStyle: React.CSSProperties = {
 
 function formatDate(d: string | null): string {
   if (!d) return "—";
+  // Data pura (km_registros.data, "2026-09-23"): new Date() lê como meia-noite UTC, que em
+  // Brasília ainda é o dia anterior — o histórico mostrava toda visita com um dia a menos.
+  const soData = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+  if (soData) return `${soData[3]}/${soData[2]}/${soData[1]}`;
   return new Date(d).toLocaleDateString("pt-BR");
 }
 

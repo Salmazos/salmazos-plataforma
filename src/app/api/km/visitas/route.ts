@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, kmVisitaCreateSchema } from "@/lib/schemas";
 import { autorizarDonoRegistro } from "@/lib/kmAuth";
+import { recalcularEmpresaVisitada } from "@/lib/carteiraClientes";
 
 async function autorizarPorRegistroId(user: User, registroId: string): Promise<NextResponse | null> {
   const svc = createServiceClient();
@@ -117,19 +118,15 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (existing) {
-      // Update: bump counters and fill in blank contact fields
-      await svc
-        .from("empresas_visitadas")
-        .update({
-          ultima_visita_em: new Date().toISOString(),
-          total_visitas: (existing.total_visitas ?? 0) + 1,
-          ultimo_visitante_id: analistaUserId,
-          ultimo_visitante_nome: analistaNome,
-          ...((!existing.contato_nome && contato) ? { contato_nome: contato } : {}),
-          ...((!existing.contato_telefone && contato_telefone) ? { contato_telefone } : {}),
-          ...((!existing.contato_email && contato_email) ? { contato_email } : {}),
-        })
-        .eq("id", existing.id);
+      // Só preenche contato em branco — total/datas/último visitante são recalculados abaixo.
+      const contatoEmBranco = {
+        ...((!existing.contato_nome && contato) ? { contato_nome: contato } : {}),
+        ...((!existing.contato_telefone && contato_telefone) ? { contato_telefone } : {}),
+        ...((!existing.contato_email && contato_email) ? { contato_email } : {}),
+      };
+      if (Object.keys(contatoEmBranco).length > 0) {
+        await svc.from("empresas_visitadas").update(contatoEmBranco).eq("id", existing.id);
+      }
     } else {
       // Visita de supervisão já traz cliente_id do combobox — evita adivinhar por nome.
       // Comercial continua resolvendo por match de nome, como antes.
@@ -160,6 +157,8 @@ export async function POST(request: NextRequest) {
         unidade_id: analistaUnidadeId,
       });
     }
+
+    await recalcularEmpresaVisitada(svc, empresa, analistaUnidadeId);
   } catch (err) {
     // Upsert is best-effort — don't fail the visita save
     console.error("[POST /api/km/visitas] Carteira não atualizada:", err);
@@ -180,8 +179,29 @@ export async function DELETE(request: NextRequest) {
   if (erroDono) return erroDono;
 
   const svc = createServiceClient();
-  const { error } = await svc.from("km_visitas").delete().eq("registro_id", registroId);
 
+  // Guarda quais empresas perdem visita antes de apagar, pra recalcular a carteira delas
+  // depois (a tela de KM apaga e regrava todas as visitas ao editar um registro).
+  const [{ data: visitasApagadas }, { data: registro }] = await Promise.all([
+    svc.from("km_visitas").select("empresa").eq("registro_id", registroId),
+    svc.from("km_registros").select("analista_id").eq("id", registroId).maybeSingle(),
+  ]);
+
+  const { error } = await svc.from("km_visitas").delete().eq("registro_id", registroId);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  try {
+    const { data: perfil } = registro?.analista_id
+      ? await svc.from("analistas_perfil").select("unidade_id").eq("id", registro.analista_id).maybeSingle()
+      : { data: null };
+    if (perfil?.unidade_id) {
+      const empresas = [...new Set((visitasApagadas ?? []).map((v) => v.empresa as string).filter(Boolean))];
+      for (const empresa of empresas) await recalcularEmpresaVisitada(svc, empresa, perfil.unidade_id);
+    }
+  } catch (err) {
+    // A visita já foi apagada; a carteira fica pra próxima gravação corrigir.
+    console.error("[DELETE /api/km/visitas] Carteira não recalculada:", err);
+  }
+
   return NextResponse.json({ success: true });
 }

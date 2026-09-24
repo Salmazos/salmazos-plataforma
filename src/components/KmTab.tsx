@@ -1094,7 +1094,7 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                       {hist.map((h, hi) => (
                         <div key={hi} style={{ display: "flex", gap: 12, fontSize: 12, color: "#374151", padding: "4px 0", borderTop: hi > 0 ? "1px solid #E2E8F0" : "none" }}>
                           <span style={{ fontWeight: 600, whiteSpace: "nowrap", color: "#1E293B", minWidth: 70 }}>
-                            {h.data ? new Date(h.data).toLocaleDateString("pt-BR") : "—"}
+                            {h.data ? formatDate(h.data) : "—"}
                           </span>
                           <span style={{ color: "#64748B", whiteSpace: "nowrap", flex: "0 0 auto" }}>{h.analista_nome ?? "—"}</span>
                           {h.motivo && <span style={{ color: "#94A3B8", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.motivo}</span>}
