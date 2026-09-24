@@ -9,6 +9,7 @@ interface SolicitacaoPendenteRow {
   cargo: string;
   num_posicoes: number;
   created_at: string;
+  confidencial: boolean;
 }
 
 // Público do popup é o mesmo do e-mail de notificação (notifyAllAnalysts): qualquer
@@ -41,7 +42,7 @@ export async function GET() {
   // Só as solicitações da unidade do analista (sócios com acesso a todas veem todas).
   let pendentesQuery = svc
     .from("solicitacoes_vagas")
-    .select("id, cliente_nome, cargo, num_posicoes, created_at")
+    .select("id, cliente_nome, cargo, num_posicoes, created_at, confidencial")
     .eq("status", "pendente")
     .order("created_at", { ascending: true });
   if (perfil.acesso_todas_unidades !== true) pendentesQuery = pendentesQuery.eq("unidade_id", perfil.unidade_id);
@@ -66,6 +67,7 @@ export async function GET() {
     cargo: p.cargo,
     numPosicoes: p.num_posicoes,
     createdAt: p.created_at,
+    confidencial: p.confidencial,
   }));
 
   return NextResponse.json({ data, temNovas });

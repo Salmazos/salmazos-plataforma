@@ -103,6 +103,7 @@ export default function SolicitarVagaPage() {
   const [salarioPeriodo, setSalarioPeriodo] = useState<"mes" | "hora">("mes");
   const [previsaoInicio, setPrevisaoInicio] = useState("");
   const [observacoes, setObservacoes] = useState("");
+  const [confidencial, setConfidencial] = useState(false);
 
   const [horarioTipo, setHorarioTipo] = useState<HorarioTipo | "">("");
   const [horEntrada, setHorEntrada] = useState("");
@@ -411,6 +412,7 @@ export default function SolicitarVagaPage() {
           beneficios_chips: gerarBeneficiosChips(),
           observacoes: observacoes.trim() || null,
           horario_padrao: montarHorarioPadrao(),
+          confidencial,
         }),
       });
       const json = await res.json();
@@ -834,6 +836,36 @@ export default function SolicitarVagaPage() {
           <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)}
             placeholder="Informações adicionais, detalhes específicos da vaga..."
             rows={3} style={{ ...inputStyle, resize: "vertical" }} />
+        </div>
+
+        {/* ── Confidencial ── */}
+        {/* Mesmo visual do checkbox "Vaga Confidencial" do painel (ModalNovaVaga.tsx) —
+            aqui é o cliente quem informa, não o analista; a solicitação carrega a marcação
+            pro sino/e-mail/popup do painel e, se aprovada, a vaga já nasce marcada como
+            confidencial (ver /api/vagas/from-solicitacao). */}
+        <div
+          style={{
+            border: "2px solid #FCA5A5",
+            borderRadius: 16,
+            padding: "16px 18px",
+            backgroundColor: confidencial ? "#FEF2F2" : "#FFFFFF",
+          }}
+        >
+          <label className="flex items-start gap-3" style={{ cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={confidencial}
+              onChange={(e) => setConfidencial(e.target.checked)}
+              style={{ marginTop: 2, width: 18, height: 18, accentColor: "#DC2626", flexShrink: 0 }}
+            />
+            <span>
+              <span style={{ fontWeight: 700, color: "#DC2626", fontSize: 14 }}>🔴 Esta vaga é confidencial</span>
+              <p style={{ fontSize: 12, color: "#7F1D1D", marginTop: 2 }}>
+                Marque se esta solicitação envolve dados sensíveis e precisa de tratamento
+                diferenciado pela Salmazos na divulgação.
+              </p>
+            </span>
+          </label>
         </div>
 
         {/* ── Error ── */}

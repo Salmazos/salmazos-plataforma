@@ -833,6 +833,7 @@ export const portalSolicitarVagaSchema = z.object({
   beneficios_chips: z.record(z.string(), z.boolean()).optional().nullable(),
   observacoes: z.string().optional().nullable(),
   horario_padrao: horarioPadraoSchema.optional().nullable(),
+  confidencial: z.boolean().optional().default(false),
 });
 
 // admissao_salario/admissao_salario_hora são numeric no banco (candidatos_vagas) e

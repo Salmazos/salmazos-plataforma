@@ -9,6 +9,7 @@ interface SolicitacaoPendente {
   cargo: string;
   numPosicoes: number;
   createdAt: string;
+  confidencial: boolean;
 }
 
 // Mesmo padrão estrutural de PopupCobrancasRSPendentes.tsx (checagem ao carregar o painel +
@@ -100,7 +101,14 @@ export default function PopupSolicitacaoVagaPendente() {
             >
               <span className="text-2xl leading-none">🔔</span>
               <div className="min-w-0">
-                <p className="text-sm font-bold text-gray-900">{s.clienteNome}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-bold text-gray-900">{s.clienteNome}</p>
+                  {s.confidencial && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#FEE2E2", color: "#DC2626", border: "1px solid #FCA5A5" }}>
+                      🔴 CONFIDENCIAL
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-gray-600">
                   {s.cargo} · {s.numPosicoes} posiç{s.numPosicoes !== 1 ? "ões" : "ão"}
                 </p>

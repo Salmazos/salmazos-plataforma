@@ -25,6 +25,7 @@ interface Solicitacao {
   beneficios: string | null;
   beneficios_chips: Record<string, boolean> | null;
   observacoes: string | null;
+  confidencial: boolean;
   created_at: string;
   status: string;
   aprovada_por: string | null;
@@ -180,6 +181,14 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                       >
                         {tipo.label}
                       </span>
+                      {s.confidencial && (
+                        <span
+                          className="text-xs font-bold px-2 py-0.5 rounded-full"
+                          style={{ backgroundColor: "#FEE2E2", color: "#DC2626", border: "1px solid #FCA5A5" }}
+                        >
+                          🔴 CONFIDENCIAL
+                        </span>
+                      )}
                       <span className="text-[10px] text-gray-400 ml-auto">
                         {new Date(s.created_at).toLocaleDateString("pt-BR")}
                       </span>

@@ -63,6 +63,10 @@ export async function POST(request: NextRequest) {
         responsavel: analistaNome,
         observacoes: sol.observacoes ?? null,
         cliente_nome_temp: sol.cliente_nome ?? null,
+        // Vaga já nasce marcada como confidencial quando o cliente marcou isso na
+        // solicitação (ver portal/solicitar-vaga) — sem isso, ela cairia no
+        // DEFAULT false da coluna e perderia a marcação do cliente na conversão.
+        confidencial: sol.confidencial === true,
         // Vaga herda a unidade do cliente que pediu (gravada na solicitação a partir de
         // clientes.unidade_id no portal), não a de quem aprova no painel — um sócio com
         // acesso a todas as unidades aprovando pedido de cliente SBC cria vaga de SBC.

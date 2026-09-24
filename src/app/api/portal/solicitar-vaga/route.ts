@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
         beneficios: body.beneficios || null,
         beneficios_chips: body.beneficios_chips ?? null,
         observacoes: body.observacoes || null,
+        confidencial: body.confidencial === true,
       })
       .select("id")
       .single();
@@ -119,9 +120,10 @@ export async function POST(request: NextRequest) {
     // /api/notificacoes), então isso não corre o risco de "sumir" pra quem
     // ainda não viu só porque outro analista já marcou como lida.
     if (analistas && analistas.length > 0) {
+      const confidencial = body.confidencial === true;
       await service.from("notificacoes_analista").insert({
         tipo: "nova_solicitacao_vaga",
-        titulo: "Nova solicitação de vaga",
+        titulo: confidencial ? "🔴 Nova solicitação de vaga (confidencial)" : "Nova solicitação de vaga",
         mensagem: `${clienteNome} solicitou ${body.num_posicoes || 1}x ${body.cargo}`,
         user_id: null,
         candidato_id: null,
@@ -132,6 +134,13 @@ export async function POST(request: NextRequest) {
 
     const numPos = body.num_posicoes || 1;
     const tipoLbl = TIPO_LABEL[body.tipo_servico] ?? body.tipo_servico;
+    const confidencial = body.confidencial === true;
+
+    const bannerConfidencialHtml = confidencial
+      ? `<div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:6px;padding:14px 18px;margin:0 0 20px;text-align:center">
+          <p style="margin:0;color:#dc2626;font-weight:700;font-size:14px">🔴 O CLIENTE MARCOU ESTA SOLICITAÇÃO COMO CONFIDENCIAL — trate a divulgação com cuidado</p>
+        </div>`
+      : "";
 
     const detailRow = (label: string, value: string | null | undefined) =>
       value ? `<tr><td style="padding:8px 14px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap;vertical-align:top">${label}</td><td style="padding:8px 14px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${value}</td></tr>` : "";
@@ -169,6 +178,7 @@ export async function POST(request: NextRequest) {
     <h1 style="color:#FFD700;margin:0;font-size:20px">🔔 Nova Solicitação de Vaga</h1>
   </div>
   <div style="padding:28px 32px">
+    ${bannerConfidencialHtml}
     <p style="margin:0 0 16px;font-size:14px;color:#374151">Nova solicitação recebida de <strong style="color:#111827">${clienteNome}</strong>:</p>
     <div style="margin-bottom:20px;padding:14px 16px;background:#DBEAFE;border-radius:10px;border:1px solid #93C5FD">
       <p style="margin:0;font-size:16px;font-weight:700;color:#1D4ED8">${body.cargo}</p>
@@ -198,7 +208,7 @@ export async function POST(request: NextRequest) {
 </body></html>`;
 
     const resultado = await notifyAllAnalysts({
-      subject: `🔔 Nova Solicitação de Vaga — ${clienteNome}`,
+      subject: `${confidencial ? "🔴🔔" : "🔔"} Nova Solicitação de Vaga — ${clienteNome}`,
       html,
       tipo: "solicitacao_vaga",
       unidadeId,
