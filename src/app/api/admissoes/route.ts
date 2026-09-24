@@ -26,6 +26,14 @@ export async function POST(request: NextRequest) {
 
   const svc = createServiceClient();
 
+  // Admissão fica na unidade da VAGA (o RH é centralizado em Monte Mor, mas o registro
+  // precisa dizer de qual unidade é). Sem vaga não dá pra saber a unidade — recusa em vez de
+  // cair no DEFAULT do banco (Monte Mor); o único formulário que cria admissão
+  // (ModalIniciarAdmissao) sempre manda a vaga.
+  if (!vaga_id) return NextResponse.json({ error: "Admissão precisa estar vinculada a uma vaga." }, { status: 400 });
+  const { data: vaga } = await svc.from("vagas").select("unidade_id").eq("id", vaga_id).maybeSingle();
+  if (!vaga) return NextResponse.json({ error: "Vaga não encontrada." }, { status: 400 });
+
   const tokenExpiraEm = new Date(Date.now() + TOKEN_VALIDADE_DIAS * 24 * 60 * 60 * 1000).toISOString();
 
   const { data: candidato } = await svc
@@ -38,7 +46,8 @@ export async function POST(request: NextRequest) {
     .from("admissoes")
     .insert({
       candidato_id,
-      vaga_id: vaga_id ?? null,
+      vaga_id,
+      unidade_id: vaga.unidade_id,
       modalidade,
       funcao,
       salario,

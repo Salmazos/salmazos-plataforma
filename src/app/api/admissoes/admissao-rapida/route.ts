@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 
     const { data: cliente } = await supabase
       .from("clientes")
-      .select("id, nome, entidade_contratante")
+      .select("id, nome, entidade_contratante, unidade_id")
       .eq("id", cliente_id)
       .maybeSingle();
     if (!cliente) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 400 });
@@ -159,6 +159,8 @@ export async function POST(request: NextRequest) {
         observacoes: `Vaga casada — criada via Admissão Rápida para registrar ${candidatoNomeFinal}, indicado diretamente pelo cliente ${cliente.nome}.`,
         data_abertura: agoraISO,
         data_fechamento: agoraISO,
+        // Vaga fica na unidade do cliente, como toda vaga com cliente (ver POST /api/vagas).
+        unidade_id: cliente.unidade_id,
       })
       .select("id, titulo, tipo_servico, cliente_id")
       .single();

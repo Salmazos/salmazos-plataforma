@@ -332,6 +332,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           horario_trabalho: admissao.horario_trabalho ?? null,
           turno: admissao.turno ?? null,
           status: "ativo",
+          unidade_id: admissao.unidade_id,
         })
         .select("id")
         .single();
@@ -373,8 +374,9 @@ export async function POST(request: NextRequest, { params }: Params) {
         user_id: null,
         candidato_id: admissao.candidato_id,
         vaga_id: admissao.vaga_id,
-        // Aviso geral: só a equipe da unidade da admissão (+ sócios) vê no sino.
-        unidade_id: admissao.unidade_id ?? null,
+        // Sem unidade (aviso pra todos): o RH é centralizado em Monte Mor — uma admissão de
+        // SBC com unidade aqui avisaria só a equipe de SBC, que não cuida do RH.
+        unidade_id: null,
       });
     } catch (notifErr) {
       console.error(`[gerar-pdf] Falha ao notificar falha de criação de funcionário — admissao_id=${id}`, notifErr);

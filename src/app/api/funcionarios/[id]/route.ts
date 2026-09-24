@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, funcionarioUpdateSchema } from "@/lib/schemas";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
 import { registrarAuditoria, diffCampos } from "@/lib/audit";
+import { resolverUnidadeCliente } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -34,6 +35,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const campos: Record<string, unknown> = {};
   if (parsed.data.nome_completo !== undefined) campos.nome_completo = parsed.data.nome_completo;
   if (parsed.data.cliente_id !== undefined) campos.cliente_id = parsed.data.cliente_id;
+  // Funcionário acompanha a unidade do cliente (mesma regra do cadastro). Sem cliente
+  // (empresa em texto livre) mantém a unidade que já tinha.
+  if (parsed.data.cliente_id && parsed.data.cliente_id !== antes.cliente_id) {
+    const unidadeCliente = await resolverUnidadeCliente(parsed.data.cliente_id);
+    if (!unidadeCliente) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 400 });
+    campos.unidade_id = unidadeCliente;
+  }
   if (parsed.data.empresa !== undefined) campos.empresa = parsed.data.empresa;
   if (parsed.data.cargo !== undefined) campos.cargo = parsed.data.cargo;
   if (parsed.data.data_admissao !== undefined) campos.data_admissao = parsed.data.data_admissao;

@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, funcionarioCreateSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
+import { resolverUnidadeCliente, resolverUnidadeUsuario } from "@/lib/unidadeAuth";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -41,10 +42,23 @@ export async function POST(request: NextRequest) {
   const parsed = parseBody(funcionarioCreateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
+  // Com cliente, o funcionário fica na unidade do cliente. Empresa em texto livre (sem
+  // cliente cadastrado) fica na unidade de quem cadastrou — mesma regra dos contatos de
+  // Aniversários; sem perfil de analista, recusa em vez de cair no DEFAULT do banco.
+  let unidadeId: string | null;
+  if (parsed.data.cliente_id) {
+    unidadeId = await resolverUnidadeCliente(parsed.data.cliente_id);
+    if (!unidadeId) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 400 });
+  } else {
+    unidadeId = (await resolverUnidadeUsuario(user))?.unidadeId ?? null;
+    if (!unidadeId) return NextResponse.json({ error: "Não foi possível identificar sua unidade." }, { status: 403 });
+  }
+
   const svc = createServiceClient();
   const { data, error } = await svc
     .from("funcionarios")
     .insert({
+      unidade_id: unidadeId,
       nome_completo: parsed.data.nome_completo,
       cliente_id: parsed.data.cliente_id ?? null,
       empresa: parsed.data.empresa,

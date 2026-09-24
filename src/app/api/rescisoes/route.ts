@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 
   const { data: funcionario, error: funcionarioError } = await svc
     .from("funcionarios")
-    .select("id, status")
+    .select("id, status, unidade_id")
     .eq("id", parsed.data.funcionario_id)
     .single();
   if (funcionarioError || !funcionario) {
@@ -69,6 +69,8 @@ export async function POST(request: NextRequest) {
     .from("rescisoes")
     .insert({
       funcionario_id: parsed.data.funcionario_id,
+      // Rescisão é da mesma unidade do funcionário desligado.
+      unidade_id: funcionario.unidade_id,
       empresa: parsed.data.empresa,
       data_desligamento: parsed.data.data_desligamento,
       modalidade: parsed.data.modalidade,
