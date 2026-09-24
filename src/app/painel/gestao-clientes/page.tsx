@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import GestaoClientesClient from "@/components/GestaoClientesClient";
 import { ETAPAS_KANBAN_VISIVEIS } from "@/lib/constants";
 import { podeAcessarGestaoClientes } from "@/lib/comercialAuth";
+import { resolverUnidadeUsuario } from "@/lib/unidadeAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,18 @@ export default async function GestaoClientesPage() {
 
   const role = user.app_metadata?.role ?? "analista";
 
+  const ctx = await resolverUnidadeUsuario(user);
+  if (!ctx) redirect("/painel");
+
   const svc = createServiceClient();
+
+  // Só os clientes da unidade de quem está vendo — os candidatos ativos abaixo são
+  // pendurados por cliente_id, então filtrar a lista de clientes já basta.
+  let clientesQuery = svc
+    .from("clientes")
+    .select("id, nome, atencao_especial, atencao_especial_nota, atencao_especial_marcado_em, atencao_especial_marcado_por")
+    .order("nome");
+  if (!ctx.todasUnidades) clientesQuery = clientesQuery.eq("unidade_id", ctx.unidadeId);
 
   const [{ data: candidatosVagas }, { data: clientes }, { data: analistas }] = await Promise.all([
     svc
@@ -43,10 +55,7 @@ export default async function GestaoClientesPage() {
       .select("id, etapa, cliente_id, updated_at, candidatos(id, nome_completo, responsavel)")
       .not("cliente_id", "is", null)
       .in("etapa", ETAPAS_KANBAN_VISIVEIS),
-    svc
-      .from("clientes")
-      .select("id, nome, atencao_especial, atencao_especial_nota, atencao_especial_marcado_em, atencao_especial_marcado_por")
-      .order("nome"),
+    clientesQuery,
     svc.from("analistas_perfil").select("user_id, nome_completo"),
   ]);
 

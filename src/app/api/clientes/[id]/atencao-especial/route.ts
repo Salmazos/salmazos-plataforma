@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, clienteAtencaoEspecialSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
 import { checarAcessoClientes } from "@/lib/comercialAuth";
+import { checarAcessoCliente } from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -19,6 +20,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarAcessoClientes(user);
   if (acessoNegado) return acessoNegado;
+  const bloqueioUnidade = await checarAcessoCliente(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   // Trava adicional, mais restrita que o acesso geral a Clientes (checarAcessoClientes acima)
   // — só superuser/diretoria pode marcar "Atenção Especial", mesmo quem tem acesso geral ao

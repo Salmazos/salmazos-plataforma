@@ -16,11 +16,20 @@ interface ClienteComCount extends Cliente {
   total_encaminhamentos: number;
 }
 
-interface Props {
-  clientes: ClienteComCount[];
+export interface UnidadeOpcaoCliente {
+  id: string;
+  nome: string;
+  ativa: boolean;
 }
 
-export default function ClientesPageClient({ clientes: inicial }: Props) {
+interface Props {
+  clientes: ClienteComCount[];
+  // Só vem preenchido pra quem tem acesso a todas as unidades (sócios) — aí a tela mostra a
+  // unidade de cada cliente e o formulário deixa escolher.
+  unidades?: UnidadeOpcaoCliente[];
+}
+
+export default function ClientesPageClient({ clientes: inicial, unidades }: Props) {
   const [clientes, setClientes] = useState<ClienteComCount[]>(inicial);
   const [modalAberto, setModalAberto] = useState(false);
   const [clienteEditando, setClienteEditando] = useState<Cliente | null>(null);
@@ -153,7 +162,12 @@ export default function ClientesPageClient({ clientes: inicial }: Props) {
       ) : (
         <div className="space-y-3">
           {filtrados.map((c) => (
-            <ClienteRow key={c.id} cliente={c} onEditar={() => abrirEdicao(c)} />
+            <ClienteRow
+              key={c.id}
+              cliente={c}
+              nomeUnidade={unidades?.find((u) => u.id === c.unidade_id)?.nome}
+              onEditar={() => abrirEdicao(c)}
+            />
           ))}
         </div>
       )}
@@ -161,6 +175,7 @@ export default function ClientesPageClient({ clientes: inicial }: Props) {
       <ModalNovoCliente
         isOpen={modalAberto}
         cliente={clienteEditando}
+        unidades={unidades}
         onClose={() => setModalAberto(false)}
         onSalvo={handleSalvo}
       />
@@ -170,9 +185,11 @@ export default function ClientesPageClient({ clientes: inicial }: Props) {
 
 function ClienteRow({
   cliente,
+  nomeUnidade,
   onEditar,
 }: {
   cliente: ClienteComCount;
+  nomeUnidade?: string;
   onEditar: () => void;
 }) {
   return (
@@ -194,6 +211,9 @@ function ClienteRow({
           <span className="text-xs bg-black/5 text-gray-600 px-2 py-0.5 rounded-full">
             {cliente.segmento}
           </span>
+          {nomeUnidade && (
+            <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{nomeUnidade}</span>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 mt-1 text-xs text-gray-500">
           <span className="flex items-center gap-1">

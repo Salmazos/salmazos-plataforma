@@ -8,6 +8,7 @@ import {
   portalAcessoDeleteSchema,
 } from "@/lib/schemas";
 import { checarAcessoClientes } from "@/lib/comercialAuth";
+import { checarAcessoCliente } from "@/lib/unidadeAuth";
 
 const MAX_USUARIOS_POR_CLIENTE = 3;
 
@@ -41,6 +42,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const cliente_id = searchParams.get("cliente_id");
     if (!cliente_id) return NextResponse.json({ error: "cliente_id obrigatório." }, { status: 400 });
+    const bloqueioUnidade = await checarAcessoCliente(user, cliente_id);
+    if (bloqueioUnidade) return bloqueioUnidade;
 
     const admin = getAdmin();
 
@@ -83,6 +86,8 @@ export async function POST(request: NextRequest) {
     const parsed = parseBody(portalAcessoSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const { cliente_id, nome, email, senha } = parsed.data;
+    const bloqueioUnidade = await checarAcessoCliente(user, cliente_id);
+    if (bloqueioUnidade) return bloqueioUnidade;
 
     const admin = getAdmin();
 
@@ -138,6 +143,8 @@ export async function PATCH(request: NextRequest) {
     const parsed = parseBody(portalAcessoUpdateSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const { cliente_id, user_id, nome, email, senha } = parsed.data;
+    const bloqueioUnidade = await checarAcessoCliente(user, cliente_id);
+    if (bloqueioUnidade) return bloqueioUnidade;
 
     const admin = getAdmin();
 
@@ -188,6 +195,8 @@ export async function DELETE(request: NextRequest) {
     });
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const { cliente_id, user_id } = parsed.data;
+    const bloqueioUnidade = await checarAcessoCliente(user, cliente_id);
+    if (bloqueioUnidade) return bloqueioUnidade;
 
     const admin = getAdmin();
 

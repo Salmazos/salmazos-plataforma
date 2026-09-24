@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, clienteUpdateSchema } from "@/lib/schemas";
 import { checarAcessoClientes } from "@/lib/comercialAuth";
+import { checarAcessoCliente, resolverUnidadeUsuario } from "@/lib/unidadeAuth";
 
 export async function PATCH(
   request: NextRequest,
@@ -17,11 +18,41 @@ export async function PATCH(
     if (acessoNegado) return acessoNegado;
 
     const { id } = await params;
+    const bloqueio = await checarAcessoCliente(user, id);
+    if (bloqueio) return bloqueio;
+
     const body = await request.json();
 
     const parsed = parseBody(clienteUpdateSchema, body);
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+
+    const supabase = createServiceClient();
+
+    // Troca de unidade: só quem tem acesso a todas as unidades, e só enquanto o cliente não
+    // tem vaga nem encaminhamento — senão vagas/processos ficariam numa unidade e o cliente
+    // em outra (e sumiriam da tela de quem cuida deles).
+    let novaUnidadeId: string | undefined;
+    if (parsed.data.unidade_id !== undefined) {
+      const { data: atual } = await supabase.from("clientes").select("unidade_id").eq("id", id).single();
+      if (atual && parsed.data.unidade_id !== atual.unidade_id) {
+        const ctx = await resolverUnidadeUsuario(user);
+        if (!ctx?.todasUnidades) {
+          return NextResponse.json({ error: "Só a diretoria pode mudar a unidade de um cliente." }, { status: 403 });
+        }
+        const [{ count: vagas }, { count: encaminhamentos }] = await Promise.all([
+          supabase.from("vagas").select("id", { count: "exact", head: true }).eq("cliente_id", id),
+          supabase.from("encaminhamentos").select("id", { count: "exact", head: true }).eq("cliente_id", id),
+        ]);
+        if ((vagas ?? 0) > 0 || (encaminhamentos ?? 0) > 0) {
+          return NextResponse.json(
+            { error: "Este cliente já tem vagas ou encaminhamentos — a unidade não pode ser alterada pela tela." },
+            { status: 409 }
+          );
+        }
+        novaUnidadeId = parsed.data.unidade_id;
+      }
     }
 
     const campos: Record<string, unknown> = {};
@@ -38,8 +69,8 @@ export async function PATCH(
     if (body.cnpj !== undefined) campos.cnpj = body.cnpj || null;
     if (body.endereco !== undefined) campos.endereco = body.endereco || null;
     if (body.processo_simplificado !== undefined) campos.processo_simplificado = body.processo_simplificado;
+    if (novaUnidadeId !== undefined) campos.unidade_id = novaUnidadeId;
 
-    const supabase = createServiceClient();
     const { data, error } = await supabase
       .from("clientes")
       .update(campos)

@@ -125,6 +125,9 @@ export const clienteCreateSchema = z.object({
   cnpj: z.string().optional().nullable(),
   endereco: z.string().optional().nullable(),
   processo_simplificado: z.boolean().optional(),
+  // Só é respeitado pra quem tem acesso a todas as unidades; os demais criam sempre na
+  // própria unidade (ver POST /api/clientes).
+  unidade_id: z.string().uuid().optional(),
 });
 
 export const clienteUpdateSchema = z.object({
@@ -141,6 +144,7 @@ export const clienteUpdateSchema = z.object({
   cnpj: z.string().optional().nullable(),
   endereco: z.string().optional().nullable(),
   processo_simplificado: z.boolean().optional(),
+  unidade_id: z.string().uuid().optional(),
 });
 
 export const clienteAtencaoEspecialSchema = z.object({

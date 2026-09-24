@@ -9,6 +9,9 @@ import CampoTelefone from "@/components/ui/CampoTelefone";
 interface Props {
   isOpen: boolean;
   cliente?: Cliente | null;
+  // Só vem pra quem tem acesso a todas as unidades (sócios): mostra o campo Unidade. Os
+  // demais não escolhem — o cliente vai pra unidade de quem cadastra (ver POST /api/clientes).
+  unidades?: { id: string; nome: string; ativa: boolean }[];
   onClose: () => void;
   onSalvo: (cliente: Cliente) => void;
 }
@@ -36,8 +39,9 @@ const FORM_VAZIO = {
   endereco: "",
 };
 
-export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: Props) {
+export default function ModalNovoCliente({ isOpen, cliente, unidades, onClose, onSalvo }: Props) {
   const [form, setForm] = useState(FORM_VAZIO);
+  const [unidadeId, setUnidadeId] = useState("");
   const [servicos, setServicos] = useState<string[]>([]);
   const [processoSimplificado, setProcessoSimplificado] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -80,6 +84,7 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
       );
       setServicos(cliente?.servicos ?? []);
       setProcessoSimplificado(cliente?.processo_simplificado ?? false);
+      setUnidadeId(cliente?.unidade_id ?? (unidades?.find((u) => u.ativa) ?? unidades?.[0])?.id ?? "");
       setLogoUrl(cliente?.logo_url ?? null);
       setErroLogo("");
       setErro("");
@@ -103,7 +108,7 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
         return () => { active = false; };
       }
     }
-  }, [isOpen, cliente]);
+  }, [isOpen, cliente, unidades]);
 
   if (!isOpen) return null;
 
@@ -173,7 +178,12 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, servicos, processo_simplificado: processoSimplificado }),
+        body: JSON.stringify({
+          ...form,
+          servicos,
+          processo_simplificado: processoSimplificado,
+          ...(unidades && unidadeId ? { unidade_id: unidadeId } : {}),
+        }),
       });
       const json = await res.json();
       if (!res.ok) { setErro(json.error ?? "Erro ao salvar."); return; }
@@ -408,6 +418,28 @@ export default function ModalNovoCliente({ isOpen, cliente, onClose, onSalvo }: 
               Necessário para gerar a Autorização Sindical na admissão de candidatos deste cliente.
             </p>
           </div>
+
+          {/* Unidade — só pra quem vê todas as unidades */}
+          {unidades && unidades.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                Unidade
+              </label>
+              <select value={unidadeId} onChange={(e) => setUnidadeId(e.target.value)} className="input-field">
+                {unidades.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.nome}
+                    {u.ativa ? "" : " (ainda não ativa)"}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">
+                {editando
+                  ? "Só pode ser alterada enquanto o cliente não tiver vagas nem encaminhamentos."
+                  : "Só a equipe desta unidade vai enxergar o cliente."}
+              </p>
+            </div>
+          )}
 
           {/* CNPJ e endereço */}
           <div className="grid grid-cols-2 gap-4">

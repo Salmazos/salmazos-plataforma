@@ -298,6 +298,7 @@ export interface Cliente {
   endereco?: string | null;
   processo_simplificado?: boolean;
   logo_url?: string | null;
+  unidade_id?: string;
   created_at: string;
 }
 

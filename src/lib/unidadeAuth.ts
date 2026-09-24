@@ -96,6 +96,18 @@ export async function checarAcessoCandidatoVaga(user: User, candidatoVagaId: str
   return null;
 }
 
+// Pra rotas que recebem o id de um cliente (cadastro, logo, atenção especial, acesso ao
+// portal): cliente de outra unidade responde como inexistente.
+export async function checarAcessoCliente(user: User, clienteId: string): Promise<NextResponse | null> {
+  const ctx = await resolverUnidadeUsuario(user);
+  if (!ctx) return RESPOSTA_SEM_PERFIL();
+  if (ctx.todasUnidades) return null;
+
+  const unidadeId = await resolverUnidadeCliente(clienteId);
+  if (!unidadeId || !podeVerUnidade(ctx, unidadeId)) return RESPOSTA_NAO_ENCONTRADO();
+  return null;
+}
+
 // Encaminhamento (candidato → entrevista num cliente) herda a unidade do CLIENTE — todo
 // encaminhamento tem cliente_id, vaga_id é opcional (conferido em 23/09: 134/134 com
 // cliente, nenhum com vaga e cliente em unidades diferentes).

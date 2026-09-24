@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoClientes } from "@/lib/comercialAuth";
+import { checarAcessoCliente } from "@/lib/unidadeAuth";
 
 // Upload do logo do cliente — mesmo padrão de api/meu-perfil/avatar/route.ts (base64 direto
 // no body, sem signed-URL: arquivo pequeno, não sensível). Reaproveita o bucket público
@@ -15,6 +16,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarAcessoClientes(user);
   if (acessoNegado) return acessoNegado;
+  const bloqueioUnidade = await checarAcessoCliente(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const { base64, contentType } = await request.json();
   if (!base64 || !contentType) {
