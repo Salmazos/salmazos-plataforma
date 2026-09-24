@@ -16,10 +16,42 @@ import {
   UserCheck,
   Trash2,
 } from "lucide-react";
-import type { AnalistaPerfil } from "@/app/painel/usuarios/page";
+import type { AnalistaPerfil, UnidadeOpcao } from "@/app/painel/usuarios/page";
 
 interface Props {
   analistas: AnalistaPerfil[];
+  unidades: UnidadeOpcao[];
+}
+
+function nomeUnidade(unidades: UnidadeOpcao[], id: string | null | undefined) {
+  return unidades.find((u) => u.id === id)?.nome ?? "—";
+}
+
+// Select de unidade compartilhado pelos modais de criar/editar. Unidade é só onde a pessoa
+// trabalha — o que ela pode fazer continua vindo do nível de acesso.
+function SelectUnidade({
+  unidades,
+  value,
+  onChange,
+}: {
+  unidades: UnidadeOpcao[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-600 mb-1">Unidade *</label>
+      <select required value={value} onChange={(e) => onChange(e.target.value)} className="input-field w-full">
+        {unidades.map((u) => (
+          <option key={u.id} value={u.id}>
+            {u.nome}
+            {u.ativa ? "" : " (ainda não ativa)"}
+          </option>
+        ))}
+      </select>
+      <p className="text-xs text-gray-400 mt-1">Diretoria e superuser enxergam todas as unidades.</p>
+    </div>
+  );
 }
 
 type FilterTab = "todos" | "ativos" | "inativos";
@@ -77,7 +109,7 @@ function PasswordStrength({ password }: { password: string }) {
   );
 }
 
-export default function UsuariosPageClient({ analistas }: Props) {
+export default function UsuariosPageClient({ analistas, unidades }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<FilterTab>("todos");
   const [search, setSearch] = useState("");
@@ -223,6 +255,7 @@ export default function UsuariosPageClient({ analistas }: Props) {
                 <th style={thStyle}>Email</th>
                 <th style={thStyle}>Cargo</th>
                 <th style={thStyle}>Nível de acesso</th>
+                <th style={thStyle}>Unidade</th>
                 <th style={thStyle}>Status</th>
                 <th style={thStyle}>Atualização</th>
                 <th style={{ ...thStyle, textAlign: "right" }}>Ações</th>
@@ -231,7 +264,7 @@ export default function UsuariosPageClient({ analistas }: Props) {
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ ...tdStyle, textAlign: "center", color: "#9CA3AF", padding: 32 }}>
+                  <td colSpan={8} style={{ ...tdStyle, textAlign: "center", color: "#9CA3AF", padding: 32 }}>
                     Nenhum usuário encontrado
                   </td>
                 </tr>
@@ -260,6 +293,9 @@ export default function UsuariosPageClient({ analistas }: Props) {
                         <Shield size={10} />
                         {badge.label}
                       </span>
+                    </td>
+                    <td style={tdStyle}>
+                      {a.acesso_todas_unidades ? "Todas" : nomeUnidade(unidades, a.unidade_id)}
                     </td>
                     <td style={tdStyle}>
                       {a.ativo ? (
@@ -322,6 +358,7 @@ export default function UsuariosPageClient({ analistas }: Props) {
       {/* Modal Novo Usuário */}
       {modalNovo && (
         <ModalNovoUsuario
+          unidades={unidades}
           onClose={() => setModalNovo(false)}
           onSuccess={() => { setModalNovo(false); router.refresh(); }}
         />
@@ -331,6 +368,7 @@ export default function UsuariosPageClient({ analistas }: Props) {
       {modalEditar && (
         <ModalEditarUsuario
           user={modalEditar}
+          unidades={unidades}
           onClose={() => setModalEditar(null)}
           onSuccess={() => { setModalEditar(null); router.refresh(); }}
         />
@@ -425,13 +463,22 @@ export default function UsuariosPageClient({ analistas }: Props) {
 }
 
 /* ───── Modal Novo Usuário ───── */
-function ModalNovoUsuario({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+function ModalNovoUsuario({
+  unidades,
+  onClose,
+  onSuccess,
+}: {
+  unidades: UnidadeOpcao[];
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
   const [form, setForm] = useState({
     nome_completo: "",
     email: "",
     cargo: "",
     departamento: "",
     nivel_acesso: "analista",
+    unidade_id: (unidades.find((u) => u.ativa) ?? unidades[0])?.id ?? "",
     senha: "",
     confirmar_senha: "",
   });
@@ -531,6 +578,7 @@ function ModalNovoUsuario({ onClose, onSuccess }: { onClose: () => void; onSucce
               <option value="dp">Departamento Pessoal</option>
             </select>
           </div>
+          <SelectUnidade unidades={unidades} value={form.unidade_id} onChange={(v) => set("unidade_id", v)} />
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Senha inicial *</label>
             <div className="relative">
@@ -593,18 +641,25 @@ function ModalNovoUsuario({ onClose, onSuccess }: { onClose: () => void; onSucce
 /* ───── Modal Editar Usuário ───── */
 function ModalEditarUsuario({
   user,
+  unidades,
   onClose,
   onSuccess,
 }: {
   user: AnalistaPerfil;
+  unidades: UnidadeOpcao[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  // Superuser não é nível escolhível nesta tela (nem existe no select nem no schema) — o
+  // nível dele é só exibido e nunca enviado, senão o PATCH era recusado (ou, pior, o select
+  // caía na primeira opção e rebaixava pra analista).
+  const ehSuperuser = user.nivel_acesso === "superuser";
   const [form, setForm] = useState({
     nome_completo: user.nome_completo,
     cargo: user.cargo || "",
     departamento: user.departamento || "",
     nivel_acesso: user.nivel_acesso || "analista",
+    unidade_id: user.unidade_id,
     ativo: user.ativo,
   });
   const [loading, setLoading] = useState(false);
@@ -617,10 +672,11 @@ function ModalEditarUsuario({
     setError("");
     setLoading(true);
     try {
+      const { nivel_acesso, ...resto } = form;
       const res = await fetch(`/api/usuarios/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(ehSuperuser ? resto : { ...resto, nivel_acesso }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Erro ao atualizar"); return; }
@@ -685,17 +741,22 @@ function ModalEditarUsuario({
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Nível de acesso</label>
-            <select
-              value={form.nivel_acesso}
-              onChange={(e) => set("nivel_acesso", e.target.value)}
-              className="input-field w-full"
-            >
-              <option value="analista">Analista</option>
-              <option value="supervisor">Supervisor</option>
-              <option value="diretoria">Diretoria</option>
-              <option value="dp">Departamento Pessoal</option>
-            </select>
+            {ehSuperuser ? (
+              <input value="Superuser" disabled className="input-field w-full bg-gray-50 text-gray-400 cursor-not-allowed" />
+            ) : (
+              <select
+                value={form.nivel_acesso}
+                onChange={(e) => set("nivel_acesso", e.target.value)}
+                className="input-field w-full"
+              >
+                <option value="analista">Analista</option>
+                <option value="supervisor">Supervisor</option>
+                <option value="diretoria">Diretoria</option>
+                <option value="dp">Departamento Pessoal</option>
+              </select>
+            )}
           </div>
+          <SelectUnidade unidades={unidades} value={form.unidade_id} onChange={(v) => set("unidade_id", v)} />
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div>
               <p className="text-sm font-medium text-gray-900">Status do usuário</p>

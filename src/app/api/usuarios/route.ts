@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, usuarioCreateSchema } from "@/lib/schemas";
+import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
 
 async function guardSuperuser() {
   const supabaseAuth = await createClient();
@@ -39,7 +40,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
-  const { nome_completo, email, cargo, departamento, nivel_acesso, senha } = parsed.data;
+  const { nome_completo, email, cargo, departamento, nivel_acesso, unidade_id, senha } = parsed.data;
+  const nivel = nivel_acesso || "analista";
 
   const supabase = createServiceClient();
 
@@ -60,8 +62,13 @@ export async function POST(req: NextRequest) {
     email,
     cargo: cargo || null,
     departamento: departamento || null,
-    nivel_acesso: nivel_acesso || "analista",
+    nivel_acesso: nivel,
     ativo: true,
+    unidade_id,
+    // Acesso a todas as unidades acompanha o nível (diretoria/superuser, mesma constante do
+    // resto do sistema) — não é escolha separada na tela. Fecha a pendência da Fase 1, em que
+    // quem virava diretoria depois da migração ficava com false.
+    acesso_todas_unidades: PAPEIS_FULL_ACCESS.includes(nivel),
   });
 
   if (perfilError) {
@@ -75,7 +82,7 @@ export async function POST(req: NextRequest) {
     acao: "usuario_criado",
     entidade: "usuarios",
     entidade_id: authUser.user.id,
-    detalhes: { email, nivel_acesso: nivel_acesso || "analista" },
+    detalhes: { email, nivel_acesso: nivel, unidade_id },
   });
 
   return NextResponse.json({ success: true });

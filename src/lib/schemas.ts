@@ -156,6 +156,9 @@ export const usuarioCreateSchema = z.object({
   cargo: z.string().optional(),
   departamento: z.string().optional(),
   nivel_acesso: z.enum(["analista", "supervisor", "diretoria", "dp"]).optional(),
+  // Obrigatório (não cai no DEFAULT do banco, que é sempre Monte Mor/Hortolândia): quem cria
+  // o usuário escolhe a unidade explicitamente.
+  unidade_id: z.string().uuid(),
   senha: z.string().min(8),
   confirmar_senha: z.string().optional(),
 });
@@ -165,6 +168,7 @@ export const usuarioUpdateSchema = z.object({
   cargo: z.string().optional(),
   departamento: z.string().optional(),
   nivel_acesso: z.enum(["analista", "supervisor", "diretoria", "dp"]).optional(),
+  unidade_id: z.string().uuid().optional(),
   ativo: z.boolean().optional(),
 });
 

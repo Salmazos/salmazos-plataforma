@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, usuarioUpdateSchema } from "@/lib/schemas";
+import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
 
 async function guardSuperuser() {
   const supabaseAuth = await createClient();
@@ -24,7 +25,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
-  const { nome_completo, cargo, departamento, nivel_acesso, ativo } = parsed.data;
+  const { nome_completo, cargo, departamento, nivel_acesso, unidade_id, ativo } = parsed.data;
 
   const supabase = createServiceClient();
 
@@ -32,7 +33,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (nome_completo !== undefined) updates.nome_completo = nome_completo;
   if (cargo !== undefined) updates.cargo = cargo;
   if (departamento !== undefined) updates.departamento = departamento;
-  if (nivel_acesso !== undefined) updates.nivel_acesso = nivel_acesso;
+  if (nivel_acesso !== undefined) {
+    updates.nivel_acesso = nivel_acesso;
+    // Acesso a todas as unidades sempre acompanha o nível — promover a diretoria libera,
+    // rebaixar tira (mesma regra da criação em api/usuarios/route.ts).
+    updates.acesso_todas_unidades = PAPEIS_FULL_ACCESS.includes(nivel_acesso);
+  }
+  if (unidade_id !== undefined) updates.unidade_id = unidade_id;
   if (ativo !== undefined) updates.ativo = ativo;
 
   const { error } = await supabase
