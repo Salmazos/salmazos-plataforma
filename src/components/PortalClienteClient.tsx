@@ -134,7 +134,7 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos, emAv
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-8">
         {[
           { label: "Total",         value: totalGeral,      bg: "#000",    color: "#FFD700" },
-          { label: "Em Avaliação",  value: emAvaliacaoCount, bg: "#DBEAFE", color: "#1D4ED8" },
+          { label: "Em Triagem",    value: emAvaliacaoCount, bg: "#DBEAFE", color: "#1D4ED8" },
           { label: "Aguardando",    value: aguardandoCount,  bg: "#FEF9C3", color: "#854D0E" },
           { label: "Aprovados",     value: aprovadosCount,   bg: "#DCFCE7", color: "#166534" },
           { label: "Reprovados",    value: reprovadosCount,  bg: "#FEE2E2", color: "#991B1B" },
@@ -154,12 +154,12 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos, emAv
         ))}
       </div>
 
-      {/* ── SECTION 1: Em Avaliação pela Salmazos ── */}
+      {/* ── SECTION 1: Em Triagem pela Salmazos ── */}
       {emAvaliacao.length > 0 && (
         <div className="mb-8">
           <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
-            Em Avaliação pela Salmazos
+            Em Triagem pela Salmazos
           </h2>
           <div className="space-y-3">
             {emAvaliacao.map((cv) => (
