@@ -10,6 +10,13 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
 // pendência do lado do cliente do mesmo jeito.
 const ETAPAS_APROVACAO = new Set(["aprovado_cliente", "aprovado", "contratado"]);
 const ETAPAS_REPROVACAO = new Set(["reprovado", "reprovado_cliente", "reprovado_final"]);
+// Candidato saiu do processo por conta própria — fecha o encaminhamento como "desistiu"
+// (pedido do Olver, 23/09, depois do caso Denis Silva/Novacki: sem isso o encaminhamento
+// ficava "aguardando" pra sempre, e o cliente continuava vendo o candidato como pendente
+// de avaliação no portal).
+const ETAPAS_DESISTENCIA = new Set(["nao_compareceu", "nao_tem_interesse"]);
+// Status de encaminhamento que ainda estão "em aberto" do lado do cliente.
+const STATUS_ABERTOS_DESISTENCIA = ["aguardando", "aguardando_agendamento_cliente"];
 
 const FEEDBACK_SINCRONIZACAO = "Avaliação registrada internamente pelo analista (fora do portal)";
 
@@ -21,9 +28,9 @@ const FEEDBACK_SINCRONIZACAO = "Avaliação registrada internamente pelo analist
 // aparecendo como "aguardando avaliação" pro cliente muito depois de já ter sido
 // contratado/reprovado internamente.
 //
-// Idempotente por design: se a etapa não indicar avaliação concluída (ex: triagem,
-// entrevista_cliente, nao_compareceu, nao_tem_interesse, bloqueado — fora do escopo desta
-// sincronização), não faz nada — nunca lança erro, nunca bloqueia o caller. Se já existe
+// Idempotente por design: se a etapa não indicar avaliação concluída nem desistência (ex:
+// triagem, entrevista_cliente, bloqueado — fora do escopo desta sincronização), não faz
+// nada — nunca lança erro, nunca bloqueia o caller. Se já existe
 // um encaminhamento (aguardando ou já avaliado) pra esse par, só atualiza o 'aguardando'
 // e nunca sobrescreve um que já foi avaliado. Se nunca existiu nenhum, cria um novo já
 // fechado — mas só pra aprovação, nunca pra reprovação (ver comentário mais abaixo).
@@ -38,6 +45,30 @@ export async function sincronizarEncaminhamentoComEtapa(
   supabase?: ServiceClient
 ): Promise<void> {
   if (!clienteId) return;
+
+  if (ETAPAS_DESISTENCIA.has(novaEtapa)) {
+    // Só o status muda (mesmo efeito do "Desistiu" escolhido à mão no perfil do candidato):
+    // sem avaliado_em nem feedback_cliente, porque o cliente não avaliou ninguém. Fecha
+    // também "aguardando_agendamento_cliente", senão o cron de lembrete continuaria cobrando
+    // o cliente de agendar entrevista de quem já saiu. Nunca cria encaminhamento novo.
+    const svcDesistencia = supabase ?? createServiceClient();
+    const { data: aberto } = await svcDesistencia
+      .from("encaminhamentos")
+      .select("id")
+      .eq("candidato_id", candidatoId)
+      .eq("cliente_id", clienteId)
+      .in("status", STATUS_ABERTOS_DESISTENCIA)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!aberto) return;
+    await svcDesistencia
+      .from("encaminhamentos")
+      .update({ status: "desistiu" })
+      .eq("id", aberto.id)
+      .in("status", STATUS_ABERTOS_DESISTENCIA);
+    return;
+  }
 
   let novoStatus: "aprovado" | "reprovado" | null = null;
   if (ETAPAS_APROVACAO.has(novaEtapa)) novoStatus = "aprovado";
