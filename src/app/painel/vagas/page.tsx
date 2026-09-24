@@ -29,8 +29,10 @@ export default async function VagasPage() {
     vagasQuery,
     solicitacoesQuery,
     // Só quem vê todas as unidades escolhe a unidade de vaga sem cliente no formulário.
+    // Inclui unidade ainda inativa (SBC), como nas telas de Clientes e Usuários: ela já opera
+    // antes da abertura oficial.
     ctx.todasUnidades
-      ? supabase.from("unidades").select("id, nome").eq("ativa", true).order("nome")
+      ? supabase.from("unidades").select("id, nome, ativa").order("nome")
       : Promise.resolve({ data: null }),
   ]);
 
@@ -38,7 +40,7 @@ export default async function VagasPage() {
     <VagasPageClient
       vagas={(vagas ?? []) as Vaga[]}
       pendingCount={pendingCount ?? 0}
-      unidades={(unidades as { id: string; nome: string }[] | null) ?? undefined}
+      unidades={(unidades as { id: string; nome: string; ativa: boolean }[] | null) ?? undefined}
     />
   );
 }

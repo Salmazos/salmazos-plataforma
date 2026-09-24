@@ -20,7 +20,7 @@ interface Props {
   // Presente só pra quem tem acesso a todas as unidades: mostra a unidade da vaga e, na
   // vaga sem cliente, o seletor obrigatório. Com cliente, a unidade é sempre a do cliente
   // (regra aplicada no POST /api/vagas).
-  unidades?: { id: string; nome: string }[];
+  unidades?: { id: string; nome: string; ativa: boolean }[];
 }
 
 // ── chip data ─────────────────────────────────────────────────────────────────
@@ -386,7 +386,12 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades
               </label>
               <select value={unidadeId} onChange={(e) => setUnidadeId(e.target.value)} className="input-field">
                 <option value="">Selecione...</option>
-                {unidades!.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
+                {unidades!.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.nome}
+                    {u.ativa ? "" : " (ainda não ativa)"}
+                  </option>
+                ))}
               </select>
             </div>
           )}

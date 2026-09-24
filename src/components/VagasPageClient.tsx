@@ -32,7 +32,7 @@ interface Props {
   vagas: Vaga[];
   pendingCount: number;
   // Só vem pra quem tem acesso a todas as unidades (ver painel/vagas/page.tsx).
-  unidades?: { id: string; nome: string }[];
+  unidades?: { id: string; nome: string; ativa: boolean }[];
 }
 
 export default function VagasPageClient({ vagas: inicial, pendingCount, unidades }: Props) {

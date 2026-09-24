@@ -55,11 +55,11 @@ export async function POST(request: NextRequest) {
       if (!body.unidade_id) {
         return NextResponse.json({ error: "Escolha a unidade da vaga." }, { status: 400 });
       }
+      // Sem filtro de ativa: unidade ainda não aberta oficialmente (SBC) já opera.
       const { data: unidade } = await supabase
         .from("unidades")
         .select("id")
         .eq("id", body.unidade_id)
-        .eq("ativa", true)
         .maybeSingle();
       if (!unidade) return NextResponse.json({ error: "Unidade inválida." }, { status: 400 });
       unidadeId = unidade.id;
