@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import SemAcessoPainel from "@/components/SemAcessoPainel";
 import { createServiceClient } from "@/lib/supabase/server";
 import { contextoUnidadeDaSessao } from "@/lib/unidadeAuth";
 import VagasPageClient from "@/components/VagasPageClient";
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function VagasPage() {
   const ctx = await contextoUnidadeDaSessao();
-  if (!ctx) notFound();
+  if (!ctx) return <SemAcessoPainel />;
 
   const supabase = createServiceClient();
 

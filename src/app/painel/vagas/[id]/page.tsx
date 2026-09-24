@@ -1,3 +1,4 @@
+import SemAcessoPainel from "@/components/SemAcessoPainel";
 import { notFound } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase/server";
 import VagaDetalheClient from "@/components/VagaDetalheClient";
@@ -14,7 +15,7 @@ interface Props {
 export default async function VagaDetalhePage({ params }: Props) {
   const { id } = await params;
   const ctx = await contextoUnidadeDaSessao();
-  if (!ctx) notFound();
+  if (!ctx) return <SemAcessoPainel />;
   const supabase = createServiceClient();
 
   const [{ data: vaga }, { data: candidatosVaga }] = await Promise.all([

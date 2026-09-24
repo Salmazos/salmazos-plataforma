@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import SemAcessoPainel from "@/components/SemAcessoPainel";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { contextoUnidadeDaSessao } from "@/lib/unidadeAuth";
 import PainelLayout from "@/components/PainelLayout";
@@ -13,7 +13,7 @@ export default async function PainelPage() {
   const authClient = await createClient();
 
   const ctx = await contextoUnidadeDaSessao();
-  if (!ctx) notFound();
+  if (!ctx) return <SemAcessoPainel />;
 
   // Kanban só com candidaturas em vagas da unidade de quem está logado — o vagas!inner
   // abaixo já existia, então o filtro na vaga descarta as candidaturas de outra unidade.

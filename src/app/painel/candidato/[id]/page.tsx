@@ -1,3 +1,4 @@
+import SemAcessoPainel from "@/components/SemAcessoPainel";
 import { notFound } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import CandidatoPerfilTabs from "@/components/CandidatoPerfilTabs";
@@ -34,7 +35,7 @@ export default async function CandidatoPerfilPage({ params }: Props) {
   // fee, retenção, etapa real) mostrados no perfil são só os de vagas da unidade de quem
   // está vendo.
   const ctx = user ? await resolverUnidadeUsuario(user) : null;
-  if (!ctx) notFound();
+  if (!ctx) return <SemAcessoPainel />;
 
   // Fetch candidatos_vagas with guarantee OR fee data
   let cvQuery = supabase
