@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { parseBody, encaminhamentoUpdateSchema } from "@/lib/schemas";
+import { exigirAcessoEncaminhamento } from "@/lib/unidadeAuth";
 
 export async function PATCH(
   request: NextRequest,
@@ -8,6 +9,8 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
+    const bloqueio = await exigirAcessoEncaminhamento(id);
+    if (bloqueio) return bloqueio;
     const body = await request.json();
     const parsed = parseBody(encaminhamentoUpdateSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });

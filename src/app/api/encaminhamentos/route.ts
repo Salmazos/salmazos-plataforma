@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { parseBody, encaminhamentoCreateSchema } from "@/lib/schemas";
+import { exigirContextoUnidade, podeVerUnidade, resolverUnidadeCliente } from "@/lib/unidadeAuth";
 
 // Se vier só a data (YYYY-MM-DD, do <input type="date">), fixa meio-dia em
 // Brasília antes de gravar — mesma convenção usada pros registros já existentes
@@ -14,22 +15,33 @@ function normalizarDataEntrevista(valor: string | null | undefined): string | nu
 }
 
 export async function GET(request: NextRequest) {
+  const { ctx, erro } = await exigirContextoUnidade();
+  if (erro) return erro;
+
   const { searchParams } = new URL(request.url);
   const candidato_id = searchParams.get("candidato_id");
 
   const supabase = createServiceClient();
 
+  // Encaminhamento herda a unidade do cliente: quem não vê todas as unidades só recebe os
+  // de clientes da própria unidade (!inner pra o filtro no cliente valer) — vale tanto pra
+  // agenda quanto pro perfil do candidato, que é compartilhado entre unidades.
+  const clienteEmbed = ctx.todasUnidades
+    ? "cliente:clientes(id, nome, cidade, segmento, servicos)"
+    : "cliente:clientes!inner(id, nome, cidade, segmento, servicos)";
+
   // When fetching for a specific candidate keep the lightweight select used by the
   // candidate profile; when fetching all records (agenda view) join extra tables.
   const select = candidato_id
-    ? "*, cliente:clientes(id, nome, cidade, segmento, servicos)"
-    : "*, cliente:clientes(id, nome, cidade, segmento, servicos), candidato:candidatos(id, nome_completo, responsavel), vaga:vagas(id, titulo)";
+    ? `*, ${clienteEmbed}`
+    : `*, ${clienteEmbed}, candidato:candidatos(id, nome_completo, responsavel), vaga:vagas(id, titulo)`;
 
   let query = supabase
     .from("encaminhamentos")
     .select(select)
     .order("data_entrevista", { ascending: true });
 
+  if (!ctx.todasUnidades) query = query.eq("cliente.unidade_id", ctx.unidadeId);
   if (candidato_id) query = query.eq("candidato_id", candidato_id);
 
   const { data, error } = await query;
@@ -43,7 +55,24 @@ export async function POST(request: NextRequest) {
     const parsed = parseBody(encaminhamentoCreateSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
+    const { ctx, erro } = await exigirContextoUnidade();
+    if (erro) return erro;
+
     const supabase = createServiceClient();
+
+    // Só encaminha pra cliente (e vaga, se vier) da própria unidade — a lista de clientes do
+    // formulário ainda mostra todas as unidades (filtro de clientes é de outra fatia), então
+    // a trava fica aqui.
+    const unidadeCliente = await resolverUnidadeCliente(parsed.data.cliente_id);
+    if (!unidadeCliente || !podeVerUnidade(ctx, unidadeCliente)) {
+      return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
+    }
+    if (parsed.data.vaga_id) {
+      const { data: vaga } = await supabase.from("vagas").select("unidade_id").eq("id", parsed.data.vaga_id).maybeSingle();
+      if (!vaga || !podeVerUnidade(ctx, vaga.unidade_id)) {
+        return NextResponse.json({ error: "Vaga não encontrada." }, { status: 404 });
+      }
+    }
 
     // Verifica duplicidade (retorna para informar o front, mas não bloqueia)
     const { data: existente } = await supabase
@@ -64,7 +93,8 @@ export async function POST(request: NextRequest) {
         status: parsed.data.status,
         tipo_servico: body.tipo_servico || null,
         observacoes: body.observacoes || null,
-        vaga_id: body.vaga_id || null,
+        // Mesmo valor validado que passou pela checagem de unidade acima.
+        vaga_id: parsed.data.vaga_id || null,
       })
       .select("*, cliente:clientes(id, nome, cidade, segmento, servicos)")
       .single();

@@ -23,11 +23,14 @@ export interface ContextoUnidade {
 // decidir "no escuro".
 export async function resolverUnidadeUsuario(user: User): Promise<ContextoUnidade | null> {
   const svc = createServiceClient();
-  const { data } = await svc
+  const { data, error } = await svc
     .from("analistas_perfil")
     .select("unidade_id, acesso_todas_unidades")
     .eq("user_id", user.id)
     .maybeSingle();
+  // Falha de banco também nega (null), mas fica no log pra não se confundir com "usuário
+  // realmente sem perfil" quando alguém reclamar de 403.
+  if (error) console.error(`[unidadeAuth] Erro ao resolver unidade do usuário ${user.id}:`, error.message);
   if (!data?.unidade_id) return null;
   return { unidadeId: data.unidade_id, todasUnidades: data.acesso_todas_unidades === true };
 }
@@ -93,6 +96,26 @@ export async function checarAcessoCandidatoVaga(user: User, candidatoVagaId: str
   return null;
 }
 
+// Encaminhamento (candidato → entrevista num cliente) herda a unidade do CLIENTE — todo
+// encaminhamento tem cliente_id, vaga_id é opcional (conferido em 23/09: 134/134 com
+// cliente, nenhum com vaga e cliente em unidades diferentes).
+export async function checarAcessoEncaminhamento(user: User, encaminhamentoId: string): Promise<NextResponse | null> {
+  const ctx = await resolverUnidadeUsuario(user);
+  if (!ctx) return RESPOSTA_SEM_PERFIL();
+  if (ctx.todasUnidades) return null;
+
+  const svc = createServiceClient();
+  const { data } = await svc
+    .from("encaminhamentos")
+    .select("cliente:clientes(unidade_id)")
+    .eq("id", encaminhamentoId)
+    .maybeSingle();
+  // PostgREST devolve o embed many-to-one como objeto, mas o tipo inferido é array.
+  const unidadeId = (data?.cliente as unknown as { unidade_id: string } | null)?.unidade_id;
+  if (!data || !podeVerUnidade(ctx, unidadeId)) return RESPOSTA_NAO_ENCONTRADO();
+  return null;
+}
+
 // Candidato é compartilhado, mas algumas rotas por candidato (etapa, responsável) atualizam
 // TODAS as candidaturas dele de uma vez. Devolve os ids das candidaturas em vagas da unidade
 // de quem está mexendo, pra essas rotas não alterarem o processo de outra unidade. null =
@@ -100,11 +123,13 @@ export async function checarAcessoCandidatoVaga(user: User, candidatoVagaId: str
 export async function idsCandidaturasDaUnidade(ctx: ContextoUnidade, candidatoId: string): Promise<string[] | null> {
   if (ctx.todasUnidades) return null;
   const svc = createServiceClient();
-  const { data } = await svc
+  const { data, error } = await svc
     .from("candidatos_vagas")
     .select("id, vagas!candidatos_vagas_vaga_id_fkey!inner(unidade_id)")
     .eq("candidato_id", candidatoId)
     .eq("vagas.unidade_id", ctx.unidadeId);
+  // Em falha de banco devolve [] (não altera nenhuma candidatura), mas registra no log.
+  if (error) console.error(`[unidadeAuth] Erro ao listar candidaturas da unidade (candidato_id=${candidatoId}):`, error.message);
   return (data ?? []).map((r) => r.id as string);
 }
 
@@ -132,6 +157,12 @@ export async function exigirAcessoVaga(vagaId: string): Promise<NextResponse | n
   const user = await usuarioDaSessao();
   if (!user) return RESPOSTA_NAO_AUTORIZADO();
   return checarAcessoVaga(user, vagaId);
+}
+
+export async function exigirAcessoEncaminhamento(encaminhamentoId: string): Promise<NextResponse | null> {
+  const user = await usuarioDaSessao();
+  if (!user) return RESPOSTA_NAO_AUTORIZADO();
+  return checarAcessoEncaminhamento(user, encaminhamentoId);
 }
 
 export async function exigirAcessoCandidatoVaga(candidatoVagaId: string): Promise<NextResponse | null> {
