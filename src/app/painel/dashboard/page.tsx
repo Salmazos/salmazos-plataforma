@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { ORIGEM_LABELS, ETAPAS_KANBAN_VISIVEIS } from "@/lib/constants";
 import { podeAcessarDashboard } from "@/lib/dashboardAuth";
+import { resolverUnidadeUsuario } from "@/lib/unidadeAuth";
+import SemAcessoPainel from "@/components/SemAcessoPainel";
 
 export const dynamic = "force-dynamic";
 
@@ -122,35 +124,64 @@ function TaxaBadge({ taxa }: { taxa: number }) {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ unidade?: string }> }) {
   const supabaseAuth = await createClient();
   const { data: { user: authUser } } = await supabaseAuth.auth.getUser();
   if (!authUser) redirect("/login");
   if (!(await podeAcessarDashboard(authUser))) redirect("/painel");
 
+  const ctx = await resolverUnidadeUsuario(authUser);
+  if (!ctx) return <SemAcessoPainel />;
+
   const supabase = createServiceClient();
+
+  // DECISÃO DO OLVER (24/09): seletor de unidade — "Todas" (padrão, igual antes) ou uma
+  // unidade. Quem não vê todas as unidades fica sempre travado na própria.
+  const { data: unidades } = await supabase.from("unidades").select("id, nome").order("nome");
+  const { unidade: unidadeParam } = await searchParams;
+  const unidadeSel: string | null = ctx.todasUnidades
+    ? ((unidades ?? []).find((u) => u.id === unidadeParam)?.id ?? null)
+    : ctx.unidadeId;
 
   const [
     { data: candidatos },
-    { data: vagas },
-    { data: encaminhamentos },
-    { data: candidatosVagas },
-    { data: clientes },
+    { data: vagasTodas },
+    { data: encaminhamentosTodos },
+    { data: candidatosVagasTodos },
+    { data: clientesTodos },
+    { data: analistas },
   ] = await Promise.all([
     supabase
       .from("candidatos")
       .select("id, status, responsavel, origem, created_at"),
-    supabase.from("vagas").select("id, status, titulo, data_abertura, data_fechamento, created_at, tipo_servico, responsavel"),
+    supabase.from("vagas").select("id, status, titulo, data_abertura, data_fechamento, created_at, tipo_servico, responsavel, unidade_id"),
     supabase.from("encaminhamentos").select("id, cliente_id, status, created_at"),
     supabase.from("candidatos_vagas").select("vaga_id, candidato_id, cliente_id, etapa, created_at, updated_at"),
-    supabase.from("clientes").select("id, nome, atencao_especial"),
+    supabase.from("clientes").select("id, nome, atencao_especial, unidade_id"),
+    supabase.from("analistas_perfil").select("nome_completo, unidade_id"),
   ]);
 
+  // Vaga e cliente têm unidade; candidatura herda da vaga e encaminhamento do cliente (mesma
+  // regra do resto da Fase 3). Candidato NÃO tem unidade — o banco é compartilhado, então os
+  // indicadores só de candidato continuam gerais (a tela avisa quando há unidade selecionada).
+  const vagas = (vagasTodas ?? []).filter((x) => !unidadeSel || x.unidade_id === unidadeSel);
+  const clientes = (clientesTodos ?? []).filter((x) => !unidadeSel || x.unidade_id === unidadeSel);
+  const vagaIdsUnidade = new Set(vagas.map((x) => x.id as string));
+  const clienteIdsUnidade = new Set(clientes.map((x) => x.id as string));
+  const candidatosVagas = (candidatosVagasTodos ?? []).filter((x) => !unidadeSel || vagaIdsUnidade.has(x.vaga_id as string));
+  const encaminhamentos = (encaminhamentosTodos ?? []).filter((x) => !unidadeSel || clienteIdsUnidade.has(x.cliente_id as string));
+  // Performance por analista com unidade selecionada = só analistas daquela unidade
+  // (candidatos.responsavel guarda o nome completo do analista).
+  const analistasDaUnidade = unidadeSel
+    ? new Set((analistas ?? []).filter((a) => a.unidade_id === unidadeSel).map((a) => a.nome_completo as string))
+    : null;
+  const nomeUnidadeSel = (unidades ?? []).find((u) => u.id === unidadeSel)?.nome ?? null;
+
   const c = candidatos ?? [];
-  const v = vagas ?? [];
-  const e = encaminhamentos ?? [];
-  const cv = candidatosVagas ?? [];
-  const cl = clientes ?? [];
+  const v = vagas;
+  const e = encaminhamentos;
+  const cv = candidatosVagas;
+  const cl = clientes;
 
   const clienteNomeMap = new Map(cl.map((x) => [x.id, x.nome as string]));
   // candidatos_vagas.etapa é a fonte de verdade da etapa do candidato (é de lá que o
@@ -283,6 +314,7 @@ export default async function DashboardPage() {
     if (stats) stats.aprovados++;
   }
   const performanceAnalistas = Array.from(analistaMap.entries())
+    .filter(([nome]) => !analistasDaUnidade || analistasDaUnidade.has(nome))
     .map(([nome, data]) => ({ nome, ...data }))
     .sort((a, b) => b.cadastrados - a.cadastrados)
     .slice(0, 10);
@@ -364,6 +396,38 @@ export default async function DashboardPage() {
         <p style={{ fontSize: 13, color: "#9CA3AF", marginTop: 4, marginBottom: 0 }}>
           Indicadores em tempo real da operação
         </p>
+        {ctx.todasUnidades && (unidades ?? []).length > 1 && (
+          <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+            {[{ id: null as string | null, nome: "Todas as unidades" }, ...(unidades ?? [])].map((u) => {
+              const ativo = u.id === unidadeSel;
+              return (
+                <a
+                  key={u.id ?? "todas"}
+                  href={u.id ? `/painel/dashboard?unidade=${u.id}` : "/painel/dashboard"}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: 999,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    textDecoration: "none",
+                    background: ativo ? "#000" : "#FFF",
+                    color: ativo ? "#FFD700" : "#374151",
+                    border: ativo ? "1px solid #000" : "1px solid #D1D5DB",
+                  }}
+                >
+                  {u.nome}
+                </a>
+              );
+            })}
+          </div>
+        )}
+        {nomeUnidadeSel && (
+          <p style={{ fontSize: 12, color: "#6B7280", marginTop: 10, marginBottom: 0 }}>
+            Mostrando <strong>{nomeUnidadeSel}</strong>. Candidatos Ativos, candidaturas por período,
+            candidatos por origem e &quot;Reprovado / Negativado&quot; são do banco de candidatos, que é
+            compartilhado entre as unidades — esses números não mudam com o filtro.
+          </p>
+        )}
       </div>
 
       {/* Vagas Críticas alert */}
