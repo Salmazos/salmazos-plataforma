@@ -19,18 +19,14 @@ interface Contato {
   email: string | null;
   telefone: string | null;
   empresa_nome: string | null;
-  clientes: { id: string; nome: string; unidade_id: string } | null;
+  // Do cliente vinculado, ou de quem cadastrou quando é só empresa em texto livre (ver
+  // api/aniversariantes e migration_sbc_aniversariantes_contatos_unidade.sql).
+  unidade_id: string;
+  clientes: { id: string; nome: string } | null;
 }
 
 function empresaDe(c: Contato) {
   return c.clientes?.nome ?? c.empresa_nome ?? "—";
-}
-
-// Unidade do contato = unidade do cliente vinculado. Contato só com empresa em texto livre
-// (sem cliente) fica sem unidade e continua avisando todas as unidades — não dá pra saber
-// de qual é sem decidir no escuro.
-function unidadeDe(c: Contato): string | null {
-  return c.clientes?.unidade_id ?? null;
 }
 
 // data_nascimento vem como "YYYY-MM-DD" (coluna date) — parse por string pra não
@@ -76,7 +72,7 @@ export async function GET(request: Request) {
 
     const { data: contatosRaw, error: errContatos } = await supabase
       .from("aniversariantes_contatos")
-      .select("id, nome_contato, cargo, data_nascimento, email, telefone, empresa_nome, clientes(id, nome, unidade_id)")
+      .select("id, nome_contato, cargo, data_nascimento, email, telefone, empresa_nome, unidade_id, clientes(id, nome)")
       .eq("ativo", true);
 
     if (errContatos) {
@@ -121,21 +117,14 @@ export async function GET(request: Request) {
         .filter((c) => parseMesDia(c.data_nascimento).mes === mesReferencia)
         .sort((a, b) => parseMesDia(a.data_nascimento).dia - parseMesDia(b.data_nascimento).dia);
 
-      // Um lote por unidade que tem aniversariante no mês, cada um com os contatos dela +
-      // os sem unidade (que continuam indo pra todas). Se só houver contatos sem unidade,
-      // saem num lote da unidade padrão (comportamento de antes da multi-unidade).
-      const { data: unidadesRows } = await supabase.from("unidades").select("id, nome, slug");
+      // Um lote por unidade que tem aniversariante no mês, cada um só com os contatos dela.
+      const { data: unidadesRows } = await supabase.from("unidades").select("id, nome");
       const unidades = unidadesRows ?? [];
-      const semUnidade = aniversariantesDoMes.filter((c) => !unidadeDe(c));
-      let unidadesDoLote = [...new Set(aniversariantesDoMes.map(unidadeDe).filter((u): u is string => !!u))];
-      if (unidadesDoLote.length === 0 && semUnidade.length > 0) {
-        const padrao = unidades.find((u) => u.slug === "monte-mor-hortolandia");
-        if (padrao) unidadesDoLote = [padrao.id];
-      }
+      const unidadesDoLote = [...new Set(aniversariantesDoMes.map((c) => c.unidade_id))];
 
       for (const unidadeLoteId of unidadesDoLote) {
         if (jaEnviouMesSeguinte(mesReferencia, unidadeLoteId)) continue;
-        const doLote = aniversariantesDoMes.filter((c) => !unidadeDe(c) || unidadeDe(c) === unidadeLoteId);
+        const doLote = aniversariantesDoMes.filter((c) => c.unidade_id === unidadeLoteId);
         const sufixoUnidade =
           unidadesDoLote.length > 1 ? ` — ${unidades.find((u) => u.id === unidadeLoteId)?.nome ?? ""}` : "";
 
@@ -212,14 +201,14 @@ export async function GET(request: Request) {
           tipo: "aniversario_tres_dias",
           titulo: `🎂 Faltam 3 dias — aniversário de ${c.nome_contato}`,
           mensagem: `${c.nome_contato} (${empresa}) faz aniversário em 3 dias, dia ${dataFmt}.`,
-          unidade_id: unidadeDe(c),
+          unidade_id: c.unidade_id,
         });
 
         const resultado = await notifyAllAnalysts({
           subject: `🎂 Faltam 3 dias — aniversário de ${c.nome_contato} (${empresa})`,
           html,
           tipo: "aniversario_tres_dias",
-          unidadeId: unidadeDe(c),
+          unidadeId: c.unidade_id,
         });
 
         if (resultado.attempted > 0) {
@@ -263,14 +252,14 @@ export async function GET(request: Request) {
           tipo: "aniversario_no_dia",
           titulo: `🎂 Hoje é aniversário de ${c.nome_contato}!`,
           mensagem: `Hoje é o aniversário de ${c.nome_contato} (${empresa}).`,
-          unidade_id: unidadeDe(c),
+          unidade_id: c.unidade_id,
         });
 
         const resultado = await notifyAllAnalysts({
           subject: `🎂 Hoje é aniversário de ${c.nome_contato} (${empresa})!`,
           html,
           tipo: "aniversario_no_dia",
-          unidadeId: unidadeDe(c),
+          unidadeId: c.unidade_id,
         });
 
         if (resultado.attempted > 0) {

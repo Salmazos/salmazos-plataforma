@@ -5,6 +5,7 @@ import { sendEmail } from "@/lib/sendEmail";
 import { envolucroAniversario, escapeHtml } from "@/lib/emailAniversarioTemplate";
 import { obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
 import { checarAcessoAniversarios } from "@/lib/aniversariosAuth";
+import { checarAcessoAniversariante } from "@/lib/unidadeAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const acessoNegado = await checarAcessoAniversarios(user);
   if (acessoNegado) return acessoNegado;
+  const bloqueioUnidade = await checarAcessoAniversariante(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
 
   const svc = createServiceClient();
   const anoAtual = obterDataHojeBrasil().getFullYear();
@@ -69,6 +72,8 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     const acessoNegado = await checarAcessoAniversarios(user);
     if (acessoNegado) return acessoNegado;
+    const bloqueioUnidade = await checarAcessoAniversariante(user, id);
+    if (bloqueioUnidade) return bloqueioUnidade;
 
     const body = await request.json();
     const parsed = parseBody(aniversarianteFelicitacaoSchema, body);

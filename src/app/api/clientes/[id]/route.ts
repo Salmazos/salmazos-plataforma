@@ -80,6 +80,11 @@ export async function PATCH(
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
+    // Contatos aniversariantes do cliente acompanham a troca de unidade dele.
+    if (novaUnidadeId !== undefined) {
+      await supabase.from("aniversariantes_contatos").update({ unidade_id: novaUnidadeId }).eq("cliente_id", id);
+    }
+
     // Decisão de negócio confirmada com o usuário (caso real: cliente Novacki, e antes
     // CBP Brasil corrigido manualmente) — cliente_email_snapshot em cobrancas_rs nasce como
     // uma cópia do e-mail do cliente no momento da geração da cobrança (rastreabilidade:

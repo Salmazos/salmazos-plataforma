@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, aniversarianteUpdateSchema } from "@/lib/schemas";
 import { checarAcessoAniversarios } from "@/lib/aniversariosAuth";
+import {
+  checarAcessoAniversariante,
+  podeVerUnidade,
+  resolverUnidadeCliente,
+  resolverUnidadeUsuario,
+} from "@/lib/unidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -18,13 +24,27 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     const acessoNegado = await checarAcessoAniversarios(user);
     if (acessoNegado) return acessoNegado;
+    const bloqueioUnidade = await checarAcessoAniversariante(user, id);
+    if (bloqueioUnidade) return bloqueioUnidade;
 
     const body = await request.json();
     const parsed = parseBody(aniversarianteUpdateSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
     const campos: Record<string, unknown> = { atualizado_em: new Date().toISOString() };
-    if (parsed.data.cliente_id !== undefined) campos.cliente_id = parsed.data.cliente_id || null;
+    if (parsed.data.cliente_id !== undefined) {
+      campos.cliente_id = parsed.data.cliente_id || null;
+      // Trocou pra outro cliente: a unidade do contato acompanha a do cliente novo (e só pode
+      // ser cliente que a pessoa enxerga). Desvincular o cliente mantém a unidade atual.
+      if (parsed.data.cliente_id) {
+        const ctx = await resolverUnidadeUsuario(user);
+        const unidadeCliente = await resolverUnidadeCliente(parsed.data.cliente_id);
+        if (!ctx || !unidadeCliente || !podeVerUnidade(ctx, unidadeCliente)) {
+          return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
+        }
+        campos.unidade_id = unidadeCliente;
+      }
+    }
     if (parsed.data.empresa_nome !== undefined) campos.empresa_nome = parsed.data.empresa_nome || null;
     if (parsed.data.nome_contato !== undefined) campos.nome_contato = parsed.data.nome_contato;
     if (parsed.data.cargo !== undefined) campos.cargo = parsed.data.cargo || null;
@@ -63,6 +83,8 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     const acessoNegado = await checarAcessoAniversarios(user);
     if (acessoNegado) return acessoNegado;
+    const bloqueioUnidade = await checarAcessoAniversariante(user, id);
+    if (bloqueioUnidade) return bloqueioUnidade;
 
     const svc = createServiceClient();
     const { data, error } = await svc

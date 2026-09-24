@@ -108,6 +108,19 @@ export async function checarAcessoCliente(user: User, clienteId: string): Promis
   return null;
 }
 
+// Contato aniversariante tem unidade própria (aniversariantes_contatos.unidade_id — do cliente
+// vinculado, ou de quem cadastrou quando é só empresa em texto livre).
+export async function checarAcessoAniversariante(user: User, contatoId: string): Promise<NextResponse | null> {
+  const ctx = await resolverUnidadeUsuario(user);
+  if (!ctx) return RESPOSTA_SEM_PERFIL();
+  if (ctx.todasUnidades) return null;
+
+  const svc = createServiceClient();
+  const { data } = await svc.from("aniversariantes_contatos").select("unidade_id").eq("id", contatoId).maybeSingle();
+  if (!data || !podeVerUnidade(ctx, data.unidade_id)) return RESPOSTA_NAO_ENCONTRADO();
+  return null;
+}
+
 // Encaminhamento (candidato → entrevista num cliente) herda a unidade do CLIENTE — todo
 // encaminhamento tem cliente_id, vaga_id é opcional (conferido em 23/09: 134/134 com
 // cliente, nenhum com vaga e cliente em unidades diferentes).
