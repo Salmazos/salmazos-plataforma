@@ -4,6 +4,7 @@ import { ORIGEM_LABELS, ETAPAS_KANBAN_VISIVEIS } from "@/lib/constants";
 import { podeAcessarDashboard } from "@/lib/dashboardAuth";
 import { resolverUnidadeUsuario } from "@/lib/unidadeAuth";
 import SemAcessoPainel from "@/components/SemAcessoPainel";
+import SeletorUnidade from "@/components/SeletorUnidade";
 
 export const dynamic = "force-dynamic";
 
@@ -396,29 +397,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <p style={{ fontSize: 13, color: "#9CA3AF", marginTop: 4, marginBottom: 0 }}>
           Indicadores em tempo real da operação
         </p>
-        {ctx.todasUnidades && (unidades ?? []).length > 1 && (
-          <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
-            {[{ id: null as string | null, nome: "Todas as unidades" }, ...(unidades ?? [])].map((u) => {
-              const ativo = u.id === unidadeSel;
-              return (
-                <a
-                  key={u.id ?? "todas"}
-                  href={u.id ? `/painel/dashboard?unidade=${u.id}` : "/painel/dashboard"}
-                  style={{
-                    padding: "6px 14px",
-                    borderRadius: 999,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    textDecoration: "none",
-                    background: ativo ? "#000" : "#FFF",
-                    color: ativo ? "#FFD700" : "#374151",
-                    border: ativo ? "1px solid #000" : "1px solid #D1D5DB",
-                  }}
-                >
-                  {u.nome}
-                </a>
-              );
-            })}
+        {ctx.todasUnidades && (
+          <div style={{ marginTop: 14 }}>
+            <SeletorUnidade unidades={unidades ?? []} unidadeSel={unidadeSel} basePath="/painel/dashboard" />
           </div>
         )}
         {nomeUnidadeSel && (
