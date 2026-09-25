@@ -21,8 +21,8 @@ export async function GET() {
       .from("clientes_meta_supervisao")
       .select("*, clientes(id, nome, ativo), analistas_perfil(id, nome_completo)")
       .order("criado_em", { ascending: false }),
-    svc.from("clientes").select("id, nome, ativo").eq("ativo", true).order("nome"),
-    svc.from("analistas_perfil").select("id, nome_completo, nivel_acesso").eq("ativo", true).order("nome_completo"),
+    svc.from("clientes").select("id, nome, ativo, unidade_id").eq("ativo", true).order("nome"),
+    svc.from("analistas_perfil").select("id, nome_completo, nivel_acesso, unidade_id").eq("ativo", true).order("nome_completo"),
   ]);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -249,6 +249,7 @@ export interface KanbanCard {
   vaga_titulo: string;
   vaga_tipo_servico: string | null;
   vaga_confidencial: boolean;
+  vaga_unidade_id?: string | null;
   encaminhamento_tipo_servico: string | null;
   encaminhamento_status: string | null;
   encaminhamento_data_entrevista: string | null;

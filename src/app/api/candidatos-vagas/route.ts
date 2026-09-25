@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { nomesCompletosDaUnidade } from "@/lib/responsaveis";
 import { parseBody, candidatoVagaCreateSchema } from "@/lib/schemas";
 import { exigirAcessoCandidatoVaga, exigirAcessoVaga, exigirContextoUnidade } from "@/lib/unidadeAuth";
 
@@ -49,16 +50,32 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const parsed = parseBody(candidatoVagaCreateSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
-    const { vaga_id, candidato_id, etapa = null, responsavel = null } = parsed.data;
+    const { vaga_id, candidato_id, etapa = null } = parsed.data;
+    let responsavel = parsed.data.responsavel ?? null;
     const bloqueio = await exigirAcessoVaga(vaga_id);
     if (bloqueio) return bloqueio;
     const supabase = createServiceClient();
 
     const { data: vagaStatus } = await supabase
       .from("vagas")
-      .select("status")
+      .select("status, unidades(slug)")
       .eq("id", vaga_id)
       .single();
+
+    // Sem responsável informado (ex: "Adicionar candidato" na tela da vaga), quem está logado
+    // assume — se for do time da unidade da vaga (decisão do Olver, 25/09). Fora do time, não
+    // mexe no responsável atual do candidato.
+    if (!responsavel) {
+      const { data: { user } } = await (await createClient()).auth.getUser();
+      if (user) {
+        const { data: perfil } = await supabase.from("analistas_perfil").select("nome_completo").eq("user_id", user.id).maybeSingle();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const slug = (vagaStatus?.unidades as any)?.slug ?? null;
+        if (perfil?.nome_completo && nomesCompletosDaUnidade(slug).includes(perfil.nome_completo)) {
+          responsavel = perfil.nome_completo;
+        }
+      }
+    }
 
     if (vagaStatus?.status === "pausada") {
       return NextResponse.json(

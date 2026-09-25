@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { ANALISTAS, TIPOS_SERVICO, HABILIDADES, ESTADOS, SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, detectarModoSalario, type SalarioModo } from "@/lib/constants";
+import { TIPOS_SERVICO, HABILIDADES, ESTADOS, SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, detectarModoSalario, type SalarioModo } from "@/lib/constants";
 import type { Vaga } from "@/types";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import { useUsuarioLogado } from "@/components/UsuarioLogadoProvider";
+import { responsaveisDaUnidade, opcoesResponsavel } from "@/lib/responsaveis";
 
 const IMPACTO_TIPO: Record<string, string> = {
   recrutamento_selecao: "Fee será aplicado conforme contrato. Garantia de 30 dias.",
@@ -123,6 +125,13 @@ function maskHora(raw: string): string {
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Props) {
+  const usuario = useUsuarioLogado();
+  // Time da unidade da vaga; o responsável já gravado continua na lista mesmo se não for dele.
+  const opcoesResp = opcoesResponsavel(
+    responsaveisDaUnidade(vaga.unidade_id ? usuario.unidadeSlugPorId[vaga.unidade_id] : null),
+    usuario.apelido,
+    vaga.responsavel
+  );
   const [form, setForm] = useState({
     titulo: "",
     cliente_id: "",
@@ -373,7 +382,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
               </label>
               <select value={form.responsavel} onChange={(e) => set("responsavel", e.target.value)} className="input-field">
                 <option value="">Selecione...</option>
-                {ANALISTAS.map((a) => <option key={a} value={a}>{a}</option>)}
+                {opcoesResp.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
           </div>

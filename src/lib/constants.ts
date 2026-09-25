@@ -6,6 +6,8 @@ export const ANALISTAS = [
   "Edivan",
   "Bete",
   "Olver",
+  "Victor",
+  "Susana",
 ] as const;
 
 export type Analista = (typeof ANALISTAS)[number];
@@ -25,6 +27,26 @@ export const ANALISTAS_NOME_COMPLETO: Record<Analista, string> = {
   Edivan: "Edivan Souza Silva",
   Bete: "Elizabete Salmazo",
   Olver: "Olver Pereira dos Santos",
+  Victor: "Victor Eduardo Oliveira",
+  Susana: "Susana Oliveira",
+};
+
+// Unidade de cada responsável — as listas de Responsável (vaga, cliente, candidato,
+// supervisor) mostram só o time da unidade da vaga/cliente (decisão do Olver, 25/09). Por
+// enquanto SBC é só Victor e Susana, que acumulam comercial, supervisão e recrutamento; os
+// sócios ficam no time de Monte Mor/Hortolândia. A Susana tem também um login antigo de
+// analista em Monte Mor (operacaosp@) mantido ativo a pedido do Olver — nas listas ela conta
+// só como SBC. Atualizar junto com ANALISTAS.
+export const ANALISTA_UNIDADE_SLUG: Record<Analista, "monte-mor-hortolandia" | "sbc"> = {
+  Giovanni: "monte-mor-hortolandia",
+  Rebecca: "monte-mor-hortolandia",
+  Andreza: "monte-mor-hortolandia",
+  Lucas: "monte-mor-hortolandia",
+  Edivan: "monte-mor-hortolandia",
+  Bete: "monte-mor-hortolandia",
+  Olver: "monte-mor-hortolandia",
+  Victor: "sbc",
+  Susana: "sbc",
 };
 
 export const HABILIDADES = [

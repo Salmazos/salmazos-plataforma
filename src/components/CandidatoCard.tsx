@@ -10,6 +10,8 @@ import ModalEntrevistaSalmazos from "./ModalEntrevistaSalmazos";
 import ModalMotivoEtapa from "./ModalMotivoEtapa";
 import { MOTIVOS_REPROVACAO_INTERNA, MOTIVOS_REPROVACAO_CLIENTE } from "@/lib/motivos-reprovacao";
 import { getProximasEtapas, getComportamentoEtapa, getEtapaLabel } from "@/lib/etapasCandidatura";
+import { useUsuarioLogado, unidadeDaTela } from "./UsuarioLogadoProvider";
+import { nomesCompletosDaUnidade, opcoesResponsavel } from "@/lib/responsaveis";
 
 type Analista = { id: string; nome_completo: string; email: string };
 
@@ -41,6 +43,7 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
   const [salvando, setSalvando] = useState(false);
   const [analistas, setAnalistas] = useState<Analista[]>([]);
   const [modalEntrevistaSalmazos, setModalEntrevistaSalmazos] = useState(false);
+  const usuario = useUsuarioLogado();
   const [modalMotivo, setModalMotivo] = useState<{ etapa: string; tipo: "motivo_interno" | "motivo_cliente" } | null>(null);
 
   useEffect(() => {
@@ -199,7 +202,14 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
             className="text-xs py-0.5 px-1.5 border border-gray-200 rounded-md bg-gray-50 text-gray-600 cursor-pointer disabled:opacity-50 flex-1 min-w-0 truncate"
           >
             <option value="">Sem responsável</option>
-            {analistas.map((a) => <option key={a.id} value={a.nome_completo}>{a.nome_completo}</option>)}
+            {opcoesResponsavel(
+              // Time da unidade da vaga do card (só quem está ativo), com quem está logado primeiro.
+              nomesCompletosDaUnidade(
+                card.vaga_unidade_id ? usuario.unidadeSlugPorId[card.vaga_unidade_id] : unidadeDaTela(usuario)
+              ).filter((n) => analistas.some((a) => a.nome_completo === n)),
+              usuario.nomeCompleto,
+              card.responsavel
+            ).map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </div>
 

@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ANALISTAS, TIPOS_SERVICO, HABILIDADES, ESTADOS, SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, detectarModoSalario, type SalarioModo } from "@/lib/constants";
+import { TIPOS_SERVICO, HABILIDADES, ESTADOS, SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, detectarModoSalario, type SalarioModo } from "@/lib/constants";
 import type { Vaga } from "@/types";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import { useUsuarioLogado } from "@/components/UsuarioLogadoProvider";
+import { responsaveisDaUnidade, responsavelPadrao, opcoesResponsavel } from "@/lib/responsaveis";
 
 interface ClienteOpcao {
   id: string;
@@ -132,6 +134,7 @@ function maskHora(raw: string): string {
 
 export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades }: Props) {
   const router = useRouter();
+  const usuario = useUsuarioLogado();
   const editando = !!vaga;
   const escolheUnidade = !editando && !!unidades;
 
@@ -217,6 +220,24 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades
       .then((r) => r.json())
       .then((j) => setClientes(j.data ?? []));
   }, [isOpen, vaga]);
+
+  // Unidade da vaga decide o time do <select> de Responsável: a do cliente; sem cliente, a
+  // escolhida pelo sócio (ou a da vaga, na edição); senão a de quem está cadastrando.
+  const unidadeIdVaga =
+    clientes.find((c) => c.id === form.cliente_id)?.unidade_id ??
+    (escolheUnidade ? unidadeId || null : vaga?.unidade_id ?? null);
+  const unidadeSlugVaga = unidadeIdVaga
+    ? usuario.unidadeSlugPorId[unidadeIdVaga] ?? null
+    : usuario.todasUnidades ? null : usuario.unidadeSlug;
+  const timeResponsavel = responsaveisDaUnidade(unidadeSlugVaga);
+
+  // Vaga nova já vem com quem está logado como responsável; se a unidade mudar (troca de
+  // cliente) e o escolhido não for do time dela, volta pro padrão.
+  useEffect(() => {
+    if (!isOpen || editando) return;
+    const time: string[] = responsaveisDaUnidade(unidadeSlugVaga);
+    setForm((f) => (time.includes(f.responsavel) ? f : { ...f, responsavel: responsavelPadrao(time, usuario.apelido) }));
+  }, [isOpen, editando, unidadeSlugVaga, usuario.apelido]);
 
   if (!isOpen) return null;
 
@@ -375,7 +396,9 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades
               </label>
               <select value={form.responsavel} onChange={(e) => set("responsavel", e.target.value)} className="input-field">
                 <option value="">Selecione...</option>
-                {ANALISTAS.map((a) => <option key={a} value={a}>{a}</option>)}
+                {opcoesResponsavel(timeResponsavel, usuario.apelido, editando ? vaga?.responsavel : null).map((a) => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
               </select>
             </div>
           </div>

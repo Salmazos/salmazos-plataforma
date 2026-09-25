@@ -6,6 +6,7 @@ import { parseBody, fromSolicitacaoSchema } from "@/lib/schemas";
 import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
 import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 import { generateUniqueSlug } from "@/lib/slug";
+import { apelidoDoNomeCompleto } from "@/lib/responsaveis";
 
 export async function POST(request: NextRequest) {
   try {
@@ -71,7 +72,9 @@ export async function POST(request: NextRequest) {
         principais_atividades: sol.principais_atividades ?? null,
         habilidades_desejadas: [],
         status: "aberta",
-        responsavel: analistaNome,
+        // Quem aprova vira o responsável, no nome curto que o <select> de Responsável da vaga
+        // usa (gravar o nome completo deixava o campo em branco na edição da vaga).
+        responsavel: apelidoDoNomeCompleto(perfil?.nome_completo) ?? analistaNome,
         observacoes: sol.observacoes ?? null,
         cliente_nome_temp: sol.cliente_nome ?? null,
         // Vaga já nasce marcada como confidencial quando o cliente marcou isso na

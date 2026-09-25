@@ -33,7 +33,7 @@ export async function GET(request: Request) {
       .from("candidatos_vagas")
       .select(
         "id, candidato_id, vaga_id, data_inicio, candidatos(nome_completo), " +
-          "vagas!candidatos_vagas_vaga_id_fkey(id, titulo, tipo_servico, created_at, cliente_id, clientes(id, nome, responsavel_comercial))"
+          "vagas!candidatos_vagas_vaga_id_fkey(id, titulo, tipo_servico, created_at, cliente_id, clientes(id, nome, responsavel_comercial, unidade_id))"
       )
       .is("pos_venda_notificado_em", null)
       .not("data_inicio", "is", null)
@@ -94,7 +94,7 @@ export async function GET(request: Request) {
       const clienteNome = cliente.nome ?? "Cliente";
       const dataInicioFmt = (r.data_inicio as string).split("-").reverse().join("/");
 
-      const destinatarios = await resolverDestinatariosPosVenda(cliente.responsavel_comercial, supabase);
+      const destinatarios = await resolverDestinatariosPosVenda(cliente.responsavel_comercial, supabase, cliente.unidade_id ?? null);
 
       if (destinatarios.length === 0) {
         console.error(

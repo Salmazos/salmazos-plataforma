@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useUsuarioLogado } from "./UsuarioLogadoProvider";
+import { nomesCompletosDaUnidade } from "@/lib/responsaveis";
 
-interface Cliente { id: string; nome: string; ativo: boolean }
-interface Supervisor { id: string; nome_completo: string }
+interface Cliente { id: string; nome: string; ativo: boolean; unidade_id: string | null }
+interface Supervisor { id: string; nome_completo: string; unidade_id: string | null }
 interface MetaRow {
   id: string;
   cliente_id: string;
@@ -49,6 +51,7 @@ export default function SupervisaoConfigClient() {
   const [form, setForm] = useState<FormState>(novoForm());
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const usuario = useUsuarioLogado();
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -67,6 +70,33 @@ export default function SupervisaoConfigClient() {
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); } }, [toast]);
 
   const clientesDisponiveis = clientes.filter((c) => !metas.some((m) => m.cliente_id === c.id));
+
+  // Supervisor: só o time da unidade do cliente (nome do time + login daquela unidade — a
+  // Susana tem um login antigo em Monte Mor que não deve aparecer lá). O já gravado fica na
+  // lista mesmo se não for do time; cadastro novo já vem com quem está logado, se for do time.
+  const unidadeCliente = clientes.find((c) => c.id === form.cliente_id)?.unidade_id ?? null;
+  const timeDoCliente = supervisores.filter((s) => {
+    const slugLogin = s.unidade_id ? usuario.unidadeSlugPorId[s.unidade_id] : null;
+    // Login válido = da unidade do time da pessoa (tira o login antigo da Susana em Monte Mor)
+    return !!slugLogin && nomesCompletosDaUnidade(slugLogin).includes(s.nome_completo) &&
+      (!unidadeCliente || s.unidade_id === unidadeCliente);
+  });
+  const supervisorLogado = timeDoCliente.find((s) => s.nome_completo === usuario.nomeCompleto) ?? null;
+  const gravado = editingId ? supervisores.find((s) => s.id === form.supervisor_responsavel_id) : undefined;
+  const supervisoresOrdenados = [
+    ...(supervisorLogado ? [supervisorLogado] : []),
+    ...timeDoCliente.filter((s) => s.id !== supervisorLogado?.id),
+    ...(gravado && !timeDoCliente.some((s) => s.id === gravado.id) ? [gravado] : []),
+  ];
+
+  const idsTime = timeDoCliente.map((s) => s.id).join(",");
+  useEffect(() => {
+    if (!modalOpen || editingId || !form.cliente_id) return;
+    const ids = idsTime.split(",");
+    setForm((f) =>
+      ids.includes(f.supervisor_responsavel_id) ? f : { ...f, supervisor_responsavel_id: supervisorLogado?.id ?? "" }
+    );
+  }, [modalOpen, editingId, form.cliente_id, idsTime, supervisorLogado?.id]);
 
   const openNew = () => {
     setEditingId(null);
@@ -209,7 +239,7 @@ export default function SupervisaoConfigClient() {
               <label style={labelStyle}>Supervisor responsável</label>
               <select style={{ ...inputStyle, cursor: "pointer" }} value={form.supervisor_responsavel_id} onChange={(e) => setForm((f) => ({ ...f, supervisor_responsavel_id: e.target.value }))}>
                 <option value="">Nenhum</option>
-                {supervisores.map((s) => <option key={s.id} value={s.id}>{s.nome_completo}</option>)}
+                {supervisoresOrdenados.map((s) => <option key={s.id} value={s.id}>{s.nome_completo}</option>)}
               </select>
             </div>
 

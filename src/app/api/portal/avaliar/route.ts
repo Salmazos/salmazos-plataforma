@@ -4,6 +4,7 @@ import { registrarHistorico } from "@/lib/registrarHistorico";
 import { registrarAuditoria } from "@/lib/audit";
 import { sendEmail } from "@/lib/sendEmail";
 import { parseBody, portalAvaliarSchema } from "@/lib/schemas";
+import { buscarPerfilResponsavel } from "@/lib/perfilResponsavel";
 
 export async function PATCH(request: NextRequest) {
   try {
@@ -197,12 +198,7 @@ export async function PATCH(request: NextRequest) {
 
       let userIdDestino: string | null = null;
       if (candNotif?.responsavel) {
-        const { data: analistaNotif } = await service
-          .from("analistas_perfil")
-          .select("user_id")
-          .eq("nome_completo", candNotif.responsavel)
-          .eq("ativo", true)
-          .maybeSingle();
+        const analistaNotif = await buscarPerfilResponsavel(service, candNotif.responsavel);
         userIdDestino = analistaNotif?.user_id ?? null;
       }
 

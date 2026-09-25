@@ -13,6 +13,8 @@ import PopupContaReceberHortolandiaVencida from "@/components/PopupContaReceberH
 import PopupVencimentoContratoMot from "@/components/PopupVencimentoContratoMot";
 import PopupSolicitacaoVagaPendente from "@/components/PopupSolicitacaoVagaPendente";
 import NotificacoesProvider from "@/components/NotificacoesProvider";
+import UsuarioLogadoProvider from "@/components/UsuarioLogadoProvider";
+import { apelidoDoNomeCompleto } from "@/lib/responsaveis";
 import { podeAcessarFuncionarios } from "@/lib/funcionariosAuth";
 import { podeAcessarAdmissoes } from "@/lib/admissaoAuth";
 import { PAPEIS_FULL_ACCESS, checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
@@ -81,11 +83,22 @@ export default async function PainelLayout({
 
   const { data: perfil } = await supabase
     .from("analistas_perfil")
-    .select("id, nome_completo, cargo, avatar_url, nivel_acesso")
+    .select("id, nome_completo, cargo, avatar_url, nivel_acesso, unidade_id, acesso_todas_unidades")
     .eq("user_id", user.id)
     .single();
 
+  const { data: unidades } = await createServiceClient().from("unidades").select("id, slug");
+  const unidadeSlugPorId = Object.fromEntries((unidades ?? []).map((u) => [u.id, u.slug]));
+  const usuarioLogado = {
+    nomeCompleto: perfil?.nome_completo ?? null,
+    apelido: apelidoDoNomeCompleto(perfil?.nome_completo),
+    unidadeSlug: perfil?.unidade_id ? unidadeSlugPorId[perfil.unidade_id] ?? null : null,
+    todasUnidades: perfil?.acesso_todas_unidades === true,
+    unidadeSlugPorId,
+  };
+
   return (
+    <UsuarioLogadoProvider valor={usuarioLogado}>
     <NotificacoesProvider>
       <div className="min-h-screen bg-gray-100 flex">
         <SidebarMenu
@@ -126,5 +139,6 @@ export default async function PainelLayout({
         <PopupSolicitacaoVagaPendente />
       </div>
     </NotificacoesProvider>
+    </UsuarioLogadoProvider>
   );
 }

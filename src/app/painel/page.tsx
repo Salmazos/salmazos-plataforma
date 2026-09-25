@@ -22,7 +22,7 @@ export default async function PainelPage() {
     .select(`
       id, etapa, vaga_id, cliente_id, observacoes, created_at,
       candidatos!inner(id, nome_completo, cargo_pretendido, cidade, estado, triagem_score, triagem_label, origem, bloqueado, responsavel, habilidades, resumo_profissional, created_at, updated_at),
-      vagas!candidatos_vagas_vaga_id_fkey!inner(id, titulo, tipo_servico, cliente_id, confidencial, clientes(nome, processo_simplificado)),
+      vagas!candidatos_vagas_vaga_id_fkey!inner(id, titulo, tipo_servico, cliente_id, confidencial, unidade_id, clientes(nome, processo_simplificado)),
       clientes(nome)
     `)
     .in("etapa", ETAPAS_KANBAN_VISIVEIS)
@@ -75,7 +75,7 @@ export default async function PainelPage() {
       created_at: string;
       updated_at: string;
     };
-    vagas: { id: string; titulo: string; tipo_servico: string | null; cliente_id: string | null; confidencial: boolean; clientes: { nome: string; processo_simplificado: boolean | null } | null };
+    vagas: { id: string; titulo: string; tipo_servico: string | null; cliente_id: string | null; confidencial: boolean; unidade_id: string | null; clientes: { nome: string; processo_simplificado: boolean | null } | null };
     clientes: { nome: string } | null;
   }[]).map((cv) => ({
     cv_id: cv.id,
@@ -84,6 +84,7 @@ export default async function PainelPage() {
     vaga_titulo: cv.vagas.titulo,
     vaga_tipo_servico: cv.vagas.tipo_servico,
     vaga_confidencial: cv.vagas.confidencial,
+    vaga_unidade_id: cv.vagas.unidade_id,
     encaminhamento_tipo_servico: tipoServicoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`) ?? null,
     encaminhamento_status: agendamentoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`)?.status ?? null,
     encaminhamento_data_entrevista: agendamentoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`)?.data_entrevista ?? null,

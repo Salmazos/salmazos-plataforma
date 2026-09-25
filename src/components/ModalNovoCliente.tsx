@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { Eye, EyeOff, Upload } from "lucide-react";
-import { SEGMENTOS_CLIENTE, TIPOS_SERVICO, ANALISTAS, ENTIDADES_CONTRATANTES } from "@/lib/constants";
+import { SEGMENTOS_CLIENTE, TIPOS_SERVICO, ENTIDADES_CONTRATANTES } from "@/lib/constants";
+import { useUsuarioLogado } from "@/components/UsuarioLogadoProvider";
+import { responsaveisDaUnidade, responsavelPadrao, opcoesResponsavel } from "@/lib/responsaveis";
 import type { Cliente } from "@/types";
 import CampoTelefone from "@/components/ui/CampoTelefone";
 
@@ -40,6 +42,7 @@ const FORM_VAZIO = {
 };
 
 export default function ModalNovoCliente({ isOpen, cliente, unidades, onClose, onSalvo }: Props) {
+  const usuario = useUsuarioLogado();
   const [form, setForm] = useState(FORM_VAZIO);
   const [unidadeId, setUnidadeId] = useState("");
   const [servicos, setServicos] = useState<string[]>([]);
@@ -109,6 +112,22 @@ export default function ModalNovoCliente({ isOpen, cliente, unidades, onClose, o
       }
     }
   }, [isOpen, cliente, unidades]);
+
+  // Time do Responsável Comercial = o da unidade do cliente (a escolhida pelo sócio, a do
+  // cliente na edição, ou a de quem cadastra). Cliente novo já vem com quem está logado.
+  const unidadeIdCliente = unidades ? unidadeId || null : cliente?.unidade_id ?? null;
+  const unidadeSlugCliente = unidadeIdCliente
+    ? usuario.unidadeSlugPorId[unidadeIdCliente] ?? null
+    : usuario.todasUnidades ? null : usuario.unidadeSlug;
+  const timeComercial = responsaveisDaUnidade(unidadeSlugCliente);
+
+  useEffect(() => {
+    if (!isOpen || cliente) return;
+    const time: string[] = responsaveisDaUnidade(unidadeSlugCliente);
+    setForm((f) =>
+      time.includes(f.responsavel_comercial) ? f : { ...f, responsavel_comercial: responsavelPadrao(time, usuario.apelido) }
+    );
+  }, [isOpen, cliente, unidadeSlugCliente, usuario.apelido]);
 
   if (!isOpen) return null;
 
@@ -393,7 +412,7 @@ export default function ModalNovoCliente({ isOpen, cliente, unidades, onClose, o
               className="input-field"
             >
               <option value="">Sem responsável</option>
-              {ANALISTAS.map((a) => (
+              {opcoesResponsavel(timeComercial, usuario.apelido, cliente?.responsavel_comercial).map((a) => (
                 <option key={a} value={a}>{a}</option>
               ))}
             </select>

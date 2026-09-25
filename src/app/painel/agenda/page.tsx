@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
-import { ANALISTAS } from "@/lib/constants";
+import { useUsuarioLogado, unidadeDaTela } from "@/components/UsuarioLogadoProvider";
+import { nomesCompletosDaUnidade } from "@/lib/responsaveis";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -138,6 +139,10 @@ export default function AgendaPage() {
   const [diaSelecionado, setDiaSelecionado] = useState<number | null>(null);
 
   const [filtroAnalista, setFiltroAnalista] = useState("");
+  const usuario = useUsuarioLogado();
+  // candidatos.responsavel guarda o nome completo — o filtro compara com ele (antes usava o
+  // nome curto de ANALISTAS e nunca batia).
+  const analistasFiltro = nomesCompletosDaUnidade(unidadeDaTela(usuario));
   const [filtroCliente, setFiltroCliente] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("");
 
@@ -286,7 +291,7 @@ export default function AgendaPage() {
               style={{ paddingTop: 8, paddingBottom: 8 }}
             >
               <option value="">Todos</option>
-              {ANALISTAS.map((a) => (
+              {analistasFiltro.map((a) => (
                 <option key={a} value={a}>{a}</option>
               ))}
             </select>

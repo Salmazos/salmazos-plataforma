@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
+import { buscarPerfilResponsavel } from "@/lib/perfilResponsavel";
 
 interface NotifyOpts {
   subject: string;
@@ -102,12 +103,7 @@ export async function notifyResponsibleOrAll(opts: NotifyResponsibleOpts): Promi
   const supabase = createServiceClient();
 
   if (opts.responsavelNome) {
-    const { data: analista } = await supabase
-      .from("analistas_perfil")
-      .select("user_id, email")
-      .eq("nome_completo", opts.responsavelNome)
-      .eq("ativo", true)
-      .maybeSingle();
+    const analista = await buscarPerfilResponsavel(supabase, opts.responsavelNome);
 
     if (analista?.user_id && analista.email) {
       await supabase.from("notificacoes_analista").insert({

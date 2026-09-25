@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { parseBody, candidatoResponsavelSchema } from "@/lib/schemas";
 import { idsCandidaturasDaUnidade, resolverUnidadeUsuario } from "@/lib/unidadeAuth";
+import { buscarPerfilResponsavel } from "@/lib/perfilResponsavel";
 
 const ETAPAS_ATIVAS = ["triagem", "entrevista_salmazos", "entrevista_cliente", "aprovado_cliente"];
 
@@ -30,12 +31,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const svc = createServiceClient();
 
   if (responsavel !== "") {
-    const { data: analista } = await svc
-      .from("analistas_perfil")
-      .select("id")
-      .eq("nome_completo", responsavel)
-      .eq("ativo", true)
-      .maybeSingle();
+    const analista = await buscarPerfilResponsavel(svc, responsavel);
 
     if (!analista) {
       return NextResponse.json({ error: "Responsável inválido." }, { status: 400 });
@@ -85,12 +81,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     });
 
     if (oldResponsavel) {
-      const { data: oldAnalista } = await svc
-        .from("analistas_perfil")
-        .select("user_id")
-        .eq("nome_completo", oldResponsavel)
-        .eq("ativo", true)
-        .maybeSingle();
+      const oldAnalista = await buscarPerfilResponsavel(svc, oldResponsavel);
 
       if (oldAnalista?.user_id) {
         await svc.from("notificacoes_analista").insert({
