@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import RescisoesPageClient from "@/components/RescisoesPageClient";
 import { podeAcessarFuncionarios } from "@/lib/funcionariosAuth";
-import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
 import { contextoRH } from "@/lib/rhUnidadeAuth";
 import SemAcessoPainel from "@/components/SemAcessoPainel";
 
@@ -15,9 +14,7 @@ export default async function RescisoesPage() {
   } = await supabaseAuth.auth.getUser();
   if (!user) redirect("/login");
 
-  const role = user.app_metadata?.role ?? "analista";
   if (!(await podeAcessarFuncionarios(user))) redirect("/painel");
-  const isFullAccess = PAPEIS_FULL_ACCESS.includes(role);
   // RH por unidade (decisão do Olver, 24/09): supervisor só vê a própria unidade; sócios, todas.
   const ctxRH = await contextoRH(user);
   if (!ctxRH) return <SemAcessoPainel />;
@@ -43,7 +40,6 @@ export default async function RescisoesPage() {
     <RescisoesPageClient
       rescisoesIniciais={rescisoes ?? []}
       clientes={clientes ?? []}
-      isFullAccess={isFullAccess}
     />
   );
 }

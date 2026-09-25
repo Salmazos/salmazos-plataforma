@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import RescisoesAvisosConfigClient from "@/components/RescisoesAvisosConfigClient";
+import { avisosEmailRescisaoAtivos } from "@/lib/dispararAvisosRescisao";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +17,11 @@ export default async function RescisoesAvisosConfigPage() {
 
   const svc = createServiceClient();
 
-  const [{ data: emailDestinatarios }, { data: plataformaDestinatariosRaw }, { data: usuarios }] = await Promise.all([
+  const [{ data: emailDestinatarios }, { data: plataformaDestinatariosRaw }, { data: usuarios }, emailAtivo] = await Promise.all([
     svc.from("rescisao_avisos_email_destinatarios").select("*").order("nome"),
     svc.from("rescisao_avisos_plataforma_destinatarios").select("*").order("criado_em"),
     svc.from("analistas_perfil").select("user_id, nome_completo, email").eq("ativo", true).order("nome_completo"),
+    avisosEmailRescisaoAtivos(),
   ]);
 
   // Sem FK direta entre rescisao_avisos_plataforma_destinatarios e analistas_perfil (as
@@ -33,6 +35,7 @@ export default async function RescisoesAvisosConfigPage() {
 
   return (
     <RescisoesAvisosConfigClient
+      emailAtivoInicial={emailAtivo}
       emailDestinatariosIniciais={emailDestinatarios ?? []}
       plataformaDestinatariosIniciais={plataformaDestinatarios}
       usuarios={usuarios ?? []}

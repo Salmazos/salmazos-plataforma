@@ -1,6 +1,14 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { RESCISAO_MODALIDADE_LABEL } from "@/lib/rescisaoModalidade";
+import { getConfiguracoesGerais } from "@/lib/configuracoesGerais";
+
+export const CHAVE_AVISOS_EMAIL_RESCISAO = "rescisao_avisos_email_ativo";
+
+export async function avisosEmailRescisaoAtivos(): Promise<boolean> {
+  const config = await getConfiguracoesGerais([CHAVE_AVISOS_EMAIL_RESCISAO]);
+  return config[CHAVE_AVISOS_EMAIL_RESCISAO] === "true";
+}
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -149,12 +157,9 @@ export interface ResultadoEnvioEmailRescisao {
   valorRescisao: number | null;
 }
 
-// Canal de e-mail isolado (extraído de dispararAvisosRescisao) — usado tanto pelo disparo
-// automático abaixo (que depois cuida do sino/popup separadamente) quanto pelo reenvio
-// manual (POST /api/rescisoes/[id]/reenviar). O reenvio NUNCA deve chamar
-// dispararAvisosRescisao inteiro: isso reinseriria em notificacoes_analista e duplicaria
-// sino/popup pra quem já recebeu no disparo original — só esta função é segura de repetir.
-export async function enviarEmailRescisao(
+// Canal de e-mail isolado do sino/popup — só é chamado quando o e-mail está ligado em
+// Configurações (ver dispararAvisosRescisao). O botão de reenvio manual foi removido em 25/09.
+async function enviarEmailRescisao(
   rescisaoId: string,
   momento: MomentoAvisoRescisao,
   supabase?: ServiceClient
@@ -214,9 +219,61 @@ export async function enviarEmailRescisao(
   return { ...base, sucesso: !algumEmailFalhou, destinatariosCount: emailDestinatarios.length };
 }
 
+// Aviso de "rescisão paga" quando o status passa de Pendente pra Pago (toggle da tabela ou
+// modal de edição). Só sino + popup, sem e-mail (decisão do Olver, 25/09) — mesma lista
+// global de destinatários de plataforma dos outros avisos. Nunca lança exceção: o status já
+// foi salvo quando isto roda, falha aqui só vira log.
+export async function avisarRescisaoPaga(rescisaoId: string, supabase?: ServiceClient): Promise<void> {
+  try {
+    const svc = supabase ?? createServiceClient();
+
+    const { data: r, error } = await svc
+      .from("rescisoes")
+      .select("empresa, modalidade, data_desligamento, valor_rescisao, funcionarios(nome_completo)")
+      .eq("id", rescisaoId)
+      .single();
+    if (error || !r) {
+      console.error(`[avisarRescisaoPaga] Rescisão não encontrada (id=${rescisaoId}):`, error?.message);
+      return;
+    }
+
+    const { data: destinatarios, error: destError } = await svc
+      .from("rescisao_avisos_plataforma_destinatarios")
+      .select("usuario_id");
+    if (destError) {
+      console.error(`[avisarRescisaoPaga] Erro ao buscar destinatários (rescisao_id=${rescisaoId}):`, destError.message);
+      return;
+    }
+    if (!destinatarios || destinatarios.length === 0) return;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nome = (r.funcionarios as any)?.nome_completo?.trim() ?? "Funcionário";
+    const modalidade = RESCISAO_MODALIDADE_LABEL[r.modalidade] ?? r.modalidade;
+    const mensagem =
+      `A rescisão do funcionário ${nome}, da empresa ${r.empresa}, desligado em ${formatarData(r.data_desligamento)}, ` +
+      `na modalidade ${modalidade}, no valor de ${moeda(r.valor_rescisao)} foi paga.`;
+
+    const { error: insertError } = await svc.from("notificacoes_analista").insert(
+      destinatarios.map((d) => ({
+        tipo: "rescisao_paga",
+        titulo: "Rescisão paga",
+        mensagem,
+        user_id: d.usuario_id,
+        candidato_id: null,
+        rescisao_id: rescisaoId,
+      }))
+    );
+    if (insertError) {
+      console.error(`[avisarRescisaoPaga] Erro ao criar notificações (rescisao_id=${rescisaoId}):`, insertError.message);
+    }
+  } catch (err) {
+    console.error(`[avisarRescisaoPaga] Falha inesperada (rescisao_id=${rescisaoId}):`, err);
+  }
+}
+
 // Função central chamada nos 3 momentos possíveis de uma rescisão (lançamento, vencimento
-// da rescisão, vencimento da guia) — sempre os mesmos 3 canais (e-mail, sino, popup de
-// login), para as mesmas 2 listas de destinatários escolhidas no lançamento. O popup não
+// da rescisão, vencimento da guia) — sino e popup de login sempre; e-mail só com a chave
+// ligada em Configurações (CHAVE_AVISOS_EMAIL_RESCISAO). O popup não
 // tem lógica própria aqui: ele deriva do que foi inserido em notificacoes_analista (ver
 // /api/rescisoes/avisos-hoje), então só precisamos gerar o e-mail e o sino.
 //
@@ -231,10 +288,23 @@ export async function dispararAvisosRescisao(rescisaoId: string, momento: Moment
     const svc = createServiceClient();
 
     // ── Canal 1: e-mail ──────────────────────────────────────────────────────
-    const resultadoEmail = await enviarEmailRescisao(rescisaoId, momento, svc);
-    if (!resultadoEmail) return { sucesso: false };
+    // Desligado por padrão (decisão do Olver, 25/09: avisos de rescisão só no sino e no popup);
+    // liga/desliga em Configurações > Avisos de Rescisão. Sem a chave gravada = desligado.
+    const emailAtivo = await avisosEmailRescisaoAtivos();
+    let emailOk = true;
+    let dados: { funcionario: string; empresa: string; valorRescisao: number | null };
+    if (emailAtivo) {
+      const resultadoEmail = await enviarEmailRescisao(rescisaoId, momento, svc);
+      if (!resultadoEmail) return { sucesso: false };
+      emailOk = resultadoEmail.sucesso;
+      dados = resultadoEmail;
+    } else {
+      const rescisao = await buscarRescisaoParaAviso(svc, rescisaoId);
+      if (!rescisao) return { sucesso: false };
+      dados = { funcionario: rescisao.nomeFuncionario, empresa: rescisao.empresa, valorRescisao: rescisao.valor_rescisao };
+    }
 
-    const { titulo, mensagem } = conteudo(momento, resultadoEmail.funcionario, resultadoEmail.empresa, resultadoEmail.valorRescisao);
+    const { titulo, mensagem } = conteudo(momento, dados.funcionario, dados.empresa, dados.valorRescisao);
 
     // ── Canal 2 e 3: sino + popup (mesma linha em notificacoes_analista alimenta os dois — ver /api/rescisoes/avisos-hoje) ──
     // Fase 3.1 — destinatários deixaram de ser por-rescisão: agora é configuração global
@@ -268,7 +338,7 @@ export async function dispararAvisosRescisao(rescisaoId: string, momento: Moment
       }
     }
 
-    return { sucesso: resultadoEmail.sucesso && !plataformaFalhou };
+    return { sucesso: emailOk && !plataformaFalhou };
   } catch (err) {
     console.error(`[dispararAvisosRescisao] Falha inesperada (rescisao_id=${rescisaoId}, momento=${momento}):`, err);
     return { sucesso: false };

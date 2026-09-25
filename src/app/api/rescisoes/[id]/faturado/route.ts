@@ -4,6 +4,7 @@ import { parseBody, rescisaoFaturadoSchema } from "@/lib/schemas";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { checarAcessoRescisaoRH } from "@/lib/rhUnidadeAuth";
+import { avisarRescisaoPaga } from "@/lib/dispararAvisosRescisao";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -32,6 +33,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const svc = createServiceClient();
 
+  const { data: antes } = await svc.from("rescisoes").select("faturado").eq("id", id).maybeSingle();
+
   const { data, error } = await svc
     .from("rescisoes")
     .update({ faturado: parsed.data.faturado })
@@ -40,6 +43,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  if (antes && !antes.faturado && parsed.data.faturado) await avisarRescisaoPaga(id, svc);
 
   registrarAuditoria({
     usuario_id: user.id,

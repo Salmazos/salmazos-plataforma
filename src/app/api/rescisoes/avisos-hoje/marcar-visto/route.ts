@@ -17,8 +17,8 @@ export async function POST() {
   const { error } = await svc
     .from("rescisao_popup_visualizacoes")
     .upsert(
-      { usuario_id: user.id, data_referencia: hojeISO },
-      { onConflict: "usuario_id,data_referencia", ignoreDuplicates: true }
+      { usuario_id: user.id, data_referencia: hojeISO, visualizado_em: new Date().toISOString() },
+      { onConflict: "usuario_id,data_referencia" }
     );
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

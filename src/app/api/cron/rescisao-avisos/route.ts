@@ -8,6 +8,10 @@ export const dynamic = "force-dynamic";
 // diferentes, ou só uma delas (valor_guia/data_pagamento_guia nulos não geram nenhuma
 // linha na segunda passada).
 //
+// Rescisão marcada como Pago (coluna `faturado`) não recebe aviso de vencimento nenhum — o
+// cliente às vezes adianta o pagamento, e o Pago cobre rescisão E guia (decisão do Olver,
+// 25/09, depois de avisos de "vence hoje" saírem pra rescisões já pagas no dia anterior).
+//
 // Idempotência: marca ultimo_aviso_..._enviado_em SÓ DEPOIS de confirmar que o disparo teve
 // sucesso (mesmo padrão do cron de lembrete-agendamento) — não antes. O cron roda 1x/dia sem
 // concorrência, então o risco de duplicar um envio no mesmo dia é baixo; o risco real é o
@@ -49,6 +53,7 @@ export async function GET(request: Request) {
       .from("rescisoes")
       .select("id")
       .eq("data_pagamento_rescisao", hojeSP)
+      .eq("faturado", false)
       .is("ultimo_aviso_vencimento_rescisao_enviado_em", null);
 
     if (errRescisao) {
@@ -78,6 +83,7 @@ export async function GET(request: Request) {
       .from("rescisoes")
       .select("id")
       .eq("data_pagamento_guia", hojeSP)
+      .eq("faturado", false)
       .is("ultimo_aviso_vencimento_guia_enviado_em", null);
 
     if (errGuia) {

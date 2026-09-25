@@ -108,8 +108,8 @@ export default function ModalLancarRescisao({ isOpen, funcionario, onClose, onLa
         <CamposRescisaoForm valores={valores} onAlterar={alterar} asoFile={asoFile} onAsoFileChange={setAsoFile} />
 
         <p className="text-xs text-gray-400 mb-4">
-          Os avisos de e-mail e plataforma são enviados automaticamente para a lista configurada em{" "}
-          <span className="font-semibold">Avisos de Rescisão</span> (menu lateral) — não é escolhido aqui.
+          Os avisos (sino e pop-up) são enviados automaticamente para a lista configurada em{" "}
+          <span className="font-semibold">Configurações › Avisos de Rescisão</span> — não é escolhido aqui.
         </p>
 
         {erro && <p className="text-red-600 text-sm mb-3">{erro}</p>}

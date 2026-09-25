@@ -1092,6 +1092,11 @@ export const rescisaoAvisoEmailUpdateSchema = z.object({
   ativo: z.boolean(),
 });
 
+// Liga/desliga o canal de e-mail dos avisos de rescisão inteiro (configuracoes_gerais).
+export const rescisaoAvisosEmailAtivoSchema = z.object({
+  ativo: z.boolean(),
+});
+
 // ── Avisos de Cobrança R&S — mesmo padrão de rescisaoAvisoEmail (lista fixa e
 // configurável de destinatários, desacoplada de nivel_acesso/role).
 

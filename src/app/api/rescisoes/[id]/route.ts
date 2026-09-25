@@ -4,6 +4,7 @@ import { parseBody, rescisaoUpdateSchema } from "@/lib/schemas";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
 import { registrarAuditoria, diffCampos, resolverNomeUsuario } from "@/lib/audit";
 import { checarAcessoRescisaoRH } from "@/lib/rhUnidadeAuth";
+import { avisarRescisaoPaga } from "@/lib/dispararAvisosRescisao";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -67,6 +68,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  if (!antes.faturado && campos.faturado === true) await avisarRescisaoPaga(id, svc);
 
   // ASO substituído: remove o arquivo antigo do Storage só depois do update confirmado —
   // se o update tivesse falhado, a referência antiga continuaria válida e não deveríamos

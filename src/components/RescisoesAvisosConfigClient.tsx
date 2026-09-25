@@ -22,16 +22,20 @@ export interface UsuarioOption {
 }
 
 interface Props {
+  emailAtivoInicial: boolean;
   emailDestinatariosIniciais: EmailDestinatario[];
   plataformaDestinatariosIniciais: PlataformaDestinatario[];
   usuarios: UsuarioOption[];
 }
 
 export default function RescisoesAvisosConfigClient({
+  emailAtivoInicial,
   emailDestinatariosIniciais,
   plataformaDestinatariosIniciais,
   usuarios,
 }: Props) {
+  const [emailAtivo, setEmailAtivo] = useState(emailAtivoInicial);
+  const [salvandoEmailAtivo, setSalvandoEmailAtivo] = useState(false);
   const [emailDestinatarios, setEmailDestinatarios] = useState(emailDestinatariosIniciais);
   const [plataformaDestinatarios, setPlataformaDestinatarios] = useState(plataformaDestinatariosIniciais);
 
@@ -44,11 +48,31 @@ export default function RescisoesAvisosConfigClient({
   const [erroPlataforma, setErroPlataforma] = useState("");
 
   // Nenhum destinatário ATIVO (não só "nenhuma linha") — um e-mail cadastrado mas
-  // desativado tem o mesmo efeito prático de lista vazia: ninguém recebe.
-  const semEmailAtivo = emailDestinatarios.every((d) => !d.ativo);
+  // desativado tem o mesmo efeito prático de lista vazia: ninguém recebe. Só é problema com
+  // o canal de e-mail ligado.
+  const semEmailAtivo = emailAtivo && emailDestinatarios.every((d) => !d.ativo);
   const semPlataforma = plataformaDestinatarios.length === 0;
 
   // ── E-mail ───────────────────────────────────────────────────────────────
+
+  const handleToggleEmailAtivo = async (ativo: boolean) => {
+    setSalvandoEmailAtivo(true);
+    setErroEmail("");
+    setEmailAtivo(ativo);
+    try {
+      const res = await fetch("/api/rescisoes-avisos-config/email-ativo", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ativo }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setEmailAtivo(!ativo);
+      setErroEmail("Não foi possível salvar. Tente novamente.");
+    } finally {
+      setSalvandoEmailAtivo(false);
+    }
+  };
 
   const handleAdicionarEmail = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -156,6 +180,25 @@ export default function RescisoesAvisosConfigClient({
 
       {/* ── E-mail ─────────────────────────────────────────────────────────── */}
       <div className="card mb-6">
+        <label className="flex items-start gap-3 mb-4 pb-4 border-b border-gray-100 cursor-pointer">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={emailAtivo}
+            disabled={salvandoEmailAtivo}
+            onChange={(e) => handleToggleEmailAtivo(e.target.checked)}
+          />
+          <span>
+            <span className="block text-sm font-semibold text-gray-900">Enviar os avisos de rescisão também por e-mail</span>
+            <span className="block text-xs text-gray-500 mt-0.5">
+              {emailAtivo
+                ? "Ligado — além do sino e do pop-up, os destinatários abaixo recebem e-mail."
+                : "Desligado — os avisos saem só no sino e no pop-up. A lista abaixo fica guardada para quando o e-mail for ligado."}
+            </span>
+          </span>
+        </label>
+
+        <div style={{ opacity: emailAtivo ? 1 : 0.55 }}>
         <p className="section-title mb-1">Destinatários de e-mail</p>
         <p className="text-xs text-gray-400 mb-4">Endereço livre — não precisa ser usuário cadastrado no painel.</p>
 
@@ -208,6 +251,7 @@ export default function RescisoesAvisosConfigClient({
             {enviandoEmail ? "Adicionando..." : "Adicionar"}
           </button>
         </form>
+        </div>
         {erroEmail && <p className="text-red-600 text-sm mt-2">{erroEmail}</p>}
       </div>
 

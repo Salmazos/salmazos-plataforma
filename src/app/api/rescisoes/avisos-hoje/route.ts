@@ -43,16 +43,33 @@ export async function GET() {
   // Filtro de "hoje" em JS (não no SQL) comparando em America/Sao_Paulo — mesma técnica já
   // usada em portal/(app)/page.tsx pra entrevistas de hoje, evita risco de shift de fuso
   // que uma comparação de intervalo timestamptz mal calculada introduziria.
-  const avisosHoje = ((recentesRaw ?? []) as AvisoRow[]).filter(
+  const doDia = ((recentesRaw ?? []) as AvisoRow[]).filter(
     (n) => new Date(n.created_at).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }) === hojeISO
   );
 
+  // "Vence hoje" de rescisão que já foi marcada como Pago depois do aviso sair não aparece
+  // mais — o popup ficaria cobrando um pagamento que já aconteceu.
+  const idsVencimento = [
+    ...new Set(doDia.filter((n) => n.tipo.startsWith("rescisao_vencimento_") && n.rescisao_id).map((n) => n.rescisao_id as string)),
+  ];
+  let pagas = new Set<string>();
+  if (idsVencimento.length > 0) {
+    const { data: rescPagas } = await svc.from("rescisoes").select("id").in("id", idsVencimento).eq("faturado", true);
+    pagas = new Set((rescPagas ?? []).map((r) => r.id));
+  }
+  const avisosHoje = doDia.filter(
+    (n) => !(n.tipo.startsWith("rescisao_vencimento_") && n.rescisao_id && pagas.has(n.rescisao_id))
+  );
+
+  // "Já visto" vale só até chegar aviso novo: o de rescisão paga pode ser criado à tarde,
+  // depois de o popup da manhã já ter sido fechado (marcar-visto atualiza visualizado_em).
   const { data: visto } = await svc
     .from("rescisao_popup_visualizacoes")
-    .select("id")
+    .select("visualizado_em")
     .eq("usuario_id", user.id)
     .eq("data_referencia", hojeISO)
     .maybeSingle();
+  const jaVisto = !!visto && avisosHoje.every((n) => new Date(n.created_at) <= new Date(visto.visualizado_em));
 
-  return NextResponse.json({ data: avisosHoje, ja_visto: !!visto });
+  return NextResponse.json({ data: avisosHoje, ja_visto: jaVisto });
 }
