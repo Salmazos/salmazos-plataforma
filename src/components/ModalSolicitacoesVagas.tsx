@@ -193,7 +193,8 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
       }
       setItems((prev) => prev.map((s) => (s.id === id ? { ...s, ...json.data } : s)));
       fecharEdicao();
-      showToast("Solicitação atualizada.");
+      showToast(json.vaga_atualizada ? "Solicitação e vaga atualizadas." : "Solicitação atualizada.");
+      if (json.vaga_atualizada) onVagaCriada();
     } finally {
       setActionLoading(null);
     }
@@ -252,6 +253,8 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                 const isEditando = editandoId === s.id && formEdicao !== null;
                 const isLoading = actionLoading === s.id;
                 const jaDecidida = s.status !== "pendente";
+                // Pendente ou aprovada podem ser editadas; aprovada propaga pra vaga (ver PATCH).
+                const editavel = s.status === "pendente" || s.status === "aprovada";
 
                 return (
                   <div key={s.id} className="border border-gray-200 rounded-xl p-5 space-y-3">
@@ -344,6 +347,18 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                       </div>
                     )}
 
+                    {s.status === "aprovada" && !isEditando && (
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => abrirEdicao(s)}
+                          disabled={isLoading}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
+                        >
+                          {"✏️"} Editar solicitação e vaga
+                        </button>
+                      </div>
+                    )}
+
                     {/* Recusa inline */}
                     {!jaDecidida && isRecusando && (
                       <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
@@ -374,8 +389,9 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                     )}
 
                     {/* Edição inline — ajustes da equipe antes de aprovar */}
-                    {!jaDecidida && isEditando && formEdicao && (
+                    {editavel && isEditando && formEdicao && (
                       <FormularioEdicao
+                        aprovada={s.status === "aprovada"}
                         form={formEdicao}
                         onChange={setFormEdicao}
                         erro={erroEdicao}
@@ -434,6 +450,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
 }
 
 function FormularioEdicao({
+  aprovada,
   form,
   onChange,
   erro,
@@ -441,6 +458,7 @@ function FormularioEdicao({
   onCancelar,
   onSalvar,
 }: {
+  aprovada: boolean;
   form: FormEdicao;
   onChange: (f: FormEdicao) => void;
   erro: string;
@@ -455,8 +473,10 @@ function FormularioEdicao({
   return (
     <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
       <p className="text-xs text-gray-500">
-        Ajustes da equipe antes de aprovar. O cliente passa a ver a versão editada no portal; a original fica
-        registrada no histórico (auditoria).
+        {aprovada
+          ? "A vaga criada a partir desta solicitação também será atualizada (inclusive na página pública de vagas), só nos campos que você alterar. Mudar o cargo muda o link público da vaga."
+          : "Ajustes da equipe antes de aprovar."}{" "}
+        O cliente passa a ver a versão editada no portal; a original fica registrada no histórico (auditoria).
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">

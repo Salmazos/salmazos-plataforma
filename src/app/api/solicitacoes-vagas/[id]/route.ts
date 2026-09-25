@@ -4,6 +4,7 @@ import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 import { parseBody, solicitacaoVagaUpdateSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
+import { propagarAlteracoesSolicitacaoNaVaga } from "@/lib/propagarSolicitacaoNaVaga";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -48,9 +49,10 @@ function chipsDeBeneficios(texto: string | null): Record<string, boolean> | null
   return Object.fromEntries(itens.map((i) => [i, true]));
 }
 
-// Ajustes pequenos da equipe numa solicitação do portal antes de aprovar, sem precisar pedir
-// pro cliente reenviar (pedido do Olver, 25/09). Só enquanto está pendente — depois de aprovada,
-// quem se edita é a vaga. O cliente passa a ver a versão editada no portal; o que ele pediu
+// Ajustes da equipe numa solicitação do portal, sem precisar pedir pro cliente reenviar
+// (pedido do Olver, 25/09). Pendente: muda só a solicitação. Aprovada: muda a solicitação e
+// propaga os campos alterados pra vaga criada a partir dela (e com isso pra página pública).
+// Recusada não se edita. O cliente passa a ver a versão editada no portal; o que ele pediu
 // originalmente fica registrado na auditoria (antes/depois de cada campo alterado).
 export async function PATCH(request: NextRequest, { params }: Params) {
   try {
@@ -73,7 +75,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!atual || !podeVerUnidade(ctx, atual.unidade_id)) {
       return NextResponse.json({ error: "Solicitação não encontrada." }, { status: 404 });
     }
-    if (atual.status !== "pendente") {
+    if (atual.status !== "pendente" && atual.status !== "aprovada") {
       return NextResponse.json({ error: mensagemDecisaoSolicitacao(atual) }, { status: 409 });
     }
 
@@ -87,11 +89,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     if (Object.keys(campos).length === 0) return NextResponse.json({ data: atual });
 
+    // .eq no status lido acima: se alguém aprovou/recusou no meio da edição, não grava.
     const { data, error } = await service
       .from("solicitacoes_vagas")
       .update({ ...campos, updated_at: new Date().toISOString() })
       .eq("id", id)
-      .eq("status", "pendente")
+      .eq("status", atual.status)
       .select("*")
       .single();
 
@@ -99,21 +102,38 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: error?.message ?? "A solicitação mudou de status enquanto era editada." }, { status: 409 });
     }
 
+    const usuarioNome = await resolverNomeUsuario(user.id, user.email ?? null, service);
+
+    let camposVaga: string[] = [];
+    if (data.status === "aprovada" && data.vaga_id) {
+      try {
+        ({ camposVaga } = await propagarAlteracoesSolicitacaoNaVaga(data.vaga_id, campos, usuarioNome ?? "", service));
+      } catch (err) {
+        console.error(`[PATCH /api/solicitacoes-vagas/[id]] Solicitação ${id} salva, mas a vaga não foi atualizada:`, err);
+        return NextResponse.json(
+          { data, error: "A solicitação foi salva, mas não foi possível atualizar a vaga. Ajuste a vaga pela tela de Vagas." },
+          { status: 500 }
+        );
+      }
+    }
+
     registrarAuditoria({
       usuario_id: user.id,
-      usuario_nome: await resolverNomeUsuario(user.id, user.email ?? null, service),
+      usuario_nome: usuarioNome,
       acao: "solicitacao_vaga_editada",
       entidade: "solicitacoes_vagas",
       entidade_id: id,
       detalhes: {
         cliente: atual.cliente_nome,
+        status: atual.status,
+        vaga_atualizada: camposVaga.length > 0 ? data.vaga_id : null,
         alteracoes: Object.fromEntries(
           Object.keys(campos).map((campo) => [campo, { antes: atual[campo] ?? null, depois: campos[campo] ?? null }])
         ),
       },
     });
 
-    return NextResponse.json({ data });
+    return NextResponse.json({ data, vaga_atualizada: camposVaga.length > 0 });
   } catch (err) {
     console.error("[PATCH /api/solicitacoes-vagas/[id]]", err);
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });
