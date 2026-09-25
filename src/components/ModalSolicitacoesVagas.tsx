@@ -30,6 +30,7 @@ interface Solicitacao {
   requisitos: string | null;
   beneficios: string | null;
   beneficios_chips: Record<string, boolean> | null;
+  principais_atividades: string | null;
   observacoes: string | null;
   confidencial: boolean;
   created_at: string;
@@ -55,6 +56,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
   const [items, setItems] = useState<Solicitacao[]>([]);
   const [toast, setToast] = useState("");
   const [expandedReq, setExpandedReq] = useState<string | null>(null);
+  const [expandedAtiv, setExpandedAtiv] = useState<string | null>(null);
   const [recusandoId, setRecusandoId] = useState<string | null>(null);
   const [motivoRecusa, setMotivoRecusa] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -332,6 +334,22 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                             {b}
                           </span>
                         ))}
+                      </div>
+                    )}
+
+                    {s.principais_atividades && (
+                      <div>
+                        <button
+                          onClick={() => setExpandedAtiv(expandedAtiv === s.id ? null : s.id)}
+                          className="text-xs text-blue-600 underline underline-offset-2"
+                        >
+                          {expandedAtiv === s.id ? "Ocultar principais atividades" : "Ver principais atividades"}
+                        </button>
+                        {expandedAtiv === s.id && (
+                          <pre className="text-xs text-gray-600 mt-1.5 whitespace-pre-wrap font-sans bg-gray-50 rounded-lg p-3">
+                            {s.principais_atividades}
+                          </pre>
+                        )}
                       </div>
                     )}
 

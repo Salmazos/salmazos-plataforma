@@ -82,7 +82,7 @@ const CORES_TIPO: Record<string, { bg: string; color: string }> = {
 const FORM_VAZIO = {
   titulo: "", cliente_id: "", tipo_servico: "", num_posicoes: "",
   prazo: "", cidade: "", estado: "",
-  salario: "", adicionais_salariais: "", observacoes: "", responsavel: "",
+  salario: "", adicionais_salariais: "", principais_atividades: "", observacoes: "", responsavel: "",
   fee_rs_percentual: "", fee_rs_prazo_cobranca: "",
   confidencial: false,
   taxa_cancelamento: false, taxa_cancelamento_percentual: "",
@@ -175,6 +175,7 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades
         estado:       vaga.estado ?? "",
         salario:      vaga.salario ?? "",
         adicionais_salariais: vaga.adicionais_salariais ?? "",
+        principais_atividades: vaga.principais_atividades ?? "",
         observacoes:  vaga.observacoes ?? "",
         responsavel:  vaga.responsavel,
         fee_rs_percentual: vaga.fee_rs_percentual != null ? String(vaga.fee_rs_percentual) : "",
@@ -802,6 +803,20 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades
                 );
               })}
             </div>
+          </div>
+
+          {/* Principais atividades — aparece na vaga pública, abaixo de Benefícios */}
+          <div className="border-t pt-4">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Principais atividades
+            </label>
+            <textarea
+              value={form.principais_atividades}
+              onChange={(e) => set("principais_atividades", e.target.value)}
+              placeholder="Uma atividade por linha..."
+              rows={4}
+              className="input-field resize-y"
+            />
           </div>
 
           {/* Observações internas */}

@@ -17,6 +17,7 @@ const CAMPO_NA_VAGA: Record<string, string> = {
   horario_texto: "horario",
   requisitos: "requisitos",
   beneficios: "beneficios",
+  principais_atividades: "principais_atividades",
   observacoes: "observacoes",
   confidencial: "confidencial",
 };

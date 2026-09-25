@@ -89,6 +89,7 @@ export async function POST(request: NextRequest) {
         adicionais_salariais: body.adicionais_salariais || null,
         requisitos: body.requisitos || null,
         beneficios: body.beneficios || null,
+        principais_atividades: body.principais_atividades || null,
         horario: body.horario || null,
         habilidades_desejadas: Array.isArray(body.habilidades_desejadas)
           ? body.habilidades_desejadas

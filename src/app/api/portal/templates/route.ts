@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
       requisitos_chips: body.requisitos_chips ?? null,
       beneficios: body.beneficios || null,
       beneficios_chips: body.beneficios_chips ?? null,
+      principais_atividades: body.principais_atividades || null,
       observacoes: body.observacoes || null,
     })
     .select("id")

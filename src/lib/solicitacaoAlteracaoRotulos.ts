@@ -14,6 +14,7 @@ export const ROTULO_CAMPO_SOLICITACAO: Record<string, string> = {
   horario_texto: "Horário",
   requisitos: "Requisitos",
   beneficios: "Benefícios",
+  principais_atividades: "Principais atividades",
   observacoes: "Observações",
   confidencial: "Confidencial",
 };

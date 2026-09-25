@@ -17,6 +17,7 @@ export interface FormEdicaoSolicitacao {
   horario_texto: string;
   requisitos: string;
   beneficios: string;
+  principais_atividades: string;
   observacoes: string;
   confidencial: boolean;
 }
@@ -33,6 +34,7 @@ export interface SolicitacaoEditavel {
   horario_texto: string | null;
   requisitos: string | null;
   beneficios: string | null;
+  principais_atividades: string | null;
   observacoes: string | null;
   confidencial: boolean;
 }
@@ -50,6 +52,7 @@ export function formDeSolicitacao(s: SolicitacaoEditavel): FormEdicaoSolicitacao
     horario_texto: s.horario_texto ?? "",
     requisitos: s.requisitos ?? "",
     beneficios: s.beneficios ?? "",
+    principais_atividades: s.principais_atividades ?? "",
     observacoes: s.observacoes ?? "",
     confidencial: s.confidencial,
   };
@@ -169,6 +172,15 @@ export default function FormularioEdicaoSolicitacao({
             rows={3}
             value={form.beneficios}
             onChange={(e) => set("beneficios", e.target.value)}
+            className={`${inputCls} resize-y`}
+          />
+        </div>
+        <div className="sm:col-span-4">
+          <label className={labelCls}>Principais atividades</label>
+          <textarea
+            rows={4}
+            value={form.principais_atividades}
+            onChange={(e) => set("principais_atividades", e.target.value)}
             className={`${inputCls} resize-y`}
           />
         </div>

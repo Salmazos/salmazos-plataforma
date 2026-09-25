@@ -44,14 +44,14 @@ export default async function VagaPublicaPage({ params }: Props) {
 
   let { data: vaga } = await supabase
     .from("vagas")
-    .select("id, titulo, cidade, estado, salario, adicionais_salariais, requisitos, beneficios, horario, observacoes, status")
+    .select("id, titulo, cidade, estado, salario, adicionais_salariais, requisitos, beneficios, principais_atividades, horario, observacoes, status")
     .eq("slug", slug)
     .maybeSingle();
 
   if (!vaga) {
     const { data: vagaById } = await supabase
       .from("vagas")
-      .select("id, titulo, cidade, estado, salario, adicionais_salariais, requisitos, beneficios, horario, observacoes, status, slug")
+      .select("id, titulo, cidade, estado, salario, adicionais_salariais, requisitos, beneficios, principais_atividades, horario, observacoes, status, slug")
       .eq("id", slug)
       .maybeSingle();
     if (vagaById?.slug) {
@@ -140,6 +140,17 @@ export default async function VagaPublicaPage({ params }: Props) {
                 </p>
                 <p style={{ fontSize: "14px", color: "#374151", lineHeight: 1.7, whiteSpace: "pre-line" }}>
                   {vaga.beneficios}
+                </p>
+              </div>
+            )}
+
+            {vaga.principais_atividades && (
+              <div style={{ marginTop: "16px", borderTop: "1px solid #e5e7eb", paddingTop: "16px" }}>
+                <p style={{ fontSize: "10px", fontWeight: 700, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>
+                  Principais Atividades
+                </p>
+                <p style={{ fontSize: "14px", color: "#374151", lineHeight: 1.7, whiteSpace: "pre-line" }}>
+                  {vaga.principais_atividades}
                 </p>
               </div>
             )}

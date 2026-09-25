@@ -616,6 +616,15 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
             </div>
           )}
 
+          {vaga.principais_atividades && (
+            <div className="card">
+              <p className="section-title mb-3">Principais atividades</p>
+              <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">
+                {vaga.principais_atividades}
+              </p>
+            </div>
+          )}
+
           {/* Observações */}
           {vaga.observacoes && (
             <div className="card">

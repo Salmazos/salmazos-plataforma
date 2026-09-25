@@ -46,7 +46,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const allowed = [
     "nome", "cargo", "tipo_servico", "cidade", "estado", "salario",
     "horario_tipo", "horario_texto", "horario_padrao",
-    "requisitos", "requisitos_chips", "beneficios", "beneficios_chips", "observacoes",
+    "requisitos", "requisitos_chips", "beneficios", "beneficios_chips", "principais_atividades", "observacoes",
   ];
   for (const key of allowed) {
     if (body[key] !== undefined) campos[key] = body[key];

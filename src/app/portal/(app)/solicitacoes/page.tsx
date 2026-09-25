@@ -28,6 +28,7 @@ interface Solicitacao {
   horario_texto: string | null;
   requisitos: string | null;
   beneficios: string | null;
+  principais_atividades: string | null;
   observacoes: string | null;
   confidencial: boolean;
   // Enquanto a vaga está ativa o cliente pode pedir alteração (ver api/portal/solicitacoes).

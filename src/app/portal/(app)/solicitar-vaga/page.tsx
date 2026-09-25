@@ -62,6 +62,7 @@ interface VagaTemplate {
   requisitos_chips: string[] | null;
   beneficios: string | null;
   beneficios_chips: Record<string, boolean> | null;
+  principais_atividades: string | null;
   observacoes: string | null;
   total_usos: number;
   ultimo_uso_em: string | null;
@@ -102,6 +103,7 @@ export default function SolicitarVagaPage() {
   // (ver formatarSalarioHora); "mes" mantém o formato de sempre (número puro).
   const [salarioPeriodo, setSalarioPeriodo] = useState<"mes" | "hora">("mes");
   const [previsaoInicio, setPrevisaoInicio] = useState("");
+  const [principaisAtividades, setPrincipaisAtividades] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [confidencial, setConfidencial] = useState(false);
 
@@ -169,6 +171,7 @@ export default function SolicitarVagaPage() {
     // sempre reseta ao aplicar um template, pra não carregar valor de uma solicitação
     // anterior sem querer.
     setAdicionaisSalariais("");
+    setPrincipaisAtividades(tpl.principais_atividades ?? "");
     setObservacoes(tpl.observacoes ?? "");
     if (tpl.horario_padrao) {
       const hp = tpl.horario_padrao;
@@ -410,6 +413,7 @@ export default function SolicitarVagaPage() {
           requisitos_chips: reqChipsList.length > 0 ? reqChipsList : null,
           beneficios: beneficiosTexto || null,
           beneficios_chips: gerarBeneficiosChips(),
+          principais_atividades: principaisAtividades.trim() || null,
           observacoes: observacoes.trim() || null,
           horario_padrao: montarHorarioPadrao(),
           confidencial,
@@ -437,6 +441,7 @@ export default function SolicitarVagaPage() {
             requisitos_chips: reqChipsList.length > 0 ? reqChipsList : null,
             beneficios: beneficiosTexto || null,
             beneficios_chips: gerarBeneficiosChips(),
+            principais_atividades: principaisAtividades.trim() || null,
             observacoes: observacoes.trim() || null,
           }),
         });
@@ -861,7 +866,18 @@ export default function SolicitarVagaPage() {
           )}
         </div>
 
-        {/* ── SECTION 5: Observações ── */}
+        {/* ── SECTION 5: Principais Atividades ── */}
+        {/* Vai pra vaga pública logo abaixo de Benefícios — Observações não (na vaga ela vira
+            observação interna da Salmazos). */}
+        <div className="bg-white rounded-2xl shadow-sm p-6">
+          <label style={labelStyle}>Principais Atividades (opcional)</label>
+          <textarea value={principaisAtividades} onChange={(e) => setPrincipaisAtividades(e.target.value)}
+            placeholder="Descreva as principais atividades do cargo (uma por linha)..."
+            rows={5} style={{ ...inputStyle, resize: "vertical" }} />
+          <p className="text-xs text-gray-400 mt-1">Aparece na vaga publicada para os candidatos.</p>
+        </div>
+
+        {/* ── SECTION 6: Observações ── */}
         <div className="bg-white rounded-2xl shadow-sm p-6">
           <label style={labelStyle}>Observações (opcional)</label>
           <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)}

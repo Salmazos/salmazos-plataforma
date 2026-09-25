@@ -79,6 +79,7 @@ export async function PATCH(_request: NextRequest, { params }: Params) {
           salario: vo.salario,
           requisitos: vo.requisitos,
           beneficios: vo.beneficios,
+          principais_atividades: vo.principais_atividades,
           horario: vo.horario,
           habilidades_desejadas: vo.habilidades_desejadas ?? [],
           responsavel: vo.responsavel,

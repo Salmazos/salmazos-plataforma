@@ -335,6 +335,7 @@ export interface Vaga {
   adicionais_salariais?: string | null;
   requisitos: string | null;
   beneficios: string | null;
+  principais_atividades?: string | null;
   horario: string | null;
   habilidades_desejadas: string[];
   responsavel: string;

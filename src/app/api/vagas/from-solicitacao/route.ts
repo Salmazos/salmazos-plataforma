@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
         horario: sol.horario_texto ?? null,
         requisitos: sol.requisitos ?? null,
         beneficios: sol.beneficios ?? null,
+        principais_atividades: sol.principais_atividades ?? null,
         habilidades_desejadas: [],
         status: "aberta",
         responsavel: analistaNome,

@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
   // /api/portal/solicitacoes/[id]/alteracao).
   let query = service
     .from("solicitacoes_vagas")
-    .select("id, cargo, tipo_servico, num_posicoes, cidade, estado, status, motivo_recusa, vaga_id, solicitado_por_user_id, created_at, salario, adicionais_salariais, previsao_inicio, horario_texto, requisitos, beneficios, observacoes, confidencial")
+    .select("id, cargo, tipo_servico, num_posicoes, cidade, estado, status, motivo_recusa, vaga_id, solicitado_por_user_id, created_at, salario, adicionais_salariais, previsao_inicio, horario_texto, requisitos, beneficios, principais_atividades, observacoes, confidencial")
     .eq("cliente_id", cu.cliente_id);
 
   if (apenasMinhas) query = query.eq("solicitado_por_user_id", user.id);

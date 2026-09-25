@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
         requisitos_chips: body.requisitos_chips ?? null,
         beneficios: body.beneficios || null,
         beneficios_chips: body.beneficios_chips ?? null,
+        principais_atividades: body.principais_atividades || null,
         observacoes: body.observacoes || null,
         confidencial: body.confidencial === true,
       })
@@ -159,6 +160,13 @@ export async function POST(request: NextRequest) {
         </div>`
       : "";
 
+    const atividadesHtml = body.principais_atividades
+      ? `<div style="margin:20px 0">
+          <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Principais Atividades</p>
+          <div style="background:#f9fafb;border-radius:8px;padding:12px 16px;font-size:13px;color:#374151;line-height:1.7;white-space:pre-wrap">${body.principais_atividades}</div>
+        </div>`
+      : "";
+
     const observacoesHtml = body.observacoes
       ? `<div style="margin:20px 0">
           <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Observações</p>
@@ -196,6 +204,7 @@ export async function POST(request: NextRequest) {
     </table>
     ${requisitosHtml}
     ${beneficiosHtml}
+    ${atividadesHtml}
     ${observacoesHtml}
     <div style="text-align:center;padding-top:24px;border-top:1px solid #f3f4f6;margin-top:20px">
       <a href="https://salmazos-plataforma.vercel.app/painel/vagas" style="display:inline-block;padding:12px 28px;background:#000;color:#FFD700;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700">Ver Solicitação</a>

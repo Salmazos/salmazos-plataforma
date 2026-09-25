@@ -95,6 +95,7 @@ export const vagaCreateSchema = z.object({
   adicionais_salariais: z.string().optional().nullable(),
   requisitos: z.string().optional().nullable(),
   beneficios: z.string().optional().nullable(),
+  principais_atividades: z.string().optional().nullable(),
   horario: z.string().optional().nullable(),
   habilidades_desejadas: z.array(z.string()).optional(),
   observacoes: z.string().optional().nullable(),
@@ -834,6 +835,7 @@ export const portalSolicitarVagaSchema = z.object({
   requisitos_chips: z.array(z.string()).optional().nullable(),
   beneficios: z.string().optional().nullable(),
   beneficios_chips: z.record(z.string(), z.boolean()).optional().nullable(),
+  principais_atividades: z.string().optional().nullable(),
   observacoes: z.string().optional().nullable(),
   horario_padrao: horarioPadraoSchema.optional().nullable(),
   confidencial: z.boolean().optional().default(false),
@@ -900,6 +902,7 @@ export const solicitacaoVagaUpdateSchema = z.object({
   horario_texto: z.string().optional().nullable(),
   requisitos: z.string().optional().nullable(),
   beneficios: z.string().optional().nullable(),
+  principais_atividades: z.string().optional().nullable(),
   observacoes: z.string().optional().nullable(),
   confidencial: z.boolean().optional(),
 });

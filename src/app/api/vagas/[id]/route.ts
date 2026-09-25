@@ -71,6 +71,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (body.adicionais_salariais !== undefined) campos.adicionais_salariais = body.adicionais_salariais || null;
     if (body.requisitos !== undefined)          campos.requisitos = body.requisitos || null;
     if (body.beneficios !== undefined)          campos.beneficios = body.beneficios || null;
+    if (body.principais_atividades !== undefined) campos.principais_atividades = body.principais_atividades || null;
     if (body.horario !== undefined)             campos.horario = body.horario || null;
     if (body.habilidades_desejadas !== undefined) campos.habilidades_desejadas = body.habilidades_desejadas;
     if (body.responsavel !== undefined)         campos.responsavel = body.responsavel;
