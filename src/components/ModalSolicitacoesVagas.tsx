@@ -2,6 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
+import { ROTULO_CAMPO_SOLICITACAO, valorLegivelCampo, type Alteracoes } from "@/lib/solicitacaoAlteracaoRotulos";
+import FormularioEdicaoSolicitacao, {
+  corpoDoForm,
+  formDeSolicitacao,
+  type FormEdicaoSolicitacao,
+} from "@/components/FormularioEdicaoSolicitacao";
 
 const TIPO_LABEL: Record<string, { label: string; bg: string; color: string }> = {
   recrutamento_selecao: { label: "R&S", bg: "#1D6FA4", color: "#fff" },
@@ -31,6 +37,9 @@ interface Solicitacao {
   aprovada_por: string | null;
   aprovada_em: string | null;
   motivo_recusa: string | null;
+  vaga_id: string | null;
+  // Pedido de alteração que o cliente fez pelo portal, aguardando decisão da Salmazos.
+  alteracao_pendente?: { id: string; alteracoes: Alteracoes; criado_em: string } | null;
 }
 
 interface Props {
@@ -39,42 +48,6 @@ interface Props {
   onVagaCriada: () => void;
   focoId?: string | null;
   onVerTodas?: () => void;
-}
-
-// Campos que a equipe pode ajustar numa solicitação pendente antes de aprovar (ver PATCH
-// /api/solicitacoes-vagas/[id]) — os mesmos que o card mostra e que viram a vaga.
-interface FormEdicao {
-  cargo: string;
-  tipo_servico: string;
-  num_posicoes: string;
-  cidade: string;
-  estado: string;
-  salario: string;
-  adicionais_salariais: string;
-  previsao_inicio: string;
-  horario_texto: string;
-  requisitos: string;
-  beneficios: string;
-  observacoes: string;
-  confidencial: boolean;
-}
-
-function formDeSolicitacao(s: Solicitacao): FormEdicao {
-  return {
-    cargo: s.cargo,
-    tipo_servico: s.tipo_servico,
-    num_posicoes: String(s.num_posicoes ?? 1),
-    cidade: s.cidade ?? "",
-    estado: s.estado ?? "",
-    salario: s.salario ?? "",
-    adicionais_salariais: s.adicionais_salariais ?? "",
-    previsao_inicio: s.previsao_inicio ?? "",
-    horario_texto: s.horario_texto ?? "",
-    requisitos: s.requisitos ?? "",
-    beneficios: s.beneficios ?? "",
-    observacoes: s.observacoes ?? "",
-    confidencial: s.confidencial,
-  };
 }
 
 export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, focoId, onVerTodas }: Props) {
@@ -86,8 +59,11 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
   const [motivoRecusa, setMotivoRecusa] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [editandoId, setEditandoId] = useState<string | null>(null);
-  const [formEdicao, setFormEdicao] = useState<FormEdicao | null>(null);
+  const [formEdicao, setFormEdicao] = useState<FormEdicaoSolicitacao | null>(null);
   const [erroEdicao, setErroEdicao] = useState("");
+  const [recusandoAlteracaoId, setRecusandoAlteracaoId] = useState<string | null>(null);
+  const [motivoRecusaAlteracao, setMotivoRecusaAlteracao] = useState("");
+  const [erroAlteracao, setErroAlteracao] = useState<{ id: string; msg: string } | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -179,12 +155,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
       const res = await fetch(`/api/solicitacoes-vagas/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formEdicao,
-          num_posicoes: Number(formEdicao.num_posicoes) || 1,
-          estado: formEdicao.estado.toUpperCase(),
-          previsao_inicio: formEdicao.previsao_inicio || null,
-        }),
+        body: JSON.stringify(corpoDoForm(formEdicao)),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -194,6 +165,43 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
       setItems((prev) => prev.map((s) => (s.id === id ? { ...s, ...json.data } : s)));
       fecharEdicao();
       showToast(json.vaga_atualizada ? "Solicitação e vaga atualizadas." : "Solicitação atualizada.");
+      if (json.vaga_atualizada) onVagaCriada();
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Decisão sobre o pedido de alteração do cliente (ver POST /api/solicitacoes-vagas/[id]/alteracao).
+  const handleDecidirAlteracao = async (s: Solicitacao, acao: "aprovar" | "recusar") => {
+    if (acao === "recusar" && !motivoRecusaAlteracao.trim()) return;
+    setActionLoading(s.id);
+    setErroAlteracao(null);
+    try {
+      const res = await fetch(`/api/solicitacoes-vagas/${s.id}/alteracao`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(acao === "aprovar" ? { acao } : { acao, motivo: motivoRecusaAlteracao.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setErroAlteracao({ id: s.id, msg: typeof json.error === "string" ? json.error : "Erro ao registrar a decisão." });
+        return;
+      }
+      // Solicitação aprovada sem outra pendência sai da lista de pendentes depois da decisão.
+      setItems((prev) =>
+        prev
+          .map((it) => (it.id === s.id ? { ...it, ...(json.data ?? {}), alteracao_pendente: null } : it))
+          .filter((it) => focoId || it.status === "pendente" || it.alteracao_pendente)
+      );
+      setRecusandoAlteracaoId(null);
+      setMotivoRecusaAlteracao("");
+      showToast(
+        acao === "aprovar"
+          ? json.vaga_atualizada
+            ? "Alterações aprovadas — solicitação e vaga atualizadas."
+            : "Alterações aprovadas."
+          : "Alterações recusadas. O cliente foi avisado."
+      );
       if (json.vaga_atualizada) onVagaCriada();
     } finally {
       setActionLoading(null);
@@ -333,6 +341,76 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                       </p>
                     )}
 
+                    {/* Pedido de alteração do cliente aguardando decisão */}
+                    {s.alteracao_pendente && (
+                      <div className="rounded-lg p-3 space-y-2" style={{ backgroundColor: "#EFF6FF", border: "1px solid #BFDBFE" }}>
+                        <p className="text-xs font-bold text-blue-900">
+                          {"✏️"} O cliente pediu alterações em{" "}
+                          {new Date(s.alteracao_pendente.criado_em).toLocaleString("pt-BR", {
+                            day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+                          })}
+                          {s.status === "aprovada" && s.vaga_id ? " — ao aprovar, a vaga também é atualizada" : ""}
+                        </p>
+                        <div className="space-y-1.5">
+                          {Object.entries(s.alteracao_pendente.alteracoes).map(([campo, { antes, depois }]) => (
+                            <div key={campo} className="text-xs">
+                              <span className="font-semibold text-gray-700">{ROTULO_CAMPO_SOLICITACAO[campo] ?? campo}:</span>{" "}
+                              <span className="text-gray-400 line-through whitespace-pre-wrap">{valorLegivelCampo(campo, antes)}</span>{" "}
+                              <span className="text-gray-400">→</span>{" "}
+                              <span className="text-gray-900 whitespace-pre-wrap">{valorLegivelCampo(campo, depois)}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {erroAlteracao?.id === s.id && <p className="text-xs text-red-600">{erroAlteracao.msg}</p>}
+
+                        {recusandoAlteracaoId === s.id ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={motivoRecusaAlteracao}
+                              onChange={(e) => setMotivoRecusaAlteracao(e.target.value)}
+                              placeholder="Motivo da recusa (vai no e-mail pro cliente)..."
+                              rows={2}
+                              className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm outline-none resize-none bg-white"
+                            />
+                            <div className="flex gap-2 justify-end">
+                              <button
+                                onClick={() => { setRecusandoAlteracaoId(null); setMotivoRecusaAlteracao(""); }}
+                                className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 bg-white"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                onClick={() => handleDecidirAlteracao(s, "recusar")}
+                                disabled={!motivoRecusaAlteracao.trim() || isLoading}
+                                className="text-xs px-3 py-1.5 rounded-lg bg-red-600 text-white font-semibold disabled:opacity-50"
+                              >
+                                {isLoading ? "Recusando..." : "Confirmar recusa"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              onClick={() => { setRecusandoAlteracaoId(s.id); setMotivoRecusaAlteracao(""); }}
+                              disabled={isLoading}
+                              className="text-xs px-3 py-1.5 rounded-lg border border-red-300 text-red-600 font-semibold bg-white hover:bg-red-50 disabled:opacity-50"
+                            >
+                              {"❌"} Recusar alterações
+                            </button>
+                            <button
+                              onClick={() => handleDecidirAlteracao(s, "aprovar")}
+                              disabled={isLoading}
+                              className="text-xs px-4 py-1.5 rounded-lg font-bold disabled:opacity-50"
+                              style={{ backgroundColor: "#1D4ED8", color: "#fff" }}
+                            >
+                              {isLoading ? "Aplicando..." : "✅ Aprovar alterações"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Já decidida por outra pessoa */}
                     {jaDecidida && (
                       <div
@@ -390,8 +468,14 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
 
                     {/* Edição inline — ajustes da equipe antes de aprovar */}
                     {editavel && isEditando && formEdicao && (
-                      <FormularioEdicao
-                        aprovada={s.status === "aprovada"}
+                      <FormularioEdicaoSolicitacao
+                        aviso={
+                          (s.status === "aprovada"
+                            ? "A vaga criada a partir desta solicitação também será atualizada (inclusive na página pública de vagas), só nos campos que você alterar. Mudar o cargo muda o link público da vaga. "
+                            : "Ajustes da equipe antes de aprovar. ") +
+                          "O cliente passa a ver a versão editada no portal; a original fica registrada no histórico (auditoria)."
+                        }
+                        rotuloSalvar="Salvar ajustes"
                         form={formEdicao}
                         onChange={setFormEdicao}
                         erro={erroEdicao}
@@ -444,153 +528,6 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
             {"✅"} {toast}
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-function FormularioEdicao({
-  aprovada,
-  form,
-  onChange,
-  erro,
-  salvando,
-  onCancelar,
-  onSalvar,
-}: {
-  aprovada: boolean;
-  form: FormEdicao;
-  onChange: (f: FormEdicao) => void;
-  erro: string;
-  salvando: boolean;
-  onCancelar: () => void;
-  onSalvar: () => void;
-}) {
-  const set = <K extends keyof FormEdicao>(campo: K, valor: FormEdicao[K]) => onChange({ ...form, [campo]: valor });
-  const labelCls = "block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1";
-  const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-gray-400";
-
-  return (
-    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-      <p className="text-xs text-gray-500">
-        {aprovada
-          ? "A vaga criada a partir desta solicitação também será atualizada (inclusive na página pública de vagas), só nos campos que você alterar. Mudar o cargo muda o link público da vaga."
-          : "Ajustes da equipe antes de aprovar."}{" "}
-        O cliente passa a ver a versão editada no portal; a original fica registrada no histórico (auditoria).
-      </p>
-
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-        <div className="sm:col-span-2">
-          <label className={labelCls}>Cargo *</label>
-          <input value={form.cargo} onChange={(e) => set("cargo", e.target.value)} className={inputCls} />
-        </div>
-        <div>
-          <label className={labelCls}>Tipo de serviço</label>
-          <select value={form.tipo_servico} onChange={(e) => set("tipo_servico", e.target.value)} className={inputCls}>
-            <option value="recrutamento_selecao">R&S</option>
-            <option value="mao_obra_temporaria">MOT</option>
-            <option value="terceirizacao">Terceirização</option>
-          </select>
-        </div>
-        <div>
-          <label className={labelCls}>Posições</label>
-          <input
-            type="number"
-            min={1}
-            value={form.num_posicoes}
-            onChange={(e) => set("num_posicoes", e.target.value)}
-            className={inputCls}
-          />
-        </div>
-        <div className="sm:col-span-3">
-          <label className={labelCls}>Cidade *</label>
-          <input value={form.cidade} onChange={(e) => set("cidade", e.target.value)} className={inputCls} />
-        </div>
-        <div>
-          <label className={labelCls}>UF</label>
-          <input
-            value={form.estado}
-            maxLength={2}
-            onChange={(e) => set("estado", e.target.value.toUpperCase())}
-            className={inputCls}
-          />
-        </div>
-        <div>
-          <label className={labelCls}>Salário</label>
-          <input value={form.salario} onChange={(e) => set("salario", e.target.value)} className={inputCls} />
-        </div>
-        <div className="sm:col-span-2">
-          <label className={labelCls}>Adicionais salariais</label>
-          <input
-            value={form.adicionais_salariais}
-            onChange={(e) => set("adicionais_salariais", e.target.value)}
-            className={inputCls}
-          />
-        </div>
-        <div>
-          <label className={labelCls}>Previsão de início</label>
-          <input
-            type="date"
-            value={form.previsao_inicio}
-            onChange={(e) => set("previsao_inicio", e.target.value)}
-            className={inputCls}
-          />
-        </div>
-        <div className="sm:col-span-4">
-          <label className={labelCls}>Horário</label>
-          <input value={form.horario_texto} onChange={(e) => set("horario_texto", e.target.value)} className={inputCls} />
-        </div>
-        <div className="sm:col-span-4">
-          <label className={labelCls}>Requisitos</label>
-          <textarea
-            rows={4}
-            value={form.requisitos}
-            onChange={(e) => set("requisitos", e.target.value)}
-            className={`${inputCls} resize-y`}
-          />
-        </div>
-        <div className="sm:col-span-4">
-          <label className={labelCls}>Benefícios (um por linha)</label>
-          <textarea
-            rows={3}
-            value={form.beneficios}
-            onChange={(e) => set("beneficios", e.target.value)}
-            className={`${inputCls} resize-y`}
-          />
-        </div>
-        <div className="sm:col-span-4">
-          <label className={labelCls}>Observações</label>
-          <textarea
-            rows={3}
-            value={form.observacoes}
-            onChange={(e) => set("observacoes", e.target.value)}
-            className={`${inputCls} resize-y`}
-          />
-        </div>
-      </div>
-
-      <label className="flex items-center gap-2 text-xs text-gray-700">
-        <input type="checkbox" checked={form.confidencial} onChange={(e) => set("confidencial", e.target.checked)} />
-        Vaga confidencial
-      </label>
-
-      {erro && <p className="text-xs text-red-600">{erro}</p>}
-
-      <div className="flex gap-2 justify-end">
-        <button
-          onClick={onCancelar}
-          disabled={salvando}
-          className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 disabled:opacity-50"
-        >
-          Cancelar
-        </button>
-        <button
-          onClick={onSalvar}
-          disabled={salvando}
-          className="text-xs px-4 py-1.5 rounded-lg font-bold bg-black text-[#FFD700] disabled:opacity-50"
-        >
-          {salvando ? "Salvando..." : "Salvar ajustes"}
-        </button>
       </div>
     </div>
   );

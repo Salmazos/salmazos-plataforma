@@ -15,7 +15,10 @@ export type EmailTemplateName =
   | "cobranca_rs_paga"
   | "cobranca_rs_cancelada"
   | "cobranca_rs_validada_diretoria"
-  | "supervisao_cliente_atrasada";
+  | "supervisao_cliente_atrasada"
+  | "alteracao_solicitacao_pedida"
+  | "alteracao_solicitacao_aprovada"
+  | "alteracao_solicitacao_recusada";
 
 interface TemplateData {
   nome: string;
@@ -73,6 +76,11 @@ interface TemplateData {
   diasSemSupervisao?: number | null;
   frequenciaDiasSupervisao?: number;
   supervisaoUrl?: string;
+  // Pedido de alteração de solicitação de vaga pelo portal (cases "alteracao_solicitacao_*"):
+  // tabela Campo/Antes/Depois já montada e escapada (resumoAlteracoesHtml em
+  // lib/solicitacaoAlteracao.ts) + link pro painel.
+  resumoAlteracoesHtml?: string;
+  solicitacaoUrl?: string;
 }
 
 export interface EmailTemplate {
@@ -126,7 +134,7 @@ const BANNER_CONFIDENCIAL = `<div style="background:#fef2f2;border:2px solid #fc
 
 export function getEmailTemplate(
   name: EmailTemplateName,
-  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor, tipoCobrancaRS, cobrancaUrl, dataVencimento, diasAtraso, dataPagamento, justificativaCancelamento, diasSemSupervisao, frequenciaDiasSupervisao, supervisaoUrl }: TemplateData
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor, tipoCobrancaRS, cobrancaUrl, dataVencimento, diasAtraso, dataPagamento, justificativaCancelamento, diasSemSupervisao, frequenciaDiasSupervisao, supervisaoUrl, resumoAlteracoesHtml, solicitacaoUrl }: TemplateData
 ): EmailTemplate {
   switch (name) {
     case "entrevista_salmazos":
@@ -710,5 +718,58 @@ export function getEmailTemplate(
         ),
       };
     }
+
+    case "alteracao_solicitacao_pedida":
+      return {
+        subject: `✏️ ${nomeCliente ?? "Cliente"} pediu alteração na solicitação — ${cargo}`,
+        descricao: `Aviso à equipe de pedido de alteração do cliente na solicitação de vaga de ${cargo}.`,
+        html: layout(
+          "Pedido de Alteração de Solicitação",
+          `<p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 16px;">
+            <strong>${nomeCliente ?? "O cliente"}</strong> pediu alterações na solicitação de vaga de
+            <strong>${cargo}</strong>. Elas só passam a valer (inclusive na vaga, se já aberta) depois que a
+            Salmazos aprovar.
+          </p>
+          ${resumoAlteracoesHtml ?? ""}
+          ${solicitacaoUrl ? `<div style="text-align:center;margin:0 0 8px;"><a href="${solicitacaoUrl}" style="display:inline-block;background:#000;color:#FFD700;font-weight:700;font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">Revisar e aprovar</a></div>` : ""}`
+        ),
+      };
+
+    case "alteracao_solicitacao_aprovada":
+      return {
+        subject: `Alterações aprovadas — ${cargo}`,
+        descricao: `Confirmação ao cliente de que as alterações na solicitação de ${cargo} foram aprovadas.`,
+        html: layout(
+          "Alterações Aprovadas",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Prezado(a), <strong>${nomeCliente ?? ""}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            As alterações que você pediu na solicitação de vaga de <strong>${cargo}</strong> foram aprovadas
+            pela nossa equipe e já estão valendo.
+          </p>
+          ${resumoAlteracoesHtml ?? ""}`
+        ),
+      };
+
+    case "alteracao_solicitacao_recusada":
+      return {
+        subject: `Atualização sobre as alterações da sua solicitação — ${cargo}`,
+        descricao: `Comunicado ao cliente de que as alterações na solicitação de ${cargo} não foram aprovadas.`,
+        html: layout(
+          "Alterações não Aprovadas",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Prezado(a), <strong>${nomeCliente ?? ""}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Analisamos as alterações que você pediu na solicitação de vaga de <strong>${cargo}</strong> e, no
+            momento, não conseguimos aplicá-las. A solicitação continua como estava.
+          </p>
+          ${motivoRecusa ? `<div style="background:#f9fafb;border-left:4px solid #d1d5db;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 8px;color:#374151;font-weight:700;font-size:14px;">Motivo:</p>
+            <p style="margin:0;color:#374151;font-size:14px;line-height:1.7;">${motivoRecusa}</p>
+          </div>` : ""}
+          ${resumoAlteracoesHtml ?? ""}
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+            Ficamos à disposição para conversar sobre os ajustes — é só entrar em contato ou acessar o portal. 😊
+          </p>`
+        ),
+      };
   }
 }

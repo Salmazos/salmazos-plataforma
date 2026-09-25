@@ -13,13 +13,29 @@ export async function GET(request: NextRequest) {
   const statusFilter = request.nextUrl.searchParams.get("status") ?? "pendente";
 
   const service = createServiceClient();
+
+  // Pedidos de alteração do cliente aguardando aprovação (ver
+  // /api/portal/solicitacoes/[id]/alteracao) — a solicitação deles aparece na lista mesmo que
+  // já esteja aprovada, pra equipe decidir no mesmo lugar.
+  let pedidosQuery = service
+    .from("solicitacao_vaga_alteracoes")
+    .select("id, solicitacao_vaga_id, alteracoes, criado_em")
+    .eq("status", "pendente");
+  if (!ctx.todasUnidades) pedidosQuery = pedidosQuery.eq("unidade_id", ctx.unidadeId);
+  const { data: pedidos } = await pedidosQuery;
+  const pedidoPorSolicitacao = new Map((pedidos ?? []).map((p) => [p.solicitacao_vaga_id, p]));
+
   let query = service
     .from("solicitacoes_vagas")
     .select("*")
     .order("created_at", { ascending: false });
 
   if (statusFilter !== "todos") {
-    query = query.eq("status", statusFilter);
+    const idsComPedido = [...pedidoPorSolicitacao.keys()];
+    query =
+      statusFilter === "pendente" && idsComPedido.length > 0
+        ? query.or(`status.eq.pendente,id.in.(${idsComPedido.join(",")})`)
+        : query.eq("status", statusFilter);
   }
   if (!ctx.todasUnidades) {
     query = query.eq("unidade_id", ctx.unidadeId);
@@ -28,5 +44,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await query;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ data: data ?? [], count: data?.length ?? 0 });
+
+  const comPedido = (data ?? []).map((s) => ({ ...s, alteracao_pendente: pedidoPorSolicitacao.get(s.id) ?? null }));
+  return NextResponse.json({ data: comPedido, count: comPedido.length });
 }

@@ -4,7 +4,7 @@ import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 import { parseBody, solicitacaoVagaUpdateSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
-import { propagarAlteracoesSolicitacaoNaVaga } from "@/lib/propagarSolicitacaoNaVaga";
+import { aplicarAlteracoesSolicitacao, calcularAlteracoes } from "@/lib/solicitacaoAlteracao";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -34,19 +34,15 @@ export async function GET(request: NextRequest, { params }: Params) {
   if (error || !data || !podeVerUnidade(ctx, data.unidade_id)) {
     return NextResponse.json({ error: "Solicitação não encontrada." }, { status: 404 });
   }
-  return NextResponse.json({ data });
-}
 
-// Linhas "• Item" do texto de benefícios viram os chips que o card mostra — mesmo formato que
-// o portal grava (texto em tópicos + chips), pra os dois não ficarem divergentes depois da edição.
-function chipsDeBeneficios(texto: string | null): Record<string, boolean> | null {
-  if (!texto) return null;
-  const itens = texto
-    .split("\n")
-    .map((l) => l.replace(/^\s*[•\-*]\s*/, "").trim())
-    .filter(Boolean);
-  if (itens.length === 0) return null;
-  return Object.fromEntries(itens.map((i) => [i, true]));
+  const { data: pedido } = await service
+    .from("solicitacao_vaga_alteracoes")
+    .select("id, solicitacao_vaga_id, alteracoes, criado_em")
+    .eq("solicitacao_vaga_id", id)
+    .eq("status", "pendente")
+    .maybeSingle();
+
+  return NextResponse.json({ data: { ...data, alteracao_pendente: pedido ?? null } });
 }
 
 // Ajustes da equipe numa solicitação do portal, sem precisar pedir pro cliente reenviar
@@ -79,42 +75,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: mensagemDecisaoSolicitacao(atual) }, { status: 409 });
     }
 
-    const campos: Record<string, unknown> = {};
-    for (const [campo, valor] of Object.entries(parsed.data)) {
-      if (valor === undefined) continue;
-      const normalizado = typeof valor === "string" && campo !== "cargo" && campo !== "cidade" ? valor.trim() || null : valor;
-      if (normalizado !== atual[campo]) campos[campo] = normalizado;
-    }
-    if ("beneficios" in campos) campos.beneficios_chips = chipsDeBeneficios(campos.beneficios as string | null);
+    const alteracoes = calcularAlteracoes(atual, parsed.data);
+    if (Object.keys(alteracoes).length === 0) return NextResponse.json({ data: atual });
 
-    if (Object.keys(campos).length === 0) return NextResponse.json({ data: atual });
+    const usuarioNome = (await resolverNomeUsuario(user.id, user.email ?? null, service)) ?? "";
 
-    // .eq no status lido acima: se alguém aprovou/recusou no meio da edição, não grava.
-    const { data, error } = await service
-      .from("solicitacoes_vagas")
-      .update({ ...campos, updated_at: new Date().toISOString() })
-      .eq("id", id)
-      .eq("status", atual.status)
-      .select("*")
-      .single();
-
-    if (error || !data) {
-      return NextResponse.json({ error: error?.message ?? "A solicitação mudou de status enquanto era editada." }, { status: 409 });
-    }
-
-    const usuarioNome = await resolverNomeUsuario(user.id, user.email ?? null, service);
-
-    let camposVaga: string[] = [];
-    if (data.status === "aprovada" && data.vaga_id) {
-      try {
-        ({ camposVaga } = await propagarAlteracoesSolicitacaoNaVaga(data.vaga_id, campos, usuarioNome ?? "", service));
-      } catch (err) {
-        console.error(`[PATCH /api/solicitacoes-vagas/[id]] Solicitação ${id} salva, mas a vaga não foi atualizada:`, err);
-        return NextResponse.json(
-          { data, error: "A solicitação foi salva, mas não foi possível atualizar a vaga. Ajuste a vaga pela tela de Vagas." },
-          { status: 500 }
-        );
-      }
+    // Status lido acima vai junto: se alguém aprovou/recusou no meio da edição, não grava.
+    const { data, vagaAtualizada, erroVaga } = await aplicarAlteracoesSolicitacao(atual, alteracoes, usuarioNome, service);
+    if (!data) {
+      return NextResponse.json({ error: "A solicitação mudou de status enquanto era editada." }, { status: 409 });
     }
 
     registrarAuditoria({
@@ -126,14 +95,18 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       detalhes: {
         cliente: atual.cliente_nome,
         status: atual.status,
-        vaga_atualizada: camposVaga.length > 0 ? data.vaga_id : null,
-        alteracoes: Object.fromEntries(
-          Object.keys(campos).map((campo) => [campo, { antes: atual[campo] ?? null, depois: campos[campo] ?? null }])
-        ),
+        vaga_atualizada: vagaAtualizada ? atual.vaga_id : null,
+        alteracoes,
       },
     });
 
-    return NextResponse.json({ data, vaga_atualizada: camposVaga.length > 0 });
+    if (erroVaga) {
+      return NextResponse.json(
+        { data, error: "A solicitação foi salva, mas não foi possível atualizar a vaga. Ajuste a vaga pela tela de Vagas." },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json({ data, vaga_atualizada: vagaAtualizada });
   } catch (err) {
     console.error("[PATCH /api/solicitacoes-vagas/[id]]", err);
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });

@@ -1,7 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import FormularioEdicaoSolicitacao, {
+  corpoDoForm,
+  formDeSolicitacao,
+  type FormEdicaoSolicitacao,
+} from "@/components/FormularioEdicaoSolicitacao";
 
 interface Solicitacao {
   id: string;
@@ -17,6 +22,22 @@ interface Solicitacao {
   created_at: string;
   candidatos_aprovados: string[];
   candidatos_reprovados: string[];
+  salario: string | null;
+  adicionais_salariais: string | null;
+  previsao_inicio: string | null;
+  horario_texto: string | null;
+  requisitos: string | null;
+  beneficios: string | null;
+  observacoes: string | null;
+  confidencial: boolean;
+  // Enquanto a vaga está ativa o cliente pode pedir alteração (ver api/portal/solicitacoes).
+  pode_editar: boolean;
+  alteracao: {
+    status: string;
+    motivo_recusa: string | null;
+    criado_em: string;
+    alteracoes: Record<string, { antes: unknown; depois: unknown }>;
+  } | null;
 }
 
 const TIPO_BADGE: Record<string, { label: string; bg: string; color: string }> = {
@@ -36,8 +57,13 @@ export default function MinhasSolicitacoesPage() {
   const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
   const [erro, setErro] = useState("");
   const [filtro, setFiltro] = useState<"todas" | "minhas">("todas");
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [form, setForm] = useState<FormEdicaoSolicitacao | null>(null);
+  const [erroEdicao, setErroEdicao] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [aviso, setAviso] = useState("");
 
-  useEffect(() => {
+  const carregar = useCallback(() => {
     setLoading(true);
     fetch(`/api/portal/solicitacoes?filtro=${filtro}`)
       .then((r) => r.json())
@@ -48,6 +74,48 @@ export default function MinhasSolicitacoesPage() {
       .catch(() => setErro("Erro ao carregar solicitações."))
       .finally(() => setLoading(false));
   }, [filtro]);
+
+  useEffect(() => {
+    carregar();
+  }, [carregar]);
+
+  const abrirEdicao = (s: Solicitacao) => {
+    // Com pedido pendente, o formulário já abre com o que o cliente pediu (o novo envio
+    // substitui o pendente — sem isso ele perderia as alterações anteriores).
+    const pendentes =
+      s.alteracao?.status === "pendente"
+        ? Object.fromEntries(Object.entries(s.alteracao.alteracoes).map(([campo, { depois }]) => [campo, depois]))
+        : {};
+    setEditandoId(s.id);
+    setForm(formDeSolicitacao({ ...s, ...pendentes } as Solicitacao));
+    setErroEdicao("");
+    setAviso("");
+  };
+
+  // O pedido não muda a solicitação na hora: fica aguardando aprovação da Salmazos.
+  const enviarPedido = async (id: string) => {
+    if (!form) return;
+    setEnviando(true);
+    setErroEdicao("");
+    try {
+      const res = await fetch(`/api/portal/solicitacoes/${id}/alteracao`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(corpoDoForm(form)),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setErroEdicao(typeof json.error === "string" ? json.error : "Erro ao enviar as alterações.");
+        return;
+      }
+      setEditandoId(null);
+      setForm(null);
+      setAviso("Alterações enviadas! Elas passam a valer assim que a equipe da Salmazos aprovar.");
+      carregar();
+    } finally {
+      setEnviando(false);
+    }
+  };
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -80,6 +148,12 @@ export default function MinhasSolicitacoesPage() {
           </button>
         ))}
       </div>
+
+      {aviso && (
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-800 font-medium">
+          {aviso}
+        </div>
+      )}
 
       {loading ? (
         <p className="text-gray-400 text-sm">Carregando...</p>
@@ -162,6 +236,52 @@ export default function MinhasSolicitacoesPage() {
                   >
                     Ver vaga publicada →
                   </Link>
+                )}
+
+                {/* Pedido de alteração: aguardando, ou último recusado com o motivo */}
+                {s.alteracao?.status === "pendente" && (
+                  <div className="mt-3 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                    <p className="text-xs font-semibold text-blue-800">
+                      {"✏️"} Alteração aguardando aprovação da Salmazos
+                    </p>
+                  </div>
+                )}
+                {s.alteracao?.status === "recusada" && s.alteracao.motivo_recusa && (
+                  <div className="mt-3 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                    <p className="text-xs font-bold text-red-700 uppercase mb-1">Alteração não aprovada</p>
+                    <p className="text-xs text-red-700">{s.alteracao.motivo_recusa}</p>
+                  </div>
+                )}
+
+                {s.pode_editar && editandoId !== s.id && (
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      onClick={() => abrirEdicao(s)}
+                      className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50"
+                    >
+                      {"✏️"} {s.alteracao?.status === "pendente" ? "Editar novamente" : "Editar"}
+                    </button>
+                  </div>
+                )}
+
+                {editandoId === s.id && form && (
+                  <div className="mt-3">
+                    <FormularioEdicaoSolicitacao
+                      aviso={
+                        (s.status === "aprovada"
+                          ? "As alterações serão aplicadas na solicitação e na vaga publicada depois que a equipe da Salmazos aprovar. "
+                          : "As alterações serão aplicadas depois que a equipe da Salmazos aprovar. ") +
+                        (s.alteracao?.status === "pendente" ? "Este envio substitui a alteração que ainda está aguardando aprovação." : "")
+                      }
+                      rotuloSalvar="Enviar para aprovação"
+                      form={form}
+                      onChange={setForm}
+                      erro={erroEdicao}
+                      salvando={enviando}
+                      onCancelar={() => { setEditandoId(null); setForm(null); }}
+                      onSalvar={() => enviarPedido(s.id)}
+                    />
+                  </div>
                 )}
               </div>
             );

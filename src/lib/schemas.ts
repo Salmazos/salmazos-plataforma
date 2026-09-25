@@ -904,6 +904,13 @@ export const solicitacaoVagaUpdateSchema = z.object({
   confidencial: z.boolean().optional(),
 });
 
+// Decisão da Salmazos sobre o pedido de alteração que o cliente fez pelo portal (POST
+// /api/solicitacoes-vagas/[id]/alteracao) — recusa exige motivo, que vai no e-mail pro cliente.
+export const solicitacaoAlteracaoDecisaoSchema = z.discriminatedUnion("acao", [
+  z.object({ acao: z.literal("aprovar") }),
+  z.object({ acao: z.literal("recusar"), motivo: z.string().trim().min(1) }),
+]);
+
 // ── Storage paths ────────────────────────────────────────────────────────────
 
 export const storagePathSchema = z.object({
