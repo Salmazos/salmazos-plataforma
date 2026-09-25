@@ -886,6 +886,24 @@ export const fromSolicitacaoSchema = z.object({
   solicitacao_id: z.string().uuid(),
 });
 
+// Ajustes feitos pela equipe numa solicitação do portal ainda pendente (PATCH
+// /api/solicitacoes-vagas/[id]) — mesmos campos que o card mostra e que viram a vaga.
+export const solicitacaoVagaUpdateSchema = z.object({
+  cargo: z.string().trim().min(1).optional(),
+  tipo_servico: z.enum(["recrutamento_selecao", "mao_obra_temporaria", "terceirizacao"]).optional(),
+  num_posicoes: z.coerce.number().int().min(1).optional(),
+  cidade: z.string().trim().min(1).optional(),
+  estado: z.string().trim().max(2).optional(),
+  salario: z.string().optional().nullable(),
+  adicionais_salariais: z.string().optional().nullable(),
+  previsao_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  horario_texto: z.string().optional().nullable(),
+  requisitos: z.string().optional().nullable(),
+  beneficios: z.string().optional().nullable(),
+  observacoes: z.string().optional().nullable(),
+  confidencial: z.boolean().optional(),
+});
+
 // ── Storage paths ────────────────────────────────────────────────────────────
 
 export const storagePathSchema = z.object({
