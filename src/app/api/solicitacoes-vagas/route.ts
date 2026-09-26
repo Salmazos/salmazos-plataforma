@@ -25,6 +25,17 @@ export async function GET(request: NextRequest) {
   const { data: pedidos } = await pedidosQuery;
   const pedidoPorSolicitacao = new Map((pedidos ?? []).map((p) => [p.solicitacao_vaga_id, p]));
 
+  // Mesmo padrão pros pedidos de pausa/reabertura de vaga (ver vagaPausaReativacao.ts) —
+  // esses ficam na tabela vaga_solicitacoes_status, chaveados por vaga_id, não
+  // solicitacao_vaga_id, então o mapa e o "aparece mesmo aprovada" usam vaga_id.
+  let pedidosStatusQuery = service
+    .from("vaga_solicitacoes_status")
+    .select("id, vaga_id, acao, motivo_tipo, motivo_texto, criado_em")
+    .eq("status", "pendente");
+  if (!ctx.todasUnidades) pedidosStatusQuery = pedidosStatusQuery.eq("unidade_id", ctx.unidadeId);
+  const { data: pedidosStatus } = await pedidosStatusQuery;
+  const pedidoStatusPorVaga = new Map((pedidosStatus ?? []).map((p) => [p.vaga_id, p]));
+
   let query = service
     .from("solicitacoes_vagas")
     .select("*")
@@ -32,9 +43,18 @@ export async function GET(request: NextRequest) {
 
   if (statusFilter !== "todos") {
     const idsComPedido = [...pedidoPorSolicitacao.keys()];
+    // status_pendente é indexado por vaga_id (não solicitacao_vaga_id) — solicitacoes_vagas
+    // também tem a coluna vaga_id, então filtra direto por ela em vez de resolver o id da
+    // solicitação primeiro.
+    const vagaIdsComPedidoStatus = [...pedidoStatusPorVaga.keys()];
+    const filtrosOr = [
+      "status.eq.pendente",
+      idsComPedido.length > 0 ? `id.in.(${idsComPedido.join(",")})` : null,
+      vagaIdsComPedidoStatus.length > 0 ? `vaga_id.in.(${vagaIdsComPedidoStatus.join(",")})` : null,
+    ].filter(Boolean);
     query =
-      statusFilter === "pendente" && idsComPedido.length > 0
-        ? query.or(`status.eq.pendente,id.in.(${idsComPedido.join(",")})`)
+      statusFilter === "pendente" && filtrosOr.length > 1
+        ? query.or(filtrosOr.join(","))
         : query.eq("status", statusFilter);
   }
   if (!ctx.todasUnidades) {
@@ -45,6 +65,10 @@ export async function GET(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const comPedido = (data ?? []).map((s) => ({ ...s, alteracao_pendente: pedidoPorSolicitacao.get(s.id) ?? null }));
+  const comPedido = (data ?? []).map((s) => ({
+    ...s,
+    alteracao_pendente: pedidoPorSolicitacao.get(s.id) ?? null,
+    status_pendente: s.vaga_id ? pedidoStatusPorVaga.get(s.vaga_id) ?? null : null,
+  }));
   return NextResponse.json({ data: comPedido, count: comPedido.length });
 }

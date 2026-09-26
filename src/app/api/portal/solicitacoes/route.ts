@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { clientePodePedirAlteracao } from "@/lib/solicitacaoAlteracao";
+import { clientePodeSolicitarPausa, clientePodeSolicitarReativacao } from "@/lib/vagaPausaReativacao";
 
 export async function GET(request: NextRequest) {
   const supabase = await createPortalClient();
@@ -90,14 +91,35 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const data = (solicitacoes ?? []).map((s) => ({
-    ...s,
-    vaga_slug: s.vaga_id ? slugMap[s.vaga_id] ?? null : null,
-    candidatos_aprovados: s.vaga_id ? aprovadosPorVaga[s.vaga_id] ?? [] : [],
-    candidatos_reprovados: s.vaga_id ? reprovadosPorVaga[s.vaga_id] ?? [] : [],
-    pode_editar: clientePodePedirAlteracao(s.status, s.vaga_id ? vagaStatusMap[s.vaga_id] ?? null : null),
-    alteracao: alteracaoPorSolicitacao[s.id] ?? null,
-  }));
+  // Pedido de pausa/reabertura pendente (ver vagaPausaReativacao.ts), indexado por vaga_id —
+  // só busca pra vagas que essa listagem já carregou, e só interessa se ainda está pendente
+  // (aprovado/recusado não trava um novo pedido).
+  const statusPendentePorVaga: Record<string, { acao: string }> = {};
+  if (vagaIds.length > 0) {
+    const { data: pedidosStatus } = await service
+      .from("vaga_solicitacoes_status")
+      .select("vaga_id, acao")
+      .in("vaga_id", vagaIds)
+      .eq("status", "pendente");
+    for (const p of pedidosStatus ?? []) statusPendentePorVaga[p.vaga_id] = { acao: p.acao };
+  }
+
+  const data = (solicitacoes ?? []).map((s) => {
+    const vagaStatus = s.vaga_id ? vagaStatusMap[s.vaga_id] ?? null : null;
+    const pedidoStatus = s.vaga_id ? statusPendentePorVaga[s.vaga_id] ?? null : null;
+    return {
+      ...s,
+      vaga_slug: s.vaga_id ? slugMap[s.vaga_id] ?? null : null,
+      vaga_status: vagaStatus,
+      candidatos_aprovados: s.vaga_id ? aprovadosPorVaga[s.vaga_id] ?? [] : [],
+      candidatos_reprovados: s.vaga_id ? reprovadosPorVaga[s.vaga_id] ?? [] : [],
+      pode_editar: clientePodePedirAlteracao(s.status, vagaStatus),
+      pode_solicitar_pausa: clientePodeSolicitarPausa(s.status, vagaStatus, !!pedidoStatus),
+      pode_solicitar_reativacao: clientePodeSolicitarReativacao(s.status, vagaStatus, !!pedidoStatus),
+      status_pendente_acao: pedidoStatus?.acao ?? null,
+      alteracao: alteracaoPorSolicitacao[s.id] ?? null,
+    };
+  });
 
   return NextResponse.json({ data });
 }

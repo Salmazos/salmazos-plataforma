@@ -914,6 +914,24 @@ export const solicitacaoAlteracaoDecisaoSchema = z.discriminatedUnion("acao", [
   z.object({ acao: z.literal("recusar"), motivo: z.string().trim().min(1) }),
 ]);
 
+// ── Pausa/reabertura de vaga pedida pelo cliente (ver vagaPausaReativacao.ts) ──────────────
+
+export const vagaSolicitarPausaSchema = z.object({
+  motivo_tipo: z.enum(["preenchida_internamente", "nao_precisa_mais", "outro"]),
+  motivo_texto: z.string().trim().optional().nullable(),
+});
+
+export const vagaSolicitarReativacaoSchema = z.object({
+  motivo_texto: z.string().trim().optional().nullable(),
+});
+
+// Decisão da Salmazos sobre o pedido de pausa/reabertura (POST /api/vagas/[id]/solicitacao-status)
+// — mesmo padrão da decisão de alteração: recusa exige motivo pro e-mail do cliente.
+export const vagaSolicitacaoStatusDecisaoSchema = z.discriminatedUnion("acao", [
+  z.object({ acao: z.literal("aprovar") }),
+  z.object({ acao: z.literal("recusar"), motivo: z.string().trim().min(1) }),
+]);
+
 // ── Storage paths ────────────────────────────────────────────────────────────
 
 export const storagePathSchema = z.object({

@@ -18,7 +18,9 @@ export type EmailTemplateName =
   | "supervisao_cliente_atrasada"
   | "alteracao_solicitacao_pedida"
   | "alteracao_solicitacao_aprovada"
-  | "alteracao_solicitacao_recusada";
+  | "alteracao_solicitacao_recusada"
+  | "vaga_status_solicitado"
+  | "vaga_status_decidido";
 
 interface TemplateData {
   nome: string;
@@ -81,6 +83,13 @@ interface TemplateData {
   // lib/solicitacaoAlteracao.ts) + link pro painel.
   resumoAlteracoesHtml?: string;
   solicitacaoUrl?: string;
+  // Pedido de pausa/reabertura de vaga pelo portal (cases "vaga_status_*") — ver
+  // vagaPausaReativacao.ts. acaoSolicitada decide o texto ("pausar"/"reabrir");
+  // decisaoStatus só é usado no e-mail de decisão pro cliente.
+  acaoSolicitada?: "pausar" | "reabrir";
+  decisaoStatus?: "aprovada" | "recusada";
+  motivoTipoEncerramentoLabel?: string | null;
+  motivoTextoEncerramento?: string | null;
 }
 
 export interface EmailTemplate {
@@ -134,7 +143,7 @@ const BANNER_CONFIDENCIAL = `<div style="background:#fef2f2;border:2px solid #fc
 
 export function getEmailTemplate(
   name: EmailTemplateName,
-  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor, tipoCobrancaRS, cobrancaUrl, dataVencimento, diasAtraso, dataPagamento, justificativaCancelamento, diasSemSupervisao, frequenciaDiasSupervisao, supervisaoUrl, resumoAlteracoesHtml, solicitacaoUrl }: TemplateData
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor, tipoCobrancaRS, cobrancaUrl, dataVencimento, diasAtraso, dataPagamento, justificativaCancelamento, diasSemSupervisao, frequenciaDiasSupervisao, supervisaoUrl, resumoAlteracoesHtml, solicitacaoUrl, acaoSolicitada, decisaoStatus, motivoTipoEncerramentoLabel, motivoTextoEncerramento }: TemplateData
 ): EmailTemplate {
   switch (name) {
     case "entrevista_salmazos":
@@ -771,5 +780,56 @@ export function getEmailTemplate(
           </p>`
         ),
       };
+
+    case "vaga_status_solicitado": {
+      const pausando = acaoSolicitada !== "reabrir";
+      return {
+        subject: `${pausando ? "⏸️" : "▶️"} ${nomeCliente ?? "Cliente"} pediu ${pausando ? "encerramento" : "reativação"} da vaga — ${cargo}`,
+        descricao: `Aviso à equipe de pedido de ${pausando ? "encerramento" : "reativação"} da vaga de ${cargo}.`,
+        html: layout(
+          pausando ? "Pedido de Encerramento de Vaga" : "Pedido de Reativação de Vaga",
+          `<p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 16px;">
+            <strong>${nomeCliente ?? "O cliente"}</strong> pediu ${pausando ? "o encerramento" : "a reativação"} da vaga de
+            <strong>${cargo}</strong> pelo portal. Ela só ${pausando ? "sai da página pública" : "volta a aparecer"} depois
+            que a Salmazos aprovar.
+          </p>
+          ${pausando && motivoTipoEncerramentoLabel ? `<div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:14px 16px;margin:0 0 16px;">
+            <p style="margin:0;color:#92400e;font-weight:700;font-size:14px;">Motivo informado: ${motivoTipoEncerramentoLabel}</p>
+            ${motivoTextoEncerramento ? `<p style="margin:6px 0 0;color:#78350f;font-size:13px;">${motivoTextoEncerramento}</p>` : ""}
+          </div>` : ""}
+          ${solicitacaoUrl ? `<div style="text-align:center;margin:0 0 8px;"><a href="${solicitacaoUrl}" style="display:inline-block;background:#000;color:#FFD700;font-weight:700;font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">Revisar pedido</a></div>` : ""}`
+        ),
+      };
+    }
+
+    case "vaga_status_decidido": {
+      const pausando = acaoSolicitada !== "reabrir";
+      const aprovada = decisaoStatus === "aprovada";
+      return {
+        subject: aprovada
+          ? `Vaga ${pausando ? "encerrada" : "reativada"} — ${cargo}`
+          : `Atualização sobre o pedido de ${pausando ? "encerramento" : "reativação"} — ${cargo}`,
+        descricao: aprovada
+          ? `Confirmação ao cliente de que a vaga de ${cargo} foi ${pausando ? "encerrada" : "reativada"}.`
+          : `Comunicado ao cliente de que o pedido de ${pausando ? "encerramento" : "reativação"} da vaga de ${cargo} não foi aprovado.`,
+        html: layout(
+          aprovada ? (pausando ? "Vaga Encerrada" : "Vaga Reativada") : "Pedido não Aprovado",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Prezado(a), <strong>${nomeCliente ?? ""}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            ${aprovada
+              ? `Confirmamos que a vaga de <strong>${cargo}</strong> foi ${pausando ? "encerrada e não aparece mais na página pública" : "reativada e já está de volta na página pública"}.`
+              : `Analisamos o pedido de ${pausando ? "encerramento" : "reativação"} da vaga de <strong>${cargo}</strong> e, no momento, não conseguimos aplicá-lo. A vaga continua como estava.`
+            }
+          </p>
+          ${!aprovada && motivoRecusa ? `<div style="background:#f9fafb;border-left:4px solid #d1d5db;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 8px;color:#374151;font-weight:700;font-size:14px;">Motivo:</p>
+            <p style="margin:0;color:#374151;font-size:14px;line-height:1.7;">${motivoRecusa}</p>
+          </div>` : ""}
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+            Qualquer dúvida, é só entrar em contato ou acessar o portal. 😊
+          </p>`
+        ),
+      };
+    }
   }
 }

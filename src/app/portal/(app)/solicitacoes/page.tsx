@@ -7,6 +7,7 @@ import FormularioEdicaoSolicitacao, {
   formDeSolicitacao,
   type FormEdicaoSolicitacao,
 } from "@/components/FormularioEdicaoSolicitacao";
+import { ROTULO_MOTIVO_ENCERRAMENTO, type MotivoTipoEncerramento } from "@/lib/vagaPausaReativacao";
 
 interface Solicitacao {
   id: string;
@@ -31,8 +32,14 @@ interface Solicitacao {
   principais_atividades: string | null;
   observacoes: string | null;
   confidencial: boolean;
+  vaga_status: string | null;
   // Enquanto a vaga está ativa o cliente pode pedir alteração (ver api/portal/solicitacoes).
   pode_editar: boolean;
+  // Pausar ("encerrar") só com a vaga aberta; reativar só com ela pausada — e nenhum dos
+  // dois com outro pedido de status já aguardando decisão (ver vagaPausaReativacao.ts).
+  pode_solicitar_pausa: boolean;
+  pode_solicitar_reativacao: boolean;
+  status_pendente_acao: "pausar" | "reabrir" | null;
   alteracao: {
     status: string;
     motivo_recusa: string | null;
@@ -63,6 +70,13 @@ export default function MinhasSolicitacoesPage() {
   const [erroEdicao, setErroEdicao] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [aviso, setAviso] = useState("");
+
+  // Pedido de pausa ("encerramento") — abre inline no card, pede motivo antes de enviar.
+  const [pedindoPausaId, setPedindoPausaId] = useState<string | null>(null);
+  const [motivoTipoPausa, setMotivoTipoPausa] = useState<MotivoTipoEncerramento>("nao_precisa_mais");
+  const [motivoTextoPausa, setMotivoTextoPausa] = useState("");
+  const [enviandoStatus, setEnviandoStatus] = useState<string | null>(null);
+  const [erroStatus, setErroStatus] = useState<{ id: string; msg: string } | null>(null);
 
   const carregar = useCallback(() => {
     setLoading(true);
@@ -115,6 +129,50 @@ export default function MinhasSolicitacoesPage() {
       carregar();
     } finally {
       setEnviando(false);
+    }
+  };
+
+  const enviarPedidoPausa = async (id: string) => {
+    setEnviandoStatus(id);
+    setErroStatus(null);
+    try {
+      const res = await fetch(`/api/portal/solicitacoes/${id}/encerramento`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo_tipo: motivoTipoPausa, motivo_texto: motivoTextoPausa.trim() || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setErroStatus({ id, msg: typeof json.error === "string" ? json.error : "Erro ao enviar o pedido." });
+        return;
+      }
+      setPedindoPausaId(null);
+      setMotivoTipoPausa("nao_precisa_mais");
+      setMotivoTextoPausa("");
+      setAviso("Pedido de encerramento enviado! A vaga sai do ar assim que a equipe da Salmazos aprovar.");
+      carregar();
+    } finally {
+      setEnviandoStatus(null);
+    }
+  };
+
+  const enviarPedidoReativacao = async (id: string) => {
+    setEnviandoStatus(id);
+    setErroStatus(null);
+    try {
+      const res = await fetch(`/api/portal/solicitacoes/${id}/reativacao`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setErroStatus({ id, msg: typeof json.error === "string" ? json.error : "Erro ao enviar o pedido." });
+        return;
+      }
+      setAviso("Pedido de reativação enviado! A vaga volta ao ar assim que a equipe da Salmazos aprovar.");
+      carregar();
+    } finally {
+      setEnviandoStatus(null);
     }
   };
 
@@ -254,14 +312,88 @@ export default function MinhasSolicitacoesPage() {
                   </div>
                 )}
 
-                {s.pode_editar && editandoId !== s.id && (
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      onClick={() => abrirEdicao(s)}
-                      className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50"
-                    >
-                      {"✏️"} {s.alteracao?.status === "pendente" ? "Editar novamente" : "Editar"}
-                    </button>
+                {/* Pedido de pausa/reabertura aguardando decisão da Salmazos */}
+                {s.status_pendente_acao && (
+                  <div className="mt-3 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                    <p className="text-xs font-semibold text-blue-800">
+                      {s.status_pendente_acao === "pausar" ? "⏸️" : "▶️"} Pedido de{" "}
+                      {s.status_pendente_acao === "pausar" ? "encerramento" : "reativação"} aguardando aprovação da Salmazos
+                    </p>
+                  </div>
+                )}
+
+                {erroStatus?.id === s.id && (
+                  <p className="text-xs text-red-600 mt-2">{erroStatus.msg}</p>
+                )}
+
+                {/* Formulário de pedido de encerramento — motivo ajuda o analista a decidir
+                    o que fazer, mas não trava o pedido em si. */}
+                {pedindoPausaId === s.id ? (
+                  <div className="mt-3 bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
+                    <p className="text-xs font-bold text-red-700">Por que quer encerrar esta vaga?</p>
+                    <div className="space-y-1.5">
+                      {(Object.entries(ROTULO_MOTIVO_ENCERRAMENTO) as [MotivoTipoEncerramento, string][]).map(([valor, label]) => (
+                        <label key={valor} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`motivo-${s.id}`}
+                            checked={motivoTipoPausa === valor}
+                            onChange={() => setMotivoTipoPausa(valor)}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                    <textarea
+                      value={motivoTextoPausa}
+                      onChange={(e) => setMotivoTextoPausa(e.target.value)}
+                      placeholder="Detalhes adicionais (opcional)..."
+                      rows={2}
+                      className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm outline-none resize-none bg-white"
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => { setPedindoPausaId(null); setMotivoTextoPausa(""); }}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 bg-white"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={() => enviarPedidoPausa(s.id)}
+                        disabled={enviandoStatus === s.id}
+                        className="text-xs px-4 py-1.5 rounded-lg bg-red-600 text-white font-semibold disabled:opacity-50"
+                      >
+                        {enviandoStatus === s.id ? "Enviando..." : "Confirmar pedido de encerramento"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex justify-end gap-2 flex-wrap">
+                    {s.pode_solicitar_reativacao && (
+                      <button
+                        onClick={() => enviarPedidoReativacao(s.id)}
+                        disabled={enviandoStatus === s.id}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-blue-300 text-blue-700 font-semibold hover:bg-blue-50 disabled:opacity-50"
+                      >
+                        {enviandoStatus === s.id ? "Enviando..." : "▶️ Solicitar reativação"}
+                      </button>
+                    )}
+                    {s.pode_solicitar_pausa && (
+                      <button
+                        onClick={() => setPedindoPausaId(s.id)}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-red-300 text-red-600 font-semibold hover:bg-red-50"
+                      >
+                        {"⏸️"} Solicitar encerramento
+                      </button>
+                    )}
+                    {s.pode_editar && editandoId !== s.id && (
+                      <button
+                        onClick={() => abrirEdicao(s)}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50"
+                      >
+                        {"✏️"} {s.alteracao?.status === "pendente" ? "Editar novamente" : "Editar"}
+                      </button>
+                    )}
                   </div>
                 )}
 

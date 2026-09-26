@@ -42,7 +42,20 @@ export async function GET(request: NextRequest, { params }: Params) {
     .eq("status", "pendente")
     .maybeSingle();
 
-  return NextResponse.json({ data: { ...data, alteracao_pendente: pedido ?? null } });
+  // Pedido de pausa/reabertura (ver vagaPausaReativacao.ts) é indexado por vaga_id, não
+  // pelo id da solicitação.
+  let pedidoStatus = null;
+  if (data.vaga_id) {
+    const { data: ps } = await service
+      .from("vaga_solicitacoes_status")
+      .select("id, vaga_id, acao, motivo_tipo, motivo_texto, criado_em")
+      .eq("vaga_id", data.vaga_id)
+      .eq("status", "pendente")
+      .maybeSingle();
+    pedidoStatus = ps;
+  }
+
+  return NextResponse.json({ data: { ...data, alteracao_pendente: pedido ?? null, status_pendente: pedidoStatus ?? null } });
 }
 
 // Ajustes da equipe numa solicitação do portal, sem precisar pedir pro cliente reenviar

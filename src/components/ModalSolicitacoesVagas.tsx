@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
 import { ROTULO_CAMPO_SOLICITACAO, valorLegivelCampo, type Alteracoes } from "@/lib/solicitacaoAlteracaoRotulos";
+import { ROTULO_MOTIVO_ENCERRAMENTO, type MotivoTipoEncerramento } from "@/lib/vagaPausaReativacao";
 import FormularioEdicaoSolicitacao, {
   corpoDoForm,
   formDeSolicitacao,
@@ -41,6 +42,16 @@ interface Solicitacao {
   vaga_id: string | null;
   // Pedido de alteração que o cliente fez pelo portal, aguardando decisão da Salmazos.
   alteracao_pendente?: { id: string; alteracoes: Alteracoes; criado_em: string } | null;
+  // Pedido de pausa ("encerramento") ou reabertura da vaga, aguardando decisão da Salmazos
+  // (ver vagaPausaReativacao.ts) — indexado pela vaga, não pela solicitação.
+  status_pendente?: {
+    id: string;
+    vaga_id: string;
+    acao: "pausar" | "reabrir";
+    motivo_tipo: MotivoTipoEncerramento | null;
+    motivo_texto: string | null;
+    criado_em: string;
+  } | null;
 }
 
 interface Props {
@@ -66,6 +77,9 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
   const [recusandoAlteracaoId, setRecusandoAlteracaoId] = useState<string | null>(null);
   const [motivoRecusaAlteracao, setMotivoRecusaAlteracao] = useState("");
   const [erroAlteracao, setErroAlteracao] = useState<{ id: string; msg: string } | null>(null);
+  const [recusandoStatusId, setRecusandoStatusId] = useState<string | null>(null);
+  const [motivoRecusaStatus, setMotivoRecusaStatus] = useState("");
+  const [erroStatus, setErroStatus] = useState<{ id: string; msg: string } | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -193,7 +207,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
       setItems((prev) =>
         prev
           .map((it) => (it.id === s.id ? { ...it, ...(json.data ?? {}), alteracao_pendente: null } : it))
-          .filter((it) => focoId || it.status === "pendente" || it.alteracao_pendente)
+          .filter((it) => focoId || it.status === "pendente" || it.alteracao_pendente || it.status_pendente)
       );
       setRecusandoAlteracaoId(null);
       setMotivoRecusaAlteracao("");
@@ -205,6 +219,44 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
           : "Alterações recusadas. O cliente foi avisado."
       );
       if (json.vaga_atualizada) onVagaCriada();
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Decisão sobre o pedido de pausa/reabertura de vaga (ver POST
+  // /api/vagas/[id]/solicitacao-status) — mesmo formato de handleDecidirAlteracao, mas
+  // chaveado pela vaga (s.vaga_id), não pela solicitação.
+  const handleDecidirStatus = async (s: Solicitacao, acao: "aprovar" | "recusar") => {
+    if (!s.vaga_id) return;
+    if (acao === "recusar" && !motivoRecusaStatus.trim()) return;
+    setActionLoading(s.id);
+    setErroStatus(null);
+    try {
+      const res = await fetch(`/api/vagas/${s.vaga_id}/solicitacao-status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(acao === "aprovar" ? { acao } : { acao, motivo: motivoRecusaStatus.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setErroStatus({ id: s.id, msg: typeof json.error === "string" ? json.error : "Erro ao registrar a decisão." });
+        return;
+      }
+      setItems((prev) =>
+        prev
+          .map((it) => (it.id === s.id ? { ...it, status_pendente: null } : it))
+          .filter((it) => focoId || it.status === "pendente" || it.alteracao_pendente || it.status_pendente)
+      );
+      setRecusandoStatusId(null);
+      setMotivoRecusaStatus("");
+      const pausando = s.status_pendente?.acao !== "reabrir";
+      showToast(
+        acao === "aprovar"
+          ? `Vaga ${pausando ? "encerrada" : "reativada"} com sucesso.`
+          : `Pedido de ${pausando ? "encerramento" : "reativação"} recusado. O cliente foi avisado.`
+      );
+      if (acao === "aprovar") onVagaCriada();
     } finally {
       setActionLoading(null);
     }
@@ -428,6 +480,77 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                         )}
                       </div>
                     )}
+
+                    {/* Pedido de pausa ("encerramento") ou reabertura da vaga aguardando decisão */}
+                    {s.status_pendente && (() => {
+                      const pendente = s.status_pendente;
+                      const pausando = pendente.acao !== "reabrir";
+                      return (
+                        <div className="rounded-lg p-3 space-y-2" style={{ backgroundColor: pausando ? "#FEF2F2" : "#EFF6FF", border: `1px solid ${pausando ? "#FCA5A5" : "#BFDBFE"}` }}>
+                          <p className="text-xs font-bold" style={{ color: pausando ? "#991B1B" : "#1E3A8A" }}>
+                            {pausando ? "⏸️" : "▶️"} O cliente pediu {pausando ? "o encerramento" : "a reativação"} desta vaga em{" "}
+                            {new Date(pendente.criado_em).toLocaleString("pt-BR", {
+                              day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+                            })}
+                          </p>
+                          {pausando && pendente.motivo_tipo && (
+                            <p className="text-xs text-gray-700">
+                              <span className="font-semibold">Motivo:</span> {ROTULO_MOTIVO_ENCERRAMENTO[pendente.motivo_tipo]}
+                            </p>
+                          )}
+                          {pendente.motivo_texto && (
+                            <p className="text-xs text-gray-600 italic whitespace-pre-wrap">{"💬"} {pendente.motivo_texto}</p>
+                          )}
+
+                          {erroStatus?.id === s.id && <p className="text-xs text-red-600">{erroStatus.msg}</p>}
+
+                          {recusandoStatusId === s.id ? (
+                            <div className="space-y-2">
+                              <textarea
+                                value={motivoRecusaStatus}
+                                onChange={(e) => setMotivoRecusaStatus(e.target.value)}
+                                placeholder="Motivo da recusa (vai no e-mail pro cliente)..."
+                                rows={2}
+                                className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm outline-none resize-none bg-white"
+                              />
+                              <div className="flex gap-2 justify-end">
+                                <button
+                                  onClick={() => { setRecusandoStatusId(null); setMotivoRecusaStatus(""); }}
+                                  className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 bg-white"
+                                >
+                                  Cancelar
+                                </button>
+                                <button
+                                  onClick={() => handleDecidirStatus(s, "recusar")}
+                                  disabled={!motivoRecusaStatus.trim() || isLoading}
+                                  className="text-xs px-3 py-1.5 rounded-lg bg-red-600 text-white font-semibold disabled:opacity-50"
+                                >
+                                  {isLoading ? "Recusando..." : "Confirmar recusa"}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex gap-2 justify-end">
+                              <button
+                                onClick={() => { setRecusandoStatusId(s.id); setMotivoRecusaStatus(""); }}
+                                disabled={isLoading}
+                                className="text-xs px-3 py-1.5 rounded-lg border border-red-300 text-red-600 font-semibold bg-white hover:bg-red-50 disabled:opacity-50"
+                              >
+                                {"❌"} Recusar
+                              </button>
+                              <button
+                                onClick={() => handleDecidirStatus(s, "aprovar")}
+                                disabled={isLoading}
+                                className="text-xs px-4 py-1.5 rounded-lg font-bold disabled:opacity-50"
+                                style={{ backgroundColor: pausando ? "#DC2626" : "#16a34a", color: "#fff" }}
+                              >
+                                {isLoading ? "Aplicando..." : pausando ? "✅ Aprovar e encerrar" : "✅ Aprovar e reabrir"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Já decidida por outra pessoa */}
                     {jaDecidida && (
