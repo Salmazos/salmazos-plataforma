@@ -287,7 +287,8 @@ export default function MinhasSolicitacoesPage() {
                   </div>
                 )}
 
-                {s.status === "aprovada" && s.vaga_slug && (
+                {/* Vaga pausada não recebe candidatura — o link só levaria pro aviso de "Vaga pausada". */}
+                {s.status === "aprovada" && s.vaga_slug && s.vaga_status !== "pausada" && (
                   <Link
                     href={`/vagas/${s.vaga_slug}`}
                     target="_blank"
