@@ -10,6 +10,7 @@ import ModalRegistrarAso from "./ModalRegistrarAso";
 import ModalRegistrarContrato from "./ModalRegistrarContrato";
 import ModalEditarFuncionario from "./ModalEditarFuncionario";
 import ModalExcluirDocumento from "./ModalExcluirDocumento";
+import { AvatarFuncionario } from "./FuncionariosPageClient";
 
 export interface FuncionarioDetalhe {
   id: string;
@@ -25,6 +26,8 @@ export interface FuncionarioDetalhe {
   status: string;
   criado_em: string;
   clientes: { nome: string } | null;
+  foto_url: string | null;
+  foto_path: string | null;
 }
 
 export interface AsoRow {
@@ -82,6 +85,66 @@ export default function FuncionarioDetalheClient({ funcionario: funcionarioInici
   const [asoParaExcluir, setAsoParaExcluir] = useState<string | null>(null);
   const [contratoParaExcluir, setContratoParaExcluir] = useState<string | null>(null);
 
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
+  const [erroFoto, setErroFoto] = useState("");
+  // Guarda só se existe foto PRÓPRIA (decide se o botão "Remover" aparece) — não precisa do
+  // path de verdade no client, o server é quem resolve tudo (ver resolverFotosFuncionarios).
+  const [temFotoPropria, setTemFotoPropria] = useState(!!funcionarioInicial.foto_path);
+
+  // Converte o arquivo escolhido pra base64 e sobe direto (sem signed-upload-url — ver
+  // comentário em api/funcionarios/[id]/foto/route.ts). Aceita só os 3 formatos que a rota
+  // valida; formato/tamanho errado é rejeitado ali, mas a checagem de tamanho aqui evita
+  // gastar o roundtrip de rede à toa.
+  const handleTrocarFoto = async (arquivo: File) => {
+    setErroFoto("");
+    if (!["image/jpeg", "image/png", "image/webp"].includes(arquivo.type)) {
+      setErroFoto("Formato não suportado. Use JPG, PNG ou WEBP.");
+      return;
+    }
+    if (arquivo.size > 3 * 1024 * 1024) {
+      setErroFoto("Imagem muito grande. Máximo 3MB.");
+      return;
+    }
+    setEnviandoFoto(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
+        reader.onerror = () => reject(new Error("Erro ao ler o arquivo."));
+        reader.readAsDataURL(arquivo);
+      });
+      const res = await fetch(`/api/funcionarios/${funcionario.id}/foto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64, contentType: arquivo.type }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Erro ao enviar foto.");
+      setFuncionario((prev) => ({ ...prev, foto_url: json.fotoUrl }));
+      setTemFotoPropria(true);
+    } catch (err) {
+      setErroFoto(err instanceof Error ? err.message : "Erro de conexão. Tente novamente.");
+    } finally {
+      setEnviandoFoto(false);
+    }
+  };
+
+  const handleRemoverFoto = async () => {
+    setErroFoto("");
+    setEnviandoFoto(true);
+    try {
+      const res = await fetch(`/api/funcionarios/${funcionario.id}/foto`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Erro ao remover foto.");
+      setFuncionario((prev) => ({ ...prev, foto_url: json.fotoUrl }));
+      setTemFotoPropria(false);
+    } catch (err) {
+      setErroFoto(err instanceof Error ? err.message : "Erro de conexão. Tente novamente.");
+    } finally {
+      setEnviandoFoto(false);
+    }
+  };
+
   const statusFuncionario = STATUS_BADGE[funcionario.status] ?? { label: funcionario.status, bg: "#F3F4F6", text: "#374151" };
   const tipoServicoLabel = TIPOS_SERVICO.find((t) => t.id === funcionario.tipo_servico)?.label ?? "—";
   const empresaNome = funcionario.clientes?.nome ?? funcionario.empresa ?? "—";
@@ -132,9 +195,43 @@ export default function FuncionarioDetalheClient({ funcionario: funcionarioInici
 
       <div className="card mb-6">
         <div className="flex items-start justify-between mb-4">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">{funcionario.nome_completo}</h1>
-            <p className="text-sm text-gray-500 mt-1">{empresaNome}</p>
+          <div className="flex items-center gap-3">
+            <div>
+              <AvatarFuncionario fotoUrl={funcionario.foto_url} nome={funcionario.nome_completo} tamanho={56} />
+              <label
+                className="block text-center"
+                style={{ fontSize: 10, fontWeight: 700, color: "#2563EB", marginTop: 4, cursor: enviandoFoto ? "wait" : "pointer" }}
+              >
+                {enviandoFoto ? "Enviando..." : "Trocar foto"}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  disabled={enviandoFoto}
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const arquivo = e.target.files?.[0];
+                    e.target.value = "";
+                    if (arquivo) handleTrocarFoto(arquivo);
+                  }}
+                />
+              </label>
+              {temFotoPropria && (
+                <button
+                  type="button"
+                  onClick={handleRemoverFoto}
+                  disabled={enviandoFoto}
+                  className="block w-full text-center"
+                  style={{ fontSize: 10, fontWeight: 700, color: "#DC2626", marginTop: 2 }}
+                >
+                  Remover
+                </button>
+              )}
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">{funcionario.nome_completo}</h1>
+              <p className="text-sm text-gray-500 mt-1">{empresaNome}</p>
+              {erroFoto && <p className="text-red-600" style={{ fontSize: 11, marginTop: 4 }}>{erroFoto}</p>}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: statusFuncionario.bg, color: statusFuncionario.text }}>

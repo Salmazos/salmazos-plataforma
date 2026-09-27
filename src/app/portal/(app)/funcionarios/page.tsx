@@ -4,6 +4,7 @@ import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { formatarDataSemFuso, formatarCPF, formatarTelefone } from "@/lib/utils";
 import { calcularStatusAso, ASO_STATUS_INFO } from "@/lib/asoStatus";
 import PortalFuncionariosListClient, { type FuncionarioPortalRow } from "@/components/PortalFuncionariosListClient";
+import { resolverFotosFuncionarios } from "@/lib/funcionarioFoto";
 
 export const dynamic = "force-dynamic";
 
@@ -36,12 +37,16 @@ export default async function PortalFuncionariosPage() {
   // dois no próprio portal) — o toggle é só front-end, sem rota nova.
   const { data: funcionarios } = await service
     .from("funcionarios")
-    .select("id, nome_completo, cargo, data_admissao, admissao_id, turno, status")
+    .select("id, nome_completo, cargo, data_admissao, admissao_id, turno, status, foto_path")
     .eq("cliente_id", clienteUsuario.cliente_id)
     .in("status", ["ativo", "desligado"])
     .order("nome_completo");
 
   const funcionarioIds = (funcionarios ?? []).map((f) => f.id);
+
+  const fotoUrlPorFuncionario = await resolverFotosFuncionarios(
+    (funcionarios ?? []).map((f) => ({ id: f.id, foto_path: f.foto_path, admissao_id: f.admissao_id }))
+  );
 
   // Data de nascimento/CPF/RG/PIS não existem em `funcionarios` — vêm de
   // admissao_dados_pessoais, preenchida no formulário de admissão digital. Sem FK direta
@@ -162,6 +167,7 @@ export default async function PortalFuncionariosPage() {
     return {
       id: f.id,
       nomeCompleto: f.nome_completo,
+      fotoUrl: fotoUrlPorFuncionario.get(f.id) ?? null,
       status: f.status as "ativo" | "desligado",
       encaminhamentoId,
       dataNascimento: dadosPessoais?.data_nascimento ? formatarDataSemFuso(dadosPessoais.data_nascimento) : "—",

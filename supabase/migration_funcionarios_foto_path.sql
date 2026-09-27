@@ -1,0 +1,12 @@
+-- Foto do funcionário (thumbnail em Funcionários — painel e portal do cliente).
+-- Nullable: a maioria já tem uma foto reaproveitável (Foto 3x4 da admissão digital,
+-- ver admissao_documentos.tipo_documento='foto_3x4'), resolvida em tempo real por
+-- src/lib/funcionarioFoto.ts. Esta coluna só guarda o path de uma foto PRÓPRIA,
+-- enviada manualmente pelo RH (obrigatória pra quem não passou por admissão digital,
+-- e disponível como substituição pra qualquer funcionário). Arquivo fica no bucket
+-- já existente "admissao-docs", pasta "fotos-funcionario/" (mesmo padrão de reaproveitamento
+-- de bucket já usado por ASO/Contrato — ver comentário em contrato-upload-url/route.ts).
+--
+-- Aplicada em produção via mcp__Supabase__apply_migration (nome: funcionarios_foto_path),
+-- este arquivo é só o registro local (CLAUDE.md: toda mudança de schema precisa de rastro).
+alter table funcionarios add column if not exists foto_path text;

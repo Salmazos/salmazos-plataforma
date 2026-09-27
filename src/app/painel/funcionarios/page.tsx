@@ -4,6 +4,7 @@ import FuncionariosPageClient from "@/components/FuncionariosPageClient";
 import { podeAcessarFuncionarios } from "@/lib/funcionariosAuth";
 import { contextoRH } from "@/lib/rhUnidadeAuth";
 import SemAcessoPainel from "@/components/SemAcessoPainel";
+import { resolverFotosFuncionarios } from "@/lib/funcionarioFoto";
 
 export const dynamic = "force-dynamic";
 
@@ -56,10 +57,15 @@ export default async function FuncionariosPage() {
   // arquivo_path aqui na listagem.
   const funcionarioIdsComContrato = new Set((contratos ?? []).map((c) => c.funcionario_id));
 
+  const fotoUrlPorFuncionario = await resolverFotosFuncionarios(
+    (funcionarios ?? []).map((f) => ({ id: f.id, foto_path: f.foto_path, admissao_id: f.admissao_id }))
+  );
+
   const funcionariosComAso = (funcionarios ?? []).map((f) => ({
     ...f,
     aso_data_exame_mais_recente: asoMaisRecentePorFuncionario.get(f.id) ?? null,
     tem_contrato: funcionarioIdsComContrato.has(f.id),
+    foto_url: fotoUrlPorFuncionario.get(f.id) ?? null,
   }));
 
   return (

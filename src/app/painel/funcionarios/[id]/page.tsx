@@ -6,6 +6,7 @@ import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
 import { contextoRH } from "@/lib/rhUnidadeAuth";
 import SemAcessoPainel from "@/components/SemAcessoPainel";
 import { podeVerUnidade } from "@/lib/unidadeAuth";
+import { resolverFotosFuncionarios } from "@/lib/funcionarioFoto";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,11 @@ export default async function FuncionarioDetalhePage({ params }: Params) {
     : { data: [] };
   const nomePorUserId = new Map((perfis ?? []).map((p) => [p.user_id, p.nome_completo]));
 
+  const fotoUrlPorFuncionario = await resolverFotosFuncionarios([
+    { id: funcionario.id, foto_path: funcionario.foto_path, admissao_id: funcionario.admissao_id },
+  ]);
+  const funcionarioComFoto = { ...funcionario, foto_url: fotoUrlPorFuncionario.get(funcionario.id) ?? null };
+
   const asosComNome = (asos ?? []).map((a) => ({
     ...a,
     criado_por_nome: a.criado_por ? nomePorUserId.get(a.criado_por) ?? "Usuário removido" : null,
@@ -70,7 +76,7 @@ export default async function FuncionarioDetalhePage({ params }: Params) {
 
   return (
     <FuncionarioDetalheClient
-      funcionario={funcionario}
+      funcionario={funcionarioComFoto}
       asosIniciais={asosComNome}
       contratosIniciais={contratosComNome}
       clientes={clientes ?? []}

@@ -25,6 +25,51 @@ export interface FuncionarioRow {
   horario_trabalho: string | null;
   turno: string | null;
   tem_contrato: boolean;
+  foto_url: string | null;
+}
+
+// Avatar circular — foto (própria ou reaproveitada da Foto 3x4 da admissão, resolvida no
+// server, ver lib/funcionarioFoto.ts) ou iniciais como placeholder. Upload/troca de foto
+// fica só na tela de detalhe (FuncionarioDetalheClient) — aqui é sempre leitura.
+export function AvatarFuncionario({ fotoUrl, nome, tamanho = 44 }: { fotoUrl: string | null; nome: string; tamanho?: number }) {
+  const iniciais = nome
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("");
+  if (fotoUrl) {
+    // eslint-disable-next-line @next/next/no-img-element -- signed URL temporária (expira em
+    // ~2h), não faz sentido pro otimizador de imagem do Next cachear/reprocessar.
+    return (
+      <img
+        src={fotoUrl}
+        alt={nome}
+        width={tamanho}
+        height={tamanho}
+        style={{ width: tamanho, height: tamanho, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+      />
+    );
+  }
+  return (
+    <div
+      style={{
+        width: tamanho,
+        height: tamanho,
+        borderRadius: "50%",
+        background: "#F3F4F6",
+        color: "#9CA3AF",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: tamanho * 0.36,
+        fontWeight: 700,
+        flexShrink: 0,
+      }}
+    >
+      {iniciais || "?"}
+    </div>
+  );
 }
 
 interface ClienteOption {
@@ -248,18 +293,21 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
               >
                 {/* Linha 1: nome em destaque, ações à direita */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
-                  <p
-                    style={{
-                      fontSize: 16,
-                      fontWeight: 700,
-                      color: "#111827",
-                      textDecoration: "underline",
-                      textDecorationThickness: 1,
-                      margin: 0,
-                    }}
-                  >
-                    {f.nome_completo}
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <AvatarFuncionario fotoUrl={f.foto_url} nome={f.nome_completo} />
+                    <p
+                      style={{
+                        fontSize: 16,
+                        fontWeight: 700,
+                        color: "#111827",
+                        textDecoration: "underline",
+                        textDecorationThickness: 1,
+                        margin: 0,
+                      }}
+                    >
+                      {f.nome_completo}
+                    </p>
+                  </div>
                   <div className="flex gap-2" style={{ flexShrink: 0 }}>
                     <Link
                       href={`/painel/funcionarios/${f.id}`}

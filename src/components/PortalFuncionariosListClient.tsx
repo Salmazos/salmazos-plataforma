@@ -28,9 +28,56 @@ function normalizarBusca(texto: string): string {
     .toLowerCase();
 }
 
+// Avatar circular — foto (própria ou reaproveitada da Foto 3x4 da admissão, resolvida no
+// server, ver lib/funcionarioFoto.ts) ou iniciais como placeholder quando não há nenhuma.
+// Mesmo componente usado no painel interno (ver FuncionariosPageClient.tsx) — mantido
+// duplicado aqui de propósito, igual ao resto deste arquivo (Campo, normalizarBusca), já que
+// portal e painel são bundles/apps separados e não compartilham client components hoje.
+function AvatarFuncionario({ fotoUrl, nome, tamanho = 44 }: { fotoUrl: string | null; nome: string; tamanho?: number }) {
+  const iniciais = nome
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("");
+  if (fotoUrl) {
+    // eslint-disable-next-line @next/next/no-img-element -- signed URL temporária (expira em
+    // ~2h), não faz sentido pro otimizador de imagem do Next cachear/reprocessar.
+    return (
+      <img
+        src={fotoUrl}
+        alt={nome}
+        width={tamanho}
+        height={tamanho}
+        style={{ width: tamanho, height: tamanho, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+      />
+    );
+  }
+  return (
+    <div
+      style={{
+        width: tamanho,
+        height: tamanho,
+        borderRadius: "50%",
+        background: "#F3F4F6",
+        color: "#9CA3AF",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: tamanho * 0.36,
+        fontWeight: 700,
+        flexShrink: 0,
+      }}
+    >
+      {iniciais || "?"}
+    </div>
+  );
+}
+
 export interface FuncionarioPortalRow {
   id: string;
   nomeCompleto: string;
+  fotoUrl: string | null;
   status: "ativo" | "desligado";
   encaminhamentoId: string | null;
   dataNascimento: string;
@@ -145,17 +192,20 @@ export default function PortalFuncionariosListClient({ funcionarios }: Props) {
                 }}
               >
                 <div className="flex items-start justify-between gap-3">
-                  {f.encaminhamentoId ? (
-                    <Link
-                      href={`/portal/candidato/${f.encaminhamentoId}`}
-                      style={{ ...nomeStyle, display: "inline-block" }}
-                      className="hover:text-[#92400E] transition-colors"
-                    >
-                      {f.nomeCompleto}
-                    </Link>
-                  ) : (
-                    <p style={nomeStyle}>{f.nomeCompleto}</p>
-                  )}
+                  <div className="flex items-center gap-3">
+                    <AvatarFuncionario fotoUrl={f.fotoUrl} nome={f.nomeCompleto} />
+                    {f.encaminhamentoId ? (
+                      <Link
+                        href={`/portal/candidato/${f.encaminhamentoId}`}
+                        style={{ ...nomeStyle, display: "inline-block" }}
+                        className="hover:text-[#92400E] transition-colors"
+                      >
+                        {f.nomeCompleto}
+                      </Link>
+                    ) : (
+                      <p style={nomeStyle}>{f.nomeCompleto}</p>
+                    )}
+                  </div>
                   {/* Rescindido não tem acesso a documento (ASSUNÇÃO DE NEGÓCIO CONFIRMADA
                       COM O OLVER — ver comentário em portal/(app)/funcionarios/page.tsx),
                       então o botão nem aparece pra não sugerir uma ação que vai falhar. */}

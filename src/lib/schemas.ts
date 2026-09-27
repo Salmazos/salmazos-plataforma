@@ -1019,6 +1019,18 @@ export const funcionarioCreateSchema = z.object({
 // a rota só aplica os campos presentes no body.
 export const funcionarioUpdateSchema = funcionarioCreateSchema.partial();
 
+// Upload de foto (thumbnail) — só RH pelo painel (decisão do Olver, 27/09: portal do
+// cliente continua só leitura). base64 pequeno o bastante (rota valida <=3MB decodificado)
+// pra caber no limite padrão de body do App Router sem precisar do fluxo de signed-upload-url
+// usado por ASO/Contrato/Admissão (esse fluxo existe pra upload grande vindo de formulário
+// público sem sessão — aqui é o RH já autenticado subindo uma imagem pequena).
+export const funcionarioFotoUploadSchema = z.object({
+  base64: z.string().min(1, "Arquivo é obrigatório"),
+  contentType: z.enum(["image/jpeg", "image/png", "image/webp"], {
+    message: "Formato não suportado. Use JPG, PNG ou WEBP.",
+  }),
+});
+
 // ── ASO Periódico (funcionario_asos) ──────────────────────────────────────────
 // Admissional/periódico, renovação a cada 12 meses, para funcionários ativos —
 // completamente separado do ASO demissional (rescisoes.aso_documento_path).
