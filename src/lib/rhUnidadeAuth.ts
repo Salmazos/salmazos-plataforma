@@ -64,3 +64,11 @@ export async function checarAcessoContratoRH(user: User, contratoId: string): Pr
   if (!data) return NAO_ENCONTRADO();
   return checarAcessoFuncionarioRH(user, data.funcionario_id);
 }
+
+// Espelho de Ponto: o fechamento guarda a unidade do cliente importado.
+export async function checarAcessoFechamentoPontoRH(user: User, fechamentoId: string): Promise<NextResponse | null> {
+  const svc = createServiceClient();
+  const { data } = await svc.from("ponto_fechamentos").select("unidade_id").eq("id", fechamentoId).maybeSingle();
+  if (!data) return NAO_ENCONTRADO();
+  return checarUnidade(user, data.unidade_id);
+}

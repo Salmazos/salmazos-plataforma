@@ -139,7 +139,11 @@ export default function PontoFechamentoDetalheClient({ fechamento, funcionarios:
         prev.map((f) =>
           f.id !== funcionarioPlanilhaId
             ? f
-            : { ...f, funcionario_id: ignorar ? null : funcionarioId, status_vinculo: ignorar ? "ignorado" : "vinculado" }
+            : {
+                ...f,
+                funcionario_id: ignorar ? null : funcionarioId,
+                status_vinculo: ignorar ? "ignorado" : funcionarioId ? "vinculado" : "pendente_vinculo",
+              }
         )
       );
     } catch (err) {

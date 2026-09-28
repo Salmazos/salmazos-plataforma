@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelPonto } from "@/lib/pontoAuth";
 import { parseBody, pontoDiaEditarSchema } from "@/lib/schemas";
+import { checarAcessoFechamentoPontoRH } from "@/lib/rhUnidadeAuth";
 
 interface Params {
   params: Promise<{ id: string; diaId: string }>;
@@ -20,6 +21,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (acessoNegado) return acessoNegado;
 
   const { id: fechamentoId, diaId } = await params;
+  const bloqueioUnidade = await checarAcessoFechamentoPontoRH(user, fechamentoId);
+  if (bloqueioUnidade) return bloqueioUnidade;
   const body = await request.json().catch(() => ({}));
   const parsed = parseBody(pontoDiaEditarSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });

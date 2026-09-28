@@ -3,7 +3,8 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelPonto } from "@/lib/pontoAuth";
 import { parseFechamentoXlsx } from "@/lib/pontoImport";
 import { slugify } from "@/lib/utils";
-import { exigirContextoUnidade } from "@/lib/unidadeAuth";
+import { podeVerUnidade } from "@/lib/unidadeAuth";
+import { contextoRH } from "@/lib/rhUnidadeAuth";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -14,6 +15,11 @@ export async function GET(request: NextRequest) {
   const acessoNegado = await checarPapelPonto(user);
   if (acessoNegado) return acessoNegado;
 
+  // RH por unidade (mesma regra de Funcionários/Rescisões): supervisor só vê o ponto dos
+  // clientes da própria unidade; sócios veem tudo.
+  const ctx = await contextoRH(user);
+  if (!ctx) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
+
   const svc = createServiceClient();
   const clienteId = request.nextUrl.searchParams.get("cliente_id");
 
@@ -22,6 +28,7 @@ export async function GET(request: NextRequest) {
     .select("id, cliente_id, periodo_inicio, periodo_fim, status, criado_em, clientes(nome)")
     .order("periodo_inicio", { ascending: false });
   if (clienteId) query = query.eq("cliente_id", clienteId);
+  if (!ctx.todasUnidades) query = query.eq("unidade_id", ctx.unidadeId);
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -74,8 +81,8 @@ export async function POST(request: NextRequest) {
   const acessoNegado = await checarPapelPonto(user);
   if (acessoNegado) return acessoNegado;
 
-  const { ctx, erro } = await exigirContextoUnidade();
-  if (erro) return erro;
+  const ctx = await contextoRH(user);
+  if (!ctx) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
 
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
@@ -85,8 +92,10 @@ export async function POST(request: NextRequest) {
 
   const svc = createServiceClient();
 
-  const { data: cliente } = await svc.from("clientes").select("id, nome").eq("id", clienteId).maybeSingle();
-  if (!cliente) return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
+  const { data: cliente } = await svc.from("clientes").select("id, nome, unidade_id").eq("id", clienteId).maybeSingle();
+  if (!cliente || !podeVerUnidade(ctx, cliente.unidade_id)) {
+    return NextResponse.json({ error: "Cliente não encontrado." }, { status: 404 });
+  }
 
   const buffer = Buffer.from(await file.arrayBuffer());
   let importado;
@@ -138,7 +147,9 @@ export async function POST(request: NextRequest) {
     .from("ponto_fechamentos")
     .insert({
       cliente_id: clienteId,
-      unidade_id: ctx.unidadeId,
+      // Unidade do cliente, não a de quem importa — sócio (Monte Mor) importando ponto de
+      // cliente de SBC grava SBC, e é o que o supervisor de SBC precisa enxergar.
+      unidade_id: cliente.unidade_id,
       periodo_inicio: importado.periodoInicio,
       periodo_fim: importado.periodoFim,
       arquivo_original_nome: file.name,

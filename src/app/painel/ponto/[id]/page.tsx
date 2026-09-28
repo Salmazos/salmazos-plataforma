@@ -1,8 +1,11 @@
+import type { ComponentProps } from "react";
 import { redirect, notFound } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { podeAcessarPonto } from "@/lib/pontoAuth";
 import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
 import PontoFechamentoDetalheClient from "@/components/PontoFechamentoDetalheClient";
+import { contextoRH } from "@/lib/rhUnidadeAuth";
+import { podeVerUnidade } from "@/lib/unidadeAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -26,10 +29,12 @@ export default async function PontoFechamentoDetalhePage({ params }: Params) {
 
   const { data: fechamento } = await svc
     .from("ponto_fechamentos")
-    .select("id, cliente_id, periodo_inicio, periodo_fim, status, arquivo_original_nome, criado_em, clientes(nome)")
+    .select("id, cliente_id, unidade_id, periodo_inicio, periodo_fim, status, arquivo_original_nome, criado_em, clientes(nome)")
     .eq("id", id)
     .maybeSingle();
-  if (!fechamento) notFound();
+  // Fechamento de outra unidade responde 404, como no resto do RH por unidade.
+  const ctx = await contextoRH(user);
+  if (!fechamento || !ctx || !podeVerUnidade(ctx, fechamento.unidade_id)) notFound();
 
   const { data: funcionariosPlanilha } = await svc
     .from("ponto_funcionarios")
@@ -46,7 +51,8 @@ export default async function PontoFechamentoDetalhePage({ params }: Params) {
         .order("data")
     : { data: [] };
 
-  const diasPorFuncionario = new Map<string, NonNullable<typeof dias>>();
+  type DiaLinha = NonNullable<typeof dias>[number];
+  const diasPorFuncionario = new Map<string, DiaLinha[]>();
   for (const d of dias ?? []) {
     const lista = diasPorFuncionario.get(d.ponto_funcionario_id) ?? [];
     lista.push(d);
@@ -65,12 +71,14 @@ export default async function PontoFechamentoDetalhePage({ params }: Params) {
     .from("funcionarios")
     .select("id, nome_completo")
     .eq("cliente_id", fechamento.cliente_id)
-    .eq("ativo", true)
+    .eq("status", "ativo")
     .order("nome_completo");
 
   return (
     <PontoFechamentoDetalheClient
-      fechamento={fechamento}
+      // clientes(nome) é many-to-one (objeto em runtime); sem tipos gerados do banco o
+      // supabase-js tipa todo embed como lista.
+      fechamento={fechamento as unknown as ComponentProps<typeof PontoFechamentoDetalheClient>["fechamento"]}
       funcionarios={funcionariosComDias}
       funcionariosDoCliente={funcionariosDoCliente ?? []}
       podeExcluir={podeExcluir}

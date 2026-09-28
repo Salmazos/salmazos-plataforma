@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelPonto } from "@/lib/pontoAuth";
 import { parseBody, pontoFuncionarioVincularSchema } from "@/lib/schemas";
+import { checarAcessoFechamentoPontoRH } from "@/lib/rhUnidadeAuth";
 
 interface Params {
   params: Promise<{ id: string; funcionarioId: string }>;
@@ -21,6 +22,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (acessoNegado) return acessoNegado;
 
   const { id: fechamentoId, funcionarioId: pontoFuncionarioId } = await params;
+  const bloqueioUnidade = await checarAcessoFechamentoPontoRH(user, fechamentoId);
+  if (bloqueioUnidade) return bloqueioUnidade;
   const body = await request.json().catch(() => ({}));
   const parsed = parseBody(pontoFuncionarioVincularSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
@@ -45,8 +48,15 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ ok: true });
   }
 
+  // Sem funcionário e sem ignorar = "Desfazer" de um ignorado: volta a ficar pendente pro RH
+  // decidir de novo (nunca vira vínculo sozinho).
   if (!parsed.data.funcionario_id) {
-    return NextResponse.json({ error: "Informe um funcionário ou marque como ignorado." }, { status: 400 });
+    const { error } = await svc
+      .from("ponto_funcionarios")
+      .update({ funcionario_id: null, status_vinculo: "pendente_vinculo" })
+      .eq("id", pontoFuncionarioId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
   }
 
   // Confirma que o funcionário escolhido é do MESMO cliente do fechamento — trava contra um

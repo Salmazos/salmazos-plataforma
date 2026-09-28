@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelPonto } from "@/lib/pontoAuth";
 import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
+import { checarAcessoFechamentoPontoRH } from "@/lib/rhUnidadeAuth";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -17,6 +18,8 @@ export async function GET(request: NextRequest, { params }: Params) {
   if (acessoNegado) return acessoNegado;
 
   const { id } = await params;
+  const bloqueioUnidade = await checarAcessoFechamentoPontoRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
   const svc = createServiceClient();
 
   const { data: fechamento } = await svc
@@ -73,6 +76,8 @@ export async function DELETE(request: NextRequest, { params }: Params) {
   }
 
   const { id } = await params;
+  const bloqueioUnidade = await checarAcessoFechamentoPontoRH(user, id);
+  if (bloqueioUnidade) return bloqueioUnidade;
   const svc = createServiceClient();
 
   const { data: fechamento } = await svc.from("ponto_fechamentos").select("status").eq("id", id).maybeSingle();
