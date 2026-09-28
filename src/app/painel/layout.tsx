@@ -16,6 +16,7 @@ import NotificacoesProvider from "@/components/NotificacoesProvider";
 import UsuarioLogadoProvider from "@/components/UsuarioLogadoProvider";
 import { apelidoDoNomeCompleto } from "@/lib/responsaveis";
 import { podeAcessarFuncionarios } from "@/lib/funcionariosAuth";
+import { podeAcessarPonto } from "@/lib/pontoAuth";
 import { podeAcessarAdmissoes } from "@/lib/admissaoAuth";
 import { PAPEIS_FULL_ACCESS, checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
 import { checarAcessoSupervisao } from "@/lib/supervisaoAuth";
@@ -53,6 +54,9 @@ export default async function PainelLayout({
   // admissaoAuth.ts em vez de reescritas aqui — mesma fonte usada pelos gates reais de
   // página/API, pra nunca divergir do que o Sidebar mostra.
   const canAccessFuncionarios = await podeAcessarFuncionarios(user);
+  // Espelho de Ponto (Fase 1): aparece aninhado dentro do grupo RH no Sidebar (não como
+  // item separado no nível raiz) — é um módulo do RH como Admissões e Funcionários.
+  const canAccessPonto = await podeAcessarPonto(user);
   const canAccessAdmissoes = await podeAcessarAdmissoes(user);
   const canAccessCobrancasRS = await checarAcessoCobrancaRS(user);
   // Acesso restrito: sem acesso amplo, mas já gerou pelo menos uma cobrança própria
@@ -110,6 +114,7 @@ export default async function PainelLayout({
           isFullAccess={isFullAccess}
           isSupervisorOrAbove={isSupervisorOrAbove}
           canAccessFuncionarios={canAccessFuncionarios}
+          canAccessPonto={canAccessPonto}
           canAccessAdmissoes={canAccessAdmissoes}
           canAccessAniversarios={canAccessAniversarios}
           canAccessCobrancasRS={canAccessCobrancasRS}

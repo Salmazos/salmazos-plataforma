@@ -1075,6 +1075,27 @@ export const funcionarioAsoAvisoPlataformaCreateSchema = z.object({
   usuario_id: z.string().uuid(),
 });
 
+// ── Espelho de Ponto ─────────────────────────────────────────────────────────
+
+export const pontoFechamentoImportarSchema = z.object({
+  cliente_id: z.string().uuid("Selecione um cliente"),
+});
+
+export const pontoDiaEditarSchema = z.object({
+  marcacoes: z.array(z.string()).optional(),
+  campos: z.record(z.string(), z.string()).optional(),
+  tipo_ocorrencia: z
+    .enum(["atraso", "falta", "atestado_medico", "atestado_horas", "suspensao", "marcacao_incompleta", "outro"])
+    .nullable()
+    .optional(),
+  justificativa_rh: z.string().trim().nullable().optional(),
+});
+
+export const pontoFuncionarioVincularSchema = z.object({
+  funcionario_id: z.string().uuid().nullable(),
+  ignorar: z.boolean().optional(),
+});
+
 // ── Rescisões (Fase 2) ───────────────────────────────────────────────────────
 
 export const rescisaoCreateSchema = z.object({

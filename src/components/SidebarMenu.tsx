@@ -51,6 +51,7 @@ interface Props {
   isFullAccess: boolean;
   isSupervisorOrAbove: boolean;
   canAccessFuncionarios: boolean;
+  canAccessPonto: boolean;
   canAccessAdmissoes: boolean;
   canAccessAniversarios: boolean;
   canAccessCobrancasRS: boolean;
@@ -92,6 +93,7 @@ interface MenuLeafDef {
   requireSuperuser?: boolean;
   requireSupervisor?: boolean;
   requireFuncionarios?: boolean;
+  requirePonto?: boolean;
   requireAdmissoes?: boolean;
   requireCobrancasRS?: boolean;
   requireSupervisao?: boolean;
@@ -145,6 +147,7 @@ const menuItems: MenuItemDef[] = [
     submenu: [
       { label: "Admissões", href: "/painel/admissoes", icon: FileCheck, requireAdmissoes: true },
       { label: "Funcionários", href: "/painel/funcionarios", icon: IdCard, requireFuncionarios: true },
+      { label: "Espelho de Ponto", href: "/painel/ponto", icon: FileSpreadsheet, requirePonto: true },
       { label: "Vencimento de Contrato", href: "/painel/vencimento-contrato", icon: Clock, requireFuncionarios: true },
       { label: "Rescisões", href: "/painel/rescisoes", icon: UserMinus, requireFuncionarios: true },
       { label: "Aniversários", href: "/painel/aniversarios", icon: Cake, requireAniversarios: true },
@@ -209,6 +212,7 @@ export default function SidebarMenu({
   isFullAccess,
   isSupervisorOrAbove,
   canAccessFuncionarios,
+  canAccessPonto,
   canAccessAdmissoes,
   canAccessAniversarios,
   canAccessCobrancasRS,
@@ -281,6 +285,7 @@ export default function SidebarMenu({
     if (def.requireSuperuser && !isSuperuser) return false;
     if (def.requireSupervisor && !isSupervisorOrAbove) return false;
     if (def.requireFuncionarios && !canAccessFuncionarios) return false;
+    if (def.requirePonto && !canAccessPonto) return false;
     if (def.requireAdmissoes && !canAccessAdmissoes) return false;
     if (def.requireAniversarios && !canAccessAniversarios) return false;
     if (def.requireCobrancasRS && !canAccessCobrancasRS && !temCobrancasGeradas) return false;

@@ -21,6 +21,7 @@ export const ABAS_CONFIG: AbaConfig[] = [
 
   { chave: "rh_admissoes", rotulo: "Admissões", grupo: "RH" },
   { chave: "rh_funcionarios", rotulo: "Funcionários", grupo: "RH" },
+  { chave: "rh_ponto", rotulo: "Espelho de Ponto", grupo: "RH" },
   { chave: "rh_rescisoes", rotulo: "Rescisões", grupo: "RH" },
   { chave: "rh_aniversarios", rotulo: "Aniversários", grupo: "RH" },
 
