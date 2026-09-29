@@ -375,14 +375,22 @@ export async function PATCH(request: NextRequest) {
 </div>
 </body></html>`;
 
-        await sendEmail({
-          to: "olver@salmazos.com.br",
-          subject: `✅ Aprovação de Candidato — ${candidatoNome} — ${clienteNome}`,
-          html,
-          tipo: "aprovacao_cliente",
-          candidato_id: enc.candidato_id,
-          vaga_id: enc.vaga_id ?? undefined,
-        });
+        // rh@ nunca esteve nessa lista — só o Olver recebia. Corrigido a pedido dele
+        // (set/2026): o RH (Andreza) precisa desses dados de admissão pra montar a
+        // documentação, e ficava sabendo da aprovação só de segunda mão.
+        const DESTINATARIOS_APROVACAO_CLIENTE = ["olver@salmazos.com.br", "rh@salmazos.com.br"];
+        await Promise.all(
+          DESTINATARIOS_APROVACAO_CLIENTE.map((destinatario) =>
+            sendEmail({
+              to: destinatario,
+              subject: `✅ Aprovação de Candidato — ${candidatoNome} — ${clienteNome}`,
+              html,
+              tipo: "aprovacao_cliente",
+              candidato_id: enc.candidato_id,
+              vaga_id: enc.vaga_id ?? undefined,
+            })
+          )
+        );
       } catch (emailErr) {
         console.error("[avaliar] Erro ao enviar email de notificação:", emailErr);
       }
