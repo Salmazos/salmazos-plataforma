@@ -33,7 +33,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     const service = createServiceClient();
     const { data: vaga } = await service
       .from("vagas")
-      .select("id, status, cliente_id, cliente_nome_temp, titulo, clientes(nome)")
+      .select("id, status, tipo_servico, cliente_id, cliente_nome_temp, titulo, clientes(nome)")
       .eq("id", id)
       .maybeSingle();
     if (!vaga) return NextResponse.json({ error: "Vaga não encontrada." }, { status: 404 });
@@ -90,7 +90,11 @@ export async function POST(request: NextRequest, { params }: Params) {
       vagaAtualizada = true;
 
       if (pedido.acao === "reabrir") {
-        await sincronizarPosicoesAbertas(id, service);
+        // MOT reaberta por aprovação do pedido do cliente também não pode fechar sozinha na
+        // mesma chamada — mesmo caso da reativação manual, ver vagaPosicoes.ts.
+        await sincronizarPosicoesAbertas(id, service, {
+          permitirFechamentoAutomatico: vaga.tipo_servico !== "mao_obra_temporaria",
+        });
       }
     }
 

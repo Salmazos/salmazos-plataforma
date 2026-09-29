@@ -185,8 +185,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     // se a vaga acabar re-fechando por já estar com todas as posições preenchidas)
     // desatualizado na resposta.
     let dataFinal = data;
-    if (body.num_posicoes !== undefined || (statusAlterado && body.status === "aberta")) {
-      await sincronizarPosicoesAbertas(id, supabase);
+    const foiReativadaAgora = statusAlterado && body.status === "aberta";
+    if (body.num_posicoes !== undefined || foiReativadaAgora) {
+      // MOT reativada manualmente não pode fechar sozinha na mesma chamada — ver comentário
+      // em vagaPosicoes.ts (caso real vaga "Conferente", set/2026).
+      const suprimirFechamentoAutomatico = foiReativadaAgora && data?.tipo_servico === "mao_obra_temporaria";
+      await sincronizarPosicoesAbertas(id, supabase, { permitirFechamentoAutomatico: !suprimirFechamentoAutomatico });
       const { data: recarregada } = await supabase
         .from("vagas")
         .select("*, clientes(id, nome, processo_simplificado)")

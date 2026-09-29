@@ -27,10 +27,26 @@ interface ResultadoSincronizacao {
 //
 // Só fecha automaticamente (nunca reabre sozinha) — reabrir é sempre decisão manual do RH,
 // e esta função é chamada logo depois pra corrigir o contador com a contagem real.
+//
+// EXCEÇÃO Mão de Obra Temporária (set/2026, caso real vaga "Conferente"): diferente de R&S,
+// onde "contratado" é definitivo e ocupa a posição pra sempre, colocação de MOT tem prazo
+// (candidatos_vagas.data_fim) e é normal o cliente pedir outro temporário/substituto na
+// mesma vaga antes desse prazo acabar. Contar "contratado" como ocupação permanente fazia a
+// vaga fechar sozinha na hora, toda vez que o analista clicava em "Reativar" — a colocação
+// anterior (ainda dentro do prazo) já esgotava `num_posicoes`, e o fechamento automático
+// rodava de novo antes do analista conseguir direcionar o novo candidato. Por isso todo
+// caminho que reabre uma vaga MOT por decisão de alguém (reativação manual, aprovação de
+// pedido do cliente, cancelamento de processo que reabre a vaga) passa
+// `permitirFechamentoAutomatico: false` — o contador continua sendo recalculado
+// normalmente, só o fechamento automático é que não roda nesse caso. Fechar de fato passa a
+// ser sempre decisão manual do analista pra esse tipo de serviço a partir da reativação.
 export async function sincronizarPosicoesAbertas(
   vagaId: string,
-  supabase: ServiceClient
+  supabase: ServiceClient,
+  opcoes?: { permitirFechamentoAutomatico?: boolean }
 ): Promise<ResultadoSincronizacao | null> {
+  const permitirFechamentoAutomatico = opcoes?.permitirFechamentoAutomatico ?? true;
+
   const { data: vaga } = await supabase
     .from("vagas")
     .select("id, status, num_posicoes")
@@ -46,7 +62,8 @@ export async function sincronizarPosicoesAbertas(
 
   const contratados = count ?? 0;
   const numPosicoesAbertas = Math.max(vaga.num_posicoes - contratados, 0);
-  const vagaFechadaAgora = numPosicoesAbertas === 0 && vaga.status === "aberta";
+  const fechariaAutomaticamente = numPosicoesAbertas === 0 && vaga.status === "aberta";
+  const vagaFechadaAgora = fechariaAutomaticamente && permitirFechamentoAutomatico;
 
   const campos: Record<string, unknown> = { num_posicoes_abertas: numPosicoesAbertas };
   if (vagaFechadaAgora) {

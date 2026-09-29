@@ -279,8 +279,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         .eq("id", vaga.id);
       // Recalcula a partir da contagem real de contratados, em vez de resetar pro total —
       // essa vaga pode já ter outras posições preenchidas além dessa que acabou de ser
-      // reprovada (ver vagaPosicoes.ts).
-      await sincronizarPosicoesAbertas(vaga.id, supabase);
+      // reprovada (ver vagaPosicoes.ts). MOT reaberta por cancelamento do cliente também não
+      // pode fechar sozinha na mesma chamada — mesmo caso da reativação manual.
+      await sincronizarPosicoesAbertas(vaga.id, supabase, {
+        permitirFechamentoAutomatico: vaga.tipo_servico !== "mao_obra_temporaria",
+      });
       vagaReaberta = true;
       void registrarHistorico({
         candidato_id: cv.candidato_id,
