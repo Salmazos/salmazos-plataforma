@@ -14,12 +14,13 @@ import PerfilAnotacoes from "@/components/PerfilAnotacoes";
 import { BotaoCurriculo } from "@/components/BotaoCurriculo";
 import TriagemBadge from "@/components/TriagemBadge";
 import type { Candidato } from "@/types";
-import type { GarantiaInfo, MelhorRetencao } from "@/components/CandidatoPerfilTabs";
+import type { GarantiaInfo, AdmissaoInfo, MelhorRetencao } from "@/components/CandidatoPerfilTabs";
 import { MOTIVOS_REPROVACAO_INTERNA, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
 
 interface Props {
   candidato: Candidato;
   garantiaInfo?: GarantiaInfo | null;
+  admissaoInfo?: AdmissaoInfo | null;
   melhorRetencao?: MelhorRetencao | null;
   role: string;
   etapaKanbanReal: string;
@@ -86,7 +87,7 @@ function formatarCpf(v: string): string {
   return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6, 9)}-${nums.slice(9)}`;
 }
 
-export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, role, etapaKanbanReal }: Props) {
+export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, melhorRetencao, role, etapaKanbanReal }: Props) {
   const router = useRouter();
   // Fonte: candidatos_vagas.etapa (a mesma que o Kanban lê), não candidato.etapa_kanban
   // — ver comentário em painel/candidato/[id]/page.tsx sobre por que esse espelho pode
@@ -977,6 +978,62 @@ export default function PerfilEdicao({ candidato, garantiaInfo, melhorRetencao, 
           </div>
         </div>
       )}
+
+      {/* Dados de Admissão — preenchidos pelo cliente na aprovação pelo portal
+          (api/portal/avaliar). Antes só existiam no e-mail de notificação; qualquer
+          candidatura aprovada com pelo menos um desses campos aparece aqui, não só R&S
+          com fee (diferente do card Financeiro R&S acima). */}
+      {admissaoInfo && (() => {
+        const salarioLabel = admissaoInfo.salario_hora != null
+          ? `R$ ${admissaoInfo.salario_hora.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/hora (Horista)`
+          : admissaoInfo.salario != null
+          ? `R$ ${admissaoInfo.salario.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês${admissaoInfo.tipo_servico === "mao_obra_temporaria" ? " (Mensalista)" : ""}`
+          : null;
+        const dataInicioLabel = admissaoInfo.data_inicio
+          ? admissaoInfo.data_inicio.split("-").reverse().join("/")
+          : null;
+        const linhas: [string, string | null][] = [
+          ["Vaga", admissaoInfo.vaga_titulo],
+          ["Data de Início", dataInicioLabel],
+          ["Salário", salarioLabel],
+          ["Cargo", admissaoInfo.cargo],
+          ["Função", admissaoInfo.funcao],
+          ["Setor", admissaoInfo.setor],
+          ["Centro de Custo", admissaoInfo.centro_custo],
+          ["Horário", admissaoInfo.horario],
+          ["Turno", admissaoInfo.turno],
+          ["Escala", admissaoInfo.escala],
+          ["Gestor Direto", admissaoInfo.gestor],
+          ["Período de Experiência", admissaoInfo.periodo_experiencia],
+          ["Tempo de Contrato", admissaoInfo.tempo_contrato],
+          ["Vale Transporte", admissaoInfo.vt == null ? null : admissaoInfo.vt ? "Sim" : "Não"],
+          ["Exame Admissional", admissaoInfo.exame_responsavel],
+          ["Local/Data Integração", admissaoInfo.local_integracao],
+          ["Telefone do Candidato", admissaoInfo.telefone_candidato],
+          ["Observações", admissaoInfo.observacoes],
+        ].filter(([, valor]) => valor != null && valor !== "");
+
+        if (linhas.length === 0) return null;
+
+        return (
+          <div className="card" style={{ marginBottom: 24, padding: "16px 20px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#FFB800", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 12 }}>
+              📋 Dados de Admissão
+            </div>
+            <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 12 }}>
+              Preenchido pelo cliente na aprovação do candidato pelo portal.
+            </p>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+              {linhas.map(([label, valor]) => (
+                <div key={label}>
+                  <dt style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</dt>
+                  <dd style={{ color: "#111827", marginTop: 2 }}>{valor}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        );
+      })()}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Coluna principal — dados */}

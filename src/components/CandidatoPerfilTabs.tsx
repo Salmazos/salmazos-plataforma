@@ -36,15 +36,42 @@ export interface MelhorRetencao {
   resumo: string | null;
 }
 
+// Dados de admissão preenchidos pelo cliente na aprovação pelo portal (api/portal/avaliar)
+// — antes só existiam no e-mail de notificação, agora também aparecem aqui no perfil.
+export interface AdmissaoInfo {
+  cv_id: string;
+  vaga_titulo: string | null;
+  tipo_servico: string | null;
+  data_inicio: string | null;
+  salario: number | null;
+  salario_hora: number | null;
+  cargo: string | null;
+  setor: string | null;
+  centro_custo: string | null;
+  horario: string | null;
+  gestor: string | null;
+  periodo_experiencia: string | null;
+  funcao: string | null;
+  turno: string | null;
+  escala: string | null;
+  tempo_contrato: string | null;
+  vt: boolean | null;
+  exame_responsavel: string | null;
+  local_integracao: string | null;
+  telefone_candidato: string | null;
+  observacoes: string | null;
+}
+
 interface Props {
   candidato: Candidato;
   garantiaInfo?: GarantiaInfo | null;
+  admissaoInfo?: AdmissaoInfo | null;
   melhorRetencao?: MelhorRetencao | null;
   role: string;
   etapaKanbanReal: string;
 }
 
-export default function CandidatoPerfilTabs({ candidato, garantiaInfo, melhorRetencao, role, etapaKanbanReal }: Props) {
+export default function CandidatoPerfilTabs({ candidato, garantiaInfo, admissaoInfo, melhorRetencao, role, etapaKanbanReal }: Props) {
   const [tab, setTab] = useState<Tab>("perfil");
 
   return (
@@ -110,6 +137,7 @@ export default function CandidatoPerfilTabs({ candidato, garantiaInfo, melhorRet
           <PerfilEdicao
             candidato={candidato}
             garantiaInfo={garantiaInfo}
+            admissaoInfo={admissaoInfo}
             melhorRetencao={melhorRetencao}
             role={role}
             etapaKanbanReal={etapaKanbanReal}
