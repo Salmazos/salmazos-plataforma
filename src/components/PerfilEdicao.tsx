@@ -985,14 +985,14 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
           com fee (diferente do card Financeiro R&S acima). */}
       {admissaoInfo && (() => {
         const salarioLabel = admissaoInfo.salario_hora != null
-          ? `R$ ${admissaoInfo.salario_hora.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/hora (Horista)`
+          ? `R$ ${Number(admissaoInfo.salario_hora).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/hora (Horista)`
           : admissaoInfo.salario != null
-          ? `R$ ${admissaoInfo.salario.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês${admissaoInfo.tipo_servico === "mao_obra_temporaria" ? " (Mensalista)" : ""}`
+          ? `R$ ${Number(admissaoInfo.salario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês${admissaoInfo.tipo_servico === "mao_obra_temporaria" ? " (Mensalista)" : ""}`
           : null;
         const dataInicioLabel = admissaoInfo.data_inicio
           ? admissaoInfo.data_inicio.split("-").reverse().join("/")
           : null;
-        const linhas: [string, string | null][] = [
+        const todasLinhas: [string, string | null][] = [
           ["Vaga", admissaoInfo.vaga_titulo],
           ["Data de Início", dataInicioLabel],
           ["Salário", salarioLabel],
@@ -1011,7 +1011,8 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
           ["Local/Data Integração", admissaoInfo.local_integracao],
           ["Telefone do Candidato", admissaoInfo.telefone_candidato],
           ["Observações", admissaoInfo.observacoes],
-        ].filter(([, valor]) => valor != null && valor !== "");
+        ];
+        const linhas = todasLinhas.filter(([, valor]) => valor != null && valor !== "");
 
         if (linhas.length === 0) return null;
 

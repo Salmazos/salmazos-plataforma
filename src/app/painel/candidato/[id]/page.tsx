@@ -42,15 +42,10 @@ export default async function CandidatoPerfilPage({ params }: Props) {
   // no e-mail de notificação e não apareciam em nenhuma tela do painel.
   let cvQuery = supabase
     .from("candidatos_vagas")
+    // Texto único (não concatenado com +): o supabase-js só infere o tipo do retorno de
+    // um select literal — concatenado vira GenericStringError e quebra o resto da página.
     .select(
-      "id, vaga_id, etapa, garantia_data_fim, garantia_acionada, garantia_acionada_em, " +
-      "admissao_fee_percentual, admissao_fee_valor, admissao_fee_prazo, fee_status, " +
-      "admissao_data_inicio, admissao_salario, admissao_salario_hora, admissao_cargo, " +
-      "admissao_setor, admissao_centro_custo, admissao_horario, admissao_gestor, " +
-      "admissao_periodo_experiencia, admissao_funcao, admissao_turno, admissao_escala, " +
-      "admissao_tempo_contrato, admissao_vt, admissao_exame_responsavel, " +
-      "admissao_local_integracao, admissao_telefone_candidato, admissao_observacoes, " +
-      "vagas!candidatos_vagas_vaga_id_fkey!inner(titulo, tipo_servico)"
+      "id, vaga_id, etapa, garantia_data_fim, garantia_acionada, garantia_acionada_em, admissao_fee_percentual, admissao_fee_valor, admissao_fee_prazo, fee_status, admissao_data_inicio, admissao_salario, admissao_salario_hora, admissao_cargo, admissao_setor, admissao_centro_custo, admissao_horario, admissao_gestor, admissao_periodo_experiencia, admissao_funcao, admissao_turno, admissao_escala, admissao_tempo_contrato, admissao_vt, admissao_exame_responsavel, admissao_local_integracao, admissao_telefone_candidato, admissao_observacoes, vagas!candidatos_vagas_vaga_id_fkey!inner(titulo, tipo_servico)"
     )
     .eq("candidato_id", id)
     .order("created_at", { ascending: false });
