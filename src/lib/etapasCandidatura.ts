@@ -101,6 +101,31 @@ export function getProximasEtapas(etapaAtual: string, processoSimplificado: bool
   }
 }
 
+// Etapa anterior "óbvia" pra desfazer um movimento por engano no Kanban geral (pedido do
+// Olver, set/2026: "a precipitação humana... o analista não consegue retornar"). Só cobre
+// o funil principal, onde a predecessora é inequívoca — null quando não há uma (triagem já é
+// a primeira) ou quando teria mais de uma origem possível (reprovado/nao_tem_interesse/
+// bloqueado podem vir de triagem, entrevista_salmazos OU entrevista_cliente: sem histórico
+// gravado por candidatura, "voltar" adivinhando erraria às vezes, então preferimos não
+// oferecer a ficar errado). contratado/reprovado_final também ficam de fora: passam por
+// "Finalizar" com efeitos colaterais (garantia, cobrança R&S, posições da vaga) que já têm
+// seu próprio caminho de reversão em "cliente cancelou o processo" (finalizar/route.ts) —
+// não duplicar essa lógica aqui.
+export function getEtapaAnterior(etapaAtual: string, processoSimplificado: boolean): EtapaOption | null {
+  switch (etapaAtual) {
+    case "entrevista_salmazos":
+      return processoSimplificado ? null : opcao("triagem");
+    case "entrevista_cliente":
+      return processoSimplificado ? opcao("triagem") : opcao("entrevista_salmazos");
+    case "aprovado_cliente":
+    case "reprovado_cliente":
+    case "nao_compareceu":
+      return opcao("entrevista_cliente");
+    default:
+      return null;
+  }
+}
+
 export type ComportamentoEtapa =
   | "entrevista_salmazos"
   | "encaminhamento"

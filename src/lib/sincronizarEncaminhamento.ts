@@ -46,6 +46,32 @@ export async function sincronizarEncaminhamentoComEtapa(
 ): Promise<void> {
   if (!clienteId) return;
 
+  // "Voltar" no Kanban geral (getEtapaAnterior) desfaz aprovado_cliente/reprovado_cliente/
+  // nao_compareceu de volta pra entrevista_cliente via PATCH direto, sem passar pelo
+  // ModalEncaminhamento (que cria um encaminhamento novo) — o fluxo normal nunca chega aqui
+  // com "entrevista_cliente" porque o encaminhamento novo já é criado antes desse PATCH.
+  // Reabre o mais recente se ele já tiver sido fechado (aprovado/reprovado/desistiu), senão
+  // o portal do cliente continuaria mostrando a decisão antiga mesmo com o candidato de
+  // volta em Entrevista Cliente internamente.
+  if (novaEtapa === "entrevista_cliente") {
+    const svcReabertura = supabase ?? createServiceClient();
+    const { data: maisRecente } = await svcReabertura
+      .from("encaminhamentos")
+      .select("id, status")
+      .eq("candidato_id", candidatoId)
+      .eq("cliente_id", clienteId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (maisRecente && !STATUS_ABERTOS_DESISTENCIA.includes(maisRecente.status)) {
+      await svcReabertura
+        .from("encaminhamentos")
+        .update({ status: "aguardando", feedback_cliente: null, avaliado_em: null })
+        .eq("id", maisRecente.id);
+    }
+    return;
+  }
+
   if (ETAPAS_DESISTENCIA.has(novaEtapa)) {
     // Só o status muda (mesmo efeito do "Desistiu" escolhido à mão no perfil do candidato):
     // sem avaliado_em nem feedback_cliente, porque o cliente não avaliou ninguém. Fecha

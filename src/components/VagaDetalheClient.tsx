@@ -16,7 +16,7 @@ import RetencaoBadge from "./RetencaoBadge";
 import VagaIndicadoresSection from "./painel/VagaIndicadoresSection";
 import { TIPOS_SERVICO } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
-import { getProximasEtapas, getComportamentoEtapa, getEtapaInfo, getEtapaLabel } from "@/lib/etapasCandidatura";
+import { getProximasEtapas, getComportamentoEtapa, getEtapaInfo, getEtapaLabel, getEtapaAnterior } from "@/lib/etapasCandidatura";
 import { MOTIVOS_REPROVACAO_CLIENTE } from "@/lib/motivos-reprovacao";
 import type { Vaga, CandidatoVaga, Candidato, MatchDetalhes } from "@/types";
 
@@ -1008,6 +1008,7 @@ function CandidatoVagaRow({
 
   const etapaInfo = getEtapaInfo(etapa);
   const opcoes = getProximasEtapas(etapa, processoSimplificado);
+  const etapaAnterior = getEtapaAnterior(etapa, processoSimplificado);
 
   // PATCH efetivo em candidatos_vagas.etapa — usado tanto pra transições diretas quanto
   // depois que um motivo é escolhido. "reprovado" preserva o fluxo próprio já existente
@@ -1137,6 +1138,17 @@ function CandidatoVagaRow({
                 </option>
               ))}
             </select>
+          )}
+          {etapaAnterior && (
+            <button
+              type="button"
+              onClick={() => salvarEtapa(etapaAnterior.value)}
+              disabled={salvando}
+              title={`Voltar para ${etapaAnterior.label}`}
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-60"
+            >
+              ↩
+            </button>
           )}
           {c?.responsavel && (
             <span className="text-[10px] text-gray-400">{c.responsavel}</span>

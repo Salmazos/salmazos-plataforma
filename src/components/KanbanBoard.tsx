@@ -252,6 +252,32 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
     }
   };
 
+  // "Voltar" (getEtapaAnterior) — PATCH direto em candidatos_vagas, sem passar pelo
+  // dispatch de moverCard: entrevista_cliente/contratado/reprovado_final ali abrem modal
+  // pra CRIAR um novo encaminhamento/finalizar o processo, o que é errado pra corrigir um
+  // engano (a correção do lado do encaminhamento já é feita à parte, ver
+  // sincronizarEncaminhamentoComEtapa). getEtapaAnterior nunca devolve contratado/
+  // reprovado_final, então esse PATCH simples é sempre seguro aqui.
+  const voltarCard = async (cvId: string, etapaAnterior: string) => {
+    setMovendo(cvId);
+    try {
+      const res = await fetch(`/api/candidatos-vagas/${cvId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ etapa: etapaAnterior }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        showToast(json.error || "Não foi possível voltar a etapa do candidato.", "#B91C1C", "⚠️");
+        return;
+      }
+      router.refresh();
+      showToast("Candidato retornado para a etapa anterior.", "#374151", "↩️");
+    } finally {
+      setMovendo(null);
+    }
+  };
+
   const handleConfirmarEncaminhamento = async (dados: {
     cliente_id: string;
     data_entrevista: string | null;
@@ -476,6 +502,7 @@ export default function KanbanBoard({ cards, filtroOrigem, analistaLogado, anali
                       key={c.cv_id}
                       card={c}
                       onMover={moverCard}
+                      onVoltar={voltarCard}
                       movendo={movendo === c.cv_id}
                     />
                   ))

@@ -9,7 +9,7 @@ import TriagemBadge from "./TriagemBadge";
 import ModalEntrevistaSalmazos from "./ModalEntrevistaSalmazos";
 import ModalMotivoEtapa from "./ModalMotivoEtapa";
 import { MOTIVOS_REPROVACAO_INTERNA, MOTIVOS_REPROVACAO_CLIENTE } from "@/lib/motivos-reprovacao";
-import { getProximasEtapas, getComportamentoEtapa, getEtapaLabel } from "@/lib/etapasCandidatura";
+import { getProximasEtapas, getComportamentoEtapa, getEtapaLabel, getEtapaAnterior } from "@/lib/etapasCandidatura";
 import { useUsuarioLogado, unidadeDaTela } from "./UsuarioLogadoProvider";
 import { nomesCompletosDaUnidade, opcoesResponsavel } from "@/lib/responsaveis";
 
@@ -34,10 +34,11 @@ function fetchAnalistas(): Promise<Analista[]> {
 interface Props {
   card: KanbanCard;
   onMover: (cvId: string, etapa: string, comentario?: string, extras?: { cliente_id?: string; data_entrevista_salmazos?: string }) => Promise<void>;
+  onVoltar: (cvId: string, etapa: string) => Promise<void>;
   movendo: boolean;
 }
 
-export default function CandidatoCard({ card, onMover, movendo }: Props) {
+export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Props) {
   const router = useRouter();
   const [responsavel, setResponsavel] = useState(card.responsavel ?? "");
   const [salvando, setSalvando] = useState(false);
@@ -101,6 +102,7 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
   const etapaAtual = ETAPAS_KANBAN.find((e) => e.id === card.etapa) ??
     ETAPAS_KANBAN.find((e) => e.id === "entrevista_salmazos");
   const opcoes = getProximasEtapas(card.etapa, card.processo_simplificado);
+  const etapaAnterior = getEtapaAnterior(card.etapa, card.processo_simplificado);
 
   return (
     <>
@@ -221,6 +223,17 @@ export default function CandidatoCard({ card, onMover, movendo }: Props) {
           >
             Ver perfil
           </button>
+
+          {etapaAnterior && (
+            <button
+              onClick={() => onVoltar(card.cv_id, etapaAnterior.value)}
+              disabled={movendo}
+              title={`Voltar para ${etapaAnterior.label}`}
+              className="text-xs py-1 px-1.5 border border-gray-200 rounded-md text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-50 font-medium"
+            >
+              ↩
+            </button>
+          )}
 
           <select
             value=""
