@@ -167,17 +167,20 @@ export async function POST(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Não foi possível vincular o candidato à vaga." }, { status: 400 });
     }
 
+    // Insert simples: o candidato acabou de ser criado, então não existe encaminhamento dele.
+    // (upsert com onConflict "candidato_id,cliente_id" falha — encaminhamentos não tem unique
+    // nesse par, só no id — e o erro ficava engolido.) Falha aqui não desfaz a aprovação, mas
+    // vai pro log: sem o encaminhamento o cliente não vê o candidato como aprovado no portal.
     if (vaga.cliente_id) {
-      await service.from("encaminhamentos").upsert(
-        {
-          candidato_id: candidato.id,
-          cliente_id: vaga.cliente_id,
-          vaga_id: vaga.id,
-          status: "aprovado",
-          avaliado_em: nowIso,
-        },
-        { onConflict: "candidato_id,cliente_id" }
-      );
+      const { error: encErr } = await service.from("encaminhamentos").insert({
+        candidato_id: candidato.id,
+        cliente_id: vaga.cliente_id,
+        vaga_id: vaga.id,
+        status: "aprovado",
+        tipo_servico: vaga.tipo_servico,
+        avaliado_em: nowIso,
+      });
+      if (encErr) console.error("[decisao indicacao] Erro ao criar encaminhamento:", encErr);
     }
 
     const { data: aprovada } = await service
