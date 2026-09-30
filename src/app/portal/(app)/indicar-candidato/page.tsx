@@ -260,11 +260,7 @@ export default function IndicarCandidatoPage() {
         Voltar
       </Link>
 
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Indicar Candidato para Registro</h1>
-      <p className="text-xs text-gray-400 mb-6">
-        Use quando você já escolheu/entrevistou o candidato por fora e só precisa que a
-        Salmazos formalize o registro — sem passar pela triagem normal.
-      </p>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">Indicar Candidato para Registro</h1>
 
       <div className="space-y-6">
         <div className="bg-white rounded-2xl shadow-sm p-6 space-y-5">
