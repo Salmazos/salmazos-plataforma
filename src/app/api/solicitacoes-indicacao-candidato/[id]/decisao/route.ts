@@ -10,6 +10,78 @@ interface Params {
   params: Promise<{ id: string }>;
 }
 
+interface CriadosNestasRequisicao {
+  candidatoId?: string;
+  candidatoVagaId?: string;
+  encaminhamentoId?: string;
+}
+
+interface ResultadoReversao {
+  erroEncaminhamento?: string | null;
+  erroCandidatoVaga?: string | null;
+  erroCandidato?: string | null;
+  sucesso: boolean;
+}
+
+async function reverterCriados(
+  service: ReturnType<typeof createServiceClient>,
+  ids: CriadosNestasRequisicao
+): Promise<ResultadoReversao> {
+  const resultado: ResultadoReversao = { sucesso: true };
+
+  if (ids.encaminhamentoId) {
+    const { error: encErr } = await service
+      .from("encaminhamentos")
+      .delete()
+      .eq("id", ids.encaminhamentoId);
+    if (encErr) {
+      resultado.erroEncaminhamento = msgErro(encErr);
+      resultado.sucesso = false;
+    }
+  }
+
+  if (ids.candidatoVagaId) {
+    const { error: cvErr } = await service
+      .from("candidatos_vagas")
+      .delete()
+      .eq("id", ids.candidatoVagaId);
+    if (cvErr) {
+      resultado.erroCandidatoVaga = msgErro(cvErr);
+      resultado.sucesso = false;
+    }
+  }
+
+  if (ids.candidatoId) {
+    const { error: canErr } = await service
+      .from("candidatos")
+      .delete()
+      .eq("id", ids.candidatoId);
+    if (canErr) {
+      resultado.erroCandidato = msgErro(canErr);
+      resultado.sucesso = false;
+    }
+  }
+
+  return resultado;
+}
+
+function gerarSuffixoAleatorio(): string {
+  return Math.random().toString(36).substring(2, 10);
+}
+
+function msgErro(e: unknown): string {
+  if (e && typeof e === "object") {
+    const err = e as Record<string, unknown>;
+    if (err.message) {
+      const details = [err.message];
+      if (err.code) details.push(`code: ${err.code}`);
+      if (err.details) details.push(`details: ${err.details}`);
+      return details.join(" | ");
+    }
+  }
+  return JSON.stringify(e);
+}
+
 const ADM_LABELS: Record<string, string> = {
   admissao_data_inicio: "Data de Início",
   admissao_setor: "Setor",
@@ -104,7 +176,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "A vaga desta indicação não está mais aberta." }, { status: 409 });
     }
 
-    const cpf = `TEMP-${Date.now()}`;
+    const cpf = `TEMP-${Date.now()}-${gerarSuffixoAleatorio()}`;
     const nowIso = new Date().toISOString();
 
     const { data: candidato, error: candidatoErr } = await service
@@ -162,28 +234,88 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     if (cvErr || !candidatoVaga) {
       console.error("[decisao indicacao] Erro ao vincular candidato à vaga:", cvErr);
-      // Não deixa o candidato órfão (sem nenhuma candidatura) se o vínculo falhar.
-      await service.from("candidatos").delete().eq("id", candidato.id);
+      const reversao = await reverterCriados(service, { candidatoId: candidato.id });
+      if (!reversao.sucesso) {
+        await registrarAuditoria({
+          usuario_id: user.id,
+          usuario_nome: usuarioNome,
+          acao: "indicacao_candidato_erro_candidatos_vagas_rollback_falhou",
+          entidade: "solicitacoes_indicacao_candidato",
+          entidade_id: id,
+          detalhes: {
+            erro_candidatos_vagas: msgErro(cvErr),
+            erro_delete_candidatos: reversao.erroCandidato,
+            candidato_id_orfo: candidato.id,
+          },
+        });
+        return NextResponse.json({ error: "Falha ao vincular candidato e não foi possível reverter. Conferir banco de dados (registros órfãos)." }, { status: 500 });
+      }
+      await registrarAuditoria({
+        usuario_id: user.id,
+        usuario_nome: usuarioNome,
+        acao: "indicacao_candidato_erro_candidatos_vagas",
+        entidade: "solicitacoes_indicacao_candidato",
+        entidade_id: id,
+        detalhes: { erro: msgErro(cvErr), cliente: sol.cliente_nome, vaga_id: vaga.id },
+      });
       return NextResponse.json({ error: "Não foi possível vincular o candidato à vaga." }, { status: 400 });
     }
 
-    // Insert simples: o candidato acabou de ser criado, então não existe encaminhamento dele.
-    // (upsert com onConflict "candidato_id,cliente_id" falha — encaminhamentos não tem unique
-    // nesse par, só no id — e o erro ficava engolido.) Falha aqui não desfaz a aprovação, mas
-    // vai pro log: sem o encaminhamento o cliente não vê o candidato como aprovado no portal.
+    // Encaminhamento é obrigatório — se falhar, rollback de tudo que foi criado nesta requisição.
+    let encaminhamentoId: string | undefined;
     if (vaga.cliente_id) {
-      const { error: encErr } = await service.from("encaminhamentos").insert({
-        candidato_id: candidato.id,
-        cliente_id: vaga.cliente_id,
-        vaga_id: vaga.id,
-        status: "aprovado",
-        tipo_servico: vaga.tipo_servico,
-        avaliado_em: nowIso,
-      });
-      if (encErr) console.error("[decisao indicacao] Erro ao criar encaminhamento:", encErr);
+      const { data: encaminhamento, error: encErr } = await service
+        .from("encaminhamentos")
+        .insert({
+          candidato_id: candidato.id,
+          cliente_id: vaga.cliente_id,
+          vaga_id: vaga.id,
+          status: "aprovado",
+          tipo_servico: vaga.tipo_servico,
+          avaliado_em: nowIso,
+        })
+        .select("id")
+        .single();
+
+      if (encErr || !encaminhamento) {
+        console.error("[decisao indicacao] Erro ao criar encaminhamento:", encErr);
+        const reversao = await reverterCriados(service, {
+          candidatoId: candidato.id,
+          candidatoVagaId: candidatoVaga.id,
+        });
+
+        if (!reversao.sucesso) {
+          await registrarAuditoria({
+            usuario_id: user.id,
+            usuario_nome: usuarioNome,
+            acao: "indicacao_candidato_erro_encaminhamento_rollback_falhou",
+            entidade: "solicitacoes_indicacao_candidato",
+            entidade_id: id,
+            detalhes: {
+              erro_encaminhamento: msgErro(encErr),
+              erro_delete_candidatos_vagas: reversao.erroCandidatoVaga,
+              erro_delete_candidatos: reversao.erroCandidato,
+              candidato_id_orfo: candidato.id,
+              candidatos_vaga_id_orfo: candidatoVaga.id,
+            },
+          });
+          return NextResponse.json({ error: "Falha ao criar encaminhamento e não foi possível reverter. Conferir banco de dados (registros órfãos)." }, { status: 500 });
+        }
+
+        await registrarAuditoria({
+          usuario_id: user.id,
+          usuario_nome: usuarioNome,
+          acao: "indicacao_candidato_erro_encaminhamento",
+          entidade: "solicitacoes_indicacao_candidato",
+          entidade_id: id,
+          detalhes: { erro: msgErro(encErr), cliente: sol.cliente_nome, vaga_id: vaga.id },
+        });
+        return NextResponse.json({ error: "Não foi possível criar o encaminhamento (cliente não veria o candidato aprovado no portal). Indicação não foi aprovada." }, { status: 500 });
+      }
+      encaminhamentoId = encaminhamento.id;
     }
 
-    const { data: aprovada } = await service
+    const { data: aprovada, error: updateErr } = await service
       .from("solicitacoes_indicacao_candidato")
       .update({
         status: "aprovada",
@@ -196,9 +328,87 @@ export async function POST(request: NextRequest, { params }: Params) {
       .eq("id", id)
       .eq("status", "pendente")
       .select("*")
-      .single();
+      .maybeSingle();
 
-    void registrarHistorico({
+    // Caso 1: Erro de banco
+    if (updateErr) {
+      console.error("[decisao indicacao] Erro ao marcar indicação como aprovada:", updateErr);
+      const reversao = await reverterCriados(service, {
+        candidatoId: candidato.id,
+        candidatoVagaId: candidatoVaga.id,
+        encaminhamentoId,
+      });
+
+      if (!reversao.sucesso) {
+        await registrarAuditoria({
+          usuario_id: user.id,
+          usuario_nome: usuarioNome,
+          acao: "indicacao_candidato_erro_update_rollback_falhou",
+          entidade: "solicitacoes_indicacao_candidato",
+          entidade_id: id,
+          detalhes: {
+            erro_update: msgErro(updateErr),
+            erro_delete_encaminhamentos: reversao.erroEncaminhamento,
+            erro_delete_candidatos_vagas: reversao.erroCandidatoVaga,
+            erro_delete_candidatos: reversao.erroCandidato,
+            candidato_id_orfo: candidato.id,
+            candidatos_vaga_id_orfo: candidatoVaga.id,
+            encaminhamento_id_orfo: encaminhamentoId,
+          },
+        });
+        return NextResponse.json({ error: "Falha ao finalizar indicação e não foi possível reverter. Conferir banco de dados (registros órfãos)." }, { status: 500 });
+      }
+
+      await registrarAuditoria({
+        usuario_id: user.id,
+        usuario_nome: usuarioNome,
+        acao: "indicacao_candidato_erro_update",
+        entidade: "solicitacoes_indicacao_candidato",
+        entidade_id: id,
+        detalhes: { erro: msgErro(updateErr) },
+      });
+      return NextResponse.json({ error: "Erro ao finalizar a indicação." }, { status: 500 });
+    }
+
+    // Caso 2: Indicação já não está pendente (aprovada por outro analista)
+    if (!aprovada) {
+      const reversao = await reverterCriados(service, {
+        candidatoId: candidato.id,
+        candidatoVagaId: candidatoVaga.id,
+        encaminhamentoId,
+      });
+
+      if (!reversao.sucesso) {
+        await registrarAuditoria({
+          usuario_id: user.id,
+          usuario_nome: usuarioNome,
+          acao: "indicacao_candidato_concorrencia_rollback_falhou",
+          entidade: "solicitacoes_indicacao_candidato",
+          entidade_id: id,
+          detalhes: {
+            erro_delete_encaminhamentos: reversao.erroEncaminhamento,
+            erro_delete_candidatos_vagas: reversao.erroCandidatoVaga,
+            erro_delete_candidatos: reversao.erroCandidato,
+            candidato_id_orfo: candidato.id,
+            candidatos_vaga_id_orfo: candidatoVaga.id,
+            encaminhamento_id_orfo: encaminhamentoId,
+          },
+        });
+        return NextResponse.json({ error: "Falha ao reverter: esta indicação foi decidida por outro analista. Conferir banco de dados (registros órfãos)." }, { status: 500 });
+      }
+
+      await registrarAuditoria({
+        usuario_id: user.id,
+        usuario_nome: usuarioNome,
+        acao: "indicacao_candidato_aprovacao_concorrente",
+        entidade: "solicitacoes_indicacao_candidato",
+        entidade_id: id,
+        detalhes: { candidato_id_criado: candidato.id },
+      });
+      return NextResponse.json({ error: "Esta indicação já foi decidida por outro analista." }, { status: 409 });
+    }
+
+    await registrarHistorico({
       candidato_id: candidato.id,
       tipo: "cadastro",
       descricao: `Candidato registrado por indicação direta de ${sol.cliente_nome ?? "cliente"} (${usuarioNome})`,
@@ -206,7 +416,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       criado_por: usuarioNome,
     });
 
-    registrarAuditoria({
+    await registrarAuditoria({
       usuario_id: user.id,
       usuario_nome: usuarioNome,
       acao: "indicacao_candidato_aprovada",
