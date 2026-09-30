@@ -115,25 +115,11 @@ export async function POST(request: NextRequest) {
         .eq("id", candidato_id);
     }
 
-    // Sync: ensure an encaminhamento exists for this candidato+cliente if vaga has a cliente
-    const { data: vaga } = await supabase
-      .from("vagas")
-      .select("cliente_id")
-      .eq("id", vaga_id)
-      .maybeSingle();
-
-    if (vaga?.cliente_id) {
-      try {
-        await supabase
-          .from("encaminhamentos")
-          .upsert(
-            { candidato_id, cliente_id: vaga.cliente_id, vaga_id, status: "aguardando" },
-            { onConflict: "candidato_id,cliente_id", ignoreDuplicates: true }
-          );
-      } catch {
-        // best-effort sync, non-blocking
-      }
-    }
+    // Sem criar encaminhamento aqui de propósito (decisão do Olver, 30/09): havia um "sync"
+    // que nunca funcionou (upsert sem constraint correspondente, erro engolido). Religado, ele
+    // poria no portal do cliente todo candidato ainda em triagem e faria o "Encaminhar" do
+    // Kanban esbarrar na UNIQUE candidato+cliente+vaga. Encaminhamento nasce só no
+    // "Encaminhar" (POST /api/encaminhamentos) ou na aprovação (sincronizarEncaminhamento).
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {

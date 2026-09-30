@@ -84,22 +84,51 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .maybeSingle();
 
-    const { data, error } = await supabase
-      .from("encaminhamentos")
-      .insert({
-        candidato_id: parsed.data.candidato_id,
-        cliente_id: parsed.data.cliente_id,
-        data_entrevista: normalizarDataEntrevista(parsed.data.data_entrevista),
-        status: parsed.data.status,
-        tipo_servico: body.tipo_servico || null,
-        observacoes: body.observacoes || null,
-        // Mesmo valor validado que passou pela checagem de unidade acima.
-        vaga_id: parsed.data.vaga_id || null,
-      })
-      .select("*, cliente:clientes(id, nome, cidade, segmento, servicos)")
-      .single();
+    const campos = {
+      candidato_id: parsed.data.candidato_id,
+      cliente_id: parsed.data.cliente_id,
+      data_entrevista: normalizarDataEntrevista(parsed.data.data_entrevista),
+      status: parsed.data.status,
+      tipo_servico: body.tipo_servico || null,
+      observacoes: body.observacoes || null,
+      // Mesmo valor validado que passou pela checagem de unidade acima.
+      vaga_id: parsed.data.vaga_id || null,
+    };
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    // Re-encaminhar o mesmo candidato pro mesmo cliente e vaga reaproveita o encaminhamento
+    // que já existe (UNIQUE candidato+cliente+vaga desde 30/09, ver
+    // migration_fix_uniq_encaminhamentos.sql) em vez de dar erro de duplicidade — decisão do
+    // Olver. Recomeça do zero: avaliação e lembretes do encaminhamento anterior são limpos.
+    const reencaminhamento = {
+      ...campos,
+      feedback_cliente: null,
+      avaliado_em: null,
+      ultimo_lembrete_agendamento_em: null,
+      lembrete_entrevista_hoje_enviado_em: null,
+    };
+    const atualizarExistente = async (vagaId: string) =>
+      supabase
+        .from("encaminhamentos")
+        .update(reencaminhamento)
+        .eq("candidato_id", campos.candidato_id)
+        .eq("cliente_id", campos.cliente_id)
+        .eq("vaga_id", vagaId)
+        .select("*, cliente:clientes(id, nome, cidade, segmento, servicos)")
+        .maybeSingle();
+
+    let resultado = campos.vaga_id ? await atualizarExistente(campos.vaga_id) : { data: null, error: null };
+    if (!resultado.data && !resultado.error) {
+      resultado = await supabase
+        .from("encaminhamentos")
+        .insert(campos)
+        .select("*, cliente:clientes(id, nome, cidade, segmento, servicos)")
+        .single();
+      // Corrida (dois cliques/abas): o outro insert ganhou — reaproveita a linha dele.
+      if (resultado.error?.code === "23505" && campos.vaga_id) resultado = await atualizarExistente(campos.vaga_id);
+    }
+    const { data, error } = resultado;
+
+    if (error || !data) return NextResponse.json({ error: error?.message ?? "Erro ao encaminhar." }, { status: 400 });
 
     const clienteNome = (data.cliente as { nome?: string } | null)?.nome ?? "cliente";
     void registrarHistorico({
