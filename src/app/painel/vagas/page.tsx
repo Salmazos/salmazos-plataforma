@@ -26,13 +26,21 @@ export default async function VagasPage() {
     .from("solicitacao_vaga_alteracoes")
     .select("id", { count: "exact", head: true })
     .eq("status", "pendente");
+  // Indicações diretas de candidato pelo cliente (ver migration_indicacao_direta_candidato.sql)
+  // ganham badge próprio no botão "Indicações", separado de "Solicitações" — são fluxos
+  // diferentes (uma vira vaga, a outra vira candidato).
+  let indicacoesQuery = supabase
+    .from("solicitacoes_indicacao_candidato")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pendente");
   if (!ctx.todasUnidades) {
     vagasQuery = vagasQuery.eq("unidade_id", ctx.unidadeId);
     solicitacoesQuery = solicitacoesQuery.eq("unidade_id", ctx.unidadeId);
     pedidosAlteracaoQuery = pedidosAlteracaoQuery.eq("unidade_id", ctx.unidadeId);
+    indicacoesQuery = indicacoesQuery.eq("unidade_id", ctx.unidadeId);
   }
 
-  const [{ data: vagas }, { count: solicitacoesPendentes }, { data: unidades }, { count: pedidosPendentes }] = await Promise.all([
+  const [{ data: vagas }, { count: solicitacoesPendentes }, { data: unidades }, { count: pedidosPendentes }, { count: indicacoesPendentes }] = await Promise.all([
     vagasQuery,
     solicitacoesQuery,
     // Só quem vê todas as unidades escolhe a unidade de vaga sem cliente no formulário.
@@ -42,6 +50,7 @@ export default async function VagasPage() {
       ? supabase.from("unidades").select("id, nome, ativa").order("nome")
       : Promise.resolve({ data: null }),
     pedidosAlteracaoQuery,
+    indicacoesQuery,
   ]);
   const pendingCount = (solicitacoesPendentes ?? 0) + (pedidosPendentes ?? 0);
 
@@ -49,6 +58,7 @@ export default async function VagasPage() {
     <VagasPageClient
       vagas={(vagas ?? []) as Vaga[]}
       pendingCount={pendingCount}
+      indicacoesPendentes={indicacoesPendentes ?? 0}
       unidades={(unidades as { id: string; nome: string; ativa: boolean }[] | null) ?? undefined}
     />
   );

@@ -1,0 +1,275 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { BotaoCurriculo } from "./BotaoCurriculo";
+
+const TIPO_LABEL: Record<string, { label: string; bg: string; color: string }> = {
+  recrutamento_selecao: { label: "R&S", bg: "#1D6FA4", color: "#fff" },
+  mao_obra_temporaria: { label: "MOT", bg: "#FFD700", color: "#000" },
+  terceirizacao: { label: "Terceirização", bg: "#1D9E75", color: "#fff" },
+};
+
+const ADM_CAMPOS: { key: string; label: string }[] = [
+  { key: "admissao_data_inicio", label: "Data de Início" },
+  { key: "admissao_setor", label: "Setor" },
+  { key: "admissao_centro_custo", label: "Centro de Custo" },
+  { key: "admissao_horario", label: "Horário" },
+  { key: "admissao_gestor", label: "Gestor Direto" },
+  { key: "admissao_periodo_experiencia", label: "Período de Experiência" },
+  { key: "admissao_funcao", label: "Função" },
+  { key: "admissao_turno", label: "Turno" },
+  { key: "admissao_escala", label: "Escala" },
+  { key: "admissao_tempo_contrato", label: "Tempo de Contrato" },
+  { key: "admissao_exame_responsavel", label: "Exame Admissional" },
+  { key: "admissao_local_integracao", label: "Local/Data Integração" },
+  { key: "admissao_observacoes", label: "Observações" },
+];
+
+interface Indicacao {
+  id: string;
+  cliente_nome: string;
+  candidato_nome: string;
+  candidato_telefone: string;
+  curriculo_url: string | null;
+  status: string;
+  motivo_recusa: string | null;
+  created_at: string;
+  vagas: { titulo: string; tipo_servico: string } | null;
+  admissao_data_inicio: string | null;
+  admissao_salario: number | null;
+  admissao_salario_hora: number | null;
+  admissao_vt: boolean | null;
+  [key: string]: unknown;
+}
+
+interface Props {
+  isOpen: boolean;
+  onClose: () => void;
+  onAprovado: () => void;
+  focoId?: string | null;
+  onVerTodas?: () => void;
+}
+
+function valorAdmissao(item: Indicacao, key: string): string {
+  const val = item[key];
+  if (val == null || val === "") return "";
+  if (key === "admissao_data_inicio") return String(val).split("-").reverse().join("/");
+  return String(val);
+}
+
+export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, focoId, onVerTodas }: Props) {
+  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<Indicacao[]>([]);
+  const [toast, setToast] = useState("");
+  const [recusandoId, setRecusandoId] = useState<string | null>(null);
+  const [motivoRecusa, setMotivoRecusa] = useState("");
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [erro, setErro] = useState<{ id: string; msg: string } | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setLoading(true);
+    if (focoId) {
+      fetch(`/api/solicitacoes-indicacao-candidato/${focoId}`)
+        .then((r) => r.json())
+        .then((json) => setItems(json.data ? [json.data] : []))
+        .catch(() => setItems([]))
+        .finally(() => setLoading(false));
+      return;
+    }
+    fetch("/api/solicitacoes-indicacao-candidato")
+      .then((r) => r.json())
+      .then((json) => setItems(json.data ?? []))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  }, [isOpen, focoId]);
+
+  if (!isOpen) return null;
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 4000);
+  };
+
+  const handleDecidir = async (id: string, acao: "aprovar" | "recusar") => {
+    if (acao === "recusar" && !motivoRecusa.trim()) return;
+    setActionLoading(id);
+    setErro(null);
+    try {
+      const res = await fetch(`/api/solicitacoes-indicacao-candidato/${id}/decisao`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(acao === "aprovar" ? { acao } : { acao, motivo: motivoRecusa.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setErro({ id, msg: typeof json.error === "string" ? json.error : "Erro ao registrar a decisão." });
+        return;
+      }
+      setItems((prev) => prev.filter((it) => it.id !== id));
+      setRecusandoId(null);
+      setMotivoRecusa("");
+      showToast(
+        acao === "aprovar"
+          ? "Indicação aprovada — o candidato já está no Kanban em \"Aprovado pelo Cliente\"."
+          : "Indicação recusada."
+      );
+      if (acao === "aprovar") onAprovado();
+      if (focoId) onVerTodas?.();
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+        <div className="bg-black text-white px-6 py-4 rounded-t-2xl flex items-center justify-between shrink-0">
+          <h2 className="font-bold text-lg">
+            {"🧑‍💼"} {focoId ? "Indicação Direta de Candidato" : "Indicações Diretas Pendentes"}
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {focoId && (
+            <button onClick={() => onVerTodas?.()} className="text-xs text-blue-600 underline underline-offset-2 mb-4">
+              ← ver todas as indicações pendentes
+            </button>
+          )}
+
+          {loading ? (
+            <div className="text-center py-12">
+              <p className="text-gray-400 text-sm">Carregando...</p>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-3xl mb-3">{focoId ? "🔍" : "🎉"}</p>
+              <p className="text-gray-500 text-sm font-medium">
+                {focoId ? "Indicação não encontrada." : "Nenhuma indicação pendente!"}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {items.map((it) => {
+                const tipo = it.vagas
+                  ? TIPO_LABEL[it.vagas.tipo_servico] ?? { label: it.vagas.tipo_servico, bg: "#6B7280", color: "#fff" }
+                  : null;
+                const isRecusando = recusandoId === it.id;
+                const isLoading = actionLoading === it.id;
+                const admPreenchidos = ADM_CAMPOS.filter((c) => valorAdmissao(it, c.key));
+
+                return (
+                  <div key={it.id} className="border border-gray-200 rounded-xl p-5 space-y-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-gray-900 text-sm">{it.candidato_nome}</span>
+                      <span className="text-gray-300">—</span>
+                      <span className="font-semibold text-gray-800 text-sm">{it.candidato_telefone}</span>
+                      {tipo && (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: tipo.bg, color: tipo.color }}>
+                          {tipo.label}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-gray-400 ml-auto">
+                        {new Date(it.created_at).toLocaleDateString("pt-BR")}
+                      </span>
+                    </div>
+
+                    <div className="text-xs text-gray-500">
+                      <span className="font-medium text-gray-700">{it.cliente_nome}</span> indicou pra vaga{" "}
+                      <span className="font-medium text-gray-700">{it.vagas?.titulo ?? "—"}</span>
+                    </div>
+
+                    {it.curriculo_url && (
+                      <BotaoCurriculo storagePath={it.curriculo_url} variant="link" label="Ver currículo anexado" />
+                    )}
+
+                    {(it.admissao_salario != null || it.admissao_salario_hora != null || admPreenchidos.length > 0) && (
+                      <div className="bg-gray-50 rounded-lg p-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                        {it.admissao_salario_hora != null && (
+                          <div><span className="text-gray-400">Salário:</span> R$ {Number(it.admissao_salario_hora).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/hora</div>
+                        )}
+                        {it.admissao_salario != null && it.admissao_salario_hora == null && (
+                          <div><span className="text-gray-400">Salário:</span> R$ {Number(it.admissao_salario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês</div>
+                        )}
+                        {it.admissao_vt != null && (
+                          <div><span className="text-gray-400">Vale Transporte:</span> {it.admissao_vt ? "Sim" : "Não"}</div>
+                        )}
+                        {admPreenchidos.map((c) => (
+                          <div key={c.key}><span className="text-gray-400">{c.label}:</span> {valorAdmissao(it, c.key)}</div>
+                        ))}
+                      </div>
+                    )}
+
+                    {erro?.id === it.id && (
+                      <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{erro.msg}</p>
+                    )}
+
+                    {it.status === "pendente" && (
+                      isRecusando ? (
+                        <div className="space-y-2">
+                          <textarea
+                            value={motivoRecusa}
+                            onChange={(e) => setMotivoRecusa(e.target.value)}
+                            placeholder="Motivo da recusa (o cliente não é avisado automaticamente — combine por fora)"
+                            className="w-full text-xs border border-gray-200 rounded-lg p-2"
+                            rows={2}
+                          />
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              onClick={() => { setRecusandoId(null); setMotivoRecusa(""); }}
+                              className="text-xs text-gray-500 px-3 py-1.5"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={() => handleDecidir(it.id, "recusar")}
+                              disabled={isLoading || !motivoRecusa.trim()}
+                              className="text-xs font-semibold text-white bg-red-600 rounded-lg px-3 py-1.5 disabled:opacity-50"
+                            >
+                              {isLoading ? "Recusando..." : "Confirmar recusa"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 justify-end pt-1">
+                          <button
+                            onClick={() => setRecusandoId(it.id)}
+                            disabled={isLoading}
+                            className="text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+                          >
+                            Recusar
+                          </button>
+                          <button
+                            onClick={() => handleDecidir(it.id, "aprovar")}
+                            disabled={isLoading}
+                            className="text-xs font-semibold text-black bg-[#FFD700] rounded-lg px-3 py-1.5 hover:brightness-95 disabled:opacity-50"
+                          >
+                            {isLoading ? "Aprovando..." : "Aprovar e registrar candidato"}
+                          </button>
+                        </div>
+                      )
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {toast && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black text-white text-xs font-medium px-4 py-2 rounded-full shadow-lg">
+            {toast}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

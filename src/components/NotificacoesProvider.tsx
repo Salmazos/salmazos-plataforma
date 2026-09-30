@@ -12,6 +12,7 @@ export interface Notificacao {
   mensagem: string;
   candidato_id: string | null;
   solicitacao_vaga_id: string | null;
+  solicitacao_indicacao_id: string | null;
   rescisao_id: string | null;
   funcionario_id: string | null;
   vaga_id: string | null;
@@ -122,6 +123,7 @@ export default function NotificacoesProvider({ children }: { children: React.Rea
     if (n.vaga_id) router.push(`/painel/vagas/${n.vaga_id}`);
     else if (n.candidato_id) router.push(`/painel/candidato/${n.candidato_id}`);
     else if (n.solicitacao_vaga_id) router.push(`/painel/vagas?solicitacao=${n.solicitacao_vaga_id}`);
+    else if (n.solicitacao_indicacao_id) router.push(`/painel/vagas?indicacao=${n.solicitacao_indicacao_id}`);
     else if (n.rescisao_id) router.push(`/painel/rescisoes?rescisao=${n.rescisao_id}`);
     else if (n.funcionario_id) router.push(`/painel/funcionarios/${n.funcionario_id}`);
     else if (n.cobranca_rs_id) router.push(`/painel/cobrancas-rs`);

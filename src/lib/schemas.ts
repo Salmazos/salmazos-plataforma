@@ -882,6 +882,43 @@ export const portalAgendarSchema = z.object({
   data_entrevista: z.string().min(1),
 });
 
+// ── Indicação direta de candidato pelo cliente (portal) ────────────────────────
+// Mesmo padrão permissivo de portalAvaliarSchema: obrigatoriedade por tipo de serviço é
+// regra de negócio validada no cliente (ver IndicarCandidatoPage), não no schema. CPF/
+// e-mail do candidato não entram aqui de propósito — ficam pro RH completar depois
+// (ASSUNÇÃO DE NEGÓCIO CONFIRMADA COM O OLVER, set/2026).
+export const portalIndicarCandidatoSchema = z.object({
+  vaga_id: z.string().uuid(),
+  candidato_nome: z.string().trim().min(1),
+  candidato_telefone: z.string().trim().min(1),
+  curriculo_url: z.string().optional().nullable(),
+  admissao_data_inicio: z.string().optional().nullable(),
+  admissao_salario: coerceNumberOptional,
+  admissao_salario_hora: coerceNumberOptional,
+  admissao_setor: z.string().optional().nullable(),
+  admissao_centro_custo: z.string().optional().nullable(),
+  admissao_horario: z.string().optional().nullable(),
+  admissao_gestor: z.string().optional().nullable(),
+  admissao_periodo_experiencia: z.string().optional().nullable(),
+  admissao_funcao: z.string().optional().nullable(),
+  admissao_turno: z.string().optional().nullable(),
+  admissao_escala: z.string().optional().nullable(),
+  admissao_tempo_contrato: z.string().optional().nullable(),
+  admissao_vt: z.boolean().optional().nullable(),
+  admissao_exame_responsavel: z.string().optional().nullable(),
+  admissao_local_integracao: z.string().optional().nullable(),
+  admissao_observacoes: z.string().optional().nullable(),
+});
+
+// Revisão do analista antes de aprovar — ele pode ajustar qualquer campo que o cliente
+// mandou (inclusive nome/telefone/vaga, se tiver digitado errado) antes de confirmar.
+export const indicacaoCandidatoEditSchema = portalIndicarCandidatoSchema.partial();
+
+export const indicacaoCandidatoDecisaoSchema = z.discriminatedUnion("acao", [
+  z.object({ acao: z.literal("aprovar") }),
+  z.object({ acao: z.literal("recusar"), motivo: z.string().trim().min(1) }),
+]);
+
 // ── From solicitação ─────────────────────────────────────────────────────────
 
 export const fromSolicitacaoSchema = z.object({

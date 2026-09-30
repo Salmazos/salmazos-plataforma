@@ -1,0 +1,287 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
+import { parseBody, indicacaoCandidatoDecisaoSchema } from "@/lib/schemas";
+import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
+import { registrarHistorico } from "@/lib/registrarHistorico";
+import { sendEmail } from "@/lib/sendEmail";
+
+interface Params {
+  params: Promise<{ id: string }>;
+}
+
+const ADM_LABELS: Record<string, string> = {
+  admissao_data_inicio: "Data de Início",
+  admissao_setor: "Setor",
+  admissao_centro_custo: "Centro de Custo",
+  admissao_horario: "Horário",
+  admissao_gestor: "Gestor Direto",
+  admissao_periodo_experiencia: "Período de Experiência",
+  admissao_funcao: "Função",
+  admissao_turno: "Turno",
+  admissao_escala: "Escala",
+  admissao_tempo_contrato: "Tempo de Contrato",
+  admissao_vt: "Vale Transporte",
+  admissao_exame_responsavel: "Exame Admissional",
+  admissao_local_integracao: "Local/Data Integração",
+  admissao_observacoes: "Observações",
+};
+
+// Decisão do analista sobre uma indicação direta de candidato (mesmo padrão de
+// POST /api/solicitacoes-vagas/[id]/alteracao — discriminated union aprovar/recusar).
+//
+// Aprovar NÃO cria o candidato já "contratado": cria candidato + candidatos_vagas na etapa
+// "aprovado_cliente" (o mesmo estado em que uma aprovação normal via portal/avaliar deixa as
+// coisas) + um encaminhamento "aprovado", e o analista segue dali com o "Finalizar" normal do
+// Kanban — que já recalcula garantia, fee e fechamento automático de posição (incl. a correção
+// de MOT reativada). Isso evita duplicar essa lógica aqui.
+export async function POST(request: NextRequest, { params }: Params) {
+  try {
+    const { id } = await params;
+
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
+
+    const { ctx, erro } = await obterContextoUnidade(user);
+    if (erro) return erro;
+
+    const body = await request.json();
+    const parsed = parseBody(indicacaoCandidatoDecisaoSchema, body);
+    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
+    const service = createServiceClient();
+    const { data: sol } = await service
+      .from("solicitacoes_indicacao_candidato")
+      .select("*, vagas(id, titulo, tipo_servico, cidade, estado, cliente_id, status)")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (!sol || !podeVerUnidade(ctx, sol.unidade_id)) {
+      return NextResponse.json({ error: "Indicação não encontrada." }, { status: 404 });
+    }
+    if (sol.status !== "pendente") {
+      return NextResponse.json({ error: "Esta indicação já foi decidida." }, { status: 409 });
+    }
+
+    const usuarioNome = (await resolverNomeUsuario(user.id, user.email ?? null, service)) ?? "";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const vaga = sol.vagas as any;
+
+    if (parsed.data.acao === "recusar") {
+      const { data: decidida } = await service
+        .from("solicitacoes_indicacao_candidato")
+        .update({
+          status: "recusada",
+          motivo_recusa: parsed.data.motivo,
+          decidido_por: usuarioNome,
+          decidido_em: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .eq("status", "pendente")
+        .select("*")
+        .single();
+
+      if (!decidida) {
+        return NextResponse.json({ error: "A indicação mudou de status enquanto era analisada." }, { status: 409 });
+      }
+
+      registrarAuditoria({
+        usuario_id: user.id,
+        usuario_nome: usuarioNome,
+        acao: "indicacao_candidato_recusada",
+        entidade: "solicitacoes_indicacao_candidato",
+        entidade_id: id,
+        detalhes: { cliente: sol.cliente_nome, candidato_nome: sol.candidato_nome, motivo: parsed.data.motivo },
+      });
+
+      return NextResponse.json({ data: decidida });
+    }
+
+    // ── Aprovar ──────────────────────────────────────────────────────────────────────
+    if (!vaga || vaga.status !== "aberta") {
+      return NextResponse.json({ error: "A vaga desta indicação não está mais aberta." }, { status: 409 });
+    }
+
+    const cpf = `TEMP-${Date.now()}`;
+    const nowIso = new Date().toISOString();
+
+    const { data: candidato, error: candidatoErr } = await service
+      .from("candidatos")
+      .insert({
+        nome_completo: sol.candidato_nome,
+        cpf,
+        telefone: sol.candidato_telefone,
+        email: "",
+        cidade: vaga.cidade ?? "",
+        estado: vaga.estado ?? "",
+        cargo_pretendido: vaga.titulo,
+        tempo_experiencia: "Sem experiência",
+        turno_disponivel: "Flexível",
+        curriculo_url: sol.curriculo_url ?? null,
+        origem: "indicacao_direta_cliente",
+        etapa_kanban: "aprovado_cliente",
+        responsavel: usuarioNome || null,
+      })
+      .select("id")
+      .single();
+
+    if (candidatoErr || !candidato) {
+      console.error("[decisao indicacao] Erro ao criar candidato:", candidatoErr);
+      return NextResponse.json({ error: "Não foi possível criar o candidato." }, { status: 400 });
+    }
+
+    const { data: candidatoVaga, error: cvErr } = await service
+      .from("candidatos_vagas")
+      .insert({
+        vaga_id: vaga.id,
+        candidato_id: candidato.id,
+        cliente_id: vaga.cliente_id,
+        etapa: "aprovado_cliente",
+        responsavel: usuarioNome || null,
+        admissao_data_inicio: sol.admissao_data_inicio,
+        admissao_salario: sol.admissao_salario,
+        admissao_salario_hora: sol.admissao_salario_hora,
+        admissao_setor: sol.admissao_setor,
+        admissao_centro_custo: sol.admissao_centro_custo,
+        admissao_horario: sol.admissao_horario,
+        admissao_gestor: sol.admissao_gestor,
+        admissao_periodo_experiencia: sol.admissao_periodo_experiencia,
+        admissao_funcao: sol.admissao_funcao,
+        admissao_turno: sol.admissao_turno,
+        admissao_escala: sol.admissao_escala,
+        admissao_tempo_contrato: sol.admissao_tempo_contrato,
+        admissao_vt: sol.admissao_vt,
+        admissao_exame_responsavel: sol.admissao_exame_responsavel,
+        admissao_local_integracao: sol.admissao_local_integracao,
+        admissao_observacoes: sol.admissao_observacoes,
+      })
+      .select("id")
+      .single();
+
+    if (cvErr || !candidatoVaga) {
+      console.error("[decisao indicacao] Erro ao vincular candidato à vaga:", cvErr);
+      // Não deixa o candidato órfão (sem nenhuma candidatura) se o vínculo falhar.
+      await service.from("candidatos").delete().eq("id", candidato.id);
+      return NextResponse.json({ error: "Não foi possível vincular o candidato à vaga." }, { status: 400 });
+    }
+
+    if (vaga.cliente_id) {
+      await service.from("encaminhamentos").upsert(
+        {
+          candidato_id: candidato.id,
+          cliente_id: vaga.cliente_id,
+          vaga_id: vaga.id,
+          status: "aprovado",
+          avaliado_em: nowIso,
+        },
+        { onConflict: "candidato_id,cliente_id" }
+      );
+    }
+
+    const { data: aprovada } = await service
+      .from("solicitacoes_indicacao_candidato")
+      .update({
+        status: "aprovada",
+        candidato_id: candidato.id,
+        candidatos_vaga_id: candidatoVaga.id,
+        decidido_por: usuarioNome,
+        decidido_em: nowIso,
+        updated_at: nowIso,
+      })
+      .eq("id", id)
+      .eq("status", "pendente")
+      .select("*")
+      .single();
+
+    void registrarHistorico({
+      candidato_id: candidato.id,
+      tipo: "cadastro",
+      descricao: `Candidato registrado por indicação direta de ${sol.cliente_nome ?? "cliente"} (${usuarioNome})`,
+      metadata: { origem: "indicacao_direta_cliente", vaga_id: vaga.id, solicitacao_id: id },
+      criado_por: usuarioNome,
+    });
+
+    registrarAuditoria({
+      usuario_id: user.id,
+      usuario_nome: usuarioNome,
+      acao: "indicacao_candidato_aprovada",
+      entidade: "solicitacoes_indicacao_candidato",
+      entidade_id: id,
+      detalhes: { cliente: sol.cliente_nome, candidato_id: candidato.id, candidatos_vaga_id: candidatoVaga.id, vaga_id: vaga.id },
+    });
+
+    // E-mail pro RH com os dados de admissão que o cliente já mandou — mesmo público que recebe
+    // isso hoje quando o cliente aprova pelo portal (ver /api/portal/avaliar), já que essa
+    // indicação nunca passa por lá.
+    try {
+      let admRows = "";
+      if (sol.admissao_salario_hora != null) {
+        admRows += `<tr><td style="padding:6px 12px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">Salário</td><td style="padding:6px 12px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">R$ ${Number(sol.admissao_salario_hora).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/hora (Horista)</td></tr>`;
+      } else if (sol.admissao_salario != null) {
+        admRows += `<tr><td style="padding:6px 12px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">Salário</td><td style="padding:6px 12px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">R$ ${Number(sol.admissao_salario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês</td></tr>`;
+      }
+      for (const [key, label] of Object.entries(ADM_LABELS)) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const val = (sol as any)[key];
+        if (val != null && val !== "" && val !== false) {
+          const display = typeof val === "boolean" ? (val ? "Sim" : "Não")
+            : key === "admissao_data_inicio" ? String(val).split("-").reverse().join("/")
+            : String(val);
+          admRows += `<tr><td style="padding:6px 12px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">${label}</td><td style="padding:6px 12px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${display}</td></tr>`;
+        }
+      }
+
+      const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
+<div style="max-width:600px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+  <div style="background:#000;padding:28px 32px;text-align:center">
+    <h1 style="color:#FFD700;margin:0;font-size:20px">🧑‍💼 Indicação Direta Aprovada</h1>
+  </div>
+  <div style="padding:28px 32px">
+    <div style="margin-bottom:20px">
+      <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Candidato</p>
+      <p style="margin:0;font-size:16px;font-weight:700;color:#111827">${sol.candidato_nome}</p>
+      <p style="margin:2px 0 0;font-size:13px;color:#6B7280">${sol.candidato_telefone} · CPF/e-mail a completar pelo RH</p>
+    </div>
+    <div style="margin-bottom:20px;padding:12px 16px;background:#f9fafb;border-radius:8px">
+      <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Vaga</p>
+      <p style="margin:0;font-size:14px;font-weight:600;color:#111827">${vaga.titulo}</p>
+      <p style="margin:2px 0 0;font-size:13px;color:#6B7280">${sol.cliente_nome ?? ""}</p>
+    </div>
+    ${admRows ? `<div style="margin-bottom:20px"><p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">📋 Dados para Admissão</p><table style="width:100%;border-collapse:collapse">${admRows}</table></div>` : ""}
+    ${sol.curriculo_url ? `<p style="margin:0 0 20px;font-size:13px;color:#374151">📎 Currículo anexado no perfil do candidato.</p>` : ""}
+    <div style="text-align:center;padding-top:16px;border-top:1px solid #f3f4f6">
+      <a href="https://salmazos-plataforma.vercel.app/painel/candidato/${candidato.id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil completo</a>
+    </div>
+  </div>
+  <div style="background:#f9fafb;padding:16px 32px;text-align:center">
+    <p style="margin:0;font-size:11px;color:#9CA3AF">Salmazos RH &amp; Serviços — Notificação automática</p>
+  </div>
+</div>
+</body></html>`;
+
+      const DESTINATARIOS = ["olver@salmazos.com.br", "rh@salmazos.com.br"];
+      await Promise.all(
+        DESTINATARIOS.map((destinatario) =>
+          sendEmail({
+            to: destinatario,
+            subject: `🧑‍💼 Indicação Direta Aprovada — ${sol.candidato_nome} — ${sol.cliente_nome ?? ""}`,
+            html,
+            tipo: "indicacao_candidato_aprovada",
+            candidato_id: candidato.id,
+            vaga_id: vaga.id,
+          })
+        )
+      );
+    } catch (emailErr) {
+      console.error("[decisao indicacao] Erro ao enviar e-mail pro RH:", emailErr);
+    }
+
+    return NextResponse.json({ data: aprovada, candidato_id: candidato.id, candidatos_vaga_id: candidatoVaga.id });
+  } catch (err) {
+    console.error("[POST /api/solicitacoes-indicacao-candidato/[id]/decisao]", err);
+    return NextResponse.json({ error: "Erro interno." }, { status: 500 });
+  }
+}

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, UserPlus } from "lucide-react";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import SidebarPortal from "@/components/SidebarPortal";
 import PopupVencimentoContratoMotPortal from "@/components/PopupVencimentoContratoMotPortal";
@@ -72,8 +72,10 @@ export default async function PortalAppLayout({
           {/* Cabeçalho compartilhado em toda página do portal (área branca de conteúdo,
               distinto do logo Salmazos na sidebar preta). "Solicitar Vaga" morava como item
               do menu lateral (SidebarPortal); saiu de lá e virou este botão centralizado,
-              mesmo destino, visível em toda página. */}
-          <div className="flex justify-center mb-6">
+              mesmo destino, visível em toda página. "Indicar Candidato" (candidato que o
+              cliente já escolheu por fora, só pra registro) entrou do lado, mesmo tratamento
+              — pedido do Olver de não virar item de menu lateral (set/2026). */}
+          <div className="flex justify-center gap-3 mb-6">
             <Link
               href="/portal/solicitar-vaga"
               className="inline-flex items-center gap-1.5 transition-opacity hover:opacity-90"
@@ -89,6 +91,22 @@ export default async function PortalAppLayout({
             >
               <PlusCircle size={16} />
               Solicitar Vaga
+            </Link>
+            <Link
+              href="/portal/indicar-candidato"
+              className="inline-flex items-center gap-1.5 transition-opacity hover:opacity-90"
+              style={{
+                backgroundColor: "#000",
+                color: "#FFD700",
+                fontWeight: 700,
+                padding: "10px 24px",
+                borderRadius: 8,
+                textDecoration: "none",
+                fontSize: 14,
+              }}
+            >
+              <UserPlus size={16} />
+              Indicar Candidato
             </Link>
           </div>
 

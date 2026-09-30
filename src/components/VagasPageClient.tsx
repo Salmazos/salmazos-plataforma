@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import ModalNovaVaga from "./ModalNovaVaga";
 import ModalSolicitacoesVagas from "./ModalSolicitacoesVagas";
+import ModalIndicacoesCandidato from "./ModalIndicacoesCandidato";
 import PainelVagasView from "./painel/PainelVagasView";
 import { TIPOS_SERVICO } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
@@ -31,18 +32,21 @@ type FiltroStatus = "todas" | "aberta" | "pausada" | "fechada" | "cancelada";
 interface Props {
   vagas: Vaga[];
   pendingCount: number;
+  indicacoesPendentes?: number;
   // Só vem pra quem tem acesso a todas as unidades (ver painel/vagas/page.tsx).
   unidades?: { id: string; nome: string; ativa: boolean }[];
 }
 
-export default function VagasPageClient({ vagas: inicial, pendingCount, unidades }: Props) {
+export default function VagasPageClient({ vagas: inicial, pendingCount, indicacoesPendentes = 0, unidades }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const solicitacaoFocoId = searchParams.get("solicitacao");
+  const indicacaoFocoId = searchParams.get("indicacao");
   const [aba, setAba] = useState<AbaVagas>("lista");
   const [vagas, setVagas] = useState<Vaga[]>(inicial);
   const [modalAberto, setModalAberto] = useState(false);
   const [modalSolicitacoes, setModalSolicitacoes] = useState(false);
+  const [modalIndicacoes, setModalIndicacoes] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>("todas");
   const [busca, setBusca] = useState("");
   const [ordenacao, setOrdenacao] = useState("recentes");
@@ -64,6 +68,10 @@ export default function VagasPageClient({ vagas: inicial, pendingCount, unidades
     if (solicitacaoFocoId) setModalSolicitacoes(true);
   }, [solicitacaoFocoId]);
 
+  useEffect(() => {
+    if (indicacaoFocoId) setModalIndicacoes(true);
+  }, [indicacaoFocoId]);
+
   const limparFocoSolicitacao = () => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete("solicitacao");
@@ -71,9 +79,21 @@ export default function VagasPageClient({ vagas: inicial, pendingCount, unidades
     router.replace(qs ? `/painel/vagas?${qs}` : "/painel/vagas");
   };
 
+  const limparFocoIndicacao = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("indicacao");
+    const qs = params.toString();
+    router.replace(qs ? `/painel/vagas?${qs}` : "/painel/vagas");
+  };
+
   const handleCloseModalSolicitacoes = () => {
     setModalSolicitacoes(false);
     if (solicitacaoFocoId) limparFocoSolicitacao();
+  };
+
+  const handleCloseModalIndicacoes = () => {
+    setModalIndicacoes(false);
+    if (indicacaoFocoId) limparFocoIndicacao();
   };
 
   const handleImportar = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -187,6 +207,35 @@ export default function VagasPageClient({ vagas: inicial, pendingCount, unidades
                 }}
               >
                 {pendingCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setModalIndicacoes(true)}
+            className="btn-outline flex items-center gap-2"
+            style={{ position: "relative" }}
+          >
+            {"🧑‍💼"} Indicações
+            {indicacoesPendentes > 0 && (
+              <span
+                style={{
+                  position: "absolute",
+                  top: -6,
+                  right: -6,
+                  backgroundColor: "#dc2626",
+                  color: "#fff",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  width: 20,
+                  height: 20,
+                  borderRadius: "50%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  lineHeight: 1,
+                }}
+              >
+                {indicacoesPendentes}
               </span>
             )}
           </button>
@@ -406,6 +455,13 @@ export default function VagasPageClient({ vagas: inicial, pendingCount, unidades
         onVagaCriada={() => router.refresh()}
         focoId={solicitacaoFocoId}
         onVerTodas={limparFocoSolicitacao}
+      />
+      <ModalIndicacoesCandidato
+        isOpen={modalIndicacoes}
+        onClose={handleCloseModalIndicacoes}
+        onAprovado={() => router.refresh()}
+        focoId={indicacaoFocoId}
+        onVerTodas={limparFocoIndicacao}
       />
     </div>
   );
