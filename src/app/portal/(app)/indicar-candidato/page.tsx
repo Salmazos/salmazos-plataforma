@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
 import CampoMoeda from "@/components/ui/CampoMoeda";
@@ -58,6 +58,8 @@ export default function IndicarCandidatoPage() {
   const [candidatoNome, setCandidatoNome] = useState("");
   const [candidatoTelefone, setCandidatoTelefone] = useState("");
   const [curriculo, setCurriculo] = useState<File | null>(null);
+  const [arrastando, setArrastando] = useState(false);
+  const inputCurriculoRef = useRef<HTMLInputElement>(null);
 
   const [admDataInicio, setAdmDataInicio] = useState("");
   const [admSalario, setAdmSalario] = useState("");
@@ -299,13 +301,56 @@ export default function IndicarCandidatoPage() {
                 <CampoTelefone value={candidatoTelefone} onChange={setCandidatoTelefone}
                   placeholder="(11) 99999-9999" style={{ ...inputStyle, ...(missing(candidatoTelefone.trim() || null) ? inv : {}) }} />
               </Field>
-              <Field label="Currículo (opcional)">
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                  onChange={(e) => setCurriculo(e.target.files?.[0] ?? null)}
-                  style={{ fontSize: 13 }}
-                />
+              <Field label="Currículo">
+                {/* Arrastar e soltar ou botão — mesmo padrão da candidatura pública
+                    (FormCandidaturaVagaPublica). Continua sem bloquear o envio sem currículo. */}
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setArrastando(true); }}
+                  onDragLeave={() => setArrastando(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setArrastando(false);
+                    const arquivo = e.dataTransfer.files?.[0];
+                    if (arquivo) setCurriculo(arquivo);
+                  }}
+                  style={{
+                    border: `2px dashed ${curriculo || arrastando ? "#FFD700" : "#D1D5DB"}`,
+                    borderRadius: 10,
+                    padding: "20px 16px",
+                    textAlign: "center",
+                    backgroundColor: arrastando ? "rgba(255,215,0,0.08)" : curriculo ? "rgba(255,215,0,0.04)" : "#F9FAFB",
+                    transition: "border-color 0.2s ease, background-color 0.2s ease",
+                  }}
+                >
+                  <input
+                    ref={inputCurriculoRef}
+                    type="file"
+                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    onChange={(e) => { setCurriculo(e.target.files?.[0] ?? null); e.target.value = ""; }}
+                    style={{ display: "none" }}
+                  />
+                  {curriculo ? (
+                    <div className="flex items-center justify-center gap-3 flex-wrap">
+                      <span className="text-sm font-medium text-gray-800">{"📎"} {curriculo.name}</span>
+                      <span className="text-xs text-gray-400">{(curriculo.size / 1024 / 1024).toFixed(2)} MB</span>
+                      <button type="button" onClick={() => setCurriculo(null)} className="text-xs font-semibold text-red-600 hover:underline">
+                        Remover
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm text-gray-500 mb-2">Arraste o arquivo aqui ou</p>
+                      <button
+                        type="button"
+                        onClick={() => inputCurriculoRef.current?.click()}
+                        className="text-sm font-semibold px-4 py-2 rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+                      >
+                        Anexar arquivo
+                      </button>
+                      <p className="text-xs text-gray-400 mt-2">PDF, Word ou imagem</p>
+                    </>
+                  )}
+                </div>
               </Field>
             </div>
 
