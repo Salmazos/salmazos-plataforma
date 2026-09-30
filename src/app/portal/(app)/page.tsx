@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
+import { horaEntrevistaReal } from "@/lib/horaEntrevista";
 import PortalClienteClient, { type EncaminhamentoPortal, type CandidatoEmAvaliacao } from "@/components/PortalClienteClient";
 
 export const dynamic = "force-dynamic";
@@ -129,11 +130,7 @@ export default async function PortalPage() {
     .map((e) => ({
       id: e.id,
       candidato_nome: e.candidato?.nome_completo ?? "Candidato",
-      hora: new Date(e.data_entrevista as string).toLocaleTimeString("pt-BR", {
-        timeZone: "America/Sao_Paulo",
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
+      hora: horaEntrevistaReal(e.data_entrevista as string),
     }));
 
   return (

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
+import { horaEntrevistaReal } from "@/lib/horaEntrevista";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ interface EntrevistaHoje {
   vaga_id: string | null;
   candidato_nome: string;
   cargo: string | null;
-  hora: string;
+  hora: string | null;
 }
 
 export async function GET(request: Request) {
@@ -55,11 +56,7 @@ export async function GET(request: Request) {
       const clienteId = r.cliente_id as string;
       const clienteNome = r.clientes?.nome ?? "Cliente";
       const clienteEmail = (r.clientes?.contato_email as string | null) ?? null;
-      const hora = new Date(r.data_entrevista).toLocaleTimeString("pt-BR", {
-        timeZone: "America/Sao_Paulo",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      const hora = horaEntrevistaReal(r.data_entrevista);
 
       const entry = porCliente.get(clienteId) ?? { clienteNome, clienteEmail, itens: [] as EntrevistaHoje[] };
       entry.itens.push({
@@ -89,7 +86,7 @@ export async function GET(request: Request) {
           (it) => `<tr>
             <td style="padding:8px 14px;font-weight:600;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${it.candidato_nome}</td>
             <td style="padding:8px 14px;color:#374151;font-size:13px;border-bottom:1px solid #f3f4f6">${it.cargo ?? "—"}</td>
-            <td style="padding:8px 14px;color:#1D4ED8;font-weight:700;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">${it.hora}</td>
+            <td style="padding:8px 14px;color:#1D4ED8;font-weight:700;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">${it.hora ?? "—"}</td>
           </tr>`
         )
         .join("");
@@ -124,7 +121,7 @@ export async function GET(request: Request) {
         to: clienteEmail,
         subject: plural
           ? `📅 Você tem ${itens.length} entrevistas hoje`
-          : `📅 Você tem entrevista hoje: ${itens[0].candidato_nome} às ${itens[0].hora}`,
+          : `📅 Você tem entrevista hoje: ${itens[0].candidato_nome}${itens[0].hora ? ` às ${itens[0].hora}` : ""}`,
         html,
         tipo: "lembrete_entrevista_hoje",
       });

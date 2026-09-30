@@ -39,7 +39,8 @@ export interface CandidatoEmAvaliacao {
 export interface EntrevistaHojeResumo {
   id: string;
   candidato_nome: string;
-  hora: string;
+  // null quando não há horário real (ver lib/horaEntrevista.ts).
+  hora: string | null;
 }
 
 interface Props {
@@ -89,7 +90,7 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos, emAv
                 <div className="mt-1.5 space-y-1">
                   {entrevistasHoje.map((e) => (
                     <p key={e.id} className="text-sm" style={{ color: "#FDE68A" }}>
-                      {e.candidato_nome} às {e.hora}
+                      {e.candidato_nome}{e.hora ? ` às ${e.hora}` : ""}
                     </p>
                   ))}
                 </div>

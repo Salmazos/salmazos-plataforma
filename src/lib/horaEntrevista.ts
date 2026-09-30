@@ -1,0 +1,15 @@
+// Horário de uma entrevista pra mostrar ao cliente, ou null quando não há horário real.
+// O "Encaminhar" do Kanban só tem campo de data e grava meio-dia (12:00 de Brasília) como
+// convenção de storage (ver normalizarDataEntrevista em api/encaminhamentos) — mostrar "às
+// 12:00" inventava um horário (caso real: Alexsandro Silva Fidencio, 30/09). Quando o próprio
+// cliente agenda pelo portal ele escolhe data E hora, e essa hora é real. Decisão do Olver:
+// esconder só o 12:00 — se o cliente agendar de verdade ao meio-dia, a hora também some.
+export function horaEntrevistaReal(dataEntrevista: string | null | undefined): string | null {
+  if (!dataEntrevista) return null;
+  const hora = new Date(dataEntrevista).toLocaleTimeString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return hora === "12:00" ? null : hora;
+}
