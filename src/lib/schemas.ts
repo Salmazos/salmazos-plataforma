@@ -202,6 +202,7 @@ export const encaminhamentoCreateSchema = z.object({
 export const encaminhamentoUpdateSchema = z.object({
   status: z.enum(["aguardando", "aprovado", "reprovado", "desistiu", "aguardando_agendamento_cliente"]).optional(),
   observacoes: z.string().optional(),
+  data_entrevista: z.string().min(1).refine(v => !isNaN(Date.parse(v)), "Data inválida").optional(),
 });
 
 // ── Candidato sub-routes ─────────────────────────────────────────────────────

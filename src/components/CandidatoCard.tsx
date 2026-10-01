@@ -12,6 +12,7 @@ import { MOTIVOS_REPROVACAO_INTERNA, MOTIVOS_REPROVACAO_CLIENTE } from "@/lib/mo
 import { getProximasEtapas, getComportamentoEtapa, getEtapaLabel, getEtapaAnterior } from "@/lib/etapasCandidatura";
 import { useUsuarioLogado, unidadeDaTela } from "./UsuarioLogadoProvider";
 import { nomesCompletosDaUnidade, opcoesResponsavel } from "@/lib/responsaveis";
+import { Pencil } from "lucide-react";
 
 type Analista = { id: string; nome_completo: string; email: string };
 
@@ -46,6 +47,9 @@ export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Prop
   const [modalEntrevistaSalmazos, setModalEntrevistaSalmazos] = useState(false);
   const usuario = useUsuarioLogado();
   const [modalMotivo, setModalMotivo] = useState<{ etapa: string; tipo: "motivo_interno" | "motivo_cliente" } | null>(null);
+  const [modalRemarcar, setModalRemarcar] = useState(false);
+  const [dataRemarcar, setDataRemarcar] = useState("");
+  const [salvarRemarcar, setSalvarRemarcar] = useState(false);
 
   useEffect(() => {
     fetchAnalistas().then(setAnalistas);
@@ -142,9 +146,21 @@ export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Prop
             {card.etapa === "entrevista_cliente" && (
               <div className="mt-0.5">
                 {card.encaminhamento_data_entrevista ? (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                    {"📅"} {formatarData(card.encaminhamento_data_entrevista)}
-                  </span>
+                  <div className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                    <span>{"📅"} {formatarData(card.encaminhamento_data_entrevista)}</span>
+                    <button
+                      onClick={() => {
+                        const iso = new Date(card.encaminhamento_data_entrevista!);
+                        const localStr = iso.toISOString().slice(0, 16);
+                        setDataRemarcar(localStr);
+                        setModalRemarcar(true);
+                      }}
+                      title="Remarcar data"
+                      className="ml-1 p-0.5 hover:bg-blue-100 rounded transition-colors"
+                    >
+                      <Pencil size={10} />
+                    </button>
+                  </div>
                 ) : card.encaminhamento_status === "aguardando_agendamento_cliente" ? (
                   <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
                     {"⏳"} Aguardando agendamento do cliente
@@ -283,6 +299,77 @@ export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Prop
         onClose={() => setModalMotivo(null)}
         onConfirmar={handleConfirmarMotivo}
       />
+
+      {modalRemarcar && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={() => !salvarRemarcar && setModalRemarcar(false)}
+        >
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Remarcar entrevista com cliente</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Data e hora
+              </label>
+              <input
+                type="datetime-local"
+                value={dataRemarcar}
+                onChange={(e) => setDataRemarcar(e.target.value)}
+                disabled={salvarRemarcar}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setModalRemarcar(false)}
+                disabled={salvarRemarcar}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  if (!dataRemarcar) {
+                    alert("Por favor, selecione uma data");
+                    return;
+                  }
+                  setSalvarRemarcar(true);
+                  try {
+                    const resEncaminhamentos = await fetch(`/api/encaminhamentos?candidato_id=${card.candidato_id}`);
+                    if (!resEncaminhamentos.ok) throw new Error("Erro ao buscar encaminhamento");
+                    const { data: encaminhamentos } = await resEncaminhamentos.json();
+                    const encaminhamento = encaminhamentos?.find((e: { vaga_id: string }) => e.vaga_id === card.vaga_id);
+                    if (!encaminhamento?.id) throw new Error("Encaminhamento não encontrado");
+
+                    const novaData = new Date(dataRemarcar).toISOString();
+                    const res = await fetch(`/api/encaminhamentos/${encaminhamento.id}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ data_entrevista: novaData }),
+                    });
+                    if (!res.ok) {
+                      const json = await res.json().catch(() => ({}));
+                      alert(json.error || "Erro ao remarcar entrevista");
+                      return;
+                    }
+                    setModalRemarcar(false);
+                    router.refresh();
+                  } catch (err) {
+                    alert(err instanceof Error ? err.message : "Erro de conexão ao remarcar entrevista");
+                  } finally {
+                    setSalvarRemarcar(false);
+                  }
+                }}
+                disabled={salvarRemarcar}
+                className="flex-1 px-4 py-2 bg-black text-white rounded-md text-sm font-medium hover:bg-gray-900 disabled:opacity-50"
+              >
+                {salvarRemarcar ? "Salvando..." : "Salvar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

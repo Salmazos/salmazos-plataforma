@@ -3,17 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { parseBody, encaminhamentoCreateSchema } from "@/lib/schemas";
 import { exigirContextoUnidade, podeVerUnidade, resolverUnidadeCliente } from "@/lib/unidadeAuth";
-
-// Se vier só a data (YYYY-MM-DD, do <input type="date">), fixa meio-dia em
-// Brasília antes de gravar — mesma convenção usada pros registros já existentes
-// na migração date -> timestamptz, evitando que a data exibida mude de dia
-// dependendo do fuso de quem lê depois. Esse 12:00 não é horário escolhido por ninguém —
-// telas pro cliente usam horaEntrevistaReal (lib/horaEntrevista.ts) pra não exibi-lo.
-function normalizarDataEntrevista(valor: string | null | undefined): string | null {
-  if (!valor) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(valor)) return `${valor}T12:00:00-03:00`;
-  return valor;
-}
+import { normalizarDataEntrevista } from "@/lib/dataEntrevista";
 
 export async function GET(request: NextRequest) {
   const { ctx, erro } = await exigirContextoUnidade();
