@@ -64,10 +64,6 @@ export default function AvisosVagasConfigClient({ configsPorEvento, usuarios }: 
   const [processandoUsuarioId, setProcessandoUsuarioId] = useState<string | null>(null);
   const [erroPlataforma, setErroPlataforma] = useState("");
 
-  const deveAvisarEmailInativo =
-    emailAtivo[abaAtiva] &&
-    emailDestinatarios[abaAtiva]?.length > 0 &&
-    emailDestinatarios[abaAtiva]?.every((d) => !d.ativo);
 
   // ── E-mail ───────────────────────────────────────────────────────────────
 
@@ -118,29 +114,42 @@ export default function AvisosVagasConfigClient({ configsPorEvento, usuarios }: 
     }
   };
 
-  const handleToggleAtivo = async (id: string, ativo: boolean) => {
-    setEmailDestinatarios((prev) => ({
-      ...prev,
-      [abaAtiva]: (prev[abaAtiva] || []).map((d) => (d.id === id ? { ...d, ativo } : d)),
-    }));
+  const [processandoEmailId, setProcessandoEmailId] = useState<string | null>(null);
+
+  const handleToggleEmail = async (usuario: UsuarioOption, incluido: boolean) => {
+    setProcessandoEmailId(usuario.email.toLowerCase().trim());
+    setErroEmail("");
     try {
-      const res = await fetch(`/api/avisos-vagas-config/email/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ativo }),
-      });
-      if (!res.ok) throw new Error();
-    } catch {
-      setEmailDestinatarios((prev) => ({
-        ...prev,
-        [abaAtiva]: (prev[abaAtiva] || []).map((d) => (d.id === id ? { ...d, ativo: !ativo } : d)),
-      }));
-      setErroEmail("Não foi possível salvar. Tente novamente.");
+      if (incluido) {
+        const res = await fetch("/api/avisos-vagas-config/email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ evento: abaAtiva, nome: usuario.nome_completo, email: usuario.email }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Erro ao adicionar destinatário.");
+        setEmailDestinatarios((prev) => ({
+          ...prev,
+          [abaAtiva]: [...(prev[abaAtiva] || []), json.data],
+        }));
+      } else {
+        const atual = (emailDestinatarios[abaAtiva] || []).find((d) => d.email.toLowerCase().trim() === usuario.email.toLowerCase().trim());
+        if (!atual) return;
+        const res = await fetch(`/api/avisos-vagas-config/email/${atual.id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error("Erro ao remover destinatário.");
+        setEmailDestinatarios((prev) => ({
+          ...prev,
+          [abaAtiva]: (prev[abaAtiva] || []).filter((d) => d.email.toLowerCase().trim() !== usuario.email.toLowerCase().trim()),
+        }));
+      }
+    } catch (err) {
+      setErroEmail(err instanceof Error ? err.message : "Erro de conexão. Tente novamente.");
+    } finally {
+      setProcessandoEmailId(null);
     }
   };
 
-  const handleRemoverEmail = async (id: string, nome: string) => {
-    if (!confirm(`Remover "${nome}" dos avisos de vaga?`)) return;
+  const handleRemoverEmailExterno = async (id: string) => {
     const anterior = emailDestinatarios[abaAtiva];
     setEmailDestinatarios((prev) => ({
       ...prev,
@@ -233,17 +242,6 @@ export default function AvisosVagasConfigClient({ configsPorEvento, usuarios }: 
             Sem destinatários configurados, o aviso segue o comportamento padrão (todos os analistas da unidade).
           </p>
 
-          {deveAvisarEmailInativo && (
-            <div
-              className="mb-5"
-              style={{ background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 10, padding: "12px 16px" }}
-            >
-              <p style={{ margin: 0, fontSize: 13, color: "#92400E", fontWeight: 600 }}>
-                ℹ️ Todos os destinatários de e-mail estão inativos — enquanto nenhum estiver ativo, o aviso por e-mail segue o padrão (todos os analistas da unidade).
-              </p>
-            </div>
-          )}
-
           {/* ── E-mail ─────────────────────────────────────────────────────────── */}
           <div className="mb-6">
             <label className="flex items-start gap-3 mb-4 pb-4 border-b border-gray-100 cursor-pointer">
@@ -266,81 +264,101 @@ export default function AvisosVagasConfigClient({ configsPorEvento, usuarios }: 
 
             <div style={{ opacity: emailAtivo[abaAtiva] ? 1 : 0.55 }}>
               <p className="section-title mb-1">Destinatários de e-mail</p>
-              <p className="text-xs text-gray-400 mb-4">Endereço livre — não precisa ser usuário cadastrado no painel.</p>
+              <p className="text-xs text-gray-400 mb-4">Marque quem deve receber e-mail. Cada pessoa marcada recebe os e-mails desse evento (de todas as unidades).</p>
 
-              {emailDestinatarios[abaAtiva]?.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-4">Nenhum destinatário cadastrado.</p>
+              {usuarios.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-4">Nenhum usuário ativo encontrado.</p>
               ) : (
-                <div style={{ overflowX: "auto" }} className="mb-4">
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                    <thead>
-                      <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-                        {["Nome", "E-mail", "Ativo", "Ações"].map((h) => (
-                          <th
-                            key={h}
-                            style={{
-                              textAlign: "left",
-                              padding: "8px 12px",
-                              fontSize: 11,
-                              fontWeight: 700,
-                              color: "#6B7280",
-                              textTransform: "uppercase",
-                            }}
-                          >
-                            {h}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {emailDestinatarios[abaAtiva]?.map((d) => (
-                        <tr key={d.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
-                          <td style={{ padding: "8px 12px", fontWeight: 600, color: "#111827" }}>{d.nome}</td>
-                          <td style={{ padding: "8px 12px", color: "#374151" }}>{d.email}</td>
-                          <td style={{ padding: "8px 12px" }}>
-                            <label className="flex items-center gap-2">
-                              <input type="checkbox" checked={d.ativo} onChange={(e) => handleToggleAtivo(d.id, e.target.checked)} />
-                            </label>
-                          </td>
-                          <td style={{ padding: "8px 12px" }}>
-                            <button onClick={() => handleRemoverEmail(d.id, d.nome)} className="btn-outline" style={{ padding: "4px 10px", fontSize: 12 }}>
-                              Remover
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div style={{ border: "1px solid #F3F4F6", borderRadius: 8, maxHeight: 320, overflowY: "auto" }} className="mb-4">
+                  {usuarios.map((u) => {
+                    const incluido = (emailDestinatarios[abaAtiva] || []).some((d) => d.email.toLowerCase().trim() === u.email.toLowerCase().trim());
+                    const processando = processandoEmailId === u.email.toLowerCase().trim();
+                    return (
+                      <label
+                        key={u.user_id}
+                        className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 border-b border-gray-100 last:border-0"
+                        style={{ opacity: processando ? 0.6 : 1 }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={incluido}
+                          disabled={processando}
+                          onChange={(e) => handleToggleEmail(u, e.target.checked)}
+                        />
+                        <span className="font-medium text-gray-900">{u.nome_completo}</span>
+                        <span className="text-xs text-gray-400">{u.email}</span>
+                      </label>
+                    );
+                  })}
                 </div>
               )}
 
-              <form onSubmit={handleAdicionarEmail} className="flex gap-2 items-end flex-wrap">
-                <div style={{ flex: "1 1 160px" }}>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nome</label>
-                  <input
-                    type="text"
-                    value={novoNome}
-                    onChange={(e) => setNovoNome(e.target.value)}
-                    placeholder="Ex: Elizabete"
-                    className="input-field"
-                    required
-                  />
-                </div>
-                <div style={{ flex: "2 1 220px" }}>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">E-mail</label>
-                  <input
-                    type="email"
-                    value={novoEmail}
-                    onChange={(e) => setNovoEmail(e.target.value)}
-                    placeholder="Ex: elizabete@salmazos.com.br"
-                    className="input-field"
-                    required
-                  />
-                </div>
-                <button type="submit" disabled={enviandoEmail} className="btn-primary disabled:opacity-50">
-                  {enviandoEmail ? "Adicionando..." : "Adicionar"}
-                </button>
-              </form>
+              {/* Outros endereços (fora do painel) */}
+              {(() => {
+                const emailsExternos = (emailDestinatarios[abaAtiva] || []).filter(
+                  (d) => !usuarios.some((u) => u.email.toLowerCase().trim() === d.email.toLowerCase().trim())
+                );
+                return (
+                  <>
+                    {emailsExternos.length > 0 && (
+                      <div className="mb-4">
+                        <p className="text-xs text-gray-500 font-semibold mb-2">Outros endereços (fora do painel)</p>
+                        <div style={{ border: "1px solid #F3F4F6", borderRadius: 8 }}>
+                          {emailsExternos.map((d) => (
+                            <div
+                              key={d.id}
+                              className="flex items-center justify-between gap-3 px-4 py-2 text-sm text-gray-700 border-b border-gray-100 last:border-0"
+                            >
+                              <div>
+                                <span className="font-medium text-gray-900">{d.nome}</span>
+                                <span className="text-xs text-gray-400 ml-2">{d.email}</span>
+                              </div>
+                              <button
+                                onClick={() => handleRemoverEmailExterno(d.id)}
+                                className="btn-outline"
+                                style={{ padding: "4px 10px", fontSize: 12 }}
+                              >
+                                Remover
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mb-4">
+                      <p className="text-xs text-gray-500 font-semibold mb-2">Adicionar endereço externo</p>
+                      <form onSubmit={handleAdicionarEmail} className="flex gap-2 items-end flex-wrap">
+                        <div style={{ flex: "1 1 160px" }}>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nome</label>
+                          <input
+                            type="text"
+                            value={novoNome}
+                            onChange={(e) => setNovoNome(e.target.value)}
+                            placeholder="Ex: Elizabete"
+                            className="input-field"
+                            required
+                          />
+                        </div>
+                        <div style={{ flex: "2 1 220px" }}>
+                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">E-mail</label>
+                          <input
+                            type="email"
+                            value={novoEmail}
+                            onChange={(e) => setNovoEmail(e.target.value)}
+                            placeholder="Ex: elizabete@salmazos.com.br"
+                            className="input-field"
+                            required
+                          />
+                        </div>
+                        <button type="submit" disabled={enviandoEmail} className="btn-primary disabled:opacity-50">
+                          {enviandoEmail ? "Adicionando..." : "Adicionar"}
+                        </button>
+                      </form>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
             {erroEmail && <p className="text-red-600 text-sm mt-2">{erroEmail}</p>}
           </div>
