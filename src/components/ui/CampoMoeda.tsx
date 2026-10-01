@@ -30,12 +30,16 @@ function centavosParaTexto(centavos: number, permitirZero?: boolean): string {
 // Máscara estilo caixa registradora: dígitos entram pela direita, sempre 2 casas decimais.
 export default function CampoMoeda({ value, onChange, placeholder, className, style, disabled, permitirZero }: CampoMoedaProps) {
   const [centavos, setCentavos] = useState<number>(() => paraCentavos(value));
+  const [preenchido, setPreenchido] = useState<boolean>(() => {
+    return value !== "" && value !== null && value !== undefined && !Number.isNaN(Number(value));
+  });
   const ultimoValorExterno = useRef(value);
 
   useEffect(() => {
     if (value !== ultimoValorExterno.current) {
       ultimoValorExterno.current = value;
       setCentavos(paraCentavos(value));
+      setPreenchido(value !== "" && value !== null && value !== undefined && !Number.isNaN(Number(value)));
     }
   }, [value]);
 
@@ -46,9 +50,11 @@ export default function CampoMoeda({ value, onChange, placeholder, className, st
 
     if (permitirZero) {
       if (digitos === "") {
+        setPreenchido(false);
         ultimoValorExterno.current = NaN;
         onChange(NaN);
       } else {
+        setPreenchido(true);
         const novoValor = novoCentavos / 100;
         ultimoValorExterno.current = novoValor;
         onChange(novoValor);
@@ -60,11 +66,13 @@ export default function CampoMoeda({ value, onChange, placeholder, className, st
     }
   };
 
+  const displayText = permitirZero && preenchido ? (centavosParaTexto(centavos, true) || "0,00") : centavosParaTexto(centavos, false);
+
   return (
     <input
       type="text"
       inputMode="decimal"
-      value={centavosParaTexto(centavos, permitirZero)}
+      value={displayText}
       onChange={handleChange}
       placeholder={placeholder}
       className={className}

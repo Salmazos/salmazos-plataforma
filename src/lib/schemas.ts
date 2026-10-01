@@ -1158,8 +1158,8 @@ export const rescisaoCreateSchema = z.object({
   data_pagamento_rescisao: z.string().min(1, "Data de pagamento da rescisão é obrigatória"),
   valor_guia: coerceNumberNonNegativeNullable.optional(),
   data_pagamento_guia: z.string().optional().nullable(),
-  pensao: coerceNumberNonNegativeNullable.optional(),
-  farmacia: coerceNumberNonNegativeNullable.optional(),
+  pensao: coerceNumberNullable.optional(),
+  farmacia: coerceNumberNullable.optional(),
   faturado: z.boolean().optional().default(false),
   aso_documento_path: z.string().optional().nullable(),
 });
