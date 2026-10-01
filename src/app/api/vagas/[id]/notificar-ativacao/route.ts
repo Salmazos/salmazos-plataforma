@@ -4,6 +4,7 @@ import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { exigirAcessoVaga } from "@/lib/unidadeAuth";
 import { analistaAtendeUnidade } from "@/lib/notifyAllAnalysts";
+import { resolverAvisoVaga, gravarSinoAvisoVaga } from "@/lib/avisosVagas";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -35,15 +36,6 @@ export async function POST(_request: NextRequest, { params }: Params) {
 
     const vagaClienteNome = (vaga.clientes as any)?.nome ?? null;
 
-    // Só a equipe da unidade da vaga (+ sócios com acesso a todas) recebe.
-    const { data: analistasTodos } = await supabase
-      .from("analistas_perfil")
-      .select("email, nome_completo, unidade_id, acesso_todas_unidades")
-      .eq("ativo", true);
-    const analistas = (analistasTodos ?? []).filter((a) => analistaAtendeUnidade(a, vaga.unidade_id));
-
-    if (!analistas.length) { console.log("[notificar-ativacao] Nenhum analista ativo"); return; }
-
     const vagaUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas/${id}`;
     const template = getEmailTemplate("nova_vaga_criada", {
       nome: "",
@@ -67,31 +59,64 @@ export async function POST(_request: NextRequest, { params }: Params) {
       taxaCancelamentoPercentual: vaga.taxa_cancelamento_percentual,
     });
 
-    const subject = `🔄 Vaga Reativada: ${vaga.titulo}`;
-    const destinatarios = analistas.filter((a) => a.email);
-    console.log(`[notificar-ativacao] Enviando para ${destinatarios.length} analistas`);
+    try {
+      const resolvido = await resolverAvisoVaga("vaga_reativada", vaga.unidade_id);
 
-    await Promise.all(
-      destinatarios.map((a) =>
-        sendEmail({
-          to: a.email,
-          subject,
-          html: template.html,
-          tipo: "nova_vaga_criada",
-          vaga_id: id,
-        })
-      )
-    ).catch((err) => console.error("[notificar-ativacao] Erro:", err));
+      if (resolvido.email.modo === "desligado") {
+        console.log("[notificar-ativacao] E-mail de vaga_reativada está desligado");
+      } else if (resolvido.email.modo === "configurado" && resolvido.email.destinatarios) {
+        const dests = resolvido.email.destinatarios.filter((d) => d.email);
+        console.log(`[notificar-ativacao] Enviando para ${dests.length} destinatários configurados`);
+        const subject = `🔄 Vaga Reativada: ${vaga.titulo}`;
+        await Promise.all(
+          dests.map((d) =>
+            sendEmail({
+              to: d.email,
+              subject,
+              html: template.html,
+              tipo: "vaga_reativada",
+              vaga_id: id,
+            })
+          )
+        ).catch((err) => console.error("[notificar-ativacao] Erro ao enviar e-mails:", err));
+      } else {
+        const { data: analistasTodos } = await supabase
+          .from("analistas_perfil")
+          .select("email, nome_completo, unidade_id, acesso_todas_unidades")
+          .eq("ativo", true);
+        const analistas = (analistasTodos ?? []).filter((a) => analistaAtendeUnidade(a, vaga.unidade_id));
 
-    const vagaConfidencial = vaga.confidencial === true;
-    const { error: errNotifSino } = await supabase.from("notificacoes_analista").insert({
-      tipo: "vaga_ativada",
-      titulo: `${vagaConfidencial ? "🔴 [CONFIDENCIAL] " : ""}Vaga reativada: ${vaga.titulo}`,
-      mensagem: `Vaga "${vaga.titulo}" (${TIPO_LABELS[vaga.tipo_servico] ?? vaga.tipo_servico}) foi reativada.`,
-      vaga_id: id,
-      unidade_id: vaga.unidade_id,
-    });
-    if (errNotifSino) console.error("[notificar-ativacao] Erro ao registrar notificação de sino:", errNotifSino.message);
+        if (analistas.length) {
+          const destinatarios = analistas.filter((a) => a.email);
+          console.log(`[notificar-ativacao] Enviando para ${destinatarios.length} analistas (modo legado)`);
+          const subject = `🔄 Vaga Reativada: ${vaga.titulo}`;
+          await Promise.all(
+            destinatarios.map((a) =>
+              sendEmail({
+                to: a.email,
+                subject,
+                html: template.html,
+                tipo: "vaga_reativada",
+                vaga_id: id,
+              })
+            )
+          ).catch((err) => console.error("[notificar-ativacao] Erro ao enviar e-mails:", err));
+        }
+      }
+
+      const vagaConfidencial = vaga.confidencial === true;
+      await gravarSinoAvisoVaga({
+        evento: "vaga_reativada",
+        unidadeId: vaga.unidade_id,
+        tipo: "vaga_ativada",
+        titulo: `${vagaConfidencial ? "🔴 [CONFIDENCIAL] " : ""}Vaga reativada: ${vaga.titulo}`,
+        mensagem: `Vaga "${vaga.titulo}" (${TIPO_LABELS[vaga.tipo_servico] ?? vaga.tipo_servico}) foi reativada.`,
+        vagaId: id,
+        resolvido,
+      });
+    } catch (err) {
+      console.error("[notificar-ativacao] Erro:", err);
+    }
   });
 
   return NextResponse.json({ ok: true });

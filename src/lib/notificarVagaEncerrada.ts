@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { analistaAtendeUnidade } from "@/lib/notifyAllAnalysts";
+import { resolverAvisoVaga, gravarSinoAvisoVaga } from "@/lib/avisosVagas";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -35,15 +36,6 @@ export async function notificarVagaEncerrada(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vagaClienteNome = (vaga.clientes as any)?.nome ?? null;
 
-  // Só a equipe da unidade da vaga (+ sócios com acesso a todas) recebe.
-  const { data: analistasTodos } = await svc
-    .from("analistas_perfil")
-    .select("email, nome_completo, unidade_id, acesso_todas_unidades")
-    .eq("ativo", true);
-  const analistas = (analistasTodos ?? []).filter((a) => analistaAtendeUnidade(a, vaga.unidade_id));
-
-  if (!analistas.length) { console.log("[notificarVagaEncerrada] Nenhum analista ativo"); return; }
-
   const vagaUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas/${vagaId}`;
   const template = getEmailTemplate("vaga_encerrada", {
     nome: "",
@@ -58,28 +50,61 @@ export async function notificarVagaEncerrada(
     nomeCliente: vagaClienteNome ?? undefined,
   });
 
-  const destinatarios = analistas.filter((a) => a.email);
-  console.log(`[notificarVagaEncerrada] Enviando para ${destinatarios.length} analistas`);
+  try {
+    const evento = status === "fechada" ? "vaga_fechada" : "vaga_cancelada";
+    const resolvido = await resolverAvisoVaga(evento, vaga.unidade_id);
 
-  await Promise.all(
-    destinatarios.map((a) =>
-      sendEmail({
-        to: a.email,
-        subject: template.subject,
-        html: template.html,
-        tipo: "vaga_encerrada",
-        vaga_id: vagaId,
-      })
-    )
-  ).catch((err) => console.error("[notificarVagaEncerrada] Erro:", err));
+    if (resolvido.email.modo === "desligado") {
+      console.log(`[notificarVagaEncerrada] E-mail de ${evento} está desligado`);
+    } else if (resolvido.email.modo === "configurado" && resolvido.email.destinatarios) {
+      const dests = resolvido.email.destinatarios.filter((d) => d.email);
+      console.log(`[notificarVagaEncerrada] Enviando para ${dests.length} destinatários configurados`);
+      await Promise.all(
+        dests.map((d) =>
+          sendEmail({
+            to: d.email,
+            subject: template.subject,
+            html: template.html,
+            tipo: "vaga_encerrada",
+            vaga_id: vagaId,
+          })
+        )
+      ).catch((err) => console.error("[notificarVagaEncerrada] Erro ao enviar e-mails:", err));
+    } else {
+      const { data: analistasTodos } = await svc
+        .from("analistas_perfil")
+        .select("email, nome_completo, unidade_id, acesso_todas_unidades")
+        .eq("ativo", true);
+      const analistas = (analistasTodos ?? []).filter((a) => analistaAtendeUnidade(a, vaga.unidade_id));
 
-  const vagaConfidencial = vaga.confidencial === true;
-  const { error: errNotifSino } = await svc.from("notificacoes_analista").insert({
-    tipo: "vaga_encerrada",
-    titulo: `${vagaConfidencial ? "🔴 [CONFIDENCIAL] " : ""}Vaga encerrada: ${vaga.titulo}`,
-    mensagem: `Vaga "${vaga.titulo}" (${TIPO_LABELS[vaga.tipo_servico] ?? vaga.tipo_servico}) foi encerrada (${status}).`,
-    vaga_id: vagaId,
-    unidade_id: vaga.unidade_id,
-  });
-  if (errNotifSino) console.error("[notificarVagaEncerrada] Erro ao registrar notificação de sino:", errNotifSino.message);
+      if (analistas.length) {
+        const destinatarios = analistas.filter((a) => a.email);
+        console.log(`[notificarVagaEncerrada] Enviando para ${destinatarios.length} analistas (modo legado)`);
+        await Promise.all(
+          destinatarios.map((a) =>
+            sendEmail({
+              to: a.email,
+              subject: template.subject,
+              html: template.html,
+              tipo: "vaga_encerrada",
+              vaga_id: vagaId,
+            })
+          )
+        ).catch((err) => console.error("[notificarVagaEncerrada] Erro ao enviar e-mails:", err));
+      }
+    }
+
+    const vagaConfidencial = vaga.confidencial === true;
+    await gravarSinoAvisoVaga({
+      evento,
+      unidadeId: vaga.unidade_id,
+      tipo: "vaga_encerrada",
+      titulo: `${vagaConfidencial ? "🔴 [CONFIDENCIAL] " : ""}Vaga encerrada: ${vaga.titulo}`,
+      mensagem: `Vaga "${vaga.titulo}" (${TIPO_LABELS[vaga.tipo_servico] ?? vaga.tipo_servico}) foi encerrada (${status}).`,
+      vagaId,
+      resolvido,
+    });
+  } catch (err) {
+    console.error("[notificarVagaEncerrada] Erro:", err);
+  }
 }

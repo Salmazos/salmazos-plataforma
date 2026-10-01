@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
-import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
+import { notifyAllAnalysts, analistaAtendeUnidade } from "@/lib/notifyAllAnalysts";
+import { sendEmail } from "@/lib/sendEmail";
 import { parseBody, portalSolicitarVagaSchema } from "@/lib/schemas";
 import { resolverUnidadeCliente } from "@/lib/unidadeAuth";
+import { resolverAvisoVaga, gravarSinoAvisoVaga } from "@/lib/avisosVagas";
 
 const TIPO_LABEL: Record<string, string> = {
   recrutamento_selecao: "Recrutamento e Seleção",
@@ -116,23 +118,6 @@ export async function POST(request: NextRequest) {
       .in("nivel_acesso", ["superuser", "diretoria"])
       .eq("ativo", true);
 
-    // Uma única linha de broadcast (user_id nulo) em vez de uma por analista —
-    // leitura é rastreada por pessoa em notificacao_leituras (ver GET/PATCH
-    // /api/notificacoes), então isso não corre o risco de "sumir" pra quem
-    // ainda não viu só porque outro analista já marcou como lida.
-    if (analistas && analistas.length > 0) {
-      const confidencial = body.confidencial === true;
-      await service.from("notificacoes_analista").insert({
-        tipo: "nova_solicitacao_vaga",
-        titulo: confidencial ? "🔴 Nova solicitação de vaga (confidencial)" : "Nova solicitação de vaga",
-        mensagem: `${clienteNome} solicitou ${body.num_posicoes || 1}x ${body.cargo}`,
-        user_id: null,
-        candidato_id: null,
-        solicitacao_vaga_id: solicitacao.id,
-        unidade_id: unidadeId,
-      });
-    }
-
     const numPos = body.num_posicoes || 1;
     const tipoLbl = TIPO_LABEL[body.tipo_servico] ?? body.tipo_servico;
     const confidencial = body.confidencial === true;
@@ -216,43 +201,82 @@ export async function POST(request: NextRequest) {
 </div>
 </body></html>`;
 
-    const resultado = await notifyAllAnalysts({
-      subject: `${confidencial ? "🔴🔔" : "🔔"} Nova Solicitação de Vaga — ${clienteNome}`,
-      html,
-      tipo: "solicitacao_vaga",
-      unidadeId,
-    });
+    try {
+      const confidencial = body.confidencial === true;
+      const resolvido = await resolverAvisoVaga("solicitacao_vaga", unidadeId);
 
-    // E-mail e sino são canais independentes (o sino já foi inserido acima antes
-    // deste ponto), mas se NENHUM e-mail chegou a ser entregue, isso é invisível
-    // pra qualquer um além de quem lê logs de servidor — por isso, além do console.error,
-    // registramos um alerta no próprio sino (mesmos destinatários da notificação normal)
-    // pra garantir que a falha apareça em algum lugar que alguém realmente vê.
-    if (resultado.succeeded === 0) {
-      const motivo = resultado.attempted === 0
-        ? "nenhum analista com e-mail cadastrado para notificar"
-        : `${resultado.failed}/${resultado.attempted} envio(s) de e-mail falharam`;
-      console.error(
-        `[POST /api/portal/solicitar-vaga] Notificação por e-mail NÃO foi entregue a ninguém para solicitacao_id=${solicitacao.id} (${motivo}).`
-      );
-      if (analistas && analistas.length > 0) {
-        const alertas = analistas
-          .filter((a) => a.user_id)
-          .map((a) => ({
-            tipo: "email_falhou",
-            titulo: "⚠️ Falha ao notificar por e-mail",
-            mensagem: `O e-mail da solicitação de vaga de ${clienteNome} (${body.cargo}) não foi entregue (${motivo}). A solicitação já está no painel de Vagas.`,
-            user_id: a.user_id,
-            candidato_id: null,
-            solicitacao_vaga_id: solicitacao.id,
-          }));
-        if (alertas.length > 0) {
-          await service.from("notificacoes_analista").insert(alertas);
+      let emailResult = { attempted: 0, succeeded: 0, failed: 0 };
+
+      if (resolvido.email.modo === "desligado") {
+        console.log("[POST /api/portal/solicitar-vaga] E-mail de solicitacao_vaga está desligado");
+      } else if (resolvido.email.modo === "configurado" && resolvido.email.destinatarios) {
+        const dests = resolvido.email.destinatarios.filter((d) => d.email);
+        console.log(`[POST /api/portal/solicitar-vaga] Enviando para ${dests.length} destinatários configurados`);
+        const resultados = await Promise.all(
+          dests.map((d) =>
+            sendEmail({
+              to: d.email,
+              subject: `${confidencial ? "🔴🔔" : "🔔"} Nova Solicitação de Vaga — ${clienteNome}`,
+              html,
+              tipo: "solicitacao_vaga",
+            })
+          )
+        ).catch((err) => {
+          console.error("[POST /api/portal/solicitar-vaga] Erro ao enviar e-mails:", err);
+          return [];
+        });
+        emailResult = {
+          attempted: resultados.length,
+          succeeded: resultados.filter((r) => r.success).length,
+          failed: resultados.length - resultados.filter((r) => r.success).length,
+        };
+      } else {
+        emailResult = await notifyAllAnalysts({
+          subject: `${confidencial ? "🔴🔔" : "🔔"} Nova Solicitação de Vaga — ${clienteNome}`,
+          html,
+          tipo: "solicitacao_vaga",
+          unidadeId,
+          excluirNiveisAcesso: [],
+        });
+      }
+
+      await gravarSinoAvisoVaga({
+        evento: "solicitacao_vaga",
+        unidadeId,
+        tipo: "nova_solicitacao_vaga",
+        titulo: confidencial ? "🔴 Nova solicitação de vaga (confidencial)" : "Nova solicitação de vaga",
+        mensagem: `${clienteNome} solicitou ${body.num_posicoes || 1}x ${body.cargo}`,
+        solicitacaoVagaId: solicitacao.id,
+        resolvido,
+      });
+
+      if (emailResult.succeeded === 0 && emailResult.attempted > 0) {
+        const motivo = `${emailResult.failed}/${emailResult.attempted} envio(s) de e-mail falharam`;
+        console.error(
+          `[POST /api/portal/solicitar-vaga] Notificação por e-mail NÃO foi entregue a ninguém para solicitacao_id=${solicitacao.id} (${motivo}).`
+        );
+        if (analistas && analistas.length > 0) {
+          const alertas = analistas
+            .filter((a) => a.user_id)
+            .map((a) => ({
+              tipo: "email_falhou",
+              titulo: "⚠️ Falha ao notificar por e-mail",
+              mensagem: `O e-mail da solicitação de vaga de ${clienteNome} (${body.cargo}) não foi entregue (${motivo}). A solicitação já está no painel de Vagas.`,
+              user_id: a.user_id,
+              candidato_id: null,
+              solicitacao_vaga_id: solicitacao.id,
+            }));
+          if (alertas.length > 0) {
+            await service.from("notificacoes_analista").insert(alertas);
+          }
         }
       }
-    }
 
-    return NextResponse.json({ success: true, id: solicitacao.id }, { status: 201 });
+      return NextResponse.json({ success: true, id: solicitacao.id }, { status: 201 });
+    } catch (err) {
+      console.error("[POST /api/portal/solicitar-vaga] Erro ao notificar:", err);
+      return NextResponse.json({ success: true, id: solicitacao.id }, { status: 201 });
+    }
   } catch (err) {
     console.error("[POST /api/portal/solicitar-vaga]", err);
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });

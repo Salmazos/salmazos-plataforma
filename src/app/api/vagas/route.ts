@@ -7,6 +7,7 @@ import { parseBody, vagaCreateSchema } from "@/lib/schemas";
 import { generateUniqueSlug } from "@/lib/slug";
 import { exigirContextoUnidade, podeVerUnidade, resolverUnidadeCliente } from "@/lib/unidadeAuth";
 import { analistaAtendeUnidade } from "@/lib/notifyAllAnalysts";
+import { resolverAvisoVaga, gravarSinoAvisoVaga } from "@/lib/avisosVagas";
 
 export async function GET(request: NextRequest) {
   const { ctx, erro } = await exigirContextoUnidade();
@@ -147,14 +148,6 @@ export async function POST(request: NextRequest) {
         avaliacao_psicologica: "Avaliação Psicológica",
       };
       const svcAfter = createServiceClient();
-      // Só a equipe da unidade da vaga (+ sócios com acesso a todas) recebe.
-      const { data: analistasTodos } = await svcAfter
-        .from("analistas_perfil")
-        .select("email, nome_completo, unidade_id, acesso_todas_unidades")
-        .eq("ativo", true);
-      const analistas = (analistasTodos ?? []).filter((a) => analistaAtendeUnidade(a, vagaUnidadeId));
-
-      if (!analistas.length) return;
 
       const vagaUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas/${vagaId}`;
       const template = getEmailTemplate("nova_vaga_criada", {
@@ -180,28 +173,61 @@ export async function POST(request: NextRequest) {
         taxaCancelamentoPercentual: vagaTaxaCancelamentoPercentual,
       });
 
-      const destinatarios = analistas.filter((a) => a.email);
-      console.log(`[POST /api/vagas] Enviando para ${destinatarios.length} analistas`);
-      await Promise.all(
-        destinatarios.map((a) =>
-          sendEmail({
-            to: a.email,
-            subject: template.subject,
-            html: template.html,
-            tipo: "nova_vaga_criada",
-            vaga_id: vagaId,
-          })
-        )
-      ).catch((err) => console.error("[POST /api/vagas] Erro ao notificar analistas:", err));
+      try {
+        const resolvido = await resolverAvisoVaga("vaga_criada", vagaUnidadeId);
 
-      const { error: errNotifSino } = await svcAfter.from("notificacoes_analista").insert({
-        tipo: "vaga_criada",
-        titulo: `${vagaConfidencial ? "🔴 [CONFIDENCIAL] " : ""}Nova vaga criada: ${vagaTitulo}`,
-        mensagem: `Vaga "${vagaTitulo}" (${TIPO_LABELS[vagaTipo] ?? vagaTipo}) foi criada e está aberta.`,
-        vaga_id: vagaId,
-        unidade_id: vagaUnidadeId,
-      });
-      if (errNotifSino) console.error("[POST /api/vagas] Erro ao registrar notificação de sino:", errNotifSino.message);
+        if (resolvido.email.modo === "desligado") {
+          console.log("[POST /api/vagas] E-mail de vaga_criada está desligado");
+        } else if (resolvido.email.modo === "configurado" && resolvido.email.destinatarios) {
+          const dests = resolvido.email.destinatarios.filter((d) => d.email);
+          console.log(`[POST /api/vagas] Enviando para ${dests.length} destinatários configurados`);
+          await Promise.all(
+            dests.map((d) =>
+              sendEmail({
+                to: d.email,
+                subject: template.subject,
+                html: template.html,
+                tipo: "nova_vaga_criada",
+                vaga_id: vagaId,
+              })
+            )
+          ).catch((err) => console.error("[POST /api/vagas] Erro ao notificar destinatários:", err));
+        } else {
+          const { data: analistasTodos } = await svcAfter
+            .from("analistas_perfil")
+            .select("email, nome_completo, unidade_id, acesso_todas_unidades")
+            .eq("ativo", true);
+          const analistas = (analistasTodos ?? []).filter((a) => analistaAtendeUnidade(a, vagaUnidadeId));
+
+          if (analistas.length) {
+            const destinatarios = analistas.filter((a) => a.email);
+            console.log(`[POST /api/vagas] Enviando para ${destinatarios.length} analistas (modo legado)`);
+            await Promise.all(
+              destinatarios.map((a) =>
+                sendEmail({
+                  to: a.email,
+                  subject: template.subject,
+                  html: template.html,
+                  tipo: "nova_vaga_criada",
+                  vaga_id: vagaId,
+                })
+              )
+            ).catch((err) => console.error("[POST /api/vagas] Erro ao notificar analistas:", err));
+          }
+        }
+
+        await gravarSinoAvisoVaga({
+          evento: "vaga_criada",
+          unidadeId: vagaUnidadeId,
+          tipo: "vaga_criada",
+          titulo: `${vagaConfidencial ? "🔴 [CONFIDENCIAL] " : ""}Nova vaga criada: ${vagaTitulo}`,
+          mensagem: `Vaga "${vagaTitulo}" (${TIPO_LABELS[vagaTipo] ?? vagaTipo}) foi criada e está aberta.`,
+          vagaId,
+          resolvido,
+        });
+      } catch (err) {
+        console.error("[POST /api/vagas] Erro ao notificar:", err);
+      }
     });
 
     return NextResponse.json({ data }, { status: 201 });

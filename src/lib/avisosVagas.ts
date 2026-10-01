@@ -115,6 +115,7 @@ interface GravarSinoAvisoVagaOpts {
   mensagem: string;
   vagaId?: string | null;
   solicitacaoVagaId?: string | null;
+  resolvido?: ResolverAvisoVagaResult;
 }
 
 export async function gravarSinoAvisoVaga({
@@ -125,9 +126,10 @@ export async function gravarSinoAvisoVaga({
   mensagem,
   vagaId,
   solicitacaoVagaId,
+  resolvido,
 }: GravarSinoAvisoVagaOpts): Promise<void> {
   const supabase = createServiceClient();
-  const modo = await resolverAvisoVaga(evento, unidadeId);
+  const modo = resolvido ?? await resolverAvisoVaga(evento, unidadeId);
 
   if (modo.plataforma.modo === "legado") {
     // Modo legado: uma linha com user_id nulo e unidade_id
