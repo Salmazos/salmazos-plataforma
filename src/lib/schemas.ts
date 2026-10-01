@@ -1352,7 +1352,7 @@ export const rescisaoAvisoPlataformaCreateSchema = z.object({
 export const avisoVagaEmailCreateSchema = z.object({
   evento: z.enum(["vaga_criada", "solicitacao_vaga", "vaga_fechada", "vaga_cancelada", "vaga_reativada"]),
   nome: z.string().trim().min(1, "Nome é obrigatório"),
-  email: z.string().trim().email("E-mail inválido"),
+  email: z.string().trim().email("Email inválido"),
 });
 
 export const avisoVagaEmailUpdateSchema = z.object({
