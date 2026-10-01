@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { PlusCircle, UserPlus } from "lucide-react";
+import { PlusCircle, UserPlus, ClipboardList } from "lucide-react";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import SidebarPortal from "@/components/SidebarPortal";
 import PopupVencimentoContratoMotPortal from "@/components/PopupVencimentoContratoMotPortal";
@@ -75,7 +75,7 @@ export default async function PortalAppLayout({
               mesmo destino, visível em toda página. "Indicar Candidato" (candidato que o
               cliente já escolheu por fora, só pra registro) entrou do lado, mesmo tratamento
               — pedido do Olver de não virar item de menu lateral (set/2026). */}
-          <div className="flex justify-center gap-3 mb-6">
+          <div className="flex justify-center gap-3 mb-6 flex-wrap">
             <Link
               href="/portal/solicitar-vaga"
               className="inline-flex items-center gap-1.5 transition-opacity hover:opacity-90"
@@ -107,6 +107,23 @@ export default async function PortalAppLayout({
             >
               <UserPlus size={16} />
               Indicar Candidato
+            </Link>
+            <Link
+              href="/portal/minhas-indicacoes"
+              className="inline-flex items-center gap-1.5 transition-opacity hover:opacity-90"
+              style={{
+                backgroundColor: "#fff",
+                color: "#000",
+                border: "1px solid #000",
+                fontWeight: 700,
+                padding: "10px 24px",
+                borderRadius: 8,
+                textDecoration: "none",
+                fontSize: 14,
+              }}
+            >
+              <ClipboardList size={16} />
+              Minhas Indicações
             </Link>
           </div>
 
