@@ -85,6 +85,7 @@ export default async function PainelPage() {
     vaga_tipo_servico: cv.vagas.tipo_servico,
     vaga_confidencial: cv.vagas.confidencial,
     vaga_unidade_id: cv.vagas.unidade_id,
+    encaminhamento_id: agendamentoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`)?.id ?? null,
     encaminhamento_tipo_servico: tipoServicoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`) ?? null,
     encaminhamento_status: agendamentoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`)?.status ?? null,
     encaminhamento_data_entrevista: agendamentoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`)?.data_entrevista ?? null,

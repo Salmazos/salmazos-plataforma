@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, encaminhamentoUpdateSchema } from "@/lib/schemas";
 import { exigirAcessoEncaminhamento } from "@/lib/unidadeAuth";
 import { normalizarDataEntrevista } from "@/lib/dataEntrevista";
@@ -13,6 +13,10 @@ export async function PATCH(
     const { id } = await params;
     const bloqueio = await exigirAcessoEncaminhamento(id);
     if (bloqueio) return bloqueio;
+
+    const authClient = await createClient();
+    const { data: { user } } = await authClient.auth.getUser();
+
     const body = await request.json();
     const parsed = parseBody(encaminhamentoUpdateSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
@@ -49,24 +53,30 @@ export async function PATCH(
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-    if (dataEntrevistaNova !== null && dataEntrevistaAnterior !== dataEntrevistaNova) {
-      const formatarData = (iso: string | null): string => {
-        if (!iso) return "—";
-        const date = new Date(iso);
-        return date.toLocaleDateString("pt-BR");
-      };
+    if (dataEntrevistaNova !== null) {
+      const tempoAnterior = dataEntrevistaAnterior ? new Date(dataEntrevistaAnterior).getTime() : null;
+      const tempoNovo = new Date(dataEntrevistaNova).getTime();
+      const mudou = tempoAnterior !== tempoNovo;
 
-      await registrarHistorico({
-        tipo: "encaminhamento",
-        candidato_id: data.candidato_id,
-        descricao: `Entrevista com o cliente remarcada de ${formatarData(dataEntrevistaAnterior)} para ${formatarData(dataEntrevistaNova)}`,
-        metadata: {
-          remarcacao: true,
-          data_entrevista: dataEntrevistaNova,
-          data_entrevista_anterior: dataEntrevistaAnterior,
-        },
-        criado_por: "sistema",
-      });
+      if (mudou) {
+        const formatarData = (iso: string | null): string => {
+          if (!iso) return "—";
+          const date = new Date(iso);
+          return date.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+        };
+
+        await registrarHistorico({
+          tipo: "encaminhamento",
+          candidato_id: data.candidato_id,
+          descricao: `Entrevista com o cliente remarcada de ${formatarData(dataEntrevistaAnterior)} para ${formatarData(dataEntrevistaNova)}`,
+          metadata: {
+            remarcacao: true,
+            data_entrevista: dataEntrevistaNova,
+            data_entrevista_anterior: dataEntrevistaAnterior,
+          },
+          criado_por: user?.email ?? null,
+        });
+      }
     }
 
     return NextResponse.json({ data });
