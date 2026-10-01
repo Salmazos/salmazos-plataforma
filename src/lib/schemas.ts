@@ -1346,3 +1346,25 @@ export const contaPagarHortolandiaUpdateSchema = contaPagarHortolandiaBase.parti
 export const rescisaoAvisoPlataformaCreateSchema = z.object({
   usuario_id: z.string().uuid(),
 });
+
+// ── Avisos de Vagas ──────────────────────────────────────────────────────────
+
+export const avisoVagaEmailCreateSchema = z.object({
+  evento: z.enum(["vaga_criada", "solicitacao_vaga", "vaga_fechada", "vaga_cancelada", "vaga_reativada"]),
+  nome: z.string().trim().min(1, "Nome é obrigatório"),
+  email: z.string().trim().email("E-mail inválido"),
+});
+
+export const avisoVagaEmailUpdateSchema = z.object({
+  ativo: z.boolean(),
+});
+
+export const avisoVagaEmailAtivoSchema = z.object({
+  evento: z.enum(["vaga_criada", "solicitacao_vaga", "vaga_fechada", "vaga_cancelada", "vaga_reativada"]),
+  email_ativo: z.boolean(),
+});
+
+export const avisoVagaPlataformaCreateSchema = z.object({
+  evento: z.enum(["vaga_criada", "solicitacao_vaga", "vaga_fechada", "vaga_cancelada", "vaga_reativada"]),
+  usuario_id: z.string().uuid(),
+});
