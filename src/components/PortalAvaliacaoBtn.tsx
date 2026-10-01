@@ -31,7 +31,7 @@ const TURNO_OPCOES = [
 const TURNO_OPCOES_MOT = [
   "Turno A", "Turno B", "Turno C", "Turno D", "Horário Administrativo", "Outro",
 ];
-const ESCALA_OPCOES_MOT = ["6x1", "6x2", "12x36", "Fixa", "Outro"];
+const ESCALA_OPCOES_MOT = ["6x1", "6x2", "12x36 - Dia", "12x36 - Noite", "Fixa", "Outro"];
 
 // "06:00" (input type=time) -> "06h00", pro texto final salvo em admissao_horario
 function formatarHoraTexto(hhmm: string): string {

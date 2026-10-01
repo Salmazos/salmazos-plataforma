@@ -20,7 +20,7 @@ const TURNO_OPCOES = [
   "Horário Administrativo", "Escala 6x1", "Escala 6x2", "Escala Fixa", "Outro",
 ];
 const TURNO_OPCOES_MOT = ["Turno A", "Turno B", "Turno C", "Turno D", "Horário Administrativo", "Outro"];
-const ESCALA_OPCOES_MOT = ["6x1", "6x2", "12x36", "Fixa", "Outro"];
+const ESCALA_OPCOES_MOT = ["6x1", "6x2", "12x36 - Dia", "12x36 - Noite", "Fixa", "Outro"];
 
 const labelStyle: React.CSSProperties = {
   fontSize: 11, fontWeight: 700, color: "#6B7280",
