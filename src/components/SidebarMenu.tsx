@@ -111,7 +111,7 @@ interface MenuLeafDef {
 
 interface MenuItemDef extends MenuLeafDef {
   separator?: boolean;
-  submenu?: MenuLeafDef[];
+  submenu?: (MenuLeafDef & { submenu?: MenuLeafDef[] })[];
 }
 
 const menuItems: MenuItemDef[] = [
@@ -184,11 +184,19 @@ const menuItems: MenuItemDef[] = [
     submenu: [
       { label: "Config. SLA", href: "/painel/sla-config", icon: Clock, requireSuperuser: true },
       { label: "Log de E-mails", href: "/painel/email-logs", icon: Mail, requireSuperuser: true },
-      { label: "Avisos de Rescisão", href: "/painel/rescisoes-avisos-config", icon: Megaphone, requireSuperuser: true },
-      { label: "Avisos de Cobrança R&S", href: "/painel/cobranca-rs-avisos-config", icon: Megaphone, requireSuperuser: true },
+      {
+        label: "Avisos",
+        href: "/painel/avisos",
+        icon: Megaphone,
+        requireSuperuser: true,
+        submenu: [
+          { label: "Avisos de Rescisão", href: "/painel/rescisoes-avisos-config", icon: Megaphone, requireSuperuser: true },
+          { label: "Avisos de Cobrança R&S", href: "/painel/cobranca-rs-avisos-config", icon: Megaphone, requireSuperuser: true },
+          { label: "Avisos de ASO Periódico", href: "/painel/funcionario-aso-avisos-config", icon: Stethoscope, requireSuperuser: true },
+        ],
+      },
       { label: "Acesso à Cobrança R&S", href: "/painel/cobranca-rs-acesso-config", icon: Banknote, requireSuperuser: true },
       { label: "Notificações de Cobrança R&S", href: "/painel/configuracoes/cobranca-rs-notificacao-enviada", icon: Megaphone, requireSuperuser: true },
-      { label: "Avisos de ASO Periódico", href: "/painel/funcionario-aso-avisos-config", icon: Stethoscope, requireSuperuser: true },
       { label: "Configuração de Supervisão", href: "/painel/supervisao-config", icon: ShieldCheck, requireSuperuser: true },
       { label: "Usuários", href: "/painel/usuarios", icon: Users, requireSuperuser: true },
       { label: "Audit Logs", href: "/painel/audit-logs", icon: ShieldCheck, requireSuperuser: true },
@@ -235,6 +243,8 @@ export default function SidebarMenu({
   // Comportamento de sanfona: só um grupo aberto por vez (href do grupo, ou null se nenhum).
   // Não persiste em localStorage de propósito: reseta fechado a cada reload.
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  // Subgrupos podem estar abertos sem limite (rastreamento por href do subgrupo).
+  const [openSubgroups, setOpenSubgroups] = useState<Set<string>>(new Set());
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -252,6 +262,35 @@ export default function SidebarMenu({
 
   useEffect(() => {
     setMobileOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    // Auto-expandir grupos e subgrupos quando a rota atual está dentro deles
+    let newOpenGroup: string | null = null;
+    const newOpenSubgroups = new Set<string>();
+
+    menuItems.forEach((item) => {
+      if (item.submenu) {
+        const hasActiveSubmenuItem = item.submenu.some((sub) => {
+          if (sub.submenu) {
+            const hasActiveSubsubmenuItem = sub.submenu.some((ss) => hrefMatches(ss.href));
+            if (hasActiveSubsubmenuItem) {
+              newOpenSubgroups.add(sub.href);
+              return true;
+            }
+            return false;
+          }
+          return hrefMatches(sub.href);
+        });
+
+        if (hasActiveSubmenuItem) {
+          newOpenGroup = item.href;
+        }
+      }
+    });
+
+    setOpenGroup(newOpenGroup);
+    setOpenSubgroups(newOpenSubgroups);
   }, [pathname]);
 
   const handleLogout = async () => {
@@ -273,9 +312,19 @@ export default function SidebarMenu({
 
   function isActive(href: string, submenu?: MenuItemDef["submenu"]) {
     if (submenu) {
-      return submenu.some((s) => hrefMatches(s.href));
+      return submenu.some((s) => {
+        if (s.submenu) {
+          return s.submenu.some((ss) => hrefMatches(ss.href));
+        }
+        return hrefMatches(s.href);
+      });
     }
     return hrefMatches(href);
+  }
+
+  function isSubgroupActive(subgroupItem: MenuLeafDef & { submenu?: MenuLeafDef[] }) {
+    if (!subgroupItem.submenu) return false;
+    return subgroupItem.submenu.some((s) => hrefMatches(s.href));
   }
 
   const isSuperuser = role === "superuser";
@@ -500,7 +549,95 @@ export default function SidebarMenu({
                       <div className="ml-4 mt-1 flex flex-col gap-0.5">
                         {item.submenu!.map((sub) => {
                           const SubIcon = sub.icon;
-                          const subActive = hrefMatches(sub.href);
+                          const subActive = sub.submenu ? isSubgroupActive(sub) : hrefMatches(sub.href);
+                          const isSubgroup = !!sub.submenu;
+                          const subgroupOpen = isSubgroup && openSubgroups.has(sub.href);
+
+                          if (isSubgroup) {
+                            // Renderizar subgrupo recolhível
+                            return (
+                              <div key={sub.href}>
+                                <button
+                                  onClick={() => {
+                                    setOpenSubgroups((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(sub.href)) {
+                                        next.delete(sub.href);
+                                      } else {
+                                        next.add(sub.href);
+                                      }
+                                      return next;
+                                    });
+                                  }}
+                                  className="group relative flex items-center w-full rounded-lg transition-colors"
+                                  style={{
+                                    padding: "6px 10px",
+                                    fontSize: 12,
+                                    fontWeight: 500,
+                                    background: subActive ? "#FFD700" : "transparent",
+                                    color: subActive ? "#000" : "rgba(255,255,255,0.7)",
+                                    border: "none",
+                                    cursor: "pointer",
+                                    justifyContent: "space-between",
+                                    gap: 6,
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!subActive) e.currentTarget.style.background = "#1a1a1a";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!subActive) e.currentTarget.style.background = "transparent";
+                                  }}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <SubIcon size={14} />
+                                    {sub.label}
+                                  </div>
+                                  <ChevronDown
+                                    size={12}
+                                    style={{
+                                      transition: "transform 0.2s",
+                                      transform: subgroupOpen ? "rotate(180deg)" : "rotate(0)",
+                                      flexShrink: 0,
+                                    }}
+                                  />
+                                </button>
+                                {subgroupOpen && (
+                                  <div className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l border-gray-600 pl-2">
+                                    {sub.submenu!.map((item) => {
+                                      const ItemIcon = item.icon;
+                                      const itemActive = hrefMatches(item.href);
+                                      return (
+                                        <Link
+                                          key={item.href}
+                                          href={item.href}
+                                          className="flex items-center gap-2 rounded-lg transition-colors"
+                                          style={{
+                                            padding: "4px 8px",
+                                            fontSize: 11,
+                                            fontWeight: 500,
+                                            background: itemActive ? "#FFD700" : "transparent",
+                                            color: itemActive ? "#000" : "rgba(255,255,255,0.6)",
+                                            textDecoration: "none",
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            if (!itemActive) e.currentTarget.style.background = "#1a1a1a";
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            if (!itemActive) e.currentTarget.style.background = "transparent";
+                                          }}
+                                        >
+                                          <ItemIcon size={12} />
+                                          {item.label}
+                                        </Link>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          // Renderizar item normal do submenu
                           return (
                             <Link
                               key={sub.href}
