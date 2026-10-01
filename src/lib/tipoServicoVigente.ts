@@ -66,6 +66,7 @@ export async function resolverTipoServicoVigente(
 }
 
 interface EncaminhamentoAgendamentoRow {
+  id: string;
   candidato_id: string;
   vaga_id: string | null;
   status: string;
@@ -80,20 +81,20 @@ export async function mapEncaminhamentoAgendamentoPorCandidatura(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: SupabaseClient<any, any, any>,
   candidatoIds: string[]
-): Promise<Map<string, { status: string; data_entrevista: string | null }>> {
-  const map = new Map<string, { status: string; data_entrevista: string | null }>();
+): Promise<Map<string, { id: string; status: string; data_entrevista: string | null }>> {
+  const map = new Map<string, { id: string; status: string; data_entrevista: string | null }>();
   if (candidatoIds.length === 0) return map;
 
   const { data } = await supabase
     .from("encaminhamentos")
-    .select("candidato_id, vaga_id, status, data_entrevista, created_at")
+    .select("id, candidato_id, vaga_id, status, data_entrevista, created_at")
     .in("candidato_id", candidatoIds)
     .order("created_at", { ascending: false });
 
   ((data ?? []) as EncaminhamentoAgendamentoRow[]).forEach((enc) => {
     if (!enc.vaga_id) return;
     const key = `${enc.candidato_id}|${enc.vaga_id}`;
-    if (!map.has(key)) map.set(key, { status: enc.status, data_entrevista: enc.data_entrevista });
+    if (!map.has(key)) map.set(key, { id: enc.id, status: enc.status, data_entrevista: enc.data_entrevista });
   });
 
   return map;

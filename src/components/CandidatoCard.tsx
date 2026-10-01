@@ -12,6 +12,8 @@ import { MOTIVOS_REPROVACAO_INTERNA, MOTIVOS_REPROVACAO_CLIENTE } from "@/lib/mo
 import { getProximasEtapas, getComportamentoEtapa, getEtapaLabel, getEtapaAnterior } from "@/lib/etapasCandidatura";
 import { useUsuarioLogado, unidadeDaTela } from "./UsuarioLogadoProvider";
 import { nomesCompletosDaUnidade, opcoesResponsavel } from "@/lib/responsaveis";
+import { Pencil } from "lucide-react";
+import { horaEntrevistaReal } from "@/lib/horaEntrevista";
 
 type Analista = { id: string; nome_completo: string; email: string };
 
@@ -46,6 +48,11 @@ export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Prop
   const [modalEntrevistaSalmazos, setModalEntrevistaSalmazos] = useState(false);
   const usuario = useUsuarioLogado();
   const [modalMotivo, setModalMotivo] = useState<{ etapa: string; tipo: "motivo_interno" | "motivo_cliente" } | null>(null);
+  const [modalRemarcar, setModalRemarcar] = useState(false);
+  const [dataRemarcar, setDataRemarcar] = useState("");
+  const [horaRemarcar, setHoraRemarcar] = useState("");
+  const [salvarRemarcar, setSalvarRemarcar] = useState(false);
+  const [erroRemarcar, setErroRemarcar] = useState("");
 
   useEffect(() => {
     fetchAnalistas().then(setAnalistas);
@@ -142,9 +149,34 @@ export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Prop
             {card.etapa === "entrevista_cliente" && (
               <div className="mt-0.5">
                 {card.encaminhamento_data_entrevista ? (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                    {"📅"} {formatarData(card.encaminhamento_data_entrevista)}
-                  </span>
+                  <div className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                    <span>{"📅"} {formatarData(card.encaminhamento_data_entrevista)}</span>
+                    <button
+                      onClick={() => {
+                        const iso = card.encaminhamento_data_entrevista!;
+                        const date = new Date(iso);
+                        const dataBr = new Intl.DateTimeFormat("pt-BR", {
+                          timeZone: "America/Sao_Paulo",
+                          year: "numeric",
+                          month: "2-digit",
+                          day: "2-digit",
+                        }).format(date);
+                        const [dia, mes, ano] = dataBr.split("/");
+                        const dataFormatada = `${ano}-${mes}-${dia}`;
+                        setDataRemarcar(dataFormatada);
+
+                        const hora = horaEntrevistaReal(iso);
+                        setHoraRemarcar(hora ? hora.replace(":", "") : "");
+
+                        setErroRemarcar("");
+                        setModalRemarcar(true);
+                      }}
+                      title="Remarcar data"
+                      className="ml-1 p-0.5 hover:bg-blue-100 rounded transition-colors"
+                    >
+                      <Pencil size={10} />
+                    </button>
+                  </div>
                 ) : card.encaminhamento_status === "aguardando_agendamento_cliente" ? (
                   <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
                     {"⏳"} Aguardando agendamento do cliente
@@ -283,6 +315,106 @@ export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Prop
         onClose={() => setModalMotivo(null)}
         onConfirmar={handleConfirmarMotivo}
       />
+
+      {modalRemarcar && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={() => !salvarRemarcar && setModalRemarcar(false)}
+        >
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Remarcar entrevista com cliente</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Data *
+              </label>
+              <input
+                type="date"
+                value={dataRemarcar}
+                onChange={(e) => {
+                  setDataRemarcar(e.target.value);
+                  setErroRemarcar("");
+                }}
+                disabled={salvarRemarcar}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Hora (opcional)
+              </label>
+              <input
+                type="time"
+                value={horaRemarcar}
+                onChange={(e) => {
+                  setHoraRemarcar(e.target.value);
+                  setErroRemarcar("");
+                }}
+                disabled={salvarRemarcar}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              />
+              <p className="text-xs text-gray-500 mt-1">Se vazio, será preenchido com 12:00 (meio-dia)</p>
+            </div>
+            {erroRemarcar && (
+              <div className="mb-4 p-2 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-sm text-red-700">{erroRemarcar}</p>
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setModalRemarcar(false)}
+                disabled={salvarRemarcar}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  if (!dataRemarcar) {
+                    setErroRemarcar("Por favor, selecione uma data");
+                    return;
+                  }
+                  if (!card.encaminhamento_id) {
+                    setErroRemarcar("Encaminhamento não encontrado");
+                    return;
+                  }
+                  setSalvarRemarcar(true);
+                  setErroRemarcar("");
+                  try {
+                    let novaData: string;
+                    if (horaRemarcar) {
+                      novaData = `${dataRemarcar}T${horaRemarcar}:00-03:00`;
+                    } else {
+                      novaData = dataRemarcar;
+                    }
+
+                    const res = await fetch(`/api/encaminhamentos/${card.encaminhamento_id}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ data_entrevista: novaData }),
+                    });
+                    if (!res.ok) {
+                      const json = await res.json().catch(() => ({}));
+                      setErroRemarcar(json.error || "Erro ao remarcar entrevista");
+                      return;
+                    }
+                    setModalRemarcar(false);
+                    router.refresh();
+                  } catch (err) {
+                    setErroRemarcar(err instanceof Error ? err.message : "Erro de conexão ao remarcar entrevista");
+                  } finally {
+                    setSalvarRemarcar(false);
+                  }
+                }}
+                disabled={salvarRemarcar}
+                className="flex-1 px-4 py-2 bg-black text-white rounded-md text-sm font-medium hover:bg-gray-900 disabled:opacity-50"
+              >
+                {salvarRemarcar ? "Salvando..." : "Salvar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
