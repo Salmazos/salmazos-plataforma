@@ -44,17 +44,16 @@ const EVENTOS_CONFIG = [
 
 export default function AvisosVagasConfigClient({ configsPorEvento, usuarios }: Props) {
   const [abaAtiva, setAbaAtiva] = useState<string>("vaga_criada");
-  const [configs, setConfigs] = useState(configsPorEvento);
 
   const [emailAtivo, setEmailAtivo] = useState<Record<string, boolean>>(
-    Object.fromEntries(EVENTOS_CONFIG.map(({ id }) => [id, configs[id]?.email_ativo ?? true]))
+    Object.fromEntries(EVENTOS_CONFIG.map(({ id }) => [id, configsPorEvento[id]?.email_ativo ?? true]))
   );
   const [salvandoEmailAtivo, setSalvandoEmailAtivo] = useState<Record<string, boolean>>({});
   const [emailDestinatarios, setEmailDestinatarios] = useState<Record<string, EmailDestinatario[]>>(
-    Object.fromEntries(EVENTOS_CONFIG.map(({ id }) => [id, configs[id]?.email_destinatarios ?? []]))
+    Object.fromEntries(EVENTOS_CONFIG.map(({ id }) => [id, configsPorEvento[id]?.email_destinatarios ?? []]))
   );
   const [plataformaDestinatarios, setPlataformaDestinatarios] = useState<Record<string, PlataformaDestinatario[]>>(
-    Object.fromEntries(EVENTOS_CONFIG.map(({ id }) => [id, configs[id]?.plataforma_destinatarios ?? []]))
+    Object.fromEntries(EVENTOS_CONFIG.map(({ id }) => [id, configsPorEvento[id]?.plataforma_destinatarios ?? []]))
   );
 
   const [novoNome, setNovoNome] = useState("");
@@ -65,9 +64,10 @@ export default function AvisosVagasConfigClient({ configsPorEvento, usuarios }: 
   const [processandoUsuarioId, setProcessandoUsuarioId] = useState<string | null>(null);
   const [erroPlataforma, setErroPlataforma] = useState("");
 
-  const config = configs[abaAtiva] || { email_ativo: true, email_destinatarios: [], plataforma_destinatarios: [] };
-  const semEmailAtivo = emailAtivo[abaAtiva] && emailDestinatarios[abaAtiva]?.every((d) => !d.ativo);
-  const semPlataforma = plataformaDestinatarios[abaAtiva]?.length === 0;
+  const deveAvisarEmailInativo =
+    emailAtivo[abaAtiva] &&
+    emailDestinatarios[abaAtiva]?.length > 0 &&
+    emailDestinatarios[abaAtiva]?.every((d) => !d.ativo);
 
   // ── E-mail ───────────────────────────────────────────────────────────────
 
@@ -135,6 +135,7 @@ export default function AvisosVagasConfigClient({ configsPorEvento, usuarios }: 
         ...prev,
         [abaAtiva]: (prev[abaAtiva] || []).map((d) => (d.id === id ? { ...d, ativo: !ativo } : d)),
       }));
+      setErroEmail("Não foi possível salvar. Tente novamente.");
     }
   };
 
@@ -153,6 +154,7 @@ export default function AvisosVagasConfigClient({ configsPorEvento, usuarios }: 
         ...prev,
         [abaAtiva]: anterior,
       }));
+      setErroEmail("Não foi possível salvar. Tente novamente.");
     }
   };
 
@@ -231,21 +233,14 @@ export default function AvisosVagasConfigClient({ configsPorEvento, usuarios }: 
             Sem destinatários configurados, o aviso segue o comportamento padrão (todos os analistas da unidade).
           </p>
 
-          {(semEmailAtivo || semPlataforma) && (
+          {deveAvisarEmailInativo && (
             <div
               className="mb-5"
               style={{ background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 10, padding: "12px 16px" }}
             >
-              {semEmailAtivo && (
-                <p style={{ margin: 0, fontSize: 13, color: "#92400E", fontWeight: 600 }}>
-                  ⚠️ Nenhum destinatário de e-mail ativo — os avisos não serão enviados por e-mail até que alguém seja adicionado ou reativado.
-                </p>
-              )}
-              {semPlataforma && (
-                <p style={{ margin: semEmailAtivo ? "6px 0 0" : 0, fontSize: 13, color: "#92400E", fontWeight: 600 }}>
-                  ⚠️ Nenhum destinatário de plataforma — o sino não vai avisar ninguém até que alguém seja marcado abaixo.
-                </p>
-              )}
+              <p style={{ margin: 0, fontSize: 13, color: "#92400E", fontWeight: 600 }}>
+                ℹ️ Todos os destinatários de e-mail estão inativos — enquanto nenhum estiver ativo, o aviso por e-mail segue o padrão (todos os analistas da unidade).
+              </p>
             </div>
           )}
 
@@ -353,7 +348,7 @@ export default function AvisosVagasConfigClient({ configsPorEvento, usuarios }: 
           {/* ── Plataforma ─────────────────────────────────────────────────────── */}
           <div>
             <p className="section-title mb-1">Destinatários de plataforma (sino + pop-up de login)</p>
-            <p className="text-xs text-gray-400 mb-4">Precisa ser usuário cadastrado no painel. Marque para incluir, desmarque para remover.</p>
+            <p className="text-xs text-gray-400 mb-4">Precisa ser usuário cadastrado no painel. Marque para incluir, desmarque para remover. Cada pessoa marcada só recebe os avisos das vagas da unidade que ela atende (ou de todas, se tiver acesso a todas as unidades).</p>
 
             {usuarios.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4">Nenhum usuário ativo encontrado.</p>
