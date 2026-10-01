@@ -204,15 +204,21 @@ export async function POST(request: NextRequest) {
     try {
       const resolvido = await resolverAvisoVaga("solicitacao_vaga", unidadeId);
 
-      await gravarSinoAvisoVaga({
-        evento: "solicitacao_vaga",
-        unidadeId,
-        tipo: "nova_solicitacao_vaga",
-        titulo: confidencial ? "🔴 Nova solicitação de vaga (confidencial)" : "Nova solicitação de vaga",
-        mensagem: `${clienteNome} solicitou ${body.num_posicoes || 1}x ${body.cargo}`,
-        solicitacaoVagaId: solicitacao.id,
-        resolvido,
-      });
+      try {
+        if (resolvido.plataforma.modo !== "legado" || (analistas && analistas.length > 0)) {
+          await gravarSinoAvisoVaga({
+            evento: "solicitacao_vaga",
+            unidadeId,
+            tipo: "nova_solicitacao_vaga",
+            titulo: confidencial ? "🔴 Nova solicitação de vaga (confidencial)" : "Nova solicitação de vaga",
+            mensagem: `${clienteNome} solicitou ${body.num_posicoes || 1}x ${body.cargo}`,
+            solicitacaoVagaId: solicitacao.id,
+            resolvido,
+          });
+        }
+      } catch (err) {
+        console.error("[POST /api/portal/solicitar-vaga] Erro ao gravar sino:", err);
+      }
 
       let emailResult = { attempted: 0, succeeded: 0, failed: 0 };
 
@@ -248,8 +254,10 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      if (emailResult.succeeded === 0 && emailResult.attempted > 0) {
-        const motivo = `${emailResult.failed}/${emailResult.attempted} envio(s) de e-mail falharam`;
+      if (resolvido.email.modo !== "desligado" && emailResult.succeeded === 0) {
+        const motivo = emailResult.attempted === 0
+          ? "nenhum analista com e-mail cadastrado para notificar"
+          : `${emailResult.failed}/${emailResult.attempted} envio(s) de e-mail falharam`;
         console.error(
           `[POST /api/portal/solicitar-vaga] Notificação por e-mail NÃO foi entregue a ninguém para solicitacao_id=${solicitacao.id} (${motivo}).`
         );
