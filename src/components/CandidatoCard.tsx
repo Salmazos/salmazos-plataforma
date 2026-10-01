@@ -322,7 +322,7 @@ export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Prop
           style={{ background: "rgba(0,0,0,0.6)" }}
           onClick={() => !salvarRemarcar && setModalRemarcar(false)}
         >
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-gray-900 mb-4">Remarcar entrevista com cliente</h3>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
