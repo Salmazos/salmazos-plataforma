@@ -176,32 +176,81 @@ export async function POST(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "A vaga desta indicação não está mais aberta." }, { status: 409 });
     }
 
-    const cpf = `TEMP-${Date.now()}-${gerarSuffixoAleatorio()}`;
     const nowIso = new Date().toISOString();
+    let candidato: { id: string };
+    let vinculadoAoCandidatoExistente = false;
 
-    const { data: candidato, error: candidatoErr } = await service
-      .from("candidatos")
-      .insert({
-        nome_completo: sol.candidato_nome,
-        cpf,
-        telefone: sol.candidato_telefone,
-        email: "",
-        cidade: vaga.cidade ?? "",
-        estado: vaga.estado ?? "",
-        cargo_pretendido: vaga.titulo,
-        tempo_experiencia: "Sem experiência",
-        turno_disponivel: "Flexível",
-        curriculo_url: sol.curriculo_url ?? null,
-        origem: "indicacao_direta_cliente",
-        etapa_kanban: "aprovado_cliente",
-        responsavel: usuarioNome || null,
-      })
-      .select("id")
-      .single();
+    // Se candidato_existente_id foi informado, usar o candidato existente
+    if (parsed.data.candidato_existente_id) {
+      const { data: candExistente } = await service
+        .from("candidatos")
+        .select("id, etapa_kanban")
+        .eq("id", parsed.data.candidato_existente_id)
+        .maybeSingle();
 
-    if (candidatoErr || !candidato) {
-      console.error("[decisao indicacao] Erro ao criar candidato:", candidatoErr);
-      return NextResponse.json({ error: "Não foi possível criar o candidato." }, { status: 400 });
+      if (!candExistente) {
+        return NextResponse.json({ error: "Candidato existente não encontrado." }, { status: 404 });
+      }
+
+      candidato = candExistente;
+      vinculadoAoCandidatoExistente = true;
+
+      // Validar que o candidato não tem candidatura ativa nesta mesma vaga
+      const { data: jaEmVaga, error: jaEmVagaErr } = await service
+        .from("candidatos_vagas")
+        .select("id")
+        .eq("candidato_id", candidato.id)
+        .eq("vaga_id", vaga.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (jaEmVagaErr) {
+        console.error("[decisao indicacao] Erro ao verificar se já está na vaga:", jaEmVagaErr);
+      }
+
+      if (jaEmVaga) {
+        await registrarAuditoria({
+          usuario_id: user.id,
+          usuario_nome: usuarioNome,
+          acao: "indicacao_candidato_erro_ja_candidatou_mesma_vaga",
+          entidade: "solicitacoes_indicacao_candidato",
+          entidade_id: id,
+          detalhes: { candidato_id: candidato.id, vaga_id: vaga.id, cliente: sol.cliente_nome },
+        });
+        return NextResponse.json({
+          error: "Este candidato já possui uma candidatura nesta mesma vaga.",
+        }, { status: 409 });
+      }
+    } else {
+      // Criar novo candidato (fluxo original)
+      const cpf = `TEMP-${Date.now()}-${gerarSuffixoAleatorio()}`;
+
+      const { data: candidatoNovo, error: candidatoErr } = await service
+        .from("candidatos")
+        .insert({
+          nome_completo: sol.candidato_nome,
+          cpf,
+          telefone: sol.candidato_telefone,
+          email: "",
+          cidade: vaga.cidade ?? "",
+          estado: vaga.estado ?? "",
+          cargo_pretendido: vaga.titulo,
+          tempo_experiencia: "Sem experiência",
+          turno_disponivel: "Flexível",
+          curriculo_url: sol.curriculo_url ?? null,
+          origem: "indicacao_direta_cliente",
+          etapa_kanban: "aprovado_cliente",
+          responsavel: usuarioNome || null,
+        })
+        .select("id")
+        .single();
+
+      if (candidatoErr || !candidatoNovo) {
+        console.error("[decisao indicacao] Erro ao criar candidato:", candidatoErr);
+        return NextResponse.json({ error: "Não foi possível criar o candidato." }, { status: 400 });
+      }
+
+      candidato = candidatoNovo;
     }
 
     const { data: candidatoVaga, error: cvErr } = await service
@@ -234,7 +283,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     if (cvErr || !candidatoVaga) {
       console.error("[decisao indicacao] Erro ao vincular candidato à vaga:", cvErr);
-      const reversao = await reverterCriados(service, { candidatoId: candidato.id });
+      const reversao = await reverterCriados(service, { ...(vinculadoAoCandidatoExistente ? {} : { candidatoId: candidato.id }) });
       if (!reversao.sucesso) {
         await registrarAuditoria({
           usuario_id: user.id,
@@ -280,7 +329,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       if (encErr || !encaminhamento) {
         console.error("[decisao indicacao] Erro ao criar encaminhamento:", encErr);
         const reversao = await reverterCriados(service, {
-          candidatoId: candidato.id,
+          ...(vinculadoAoCandidatoExistente ? {} : { candidatoId: candidato.id }),
           candidatoVagaId: candidatoVaga.id,
         });
 
@@ -334,7 +383,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (updateErr) {
       console.error("[decisao indicacao] Erro ao marcar indicação como aprovada:", updateErr);
       const reversao = await reverterCriados(service, {
-        candidatoId: candidato.id,
+        ...(vinculadoAoCandidatoExistente ? {} : { candidatoId: candidato.id }),
         candidatoVagaId: candidatoVaga.id,
         encaminhamentoId,
       });
@@ -373,7 +422,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     // Caso 2: Indicação já não está pendente (aprovada por outro analista)
     if (!aprovada) {
       const reversao = await reverterCriados(service, {
-        candidatoId: candidato.id,
+        ...(vinculadoAoCandidatoExistente ? {} : { candidatoId: candidato.id }),
         candidatoVagaId: candidatoVaga.id,
         encaminhamentoId,
       });
@@ -410,19 +459,27 @@ export async function POST(request: NextRequest, { params }: Params) {
 
     await registrarHistorico({
       candidato_id: candidato.id,
-      tipo: "cadastro",
-      descricao: `Candidato registrado por indicação direta de ${sol.cliente_nome ?? "cliente"} (${usuarioNome})`,
-      metadata: { origem: "indicacao_direta_cliente", vaga_id: vaga.id, solicitacao_id: id },
+      tipo: vinculadoAoCandidatoExistente ? "encaminhamento" : "cadastro",
+      descricao: vinculadoAoCandidatoExistente
+        ? `Candidato vinculado por indicação direta de ${sol.cliente_nome ?? "cliente"} (${usuarioNome})`
+        : `Candidato registrado por indicação direta de ${sol.cliente_nome ?? "cliente"} (${usuarioNome})`,
+      metadata: { origem: "indicacao_direta_cliente", vaga_id: vaga.id, solicitacao_id: id, vinculado_existente: vinculadoAoCandidatoExistente },
       criado_por: usuarioNome,
     });
 
     await registrarAuditoria({
       usuario_id: user.id,
       usuario_nome: usuarioNome,
-      acao: "indicacao_candidato_aprovada",
+      acao: vinculadoAoCandidatoExistente ? "indicacao_candidato_aprovada_vinculada" : "indicacao_candidato_aprovada",
       entidade: "solicitacoes_indicacao_candidato",
       entidade_id: id,
-      detalhes: { cliente: sol.cliente_nome, candidato_id: candidato.id, candidatos_vaga_id: candidatoVaga.id, vaga_id: vaga.id },
+      detalhes: {
+        cliente: sol.cliente_nome,
+        candidato_id: candidato.id,
+        candidatos_vaga_id: candidatoVaga.id,
+        vaga_id: vaga.id,
+        vinculado_candidato_existente: vinculadoAoCandidatoExistente,
+      },
     });
 
     // E-mail pro RH com os dados de admissão que o cliente já mandou — mesmo público que recebe
@@ -492,7 +549,11 @@ export async function POST(request: NextRequest, { params }: Params) {
       console.error("[decisao indicacao] Erro ao enviar e-mail pro RH:", emailErr);
     }
 
-    return NextResponse.json({ data: aprovada, candidato_id: candidato.id, candidatos_vaga_id: candidatoVaga.id });
+    return NextResponse.json({
+      data: aprovada,
+      candidato_id: candidato.id,
+      candidatos_vaga_id: candidatoVaga.id,
+    });
   } catch (err) {
     console.error("[POST /api/solicitacoes-indicacao-candidato/[id]/decisao]", err);
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });

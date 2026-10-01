@@ -42,6 +42,15 @@ interface Indicacao {
   [key: string]: unknown;
 }
 
+interface Duplicado {
+  candidato_id: string;
+  candidato_nome: string;
+  etapa_kanban: string;
+  criterio: string;
+  vaga_titulo?: string;
+  cliente_nome?: string;
+}
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
@@ -65,6 +74,29 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
   const [motivoRecusa, setMotivoRecusa] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [erro, setErro] = useState<{ id: string; msg: string } | null>(null);
+  const [duplicados, setDuplicados] = useState<Record<string, Duplicado[]>>({});
+  const [carregandoDuplicados, setCarregandoDuplicados] = useState<Set<string>>(new Set());
+  const [vincularPara, setVincularPara] = useState<{ indicacaoId: string; candidatoId: string } | null>(null);
+  const [confirmarCriarNovo, setConfirmarCriarNovo] = useState<string | null>(null);
+
+  const buscarDuplicados = async (indicacaoId: string) => {
+    setCarregandoDuplicados((prev) => new Set(prev).add(indicacaoId));
+    try {
+      const res = await fetch(`/api/solicitacoes-indicacao-candidato/buscar-duplicados?indicacao_id=${indicacaoId}`);
+      const json = await res.json();
+      if (res.ok && json.duplicados?.length > 0) {
+        setDuplicados((prev) => ({ ...prev, [indicacaoId]: json.duplicados }));
+      }
+    } catch (e) {
+      console.error("Erro ao buscar duplicados:", e);
+    } finally {
+      setCarregandoDuplicados((prev) => {
+        const next = new Set(prev);
+        next.delete(indicacaoId);
+        return next;
+      });
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -72,14 +104,25 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
     if (focoId) {
       fetch(`/api/solicitacoes-indicacao-candidato/${focoId}`)
         .then((r) => r.json())
-        .then((json) => setItems(json.data ? [json.data] : []))
+        .then((json) => {
+          if (json.data) {
+            setItems([json.data]);
+            buscarDuplicados(json.data.id);
+          } else {
+            setItems([]);
+          }
+        })
         .catch(() => setItems([]))
         .finally(() => setLoading(false));
       return;
     }
     fetch("/api/solicitacoes-indicacao-candidato")
       .then((r) => r.json())
-      .then((json) => setItems(json.data ?? []))
+      .then((json) => {
+        const data = json.data ?? [];
+        setItems(data);
+        data.forEach((item: Indicacao) => buscarDuplicados(item.id));
+      })
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
   }, [isOpen, focoId]);
@@ -91,15 +134,19 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
     setTimeout(() => setToast(""), 4000);
   };
 
-  const handleDecidir = async (id: string, acao: "aprovar" | "recusar") => {
+  const handleDecidir = async (id: string, acao: "aprovar" | "recusar", candidatoExistenteId?: string) => {
     if (acao === "recusar" && !motivoRecusa.trim()) return;
     setActionLoading(id);
     setErro(null);
     try {
+      const body = acao === "aprovar"
+        ? { acao, ...(candidatoExistenteId && { candidato_existente_id: candidatoExistenteId }) }
+        : { acao, motivo: motivoRecusa.trim() };
+
       const res = await fetch(`/api/solicitacoes-indicacao-candidato/${id}/decisao`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(acao === "aprovar" ? { acao } : { acao, motivo: motivoRecusa.trim() }),
+        body: JSON.stringify(body),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -109,9 +156,13 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
       setItems((prev) => prev.filter((it) => it.id !== id));
       setRecusandoId(null);
       setMotivoRecusa("");
+      setVincularPara(null);
+      setConfirmarCriarNovo(null);
       showToast(
         acao === "aprovar"
-          ? "Indicação aprovada — o candidato já está no Kanban em \"Aprovado pelo Cliente\"."
+          ? candidatoExistenteId
+            ? `Indicação aprovada e vinculada a ${json.candidato_id || "candidato"}. Confira o card no Kanban em Retorno Cliente.`
+            : "Indicação aprovada — o candidato já está no Kanban em \"Aprovado pelo Cliente\"."
           : "Indicação recusada."
       );
       if (acao === "aprovar") onAprovado();
@@ -212,6 +263,73 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                       <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{erro.msg}</p>
                     )}
 
+                    {(duplicados[it.id]?.length ?? 0) > 0 && !vincularPara && !confirmarCriarNovo && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                        <p className="text-xs font-semibold text-amber-900">
+                          ⚠️ Candidato(s) duplicado(s) encontrado(s)
+                        </p>
+                        {duplicados[it.id].map((dup) => (
+                          <div key={dup.candidato_id} className="text-xs text-amber-800 bg-white rounded px-2 py-1.5">
+                            <p className="font-medium">{dup.candidato_nome}</p>
+                            <p className="text-amber-600">
+                              Critério: {dup.criterio} · Etapa: {dup.etapa_kanban}
+                              {dup.vaga_titulo && ` · Última vaga: ${dup.vaga_titulo}`}
+                            </p>
+                            <button
+                              onClick={() => setVincularPara({ indicacaoId: it.id, candidatoId: dup.candidato_id })}
+                              className="text-xs text-blue-600 font-semibold border border-blue-300 rounded px-2 py-1 mt-1 hover:bg-blue-50"
+                            >
+                              Vincular a este
+                            </button>
+                          </div>
+                        ))}
+                        <div className="pt-2">
+                          <button
+                            onClick={() => setConfirmarCriarNovo(it.id)}
+                            className="text-xs text-gray-600 font-semibold border border-gray-300 rounded px-2 py-1 hover:bg-gray-50"
+                          >
+                            Criar novo mesmo assim
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {vincularPara?.indicacaoId === it.id && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex gap-2 items-center">
+                        <p className="text-xs text-blue-900 flex-1">
+                          ✓ Vinculando a: <strong>{duplicados[it.id]?.find((d) => d.candidato_id === vincularPara.candidatoId)?.candidato_nome || "..."}</strong>
+                        </p>
+                        <button
+                          onClick={() => setVincularPara(null)}
+                          className="text-xs text-blue-600 underline whitespace-nowrap"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    )}
+
+                    {confirmarCriarNovo === it.id && (
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 space-y-2">
+                        <p className="text-xs font-semibold text-orange-900">
+                          Tem certeza que deseja criar um novo candidato?
+                        </p>
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={() => setConfirmarCriarNovo(null)}
+                            className="text-xs text-gray-600 px-2 py-1"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={() => { setConfirmarCriarNovo(null); handleDecidir(it.id, "aprovar"); }}
+                            className="text-xs font-semibold text-white bg-orange-600 rounded px-3 py-1 hover:bg-orange-700"
+                          >
+                            Sim, criar novo
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {it.status === "pendente" && (
                       isRecusando ? (
                         <div className="space-y-2">
@@ -247,13 +365,23 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                           >
                             Recusar
                           </button>
-                          <button
-                            onClick={() => handleDecidir(it.id, "aprovar")}
-                            disabled={isLoading}
-                            className="text-xs font-semibold text-black bg-[#FFD700] rounded-lg px-3 py-1.5 hover:brightness-95 disabled:opacity-50"
-                          >
-                            {isLoading ? "Aprovando..." : "Aprovar e registrar candidato"}
-                          </button>
+                          {vincularPara?.indicacaoId === it.id ? (
+                            <button
+                              onClick={() => handleDecidir(it.id, "aprovar", vincularPara.candidatoId)}
+                              disabled={isLoading}
+                              className="text-xs font-semibold text-black bg-[#FFD700] rounded-lg px-3 py-1.5 hover:brightness-95 disabled:opacity-50"
+                            >
+                              {isLoading ? "Vinculando..." : "Confirmar vínculo"}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleDecidir(it.id, "aprovar")}
+                              disabled={isLoading}
+                              className="text-xs font-semibold text-black bg-[#FFD700] rounded-lg px-3 py-1.5 hover:brightness-95 disabled:opacity-50"
+                            >
+                              {isLoading ? "Aprovando..." : "Aprovar e registrar candidato"}
+                            </button>
+                          )}
                         </div>
                       )
                     )}
