@@ -16,7 +16,7 @@ function paraValores(r: RescisaoRow): ValoresRescisao {
     modalidade: r.modalidade,
     entrevistaDesligamento: r.entrevista_desligamento,
     funcionarioAssinou: r.funcionario_assinou,
-    valorRescisao: r.valor_rescisao ? String(r.valor_rescisao) : "",
+    valorRescisao: r.valor_rescisao !== null && r.valor_rescisao !== undefined ? String(r.valor_rescisao) : "",
     dataPagamentoRescisao: r.data_pagamento_rescisao,
     valorGuia: r.valor_guia ? String(r.valor_guia) : "",
     dataPagamentoGuia: r.data_pagamento_guia ?? "",

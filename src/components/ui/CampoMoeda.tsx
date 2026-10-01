@@ -9,6 +9,7 @@ interface CampoMoedaProps {
   className?: string;
   style?: React.CSSProperties;
   disabled?: boolean;
+  permitirZero?: boolean;
 }
 
 function paraCentavos(value: number | string | null | undefined): number {
@@ -21,13 +22,13 @@ function paraCentavos(value: number | string | null | undefined): number {
   return isNaN(num) ? 0 : Math.round(num * 100);
 }
 
-function centavosParaTexto(centavos: number): string {
-  if (!centavos) return "";
+function centavosParaTexto(centavos: number, permitirZero?: boolean): string {
+  if (!centavos && !(permitirZero && centavos === 0)) return "";
   return (centavos / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // Máscara estilo caixa registradora: dígitos entram pela direita, sempre 2 casas decimais.
-export default function CampoMoeda({ value, onChange, placeholder, className, style, disabled }: CampoMoedaProps) {
+export default function CampoMoeda({ value, onChange, placeholder, className, style, disabled, permitirZero }: CampoMoedaProps) {
   const [centavos, setCentavos] = useState<number>(() => paraCentavos(value));
   const ultimoValorExterno = useRef(value);
 
@@ -42,16 +43,28 @@ export default function CampoMoeda({ value, onChange, placeholder, className, st
     const digitos = e.target.value.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
     const novoCentavos = digitos ? parseInt(digitos, 10) : 0;
     setCentavos(novoCentavos);
-    const novoValor = novoCentavos / 100;
-    ultimoValorExterno.current = novoValor;
-    onChange(novoValor);
+
+    if (permitirZero) {
+      if (digitos === "") {
+        ultimoValorExterno.current = NaN;
+        onChange(NaN);
+      } else {
+        const novoValor = novoCentavos / 100;
+        ultimoValorExterno.current = novoValor;
+        onChange(novoValor);
+      }
+    } else {
+      const novoValor = novoCentavos / 100;
+      ultimoValorExterno.current = novoValor;
+      onChange(novoValor);
+    }
   };
 
   return (
     <input
       type="text"
       inputMode="decimal"
-      value={centavosParaTexto(centavos)}
+      value={centavosParaTexto(centavos, permitirZero)}
       onChange={handleChange}
       placeholder={placeholder}
       className={className}

@@ -32,6 +32,18 @@ const coerceNumberNullable = z.preprocess((val) => {
   return isNaN(n) ? val : n;
 }, z.number().nullable());
 
+const coerceNumberNonNegative = z.preprocess((val) => {
+  if (val === "" || val === null || val === undefined) return undefined;
+  const n = Number(val);
+  return isNaN(n) ? val : n;
+}, z.number().min(0, "Valor não pode ser negativo"));
+
+const coerceNumberNonNegativeNullable = z.preprocess((val) => {
+  if (val === "" || val === null || val === undefined) return null;
+  const n = Number(val);
+  return isNaN(n) ? val : n;
+}, z.number().min(0, "Valor não pode ser negativo").nullable());
+
 // ── Candidato ────────────────────────────────────────────────────────────────
 
 export const candidatoCreateSchema = z.object({
@@ -1142,12 +1154,12 @@ export const rescisaoCreateSchema = z.object({
   modalidade: z.enum(["pedido_demissao", "desligamento_pela_empresa", "efetivado"]),
   entrevista_desligamento: z.boolean().optional().default(false),
   funcionario_assinou: z.boolean().optional().default(false),
-  valor_rescisao: coerceNumber,
+  valor_rescisao: coerceNumberNonNegative,
   data_pagamento_rescisao: z.string().min(1, "Data de pagamento da rescisão é obrigatória"),
-  valor_guia: coerceNumberNullable.optional(),
+  valor_guia: coerceNumberNonNegativeNullable.optional(),
   data_pagamento_guia: z.string().optional().nullable(),
-  pensao: coerceNumberNullable.optional(),
-  farmacia: coerceNumberNullable.optional(),
+  pensao: coerceNumberNonNegativeNullable.optional(),
+  farmacia: coerceNumberNonNegativeNullable.optional(),
   faturado: z.boolean().optional().default(false),
   aso_documento_path: z.string().optional().nullable(),
 });

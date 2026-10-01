@@ -37,7 +37,14 @@ export const MODALIDADE_OPCOES = [
 ];
 
 export function valoresRescisaoValidos(v: ValoresRescisao): boolean {
-  return Boolean(v.dataDesligamento && v.modalidade && Number(v.valorRescisao) > 0 && v.dataPagamentoRescisao);
+  return Boolean(
+    v.dataDesligamento &&
+    v.modalidade &&
+    v.valorRescisao !== "" &&
+    !isNaN(Number(v.valorRescisao)) &&
+    Number(v.valorRescisao) >= 0 &&
+    v.dataPagamentoRescisao
+  );
 }
 
 interface Props {
@@ -106,9 +113,10 @@ export default function CamposRescisaoForm({
         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Valor da rescisão *</label>
         <CampoMoeda
           value={valores.valorRescisao}
-          onChange={(v) => onAlterar("valorRescisao", v > 0 ? String(v) : "")}
+          onChange={(v) => onAlterar("valorRescisao", isNaN(v) ? "" : String(v))}
           placeholder="Ex: 1.500,00"
           className="input-field"
+          permitirZero={true}
         />
       </div>
 
