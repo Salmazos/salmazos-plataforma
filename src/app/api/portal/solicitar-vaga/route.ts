@@ -202,8 +202,17 @@ export async function POST(request: NextRequest) {
 </body></html>`;
 
     try {
-      const confidencial = body.confidencial === true;
       const resolvido = await resolverAvisoVaga("solicitacao_vaga", unidadeId);
+
+      await gravarSinoAvisoVaga({
+        evento: "solicitacao_vaga",
+        unidadeId,
+        tipo: "nova_solicitacao_vaga",
+        titulo: confidencial ? "🔴 Nova solicitação de vaga (confidencial)" : "Nova solicitação de vaga",
+        mensagem: `${clienteNome} solicitou ${body.num_posicoes || 1}x ${body.cargo}`,
+        solicitacaoVagaId: solicitacao.id,
+        resolvido,
+      });
 
       let emailResult = { attempted: 0, succeeded: 0, failed: 0 };
 
@@ -236,19 +245,8 @@ export async function POST(request: NextRequest) {
           html,
           tipo: "solicitacao_vaga",
           unidadeId,
-          excluirNiveisAcesso: [],
         });
       }
-
-      await gravarSinoAvisoVaga({
-        evento: "solicitacao_vaga",
-        unidadeId,
-        tipo: "nova_solicitacao_vaga",
-        titulo: confidencial ? "🔴 Nova solicitação de vaga (confidencial)" : "Nova solicitação de vaga",
-        mensagem: `${clienteNome} solicitou ${body.num_posicoes || 1}x ${body.cargo}`,
-        solicitacaoVagaId: solicitacao.id,
-        resolvido,
-      });
 
       if (emailResult.succeeded === 0 && emailResult.attempted > 0) {
         const motivo = `${emailResult.failed}/${emailResult.attempted} envio(s) de e-mail falharam`;
