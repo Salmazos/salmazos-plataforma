@@ -1424,3 +1424,21 @@ export const contatoEmpresaCreateSchema = z.object({
   telefone: textoContatoOpcional,
   email: textoContatoOpcional,
 });
+
+export const contatoEmpresaUpdateSchema = z.object({
+  nome: z.string().trim().min(1, "Informe o nome do contato.").max(200).optional(),
+  cargo: textoContatoOpcional,
+  telefone: textoContatoOpcional,
+  email: textoContatoOpcional,
+  principal: z.boolean().optional(),
+});
+
+export const contatoRegistroCreateSchema = z.object({
+  contato_id: z.string().uuid().optional().nullable(),
+  tipo: z.enum(["ligacao", "visita", "email", "whatsapp", "anotacao"]),
+  resultado: z.enum(["sem_interesse", "retornar", "quer_proposta", "fechou", "nao_encontrou"]).optional().nullable(),
+  descricao: z.string().trim().max(2000).optional().nullable(),
+  // As regras "não pode ser futuro" / ">= hoje" dependem do dia em Brasília e ficam na rota.
+  ocorrido_em: dataIsoComercial.optional(),
+  proximo_contato_em: dataIsoComercial.optional(),
+});

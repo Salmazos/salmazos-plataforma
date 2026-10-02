@@ -85,3 +85,11 @@ export async function mensagemOportunidadeAberta(
   const { data: vend } = await svc.from("analistas_perfil").select("nome_completo").eq("id", aberta.vendedor_id).maybeSingle();
   return `Já existe uma oportunidade aberta para esta empresa (vendedor: ${vend?.nome_completo ?? "—"}, fase: ${rotuloEtapa(aberta.etapa as string)}).`;
 }
+
+// Escrita na Carteira (contatos, registros, lembretes): só vendedor, e só em empresa da própria
+// unidade — ou de qualquer unidade para quem tem acesso a todas. O service client ignora RLS,
+// então esta checagem tem que rodar em toda rota de escrita.
+export function podeEscreverNaUnidade(ctx: ContextoComercial, unidadeId: string | null | undefined): boolean {
+  if (!ctx.vendedor) return false;
+  return ctx.todasUnidades || (!!ctx.unidadeId && unidadeId === ctx.unidadeId);
+}

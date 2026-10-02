@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import EmpresasVisitadasClient from "@/components/EmpresasVisitadasClient";
 import { podeAcessarCarteiraClientes } from "@/lib/comercialAuth";
+import { resolverContextoComercial } from "@/lib/comercial";
 
 export const dynamic = "force-dynamic";
 
@@ -18,5 +19,8 @@ export default async function EmpresasVisitadasPage() {
     .eq("ativo", true)
     .order("nome_completo");
 
-  return <EmpresasVisitadasClient analistas={analistas ?? []} />;
+  // Ler a Carteira exige o acesso acima; escrever (contatos, registros) exige perfil de vendedor.
+  const ctxComercial = await resolverContextoComercial(user);
+
+  return <EmpresasVisitadasClient analistas={analistas ?? []} podeEscrever={ctxComercial?.vendedor === true} />;
 }

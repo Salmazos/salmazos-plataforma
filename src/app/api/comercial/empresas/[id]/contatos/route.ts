@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, contatoEmpresaCreateSchema } from "@/lib/schemas";
-import { exigirContextoComercial, type ContextoComercial } from "@/lib/comercial";
+import { exigirContextoComercial, podeEscreverNaUnidade, type ContextoComercial } from "@/lib/comercial";
 
 // Service client ignora RLS: a empresa só é acessível se for da unidade do usuário
 // (gestor com acesso a todas as unidades também enxerga as demais, só para leitura).
@@ -10,7 +10,7 @@ async function carregarEmpresa(id: string, ctx: ContextoComercial, escrita: bool
   const { data: empresa } = await svc.from("empresas_visitadas").select("id, unidade_id").eq("id", id).maybeSingle();
   if (!empresa) return { svc, empresa: null };
   const mesmaUnidade = !!ctx.unidadeId && empresa.unidade_id === ctx.unidadeId;
-  const alcance = escrita ? mesmaUnidade : mesmaUnidade || (ctx.gestor && ctx.todasUnidades);
+  const alcance = escrita ? podeEscreverNaUnidade(ctx, empresa.unidade_id) : mesmaUnidade || (ctx.gestor && ctx.todasUnidades);
   return { svc, empresa: alcance ? empresa : null };
 }
 

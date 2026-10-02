@@ -30,6 +30,10 @@ export async function GET(request: NextRequest) {
   } else {
     return NextResponse.json({ data: [] });
   }
+  // ?id= busca uma empresa específica (usado ao abrir a oportunidade vinda da Carteira); o filtro de
+  // unidade acima continua valendo.
+  const idFiltro = request.nextUrl.searchParams.get("id");
+  if (idFiltro) query = query.eq("id", idFiltro);
   if (q) query = query.ilike("nome", `%${escapeLike(q)}%`);
 
   const { data: empresas, error } = await query;

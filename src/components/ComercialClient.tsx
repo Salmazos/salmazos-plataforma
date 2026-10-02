@@ -129,6 +129,16 @@ export default function ComercialClient({ vendedor, gestor, meuAnalistaId, vende
 
   useEffect(() => { carregar(); }, [carregar]);
 
+  // Vindo da Carteira ("Criar oportunidade"): abre o modal já com a empresa e limpa o parâmetro da URL.
+  useEffect(() => {
+    const empresaId = new URLSearchParams(window.location.search).get("empresa");
+    if (!empresaId) return;
+    if (vendedor) setNovaAberta({ empresa_id: empresaId });
+    const url = new URL(window.location.href);
+    url.searchParams.delete("empresa");
+    window.history.replaceState(null, "", url.pathname + (url.search ? url.search : "") + url.hash);
+  }, [vendedor]);
+
   const detalhe = useMemo(() => ops.find((o) => o.id === detalheId) ?? null, [ops, detalheId]);
   const abas = [
     ...(vendedor ? [{ k: "dia" as const, t: "Meu dia" }] : []),
@@ -346,7 +356,7 @@ function ModalNova({ inicial, onClose, onSalvo }: { inicial: { empresa_id?: stri
   useEffect(() => {
     if (!inicial.empresa_id) return;
     (async () => {
-      const r = await fetch(`/api/comercial/empresas?q=${encodeURIComponent(inicial.empresa ?? "")}`);
+      const r = await fetch(`/api/comercial/empresas?id=${encodeURIComponent(inicial.empresa_id ?? "")}`);
       const j = await r.json();
       const achada = (j.data ?? []).find((x: EmpresaOpc) => x.id === inicial.empresa_id);
       if (achada) escolher(achada); else setBuscaAberta(true);
@@ -502,6 +512,25 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
     })();
   }, [op.empresa_visitada_id]);
   const contatoAtual = contatos.find((x) => x.id === op.contato_id) ?? null;
+  const [novoContatoAberto, setNovoContatoAberto] = useState(false);
+  const [novoContato, setNovoContato] = useState({ nome: "", cargo: "", telefone: "", email: "" });
+
+  // Cria o contato na empresa e já o seleciona na oportunidade.
+  async function criarContatoESelecionar() {
+    if (!op.empresa_visitada_id) return;
+    if (!novoContato.nome.trim()) { setErro("Informe o nome do contato."); return; }
+    setSalvando(true); setErro("");
+    const rc = await fetch(`/api/comercial/empresas/${op.empresa_visitada_id}/contatos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(novoContato) });
+    const jc = await rc.json();
+    if (!rc.ok) { setSalvando(false); setErro(jc.error || "Erro ao salvar o contato."); return; }
+    const rp = await fetch(`/api/comercial/oportunidades/${op.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contato_id: jc.data.id }) });
+    const jp = await rp.json();
+    setSalvando(false);
+    if (!rp.ok) { setErro(jp.error || "Contato criado, mas não foi possível selecioná-lo."); return; }
+    setNovoContatoAberto(false); setNovoContato({ nome: "", cargo: "", telefone: "", email: "" });
+    setContatos((prev) => [...prev, jc.data]);
+    onMudou();
+  }
 
   async function enviar(url: string, method: string, body: unknown) {
     setSalvando(true); setErro("");
@@ -522,19 +551,35 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
         <div><b>Valor:</b> {FASES_COM_VALOR.includes(op.etapa) ? fmtMoeda(op.valor_estimado) : "—"}</div>
         <div><b>Contato:</b> {op.contato_nome || "—"}{contatoAtual?.cargo ? ` · ${contatoAtual.cargo}` : ""}{op.contato_telefone ? ` · ${op.contato_telefone}` : ""}</div>
         <div><b>E-mail:</b> {op.contato_email || "—"}</div>
-        {podeEditar && contatos.length > 0 && (
+        {podeEditar && op.empresa_visitada_id && (
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={labelStyle}>Trocar contato</label>
-            <select style={inputStyle} value={op.contato_id ?? ""} disabled={salvando}
-              onChange={(x) => enviar(`/api/comercial/oportunidades/${op.id}`, "PATCH", { contato_id: x.target.value || null })}>
-              <option value="">Sem contato</option>
-              {contatos.map((k) => <option key={k.id} value={k.id}>{k.nome}{k.cargo ? ` · ${k.cargo}` : ""}</option>)}
-            </select>
+            <div style={{ display: "flex", gap: 8 }}>
+              {contatos.length > 0 && (
+                <select style={inputStyle} value={op.contato_id ?? ""} disabled={salvando}
+                  onChange={(x) => enviar(`/api/comercial/oportunidades/${op.id}`, "PATCH", { contato_id: x.target.value || null })}>
+                  <option value="">Sem contato</option>
+                  {contatos.map((k) => <option key={k.id} value={k.id}>{k.nome}{k.cargo ? ` · ${k.cargo}` : ""}</option>)}
+                </select>
+              )}
+              <button style={{ ...btnSecundario, whiteSpace: "nowrap" }} onClick={() => setNovoContatoAberto((v) => !v)}>Novo contato</button>
+            </div>
+            {novoContatoAberto && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+                <div><label style={labelStyle}>Nome *</label><input style={inputStyle} value={novoContato.nome} onChange={(x) => setNovoContato({ ...novoContato, nome: x.target.value })} /></div>
+                <div><label style={labelStyle}>Cargo</label><input style={inputStyle} value={novoContato.cargo} onChange={(x) => setNovoContato({ ...novoContato, cargo: x.target.value })} /></div>
+                <div><label style={labelStyle}>Telefone</label><input style={inputStyle} value={novoContato.telefone} onChange={(x) => setNovoContato({ ...novoContato, telefone: x.target.value })} /></div>
+                <div><label style={labelStyle}>E-mail</label><input style={inputStyle} value={novoContato.email} onChange={(x) => setNovoContato({ ...novoContato, email: x.target.value })} /></div>
+                <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
+                  <button style={btnPrimario} disabled={salvando} onClick={criarContatoESelecionar}>{salvando ? "Salvando..." : "Salvar e selecionar"}</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
         <div><b>Serviço:</b> {op.servico_interesse || "—"}</div>
         <div><b>Vendedor:</b> {op.vendedor_nome || "—"}</div>
-        <div style={{ gridColumn: "1 / -1" }}><b>Próxima ação:</b> {op.proxima_acao || "—"} {op.proxima_acao_em ? `(${fmtData(op.proxima_acao_em)})` : ""}</div>
+        {aberta && <div style={{ gridColumn: "1 / -1" }}><b>Próxima ação:</b> {op.proxima_acao || "—"} {op.proxima_acao_em ? `(${fmtData(op.proxima_acao_em)})` : ""}</div>}
         {(op.motivo_perda_categoria || op.motivo_perda) && (
           <div style={{ gridColumn: "1 / -1" }}><b>Motivo:</b> {op.motivo_perda_categoria ? (ROTULO_MOTIVO_PERDA[op.motivo_perda_categoria] ?? op.motivo_perda_categoria) : ""}{op.motivo_perda ? `${op.motivo_perda_categoria ? " — " : ""}${op.motivo_perda}` : ""}</div>
         )}
