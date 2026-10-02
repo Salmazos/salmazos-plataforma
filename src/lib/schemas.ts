@@ -1379,10 +1379,8 @@ const motivoPerdaCategoria = z.enum(["sem_necessidade", "valor_acima_orcamento",
 const textoOpcionalComercial = z.string().trim().max(500).optional().nullable();
 
 export const oportunidadeCreateSchema = z.object({
-  empresa: z.string().trim().min(1, "Empresa obrigatória.").max(200),
-  contato_nome: textoOpcionalComercial,
-  contato_telefone: textoOpcionalComercial,
-  contato_email: textoOpcionalComercial,
+  empresa_visitada_id: z.string().uuid("Escolha uma empresa da Carteira."),
+  contato_id: z.string().uuid().optional().nullable(),
   origem: z.enum(["ligacao", "indicacao", "outro"]).default("ligacao"),
   servico_interesse: textoOpcionalComercial,
   valor_estimado: z.coerce.number().nonnegative().max(100000000).optional().nullable(),
@@ -1402,6 +1400,8 @@ export const oportunidadeUpdateSchema = z.object({
   contato_email: textoOpcionalComercial,
   motivo_perda: z.string().trim().max(500).optional().nullable(),
   motivo_perda_categoria: motivoPerdaCategoria.optional(),
+  contato_id: z.string().uuid().optional().nullable(),
+  reconectar_em: dataIsoComercial.optional(),
 });
 
 export const oportunidadeInteracaoCreateSchema = z.object({
@@ -1410,4 +1410,17 @@ export const oportunidadeInteracaoCreateSchema = z.object({
   descricao: z.string().trim().max(2000).optional().nullable(),
   proxima_acao: z.string().trim().min(1).max(300).optional(),
   proxima_acao_em: dataIsoComercial.optional(),
+  contato_id: z.string().uuid().optional().nullable(),
+});
+
+export const empresaComercialCreateSchema = z.object({
+  nome: z.string().trim().min(2, "Informe o nome da empresa.").max(200),
+});
+
+const textoContatoOpcional = z.string().trim().max(200).optional().nullable();
+export const contatoEmpresaCreateSchema = z.object({
+  nome: z.string().trim().min(1, "Informe o nome do contato.").max(200),
+  cargo: textoContatoOpcional,
+  telefone: textoContatoOpcional,
+  email: textoContatoOpcional,
 });

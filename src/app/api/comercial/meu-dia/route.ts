@@ -39,8 +39,9 @@ export async function GET() {
       .gt("total_visitas", 0)
       .order("ultima_visita_em", { ascending: true })
       .limit(100);
-    const comOportunidade = new Set(lista.map((o) => String(o.empresa).trim().toLowerCase()));
-    semRetorno = (carteira ?? []).filter((e) => !e.cliente_id && !comOportunidade.has(String(e.nome).trim().toLowerCase()));
+    // Compara pelo id da empresa da Carteira (não mais pelo nome em minúsculas).
+    const comOportunidade = new Set(lista.map((o) => o.empresa_visitada_id as string | null).filter(Boolean));
+    semRetorno = (carteira ?? []).filter((e) => !e.cliente_id && !comOportunidade.has(e.id as string));
   }
 
   return NextResponse.json({ data: { hoje: deHoje, atrasadas, semRetorno }, vendedor: true, hojeData: hoje });

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, oportunidadeCreateSchema } from "@/lib/schemas";
-import { exigirContextoComercial, hojeSaoPaulo } from "@/lib/comercial";
+import { exigirContextoComercial, hojeSaoPaulo, mensagemOportunidadeAberta } from "@/lib/comercial";
 
 // Regra de acesso: as rotas usam service client (ignora RLS), então o filtro por vendedor/unidade
 // precisa estar aqui, em toda query. Vendedor enxerga só o que é dele; gestor (diretoria/superuser)
@@ -67,15 +67,46 @@ export async function POST(request: NextRequest) {
   }
 
   const svc = createServiceClient();
+
+  // Service client ignora RLS: a empresa tem que ser da unidade do vendedor.
+  const { data: empresa } = await svc
+    .from("empresas_visitadas")
+    .select("id, nome, cliente_id, unidade_id")
+    .eq("id", d.empresa_visitada_id)
+    .maybeSingle();
+  if (!empresa || empresa.unidade_id !== ctx.unidadeId) {
+    return NextResponse.json({ error: "Empresa não encontrada na Carteira da sua unidade." }, { status: 404 });
+  }
+
+  let contato: { id: string; nome: string; telefone: string | null; email: string | null } | null = null;
+  if (d.contato_id) {
+    const { data: c } = await svc
+      .from("empresa_contatos")
+      .select("id, nome, telefone, email, empresa_visitada_id")
+      .eq("id", d.contato_id)
+      .maybeSingle();
+    if (!c || c.empresa_visitada_id !== empresa.id) {
+      return NextResponse.json({ error: "Esse contato não pertence à empresa escolhida." }, { status: 400 });
+    }
+    contato = c;
+  }
+
+  const jaAberta = await mensagemOportunidadeAberta(svc, empresa.id);
+  if (jaAberta) return NextResponse.json({ error: jaAberta }, { status: 409 });
+
   const { data, error } = await svc
     .from("oportunidades")
     .insert({
       unidade_id: ctx.unidadeId,
       vendedor_id: ctx.analistaId,
-      empresa: d.empresa,
-      contato_nome: d.contato_nome || null,
-      contato_telefone: d.contato_telefone || null,
-      contato_email: d.contato_email || null,
+      empresa: empresa.nome,
+      empresa_visitada_id: empresa.id,
+      cliente_id: empresa.cliente_id ?? null,
+      contato_id: contato?.id ?? null,
+      // Snapshot do contato escolhido (a lista/cartões leem estes campos direto).
+      contato_nome: contato?.nome ?? null,
+      contato_telefone: contato?.telefone ?? null,
+      contato_email: contato?.email ?? null,
       origem: d.origem,
       servico_interesse: d.servico_interesse || null,
       valor_estimado: d.valor_estimado ?? null,
@@ -85,6 +116,13 @@ export async function POST(request: NextRequest) {
     })
     .select()
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) {
+    // Corrida entre duas criações: o índice único barra a segunda.
+    if (error.code === "23505") {
+      const msg = (await mensagemOportunidadeAberta(svc, empresa.id)) ?? "Já existe uma oportunidade aberta para esta empresa.";
+      return NextResponse.json({ error: msg }, { status: 409 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
   return NextResponse.json({ data }, { status: 201 });
 }

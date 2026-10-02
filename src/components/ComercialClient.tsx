@@ -22,9 +22,13 @@ interface Oportunidade {
   proxima_acao_em: string | null;
   motivo_perda: string | null;
   motivo_perda_categoria: string | null;
+  empresa_visitada_id: string | null;
+  contato_id: string | null;
   updated_at: string;
 }
-interface Interacao { id: string; tipo: string; resultado: string | null; descricao: string | null; created_at: string }
+interface Interacao { id: string; tipo: string; resultado: string | null; descricao: string | null; created_at: string; contato_nome?: string | null }
+interface Contato { id: string; nome: string; cargo: string | null; telefone: string | null; email: string | null; principal: boolean }
+interface EmpresaOpc { id: string; nome: string; contatos: Contato[]; oportunidade_aberta: { id: string; vendedor_nome: string | null; etapa: string } | null }
 interface Carteira { id: string; nome: string; contato_nome: string | null; contato_telefone: string | null; ultima_visita_em: string; total_visitas: number }
 interface MeuDia { hoje: Oportunidade[]; atrasadas: Oportunidade[]; semRetorno: Carteira[] }
 
@@ -53,6 +57,15 @@ function fmtMoeda(v: number | null): string {
 }
 function diasParado(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
+}
+// Data de hoje em Brasília (AAAA-MM-DD) e soma de dias, para o padrão do lembrete de reconexão.
+function hojeSP(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+function somarDiasStr(dataIso: string, dias: number): string {
+  const d = new Date(`${dataIso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
 }
 function textoSemMovimento(iso: string): string {
   const n = diasParado(iso);
@@ -88,7 +101,7 @@ export default function ComercialClient({ vendedor, gestor, meuAnalistaId, vende
   const [erro, setErro] = useState("");
   const [filtroVendedor, setFiltroVendedor] = useState("");
   const [filtroEtapa, setFiltroEtapa] = useState("");
-  const [novaAberta, setNovaAberta] = useState<null | { empresa?: string; contato_nome?: string; contato_telefone?: string }>(null);
+  const [novaAberta, setNovaAberta] = useState<null | { empresa_id?: string; empresa?: string }>(null);
   const [detalheId, setDetalheId] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
@@ -212,7 +225,7 @@ export default function ComercialClient({ vendedor, gestor, meuAnalistaId, vende
                       <div style={{ fontWeight: 700, fontSize: 13 }}>{c.nome}</div>
                       <div style={{ fontSize: 11, color: "#6B7280" }}>Última visita {fmtData(c.ultima_visita_em)} · {c.total_visitas} visita(s){c.contato_nome ? ` · ${c.contato_nome}` : ""}</div>
                     </div>
-                    <button style={{ ...btnSecundario, padding: "6px 12px", fontSize: 12 }} onClick={() => setNovaAberta({ empresa: c.nome, contato_nome: c.contato_nome ?? "", contato_telefone: c.contato_telefone ?? "" })}>Abrir oportunidade</button>
+                    <button style={{ ...btnSecundario, padding: "6px 12px", fontSize: 12 }} onClick={() => setNovaAberta({ empresa_id: c.id, empresa: c.nome })}>Abrir oportunidade</button>
                   </div>
                 ))}
               </div>
@@ -296,20 +309,83 @@ export default function ComercialClient({ vendedor, gestor, meuAnalistaId, vende
   );
 }
 
-function ModalNova({ inicial, onClose, onSalvo }: { inicial: { empresa?: string; contato_nome?: string; contato_telefone?: string }; onClose: () => void; onSalvo: () => void }) {
-  const [f, setF] = useState({
-    empresa: inicial.empresa ?? "", contato_nome: inicial.contato_nome ?? "", contato_telefone: inicial.contato_telefone ?? "", contato_email: "",
-    servico_interesse: "", valor_estimado: "", origem: "ligacao", etapa: "prospeccao", proxima_acao: "", proxima_acao_em: "",
-  });
+function ModalNova({ inicial, onClose, onSalvo }: { inicial: { empresa_id?: string; empresa?: string }; onClose: () => void; onSalvo: () => void }) {
+  const [f, setF] = useState({ servico_interesse: "", valor_estimado: "", origem: "ligacao", etapa: "prospeccao", proxima_acao: "", proxima_acao_em: "" });
+  const [q, setQ] = useState(inicial.empresa ?? "");
+  const [resultados, setResultados] = useState<EmpresaOpc[]>([]);
+  const [empresa, setEmpresa] = useState<EmpresaOpc | null>(null);
+  const [buscaAberta, setBuscaAberta] = useState(!inicial.empresa_id);
+  const [cadastrando, setCadastrando] = useState(false);
+  const [nomeNovaEmpresa, setNomeNovaEmpresa] = useState("");
+  const [contatoSel, setContatoSel] = useState("");
+  const [novoContato, setNovoContato] = useState({ nome: "", cargo: "", telefone: "", email: "" });
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v }));
 
+  function escolher(emp: EmpresaOpc) {
+    setEmpresa(emp);
+    setBuscaAberta(false);
+    setContatoSel((emp.contatos.find((c) => c.principal) ?? emp.contatos[0])?.id ?? "novo");
+  }
+
+  // Busca na Carteira com debounce simples.
+  useEffect(() => {
+    if (!buscaAberta) return;
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/comercial/empresas?q=${encodeURIComponent(q.trim())}`);
+        const j = await r.json();
+        if (r.ok) setResultados(j.data ?? []);
+      } catch { /* ignora: a lista só não atualiza */ }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q, buscaAberta]);
+
+  // Empresa já escolhida (vem do "Para reconectar" do Meu dia).
+  useEffect(() => {
+    if (!inicial.empresa_id) return;
+    (async () => {
+      const r = await fetch(`/api/comercial/empresas?q=${encodeURIComponent(inicial.empresa ?? "")}`);
+      const j = await r.json();
+      const achada = (j.data ?? []).find((x: EmpresaOpc) => x.id === inicial.empresa_id);
+      if (achada) escolher(achada); else setBuscaAberta(true);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function cadastrarEmpresa() {
+    setErro("");
+    const r = await fetch("/api/comercial/empresas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nome: nomeNovaEmpresa }) });
+    const j = await r.json();
+    if (!r.ok) { setErro(j.error || "Erro ao cadastrar empresa."); return; }
+    // Se a empresa já existia, a resposta não traz contatos nem oportunidade aberta: recarrega a ficha.
+    const r2 = await fetch(`/api/comercial/empresas?q=${encodeURIComponent(j.data.nome)}`);
+    const j2 = await r2.json();
+    const ficha: EmpresaOpc = (j2.data ?? []).find((x: EmpresaOpc) => x.id === j.data.id) ?? j.data;
+    setCadastrando(false); setNomeNovaEmpresa("");
+    escolher(ficha);
+  }
+
   async function salvar() {
+    if (!empresa) { setErro("Escolha uma empresa da Carteira."); return; }
+    if (empresa.oportunidade_aberta) { setErro("Essa empresa já tem uma oportunidade aberta."); return; }
     setSalvando(true); setErro("");
+    let contatoId: string | null = contatoSel && contatoSel !== "novo" ? contatoSel : null;
+    if (contatoSel === "novo" && novoContato.nome.trim()) {
+      const rc = await fetch(`/api/comercial/empresas/${empresa.id}/contatos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(novoContato) });
+      const jc = await rc.json();
+      if (!rc.ok) { setSalvando(false); setErro(jc.error || "Erro ao salvar o contato."); return; }
+      contatoId = jc.data.id;
+    }
     const res = await fetch("/api/comercial/oportunidades", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...f, valor_estimado: f.etapa === "proposta_enviada" && f.valor_estimado !== "" ? Number(f.valor_estimado.replace(",", ".")) : null }),
+      body: JSON.stringify({
+        ...f,
+        empresa_visitada_id: empresa.id,
+        contato_id: contatoId,
+        valor_estimado: f.etapa === "proposta_enviada" && f.valor_estimado !== "" ? Number(f.valor_estimado.replace(",", ".")) : null,
+      }),
     });
     const j = await res.json();
     setSalvando(false);
@@ -320,12 +396,59 @@ function ModalNova({ inicial, onClose, onSalvo }: { inicial: { empresa?: string;
   return (
     <Modal titulo="Nova oportunidade" onClose={onClose}>
       <div style={{ display: "grid", gap: 10 }}>
-        <div><label style={labelStyle}>Empresa *</label><input style={inputStyle} value={f.empresa} onChange={(e) => set("empresa", e.target.value)} /></div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <div><label style={labelStyle}>Contato</label><input style={inputStyle} value={f.contato_nome} onChange={(e) => set("contato_nome", e.target.value)} /></div>
-          <div><label style={labelStyle}>Telefone</label><input style={inputStyle} value={f.contato_telefone} onChange={(e) => set("contato_telefone", e.target.value)} /></div>
+        <div>
+          <label style={labelStyle}>Empresa da Carteira *</label>
+          {empresa && !buscaAberta ? (
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, ...inputStyle }}>
+              <span style={{ fontWeight: 700 }}>{empresa.nome}</span>
+              <button style={{ ...btnSecundario, padding: "4px 10px", fontSize: 12 }} onClick={() => { setBuscaAberta(true); setQ(empresa.nome); }}>Trocar</button>
+            </div>
+          ) : (
+            <>
+              <input style={inputStyle} value={q} onChange={(x) => setQ(x.target.value)} placeholder="Digite para buscar na Carteira..." />
+              <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid #E5E7EB", borderRadius: 8, marginTop: 4 }}>
+                {resultados.length === 0 ? <div style={{ padding: 10, fontSize: 12, color: "#6B7280" }}>Nenhuma empresa encontrada.</div> : resultados.map((r) => (
+                  <div key={r.id}
+                    onClick={() => { if (!r.oportunidade_aberta) escolher(r); }}
+                    style={{ padding: "8px 10px", borderTop: "1px solid #F3F4F6", fontSize: 13, cursor: r.oportunidade_aberta ? "not-allowed" : "pointer", opacity: r.oportunidade_aberta ? 0.6 : 1 }}>
+                    <div style={{ fontWeight: 700 }}>{r.nome}</div>
+                    {r.oportunidade_aberta && (
+                      <div style={{ fontSize: 11, color: "#B45309" }}>Já tem oportunidade aberta ({r.oportunidade_aberta.vendedor_nome ?? "—"} · {rotuloEtapa(r.oportunidade_aberta.etapa)})</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {!cadastrando ? (
+                <button style={{ ...btnSecundario, padding: "4px 10px", fontSize: 12, marginTop: 6 }} onClick={() => { setCadastrando(true); setNomeNovaEmpresa(q); }}>Cadastrar nova empresa</button>
+              ) : (
+                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                  <input style={inputStyle} value={nomeNovaEmpresa} onChange={(x) => setNomeNovaEmpresa(x.target.value)} placeholder="Nome da nova empresa" />
+                  <button style={btnPrimario} onClick={cadastrarEmpresa}>Cadastrar</button>
+                  <button style={btnSecundario} onClick={() => setCadastrando(false)}>Cancelar</button>
+                </div>
+              )}
+            </>
+          )}
         </div>
-        <div><label style={labelStyle}>E-mail</label><input style={inputStyle} value={f.contato_email} onChange={(e) => set("contato_email", e.target.value)} /></div>
+
+        {empresa && !buscaAberta && (
+          <div>
+            <label style={labelStyle}>Contato</label>
+            <select style={inputStyle} value={contatoSel} onChange={(x) => setContatoSel(x.target.value)}>
+              {empresa.contatos.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.cargo ? ` · ${c.cargo}` : ""}{c.principal ? " (principal)" : ""}</option>)}
+              <option value="novo">Novo contato</option>
+            </select>
+            {contatoSel === "novo" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+                <div><label style={labelStyle}>Nome *</label><input style={inputStyle} value={novoContato.nome} onChange={(x) => setNovoContato({ ...novoContato, nome: x.target.value })} /></div>
+                <div><label style={labelStyle}>Cargo</label><input style={inputStyle} value={novoContato.cargo} onChange={(x) => setNovoContato({ ...novoContato, cargo: x.target.value })} /></div>
+                <div><label style={labelStyle}>Telefone</label><input style={inputStyle} value={novoContato.telefone} onChange={(x) => setNovoContato({ ...novoContato, telefone: x.target.value })} /></div>
+                <div><label style={labelStyle}>E-mail</label><input style={inputStyle} value={novoContato.email} onChange={(x) => setNovoContato({ ...novoContato, email: x.target.value })} /></div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div><label style={labelStyle}>Serviço de interesse</label><input style={inputStyle} value={f.servico_interesse} onChange={(e) => set("servico_interesse", e.target.value)} placeholder="R&S, MOT, Terceirização..." /></div>
           {f.etapa === "proposta_enviada" && <div><label style={labelStyle}>Valor estimado (R$) *</label><input style={inputStyle} inputMode="decimal" value={f.valor_estimado} onChange={(e) => set("valor_estimado", e.target.value)} /></div>}
@@ -359,8 +482,9 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
   const [modo, setModo] = useState<"" | "contato" | "etapa">("");
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
-  const [c, setC] = useState({ tipo: "ligacao", resultado: "", descricao: "", proxima_acao: "", proxima_acao_em: "" });
-  const [e, setE] = useState({ etapa: op.etapa === "negociacao" ? "proposta_enviada" : op.etapa, motivo_perda_categoria: "", motivo_perda: "", valor_estimado: op.valor_estimado != null ? String(op.valor_estimado).replace(".", ",") : "", servico_interesse: op.servico_interesse ?? "", proxima_acao: op.proxima_acao ?? "", proxima_acao_em: op.proxima_acao_em ?? "" });
+  const [c, setC] = useState({ tipo: "ligacao", resultado: "", descricao: "", proxima_acao: "", proxima_acao_em: "", contato_id: op.contato_id ?? "" });
+  const [contatos, setContatos] = useState<Contato[]>([]);
+  const [e, setE] = useState({ etapa: op.etapa === "negociacao" ? "proposta_enviada" : op.etapa, motivo_perda_categoria: "", motivo_perda: "", reconectar_em: somarDiasStr(hojeSP(), 90), valor_estimado: op.valor_estimado != null ? String(op.valor_estimado).replace(".", ",") : "", servico_interesse: op.servico_interesse ?? "", proxima_acao: op.proxima_acao ?? "", proxima_acao_em: op.proxima_acao_em ?? "" });
   const aberta = ehAberta(op.etapa);
 
   const carregarHist = useCallback(async () => {
@@ -369,6 +493,15 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
     if (r.ok) setHist(j.data ?? []);
   }, [op.id]);
   useEffect(() => { carregarHist(); }, [carregarHist]);
+  useEffect(() => {
+    if (!op.empresa_visitada_id) return;
+    (async () => {
+      const r = await fetch(`/api/comercial/empresas/${op.empresa_visitada_id}/contatos`);
+      const j = await r.json();
+      if (r.ok) setContatos(j.data ?? []);
+    })();
+  }, [op.empresa_visitada_id]);
+  const contatoAtual = contatos.find((x) => x.id === op.contato_id) ?? null;
 
   async function enviar(url: string, method: string, body: unknown) {
     setSalvando(true); setErro("");
@@ -387,8 +520,18 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 13, color: "#374151", marginBottom: 12 }}>
         <div><b>Fase:</b> {rotuloEtapa(op.etapa)}</div>
         <div><b>Valor:</b> {FASES_COM_VALOR.includes(op.etapa) ? fmtMoeda(op.valor_estimado) : "—"}</div>
-        <div><b>Contato:</b> {op.contato_nome || "—"} {op.contato_telefone ? `· ${op.contato_telefone}` : ""}</div>
+        <div><b>Contato:</b> {op.contato_nome || "—"}{contatoAtual?.cargo ? ` · ${contatoAtual.cargo}` : ""}{op.contato_telefone ? ` · ${op.contato_telefone}` : ""}</div>
         <div><b>E-mail:</b> {op.contato_email || "—"}</div>
+        {podeEditar && contatos.length > 0 && (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={labelStyle}>Trocar contato</label>
+            <select style={inputStyle} value={op.contato_id ?? ""} disabled={salvando}
+              onChange={(x) => enviar(`/api/comercial/oportunidades/${op.id}`, "PATCH", { contato_id: x.target.value || null })}>
+              <option value="">Sem contato</option>
+              {contatos.map((k) => <option key={k.id} value={k.id}>{k.nome}{k.cargo ? ` · ${k.cargo}` : ""}</option>)}
+            </select>
+          </div>
+        )}
         <div><b>Serviço:</b> {op.servico_interesse || "—"}</div>
         <div><b>Vendedor:</b> {op.vendedor_nome || "—"}</div>
         <div style={{ gridColumn: "1 / -1" }}><b>Próxima ação:</b> {op.proxima_acao || "—"} {op.proxima_acao_em ? `(${fmtData(op.proxima_acao_em)})` : ""}</div>
@@ -417,6 +560,13 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
                 {Object.entries(ROTULO_RESULTADO_CONTATO).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select></div>
           </div>
+          {contatos.length > 0 && (
+            <div><label style={labelStyle}>Contato</label>
+              <select style={inputStyle} value={c.contato_id} onChange={(x) => setC({ ...c, contato_id: x.target.value })}>
+                <option value="">—</option>
+                {contatos.map((k) => <option key={k.id} value={k.id}>{k.nome}{k.cargo ? ` · ${k.cargo}` : ""}</option>)}
+              </select></div>
+          )}
           <div><label style={labelStyle}>O que foi conversado</label><textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} value={c.descricao} onChange={(x) => setC({ ...c, descricao: x.target.value })} /></div>
           {aberta && (
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
@@ -427,7 +577,7 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <button style={btnSecundario} onClick={() => setModo("")}>Cancelar</button>
             <button style={btnPrimario} disabled={salvando} onClick={() => enviar(`/api/comercial/oportunidades/${op.id}/interacoes`, "POST", {
-              tipo: c.tipo, resultado: c.resultado || null, descricao: c.descricao || null,
+              tipo: c.tipo, resultado: c.resultado || null, descricao: c.descricao || null, contato_id: c.contato_id || null,
               ...(aberta ? { proxima_acao: c.proxima_acao, proxima_acao_em: c.proxima_acao_em } : {}),
             })}>{salvando ? "Salvando..." : "Salvar contato"}</button>
           </div>
@@ -453,6 +603,9 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
                   <option value="">Selecione...</option>
                   {Object.entries(ROTULO_MOTIVO_PERDA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select></div>
+              <div><label style={labelStyle}>Quando vamos reconectar? *</label>
+                <input type="date" style={inputStyle} value={e.reconectar_em} min={hojeSP()} onChange={(x) => setE({ ...e, reconectar_em: x.target.value })} />
+                <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>Você receberá um lembrete nesta data.</div></div>
               {e.motivo_perda_categoria === "outro" && (
                 <div><label style={labelStyle}>Qual foi o motivo? *</label><input style={inputStyle} value={e.motivo_perda} onChange={(x) => setE({ ...e, motivo_perda: x.target.value })} /></div>
               )}
@@ -469,7 +622,7 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
             <button style={btnPrimario} disabled={salvando} onClick={() => enviar(`/api/comercial/oportunidades/${op.id}`, "PATCH", {
               etapa: e.etapa,
               ...(exigeValor ? { valor_estimado: e.valor_estimado.trim() === "" ? null : Number(e.valor_estimado.replace(",", ".")), servico_interesse: e.servico_interesse } : {}),
-              ...(e.etapa === "perdido" ? { motivo_perda_categoria: e.motivo_perda_categoria || undefined, ...(e.motivo_perda_categoria === "outro" ? { motivo_perda: e.motivo_perda } : {}) } : {}),
+              ...(e.etapa === "perdido" ? { motivo_perda_categoria: e.motivo_perda_categoria || undefined, reconectar_em: e.reconectar_em || undefined, ...(e.motivo_perda_categoria === "outro" ? { motivo_perda: e.motivo_perda } : {}) } : {}),
               ...(novaAberta ? { proxima_acao: e.proxima_acao, proxima_acao_em: e.proxima_acao_em } : {}),
             })}>{salvando ? "Salvando..." : "Salvar fase"}</button>
           </div>
@@ -481,7 +634,7 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
       <h3 style={{ fontSize: 14, margin: "4px 0 8px" }}>Histórico</h3>
       {hist.length === 0 ? <p style={{ fontSize: 13, color: "#6B7280" }}>Sem interações ainda.</p> : hist.map((h) => (
         <div key={h.id} style={{ borderTop: "1px solid #F3F4F6", padding: "8px 0", fontSize: 13 }}>
-          <div style={{ color: "#6B7280", fontSize: 11 }}>{new Date(h.created_at).toLocaleString("pt-BR")} · {ROTULO_TIPO[h.tipo] ?? h.tipo}{h.resultado ? ` · ${ROTULO_RESULTADO_CONTATO[h.resultado] ?? h.resultado}` : ""}</div>
+          <div style={{ color: "#6B7280", fontSize: 11 }}>{new Date(h.created_at).toLocaleString("pt-BR")} · {ROTULO_TIPO[h.tipo] ?? h.tipo}{h.resultado ? ` · ${ROTULO_RESULTADO_CONTATO[h.resultado] ?? h.resultado}` : ""}{h.contato_nome ? ` · ${h.contato_nome}` : ""}</div>
           {h.descricao && <div style={{ color: "#111827" }}>{descricaoHistorico(h)}</div>}
         </div>
       ))}

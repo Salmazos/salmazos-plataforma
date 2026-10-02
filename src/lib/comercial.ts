@@ -1,9 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { ehAberta } from "@/lib/comercialRotulos";
-
-type ServiceClient = ReturnType<typeof createServiceClient>;
+import { ehAberta, rotuloEtapa } from "@/lib/comercialRotulos";
 
 export const ETAPAS = ["prospeccao", "contato_feito", "reuniao_visita", "proposta_enviada", "negociacao", "ganho", "perdido"] as const;
 export type Etapa = (typeof ETAPAS)[number];
@@ -68,146 +66,22 @@ export function somarDias(dataIso: string, dias: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-const ORDEM_ETAPA: Record<string, number> = { prospeccao: 0, contato_feito: 1, reuniao_visita: 2, proposta_enviada: 3, negociacao: 4 };
-
-const DIAS_RETORNO: Record<ResultadoComercial, number> = { sem_interesse: 30, retornar: 7, quer_proposta: 3, fechou: 1, nao_encontrou: 7 };
-const TEXTO_PROXIMA_ACAO: Record<ResultadoComercial, string> = {
-  sem_interesse: "Retomar contato (sem interesse na última visita)",
-  retornar: "Retornar contato",
-  quer_proposta: "Enviar proposta",
-  fechou: "Confirmar fechamento",
-  nao_encontrou: "Tentar novo contato (ninguém encontrado)",
-};
-const ETAPA_INICIAL: Record<ResultadoComercial, Etapa> = {
-  sem_interesse: "contato_feito",
-  retornar: "contato_feito",
-  quer_proposta: "reuniao_visita",
-  // Visita nunca cria/avança sozinha para proposta ou ganho: valor e serviço só se exigem ao
-  // mover manualmente para "Proposta enviada". O teto automático é Reunião/Visita.
-  fechou: "reuniao_visita",
-  nao_encontrou: "prospeccao",
-};
-
-function escapeLike(s: string): string {
-  return s.replace(/[\\%_]/g, (c) => `\\${c}`);
-}
-
-export interface VisitaComercialInput {
-  registroId: string;
-  kmVisitaId: string | null;
-  empresa: string;
-  contato?: string | null;
-  contatoTelefone?: string | null;
-  contatoEmail?: string | null;
-  motivo?: string | null;
-  resumo?: string | null;
-  resultadoComercial?: ResultadoComercial | null;
-  clienteId?: string | null;
-}
-
-// DESATIVADA: a KM não alimenta mais o funil (decisão do dono, 02/10). Sem chamadores. Avaliar remoção no próximo prompt.
-// Integração KM → Funil. Idempotente: a tela de KM apaga e regrava todas as visitas ao editar
-// um registro, então a interação é chaveada por (oportunidade, km_registro_id) e uma regravação
-// só atualiza a interação — nunca duplica nem reagenda a próxima ação. Chamar sempre dentro de
-// try/catch: falha aqui não pode impedir o salvamento da KM.
-export async function registrarVisitaNoFunil(svc: ServiceClient, input: VisitaComercialInput): Promise<void> {
-  const { data: registro } = await svc.from("km_registros").select("analista_id, data").eq("id", input.registroId).maybeSingle();
-  if (!registro?.analista_id) return;
-  const { data: perfil } = await svc
-    .from("analistas_perfil")
-    .select("id, perfil_comercial, unidade_id, ativo")
-    .eq("id", registro.analista_id)
-    .maybeSingle();
-  if (!perfil || perfil.ativo === false || perfil.perfil_comercial !== true || !perfil.unidade_id) return;
-
-  const resultado = input.resultadoComercial ?? null;
-  const hoje = hojeSaoPaulo();
-  const dataVisita: string = typeof registro.data === "string" ? registro.data.slice(0, 10) : hoje;
-  let proximaEm = somarDias(dataVisita, DIAS_RETORNO[resultado ?? "retornar"]);
-  if (proximaEm < hoje) proximaEm = hoje;
-  const proximaAcao = TEXTO_PROXIMA_ACAO[resultado ?? "retornar"];
-
-  const { data: carteira } = await svc
-    .from("empresas_visitadas")
-    .select("id, cliente_id")
-    .ilike("nome", escapeLike(input.empresa))
-    .eq("unidade_id", perfil.unidade_id)
-    .limit(1)
-    .maybeSingle();
-
-  const { data: abertas } = await svc
+// Só pode existir UMA oportunidade aberta por empresa na unidade inteira (índice único parcial no
+// banco). Devolve a mensagem com o vendedor responsável e a fase, ou null se a empresa está livre.
+export async function mensagemOportunidadeAberta(
+  svc: ReturnType<typeof createServiceClient>,
+  empresaVisitadaId: string,
+  ignorarId?: string
+): Promise<string | null> {
+  let q = svc
     .from("oportunidades")
-    .select("id, etapa, contato_nome, contato_telefone, contato_email, empresa_visitada_id, cliente_id")
-    .eq("vendedor_id", perfil.id)
-    .eq("unidade_id", perfil.unidade_id)
-    .ilike("empresa", escapeLike(input.empresa))
-    .in("etapa", ETAPAS_ABERTAS)
-    .order("created_at", { ascending: false })
+    .select("vendedor_id, etapa")
+    .eq("empresa_visitada_id", empresaVisitadaId)
+    .not("etapa", "in", "(ganho,perdido)")
     .limit(1);
-  let oportunidade = abertas?.[0] ?? null;
-  let nova = false;
-
-  if (!oportunidade) {
-    const { data: criada, error } = await svc
-      .from("oportunidades")
-      .insert({
-        unidade_id: perfil.unidade_id,
-        vendedor_id: perfil.id,
-        empresa: input.empresa,
-        contato_nome: input.contato || null,
-        contato_telefone: input.contatoTelefone || null,
-        contato_email: input.contatoEmail || null,
-        cliente_id: input.clienteId || carteira?.cliente_id || null,
-        empresa_visitada_id: carteira?.id ?? null,
-        origem: "km",
-        etapa: ETAPA_INICIAL[resultado ?? "retornar"],
-        proxima_acao: proximaAcao,
-        proxima_acao_em: proximaEm,
-      })
-      .select("id, etapa, contato_nome, contato_telefone, contato_email, empresa_visitada_id, cliente_id")
-      .single();
-    if (error || !criada) throw new Error(error?.message ?? "falha ao criar oportunidade");
-    oportunidade = criada;
-    nova = true;
-  }
-
-  const descricao = [input.motivo, input.resumo].filter((x) => x && String(x).trim()).join(" — ") || "Visita registrada na KM";
-  const { data: jaExiste } = await svc
-    .from("oportunidade_interacoes")
-    .select("id")
-    .eq("oportunidade_id", oportunidade.id)
-    .eq("km_registro_id", input.registroId)
-    .maybeSingle();
-
-  if (jaExiste) {
-    // Regravação (edição do registro de KM): atualiza só a interação.
-    await svc
-      .from("oportunidade_interacoes")
-      .update({ resultado, descricao, km_visita_id: input.kmVisitaId })
-      .eq("id", jaExiste.id);
-    return;
-  }
-
-  await svc.from("oportunidade_interacoes").insert({
-    oportunidade_id: oportunidade.id,
-    autor_id: perfil.id,
-    tipo: "visita",
-    resultado,
-    descricao,
-    km_visita_id: input.kmVisitaId,
-    km_registro_id: input.registroId,
-  });
-
-  if (!nova) {
-    const atualiza: Record<string, unknown> = { proxima_acao: proximaAcao, proxima_acao_em: proximaEm, updated_at: new Date().toISOString() };
-    if (resultado) {
-      const alvo = ETAPA_INICIAL[resultado];
-      if ((ORDEM_ETAPA[alvo] ?? 0) > (ORDEM_ETAPA[oportunidade.etapa] ?? 0)) atualiza.etapa = alvo;
-    }
-    if (!oportunidade.contato_nome && input.contato) atualiza.contato_nome = input.contato;
-    if (!oportunidade.contato_telefone && input.contatoTelefone) atualiza.contato_telefone = input.contatoTelefone;
-    if (!oportunidade.contato_email && input.contatoEmail) atualiza.contato_email = input.contatoEmail;
-    if (!oportunidade.empresa_visitada_id && carteira?.id) atualiza.empresa_visitada_id = carteira.id;
-    await svc.from("oportunidades").update(atualiza).eq("id", oportunidade.id);
-  }
+  if (ignorarId) q = q.neq("id", ignorarId);
+  const { data: aberta } = await q.maybeSingle();
+  if (!aberta) return null;
+  const { data: vend } = await svc.from("analistas_perfil").select("nome_completo").eq("id", aberta.vendedor_id).maybeSingle();
+  return `Já existe uma oportunidade aberta para esta empresa (vendedor: ${vend?.nome_completo ?? "—"}, fase: ${rotuloEtapa(aberta.etapa as string)}).`;
 }
