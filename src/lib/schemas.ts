@@ -750,6 +750,7 @@ export const kmVisitaCreateSchema = z.object({
   problema_descricao: z.string().optional().nullable(),
   plano_acao: z.string().optional().nullable(),
   evidencias_fotos: z.array(z.string()).optional(),
+  resultado_comercial: z.enum(["sem_interesse", "retornar", "quer_proposta", "fechou", "nao_encontrou"]).optional().nullable(),
 }).superRefine((data, ctx) => {
   if (data.tipo_visita === "supervisao" && !data.cliente_id) {
     ctx.addIssue({ code: "custom", path: ["cliente_id"], message: "cliente_id é obrigatório para visita de supervisão." });
@@ -1367,4 +1368,43 @@ export const avisoVagaEmailAtivoSchema = z.object({
 export const avisoVagaPlataformaCreateSchema = z.object({
   evento: z.enum(["vaga_criada", "solicitacao_vaga", "vaga_fechada", "vaga_cancelada", "vaga_reativada"]),
   usuario_id: z.string().uuid(),
+});
+
+// ── Comercial (funil de oportunidades) ───────────────────────────────────────
+
+const dataIsoComercial = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida (use AAAA-MM-DD).");
+const etapaComercial = z.enum(["prospeccao", "contato_feito", "reuniao_visita", "proposta_enviada", "negociacao", "ganho", "perdido"]);
+const textoOpcionalComercial = z.string().trim().max(500).optional().nullable();
+
+export const oportunidadeCreateSchema = z.object({
+  empresa: z.string().trim().min(1, "Empresa obrigatória.").max(200),
+  contato_nome: textoOpcionalComercial,
+  contato_telefone: textoOpcionalComercial,
+  contato_email: textoOpcionalComercial,
+  origem: z.enum(["ligacao", "indicacao", "outro"]).default("ligacao"),
+  servico_interesse: textoOpcionalComercial,
+  valor_estimado: z.coerce.number().nonnegative().max(100000000).optional().nullable(),
+  etapa: z.enum(["prospeccao", "contato_feito", "reuniao_visita", "proposta_enviada", "negociacao"]).default("prospeccao"),
+  proxima_acao: z.string().trim().min(1, "Próxima ação obrigatória.").max(300),
+  proxima_acao_em: dataIsoComercial,
+});
+
+export const oportunidadeUpdateSchema = z.object({
+  etapa: etapaComercial.optional(),
+  proxima_acao: z.string().trim().min(1).max(300).optional(),
+  proxima_acao_em: dataIsoComercial.optional(),
+  valor_estimado: z.coerce.number().nonnegative().max(100000000).optional().nullable(),
+  servico_interesse: textoOpcionalComercial,
+  contato_nome: textoOpcionalComercial,
+  contato_telefone: textoOpcionalComercial,
+  contato_email: textoOpcionalComercial,
+  motivo_perda: z.string().trim().max(500).optional().nullable(),
+});
+
+export const oportunidadeInteracaoCreateSchema = z.object({
+  tipo: z.enum(["ligacao", "visita", "email", "whatsapp", "anotacao"]),
+  resultado: z.enum(["sem_interesse", "retornar", "quer_proposta", "fechou", "nao_encontrou"]).optional().nullable(),
+  descricao: z.string().trim().max(2000).optional().nullable(),
+  proxima_acao: z.string().trim().min(1).max(300).optional(),
+  proxima_acao_em: dataIsoComercial.optional(),
 });

@@ -70,6 +70,7 @@ interface Props {
   canAccessClientes: boolean;
   canAccessCarteiraClientes: boolean;
   canAccessGestaoClientes: boolean;
+  canAccessFunilComercial: boolean;
   canAccessDocumentos: boolean;
 }
 
@@ -106,6 +107,7 @@ interface MenuLeafDef {
   requireClientes?: boolean;
   requireCarteiraClientes?: boolean;
   requireGestaoClientes?: boolean;
+  requireFunilComercial?: boolean;
   requireDocumentos?: boolean;
 }
 
@@ -137,6 +139,7 @@ const menuItems: MenuItemDef[] = [
       { label: "Clientes", href: "/painel/clientes", icon: Building2, requireClientes: true },
       { label: "Carteira de Clientes", href: "/painel/empresas-visitadas", icon: MapPin, requireCarteiraClientes: true },
       { label: "Gestão de Clientes", href: "/painel/gestao-clientes", icon: AlertTriangle, requireGestaoClientes: true },
+      { label: "Funil Comercial", href: "/painel/comercial", icon: TrendingUp, requireFunilComercial: true },
     ],
   },
   {
@@ -235,6 +238,7 @@ export default function SidebarMenu({
   canAccessClientes,
   canAccessCarteiraClientes,
   canAccessGestaoClientes,
+  canAccessFunilComercial,
   canAccessDocumentos,
   userEmail,
 }: Props) {
@@ -348,6 +352,7 @@ export default function SidebarMenu({
     if (def.requireClientes && !canAccessClientes) return false;
     if (def.requireCarteiraClientes && !canAccessCarteiraClientes) return false;
     if (def.requireGestaoClientes && !canAccessGestaoClientes) return false;
+    if (def.requireFunilComercial && !canAccessFunilComercial) return false;
     if (def.requireDocumentos && !canAccessDocumentos) return false;
     return true;
   }

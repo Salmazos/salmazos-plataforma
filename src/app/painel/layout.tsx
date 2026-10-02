@@ -27,6 +27,7 @@ import { podeAcessarFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaA
 import { podeAcessarRelatorios } from "@/lib/relatoriosAuth";
 import { podeAcessarDashboard } from "@/lib/dashboardAuth";
 import { podeAcessarClientes, podeAcessarCarteiraClientes, podeAcessarGestaoClientes } from "@/lib/comercialAuth";
+import { podeAcessarFunilComercial } from "@/lib/comercial";
 import { podeAcessarDocumentos } from "@/lib/documentosAuth";
 
 export const dynamic = "force-dynamic";
@@ -83,6 +84,7 @@ export default async function PainelLayout({
   const canAccessClientes = await podeAcessarClientes(user);
   const canAccessCarteiraClientes = await podeAcessarCarteiraClientes(user);
   const canAccessGestaoClientes = await podeAcessarGestaoClientes(user);
+  const canAccessFunilComercial = await podeAcessarFunilComercial(user);
   const canAccessDocumentos = await podeAcessarDocumentos(user);
 
   const { data: perfil } = await supabase
@@ -128,6 +130,7 @@ export default async function PainelLayout({
           canAccessClientes={canAccessClientes}
           canAccessCarteiraClientes={canAccessCarteiraClientes}
           canAccessGestaoClientes={canAccessGestaoClientes}
+          canAccessFunilComercial={canAccessFunilComercial}
           canAccessDocumentos={canAccessDocumentos}
         />
         <main className="flex-1 min-w-0 px-6 py-6">{children}</main>

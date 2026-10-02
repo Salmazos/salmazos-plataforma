@@ -72,6 +72,7 @@ interface KmVisita {
   contato_email: string | null;
   motivo: string | null;
   resultado: string | null;
+  resultado_comercial?: string | null;
   ordem: number;
   tipo_visita: "supervisao" | "comercial";
   cliente_id: string | null;
@@ -117,6 +118,7 @@ interface VisitaLocal {
   contato_email: string;
   motivo: string;
   resultado: string;
+  resultado_comercial: string;
   tipo_visita: "supervisao" | "comercial";
   cliente_id: string | null;
   checklist_equipe_completa: string;
@@ -133,7 +135,7 @@ interface VisitaLocal {
 
 function novaVisitaLocal(): VisitaLocal {
   return {
-    empresa: "", contato: "", contato_telefone: "", contato_email: "", motivo: "", resultado: "",
+    empresa: "", contato: "", contato_telefone: "", contato_email: "", motivo: "", resultado: "", resultado_comercial: "",
     tipo_visita: "comercial", cliente_id: null,
     checklist_equipe_completa: "", checklist_epi: "", checklist_uniforme: "",
     checklist_pontualidade: "", checklist_ambiente: "", checklist_feedback_cliente: "",
@@ -348,7 +350,7 @@ export default function KmTab({ analistaId, isGestor }: Props) {
       setVisitas(
         loaded.length > 0
           ? loaded.map((v) => ({
-              empresa: v.empresa, contato: v.contato ?? "", contato_telefone: v.contato_telefone ?? "", contato_email: v.contato_email ?? "", motivo: v.motivo ?? "", resultado: v.resultado ?? "",
+              empresa: v.empresa, contato: v.contato ?? "", contato_telefone: v.contato_telefone ?? "", contato_email: v.contato_email ?? "", motivo: v.motivo ?? "", resultado: v.resultado ?? "", resultado_comercial: v.resultado_comercial ?? "",
               tipo_visita: v.tipo_visita ?? "comercial", cliente_id: v.cliente_id ?? null,
               checklist_equipe_completa: v.checklist_equipe_completa ?? "", checklist_epi: v.checklist_epi ?? "",
               checklist_uniforme: v.checklist_uniforme ?? "", checklist_pontualidade: v.checklist_pontualidade ?? "",
@@ -461,6 +463,7 @@ export default function KmTab({ analistaId, isGestor }: Props) {
               contato_email: v.contato_email || null,
               motivo: v.motivo || null,
               resultado: v.resultado || null,
+              resultado_comercial: v.tipo_visita === "comercial" ? (v.resultado_comercial || null) : null,
               ordem: ordemIdx + 1,
               tipo_visita: v.tipo_visita,
               cliente_id: v.tipo_visita === "supervisao" ? v.cliente_id : null,
@@ -960,6 +963,19 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                     </div>
                     {v.tipo_visita !== "supervisao" && (
                       <div>
+                        <label style={labelStyle}>Resultado da visita</label>
+                        <select
+                          style={{ ...inputStyle, marginBottom: 8 }}
+                          value={v.resultado_comercial}
+                          onChange={(e) => updateVisita(idx, "resultado_comercial", e.target.value)}
+                        >
+                          <option value="">Selecione...</option>
+                          <option value="sem_interesse">Sem interesse</option>
+                          <option value="retornar">Retornar</option>
+                          <option value="quer_proposta">Quer proposta</option>
+                          <option value="fechou">Fechou</option>
+                          <option value="nao_encontrou">Não encontrei ninguém</option>
+                        </select>
                         <label style={labelStyle}>Resumo da visita</label>
                         <textarea
                           style={{ ...inputStyle, resize: "none", minHeight: 38 }}

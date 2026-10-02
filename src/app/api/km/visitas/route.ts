@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, kmVisitaCreateSchema } from "@/lib/schemas";
 import { autorizarDonoRegistro } from "@/lib/kmAuth";
 import { recalcularEmpresaVisitada } from "@/lib/carteiraClientes";
+import { registrarVisitaNoFunil } from "@/lib/comercial";
 
 async function autorizarPorRegistroId(user: User, registroId: string): Promise<NextResponse | null> {
   const svc = createServiceClient();
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
     registro_id, empresa, contato, contato_telefone, contato_email, motivo, resultado, ordem,
     tipo_visita, cliente_id, checklist_equipe_completa, checklist_epi, checklist_uniforme,
     checklist_pontualidade, checklist_ambiente, checklist_feedback_cliente,
-    problema_identificado, problema_descricao, plano_acao, evidencias_fotos,
+    problema_identificado, problema_descricao, plano_acao, evidencias_fotos, resultado_comercial,
   } = parsed.data;
 
   const erroDono = await autorizarPorRegistroId(user, registro_id);
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
       problema_descricao: problema_descricao || null,
       plano_acao: plano_acao || null,
       evidencias_fotos: evidencias_fotos ?? [],
+      resultado_comercial: resultado_comercial || null,
     })
     .select()
     .single();
@@ -162,6 +164,27 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     // Upsert is best-effort — don't fail the visita save
     console.error("[POST /api/km/visitas] Carteira não atualizada:", err);
+  }
+
+  // ── Funil comercial (best-effort, como a carteira): visita comercial de vendedor com perfil
+  // comercial vira/atualiza oportunidade. Falha aqui nunca derruba o salvamento da KM.
+  if ((tipo_visita ?? "comercial") === "comercial") {
+    try {
+      await registrarVisitaNoFunil(svc, {
+        registroId: registro_id,
+        kmVisitaId: data?.id ?? null,
+        empresa,
+        contato,
+        contatoTelefone: contato_telefone,
+        contatoEmail: contato_email,
+        motivo,
+        resumo: resultado,
+        resultadoComercial: resultado_comercial ?? null,
+        clienteId: cliente_id,
+      });
+    } catch (err) {
+      console.error("[POST /api/km/visitas] Funil comercial não atualizado:", err);
+    }
   }
 
   return NextResponse.json({ data }, { status: 201 });
