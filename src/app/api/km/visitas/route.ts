@@ -4,7 +4,6 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, kmVisitaCreateSchema } from "@/lib/schemas";
 import { autorizarDonoRegistro } from "@/lib/kmAuth";
 import { recalcularEmpresaVisitada } from "@/lib/carteiraClientes";
-import { registrarVisitaNoFunil } from "@/lib/comercial";
 
 async function autorizarPorRegistroId(user: User, registroId: string): Promise<NextResponse | null> {
   const svc = createServiceClient();
@@ -47,7 +46,7 @@ export async function POST(request: NextRequest) {
     registro_id, empresa, contato, contato_telefone, contato_email, motivo, resultado, ordem,
     tipo_visita, cliente_id, checklist_equipe_completa, checklist_epi, checklist_uniforme,
     checklist_pontualidade, checklist_ambiente, checklist_feedback_cliente,
-    problema_identificado, problema_descricao, plano_acao, evidencias_fotos, resultado_comercial,
+    problema_identificado, problema_descricao, plano_acao, evidencias_fotos,
   } = parsed.data;
 
   const erroDono = await autorizarPorRegistroId(user, registro_id);
@@ -77,7 +76,6 @@ export async function POST(request: NextRequest) {
       problema_descricao: problema_descricao || null,
       plano_acao: plano_acao || null,
       evidencias_fotos: evidencias_fotos ?? [],
-      resultado_comercial: resultado_comercial || null,
     })
     .select()
     .single();
@@ -85,105 +83,88 @@ export async function POST(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   // ── Upsert empresas_visitadas ──
-  try {
-    // Resolve analista info from the registro
-    const { data: registro } = await svc
-      .from("km_registros")
-      .select("analista_id")
-      .eq("id", registro_id)
-      .single();
-
-    let analistaNome: string | null = null;
-    let analistaUserId: string | null = null;
-    let analistaUnidadeId: string | null = null;
-    if (registro?.analista_id) {
-      const { data: perfil } = await svc
-        .from("analistas_perfil")
-        .select("nome_completo, user_id, unidade_id")
-        .eq("id", registro.analista_id)
-        .single();
-      analistaNome = perfil?.nome_completo ?? null;
-      analistaUserId = perfil?.user_id ?? null;
-      analistaUnidadeId = perfil?.unidade_id ?? null;
-    }
-    // Carteira é separada por unidade (decisão do Olver, 24/09): a empresa fica na unidade de
-    // quem visitou. Sem unidade conhecida não grava na carteira — a visita em si já foi salva.
-    if (!analistaUnidadeId) throw new Error(`analista sem unidade (registro_id=${registro_id})`);
-
-    // Look for existing empresa (case-insensitive), só na carteira da mesma unidade
-    const { data: existing } = await svc
-      .from("empresas_visitadas")
-      .select("id, contato_nome, contato_telefone, contato_email, cliente_id, total_visitas")
-      .ilike("nome", empresa)
-      .eq("unidade_id", analistaUnidadeId)
-      .limit(1)
-      .maybeSingle();
-
-    if (existing) {
-      // Só preenche contato em branco — total/datas/último visitante são recalculados abaixo.
-      const contatoEmBranco = {
-        ...((!existing.contato_nome && contato) ? { contato_nome: contato } : {}),
-        ...((!existing.contato_telefone && contato_telefone) ? { contato_telefone } : {}),
-        ...((!existing.contato_email && contato_email) ? { contato_email } : {}),
-      };
-      if (Object.keys(contatoEmBranco).length > 0) {
-        await svc.from("empresas_visitadas").update(contatoEmBranco).eq("id", existing.id);
-      }
-    } else {
-      // Visita de supervisão já traz cliente_id do combobox — evita adivinhar por nome.
-      // Comercial continua resolvendo por match de nome, como antes.
-      let empresaClienteId: string | null = cliente_id || null;
-      if (!empresaClienteId) {
-        const { data: cliente } = await svc
-          .from("clientes")
-          .select("id")
-          .ilike("nome", empresa)
-          .eq("unidade_id", analistaUnidadeId)
-          .limit(1)
-          .maybeSingle();
-        if (cliente) empresaClienteId = cliente.id;
-      }
-
-      await svc.from("empresas_visitadas").insert({
-        nome: empresa,
-        contato_nome: contato || null,
-        contato_telefone: contato_telefone || null,
-        contato_email: contato_email || null,
-        cliente_id: empresaClienteId,
-        primeira_visita_em: new Date().toISOString(),
-        ultima_visita_em: new Date().toISOString(),
-        total_visitas: 1,
-        ultimo_visitante_id: analistaUserId,
-        ultimo_visitante_nome: analistaNome,
-        created_by: analistaUserId,
-        unidade_id: analistaUnidadeId,
-      });
-    }
-
-    await recalcularEmpresaVisitada(svc, empresa, analistaUnidadeId);
-  } catch (err) {
-    // Upsert is best-effort — don't fail the visita save
-    console.error("[POST /api/km/visitas] Carteira não atualizada:", err);
-  }
-
-  // ── Funil comercial (best-effort, como a carteira): visita comercial de vendedor com perfil
-  // comercial vira/atualiza oportunidade. Falha aqui nunca derruba o salvamento da KM.
-  if ((tipo_visita ?? "comercial") === "comercial") {
+  // Decisão do dono (02/10): a KM comercial serve só para lançar km e garantir o reembolso; não
+  // toca a carteira nem o funil. Só a supervisão de posto continua alimentando empresas_visitadas.
+  if (tipo_visita === "supervisao") {
     try {
-      await registrarVisitaNoFunil(svc, {
-        registroId: registro_id,
-        kmVisitaId: data?.id ?? null,
-        empresa,
-        contato,
-        contatoTelefone: contato_telefone,
-        contatoEmail: contato_email,
-        motivo,
-        resumo: resultado,
-        resultadoComercial: resultado_comercial ?? null,
-        clienteId: cliente_id,
-      });
+      // Resolve analista info from the registro
+      const { data: registro } = await svc
+        .from("km_registros")
+        .select("analista_id")
+        .eq("id", registro_id)
+        .single();
+
+      let analistaNome: string | null = null;
+      let analistaUserId: string | null = null;
+      let analistaUnidadeId: string | null = null;
+      if (registro?.analista_id) {
+        const { data: perfil } = await svc
+          .from("analistas_perfil")
+          .select("nome_completo, user_id, unidade_id")
+          .eq("id", registro.analista_id)
+          .single();
+        analistaNome = perfil?.nome_completo ?? null;
+        analistaUserId = perfil?.user_id ?? null;
+        analistaUnidadeId = perfil?.unidade_id ?? null;
+      }
+      // Carteira é separada por unidade (decisão do Olver, 24/09): a empresa fica na unidade de
+      // quem visitou. Sem unidade conhecida não grava na carteira — a visita em si já foi salva.
+      if (!analistaUnidadeId) throw new Error(`analista sem unidade (registro_id=${registro_id})`);
+
+      // Look for existing empresa (case-insensitive), só na carteira da mesma unidade
+      const { data: existing } = await svc
+        .from("empresas_visitadas")
+        .select("id, contato_nome, contato_telefone, contato_email, cliente_id, total_visitas")
+        .ilike("nome", empresa)
+        .eq("unidade_id", analistaUnidadeId)
+        .limit(1)
+        .maybeSingle();
+
+      if (existing) {
+        // Só preenche contato em branco — total/datas/último visitante são recalculados abaixo.
+        const contatoEmBranco = {
+          ...((!existing.contato_nome && contato) ? { contato_nome: contato } : {}),
+          ...((!existing.contato_telefone && contato_telefone) ? { contato_telefone } : {}),
+          ...((!existing.contato_email && contato_email) ? { contato_email } : {}),
+        };
+        if (Object.keys(contatoEmBranco).length > 0) {
+          await svc.from("empresas_visitadas").update(contatoEmBranco).eq("id", existing.id);
+        }
+      } else {
+        // Visita de supervisão já traz cliente_id do combobox — evita adivinhar por nome.
+        // Comercial continua resolvendo por match de nome, como antes.
+        let empresaClienteId: string | null = cliente_id || null;
+        if (!empresaClienteId) {
+          const { data: cliente } = await svc
+            .from("clientes")
+            .select("id")
+            .ilike("nome", empresa)
+            .eq("unidade_id", analistaUnidadeId)
+            .limit(1)
+            .maybeSingle();
+          if (cliente) empresaClienteId = cliente.id;
+        }
+
+        await svc.from("empresas_visitadas").insert({
+          nome: empresa,
+          contato_nome: contato || null,
+          contato_telefone: contato_telefone || null,
+          contato_email: contato_email || null,
+          cliente_id: empresaClienteId,
+          primeira_visita_em: new Date().toISOString(),
+          ultima_visita_em: new Date().toISOString(),
+          total_visitas: 1,
+          ultimo_visitante_id: analistaUserId,
+          ultimo_visitante_nome: analistaNome,
+          created_by: analistaUserId,
+          unidade_id: analistaUnidadeId,
+        });
+      }
+
+      await recalcularEmpresaVisitada(svc, empresa, analistaUnidadeId);
     } catch (err) {
-      console.error("[POST /api/km/visitas] Funil comercial não atualizado:", err);
+      // Upsert is best-effort — don't fail the visita save
+      console.error("[POST /api/km/visitas] Carteira não atualizada:", err);
     }
   }
 

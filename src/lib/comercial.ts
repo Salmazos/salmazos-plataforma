@@ -105,6 +105,7 @@ export interface VisitaComercialInput {
   clienteId?: string | null;
 }
 
+// DESATIVADA: a KM não alimenta mais o funil (decisão do dono, 02/10). Sem chamadores. Avaliar remoção no próximo prompt.
 // Integração KM → Funil. Idempotente: a tela de KM apaga e regrava todas as visitas ao editar
 // um registro, então a interação é chaveada por (oportunidade, km_registro_id) e uma regravação
 // só atualiza a interação — nunca duplica nem reagenda a próxima ação. Chamar sempre dentro de

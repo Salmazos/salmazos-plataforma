@@ -458,12 +458,13 @@ export default function KmTab({ analistaId, isGestor }: Props) {
             body: JSON.stringify({
               registro_id: registroId,
               empresa: v.empresa,
-              contato: v.contato || null,
-              contato_telefone: v.contato_telefone || null,
-              contato_email: v.contato_email || null,
+              // KM comercial é só reembolso: não envia contato nem resultado comercial (a UI também os oculta).
+              contato: v.tipo_visita === "supervisao" ? (v.contato || null) : null,
+              contato_telefone: v.tipo_visita === "supervisao" ? (v.contato_telefone || null) : null,
+              contato_email: v.tipo_visita === "supervisao" ? (v.contato_email || null) : null,
               motivo: v.motivo || null,
               resultado: v.resultado || null,
-              resultado_comercial: v.tipo_visita === "comercial" ? (v.resultado_comercial || null) : null,
+              resultado_comercial: null,
               ordem: ordemIdx + 1,
               tipo_visita: v.tipo_visita,
               cliente_id: v.tipo_visita === "supervisao" ? v.cliente_id : null,
@@ -606,9 +607,12 @@ export default function KmTab({ analistaId, isGestor }: Props) {
     setVisitas((prev) => prev.map((v, i) => i === idx ? {
       ...v,
       empresa: s.nome,
-      contato: s.contato_nome ?? v.contato,
-      contato_telefone: s.contato_telefone ?? v.contato_telefone,
-      contato_email: s.contato_email ?? v.contato_email,
+      // Contato da carteira só preenche a supervisão; na visita comercial os campos ficam ocultos.
+      ...(v.tipo_visita === "supervisao" ? {
+        contato: s.contato_nome ?? v.contato,
+        contato_telefone: s.contato_telefone ?? v.contato_telefone,
+        contato_email: s.contato_email ?? v.contato_email,
+      } : {}),
     } : v));
     setSugestaoAberta(null);
     setSugestoes((prev) => ({ ...prev, [idx]: [] }));
@@ -928,21 +932,25 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                       )}
                     </div>
 
-                    {/* Contato nome */}
-                    <div>
-                      <label style={labelStyle}>Nome do contato</label>
-                      <input style={inputStyle} placeholder="Nome do contato" value={v.contato} onChange={(e) => updateVisita(idx, "contato", e.target.value)} />
-                    </div>
+                    {v.tipo_visita === "supervisao" && (
+                      <>
+                      {/* Contato nome */}
+                      <div>
+                        <label style={labelStyle}>Nome do contato</label>
+                        <input style={inputStyle} placeholder="Nome do contato" value={v.contato} onChange={(e) => updateVisita(idx, "contato", e.target.value)} />
+                      </div>
 
-                    {/* Telefone + E-mail */}
-                    <div>
-                      <label style={labelStyle}>Telefone do contato</label>
-                      <CampoTelefone style={inputStyle} placeholder="(00) 00000-0000" value={v.contato_telefone} onChange={(valor) => updateVisita(idx, "contato_telefone", valor)} />
-                    </div>
-                    <div>
-                      <label style={labelStyle}>E-mail do contato</label>
-                      <input style={inputStyle} type="email" placeholder="contato@empresa.com" value={v.contato_email} onChange={(e) => updateVisita(idx, "contato_email", e.target.value)} />
-                    </div>
+                      {/* Telefone + E-mail */}
+                      <div>
+                        <label style={labelStyle}>Telefone do contato</label>
+                        <CampoTelefone style={inputStyle} placeholder="(00) 00000-0000" value={v.contato_telefone} onChange={(valor) => updateVisita(idx, "contato_telefone", valor)} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>E-mail do contato</label>
+                        <input style={inputStyle} type="email" placeholder="contato@empresa.com" value={v.contato_email} onChange={(e) => updateVisita(idx, "contato_email", e.target.value)} />
+                      </div>
+                      </>
+                    )}
 
                     {/* Motivo + Resumo */}
                     <div>
@@ -963,19 +971,6 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                     </div>
                     {v.tipo_visita !== "supervisao" && (
                       <div>
-                        <label style={labelStyle}>Resultado da visita</label>
-                        <select
-                          style={{ ...inputStyle, marginBottom: 8 }}
-                          value={v.resultado_comercial}
-                          onChange={(e) => updateVisita(idx, "resultado_comercial", e.target.value)}
-                        >
-                          <option value="">Selecione...</option>
-                          <option value="sem_interesse">Sem necessidade agora</option>
-                          <option value="retornar">Combinamos novo contato</option>
-                          <option value="quer_proposta">Pediu proposta</option>
-                          <option value="fechou">Fechamos</option>
-                          <option value="nao_encontrou">Ainda não consegui falar</option>
-                        </select>
                         <label style={labelStyle}>Resumo da visita</label>
                         <textarea
                           style={{ ...inputStyle, resize: "none", minHeight: 38 }}
