@@ -1,12 +1,14 @@
 import type { User } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { ehAberta } from "@/lib/comercialRotulos";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
 export const ETAPAS = ["prospeccao", "contato_feito", "reuniao_visita", "proposta_enviada", "negociacao", "ganho", "perdido"] as const;
 export type Etapa = (typeof ETAPAS)[number];
-export const ETAPAS_ABERTAS: Etapa[] = ["prospeccao", "contato_feito", "reuniao_visita", "proposta_enviada", "negociacao"];
+// Derivado de ehAberta (inclui "negociacao" legado, que não se usa mais em registros novos).
+export const ETAPAS_ABERTAS: Etapa[] = ETAPAS.filter(ehAberta);
 export const RESULTADOS_COMERCIAIS = ["sem_interesse", "retornar", "quer_proposta", "fechou", "nao_encontrou"] as const;
 export type ResultadoComercial = (typeof RESULTADOS_COMERCIAIS)[number];
 
@@ -80,7 +82,9 @@ const ETAPA_INICIAL: Record<ResultadoComercial, Etapa> = {
   sem_interesse: "contato_feito",
   retornar: "contato_feito",
   quer_proposta: "reuniao_visita",
-  fechou: "negociacao",
+  // Visita nunca cria/avança sozinha para proposta ou ganho: valor e serviço só se exigem ao
+  // mover manualmente para "Proposta enviada". O teto automático é Reunião/Visita.
+  fechou: "reuniao_visita",
   nao_encontrou: "prospeccao",
 };
 

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, oportunidadeInteracaoCreateSchema } from "@/lib/schemas";
-import { exigirContextoComercial, ETAPAS_ABERTAS } from "@/lib/comercial";
+import { exigirContextoComercial } from "@/lib/comercial";
+import { ehAberta } from "@/lib/comercialRotulos";
 
 async function carregarOportunidade(id: string, ctx: { gestor: boolean; todasUnidades: boolean; unidadeId: string | null; analistaId: string; vendedor: boolean }) {
   const svc = createServiceClient();
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
   const d = parsed.data;
 
-  const aberta = (ETAPAS_ABERTAS as string[]).includes(opp.etapa);
+  const aberta = ehAberta(opp.etapa);
   if (aberta && (!d.proxima_acao || !d.proxima_acao_em)) {
     return NextResponse.json({ error: "Informe a próxima ação e a data." }, { status: 400 });
   }

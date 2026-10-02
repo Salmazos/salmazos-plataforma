@@ -1373,7 +1373,9 @@ export const avisoVagaPlataformaCreateSchema = z.object({
 // ── Comercial (funil de oportunidades) ───────────────────────────────────────
 
 const dataIsoComercial = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida (use AAAA-MM-DD).");
-const etapaComercial = z.enum(["prospeccao", "contato_feito", "reuniao_visita", "proposta_enviada", "negociacao", "ganho", "perdido"]);
+// "negociacao" é legado: continua no banco, mas não é mais aceita em escrita.
+const etapaComercial = z.enum(["prospeccao", "contato_feito", "reuniao_visita", "proposta_enviada", "ganho", "perdido"]);
+const motivoPerdaCategoria = z.enum(["sem_necessidade", "valor_acima_orcamento", "outro_fornecedor", "sem_retorno", "resolveu_internamente", "outro"]);
 const textoOpcionalComercial = z.string().trim().max(500).optional().nullable();
 
 export const oportunidadeCreateSchema = z.object({
@@ -1384,7 +1386,7 @@ export const oportunidadeCreateSchema = z.object({
   origem: z.enum(["ligacao", "indicacao", "outro"]).default("ligacao"),
   servico_interesse: textoOpcionalComercial,
   valor_estimado: z.coerce.number().nonnegative().max(100000000).optional().nullable(),
-  etapa: z.enum(["prospeccao", "contato_feito", "reuniao_visita", "proposta_enviada", "negociacao"]).default("prospeccao"),
+  etapa: z.enum(["prospeccao", "contato_feito", "reuniao_visita", "proposta_enviada"]).default("prospeccao"),
   proxima_acao: z.string().trim().min(1, "Próxima ação obrigatória.").max(300),
   proxima_acao_em: dataIsoComercial,
 });
@@ -1399,6 +1401,7 @@ export const oportunidadeUpdateSchema = z.object({
   contato_telefone: textoOpcionalComercial,
   contato_email: textoOpcionalComercial,
   motivo_perda: z.string().trim().max(500).optional().nullable(),
+  motivo_perda_categoria: motivoPerdaCategoria.optional(),
 });
 
 export const oportunidadeInteracaoCreateSchema = z.object({

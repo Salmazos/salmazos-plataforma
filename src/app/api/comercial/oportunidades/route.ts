@@ -56,6 +56,16 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
   const d = parsed.data;
 
+  // Criar já em "Proposta enviada" exige o mesmo que avançar até ela depois.
+  if (d.etapa === "proposta_enviada") {
+    if (d.valor_estimado == null || !(d.valor_estimado > 0)) {
+      return NextResponse.json({ error: "Informe o valor estimado (maior que zero) para criar já em Proposta enviada." }, { status: 400 });
+    }
+    if (!d.servico_interesse?.trim()) {
+      return NextResponse.json({ error: "Informe o serviço de interesse para criar já em Proposta enviada." }, { status: 400 });
+    }
+  }
+
   const svc = createServiceClient();
   const { data, error } = await svc
     .from("oportunidades")

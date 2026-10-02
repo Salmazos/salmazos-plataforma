@@ -970,11 +970,11 @@ export default function KmTab({ analistaId, isGestor }: Props) {
                           onChange={(e) => updateVisita(idx, "resultado_comercial", e.target.value)}
                         >
                           <option value="">Selecione...</option>
-                          <option value="sem_interesse">Sem interesse</option>
-                          <option value="retornar">Retornar</option>
-                          <option value="quer_proposta">Quer proposta</option>
-                          <option value="fechou">Fechou</option>
-                          <option value="nao_encontrou">Não encontrei ninguém</option>
+                          <option value="sem_interesse">Sem necessidade agora</option>
+                          <option value="retornar">Combinamos novo contato</option>
+                          <option value="quer_proposta">Pediu proposta</option>
+                          <option value="fechou">Fechamos</option>
+                          <option value="nao_encontrou">Ainda não consegui falar</option>
                         </select>
                         <label style={labelStyle}>Resumo da visita</label>
                         <textarea
