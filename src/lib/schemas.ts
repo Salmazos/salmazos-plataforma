@@ -1418,18 +1418,27 @@ export const empresaComercialCreateSchema = z.object({
 });
 
 const textoContatoOpcional = z.string().trim().max(200).optional().nullable();
+// E-mail do contato: vazio continua permitido; preenchido tem que ser nome@dominio.com. Grava em minúsculas.
+const emailContatoOpcional = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(200)
+  .refine((v) => v === "" || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v), "E-mail inválido. Use o formato nome@empresa.com")
+  .optional()
+  .nullable();
 export const contatoEmpresaCreateSchema = z.object({
   nome: z.string().trim().min(1, "Informe o nome do contato.").max(200),
   cargo: textoContatoOpcional,
   telefone: textoContatoOpcional,
-  email: textoContatoOpcional,
+  email: emailContatoOpcional,
 });
 
 export const contatoEmpresaUpdateSchema = z.object({
   nome: z.string().trim().min(1, "Informe o nome do contato.").max(200).optional(),
   cargo: textoContatoOpcional,
   telefone: textoContatoOpcional,
-  email: textoContatoOpcional,
+  email: emailContatoOpcional,
   principal: z.boolean().optional(),
 });
 

@@ -27,6 +27,23 @@ export function formatarTelefone(valor: string): string {
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
 }
 
+// Exibição de telefone no padrão "19 99999-9999" (11 dígitos) ou "19 9999-9999" (10). Só mostra: não
+// altera o dado gravado e formata também telefones antigos sem máscara. Fora de 10/11 dígitos, devolve como está.
+export function exibirTelefone(valor: string | null | undefined): string {
+  if (!valor) return "";
+  const d = valor.replace(/\D/g, "");
+  if (d.length === 11) return `${d.slice(0, 2)} ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `${d.slice(0, 2)} ${d.slice(2, 6)}-${d.slice(6)}`;
+  return valor;
+}
+
+// E-mail opcional: vazio é válido; preenchido precisa ser tipo nome@dominio.com (com ponto no domínio).
+export function emailContatoValido(valor: string | null | undefined): boolean {
+  const v = (valor ?? "").trim();
+  return v === "" || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
+}
+export const MSG_EMAIL_INVALIDO = "E-mail inválido. Use o formato nome@empresa.com";
+
 export function validarCPF(cpf: string): boolean {
   const n = cpf.replace(/\D/g, "");
   if (n.length !== 11 || /^(\d)\1+$/.test(n)) return false;

@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import CampoTelefone from "@/components/ui/CampoTelefone";
+import { exibirTelefone, emailContatoValido, MSG_EMAIL_INVALIDO } from "@/lib/utils";
 import { ROTULO_RESULTADO_CONTATO, ROTULO_MOTIVO_PERDA, rotuloEtapa, ehAberta } from "@/lib/comercialRotulos";
 
 interface Vendedor { id: string; nome_completo: string; unidade_nome: string | null }
@@ -159,10 +161,15 @@ export default function ComercialClient({ vendedor, gestor, meuAnalistaId, vende
       <div onClick={() => setDetalheId(o.id)} style={{ background: "#fff", border: `1px solid ${alerta ? "#FCA5A5" : "#E5E7EB"}`, borderLeft: `4px solid ${alerta ? "#DC2626" : "#FFB800"}`, borderRadius: 10, padding: 10, marginBottom: 8, cursor: "pointer" }}>
         <div style={{ fontWeight: 700, fontSize: 13, color: "#111827" }}>{o.empresa}</div>
         {gestor && !vendedor || (gestor && o.vendedor_nome) ? <div style={{ fontSize: 11, color: "#6B7280" }}>{o.vendedor_nome}</div> : null}
-        <div style={{ fontSize: 12, color: "#374151", marginTop: 4 }}>{o.proxima_acao || "Sem próxima ação"}</div>
-        <div style={{ fontSize: 11, color: alerta ? "#B91C1C" : "#6B7280", marginTop: 2 }}>
-          {o.proxima_acao_em ? fmtData(o.proxima_acao_em) : "sem data"}{atrasada(o) ? " · precisa de atenção" : ""}
-        </div>
+        {/* Oportunidade encerrada (venda fechada / não desta vez) não mostra próxima ação nem data. */}
+        {ehAberta(o.etapa) && (
+          <>
+            <div style={{ fontSize: 12, color: "#374151", marginTop: 4 }}>{o.proxima_acao || "Sem próxima ação"}</div>
+            <div style={{ fontSize: 11, color: alerta ? "#B91C1C" : "#6B7280", marginTop: 2 }}>
+              {o.proxima_acao_em ? fmtData(o.proxima_acao_em) : "sem data"}{atrasada(o) ? " · precisa de atenção" : ""}
+            </div>
+          </>
+        )}
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#6B7280", marginTop: 4 }}>
           <span>{FASES_COM_VALOR.includes(o.etapa) ? fmtMoeda(o.valor_estimado) : ""}</span>
           {ehAberta(o.etapa) && <span>{textoSemMovimento(o.updated_at)}</span>}
@@ -383,6 +390,7 @@ function ModalNova({ inicial, onClose, onSalvo }: { inicial: { empresa_id?: stri
     setSalvando(true); setErro("");
     let contatoId: string | null = contatoSel && contatoSel !== "novo" ? contatoSel : null;
     if (contatoSel === "novo" && novoContato.nome.trim()) {
+      if (!emailContatoValido(novoContato.email)) { setSalvando(false); setErro(MSG_EMAIL_INVALIDO); return; }
       const rc = await fetch(`/api/comercial/empresas/${empresa.id}/contatos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(novoContato) });
       const jc = await rc.json();
       if (!rc.ok) { setSalvando(false); setErro(jc.error || "Erro ao salvar o contato."); return; }
@@ -452,7 +460,7 @@ function ModalNova({ inicial, onClose, onSalvo }: { inicial: { empresa_id?: stri
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
                 <div><label style={labelStyle}>Nome *</label><input style={inputStyle} value={novoContato.nome} onChange={(x) => setNovoContato({ ...novoContato, nome: x.target.value })} /></div>
                 <div><label style={labelStyle}>Cargo</label><input style={inputStyle} value={novoContato.cargo} onChange={(x) => setNovoContato({ ...novoContato, cargo: x.target.value })} /></div>
-                <div><label style={labelStyle}>Telefone</label><input style={inputStyle} value={novoContato.telefone} onChange={(x) => setNovoContato({ ...novoContato, telefone: x.target.value })} /></div>
+                <div><label style={labelStyle}>Telefone</label><CampoTelefone style={inputStyle} placeholder="(00) 00000-0000" value={novoContato.telefone} onChange={(v) => setNovoContato({ ...novoContato, telefone: v })} /></div>
                 <div><label style={labelStyle}>E-mail</label><input style={inputStyle} value={novoContato.email} onChange={(x) => setNovoContato({ ...novoContato, email: x.target.value })} /></div>
               </div>
             )}
@@ -519,6 +527,7 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
   async function criarContatoESelecionar() {
     if (!op.empresa_visitada_id) return;
     if (!novoContato.nome.trim()) { setErro("Informe o nome do contato."); return; }
+    if (!emailContatoValido(novoContato.email)) { setErro(MSG_EMAIL_INVALIDO); return; }
     setSalvando(true); setErro("");
     const rc = await fetch(`/api/comercial/empresas/${op.empresa_visitada_id}/contatos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(novoContato) });
     const jc = await rc.json();
@@ -549,7 +558,7 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 13, color: "#374151", marginBottom: 12 }}>
         <div><b>Fase:</b> {rotuloEtapa(op.etapa)}</div>
         <div><b>Valor:</b> {FASES_COM_VALOR.includes(op.etapa) ? fmtMoeda(op.valor_estimado) : "—"}</div>
-        <div><b>Contato:</b> {op.contato_nome || "—"}{contatoAtual?.cargo ? ` · ${contatoAtual.cargo}` : ""}{op.contato_telefone ? ` · ${op.contato_telefone}` : ""}</div>
+        <div><b>Contato:</b> {op.contato_nome || "—"}{contatoAtual?.cargo ? ` · ${contatoAtual.cargo}` : ""}{op.contato_telefone ? ` · ${exibirTelefone(op.contato_telefone)}` : ""}</div>
         <div><b>E-mail:</b> {op.contato_email || "—"}</div>
         {podeEditar && op.empresa_visitada_id && (
           <div style={{ gridColumn: "1 / -1" }}>
@@ -568,7 +577,7 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
                 <div><label style={labelStyle}>Nome *</label><input style={inputStyle} value={novoContato.nome} onChange={(x) => setNovoContato({ ...novoContato, nome: x.target.value })} /></div>
                 <div><label style={labelStyle}>Cargo</label><input style={inputStyle} value={novoContato.cargo} onChange={(x) => setNovoContato({ ...novoContato, cargo: x.target.value })} /></div>
-                <div><label style={labelStyle}>Telefone</label><input style={inputStyle} value={novoContato.telefone} onChange={(x) => setNovoContato({ ...novoContato, telefone: x.target.value })} /></div>
+                <div><label style={labelStyle}>Telefone</label><CampoTelefone style={inputStyle} placeholder="(00) 00000-0000" value={novoContato.telefone} onChange={(v) => setNovoContato({ ...novoContato, telefone: v })} /></div>
                 <div><label style={labelStyle}>E-mail</label><input style={inputStyle} value={novoContato.email} onChange={(x) => setNovoContato({ ...novoContato, email: x.target.value })} /></div>
                 <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
                   <button style={btnPrimario} disabled={salvando} onClick={criarContatoESelecionar}>{salvando ? "Salvando..." : "Salvar e selecionar"}</button>
@@ -616,7 +625,7 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
           {aberta && (
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
               <div><label style={labelStyle}>Próxima ação *</label><input style={inputStyle} value={c.proxima_acao} onChange={(x) => setC({ ...c, proxima_acao: x.target.value })} /></div>
-              <div><label style={labelStyle}>Quando vamos reconectar? *</label><input type="date" style={inputStyle} value={c.proxima_acao_em} onChange={(x) => setC({ ...c, proxima_acao_em: x.target.value })} /></div>
+              <div><label style={labelStyle}>Quando vamos retomar? *</label><input type="date" style={inputStyle} value={c.proxima_acao_em} onChange={(x) => setC({ ...c, proxima_acao_em: x.target.value })} /></div>
             </div>
           )}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
@@ -659,7 +668,7 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
           {novaAberta && (
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
               <div><label style={labelStyle}>Próxima ação *</label><input style={inputStyle} value={e.proxima_acao} onChange={(x) => setE({ ...e, proxima_acao: x.target.value })} /></div>
-              <div><label style={labelStyle}>Quando vamos reconectar? *</label><input type="date" style={inputStyle} value={e.proxima_acao_em} onChange={(x) => setE({ ...e, proxima_acao_em: x.target.value })} /></div>
+              <div><label style={labelStyle}>Quando vamos retomar? *</label><input type="date" style={inputStyle} value={e.proxima_acao_em} onChange={(x) => setE({ ...e, proxima_acao_em: x.target.value })} /></div>
             </div>
           )}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>

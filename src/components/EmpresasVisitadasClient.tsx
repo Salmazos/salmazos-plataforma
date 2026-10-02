@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { ROTULO_RESULTADO_CONTATO, rotuloEtapa } from "@/lib/comercialRotulos";
+import CampoTelefone from "@/components/ui/CampoTelefone";
+import { exibirTelefone, emailContatoValido, MSG_EMAIL_INVALIDO } from "@/lib/utils";
 
 interface Analista {
   id: string;
@@ -148,6 +150,7 @@ export default function EmpresasVisitadasClient({ analistas: _analistas, podeEsc
     if (!formContato) return;
     const { empresaId, contatoId, nome, cargo, telefone, email } = formContato;
     if (!nome.trim()) { setErroContato("Informe o nome do contato."); return; }
+    if (!emailContatoValido(email)) { setErroContato(MSG_EMAIL_INVALIDO); return; }
     const url = contatoId ? `/api/comercial/empresas/${empresaId}/contatos/${contatoId}` : `/api/comercial/empresas/${empresaId}/contatos`;
     if (await chamar(url, contatoId ? "PATCH" : "POST", { nome, cargo, telefone, email })) {
       setFormContato(null);
@@ -267,7 +270,7 @@ export default function EmpresasVisitadasClient({ analistas: _analistas, podeEsc
                           )}
                         </td>
                         <td style={td}>{e.contato_nome ?? "—"}</td>
-                        <td style={td}>{e.contato_telefone ?? "—"}</td>
+                        <td style={td}>{e.contato_telefone ? exibirTelefone(e.contato_telefone) : "—"}</td>
                         <td style={td}>{e.contato_email ? (
                           <a href={`mailto:${e.contato_email}`} style={{ color: "#3B82F6", textDecoration: "none" }} onClick={(ev) => ev.stopPropagation()}>
                             {e.contato_email}
@@ -324,7 +327,7 @@ export default function EmpresasVisitadasClient({ analistas: _analistas, podeEsc
                                     <div>
                                       <span style={{ fontWeight: 700, color: "#111827" }}>{c.nome}</span>
                                       {c.principal && <span style={{ marginLeft: 6, padding: "1px 6px", borderRadius: 6, fontSize: 10, fontWeight: 700, background: "#FEF3C7", color: "#92400E" }}>Principal</span>}
-                                      <span style={{ color: "#6B7280" }}>{c.cargo ? ` · ${c.cargo}` : ""}{c.telefone ? ` · ${c.telefone}` : ""}{c.email ? ` · ${c.email}` : ""}</span>
+                                      <span style={{ color: "#6B7280" }}>{c.cargo ? ` · ${c.cargo}` : ""}{c.telefone ? ` · ${exibirTelefone(c.telefone)}` : ""}{c.email ? ` · ${c.email}` : ""}</span>
                                     </div>
                                     {podeEscrever && det.pode_escrever && (
                                       <div style={{ display: "flex", gap: 6 }}>
@@ -342,7 +345,7 @@ export default function EmpresasVisitadasClient({ analistas: _analistas, podeEsc
                                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 10, alignItems: "end" }}>
                                     <div><label style={labelStyle}>Nome *</label><input style={{ ...inputStyle, width: "100%", boxSizing: "border-box", padding: "7px 10px" }} value={formContato.nome} onChange={(x) => setFormContato({ ...formContato, nome: x.target.value })} /></div>
                                     <div><label style={labelStyle}>Cargo</label><input style={{ ...inputStyle, width: "100%", boxSizing: "border-box", padding: "7px 10px" }} value={formContato.cargo} onChange={(x) => setFormContato({ ...formContato, cargo: x.target.value })} /></div>
-                                    <div><label style={labelStyle}>Telefone</label><input style={{ ...inputStyle, width: "100%", boxSizing: "border-box", padding: "7px 10px" }} value={formContato.telefone} onChange={(x) => setFormContato({ ...formContato, telefone: x.target.value })} /></div>
+                                    <div><label style={labelStyle}>Telefone</label><CampoTelefone style={{ ...inputStyle, width: "100%", boxSizing: "border-box", padding: "7px 10px" }} placeholder="(00) 00000-0000" value={formContato.telefone} onChange={(v) => setFormContato({ ...formContato, telefone: v })} /></div>
                                     <div><label style={labelStyle}>E-mail</label><input style={{ ...inputStyle, width: "100%", boxSizing: "border-box", padding: "7px 10px" }} value={formContato.email} onChange={(x) => setFormContato({ ...formContato, email: x.target.value })} /></div>
                                     <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
                                       <button style={btnAcao} onClick={salvarContato}>Salvar contato</button>
@@ -423,6 +426,7 @@ function ModalRegistro({ empresa, contatos, onClose, onSalvo }: { empresa: Empre
     setSalvando(true); setErro("");
     let contatoId: string | null = contatoSel !== "novo" ? contatoSel : null;
     if (contatoSel === "novo" && novo.nome.trim()) {
+      if (!emailContatoValido(novo.email)) { setSalvando(false); setErro(MSG_EMAIL_INVALIDO); return; }
       const rc = await fetch(`/api/comercial/empresas/${empresa.id}/contatos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(novo) });
       const jc = await rc.json();
       if (!rc.ok) { setSalvando(false); setErro(jc.error || "Erro ao salvar o contato."); return; }
@@ -456,7 +460,7 @@ function ModalRegistro({ empresa, contatos, onClose, onSalvo }: { empresa: Empre
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
                 <div><label style={labelStyle}>Nome *</label><input style={campo} value={novo.nome} onChange={(x) => setNovo({ ...novo, nome: x.target.value })} /></div>
                 <div><label style={labelStyle}>Cargo</label><input style={campo} value={novo.cargo} onChange={(x) => setNovo({ ...novo, cargo: x.target.value })} /></div>
-                <div><label style={labelStyle}>Telefone</label><input style={campo} value={novo.telefone} onChange={(x) => setNovo({ ...novo, telefone: x.target.value })} /></div>
+                <div><label style={labelStyle}>Telefone</label><CampoTelefone style={campo} placeholder="(00) 00000-0000" value={novo.telefone} onChange={(v) => setNovo({ ...novo, telefone: v })} /></div>
                 <div><label style={labelStyle}>E-mail</label><input style={campo} value={novo.email} onChange={(x) => setNovo({ ...novo, email: x.target.value })} /></div>
               </div>
             )}
