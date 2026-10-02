@@ -1451,3 +1451,8 @@ export const contatoRegistroCreateSchema = z.object({
   ocorrido_em: dataIsoComercial.optional(),
   proximo_contato_em: dataIsoComercial.optional(),
 });
+
+export const lembreteAcaoSchema = z.object({
+  acao: z.enum(["adiar", "concluir", "cancelar"]),
+  nova_data: dataIsoComercial.optional(),
+});

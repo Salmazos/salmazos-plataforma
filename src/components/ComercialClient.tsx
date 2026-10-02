@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import CampoTelefone from "@/components/ui/CampoTelefone";
+import { dataAdiamentoValida, diasDeAtraso } from "@/lib/lembretesRegras";
 import { exibirTelefone, emailContatoValido, MSG_EMAIL_INVALIDO } from "@/lib/utils";
 import { ROTULO_RESULTADO_CONTATO, ROTULO_MOTIVO_PERDA, rotuloEtapa, ehAberta } from "@/lib/comercialRotulos";
 
@@ -32,7 +33,11 @@ interface Interacao { id: string; tipo: string; resultado: string | null; descri
 interface Contato { id: string; nome: string; cargo: string | null; telefone: string | null; email: string | null; principal: boolean }
 interface EmpresaOpc { id: string; nome: string; contatos: Contato[]; oportunidade_aberta: { id: string; vendedor_nome: string | null; etapa: string } | null }
 interface Carteira { id: string; nome: string; contato_nome: string | null; contato_telefone: string | null; ultima_visita_em: string; total_visitas: number }
-interface MeuDia { hoje: Oportunidade[]; atrasadas: Oportunidade[]; semRetorno: Carteira[] }
+interface LembreteMeuDia {
+  id: string; empresa_visitada_id: string | null; empresa_nome: string | null; texto: string | null;
+  data_lembrete: string; contato_id: string | null; empresa_tem_oportunidade_aberta: boolean;
+}
+interface MeuDia { hoje: Oportunidade[]; atrasadas: Oportunidade[]; semRetorno: Carteira[]; lembretes: LembreteMeuDia[] }
 
 // Fases em que valor e serviço já são exigidos (a partir de Proposta enviada; "negociacao" é legado).
 const FASES_COM_VALOR = ["proposta_enviada", "negociacao", "ganho"];
@@ -98,7 +103,7 @@ export default function ComercialClient({ vendedor, gestor, meuAnalistaId, vende
   const [aba, setAba] = useState<"dia" | "funil" | "lista">(vendedor ? "dia" : "funil");
   const [ops, setOps] = useState<Oportunidade[]>([]);
   const [hoje, setHoje] = useState<string>("");
-  const [meuDia, setMeuDia] = useState<MeuDia>({ hoje: [], atrasadas: [], semRetorno: [] });
+  const [meuDia, setMeuDia] = useState<MeuDia>({ hoje: [], atrasadas: [], semRetorno: [], lembretes: [] });
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [filtroVendedor, setFiltroVendedor] = useState("");
@@ -120,7 +125,7 @@ export default function ComercialClient({ vendedor, gestor, meuAnalistaId, vende
       setHoje(j1.hoje ?? "");
       if (r2) {
         const j2 = await r2.json();
-        if (r2.ok) setMeuDia(j2.data ?? { hoje: [], atrasadas: [], semRetorno: [] });
+        if (r2.ok) setMeuDia({ hoje: [], atrasadas: [], semRetorno: [], lembretes: [], ...(j2.data ?? {}) });
       }
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar.");
@@ -230,6 +235,12 @@ export default function ComercialClient({ vendedor, gestor, meuAnalistaId, vende
                 {meuDia.atrasadas.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: "#6B7280" }}>Nada precisando de atenção.</p> : meuDia.atrasadas.map((o) => <CartaoOp key={o.id} o={o} />)}
               </div>
               <div style={cardStyle}>
+                <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Retomar contato ({meuDia.lembretes.length})</h3>
+                {meuDia.lembretes.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: "#6B7280" }}>Nenhuma empresa esperando seu retorno.</p> : meuDia.lembretes.map((l) => (
+                  <LembreteCartao key={l.id} l={l} onMudou={carregar} onCriarOportunidade={(id, nome) => setNovaAberta({ empresa_id: id, empresa: nome })} />
+                ))}
+              </div>
+              <div style={cardStyle}>
                 <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>Para hoje ({meuDia.hoje.length})</h3>
                 {meuDia.hoje.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: "#6B7280" }}>Nada agendado para hoje.</p> : meuDia.hoje.map((o) => <CartaoOp key={o.id} o={o} />)}
               </div>
@@ -323,6 +334,152 @@ export default function ComercialClient({ vendedor, gestor, meuAnalistaId, vende
       {novaAberta && <ModalNova inicial={novaAberta} onClose={() => setNovaAberta(null)} onSalvo={() => { setNovaAberta(null); carregar(); }} />}
       {detalhe && <ModalDetalhe op={detalhe} podeEditar={vendedor && detalhe.vendedor_id === meuAnalistaId} onClose={() => setDetalheId(null)} onMudou={carregar} />}
     </div>
+  );
+}
+
+// Item da seção "Retomar contato" do Meu dia: registrar contato, adiar ou dispensar o lembrete.
+function LembreteCartao({ l, onMudou, onCriarOportunidade }: { l: LembreteMeuDia; onMudou: () => void; onCriarOportunidade: (empresaId: string, nome: string) => void }) {
+  const hoje = hojeSP();
+  const atraso = diasDeAtraso(l.data_lembrete, hoje);
+  const [modo, setModo] = useState<"" | "adiar" | "registrar">("");
+  const [novaData, setNovaData] = useState(somarDiasStr(hoje, 1));
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  async function acao(corpo: { acao: "adiar" | "concluir" | "cancelar"; nova_data?: string }) {
+    setSalvando(true); setErro("");
+    const r = await fetch(`/api/comercial/lembretes/${l.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
+    const j = await r.json().catch(() => ({}));
+    setSalvando(false);
+    if (!r.ok) { setErro(j.error || "Não foi possível concluir a ação."); return false; }
+    setModo(""); onMudou();
+    return true;
+  }
+  function adiar() {
+    if (!dataAdiamentoValida(novaData, hoje)) { setErro("Escolha uma data depois de hoje."); return; }
+    acao({ acao: "adiar", nova_data: novaData });
+  }
+  function dispensar() {
+    if (!window.confirm("Não é mais necessário retomar contato com esta empresa?")) return;
+    acao({ acao: "cancelar" });
+  }
+
+  return (
+    <div style={{ borderTop: "1px solid #F3F4F6", padding: "10px 0" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 13, color: "#111827" }}>
+            {l.empresa_nome ?? "Empresa"}
+            {l.empresa_tem_oportunidade_aberta && (
+              <span style={{ marginLeft: 8, padding: "2px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700, background: "#DBEAFE", color: "#1E40AF" }}>Já tem oportunidade aberta</span>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: "#374151" }}>{l.texto || "Retomar contato"}</div>
+          <div style={{ fontSize: 11, color: atraso > 0 ? "#B91C1C" : "#6B7280" }}>
+            para {fmtData(l.data_lembrete)}{atraso > 0 ? ` · atrasado há ${atraso} dia${atraso === 1 ? "" : "s"}` : ""}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "flex-start" }}>
+          <button style={{ ...btnPrimario, padding: "6px 12px", fontSize: 12 }} disabled={salvando || !l.empresa_visitada_id} onClick={() => { setErro(""); setModo("registrar"); }}>Registrar contato</button>
+          <button style={{ ...btnSecundario, padding: "6px 12px", fontSize: 12 }} disabled={salvando} onClick={() => { setErro(""); setModo(modo === "adiar" ? "" : "adiar"); }}>Adiar</button>
+          <button style={{ ...btnSecundario, padding: "6px 12px", fontSize: 12 }} disabled={salvando} onClick={dispensar}>Não é mais necessário</button>
+          {!l.empresa_tem_oportunidade_aberta && l.empresa_visitada_id && (
+            <button style={{ ...btnSecundario, padding: "6px 12px", fontSize: 12 }} onClick={() => onCriarOportunidade(l.empresa_visitada_id as string, l.empresa_nome ?? "")}>Criar oportunidade</button>
+          )}
+        </div>
+      </div>
+      {modo === "adiar" && (
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 8 }}>
+          <div><label style={labelStyle}>Nova data</label><input type="date" style={inputStyle} min={somarDiasStr(hoje, 1)} value={novaData} onChange={(x) => setNovaData(x.target.value)} /></div>
+          <button style={btnPrimario} disabled={salvando} onClick={adiar}>{salvando ? "Salvando..." : "Confirmar"}</button>
+          <button style={btnSecundario} onClick={() => setModo("")}>Cancelar</button>
+        </div>
+      )}
+      {erro && <div style={{ color: "#B91C1C", fontSize: 13, marginTop: 6 }}>{erro}</div>}
+      {modo === "registrar" && l.empresa_visitada_id && (
+        <ModalRegistrarLembrete
+          lembrete={l}
+          onClose={() => setModo("")}
+          onSalvo={async () => {
+            // Contato registrado: o lembrete está cumprido. Se isso falhar, o contato JÁ foi gravado.
+            const ok = await acao({ acao: "concluir" });
+            if (!ok) setErro("O contato foi registrado, mas não foi possível marcar o lembrete como feito. Tente de novo.");
+            else setModo("");
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Modal compacto de registro de contato avulso (POST /api/comercial/empresas/[id]/registros).
+// Não abre oportunidade: quem decide isso é o vendedor depois.
+function ModalRegistrarLembrete({ lembrete, onClose, onSalvo }: { lembrete: LembreteMeuDia; onClose: () => void; onSalvo: () => void | Promise<void> }) {
+  const hoje = hojeSP();
+  const [contatos, setContatos] = useState<Contato[]>([]);
+  const [f, setF] = useState({ contato_id: lembrete.contato_id ?? "", tipo: "ligacao", resultado: "", descricao: "", ocorrido_em: hoje, proximo_contato_em: "" });
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch(`/api/comercial/empresas/${lembrete.empresa_visitada_id}/contatos`);
+        const j = await r.json();
+        if (!r.ok) return;
+        const lista: Contato[] = j.data ?? [];
+        setContatos(lista);
+        setF((p) => p.contato_id ? p : { ...p, contato_id: (lista.find((c) => c.principal) ?? lista[0])?.id ?? "" });
+      } catch { /* sem contatos: o registro vai sem contato */ }
+    })();
+  }, [lembrete.empresa_visitada_id]);
+
+  async function salvar() {
+    setSalvando(true); setErro("");
+    const r = await fetch(`/api/comercial/empresas/${lembrete.empresa_visitada_id}/registros`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contato_id: f.contato_id || null, tipo: f.tipo, resultado: f.resultado || null, descricao: f.descricao || null,
+        ocorrido_em: f.ocorrido_em || undefined, proximo_contato_em: f.proximo_contato_em || undefined,
+      }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { setSalvando(false); setErro(j.error || "Erro ao salvar."); return; }
+    await onSalvo();
+    setSalvando(false);
+  }
+
+  return (
+    <Modal titulo={`Registrar contato · ${lembrete.empresa_nome ?? ""}`} onClose={onClose}>
+      <div style={{ display: "grid", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div><label style={labelStyle}>Contato</label>
+            <select style={inputStyle} value={f.contato_id} onChange={(x) => setF({ ...f, contato_id: x.target.value })}>
+              <option value="">—</option>
+              {contatos.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.cargo ? ` · ${c.cargo}` : ""}</option>)}
+            </select></div>
+          <div><label style={labelStyle}>Tipo</label>
+            <select style={inputStyle} value={f.tipo} onChange={(x) => setF({ ...f, tipo: x.target.value })}>
+              {Object.entries(ROTULO_TIPO).filter(([k]) => k !== "mudanca_etapa").map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select></div>
+        </div>
+        <div><label style={labelStyle}>Resultado</label>
+          <select style={inputStyle} value={f.resultado} onChange={(x) => setF({ ...f, resultado: x.target.value })}>
+            <option value="">—</option>
+            {Object.entries(ROTULO_RESULTADO_CONTATO).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select></div>
+        <div><label style={labelStyle}>O que foi conversado</label><textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical" }} value={f.descricao} onChange={(x) => setF({ ...f, descricao: x.target.value })} /></div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div><label style={labelStyle}>Data do contato</label><input type="date" style={inputStyle} max={hoje} value={f.ocorrido_em} onChange={(x) => setF({ ...f, ocorrido_em: x.target.value })} /></div>
+          <div><label style={labelStyle}>Quando vamos retornar?</label><input type="date" style={inputStyle} min={hoje} value={f.proximo_contato_em} onChange={(x) => setF({ ...f, proximo_contato_em: x.target.value })} /></div>
+        </div>
+        {erro && <div style={{ color: "#B91C1C", fontSize: 13 }}>{erro}</div>}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button style={btnSecundario} onClick={onClose}>Cancelar</button>
+          <button style={btnPrimario} disabled={salvando} onClick={salvar}>{salvando ? "Salvando..." : "Salvar contato"}</button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

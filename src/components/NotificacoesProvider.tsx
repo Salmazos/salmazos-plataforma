@@ -120,7 +120,9 @@ export default function NotificacoesProvider({ children }: { children: React.Rea
     // "fee_rs_nao_configurado" preenche os dois campos ao mesmo tempo, e pra esse caso
     // o destino útil é a página da vaga (onde o alerta de taxa ausente também aparece),
     // não o perfil do candidato.
-    if (n.vaga_id) router.push(`/painel/vagas/${n.vaga_id}`);
+    // Por tipo (não há coluna de id): o aviso diário do Comercial leva ao "Meu dia".
+    if (n.tipo === "lembrete_comercial") router.push("/painel/comercial");
+    else if (n.vaga_id) router.push(`/painel/vagas/${n.vaga_id}`);
     else if (n.candidato_id) router.push(`/painel/candidato/${n.candidato_id}`);
     else if (n.solicitacao_vaga_id) router.push(`/painel/vagas?solicitacao=${n.solicitacao_vaga_id}`);
     else if (n.solicitacao_indicacao_id) router.push(`/painel/vagas?indicacao=${n.solicitacao_indicacao_id}`);

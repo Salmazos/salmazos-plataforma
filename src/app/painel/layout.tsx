@@ -8,6 +8,7 @@ import PopupCobrancasRSPendentes from "@/components/PopupCobrancasRSPendentes";
 import PopupCobrancaEnviada from "@/components/PopupCobrancaEnviada";
 import PopupCobrancaVencida from "@/components/PopupCobrancaVencida";
 import PopupSupervisaoPendente from "@/components/PopupSupervisaoPendente";
+import PopupLembretesComercial from "@/components/PopupLembretesComercial";
 import PopupPosVendaRSHoje from "@/components/PopupPosVendaRSHoje";
 import PopupContaReceberHortolandiaVencida from "@/components/PopupContaReceberHortolandiaVencida";
 import PopupVencimentoContratoMot from "@/components/PopupVencimentoContratoMot";
@@ -141,6 +142,7 @@ export default async function PainelLayout({
         <PopupCobrancaEnviada />
         <PopupCobrancaVencida />
         <PopupSupervisaoPendente />
+        <PopupLembretesComercial />
         <PopupPosVendaRSHoje />
         <PopupContaReceberHortolandiaVencida />
         <PopupVencimentoContratoMot />
