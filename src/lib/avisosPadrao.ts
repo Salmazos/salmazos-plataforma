@@ -2,10 +2,10 @@
 // (supabase/migration_avisos_unificados.sql, copiada das tabelas antigas em out/2026). Constante
 // versionada de propósito — o botão "Restaurar padrão do sistema" não lê tabela antiga nenhuma.
 // Módulo puro (sem imports): usado no client, no server e no script de verificação.
-// Hoje só o grupo Vagas tem padrão; rescisão e ASO entram aqui quando forem liberados.
+// Hoje Vagas e Portal do cliente têm padrão; rescisão e ASO entram aqui quando forem liberados.
 
-export type GrupoComPadrao = "vagas";
-export type CanalPadrao = "email" | "sino";
+export type GrupoComPadrao = "vagas" | "portal_cliente";
+export type CanalPadrao = "email" | "sino" | "popup";
 
 export type DestinatarioPadrao =
   | { tipo_destinatario: "email"; nome: string; email: string }
@@ -39,7 +39,38 @@ const EMAIL_REBECCA = e("Rebecca Zambonini", "curriculos@salmazos.com.br");
 const EMAIL_ANDREZA = e("Andreza Salmazo", "rh@salmazos.com.br");
 const EMAIL_GIOVANNI = e("Giovanni Prado", "vagas@salmazos.com.br");
 
+// Os 10 analistas ativos com e-mail na carga de migration_avisos_fase1c.sql (Susana Oliveira tem
+// dois perfis, um por unidade). O filtro de unidade vale por cima na hora de enviar.
+const ANALISTAS_ATIVOS: DestinatarioPadrao[] = [
+  ANDREZA,
+  u("996db358-b02c-461a-bf36-c0f2b316e7fd", "Edivan Souza Silva"),
+  u("b40f3989-eb60-4614-adb7-1790fcfaa792", "Elizabete Salmazo"),
+  GIOVANNI,
+  u("3a8bdae4-781e-4ff0-aaa7-86276848ce99", "Lucas Miguel"),
+  u("a1131df1-94bf-4c82-930e-0f80742d8ebf", "Olver Pereira dos Santos"),
+  REBECCA,
+  u("00a62f1c-757a-4ed3-a462-00574c6fa0d6", "Susana Oliveira (Monte Mor / Hortolândia)"),
+  u("9dd9c66c-005a-4de8-930a-8fe71e3112f4", "Susana Oliveira (São Bernardo do Campo)"),
+  u("cb2f5a16-0a4b-457f-9b25-be5006726eec", "Victor Eduardo Oliveira"),
+];
+
+const EMAIL_OLVER = e("Olver", "olver@salmazos.com.br");
+const EMAIL_RH = e("RH", "rh@salmazos.com.br");
+
+const PADRAO_PORTAL_CLIENTE: Record<string, PadraoEvento> = {
+  indicacao_candidato_recebida: {
+    email: { ativo: true, destinatarios: ANALISTAS_ATIVOS },
+    sino: { ativo: true, destinatarios: ANALISTAS_ATIVOS },
+    popup: { ativo: true, destinatarios: ANALISTAS_ATIVOS },
+  },
+  portal_candidato_aprovado: { email: { ativo: true, destinatarios: [EMAIL_OLVER, EMAIL_RH] } },
+  // Nasce desligado: hoje não existe e-mail interno de reprovação.
+  portal_candidato_reprovado: { email: { ativo: false, destinatarios: [EMAIL_OLVER, EMAIL_RH] } },
+  indicacao_decisao_cliente: { email: { ativo: true, destinatarios: [EMAIL_OLVER, EMAIL_RH] } },
+};
+
 export const PADRAO_AVISOS: Record<GrupoComPadrao, Record<string, PadraoEvento>> = {
+  portal_cliente: PADRAO_PORTAL_CLIENTE,
   vagas: {
     vaga_criada: {
       email: { ativo: true, destinatarios: [EMAIL_REBECCA, EMAIL_GIOVANNI] },
@@ -93,7 +124,7 @@ export function montarPayloadRestauracao(grupo: GrupoComPadrao, usuariosAtivos: 
 
   for (const [evento, canais] of Object.entries(PADRAO_AVISOS[grupo])) {
     const itens: PayloadRestauracao["eventos"][number]["canais"] = [];
-    for (const canal of ["email", "sino"] as const) {
+    for (const canal of ["email", "sino", "popup"] as const) {
       const padrao = canais[canal];
       if (!padrao) continue;
       const destinatarios: Record<string, string>[] = [];

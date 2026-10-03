@@ -7,7 +7,7 @@ export const EVENTOS_POR_GRUPO: Record<GrupoAviso, string[]> = {
   vagas: ["vaga_criada", "vaga_reativada", "vaga_fechada", "vaga_cancelada", "solicitacao_vaga"],
   rescisao: ["rescisao_lancamento", "rescisao_vencimento_rescisao", "rescisao_vencimento_guia", "rescisao_paga"],
   aso: ["aso_periodico_sem_registro", "aso_periodico_vencendo", "aso_periodico_atrasado"],
-  portal_cliente: ["portal_candidato_aprovado", "portal_candidato_reprovado", "indicacao_decisao_cliente"],
+  portal_cliente: ["indicacao_candidato_recebida", "portal_candidato_aprovado", "portal_candidato_reprovado", "indicacao_decisao_cliente"],
 };
 
 export const ROTULO_GRUPO: Record<GrupoAviso, string> = {
@@ -33,23 +33,27 @@ export const ROTULO_EVENTO: Record<string, string> = {
   portal_candidato_aprovado: "Cliente aprovou candidato (portal)",
   portal_candidato_reprovado: "Cliente reprovou candidato (portal)",
   indicacao_decisao_cliente: "Indicação direta aprovada pela Salmazos",
+  indicacao_candidato_recebida: "Cliente enviou indicação direta de candidato",
 };
 
 // Canais que cada aviso realmente tem hoje (espelha aviso_eventos.canais_suportados). O que não
 // está aqui suporta e-mail e sino.
-export const CANAIS_POR_EVENTO: Record<string, readonly ("email" | "sino")[]> = {
+export const CANAIS_POR_EVENTO: Record<string, readonly ("email" | "sino" | "popup")[]> = {
+  indicacao_candidato_recebida: ["email", "sino", "popup"],
   rescisao_paga: ["sino"],
   portal_candidato_aprovado: ["email"],
   portal_candidato_reprovado: ["email"],
   indicacao_decisao_cliente: ["email"],
 };
 
-export function canaisDoEvento(evento: string): readonly ("email" | "sino")[] {
+export function canaisDoEvento(evento: string): readonly ("email" | "sino" | "popup")[] {
   return CANAIS_POR_EVENTO[evento] ?? CANAIS_FASE1;
 }
 
 // Explicações mostradas na tela, onde o aviso foge do padrão "lista por canal".
 export const NOTA_EVENTO: Record<string, string> = {
+  indicacao_candidato_recebida:
+    "Dispara quando o cliente envia uma indicação direta pelo portal. O popup lista as indicações pendentes quando a pessoa entra no painel e reaparece no próximo login enquanto houver pendente que ela não tenha dispensado; clicar abre a indicação. Quem não está na lista do popup não vê o popup (e com o popup desligado ninguém vê). O filtro de unidade é regra fixa: só recebem quem atende a unidade do cliente.",
   rescisao_paga: "Hoje este aviso só existe no sino (e no popup de login, que deriva dele).",
   portal_candidato_aprovado:
     "O sino desta aprovação continua indo para o responsável pelo candidato (regra fixa, não é lista) — por isso só o e-mail é configurável.",
@@ -61,7 +65,7 @@ export const NOTA_EVENTO: Record<string, string> = {
 
 export const CANAIS_FASE1 = ["email", "sino"] as const;
 export type CanalFase1 = (typeof CANAIS_FASE1)[number];
-export const ROTULO_CANAL: Record<string, string> = { email: "E-mail", sino: "Sino" };
+export const ROTULO_CANAL: Record<string, string> = { email: "E-mail", sino: "Sino", popup: "Popup" };
 
 export function grupoDoEvento(evento: string): GrupoAviso | null {
   for (const g of Object.keys(EVENTOS_POR_GRUPO) as GrupoAviso[]) {
@@ -72,6 +76,11 @@ export function grupoDoEvento(evento: string): GrupoAviso | null {
 
 // O que significa "sem destinatários na lista" (modo legado) em cada grupo — mostrado na tela.
 export function descricaoPadraoDoSistema(grupo: GrupoAviso, canal: string, evento = ""): string {
+  if (evento === "indicacao_candidato_recebida") {
+    return canal === "popup"
+      ? "Sem destinatários: ninguém vê o popup."
+      : "Padrão do sistema: todos os analistas da unidade do cliente recebem.";
+  }
   if (grupo === "portal_cliente") {
     return evento === "portal_candidato_reprovado"
       ? "Sem destinatários: ninguém recebe."

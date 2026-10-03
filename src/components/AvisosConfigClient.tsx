@@ -197,7 +197,7 @@ export default function AvisosConfigClient() {
 interface BlocoProps {
   grupo: GrupoAviso;
   evento: string;
-  canal: "email" | "sino";
+  canal: "email" | "sino" | "popup";
   cfg?: CanalCfg;
   lista: Destinatario[];
   usuarios: Usuario[];
@@ -216,7 +216,7 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
   const [emailNovo, setEmailNovo] = useState("");
 
   const usuariosDisponiveis = usuarios.filter(
-    (u) => (canal === "sino" || !!u.email) && !lista.some((d) => d.usuario_id === u.user_id)
+    (u) => (canal !== "email" || !!u.email) && !lista.some((d) => d.usuario_id === u.user_id)
   );
 
   let situacao: string;
@@ -226,7 +226,7 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
 
   async function adicionar() {
     const corpo =
-      modoNovo === "usuario" || canal === "sino"
+      modoNovo === "usuario" || canal !== "email"
         ? { evento, canal, tipo_destinatario: "usuario", usuario_id: usuarioNovo }
         : { evento, canal, tipo_destinatario: "email", nome: nomeNovo, email: emailNovo };
     const ok = await executar(`${chaveCanal}:add`, chamar("/api/avisos-config/destinatarios", "POST", corpo));
@@ -234,7 +234,7 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
   }
 
   const bloqueado = ocupado !== null;
-  const podeAdicionar = modoNovo === "usuario" || canal === "sino" ? !!usuarioNovo : !!nomeNovo.trim() && !!emailNovo.trim();
+  const podeAdicionar = modoNovo === "usuario" || canal !== "email" ? !!usuarioNovo : !!nomeNovo.trim() && !!emailNovo.trim();
 
   return (
     <div style={{ border: "1px solid #F3F4F6", borderRadius: 8, padding: 12, opacity: ligado ? 1 : 0.85 }}>
@@ -291,7 +291,7 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
             <option value="email">E-mail livre</option>
           </select>
         )}
-        {modoNovo === "usuario" || canal === "sino" ? (
+        {modoNovo === "usuario" || canal !== "email" ? (
           <select className="input-field" style={{ flex: 1, minWidth: 160 }} value={usuarioNovo} onChange={(e) => setUsuarioNovo(e.target.value)}>
             <option value="">Selecione…</option>
             {usuariosDisponiveis.map((u) => (

@@ -39,8 +39,8 @@ export async function POST(request: NextRequest) {
     linha = { evento: d.evento, canal: d.canal, tipo_destinatario: "usuario", usuario_id: d.usuario_id, ativo: true };
     nomeAuditoria = analista.nome_completo ?? null;
   } else {
-    if (d.canal === "sino") {
-      return NextResponse.json({ error: "O sino só aceita usuários da plataforma." }, { status: 400 });
+    if (d.canal !== "email") {
+      return NextResponse.json({ error: "O sino e o popup só aceitam usuários da plataforma." }, { status: 400 });
     }
     linha = {
       evento: d.evento,

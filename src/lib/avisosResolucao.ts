@@ -114,7 +114,8 @@ export async function resolverComFonte(
     return p;
   };
 
-  if (canal === "sino") {
+  // Sino e popup são por usuário da plataforma (user_id); só o e-mail aceita endereço livre.
+  if (canal === "sino" || canal === "popup") {
     const userIds = filtrar ? usuarioIds.filter((id) => passa(id) !== null) : usuarioIds;
     return { modo: "configurado", fonte: origem, emails: [], userIds, falhou: false };
   }
@@ -149,4 +150,24 @@ export function emailsOuPadrao(res: ResolucaoAviso, padrao: readonly string[]): 
 // Para avisos que ainda não existiam por e-mail: só envia quando há lista configurada e ligada.
 export function emailsSomenteConfigurado(res: ResolucaoAviso): string[] {
   return res.modo === "configurado" ? res.emails.map((e) => e.email) : [];
+}
+
+export interface ResultadoCanal {
+  canal: string;
+  ok: boolean;
+}
+
+// Roda os canais de um aviso de forma INDEPENDENTE: a falha (exceção) de um nunca impede os
+// outros. Cada erro é registrado com contexto; quem chama nunca recebe exceção.
+export async function executarCanaisIndependentes(
+  contexto: string,
+  tarefas: Record<string, () => Promise<unknown>>,
+  registrarErro: (mensagem: string, erro: unknown) => void = (m, e) => console.error(m, e)
+): Promise<ResultadoCanal[]> {
+  const nomes = Object.keys(tarefas);
+  const resultados = await Promise.allSettled(nomes.map((n) => Promise.resolve().then(tarefas[n])));
+  return resultados.map((r, i) => {
+    if (r.status === "rejected") registrarErro(`[${contexto}] Falha no canal "${nomes[i]}":`, r.reason);
+    return { canal: nomes[i], ok: r.status === "fulfilled" };
+  });
 }

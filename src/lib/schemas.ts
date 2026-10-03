@@ -1373,7 +1373,7 @@ export const avisoVagaPlataformaCreateSchema = z.object({
 // ── Avisos unificados (Configurações > Avisos) ───────────────────────────────
 
 const avisoConfigEvento = z.string().trim().min(1).max(80);
-const avisoConfigCanal = z.enum(["email", "sino"]);
+const avisoConfigCanal = z.enum(["email", "sino", "popup"]);
 
 export const avisoConfigCanalSchema = z.object({
   evento: avisoConfigEvento,
@@ -1397,9 +1397,9 @@ export const avisoConfigDestinatarioCreateSchema = z.discriminatedUnion("tipo_de
   }),
 ]);
 
-// Só Vagas tem "padrão do sistema" nesta entrega; rescisão e aso entram aqui depois.
+// Vagas e Portal do cliente têm "padrão do sistema"; rescisão e aso entram aqui depois.
 export const avisoConfigRestaurarPadraoSchema = z.object({
-  grupo: z.enum(["vagas"]),
+  grupo: z.enum(["vagas", "portal_cliente"]),
 });
 
 export const avisoConfigDestinatarioUpdateSchema = z.object({

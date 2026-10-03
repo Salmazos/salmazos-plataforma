@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
-import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
+import { avisarIndicacaoRecebida } from "@/lib/avisoIndicacaoRecebida";
 import { parseBody, portalIndicarCandidatoSchema } from "@/lib/schemas";
 import { resolverUnidadeCliente } from "@/lib/unidadeAuth";
 
@@ -114,17 +114,6 @@ export async function POST(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-    await service.from("notificacoes_analista").insert({
-      tipo: "nova_indicacao_candidato",
-      titulo: "Indicação direta de candidato",
-      mensagem: `${clienteNome} indicou ${dados.candidato_nome} para a vaga ${vaga.titulo}`,
-      user_id: null,
-      // vaga_id fica de fora de propósito: o clique deve abrir a indicação pendente (ver
-      // solicitacao_indicacao_id abaixo e NotificacoesProvider.tsx), não a página da vaga.
-      solicitacao_indicacao_id: solicitacao.id,
-      unidade_id: unidadeId,
-    });
-
     const tipoLbl = TIPO_LABEL[vaga.tipo_servico] ?? vaga.tipo_servico;
     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
@@ -155,12 +144,17 @@ export async function POST(request: NextRequest) {
 </div>
 </body></html>`;
 
-    await notifyAllAnalysts({
+    // Avisos internos (e-mail e sino, isolados entre si; o popup lê da mesma lista). Nunca lança:
+    // a indicação já está gravada e o cliente recebe 201 mesmo se um canal falhar.
+    await avisarIndicacaoRecebida({
+      solicitacaoId: solicitacao.id,
+      unidadeId,
+      vagaId: vaga.id,
+      vagaTitulo: vaga.titulo,
+      clienteNome,
+      candidatoNome: dados.candidato_nome,
       subject: `🧑‍💼 Indicação Direta de Candidato — ${clienteNome}`,
       html,
-      tipo: "indicacao_candidato",
-      vaga_id: vaga.id,
-      unidadeId,
     });
 
     return NextResponse.json({ success: true, id: solicitacao.id }, { status: 201 });

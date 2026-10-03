@@ -2,7 +2,7 @@
 // Rodar: node --experimental-strip-types scripts/verificar-avisos-resolvedor.mts
 import assert from "node:assert/strict";
 import {
-  resolverComFonte, analistaAtendeUnidade, emailsOuPadrao, emailsSomenteConfigurado,
+  resolverComFonte, analistaAtendeUnidade, emailsOuPadrao, emailsSomenteConfigurado, executarCanaisIndependentes,
   type DadosAviso, type FonteAvisos, type LinhaDestinatario, type PerfilAnalista,
 } from "../src/lib/avisosResolucao.ts";
 import { PADRAO_AVISOS, grupoTemPadrao, montarPayloadRestauracao } from "../src/lib/avisosPadrao.ts";
@@ -176,7 +176,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   const TODOS = new Set<string>();
   for (const evento of Object.values(PADRAO_AVISOS.vagas)) for (const c of Object.values(evento)) for (const d of c.destinatarios) if (d.tipo_destinatario === "usuario") TODOS.add(d.usuario_id);
 
-  await caso("padrão: só vagas tem padrão", () => { assert.equal(grupoTemPadrao("vagas"), true); assert.equal(grupoTemPadrao("rescisao"), false); });
+  await caso("padrão: só vagas e portal_cliente têm padrão", () => { assert.equal(grupoTemPadrao("vagas"), true); assert.equal(grupoTemPadrao("portal_cliente"), true); assert.equal(grupoTemPadrao("rescisao"), false); });
   await caso("padrão vagas: 5 eventos, espelho da carga inicial (e-mail 2/3/3/0/3, sino 7/7/7/7/3)", () => {
     const p = PADRAO_AVISOS.vagas;
     assert.deepEqual(Object.keys(p).sort(), ["solicitacao_vaga", "vaga_cancelada", "vaga_criada", "vaga_fechada", "vaga_reativada"]);
@@ -215,6 +215,96 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     assert.ok(emails.every((d) => d.email === d.email.toLowerCase()));
     const usu = r.payload.eventos.flatMap((e) => e.canais).flatMap((c) => c.destinatarios).filter((d) => d.tipo_destinatario === "usuario");
     assert.ok(usu.every((d) => !("email" in d) && !!d.usuario_id));
+  });
+
+  // ── Fase 1c: indicacao_candidato_recebida (e-mail, sino e popup) ──
+  const EV = "indicacao_candidato_recebida";
+  const dez = Array.from({ length: 10 }, (_, i) => usuario(`a${i}`));
+  const perfisUnidade = (n: number): PerfilAnalista[] => Array.from({ length: n }, (_, i) => perfil(`a${i}`, { unidade_id: i < 8 ? "MM" : "SBC", acesso_todas_unidades: i === 0 }));
+
+  for (const canal of ["email", "sino", "popup"] as const) {
+    await caso(`1c fallback (${canal}): sem config nova e sem config antiga = legado, sem lista`, async () => {
+      const r = await resolverComFonte(fonte({ novo: { canalAtivo: null, linhas: [] }, antigo: { canalAtivo: null, linhas: [] } }), EV, canal, "MM");
+      assert.equal(r.modo, "legado"); assert.deepEqual(r.userIds, []); assert.deepEqual(r.emails, []); assert.equal(r.falhou, false);
+    });
+    await caso(`1c fallback (${canal}): tabelas novas inexistentes (erro) = legado`, async () => {
+      const r = await resolverComFonte(fonte({ novoErro: true, antigo: { canalAtivo: null, linhas: [] } }), EV, canal, "MM");
+      assert.equal(r.modo, "legado");
+    });
+    await caso(`1c canal desligado (${canal}): ninguém, mesmo com lista`, async () => {
+      const r = await resolverComFonte(fonte({ novo: { canalAtivo: false, linhas: dez }, perfis: perfisUnidade(10) }), EV, canal, "MM");
+      assert.equal(r.modo, "desligado"); assert.deepEqual(r.userIds, []); assert.deepEqual(r.emails, []);
+    });
+  }
+  await caso("1c popup: lista configurada devolve só usuarios (userIds), sem filtro de unidade e sem e-mails", async () => {
+    const f = fonte({ novo: { canalAtivo: true, linhas: [usuario("a1"), usuario("a2"), usuario("a3", false)] } });
+    const r = await resolverComFonte(f, EV, "popup");
+    assert.equal(r.modo, "configurado"); assert.deepEqual(r.userIds, ["a1", "a2"]); assert.deepEqual(r.emails, []); assert.ok(!f.chamadas.includes("perfis"));
+  });
+  await caso("1c popup: só vê quem está na lista (usuário fora da lista não está em userIds)", async () => {
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [usuario("a1")] } }), EV, "popup");
+    assert.ok(r.userIds.includes("a1")); assert.ok(!r.userIds.includes("a5"));
+  });
+  await caso("1c popup: lista com todos desativados = legado (ninguém vê)", async () => {
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [usuario("a1", false)] } }), EV, "popup");
+    assert.equal(r.modo, "legado"); assert.deepEqual(r.userIds, []);
+  });
+  await caso("1c popup: falha ao ler (novo e antigo) = falhou, sem lista", async () => {
+    const r = await resolverComFonte(fonte({ novo: null, antigo: null }), EV, "popup");
+    assert.equal(r.falhou, true); assert.deepEqual(r.userIds, []);
+  });
+  await caso("1c sino com a carga de 10 e unidade MM: filtro de unidade fixo (8 da unidade + sócio com acesso a todas)", async () => {
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: dez }, perfis: perfisUnidade(10) }), EV, "sino", "MM");
+    assert.deepEqual(r.userIds.sort(), ["a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7"]);
+  });
+  await caso("1c sino unidade SBC: só os 2 de SBC + quem tem acesso a todas", async () => {
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: dez }, perfis: perfisUnidade(10) }), EV, "sino", "SBC");
+    assert.deepEqual(r.userIds.sort(), ["a0", "a8", "a9"]);
+  });
+  await caso("1c e-mail por usuário: resolve o e-mail do perfil e respeita a unidade", async () => {
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: dez }, perfis: perfisUnidade(10) }), EV, "email", "SBC");
+    assert.deepEqual(r.emails.map((e) => e.email).sort(), ["a0@x.com", "a8@x.com", "a9@x.com"]);
+  });
+
+  // isolamento de canais
+  await caso("1c isolamento: falha do sino não impede o e-mail (e vice-versa) e nada lança", async () => {
+    const ordem: string[] = []; const erros: string[] = [];
+    const r = await executarCanaisIndependentes("teste", {
+      sino: async () => { ordem.push("sino"); throw new Error("banco fora"); },
+      email: async () => { ordem.push("email"); },
+    }, (m) => erros.push(m));
+    assert.deepEqual(ordem.sort(), ["email", "sino"]);
+    assert.deepEqual(r, [{ canal: "sino", ok: false }, { canal: "email", ok: true }]);
+    assert.equal(erros.length, 1); assert.ok(erros[0].includes("sino") && erros[0].includes("teste"));
+  });
+  await caso("1c isolamento: exceção síncrona numa tarefa também é contida", async () => {
+    const r = await executarCanaisIndependentes("t", { a: () => { throw new Error("x"); }, b: async () => 1 }, () => {});
+    assert.deepEqual(r.map((x) => x.ok), [false, true]);
+  });
+  await caso("1c isolamento: todos falham = ainda não lança", async () => {
+    const r = await executarCanaisIndependentes("t", { a: async () => { throw new Error("1"); }, b: async () => { throw new Error("2"); } }, () => {});
+    assert.deepEqual(r.map((x) => x.ok), [false, false]);
+  });
+
+  // padrão Portal do cliente
+  await caso("1c padrão portal_cliente: 4 eventos; recebida com 10 analistas nos 3 canais; reprovado desligado", () => {
+    const p = PADRAO_AVISOS.portal_cliente;
+    assert.deepEqual(Object.keys(p).sort(), ["indicacao_candidato_recebida", "indicacao_decisao_cliente", "portal_candidato_aprovado", "portal_candidato_reprovado"]);
+    for (const c of ["email", "sino", "popup"] as const) assert.equal(p.indicacao_candidato_recebida[c]!.destinatarios.length, 10);
+    assert.equal(p.portal_candidato_reprovado.email!.ativo, false);
+    const ids = p.indicacao_candidato_recebida.popup!.destinatarios.map((d) => (d.tipo_destinatario === "usuario" ? d.usuario_id : ""));
+    assert.equal(new Set(ids).size, 10);
+  });
+  await caso("1c restauração portal_cliente: payload com popup; inativo ignorado e informado; vazio = 409", () => {
+    const ids = new Set(PADRAO_AVISOS.portal_cliente.indicacao_candidato_recebida.email!.destinatarios.flatMap((d) => (d.tipo_destinatario === "usuario" ? [d.usuario_id] : [])));
+    const ok = montarPayloadRestauracao("portal_cliente", ids);
+    assert.deepEqual(ok.semDestinatario, []); assert.equal(ok.payload.eventos.length, 4);
+    assert.ok(ok.payload.eventos.find((e) => e.evento === "indicacao_candidato_recebida")!.canais.some((c) => c.canal === "popup"));
+    const sem = new Set(ids); sem.delete([...ids][0]);
+    assert.ok(montarPayloadRestauracao("portal_cliente", sem).ignorados.length >= 3);
+    const vazio = montarPayloadRestauracao("portal_cliente", new Set());
+    assert.ok(vazio.semDestinatario.some((x) => x.evento === "indicacao_candidato_recebida" && x.canal === "popup"));
+    assert.ok(!vazio.semDestinatario.some((x) => x.evento === "portal_candidato_reprovado"));
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);
