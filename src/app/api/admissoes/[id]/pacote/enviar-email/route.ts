@@ -9,7 +9,7 @@ import { sendEmail, obterRemetente } from "@/lib/sendEmail";
 import { registrarAuditoria } from "@/lib/audit";
 import {
   LIMITE_ANEXO_EMAIL_BYTES, formatarMB, formatarSalario, montarAssunto, montarHtmlEmail, montarLinhaEmpresa,
-  montarLinhasDados, montarTextoEmail, nomeArquivoAnexo, podeEnviarAgora, resolverTempoContrato, saudacaoSaoPaulo, separarParaCc,
+  montarLinhasDados, montarTextoEmail, nomeArquivoAnexo, podeEnviarAgora, resolverTempoContrato, saudacaoSaoPaulo, separarParaCc, classificarErroEmail,
   type DadosEmailPacote,
 } from "@/lib/emailPacoteContabilidade";
 
@@ -210,9 +210,12 @@ export async function POST(request: NextRequest, { params }: Params) {
     transporte: "contabilidade",
     attachments: [{ filename: nomeArquivoAnexo(ctx.nome), content: pdf, contentType: "application/pdf" }],
   });
-  // Falhou: nada é gravado na admissão (sendEmail já registrou o erro em email_logs).
+  // Falhou: nada é gravado na admissão (pacote_enviado_email_* só depois de envio aceito). O sendEmail já
+  // gravou a falha em email_logs (tipo pacote_contabilidade) e a mensagem vem curta e sem segredos.
   if (!resultado.success) {
-    return NextResponse.json({ error: "Não foi possível enviar o e-mail. Tente novamente em instantes ou envie manualmente." }, { status: 502 });
+    console.error("[POST /api/admissoes/[id]/pacote/enviar-email] Falha no envio:", resultado.errorCode ?? "sem código", "-", resultado.error ?? "");
+    const classe = classificarErroEmail(resultado.errorCode);
+    return NextResponse.json({ error: classe.mensagem }, { status: 502 });
   }
 
   // Só depois do envio aceito pelo SMTP. Não altera admissoes.status.

@@ -5,6 +5,8 @@ import {
   escaparHtml, formatarDataBR, formatarSalario, saudacaoSaoPaulo, montarAssunto, montarLinhasDados,
   montarHtmlEmail, montarTextoEmail, nomeArquivoAnexo, podeEnviarAgora, resolverTempoContrato,
   montarLinhaEmpresa, LIMITE_ANEXO_EMAIL_BYTES, separarParaCc, deixariaSemCcAtivo, MSG_ULTIMO_CC, MSG_EMAIL_DUPLICADO,
+  interpretarSecureSmtp, classificarErroEmail, mensagemErroCurta,
+  MSG_ERRO_EMAIL_TIMEOUT, MSG_ERRO_EMAIL_AUTH, MSG_ERRO_EMAIL_OUTRO,
 } from "../src/lib/emailPacoteContabilidade.ts";
 
 let total = 0;
@@ -99,6 +101,33 @@ caso("trava: id inexistente não bloqueia", () => assert.equal(deixariaSemCcAtiv
 caso("mensagens exatas da trava e do duplicado", () => {
   assert.equal(MSG_ULTIMO_CC, "É obrigatório manter pelo menos um e-mail em Cópia (Cc) ativo.");
   assert.equal(MSG_EMAIL_DUPLICADO, "Este e-mail já está cadastrado em Para ou Cc.");
+});
+
+for (const [valor, porta, esperado] of [
+  ["true", 587, true], ["True", 587, true], [" TRUE ", 587, true], ["1", 587, true], ["yes", 587, true], [" Yes ", 25, true],
+  ["false", 465, false], ["FALSE", 587, false], ["0", 465, false], ["no", 465, false],
+  ["", 465, true], [undefined, 465, true], ["", 587, false], [undefined, 587, false], ["talvez", 465, true], ["talvez", 587, false],
+] as [string | undefined, number, boolean][]) {
+  caso(`SECURE ${JSON.stringify(valor)} porta ${porta} => ${esperado}`, () => assert.equal(interpretarSecureSmtp(valor, porta), esperado));
+}
+for (const cod of ["ETIMEDOUT", "ECONNECTION", "ESOCKET", "ECONNRESET", "etimedout"]) {
+  caso(`erro ${cod} => timeout`, () => assert.deepEqual(classificarErroEmail(cod), { tipo: "timeout", mensagem: MSG_ERRO_EMAIL_TIMEOUT }));
+}
+caso("erro EAUTH => autenticação", () => assert.deepEqual(classificarErroEmail("EAUTH"), { tipo: "autenticacao", mensagem: MSG_ERRO_EMAIL_AUTH }));
+caso("erro desconhecido/sem código => outro", () => {
+  assert.deepEqual(classificarErroEmail("EENVELOPE"), { tipo: "outro", mensagem: MSG_ERRO_EMAIL_OUTRO });
+  assert.deepEqual(classificarErroEmail(undefined), { tipo: "outro", mensagem: MSG_ERRO_EMAIL_OUTRO });
+});
+caso("mensagens dos três casos", () => {
+  assert.equal(MSG_ERRO_EMAIL_TIMEOUT, "Tempo esgotado ao conectar ao servidor de e-mail");
+  assert.equal(MSG_ERRO_EMAIL_AUTH, "Falha de autenticação no servidor de e-mail");
+  assert.equal(MSG_ERRO_EMAIL_OUTRO, "Não foi possível enviar o e-mail");
+});
+caso("log curto mascara segredos e limita tamanho", () => {
+  const m = mensagemErroCurta("EAUTH", "Invalid login for usuario@x.com: senha-super-secreta rejeitada", ["usuario@x.com", "senha-super-secreta"]);
+  assert.equal(m, "[EAUTH] Invalid login for ***: *** rejeitada");
+  assert.ok(!m.includes("senha-super-secreta") && !m.includes("usuario@x.com"));
+  assert.ok(mensagemErroCurta("X", "a".repeat(500)).length <= 200);
 });
 
 console.log(`\n${total} casos passaram${process.exitCode ? " (HOUVE FALHAS)" : ""}`);

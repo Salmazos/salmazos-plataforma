@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { registrarLogEmail } from "@/lib/emailLogger";
+import { interpretarSecureSmtp, mensagemErroCurta } from "@/lib/emailPacoteContabilidade";
 
 interface SendEmailAttachment {
   filename: string;
@@ -21,18 +22,24 @@ interface SendEmailOpts {
   transporte?: "contabilidade";
 }
 
-// Caixa dedicada só é usada quando TODAS as variáveis de conexão existem; senão, SMTP padrão.
+// Caixa dedicada só é usada quando host, porta, usuário e senha existem (SECURE é opcional: sem ele,
+// vale true na porta 465 e false nas demais). Valores levam trim (só espaços das pontas).
 function configContabilidade() {
-  const { SMTP_CONTABILIDADE_HOST: host, SMTP_CONTABILIDADE_PORT: port, SMTP_CONTABILIDADE_SECURE: secure, SMTP_CONTABILIDADE_USER: user, SMTP_CONTABILIDADE_PASS: pass } = process.env;
-  if (!host || !port || secure === undefined || !user || !pass) return null;
-  return { host, port: Number(port) || 587, secure: secure === "true", user, pass };
+  const env = process.env;
+  const host = env.SMTP_CONTABILIDADE_HOST?.trim();
+  const portaTxt = env.SMTP_CONTABILIDADE_PORT?.trim();
+  const user = env.SMTP_CONTABILIDADE_USER?.trim();
+  const pass = env.SMTP_CONTABILIDADE_PASS?.trim();
+  if (!host || !portaTxt || !user || !pass) return null;
+  const port = Number(portaTxt) || 587;
+  return { host, port, secure: interpretarSecureSmtp(env.SMTP_CONTABILIDADE_SECURE, port), user, pass };
 }
 
 // Remetente efetivo (só o "From", nunca credencial) — usado também para mostrar na tela.
 export function obterRemetente(transporte?: "contabilidade"): string {
   if (transporte === "contabilidade") {
     const c = configContabilidade();
-    if (c) return process.env.SMTP_CONTABILIDADE_FROM || `"Salmazos RH" <${c.user}>`;
+    if (c) return process.env.SMTP_CONTABILIDADE_FROM?.trim() || `"Salmazos RH" <${c.user}>`;
   }
   return process.env.SMTP_FROM || `"Salmazos RH" <${process.env.SMTP_USER}>`;
 }
@@ -47,7 +54,7 @@ export async function sendEmail({
   cc,
   attachments,
   transporte,
-}: SendEmailOpts): Promise<{ success: boolean; error?: string }> {
+}: SendEmailOpts): Promise<{ success: boolean; error?: string; errorCode?: string }> {
   try {
     // Transporter criado sob demanda a cada envio (como já era); o da contabilidade só quando configurado.
     const dedicada = transporte === "contabilidade" ? configContabilidade() : null;
@@ -62,6 +69,8 @@ export async function sendEmail({
       tls: {
         rejectUnauthorized: false,
       },
+      // Só a caixa da contabilidade: falha rápido, com erro claro, em vez de esperar os 30s da Vercel.
+      ...(dedicada ? { connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 20000 } : {}),
     });
 
     const info = await transporter.sendMail({
@@ -89,8 +98,17 @@ export async function sendEmail({
     return { success: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    const codigo = typeof (err as { code?: unknown })?.code === "string" ? (err as { code: string }).code : undefined;
+    if (transporte === "contabilidade") {
+      // Caixa da contabilidade: só código + mensagem curta (com usuário/senha mascarados); nunca o objeto
+      // de erro inteiro nem variáveis de ambiente. Este é o único registro da falha em email_logs.
+      const curta = mensagemErroCurta(codigo, msg, [process.env.SMTP_CONTABILIDADE_USER, process.env.SMTP_CONTABILIDADE_PASS]);
+      console.error("[sendEmail] Falha ao enviar e-mail (contabilidade):", curta);
+      await registrarLogEmail({ destinatario: to, assunto: subject, tipo, status: "erro", erro_mensagem: curta, candidato_id, vaga_id });
+      return { success: false, error: curta, errorCode: codigo };
+    }
     console.error("[sendEmail] Falha ao enviar e-mail:", err);
     await registrarLogEmail({ destinatario: to, assunto: subject, tipo, status: "erro", erro_mensagem: msg, candidato_id, vaga_id });
-    return { success: false, error: msg };
+    return { success: false, error: msg, errorCode: codigo };
   }
 }

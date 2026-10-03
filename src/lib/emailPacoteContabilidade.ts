@@ -179,3 +179,38 @@ export function deixariaSemCcAtivo(linhas: DestinatarioContabilidadeLinha[], id:
 
 export const MSG_ULTIMO_CC = "É obrigatório manter pelo menos um e-mail em Cópia (Cc) ativo.";
 export const MSG_EMAIL_DUPLICADO = "Este e-mail já está cadastrado em Para ou Cc.";
+
+// SMTP_CONTABILIDADE_SECURE: ignora maiúsculas e espaços; "true"/"1"/"yes" = true, "false"/"0"/"no" = false.
+// Ausente ou inválido: true na porta 465 (SSL implícito), false nas demais.
+export function interpretarSecureSmtp(valor: string | null | undefined, porta: number): boolean {
+  const v = (valor ?? "").trim().toLowerCase();
+  if (v === "true" || v === "1" || v === "yes") return true;
+  if (v === "false" || v === "0" || v === "no") return false;
+  return porta === 465;
+}
+
+export type TipoErroEmail = "timeout" | "autenticacao" | "outro";
+
+export const MSG_ERRO_EMAIL_TIMEOUT = "Tempo esgotado ao conectar ao servidor de e-mail";
+export const MSG_ERRO_EMAIL_AUTH = "Falha de autenticação no servidor de e-mail";
+export const MSG_ERRO_EMAIL_OUTRO = "Não foi possível enviar o e-mail";
+
+// Classifica pelo código do erro do nodemailer (nunca pela mensagem, que pode ter dados do servidor).
+export function classificarErroEmail(codigo: string | null | undefined): { tipo: TipoErroEmail; mensagem: string } {
+  const c = (codigo ?? "").trim().toUpperCase();
+  if (c === "ETIMEDOUT" || c === "ECONNECTION" || c === "ESOCKET" || c === "ECONNRESET") return { tipo: "timeout", mensagem: MSG_ERRO_EMAIL_TIMEOUT };
+  if (c === "EAUTH") return { tipo: "autenticacao", mensagem: MSG_ERRO_EMAIL_AUTH };
+  return { tipo: "outro", mensagem: MSG_ERRO_EMAIL_OUTRO };
+}
+
+// Mensagem curta para log: troca segredos por *** e limita o tamanho. Não é garantia de conteúdo
+// seguro (o servidor pode devolver texto livre), por isso o log leva só código + trecho curto.
+export function mensagemErroCurta(codigo: string | null | undefined, mensagem: string | null | undefined, segredos: (string | undefined)[] = [], max = 200): string {
+  let m = (mensagem ?? "").replace(/\s+/g, " ").trim();
+  for (const s of segredos) {
+    const t = (s ?? "").trim();
+    if (t.length >= 3) m = m.split(t).join("***");
+  }
+  const texto = `${codigo ? `[${codigo}] ` : ""}${m}`.trim();
+  return texto.length > max ? `${texto.slice(0, max - 1)}…` : texto;
+}
