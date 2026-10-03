@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import CampoTelefone from "@/components/ui/CampoTelefone";
 import { dataAdiamentoValida, diasDeAtraso } from "@/lib/lembretesRegras";
 import { exibirTelefone, emailContatoValido, MSG_EMAIL_INVALIDO } from "@/lib/utils";
-import { ROTULO_RESULTADO_CONTATO, ROTULO_MOTIVO_PERDA, rotuloEtapa, ehAberta } from "@/lib/comercialRotulos";
+import { ROTULO_RESULTADO_CONTATO, ROTULO_MOTIVO_PERDA, ROTULO_ORIGEM, rotuloEtapa, ehAberta } from "@/lib/comercialRotulos";
 
 interface Vendedor { id: string; nome_completo: string; unidade_nome: string | null }
 interface Props { vendedor: boolean; gestor: boolean; meuAnalistaId: string; vendedores: Vendedor[] }
@@ -631,7 +631,7 @@ function ModalNova({ inicial, onClose, onSalvo }: { inicial: { empresa_id?: stri
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <div><label style={labelStyle}>Origem</label>
             <select style={inputStyle} value={f.origem} onChange={(e) => set("origem", e.target.value)}>
-              <option value="ligacao">Ligação</option><option value="indicacao">Indicação</option><option value="outro">Outro</option>
+              {["ligacao", "indicacao", "outro"].map((k) => <option key={k} value={k}>{ROTULO_ORIGEM[k]}</option>)}
             </select></div>
           <div><label style={labelStyle}>Fase inicial</label>
             <select style={inputStyle} value={f.etapa} onChange={(e) => set("etapa", e.target.value)}>

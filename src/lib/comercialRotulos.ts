@@ -32,7 +32,8 @@ export const ROTULO_MOTIVO_PERDA: Record<string, string> = {
 export const ROTULO_ORIGEM: Record<string, string> = {
   ligacao: "Ligação",
   indicacao: "Indicação",
-  outro: "Outro",
+  // Valor interno continua "outro" (CHECK do banco); só o texto muda: o comercial saiu para a rua e visitou empresas.
+  outro: "Externo",
   km: "Visita (KM)",
 };
 
