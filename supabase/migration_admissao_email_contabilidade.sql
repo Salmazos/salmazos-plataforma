@@ -20,3 +20,15 @@ ALTER TABLE public.admissoes
   ADD COLUMN IF NOT EXISTS pacote_enviado_email_em timestamptz,
   ADD COLUMN IF NOT EXISTS pacote_enviado_email_por uuid,
   ADD COLUMN IF NOT EXISTS pacote_enviado_email_para text;
+
+-- Cc editável pela tela: mesma tabela, com a coluna copia (false = "Para", true = "Cópia (Cc)").
+-- O índice único em lower(email) vale para as duas listas (o mesmo endereço não fica em Para e Cc).
+ALTER TABLE public.admissao_contabilidade_email_destinatarios
+  ADD COLUMN IF NOT EXISTS copia boolean NOT NULL DEFAULT false;
+
+-- Seed dos Cc que antes eram fixos no código (EMAIL_CONTABILIDADE_CC_FIXO, removido).
+INSERT INTO public.admissao_contabilidade_email_destinatarios (nome, email, ativo, copia)
+VALUES
+  ('Consultoria Salmazos', 'consultoria@salmazos.com.br', true, true),
+  ('RH Salmazos', 'rh@salmazos.com.br', true, true)
+ON CONFLICT DO NOTHING;

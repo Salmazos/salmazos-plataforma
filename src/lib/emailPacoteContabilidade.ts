@@ -153,3 +153,29 @@ export function podeEnviarAgora(ultimoEnvioEm: string | null | undefined, reenvi
 export function formatarMB(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1).replace(".", ",");
 }
+
+export interface DestinatarioContabilidadeLinha {
+  id?: string;
+  email: string;
+  copia: boolean;
+  ativo: boolean;
+}
+
+// Para = ativos com copia=false; Cc = ativos com copia=true. Cc vazio cai no mínimo (último recurso).
+export function separarParaCc(linhas: DestinatarioContabilidadeLinha[], ccMinimo: string): { para: string[]; cc: string[]; usouCcMinimo: boolean } {
+  const ativos = linhas.filter((l) => l.ativo);
+  const para = ativos.filter((l) => !l.copia).map((l) => l.email);
+  const cc = ativos.filter((l) => l.copia).map((l) => l.email);
+  if (cc.length === 0) return { para, cc: [ccMinimo], usouCcMinimo: true };
+  return { para, cc, usouCcMinimo: false };
+}
+
+// Trava do último Cc ativo: remover ou desativar este item deixaria a lista de Cc ativos vazia?
+export function deixariaSemCcAtivo(linhas: DestinatarioContabilidadeLinha[], id: string): boolean {
+  const alvo = linhas.find((l) => l.id === id);
+  if (!alvo || !alvo.copia || !alvo.ativo) return false;
+  return linhas.filter((l) => l.copia && l.ativo).length <= 1;
+}
+
+export const MSG_ULTIMO_CC = "É obrigatório manter pelo menos um e-mail em Cópia (Cc) ativo.";
+export const MSG_EMAIL_DUPLICADO = "Este e-mail já está cadastrado em Para ou Cc.";

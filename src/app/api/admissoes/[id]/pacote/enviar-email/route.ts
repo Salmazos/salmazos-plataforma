@@ -3,13 +3,13 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
 import { checarAcessoAdmissaoRH } from "@/lib/rhUnidadeAuth";
 import { parseBody, admissaoEnviarEmailContabilidadeSchema } from "@/lib/schemas";
-import { ENTIDADES_CONTRATANTES, EMAIL_CONTABILIDADE_CC_FIXO, TEMPO_CONTRATO_PADRAO } from "@/lib/constants";
+import { ENTIDADES_CONTRATANTES, EMAIL_CONTABILIDADE_CC_MINIMO, TEMPO_CONTRATO_PADRAO } from "@/lib/constants";
 import { exibirTelefone } from "@/lib/utils";
 import { sendEmail, obterRemetente } from "@/lib/sendEmail";
 import { registrarAuditoria } from "@/lib/audit";
 import {
   LIMITE_ANEXO_EMAIL_BYTES, formatarMB, formatarSalario, montarAssunto, montarHtmlEmail, montarLinhaEmpresa,
-  montarLinhasDados, montarTextoEmail, nomeArquivoAnexo, podeEnviarAgora, resolverTempoContrato, saudacaoSaoPaulo,
+  montarLinhasDados, montarTextoEmail, nomeArquivoAnexo, podeEnviarAgora, resolverTempoContrato, saudacaoSaoPaulo, separarParaCc,
   type DadosEmailPacote,
 } from "@/lib/emailPacoteContabilidade";
 
@@ -45,7 +45,7 @@ async function carregarContexto(svc: ServiceClient, id: string) {
     adm.candidato_id && adm.vaga_id
       ? svc.from("candidatos_vagas").select("admissao_data_inicio, admissao_tempo_contrato").eq("candidato_id", adm.candidato_id).eq("vaga_id", adm.vaga_id).limit(1).maybeSingle()
       : Promise.resolve({ data: null }),
-    svc.from("admissao_contabilidade_email_destinatarios").select("nome, email").eq("ativo", true).order("nome"),
+    svc.from("admissao_contabilidade_email_destinatarios").select("nome, email, copia, ativo").eq("ativo", true).order("nome"),
   ]);
 
   const candidato = adm.candidatos as { nome_completo: string | null; telefone: string | null } | null;
@@ -87,7 +87,8 @@ async function carregarContexto(svc: ServiceClient, id: string) {
     dados,
     tempoContratoSugerido,
     avisos,
-    para: ((destinatarios ?? []) as { nome: string; email: string }[]).map((d) => d.email),
+    // Para = ativos com copia=false; Cc = ativos com copia=true (vazio cai no Cc mínimo, com aviso).
+    ...separarParaCc((destinatarios ?? []) as { email: string; copia: boolean; ativo: boolean }[], EMAIL_CONTABILIDADE_CC_MINIMO),
   };
 }
 
@@ -144,7 +145,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
     corpoHtml: montarHtmlEmail(saudacao, linhas),
     corpoTexto: montarTextoEmail(saudacao, linhas),
     para: ctx.para,
-    cc: EMAIL_CONTABILIDADE_CC_FIXO,
+    cc: ctx.cc,
+    avisoCc: ctx.usouCcMinimo ? `Nenhum e-mail em Cópia (Cc) ativo: o envio usará ${EMAIL_CONTABILIDADE_CC_MINIMO} como cópia mínima. Cadastre um Cc em Configurações > Avisos > E-mail da contabilidade (Admissões).` : null,
     remetente: obterRemetente("contabilidade"),
     pdfExiste,
     nomeAnexo: nomeArquivoAnexo(ctx.nome),
@@ -201,7 +203,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const resultado = await sendEmail({
     to: para,
-    cc: EMAIL_CONTABILIDADE_CC_FIXO.join(", "),
+    cc: ctx.cc.join(", "),
     subject: assunto,
     html,
     tipo: "pacote_contabilidade",
@@ -226,13 +228,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     acao: "admissao_pacote_enviado_email",
     entidade: "admissoes",
     entidade_id: id,
-    detalhes: { para: ctx.para, cc: EMAIL_CONTABILIDADE_CC_FIXO, reenvio: reenviar },
+    detalhes: { para: ctx.para, cc: ctx.cc, reenvio: reenviar },
   });
 
   return NextResponse.json({
     success: true,
     para: ctx.para,
-    cc: EMAIL_CONTABILIDADE_CC_FIXO,
+    cc: ctx.cc,
     ...(updErr ? { aviso: "E-mail enviado, mas não foi possível registrar o envio na admissão." } : {}),
   });
 }

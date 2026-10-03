@@ -194,9 +194,9 @@ export const ENTIDADES_CONTRATANTES = [
 // (vale para qualquer tipo de serviço).
 export const TEMPO_CONTRATO_PADRAO = "180 dias, prorrogável por mais 90 dias";
 
-// Cópia fixa de todo e-mail do pacote de admissão para a contabilidade — de propósito no código,
-// não editável pela tela (os destinatários "Para" é que são configuráveis).
-export const EMAIL_CONTABILIDADE_CC_FIXO = ["consultoria@salmazos.com.br", "rh@salmazos.com.br"];
+// Último recurso: o Cc agora vem do banco (admissao_contabilidade_email_destinatarios, copia = true).
+// Só se, por qualquer motivo, não restar nenhum Cc ativo, o envio usa este endereço (com aviso na prévia).
+export const EMAIL_CONTABILIDADE_CC_MINIMO = "rh@salmazos.com.br";
 
 // Turno de trabalho do funcionário — menu fixo (não texto livre), preenchido pelo RH junto
 // com o Horário de trabalho na tela de Admissão (admissoes.turno), propagado pra

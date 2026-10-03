@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import AdmissaoContabilidadeConfigClient from "@/components/AdmissaoContabilidadeConfigClient";
-import { EMAIL_CONTABILIDADE_CC_FIXO } from "@/lib/constants";
 import { obterRemetente } from "@/lib/sendEmail";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +19,6 @@ export default async function AdmissaoContabilidadeConfigPage() {
   return (
     <AdmissaoContabilidadeConfigClient
       destinatariosIniciais={destinatarios ?? []}
-      ccFixo={EMAIL_CONTABILIDADE_CC_FIXO}
       remetente={obterRemetente("contabilidade")}
     />
   );

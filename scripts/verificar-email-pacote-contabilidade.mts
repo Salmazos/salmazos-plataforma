@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   escaparHtml, formatarDataBR, formatarSalario, saudacaoSaoPaulo, montarAssunto, montarLinhasDados,
   montarHtmlEmail, montarTextoEmail, nomeArquivoAnexo, podeEnviarAgora, resolverTempoContrato,
-  montarLinhaEmpresa, LIMITE_ANEXO_EMAIL_BYTES,
+  montarLinhaEmpresa, LIMITE_ANEXO_EMAIL_BYTES, separarParaCc, deixariaSemCcAtivo, MSG_ULTIMO_CC, MSG_EMAIL_DUPLICADO,
 } from "../src/lib/emailPacoteContabilidade.ts";
 
 let total = 0;
@@ -67,5 +67,38 @@ caso("reenvio: 9 min bloqueia", () => assert.equal(podeEnviarAgora("2026-10-03T1
 caso("reenvio: exatamente 10 min libera", () => assert.equal(podeEnviarAgora("2026-10-03T14:50:00Z", false, agora), true));
 caso("reenvio: 9 min com reenviar=true libera", () => assert.equal(podeEnviarAgora("2026-10-03T14:51:00Z", true, agora), true));
 caso("limite do anexo = 15 MB", () => assert.equal(LIMITE_ANEXO_EMAIL_BYTES, 15 * 1024 * 1024));
+
+const linhas = [
+  { id: "1", email: "olverpera@gmail.com", copia: false, ativo: true },
+  { id: "2", email: "consultoria@salmazos.com.br", copia: true, ativo: true },
+  { id: "3", email: "rh@salmazos.com.br", copia: true, ativo: true },
+  { id: "4", email: "inativo@x.com", copia: false, ativo: false },
+  { id: "5", email: "cc-inativo@x.com", copia: true, ativo: false },
+];
+caso("Para = ativos copia=false; Cc = ativos copia=true", () => {
+  const r = separarParaCc(linhas, "rh@salmazos.com.br");
+  assert.deepEqual(r.para, ["olverpera@gmail.com"]);
+  assert.deepEqual(r.cc, ["consultoria@salmazos.com.br", "rh@salmazos.com.br"]);
+  assert.equal(r.usouCcMinimo, false);
+});
+caso("Cc vazio cai no mínimo e sinaliza", () => {
+  const r = separarParaCc(linhas.filter((l) => !l.copia), "rh@salmazos.com.br");
+  assert.deepEqual(r.cc, ["rh@salmazos.com.br"]);
+  assert.equal(r.usouCcMinimo, true);
+});
+caso("Cc só com inativos também cai no mínimo", () => {
+  const r = separarParaCc(linhas.filter((l) => !l.copia || !l.ativo), "rh@salmazos.com.br");
+  assert.equal(r.usouCcMinimo, true);
+});
+caso("Para vazio fica vazio (o envio responde 400)", () => assert.deepEqual(separarParaCc(linhas.filter((l) => l.copia), "x@x.com").para, []));
+caso("trava: com 2 Cc ativos pode remover/desativar um", () => assert.equal(deixariaSemCcAtivo(linhas, "2"), false));
+caso("trava: último Cc ativo não pode sair", () => assert.equal(deixariaSemCcAtivo(linhas.filter((l) => l.id !== "2"), "3"), true));
+caso("trava: Cc inativo pode ser removido mesmo sendo o único Cc", () => assert.equal(deixariaSemCcAtivo(linhas.filter((l) => l.id === "5"), "5"), false));
+caso("trava: item do Para nunca é bloqueado", () => assert.equal(deixariaSemCcAtivo(linhas.filter((l) => !l.copia), "1"), false));
+caso("trava: id inexistente não bloqueia", () => assert.equal(deixariaSemCcAtivo(linhas, "zzz"), false));
+caso("mensagens exatas da trava e do duplicado", () => {
+  assert.equal(MSG_ULTIMO_CC, "É obrigatório manter pelo menos um e-mail em Cópia (Cc) ativo.");
+  assert.equal(MSG_EMAIL_DUPLICADO, "Este e-mail já está cadastrado em Para ou Cc.");
+});
 
 console.log(`\n${total} casos passaram${process.exitCode ? " (HOUVE FALHAS)" : ""}`);

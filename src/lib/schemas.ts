@@ -1468,11 +1468,16 @@ const emailComDominio = z
 export const admissaoContabilidadeEmailCreateSchema = z.object({
   nome: z.string().trim().min(1, "Nome é obrigatório").max(200),
   email: emailComDominio,
+  // false = destinatário "Para"; true = "Cópia (Cc)".
+  copia: z.boolean().default(false),
 });
 
-export const admissaoContabilidadeEmailUpdateSchema = z.object({
-  ativo: z.boolean(),
-});
+export const admissaoContabilidadeEmailUpdateSchema = z
+  .object({
+    ativo: z.boolean().optional(),
+    nome: z.string().trim().min(1, "Nome é obrigatório").max(200).optional(),
+  })
+  .refine((v) => v.ativo !== undefined || v.nome !== undefined, "Informe o que alterar.");
 
 export const admissaoEnviarEmailContabilidadeSchema = z.object({
   tempoContrato: z.string().trim().max(200).optional().nullable(),
