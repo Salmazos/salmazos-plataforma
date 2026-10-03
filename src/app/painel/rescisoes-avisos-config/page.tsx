@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import AvisoMigradoBanner from "@/components/AvisoMigradoBanner";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import RescisoesAvisosConfigClient from "@/components/RescisoesAvisosConfigClient";
 import { avisosEmailRescisaoAtivos } from "@/lib/dispararAvisosRescisao";
@@ -34,11 +35,14 @@ export default async function RescisoesAvisosConfigPage() {
   }));
 
   return (
+    <>
+      <AvisoMigradoBanner detalhe='Exceção: o aviso de "rescisão paga" ainda usa a lista desta tela.' />
     <RescisoesAvisosConfigClient
       emailAtivoInicial={emailAtivo}
       emailDestinatariosIniciais={emailDestinatarios ?? []}
       plataformaDestinatariosIniciais={plataformaDestinatarios}
       usuarios={usuarios ?? []}
     />
+    </>
   );
 }

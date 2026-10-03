@@ -2,8 +2,9 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { RESCISAO_MODALIDADE_LABEL } from "@/lib/rescisaoModalidade";
 import { getConfiguracoesGerais } from "@/lib/configuracoesGerais";
+import { resolverDestinatarios, CHAVE_AVISOS_EMAIL_RESCISAO } from "@/lib/avisos";
 
-export const CHAVE_AVISOS_EMAIL_RESCISAO = "rescisao_avisos_email_ativo";
+export { CHAVE_AVISOS_EMAIL_RESCISAO };
 
 export async function avisosEmailRescisaoAtivos(): Promise<boolean> {
   const config = await getConfiguracoesGerais([CHAVE_AVISOS_EMAIL_RESCISAO]);
@@ -158,10 +159,12 @@ export interface ResultadoEnvioEmailRescisao {
 }
 
 // Canal de e-mail isolado do sino/popup — só é chamado quando o e-mail está ligado em
-// Configurações (ver dispararAvisosRescisao). O botão de reenvio manual foi removido em 25/09.
+// Configurações > Avisos (ver dispararAvisosRescisao), que já resolve os destinatários.
+// O botão de reenvio manual foi removido em 25/09.
 async function enviarEmailRescisao(
   rescisaoId: string,
   momento: MomentoAvisoRescisao,
+  emailDestinatarios: { nome: string; email: string }[],
   supabase?: ServiceClient
 ): Promise<ResultadoEnvioEmailRescisao | null> {
   const svc = supabase ?? createServiceClient();
@@ -171,19 +174,9 @@ async function enviarEmailRescisao(
 
   const { assuntoEmail, corDestaque, tituloEmail } = conteudo(momento, rescisao.nomeFuncionario, rescisao.empresa, rescisao.valor_rescisao);
 
-  const { data: emailDestinatarios, error: emailDestError } = await svc
-    .from("rescisao_avisos_email_destinatarios")
-    .select("id, nome, email")
-    .eq("ativo", true);
-
   const base = { funcionario: rescisao.nomeFuncionario, empresa: rescisao.empresa, valorRescisao: rescisao.valor_rescisao };
 
-  if (emailDestError) {
-    console.error(`[enviarEmailRescisao] Erro ao buscar destinatários de e-mail (rescisao_id=${rescisaoId}):`, emailDestError.message);
-    return { ...base, sucesso: false, destinatariosCount: 0 };
-  }
-
-  if (!emailDestinatarios || emailDestinatarios.length === 0) {
+  if (emailDestinatarios.length === 0) {
     return { ...base, sucesso: true, destinatariosCount: 0 };
   }
 
@@ -289,12 +282,18 @@ export async function dispararAvisosRescisao(rescisaoId: string, momento: Moment
 
     // ── Canal 1: e-mail ──────────────────────────────────────────────────────
     // Desligado por padrão (decisão do Olver, 25/09: avisos de rescisão só no sino e no popup);
-    // liga/desliga em Configurações > Avisos de Rescisão. Sem a chave gravada = desligado.
-    const emailAtivo = await avisosEmailRescisaoAtivos();
+    // liga/desliga e lista em Configurações > Avisos (resolverDestinatarios, com fallback para a
+    // chave/tabelas antigas). Sem nada configurado = desligado/ninguém.
+    const evento = `rescisao_${momento}`;
+    const email = await resolverDestinatarios(evento, "email");
+    if (email.falhou) {
+      console.error(`[dispararAvisosRescisao] Erro ao buscar destinatários de e-mail (rescisao_id=${rescisaoId})`);
+      return { sucesso: false };
+    }
     let emailOk = true;
     let dados: { funcionario: string; empresa: string; valorRescisao: number | null };
-    if (emailAtivo) {
-      const resultadoEmail = await enviarEmailRescisao(rescisaoId, momento, svc);
+    if (email.modo !== "desligado") {
+      const resultadoEmail = await enviarEmailRescisao(rescisaoId, momento, email.emails, svc);
       if (!resultadoEmail) return { sucesso: false };
       emailOk = resultadoEmail.sucesso;
       dados = resultadoEmail;
@@ -307,27 +306,21 @@ export async function dispararAvisosRescisao(rescisaoId: string, momento: Moment
     const { titulo, mensagem } = conteudo(momento, dados.funcionario, dados.empresa, dados.valorRescisao);
 
     // ── Canal 2 e 3: sino + popup (mesma linha em notificacoes_analista alimenta os dois — ver /api/rescisoes/avisos-hoje) ──
-    // Fase 3.1 — destinatários deixaram de ser por-rescisão: agora é configuração global
-    // (ver /painel/rescisoes-avisos-config), a mesma lista pros 3 momentos de toda rescisão.
-    const { data: plataformaDestinatarios, error: plataformaDestError } = await svc
-      .from("rescisao_avisos_plataforma_destinatarios")
-      .select("usuario_id");
-
-    if (plataformaDestError) {
-      console.error(
-        `[dispararAvisosRescisao] Erro ao buscar destinatários de plataforma (rescisao_id=${rescisaoId}):`,
-        plataformaDestError.message
-      );
+    // Destinatários: configuração global por evento (Configurações > Avisos), a mesma lista nos
+    // 3 momentos até alguém diferenciar. Sem filtro de unidade (como sempre foi).
+    const sino = await resolverDestinatarios(evento, "sino");
+    if (sino.falhou) {
+      console.error(`[dispararAvisosRescisao] Erro ao buscar destinatários de plataforma (rescisao_id=${rescisaoId})`);
       return { sucesso: false };
     }
 
     let plataformaFalhou = false;
-    if (plataformaDestinatarios && plataformaDestinatarios.length > 0) {
-      const rows = plataformaDestinatarios.map((d) => ({
+    if (sino.modo === "configurado" && sino.userIds.length > 0) {
+      const rows = sino.userIds.map((usuarioId) => ({
         tipo: `rescisao_${momento}`,
         titulo,
         mensagem,
-        user_id: d.usuario_id,
+        user_id: usuarioId,
         candidato_id: null,
         rescisao_id: rescisaoId,
       }));

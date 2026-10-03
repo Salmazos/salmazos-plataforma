@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import AvisoMigradoBanner from "@/components/AvisoMigradoBanner";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import FuncionarioAsoAvisosConfigClient from "@/components/FuncionarioAsoAvisosConfigClient";
 
@@ -32,10 +33,13 @@ export default async function FuncionarioAsoAvisosConfigPage() {
   }));
 
   return (
+    <>
+      <AvisoMigradoBanner />
     <FuncionarioAsoAvisosConfigClient
       emailDestinatariosIniciais={emailDestinatarios ?? []}
       plataformaDestinatariosIniciais={plataformaDestinatarios}
       usuarios={usuarios ?? []}
     />
+    </>
   );
 }

@@ -193,6 +193,7 @@ const menuItems: MenuItemDef[] = [
         icon: Megaphone,
         requireSuperuser: true,
         submenu: [
+          { label: "Avisos", href: "/painel/avisos-config", icon: Megaphone, requireSuperuser: true },
           { label: "Avisos de Vagas", href: "/painel/avisos-vagas-config", icon: Megaphone, requireSuperuser: true },
           { label: "Avisos de Rescisão", href: "/painel/rescisoes-avisos-config", icon: Megaphone, requireSuperuser: true },
           { label: "Avisos de Cobrança R&S", href: "/painel/cobranca-rs-avisos-config", icon: Megaphone, requireSuperuser: true },

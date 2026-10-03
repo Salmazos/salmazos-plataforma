@@ -21,13 +21,9 @@ interface NotifyOpts {
 
 // Filtro de destinatários por unidade, compartilhado pelos envios em massa (e-mail) — mesma
 // regra de ContextoUnidade em unidadeAuth.ts.
-export function analistaAtendeUnidade(
-  a: { unidade_id: string | null; acesso_todas_unidades: boolean | null },
-  unidadeId: string | null | undefined
-): boolean {
-  if (!unidadeId) return true;
-  return a.acesso_todas_unidades === true || a.unidade_id === unidadeId;
-}
+// Implementação em avisosResolucao.ts (módulo puro, também usado no script de verificação).
+import { analistaAtendeUnidade } from "@/lib/avisosResolucao";
+export { analistaAtendeUnidade };
 
 interface NotifyResult {
   attempted: number;
