@@ -7,6 +7,8 @@ import {
   montarLinhaEmpresa, LIMITE_ANEXO_EMAIL_BYTES, separarParaCc, deixariaSemCcAtivo, MSG_ULTIMO_CC, MSG_EMAIL_DUPLICADO,
   interpretarSecureSmtp, classificarErroEmail, mensagemErroCurta,
   MSG_ERRO_EMAIL_TIMEOUT, MSG_ERRO_EMAIL_AUTH, MSG_ERRO_EMAIL_OUTRO,
+  sanitizarCampoEmail, validarCamposEmail, montarAssuntoDeCampos, montarLinhasDeCampos, listarCamposEditados, avisosCamposFaltando,
+  interpretarValorBR, numeroParaBR, formatarTelefoneEmail, dataISOValida,
 } from "../src/lib/emailPacoteContabilidade.ts";
 
 let total = 0;
@@ -128,6 +130,98 @@ caso("log curto mascara segredos e limita tamanho", () => {
   assert.equal(m, "[EAUTH] Invalid login for ***: *** rejeitada");
   assert.ok(!m.includes("senha-super-secreta") && !m.includes("usuario@x.com"));
   assert.ok(mensagemErroCurta("X", "a".repeat(500)).length <= 200);
+});
+
+// ── Campos editáveis ─────────────────────────────────────────────────────────────────────────────
+const PADRAO = "180 dias, prorrogável por mais 90 dias";
+const original = { nome: "Maria da Silva", funcao: "Auxiliar", salarioValor: 9.4, salarioTipo: "hora", horario: "07h às 16h", telefone: "19 98990-1331", dataInicio: "2026-10-05", tempoContrato: "" };
+
+caso("sanitizar: quebra de linha e controle viram espaço, colapsa e apara", () => assert.equal(sanitizarCampoEmail("  Maria\r\nBcc: x@y.com\t\u0000da   Silva \u2028", 120), "Maria Bcc: x@y.com da Silva"));
+caso("sanitizar: limita o tamanho", () => assert.equal(sanitizarCampoEmail("a".repeat(300), 120).length, 120));
+caso("sanitizar: null/undefined => vazio", () => { assert.equal(sanitizarCampoEmail(null, 10), ""); assert.equal(sanitizarCampoEmail(undefined, 10), ""); });
+caso("nome com quebra de linha NÃO chega ao assunto", () => {
+  const v = validarCamposEmail({ ...original, nome: "Maria\r\nBcc: atacante@x.com" });
+  const assunto = montarAssuntoDeCampos(v.camposNormalizados);
+  assert.ok(!/[\r\n]/.test(assunto));
+  assert.equal(assunto, "Admissão - 05/10/2026 - Maria Bcc: atacante@x.com");
+});
+caso("validar: tudo certo", () => { const v = validarCamposEmail(original); assert.equal(v.ok, true); assert.deepEqual(v.erros, []); });
+caso("validar: nome vazio", () => { const v = validarCamposEmail({ ...original, nome: "   " }); assert.equal(v.ok, false); assert.ok(v.erros.includes("Informe o nome.")); });
+caso("validar: data inválida (31/02, formato errado) e vazia ok", () => {
+  assert.equal(validarCamposEmail({ ...original, dataInicio: "2026-02-31" }).ok, false);
+  assert.equal(validarCamposEmail({ ...original, dataInicio: "05/10/2026" }).ok, false);
+  assert.equal(validarCamposEmail({ ...original, dataInicio: "" }).ok, true);
+  assert.equal(dataISOValida("2028-02-29"), true);
+  assert.equal(dataISOValida("2027-02-29"), false);
+});
+caso("validar: salário sem tipo", () => { const v = validarCamposEmail({ ...original, salarioTipo: null }); assert.equal(v.ok, false); assert.ok(v.erros.some((e) => e.includes("por hora ou mensal"))); });
+caso("validar: salário tipo inválido", () => assert.equal(validarCamposEmail({ ...original, salarioTipo: "semanal" }).ok, false));
+caso("validar: salário negativo, NaN e infinito", () => {
+  assert.equal(validarCamposEmail({ ...original, salarioValor: -1 }).ok, false);
+  assert.equal(validarCamposEmail({ ...original, salarioValor: NaN }).ok, false);
+  assert.equal(validarCamposEmail({ ...original, salarioValor: Infinity }).ok, false);
+});
+caso("validar: salário zero é válido; vazio (null) dispensa o tipo", () => {
+  assert.equal(validarCamposEmail({ ...original, salarioValor: 0 }).ok, true);
+  const v = validarCamposEmail({ ...original, salarioValor: null, salarioTipo: null });
+  assert.equal(v.ok, true);
+  assert.equal(v.camposNormalizados.salarioValor, null);
+  assert.equal(v.camposNormalizados.salarioTipo, null);
+});
+caso("validar: telefone só dígitos é formatado (11 e 10 dígitos)", () => {
+  assert.equal(validarCamposEmail({ ...original, telefone: "19989901331" }).camposNormalizados.telefone, "19 98990-1331");
+  assert.equal(validarCamposEmail({ ...original, telefone: "1932211234" }).camposNormalizados.telefone, "19 3221-1234");
+  assert.equal(formatarTelefoneEmail("(19) 98990-1331"), "19 98990-1331");
+});
+caso("validar: telefone fora de 10/11 dígitos fica como digitado", () => assert.equal(validarCamposEmail({ ...original, telefone: "ramal 123" }).camposNormalizados.telefone, "ramal 123"));
+caso("validar: entrada não-objeto não quebra", () => { assert.equal(validarCamposEmail(null).ok, false); assert.equal(validarCamposEmail("x").ok, false); });
+caso("valor BR: interpretar e formatar", () => {
+  assert.equal(interpretarValorBR("1.800,00"), 1800);
+  assert.equal(interpretarValorBR("9,40"), 9.4);
+  assert.equal(interpretarValorBR("R$ 9,4"), 9.4);
+  assert.equal(interpretarValorBR("1800"), 1800);
+  assert.equal(interpretarValorBR(""), null);
+  assert.ok(Number.isNaN(interpretarValorBR("abc") as number));
+  assert.ok(Number.isNaN(interpretarValorBR("1.80,0") as number));
+  assert.equal(numeroParaBR(1800), "1.800,00");
+  assert.equal(numeroParaBR(9.4), "9,40");
+  assert.equal(numeroParaBR(null), "");
+});
+caso("assunto e anexo com nome editado", () => {
+  const v = validarCamposEmail({ ...original, nome: "José D'Ávila Júnior", dataInicio: "2026-11-02" }).camposNormalizados;
+  assert.equal(montarAssuntoDeCampos(v), "Admissão - 02/11/2026 - José D'Ávila Júnior");
+  assert.equal(nomeArquivoAnexo(v.nome), "admissao-jose-d-avila-junior.pdf");
+});
+caso("linhas: vazias omitidas, salário formatado, tempo de contrato padrão quando vazio", () => {
+  const v = validarCamposEmail({ ...original, funcao: "", horario: "", telefone: "" }).camposNormalizados;
+  const l = montarLinhasDeCampos(v, "293 - EMPRESA", "Cliente X", PADRAO);
+  assert.deepEqual(l.map((x) => x.rotulo), ["Empresa", "Cliente", "Data de início", "Nome", "Salário", "Tempo de Contrato"]);
+  assert.equal(l.find((x) => x.rotulo === "Salário")?.valor, "R$ 9,40 hora");
+  assert.equal(l.find((x) => x.rotulo === "Tempo de Contrato")?.valor, PADRAO);
+});
+caso("linhas: Empresa/Cliente vêm do servidor e Tempo de Contrato digitado prevalece", () => {
+  const v = validarCamposEmail({ ...original, tempoContrato: "90 dias" }).camposNormalizados;
+  const l = montarLinhasDeCampos(v, "324 - OUTRA", "Cliente Y", PADRAO);
+  assert.equal(l.find((x) => x.rotulo === "Empresa")?.valor, "324 - OUTRA");
+  assert.equal(l.find((x) => x.rotulo === "Cliente")?.valor, "Cliente Y");
+  assert.equal(l.find((x) => x.rotulo === "Tempo de Contrato")?.valor, "90 dias");
+});
+caso("listarCamposEditados: sem mudança => []", () => assert.deepEqual(listarCamposEditados(original, { ...original }), []));
+caso("listarCamposEditados: ignora diferença só de formatação/espaços", () =>
+  assert.deepEqual(listarCamposEditados(original, { ...original, nome: "  Maria   da Silva ", telefone: "19989901331" }), []));
+caso("listarCamposEditados: nomes dos campos que mudaram", () =>
+  assert.deepEqual(listarCamposEditados(original, { ...original, nome: "Maria Souza", horario: "08h às 17h", dataInicio: "2026-10-06", tempoContrato: "90 dias" }), ["nome", "horario", "dataInicio", "tempoContrato"]));
+caso("listarCamposEditados: salário (valor ou tipo) e telefone/função", () => {
+  assert.deepEqual(listarCamposEditados(original, { ...original, salarioValor: 10 }), ["salario"]);
+  assert.deepEqual(listarCamposEditados(original, { ...original, salarioTipo: "mensal" }), ["salario"]);
+  assert.deepEqual(listarCamposEditados(original, { ...original, funcao: "Op.", telefone: "19 3221-1234" }), ["funcao", "telefone"]);
+});
+caso("listarCamposEditados: trocar o tipo não conta se o salário está vazio nos dois", () =>
+  assert.deepEqual(listarCamposEditados({ ...original, salarioValor: null, salarioTipo: null }, { ...original, salarioValor: null, salarioTipo: "hora" }), []));
+caso("avisos sobre valores editados", () => {
+  const v = validarCamposEmail({ ...original, funcao: "", salarioValor: null, salarioTipo: null }).camposNormalizados;
+  assert.deepEqual(avisosCamposFaltando(v, "293 - E", "Cli"), ["Função não preenchida.", "Salário não preenchido."]);
+  assert.deepEqual(avisosCamposFaltando(v, "", ""), ["Empresa (entidade contratante) não definida.", "Cliente não encontrado.", "Função não preenchida.", "Salário não preenchido."]);
 });
 
 console.log(`\n${total} casos passaram${process.exitCode ? " (HOUVE FALHAS)" : ""}`);

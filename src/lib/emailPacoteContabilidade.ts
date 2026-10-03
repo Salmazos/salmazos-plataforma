@@ -214,3 +214,151 @@ export function mensagemErroCurta(codigo: string | null | undefined, mensagem: s
   const texto = `${codigo ? `[${codigo}] ` : ""}${m}`.trim();
   return texto.length > max ? `${texto.slice(0, max - 1)}…` : texto;
 }
+
+// ── Campos editáveis do e-mail (valem só para o e-mail; nada é gravado no cadastro) ─────────────────
+export interface CamposEmailContabilidade {
+  nome: string;
+  funcao: string;
+  salarioValor: number | null;
+  salarioTipo: "hora" | "mensal" | null;
+  horario: string;
+  telefone: string;
+  dataInicio: string; // YYYY-MM-DD ou vazio
+  tempoContrato: string;
+}
+
+export const LIMITES_CAMPOS_EMAIL = { nome: 120, funcao: 120, horario: 200, telefone: 40, tempoContrato: 200 } as const;
+
+// Tira quebras de linha e caracteres de controle (evita injeção de cabeçalho no assunto), colapsa
+// espaços repetidos, apara e limita o tamanho.
+export function sanitizarCampoEmail(texto: unknown, max: number): string {
+  if (texto === null || texto === undefined) return "";
+  const limpo = String(texto)
+    .replace(/[\u0000-\u001F\u007F-\u009F\u2028\u2029]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return limpo.length > max ? limpo.slice(0, max).trim() : limpo;
+}
+
+// Mesma regra de exibirTelefone (utils.ts), copiada aqui para manter este módulo sem imports:
+// 11 dígitos = "DD 9XXXX-XXXX", 10 = "DD XXXX-XXXX"; qualquer outra coisa fica como digitada.
+export function formatarTelefoneEmail(valor: string): string {
+  const d = valor.replace(/\D/g, "");
+  if (d.length === 11) return `${d.slice(0, 2)} ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `${d.slice(0, 2)} ${d.slice(2, 6)}-${d.slice(6)}`;
+  return valor;
+}
+
+export function dataISOValida(valor: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor);
+  if (!m) return false;
+  const [a, mes, dia] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const d = new Date(Date.UTC(a, mes - 1, dia));
+  return d.getUTCFullYear() === a && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
+}
+
+// "1.800,00" / "9,40" / "R$ 9,4" => número; vazio => null; inválido => NaN (a validação rejeita).
+export function interpretarValorBR(texto: string): number | null {
+  const t = texto.replace(/R\$/gi, "").replace(/\s+/g, "");
+  if (t === "") return null;
+  if (!/^(\d{1,3}(\.\d{3})+|\d+)(,\d+)?$/.test(t)) return NaN;
+  return Number(t.replace(/\./g, "").replace(",", "."));
+}
+
+// 1800 => "1.800,00"; 9.4 => "9,40".
+export function numeroParaBR(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "";
+  const [inteiro, centavos] = n.toFixed(2).split(".");
+  return `${inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${centavos}`;
+}
+
+// Normaliza (sanitiza e formata) e valida. Devolve sempre os campos normalizados, mesmo com erro.
+export function validarCamposEmail(entrada: unknown): { ok: boolean; erros: string[]; camposNormalizados: CamposEmailContabilidade } {
+  const e = (entrada && typeof entrada === "object" ? entrada : {}) as Record<string, unknown>;
+  const erros: string[] = [];
+
+  const nome = sanitizarCampoEmail(e.nome, LIMITES_CAMPOS_EMAIL.nome);
+  if (!nome) erros.push("Informe o nome.");
+
+  const dataInicio = sanitizarCampoEmail(e.dataInicio, 10);
+  if (dataInicio && !dataISOValida(dataInicio)) erros.push("Data de início inválida.");
+
+  let salarioValor: number | null = null;
+  let salarioTipo: "hora" | "mensal" | null = null;
+  const bruto = e.salarioValor;
+  if (bruto !== null && bruto !== undefined && bruto !== "") {
+    const n = typeof bruto === "number" ? bruto : typeof bruto === "string" ? Number(bruto) : NaN;
+    if (!Number.isFinite(n) || n < 0 || n > 1_000_000_000) {
+      erros.push("Salário inválido.");
+    } else {
+      salarioValor = n;
+      if (e.salarioTipo === "hora" || e.salarioTipo === "mensal") salarioTipo = e.salarioTipo;
+      else erros.push("Informe se o salário é por hora ou mensal.");
+    }
+  }
+
+  return {
+    ok: erros.length === 0,
+    erros,
+    camposNormalizados: {
+      nome,
+      funcao: sanitizarCampoEmail(e.funcao, LIMITES_CAMPOS_EMAIL.funcao),
+      salarioValor,
+      salarioTipo,
+      horario: sanitizarCampoEmail(e.horario, LIMITES_CAMPOS_EMAIL.horario),
+      telefone: formatarTelefoneEmail(sanitizarCampoEmail(e.telefone, LIMITES_CAMPOS_EMAIL.telefone)),
+      dataInicio: dataISOValida(dataInicio) ? dataInicio : "",
+      tempoContrato: sanitizarCampoEmail(e.tempoContrato, LIMITES_CAMPOS_EMAIL.tempoContrato),
+    },
+  };
+}
+
+// Fonte única para servidor e modal: assunto, linhas e avisos saem sempre dos campos normalizados.
+export function montarAssuntoDeCampos(c: CamposEmailContabilidade): string {
+  return montarAssunto(c.dataInicio, c.nome);
+}
+
+export function montarLinhasDeCampos(c: CamposEmailContabilidade, empresa: string, cliente: string, tempoContratoPadrao: string): LinhaDado[] {
+  return montarLinhasDados({
+    empresa,
+    cliente,
+    dataInicio: c.dataInicio || null,
+    nome: c.nome,
+    funcao: c.funcao,
+    salario: c.salarioValor === null ? "" : formatarSalario(c.salarioValor, c.salarioTipo),
+    horario: c.horario,
+    telefone: c.telefone,
+    tempoContrato: resolverTempoContrato(c.tempoContrato, tempoContratoPadrao),
+  });
+}
+
+// Campos que o e-mail omitiria (só aviso, não bloqueia). Calculado sobre os valores já editados.
+export function avisosCamposFaltando(c: CamposEmailContabilidade, empresa: string, cliente: string): string[] {
+  const avisos: string[] = [];
+  if (!c.nome) avisos.push("Nome do candidato não encontrado.");
+  if (!c.dataInicio) avisos.push("Data de início não definida.");
+  if (!empresa) avisos.push("Empresa (entidade contratante) não definida.");
+  if (!cliente) avisos.push("Cliente não encontrado.");
+  if (!c.funcao) avisos.push("Função não preenchida.");
+  if (c.salarioValor === null) avisos.push("Salário não preenchido.");
+  if (!c.horario) avisos.push("Horário não preenchido.");
+  if (!c.telefone) avisos.push("Telefone não encontrado.");
+  return avisos;
+}
+
+export type NomeCampoEmail = "nome" | "funcao" | "salario" | "horario" | "telefone" | "dataInicio" | "tempoContrato";
+
+// Nomes dos campos que mudaram (ambos os lados passam pela mesma normalização antes de comparar).
+export function listarCamposEditados(original: unknown, editado: unknown): NomeCampoEmail[] {
+  const a = validarCamposEmail(original).camposNormalizados;
+  const b = validarCamposEmail(editado).camposNormalizados;
+  const mudou: NomeCampoEmail[] = [];
+  if (a.nome !== b.nome) mudou.push("nome");
+  if (a.funcao !== b.funcao) mudou.push("funcao");
+  if (a.salarioValor !== b.salarioValor || (a.salarioValor !== null && a.salarioTipo !== b.salarioTipo)) mudou.push("salario");
+  if (a.horario !== b.horario) mudou.push("horario");
+  if (a.telefone !== b.telefone) mudou.push("telefone");
+  if (a.dataInicio !== b.dataInicio) mudou.push("dataInicio");
+  if (a.tempoContrato !== b.tempoContrato) mudou.push("tempoContrato");
+  return mudou;
+}

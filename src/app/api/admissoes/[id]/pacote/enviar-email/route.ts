@@ -8,9 +8,9 @@ import { exibirTelefone } from "@/lib/utils";
 import { sendEmail, obterRemetente } from "@/lib/sendEmail";
 import { registrarAuditoria } from "@/lib/audit";
 import {
-  LIMITE_ANEXO_EMAIL_BYTES, formatarMB, formatarSalario, montarAssunto, montarHtmlEmail, montarLinhaEmpresa,
-  montarLinhasDados, montarTextoEmail, nomeArquivoAnexo, podeEnviarAgora, resolverTempoContrato, saudacaoSaoPaulo, separarParaCc, classificarErroEmail,
-  type DadosEmailPacote,
+  LIMITE_ANEXO_EMAIL_BYTES, formatarMB, montarHtmlEmail, montarLinhaEmpresa, montarTextoEmail, nomeArquivoAnexo, podeEnviarAgora,
+  resolverTempoContrato, saudacaoSaoPaulo, separarParaCc, classificarErroEmail, validarCamposEmail, montarAssuntoDeCampos,
+  montarLinhasDeCampos, avisosCamposFaltando, listarCamposEditados, dataISOValida,
 } from "@/lib/emailPacoteContabilidade";
 
 export const maxDuration = 30;
@@ -50,43 +50,33 @@ async function carregarContexto(svc: ServiceClient, id: string) {
 
   const candidato = adm.candidatos as { nome_completo: string | null; telefone: string | null } | null;
   const cliente = adm.vagas?.clientes as { nome: string; entidade_contratante: string | null } | null;
-  const nome = (dp?.nome_completo || candidato?.nome_completo || "").trim();
-  const dataInicio: string | null = adm.data_admissao || cv?.admissao_data_inicio || null;
-  const telefone = exibirTelefone(dp?.telefone || candidato?.telefone || "");
   const entidadeValue: string | null = adm.entidade_contratante ?? cliente?.entidade_contratante ?? null;
   const entidade = ENTIDADES_CONTRATANTES.find((e) => e.value === entidadeValue);
   const tempoContratoSugerido = resolverTempoContrato(cv?.admissao_tempo_contrato, TEMPO_CONTRATO_PADRAO);
 
-  const dados = (tempoContrato: string): DadosEmailPacote => ({
-    empresa: entidade ? montarLinhaEmpresa(entidade.codigoContabilidade, entidade.razaoSocialContabilidade) : "",
-    cliente: cliente?.nome ?? "",
+  // Valores do cadastro, já normalizados: base da prévia e da comparação "o que foi editado".
+  const dataBruta: string = adm.data_admissao || cv?.admissao_data_inicio || "";
+  const dataInicio = /^\d{4}-\d{2}-\d{2}/.test(dataBruta) && dataISOValida(dataBruta.slice(0, 10)) ? dataBruta.slice(0, 10) : "";
+  const salarioNum = adm.salario === null || adm.salario === undefined || adm.salario === "" ? null : Number(adm.salario);
+  const camposOriginais = validarCamposEmail({
+    nome: dp?.nome_completo || candidato?.nome_completo || "",
+    funcao: adm.funcao ?? "",
+    salarioValor: salarioNum !== null && Number.isFinite(salarioNum) ? salarioNum : null,
+    salarioTipo: adm.tipo_salario === "hora" ? "hora" : "mensal",
+    horario: adm.horario_trabalho ?? "",
+    telefone: exibirTelefone(dp?.telefone || candidato?.telefone || ""),
     dataInicio,
-    nome,
-    funcao: adm.funcao ?? null,
-    salario: formatarSalario(adm.salario, adm.tipo_salario),
-    horario: adm.horario_trabalho ?? null,
-    telefone,
-    tempoContrato,
-  });
-
-  // Campos que o e-mail omitiria — só aviso, não bloqueia o envio.
-  const avisos: string[] = [];
-  const base = dados(tempoContratoSugerido);
-  if (!base.nome) avisos.push("Nome do candidato não encontrado.");
-  if (!base.dataInicio) avisos.push("Data de início não definida.");
-  if (!base.empresa) avisos.push("Empresa (entidade contratante) não definida.");
-  if (!base.cliente) avisos.push("Cliente não encontrado.");
-  if (!base.funcao) avisos.push("Função não preenchida.");
-  if (!base.salario) avisos.push("Salário não preenchido.");
-  if (!base.horario) avisos.push("Horário não preenchido.");
-  if (!base.telefone) avisos.push("Telefone não encontrado.");
+    tempoContrato: tempoContratoSugerido,
+  }).camposNormalizados;
+  const empresa = entidade ? montarLinhaEmpresa(entidade.codigoContabilidade, entidade.razaoSocialContabilidade) : "";
+  const nomeCliente = cliente?.nome ?? "";
 
   return {
     adm,
-    nome,
-    dados,
+    camposOriginais,
+    empresa,
+    cliente: nomeCliente,
     tempoContratoSugerido,
-    avisos,
     // Para = ativos com copia=false; Cc = ativos com copia=true (vazio cai no Cc mínimo, com aviso).
     ...separarParaCc((destinatarios ?? []) as { email: string; copia: boolean; ativo: boolean }[], EMAIL_CONTABILIDADE_CC_MINIMO),
   };
@@ -124,8 +114,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
   const ctx = await carregarContexto(svc, id);
   if (!ctx) return NextResponse.json({ error: "Admissão não encontrada." }, { status: 404 });
 
-  const dados = ctx.dados(ctx.tempoContratoSugerido);
-  const linhas = montarLinhasDados(dados);
+  const linhas = montarLinhasDeCampos(ctx.camposOriginais, ctx.empresa, ctx.cliente, TEMPO_CONTRATO_PADRAO);
   const saudacao = saudacaoSaoPaulo();
   const pdfExiste = !!ctx.adm.pdf_pacote_path;
   const tamanho = pdfExiste ? await tamanhoDoPdf(svc, ctx.adm.pdf_pacote_path) : null;
@@ -139,7 +128,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
   }
 
   return NextResponse.json({
-    assunto: semQuebraDeLinha(montarAssunto(dados.dataInicio, dados.nome)),
+    assunto: semQuebraDeLinha(montarAssuntoDeCampos(ctx.camposOriginais)),
     saudacao,
     linhas,
     corpoHtml: montarHtmlEmail(saudacao, linhas),
@@ -149,11 +138,16 @@ export async function GET(_request: NextRequest, { params }: Params) {
     avisoCc: ctx.usouCcMinimo ? `Nenhum e-mail em Cópia (Cc) ativo: o envio usará ${EMAIL_CONTABILIDADE_CC_MINIMO} como cópia mínima. Cadastre um Cc em Configurações > Avisos > E-mail da contabilidade (Admissões).` : null,
     remetente: obterRemetente("contabilidade"),
     pdfExiste,
-    nomeAnexo: nomeArquivoAnexo(ctx.nome),
+    nomeAnexo: nomeArquivoAnexo(ctx.camposOriginais.nome),
     tamanhoPdfBytes: tamanho,
     limiteAnexoBytes: LIMITE_ANEXO_EMAIL_BYTES,
     tempoContratoSugerido: ctx.tempoContratoSugerido,
-    avisos: ctx.avisos,
+    tempoContratoPadrao: TEMPO_CONTRATO_PADRAO,
+    // Para o modal montar a prévia no navegador com as mesmas funções puras.
+    campos: ctx.camposOriginais,
+    empresa: ctx.empresa,
+    cliente: ctx.cliente,
+    avisos: avisosCamposFaltando(ctx.camposOriginais, ctx.empresa, ctx.cliente),
     ultimoEnvio,
   });
 }
@@ -181,6 +175,18 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Este pacote foi enviado há menos de 10 minutos. Para enviar de novo, marque \"Reenviar mesmo assim\"." }, { status: 409 });
   }
 
+  // Campos do e-mail: os do modal (se vieram) ou os do cadastro, como antes. Valem só para este e-mail:
+  // nada é gravado em admissoes, admissao_dados_pessoais, candidatos nem candidatos_vagas.
+  const entrada = parsed.data.campos
+    ? { ...parsed.data.campos, tempoContrato: parsed.data.campos.tempoContrato ?? parsed.data.tempoContrato ?? "" }
+    : { ...ctx.camposOriginais, tempoContrato: parsed.data.tempoContrato ?? ctx.camposOriginais.tempoContrato };
+  const validacao = validarCamposEmail(entrada);
+  if (!validacao.ok) {
+    return NextResponse.json({ error: `Corrija os campos do e-mail: ${validacao.erros.join(" ")}`, erros: validacao.erros }, { status: 400 });
+  }
+  const camposEmail = validacao.camposNormalizados;
+  const camposEditados = listarCamposEditados(ctx.camposOriginais, camposEmail);
+
   // Baixa o PDF já gerado (nunca gera de novo).
   const { data: arquivo, error: dlErr } = await svc.storage.from("admissao-docs").download(ctx.adm.pdf_pacote_path);
   if (dlErr || !arquivo) {
@@ -194,11 +200,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     );
   }
 
-  // O tempo de contrato editado no modal vale só para este e-mail (não grava em candidatos_vagas).
-  const tempoContrato = resolverTempoContrato(parsed.data.tempoContrato, ctx.tempoContratoSugerido);
-  const dados = ctx.dados(tempoContrato);
-  const assunto = semQuebraDeLinha(montarAssunto(dados.dataInicio, dados.nome));
-  const html = montarHtmlEmail(saudacaoSaoPaulo(), montarLinhasDados(dados));
+  const assunto = semQuebraDeLinha(montarAssuntoDeCampos(camposEmail));
+  // O servidor SEMPRE monta o corpo (nunca confia em HTML do cliente), a partir dos campos normalizados.
+  const html = montarHtmlEmail(saudacaoSaoPaulo(), montarLinhasDeCampos(camposEmail, ctx.empresa, ctx.cliente, TEMPO_CONTRATO_PADRAO));
   const para = ctx.para.join(", ");
 
   const resultado = await sendEmail({
@@ -208,7 +212,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     html,
     tipo: "pacote_contabilidade",
     transporte: "contabilidade",
-    attachments: [{ filename: nomeArquivoAnexo(ctx.nome), content: pdf, contentType: "application/pdf" }],
+    attachments: [{ filename: nomeArquivoAnexo(camposEmail.nome), content: pdf, contentType: "application/pdf" }],
   });
   // Falhou: nada é gravado na admissão (pacote_enviado_email_* só depois de envio aceito). O sendEmail já
   // gravou a falha em email_logs (tipo pacote_contabilidade) e a mensagem vem curta e sem segredos.
@@ -231,7 +235,8 @@ export async function POST(request: NextRequest, { params }: Params) {
     acao: "admissao_pacote_enviado_email",
     entidade: "admissoes",
     entidade_id: id,
-    detalhes: { para: ctx.para, cc: ctx.cc, reenvio: reenviar },
+    // Só os NOMES dos campos corrigidos (nunca os valores).
+    detalhes: { para: ctx.para, cc: ctx.cc, reenvio: reenviar, campos_editados: camposEditados.length > 0, campos_editados_nomes: camposEditados },
   });
 
   return NextResponse.json({

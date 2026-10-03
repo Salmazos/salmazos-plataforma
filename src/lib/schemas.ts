@@ -1479,7 +1479,21 @@ export const admissaoContabilidadeEmailUpdateSchema = z
   })
   .refine((v) => v.ativo !== undefined || v.nome !== undefined, "Informe o que alterar.");
 
+// Campos corrigidos no modal (valem só para o e-mail; o servidor valida e normaliza de novo, e monta o corpo).
+const textoCampoEmail = z.string().max(2000).optional().nullable();
 export const admissaoEnviarEmailContabilidadeSchema = z.object({
   tempoContrato: z.string().trim().max(200).optional().nullable(),
   reenviar: z.boolean().optional(),
+  campos: z
+    .object({
+      nome: textoCampoEmail,
+      funcao: textoCampoEmail,
+      salarioValor: z.number().nullable().optional(),
+      salarioTipo: z.enum(["hora", "mensal"]).nullable().optional(),
+      horario: textoCampoEmail,
+      telefone: textoCampoEmail,
+      dataInicio: textoCampoEmail,
+      tempoContrato: textoCampoEmail,
+    })
+    .optional(),
 });
