@@ -94,14 +94,14 @@ export async function GET(request: NextRequest) {
           if ((ultimaCandidatura?.vagas as any)?.cliente_id) {
             const { data: cliente, error: clienteErr } = await service
               .from("clientes")
-              .select("nome_fantasia")
+              .select("nome")
               .eq("id", (ultimaCandidatura?.vagas as any)?.cliente_id)
               .maybeSingle();
 
             if (clienteErr) {
               console.error("[buscar-duplicados] Erro ao buscar cliente:", clienteErr);
             }
-            clienteNome = cliente?.nome_fantasia;
+            clienteNome = cliente?.nome;
           }
 
           // Mapear etapa_kanban para rótulo legível usando ETAPAS_KANBAN

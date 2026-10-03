@@ -8,7 +8,6 @@ interface Indicacao {
   vaga_id: string;
   vaga_titulo: string | null;
   status: string;
-  motivo_recusa: string | null;
   decidido_em: string | null;
   created_at: string;
 }
@@ -16,7 +15,8 @@ interface Indicacao {
 const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
   pendente: { label: "Em análise", bg: "bg-yellow-100", text: "text-yellow-800" },
   aprovada: { label: "Aprovada", bg: "bg-green-100", text: "text-green-800" },
-  recusada: { label: "Recusada", bg: "bg-red-100", text: "text-red-800" },
+  // O cliente vê só "Não aprovada": o motivo da recusa é interno (a API nem o devolve).
+  recusada: { label: "Não aprovada", bg: "bg-gray-100", text: "text-gray-700" },
 };
 
 function formatarDataPT(iso: string): string {
@@ -90,9 +90,6 @@ export default function MinhasIndicacoesPage() {
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusInfo.bg} ${statusInfo.text}`}>
                   {statusInfo.label}
                 </span>
-                {ind.status === "recusada" && ind.motivo_recusa && (
-                  <p className="text-gray-600 text-xs text-right max-w-xs">{ind.motivo_recusa}</p>
-                )}
               </div>
             </div>
           </div>

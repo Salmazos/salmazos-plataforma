@@ -4,7 +4,7 @@ import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 import { parseBody, indicacaoCandidatoDecisaoSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { registrarHistorico } from "@/lib/registrarHistorico";
-import { sendEmail } from "@/lib/sendEmail";
+import { enviarEmailAvisoVaga } from "@/lib/avisosVagas";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -532,21 +532,20 @@ export async function POST(request: NextRequest, { params }: Params) {
 </div>
 </body></html>`;
 
-      const DESTINATARIOS = ["olver@salmazos.com.br", "rh@salmazos.com.br"];
-      await Promise.all(
-        DESTINATARIOS.map((destinatario) =>
-          sendEmail({
-            to: destinatario,
-            subject: `🧑‍💼 Indicação Direta Aprovada — ${sol.candidato_nome} — ${sol.cliente_nome ?? ""}`,
-            html,
-            tipo: "indicacao_candidato_aprovada",
-            candidato_id: candidato.id,
-            vaga_id: vaga.id,
-          })
-        )
-      );
+      // Destinatários = lista de "Avisos de Vagas" (evento "solicitacao_vaga"), não mais endereços fixos.
+      // Lista vazia: só um aviso no log. Falha de e-mail nunca desfaz a aprovação (já gravada acima).
+      await enviarEmailAvisoVaga({
+        evento: "solicitacao_vaga",
+        unidadeId: sol.unidade_id,
+        subject: `🧑‍💼 Indicação Direta Aprovada — ${sol.candidato_nome} — ${sol.cliente_nome ?? ""}`,
+        html,
+        tipo: "indicacao_candidato_aprovada",
+        candidato_id: candidato.id,
+        vaga_id: vaga.id,
+        contexto: "decisao indicacao",
+      });
     } catch (emailErr) {
-      console.error("[decisao indicacao] Erro ao enviar e-mail pro RH:", emailErr);
+      console.error("[decisao indicacao] Erro ao montar/enviar e-mail de aprovação:", emailErr instanceof Error ? emailErr.message : emailErr);
     }
 
     return NextResponse.json({

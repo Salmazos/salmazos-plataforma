@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
-import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
+import { enviarEmailAvisoVaga } from "@/lib/avisosVagas";
 import { parseBody, portalIndicarCandidatoSchema } from "@/lib/schemas";
 import { resolverUnidadeCliente } from "@/lib/unidadeAuth";
 
@@ -28,7 +28,8 @@ export async function GET() {
 
   const { data, error } = await service
     .from("solicitacoes_indicacao_candidato")
-    .select("id, candidato_nome, candidato_telefone, status, motivo_recusa, created_at, vagas(titulo)")
+    // motivo_recusa fica de fora de propósito: é nota interna da equipe e não pode chegar ao navegador do cliente.
+    .select("id, candidato_nome, candidato_telefone, status, created_at, vagas(titulo)")
     .eq("cliente_id", cu.cliente_id)
     .order("created_at", { ascending: false });
 
@@ -155,12 +156,16 @@ export async function POST(request: NextRequest) {
 </div>
 </body></html>`;
 
-    await notifyAllAnalysts({
+    // E-mail só para a lista de "Avisos de Vagas" (evento "solicitacao_vaga": é o aviso de pedido do cliente
+    // que precisa de ação do analista). O sino acima não muda. Falha aqui nunca desfaz a indicação.
+    await enviarEmailAvisoVaga({
+      evento: "solicitacao_vaga",
+      unidadeId,
       subject: `🧑‍💼 Indicação Direta de Candidato — ${clienteNome}`,
       html,
       tipo: "indicacao_candidato",
       vaga_id: vaga.id,
-      unidadeId,
+      contexto: "portal/indicar-candidato",
     });
 
     return NextResponse.json({ success: true, id: solicitacao.id }, { status: 201 });

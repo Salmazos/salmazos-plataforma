@@ -161,8 +161,8 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
       showToast(
         acao === "aprovar"
           ? candidatoExistenteId
-            ? `Indicação aprovada e vinculada a ${json.candidato_id || "candidato"}. Confira o card no Kanban em Retorno Cliente.`
-            : "Indicação aprovada — o candidato já está no Kanban em \"Aprovado pelo Cliente\"."
+            ? "Indicação aprovada e vinculada ao candidato existente. Confira o card no Kanban em \"Retorno Cliente\"."
+            : "Indicação aprovada — o candidato já está no Kanban em \"Retorno Cliente\"."
           : "Indicação recusada."
       );
       if (acao === "aprovar") onAprovado();
@@ -336,7 +336,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                           <textarea
                             value={motivoRecusa}
                             onChange={(e) => setMotivoRecusa(e.target.value)}
-                            placeholder="Motivo da recusa (o cliente não é avisado automaticamente — combine por fora)"
+                            placeholder={'Motivo da recusa (uso interno: não é mostrado ao cliente, que vê apenas "Não aprovada")'}
                             className="w-full text-xs border border-gray-200 rounded-lg p-2"
                             rows={2}
                           />

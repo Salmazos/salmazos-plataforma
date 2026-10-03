@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { analistaAtendeUnidade } from "@/lib/notifyAllAnalysts";
+import { sendEmail } from "@/lib/sendEmail";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -167,5 +168,53 @@ export async function gravarSinoAvisoVaga({
     if (error) {
       console.error(`[gravarSinoAvisoVaga] Erro ao registrar notificações configuradas (evento="${evento}"):`, error.message);
     }
+  }
+}
+
+interface EnviarEmailAvisoVagaOpts {
+  evento: EventoAvisoVaga;
+  unidadeId?: string | null;
+  subject: string;
+  html: string;
+  tipo: string;
+  candidato_id?: string;
+  vaga_id?: string;
+  // Só para o log (nome da rota/fluxo); nunca coloque dados pessoais aqui.
+  contexto: string;
+}
+
+// E-mail para a lista de destinatários da tela "Avisos de Vagas" (aviso_vaga_email_destinatarios, ativos)
+// de um evento. Reaproveita resolverAvisoVaga, mas SEM o fallback "legado" (todos os analistas): sem
+// destinatário ativo, ou com o e-mail do evento desligado, não envia nada. Nunca lança — falha de
+// e-mail não pode desfazer a operação principal de quem chama.
+export async function enviarEmailAvisoVaga(opts: EnviarEmailAvisoVagaOpts): Promise<{ enviados: number; falhas: number }> {
+  try {
+    const resolvido = await resolverAvisoVaga(opts.evento, opts.unidadeId);
+    if (resolvido.email.modo === "desligado") {
+      console.log(`[${opts.contexto}] E-mail do evento "${opts.evento}" está desligado em Avisos de Vagas — não enviado.`);
+      return { enviados: 0, falhas: 0 };
+    }
+    const emails = [
+      ...new Set(
+        (resolvido.email.modo === "configurado" ? resolvido.email.destinatarios ?? [] : [])
+          .map((d) => (d.email ?? "").trim().toLowerCase())
+          .filter((e) => e !== "")
+      ),
+    ];
+    if (emails.length === 0) {
+      console.warn(`[${opts.contexto}] Nenhum destinatário ativo em Avisos de Vagas (evento "${opts.evento}") — e-mail não enviado.`);
+      return { enviados: 0, falhas: 0 };
+    }
+    const resultados = await Promise.all(
+      emails.map((to) =>
+        sendEmail({ to, subject: opts.subject, html: opts.html, tipo: opts.tipo, candidato_id: opts.candidato_id, vaga_id: opts.vaga_id })
+      )
+    );
+    const falhas = resultados.filter((r) => !r.success).length;
+    if (falhas > 0) console.error(`[${opts.contexto}] ${falhas}/${resultados.length} e-mail(s) falharam (tipo "${opts.tipo}").`);
+    return { enviados: resultados.length - falhas, falhas };
+  } catch (err) {
+    console.error(`[${opts.contexto}] Erro ao enviar e-mails de aviso:`, err instanceof Error ? err.message : err);
+    return { enviados: 0, falhas: 0 };
   }
 }
