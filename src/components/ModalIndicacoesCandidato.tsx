@@ -134,6 +134,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
     setTimeout(() => setToast(""), 4000);
   };
 
+  // acao "aprovar" = confirmar o registro; "recusar" = solicitar correção dos dados (valores da API não mudam).
   const handleDecidir = async (id: string, acao: "aprovar" | "recusar", candidatoExistenteId?: string) => {
     if (acao === "recusar" && !motivoRecusa.trim()) return;
     setActionLoading(id);
@@ -161,9 +162,9 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
       showToast(
         acao === "aprovar"
           ? candidatoExistenteId
-            ? "Indicação aprovada e vinculada ao candidato existente. Confira o card no Kanban em \"Retorno Cliente\"."
-            : "Indicação aprovada — o candidato já está no Kanban em \"Retorno Cliente\"."
-          : "Indicação recusada."
+            ? "Registro confirmado e vinculado ao candidato existente. Confira o card no Kanban em \"Retorno Cliente\"."
+            : "Registro confirmado — o candidato já está no Kanban em \"Retorno Cliente\"."
+          : "Correção solicitada — o cliente verá a mensagem em Minhas indicações."
       );
       if (acao === "aprovar") onAprovado();
       if (focoId) onVerTodas?.();
@@ -180,7 +181,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="bg-black text-white px-6 py-4 rounded-t-2xl flex items-center justify-between shrink-0">
           <h2 className="font-bold text-lg">
-            {"🧑‍💼"} {focoId ? "Indicação Direta de Candidato" : "Indicações Diretas Pendentes"}
+            {"🧑‍💼"} {focoId ? "Indicação Direta de Candidato" : "Indicações Diretas em Conferência"}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -192,7 +193,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
         <div className="flex-1 overflow-y-auto p-6">
           {focoId && (
             <button onClick={() => onVerTodas?.()} className="text-xs text-blue-600 underline underline-offset-2 mb-4">
-              ← ver todas as indicações pendentes
+              ← ver todas as indicações em conferência
             </button>
           )}
 
@@ -204,7 +205,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
             <div className="text-center py-12">
               <p className="text-3xl mb-3">{focoId ? "🔍" : "🎉"}</p>
               <p className="text-gray-500 text-sm font-medium">
-                {focoId ? "Indicação não encontrada." : "Nenhuma indicação pendente!"}
+                {focoId ? "Indicação não encontrada." : "Nenhuma indicação em conferência!"}
               </p>
             </div>
           ) : (
@@ -333,13 +334,17 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                     {it.status === "pendente" && (
                       isRecusando ? (
                         <div className="space-y-2">
+                          <label className="block text-xs font-semibold text-gray-700">O que precisa ser corrigido *</label>
                           <textarea
                             value={motivoRecusa}
                             onChange={(e) => setMotivoRecusa(e.target.value)}
-                            placeholder={'Motivo da recusa (uso interno: não é mostrado ao cliente, que vê apenas "Não aprovada")'}
+                            placeholder="O que precisa ser corrigido"
                             className="w-full text-xs border border-gray-200 rounded-lg p-2"
                             rows={2}
                           />
+                          <p className="text-[11px] text-gray-500">
+                            O cliente verá esta mensagem em Minhas indicações. Descreva apenas os dados de registro que precisam de correção.
+                          </p>
                           <div className="flex gap-2 justify-end">
                             <button
                               onClick={() => { setRecusandoId(null); setMotivoRecusa(""); }}
@@ -352,7 +357,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                               disabled={isLoading || !motivoRecusa.trim()}
                               className="text-xs font-semibold text-white bg-red-600 rounded-lg px-3 py-1.5 disabled:opacity-50"
                             >
-                              {isLoading ? "Recusando..." : "Confirmar recusa"}
+                              {isLoading ? "Enviando..." : "Enviar solicitação de correção"}
                             </button>
                           </div>
                         </div>
@@ -363,7 +368,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                             disabled={isLoading}
                             className="text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
                           >
-                            Recusar
+                            Solicitar correção
                           </button>
                           {vincularPara?.indicacaoId === it.id ? (
                             <button
@@ -379,7 +384,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                               disabled={isLoading}
                               className="text-xs font-semibold text-black bg-[#FFD700] rounded-lg px-3 py-1.5 hover:brightness-95 disabled:opacity-50"
                             >
-                              {isLoading ? "Aprovando..." : "Aprovar e registrar candidato"}
+                              {isLoading ? "Confirmando..." : "Confirmar registro"}
                             </button>
                           )}
                         </div>

@@ -12,7 +12,7 @@ interface DuplicadoEncontrado {
   cliente_nome?: string;
 }
 
-// Busca de candidatos duplicados por telefone ao revisar uma indicação direta.
+// Busca de candidatos duplicados por telefone ao conferir os dados de registro de uma indicação direta.
 // Retorna apenas a correspondência EXATA (normalizada: somente dígitos).
 // Rota restrita a usuários internos (analista, supervisor, dp, diretoria, superuser).
 export async function GET(request: NextRequest) {

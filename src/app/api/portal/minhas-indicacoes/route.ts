@@ -17,8 +17,9 @@ export async function GET() {
 
   const { data: indicacoes, error } = await service
     .from("solicitacoes_indicacao_candidato")
-    // motivo_recusa NÃO é selecionado: é nota interna da equipe e não pode vazar pela resposta da API.
-    .select("id, candidato_nome, vaga_id, status, decidido_em, created_at")
+    // motivo_recusa = "o que precisa ser corrigido" (correção solicitada pela equipe): o cliente DEVE ver.
+    // O filtro por cliente E por usuário solicitante abaixo garante que só volta o que é dele.
+    .select("id, candidato_nome, vaga_id, status, motivo_recusa, decidido_em, created_at")
     .eq("cliente_id", cu.cliente_id)
     .eq("solicitado_por_user_id", user.id)
     .order("created_at", { ascending: false })

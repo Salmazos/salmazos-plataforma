@@ -928,9 +928,10 @@ export const portalIndicarCandidatoSchema = z.object({
 // mandou (inclusive nome/telefone/vaga, se tiver digitado errado) antes de confirmar.
 export const indicacaoCandidatoEditSchema = portalIndicarCandidatoSchema.partial();
 
+// "aprovar" = confirmar o registro; "recusar" = solicitar correção dos dados (motivo = o que corrigir, visível ao cliente).
 export const indicacaoCandidatoDecisaoSchema = z.discriminatedUnion("acao", [
   z.object({ acao: z.literal("aprovar"), candidato_existente_id: z.string().uuid().optional() }),
-  z.object({ acao: z.literal("recusar"), motivo: z.string().trim().min(1) }),
+  z.object({ acao: z.literal("recusar"), motivo: z.string().trim().min(1, "Descreva o que precisa ser corrigido.") }),
 ]);
 
 // ── From solicitação ─────────────────────────────────────────────────────────

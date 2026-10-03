@@ -28,7 +28,8 @@ export async function GET() {
 
   const { data, error } = await service
     .from("solicitacoes_indicacao_candidato")
-    // motivo_recusa fica de fora de propósito: é nota interna da equipe e não pode chegar ao navegador do cliente.
+    // Este GET não é usado por nenhuma tela (o acompanhamento é /api/portal/minhas-indicacoes, que devolve o motivo
+    // da correção); por isso o motivo_recusa não é devolvido aqui.
     .select("id, candidato_nome, candidato_telefone, status, created_at, vagas(titulo)")
     .eq("cliente_id", cu.cliente_id)
     .order("created_at", { ascending: false });
@@ -118,7 +119,7 @@ export async function POST(request: NextRequest) {
     await service.from("notificacoes_analista").insert({
       tipo: "nova_indicacao_candidato",
       titulo: "Indicação direta de candidato",
-      mensagem: `${clienteNome} indicou ${dados.candidato_nome} para a vaga ${vaga.titulo}`,
+      mensagem: `${clienteNome} indicou ${dados.candidato_nome} para a vaga ${vaga.titulo} — conferir dados de registro`,
       user_id: null,
       // vaga_id fica de fora de propósito: o clique deve abrir a indicação pendente (ver
       // solicitacao_indicacao_id abaixo e NotificacoesProvider.tsx), não a página da vaga.
@@ -135,7 +136,7 @@ export async function POST(request: NextRequest) {
     <h1 style="color:#FFD700;margin:0;font-size:20px">🧑‍💼 Indicação Direta de Candidato</h1>
   </div>
   <div style="padding:28px 32px">
-    <p style="margin:0 0 16px;font-size:14px;color:#374151"><strong style="color:#111827">${clienteNome}</strong> indicou um candidato direto pra registro, sem passar pela triagem:</p>
+    <p style="margin:0 0 16px;font-size:14px;color:#374151"><strong style="color:#111827">${clienteNome}</strong> fez uma indicação direta: o candidato <strong>já foi aprovado pelo cliente</strong> e segue direto para o registro, sem passar pela triagem. A Salmazos não avalia o candidato — sua ação é <strong>conferir os dados de registro</strong>:</p>
     <div style="margin-bottom:20px;padding:14px 16px;background:#DBEAFE;border-radius:10px;border:1px solid #93C5FD">
       <p style="margin:0;font-size:16px;font-weight:700;color:#1D4ED8">${dados.candidato_nome}</p>
       <p style="margin:4px 0 0;font-size:13px;color:#1E40AF">${dados.candidato_telefone}</p>
@@ -145,9 +146,9 @@ export async function POST(request: NextRequest) {
       <p style="margin:0;font-size:14px;font-weight:600;color:#111827">${vaga.titulo}</p>
       <p style="margin:2px 0 0;font-size:13px;color:#6B7280">${tipoLbl}</p>
     </div>
-    ${dados.curriculo_url ? `<p style="margin:0 0 20px;font-size:13px;color:#374151">📎 Currículo anexado — revise a indicação no painel para baixar.</p>` : ""}
+    ${dados.curriculo_url ? `<p style="margin:0 0 20px;font-size:13px;color:#374151">📎 Currículo anexado — abra a indicação no painel para baixar.</p>` : ""}
     <div style="text-align:center;padding-top:24px;border-top:1px solid #f3f4f6;margin-top:20px">
-      <a href="https://salmazos-plataforma.vercel.app/painel/vagas" style="display:inline-block;padding:12px 28px;background:#000;color:#FFD700;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700">Revisar indicação</a>
+      <a href="https://salmazos-plataforma.vercel.app/painel/vagas" style="display:inline-block;padding:12px 28px;background:#000;color:#FFD700;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700">Conferir dados de registro</a>
     </div>
   </div>
   <div style="background:#f9fafb;padding:16px 32px;text-align:center">
@@ -161,7 +162,7 @@ export async function POST(request: NextRequest) {
     await enviarEmailAvisoVaga({
       evento: "solicitacao_vaga",
       unidadeId,
-      subject: `🧑‍💼 Indicação Direta de Candidato — ${clienteNome}`,
+      subject: `🧑‍💼 Indicação direta (candidato já aprovado pelo cliente) — conferir dados de registro — ${clienteNome}`,
       html,
       tipo: "indicacao_candidato",
       vaga_id: vaga.id,

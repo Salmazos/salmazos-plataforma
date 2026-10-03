@@ -212,6 +212,7 @@ export default function VagasPageClient({ vagas: inicial, pendingCount, indicaco
           </button>
           <button
             onClick={() => setModalIndicacoes(true)}
+            title="Indicações diretas em conferência (candidato já aprovado pelo cliente)"
             className="btn-outline flex items-center gap-2"
             style={{ position: "relative" }}
           >

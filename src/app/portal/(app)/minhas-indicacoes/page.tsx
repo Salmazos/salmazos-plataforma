@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 
 interface Indicacao {
   id: string;
@@ -8,15 +9,17 @@ interface Indicacao {
   vaga_id: string;
   vaga_titulo: string | null;
   status: string;
+  motivo_recusa: string | null;
   decidido_em: string | null;
   created_at: string;
 }
 
+// Rótulos de negócio (os valores de status do banco/API seguem pendente/aprovada/recusada): o candidato
+// já foi aprovado pelo cliente; a Salmazos só confere os dados de registro.
 const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
-  pendente: { label: "Em análise", bg: "bg-yellow-100", text: "text-yellow-800" },
-  aprovada: { label: "Aprovada", bg: "bg-green-100", text: "text-green-800" },
-  // O cliente vê só "Não aprovada": o motivo da recusa é interno (a API nem o devolve).
-  recusada: { label: "Não aprovada", bg: "bg-gray-100", text: "text-gray-700" },
+  pendente: { label: "Em conferência", bg: "bg-yellow-100", text: "text-yellow-800" },
+  aprovada: { label: "Registrada", bg: "bg-green-100", text: "text-green-800" },
+  recusada: { label: "Correção solicitada", bg: "bg-amber-100", text: "text-amber-900" },
 };
 
 function formatarDataPT(iso: string): string {
@@ -92,6 +95,21 @@ export default function MinhasIndicacoesPage() {
                 </span>
               </div>
             </div>
+            {ind.status === "recusada" && (
+              <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5">
+                <p className="text-xs font-bold text-amber-900">O que precisa ser corrigido:</p>
+                {/* Texto puro (React escapa) com as quebras de linha preservadas. */}
+                <p className="text-sm text-amber-950 mt-1" style={{ whiteSpace: "pre-line", overflowWrap: "anywhere" }}>
+                  {ind.motivo_recusa?.trim() || "A equipe Salmazos solicitou a correção de dados de registro. Entre em contato para saber quais."}
+                </p>
+                <p className="text-xs text-amber-900 mt-2">
+                  Faça uma nova indicação com os dados corrigidos.{" "}
+                  <Link href="/portal/indicar-candidato" className="font-semibold underline underline-offset-2">
+                    Indicar candidato →
+                  </Link>
+                </p>
+              </div>
+            )}
           </div>
         );
       })}

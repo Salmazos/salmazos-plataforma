@@ -99,7 +99,10 @@ const ADM_LABELS: Record<string, string> = {
   admissao_observacoes: "Observações",
 };
 
-// Decisão do analista sobre uma indicação direta de candidato (mesmo padrão de
+// Conferência do analista numa indicação direta de candidato. O candidato JÁ foi aprovado pelo cliente: a
+// Salmazos não o avalia, só confere os dados de registro. "aprovar" = confirmar o registro; "recusar" =
+// solicitar correção dos dados (o motivo é mostrado ao cliente em Minhas indicações). Os valores
+// aprovar/recusar e os status do banco seguem os mesmos — só os textos mudaram. (Mesmo padrão de
 // POST /api/solicitacoes-vagas/[id]/alteracao — discriminated union aprovar/recusar).
 //
 // Aprovar NÃO cria o candidato já "contratado": cria candidato + candidatos_vagas na etapa
@@ -156,7 +159,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         .single();
 
       if (!decidida) {
-        return NextResponse.json({ error: "A indicação mudou de status enquanto era analisada." }, { status: 409 });
+        return NextResponse.json({ error: "A indicação mudou de status enquanto era conferida." }, { status: 409 });
       }
 
       registrarAuditoria({
@@ -359,7 +362,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           entidade_id: id,
           detalhes: { erro: msgErro(encErr), cliente: sol.cliente_nome, vaga_id: vaga.id },
         });
-        return NextResponse.json({ error: "Não foi possível criar o encaminhamento (cliente não veria o candidato aprovado no portal). Indicação não foi aprovada." }, { status: 500 });
+        return NextResponse.json({ error: "Não foi possível criar o encaminhamento (cliente não veria o candidato aprovado no portal). O registro não foi confirmado." }, { status: 500 });
       }
       encaminhamentoId = encaminhamento.id;
     }
@@ -482,7 +485,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       },
     });
 
-    // E-mail pro RH com os dados de admissão que o cliente já mandou — mesmo público que recebe
+    // E-mail de "registro confirmado" com os dados de admissão que o cliente já mandou — mesmo público que recebe
     // isso hoje quando o cliente aprova pelo portal (ver /api/portal/avaliar), já que essa
     // indicação nunca passa por lá.
     try {
@@ -507,7 +510,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
 <div style="max-width:600px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
   <div style="background:#000;padding:28px 32px;text-align:center">
-    <h1 style="color:#FFD700;margin:0;font-size:20px">🧑‍💼 Indicação Direta Aprovada</h1>
+    <h1 style="color:#FFD700;margin:0;font-size:20px">🧑‍💼 Registro confirmado</h1>
   </div>
   <div style="padding:28px 32px">
     <div style="margin-bottom:20px">
@@ -537,7 +540,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       await enviarEmailAvisoVaga({
         evento: "solicitacao_vaga",
         unidadeId: sol.unidade_id,
-        subject: `🧑‍💼 Indicação Direta Aprovada — ${sol.candidato_nome} — ${sol.cliente_nome ?? ""}`,
+        subject: `🧑‍💼 Registro confirmado — Indicação Direta — ${sol.candidato_nome} — ${sol.cliente_nome ?? ""}`,
         html,
         tipo: "indicacao_candidato_aprovada",
         candidato_id: candidato.id,

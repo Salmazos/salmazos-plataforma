@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { obterContextoUnidade } from "@/lib/unidadeAuth";
 
-// Lista de indicações diretas de candidato pra revisão do analista — mesmo padrão de
+// Lista de indicações diretas de candidato pra conferência dos dados de registro pelo analista — mesmo padrão de
 // /api/solicitacoes-vagas (default "pendente", "todos" pra ver aprovadas/recusadas também).
 export async function GET(request: NextRequest) {
   const supabase = await createClient();

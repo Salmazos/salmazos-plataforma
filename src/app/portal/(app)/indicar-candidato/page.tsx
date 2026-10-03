@@ -234,8 +234,8 @@ export default function IndicarCandidatoPage() {
           <div className="text-5xl mb-4">{"✅"}</div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Indicação enviada!</h2>
           <p className="text-sm text-gray-500 mb-6">
-            A equipe Salmazos vai revisar e entrar em contato com o candidato pra completar
-            o registro.
+            A equipe Salmazos vai conferir os dados de registro e entrar em contato com o candidato
+            para completar o registro. Acompanhe o andamento em Minhas Indicações.
           </p>
           <Link href="/portal" className="inline-block px-6 py-2.5 bg-black text-[#FFD700] rounded-xl font-semibold text-sm">
             Voltar ao painel
