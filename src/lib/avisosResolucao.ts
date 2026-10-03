@@ -137,3 +137,16 @@ export async function resolverComFonte(
   }
   return { modo: "configurado", fonte: origem, emails, userIds: [], falhou: false };
 }
+
+// Para avisos que antes tinham destinatários FIXOS no código: desligado = ninguém; configurado =
+// a lista; legado (sem configuração, ou falha de leitura) = o padrão antigo do código.
+export function emailsOuPadrao(res: ResolucaoAviso, padrao: readonly string[]): string[] {
+  if (res.modo === "desligado") return [];
+  if (res.modo === "configurado") return res.emails.map((e) => e.email);
+  return [...padrao];
+}
+
+// Para avisos que ainda não existiam por e-mail: só envia quando há lista configurada e ligada.
+export function emailsSomenteConfigurado(res: ResolucaoAviso): string[] {
+  return res.modo === "configurado" ? res.emails.map((e) => e.email) : [];
+}

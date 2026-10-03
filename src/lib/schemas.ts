@@ -1397,6 +1397,11 @@ export const avisoConfigDestinatarioCreateSchema = z.discriminatedUnion("tipo_de
   }),
 ]);
 
+// Só Vagas tem "padrão do sistema" nesta entrega; rescisão e aso entram aqui depois.
+export const avisoConfigRestaurarPadraoSchema = z.object({
+  grupo: z.enum(["vagas"]),
+});
+
 export const avisoConfigDestinatarioUpdateSchema = z.object({
   ativo: z.boolean(),
 });

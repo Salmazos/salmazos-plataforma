@@ -36,7 +36,7 @@ export default async function RescisoesAvisosConfigPage() {
 
   return (
     <>
-      <AvisoMigradoBanner detalhe='Exceção: o aviso de "rescisão paga" ainda usa a lista desta tela.' />
+      <AvisoMigradoBanner />
     <RescisoesAvisosConfigClient
       emailAtivoInicial={emailAtivo}
       emailDestinatariosIniciais={emailDestinatarios ?? []}

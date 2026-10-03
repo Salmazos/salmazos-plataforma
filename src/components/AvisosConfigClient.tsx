@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { grupoTemPadrao } from "@/lib/avisosPadrao";
 import {
-  CANAIS_FASE1,
+  NOTA_EVENTO,
+  canaisDoEvento,
   EVENTOS_POR_GRUPO,
   ROTULO_CANAL,
   ROTULO_EVENTO,
@@ -25,7 +27,7 @@ interface CanalCfg { evento: string; canal: string; ativo: boolean }
 interface Usuario { user_id: string; nome_completo: string; email: string | null }
 interface Dados { canais: CanalCfg[]; destinatarios: Destinatario[]; usuarios: Usuario[] }
 
-const GRUPOS: GrupoAviso[] = ["vagas", "rescisao", "aso"];
+const GRUPOS: GrupoAviso[] = ["vagas", "rescisao", "aso", "portal_cliente"];
 
 async function chamar(url: string, method: string, body?: unknown): Promise<{ ok: boolean; erro?: string }> {
   try {
@@ -130,11 +132,46 @@ export default function AvisosConfigClient() {
         </div>
 
         <div style={{ paddingTop: 16 }}>
+          {grupoTemPadrao(aba) && (
+            <div className="flex items-center justify-between gap-3 mb-4 pb-4 border-b border-gray-100">
+              <p className="text-xs text-gray-500">Volta os destinatários e os canais ligados deste grupo para o padrão do sistema.</p>
+              <button
+                className="btn-outline"
+                disabled={ocupado !== null}
+                onClick={async () => {
+                  if (!window.confirm(`Isso substitui a configuração atual de ${ROTULO_GRUPO[aba]} pelo padrão do sistema. Continuar?`)) return;
+                  setOcupado("restaurar");
+                  setMensagem(null);
+                  try {
+                    const res = await fetch("/api/avisos-config/restaurar-padrao", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ grupo: aba }),
+                    });
+                    const json = await res.json().catch(() => ({}));
+                    if (!res.ok) setMensagem({ tipo: "erro", texto: json.error ?? "Não foi possível restaurar o padrão." });
+                    else {
+                      const ign = (json.data?.ignorados ?? []).length;
+                      setMensagem({ tipo: "ok", texto: `Padrão de ${ROTULO_GRUPO[aba]} restaurado.${ign > 0 ? ` ${ign} usuário(s) do padrão estão inativos e ficaram de fora.` : ""}` });
+                      await carregar();
+                    }
+                  } catch {
+                    setMensagem({ tipo: "erro", texto: "Falha de conexão. Tente novamente." });
+                  }
+                  setOcupado(null);
+                }}
+              >
+                Restaurar padrão do sistema
+              </button>
+            </div>
+          )}
           {EVENTOS_POR_GRUPO[aba].map((evento) => (
             <div key={evento} className="mb-6 pb-6 border-b border-gray-100 last:border-0">
-              <h2 className="text-sm font-bold text-gray-900 mb-3">{ROTULO_EVENTO[evento] ?? evento}</h2>
+              <h2 className="text-sm font-bold text-gray-900 mb-1">{ROTULO_EVENTO[evento] ?? evento}</h2>
+              {NOTA_EVENTO[evento] && <p className="text-xs text-gray-500 mb-3">{NOTA_EVENTO[evento]}</p>}
+              {!NOTA_EVENTO[evento] && <div className="mb-2" />}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
-                {CANAIS_FASE1.map((canal) => (
+                {canaisDoEvento(evento).map((canal) => (
                   <CanalBloco
                     key={canal}
                     grupo={aba}
@@ -184,7 +221,7 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
 
   let situacao: string;
   if (!ligado) situacao = "Desligado: ninguém recebe por este canal.";
-  else if (ativos === 0) situacao = descricaoPadraoDoSistema(grupo, canal);
+  else if (ativos === 0) situacao = descricaoPadraoDoSistema(grupo, canal, evento);
   else situacao = `${ativos} destinatário${ativos > 1 ? "s" : ""} ativo${ativos > 1 ? "s" : ""}.`;
 
   async function adicionar() {

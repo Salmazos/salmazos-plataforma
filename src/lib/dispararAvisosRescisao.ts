@@ -213,8 +213,8 @@ async function enviarEmailRescisao(
 }
 
 // Aviso de "rescisão paga" quando o status passa de Pendente pra Pago (toggle da tabela ou
-// modal de edição). Só sino + popup, sem e-mail (decisão do Olver, 25/09) — mesma lista
-// global de destinatários de plataforma dos outros avisos. Nunca lança exceção: o status já
+// modal de edição). Só sino + popup, sem e-mail (decisão do Olver, 25/09) — lista do evento
+// rescisao_paga em Configurações > Avisos. Nunca lança exceção: o status já
 // foi salvo quando isto roda, falha aqui só vira log.
 export async function avisarRescisaoPaga(rescisaoId: string, supabase?: ServiceClient): Promise<void> {
   try {
@@ -230,14 +230,14 @@ export async function avisarRescisaoPaga(rescisaoId: string, supabase?: ServiceC
       return;
     }
 
-    const { data: destinatarios, error: destError } = await svc
-      .from("rescisao_avisos_plataforma_destinatarios")
-      .select("usuario_id");
-    if (destError) {
-      console.error(`[avisarRescisaoPaga] Erro ao buscar destinatários (rescisao_id=${rescisaoId}):`, destError.message);
+    // Lista em Configurações > Avisos (evento rescisao_paga, só sino); fallback: lista antiga de
+    // plataforma de rescisão. Sem destinatários (ou canal desligado) = ninguém recebe, como antes.
+    const sino = await resolverDestinatarios("rescisao_paga", "sino");
+    if (sino.falhou) {
+      console.error(`[avisarRescisaoPaga] Erro ao buscar destinatários (rescisao_id=${rescisaoId})`);
       return;
     }
-    if (!destinatarios || destinatarios.length === 0) return;
+    if (sino.modo !== "configurado" || sino.userIds.length === 0) return;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nome = (r.funcionarios as any)?.nome_completo?.trim() ?? "Funcionário";
@@ -247,11 +247,11 @@ export async function avisarRescisaoPaga(rescisaoId: string, supabase?: ServiceC
       `na modalidade ${modalidade}, no valor de ${moeda(r.valor_rescisao)} foi paga.`;
 
     const { error: insertError } = await svc.from("notificacoes_analista").insert(
-      destinatarios.map((d) => ({
+      sino.userIds.map((usuarioId) => ({
         tipo: "rescisao_paga",
         titulo: "Rescisão paga",
         mensagem,
-        user_id: d.usuario_id,
+        user_id: usuarioId,
         candidato_id: null,
         rescisao_id: rescisaoId,
       }))

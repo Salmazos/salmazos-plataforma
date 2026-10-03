@@ -2,9 +2,10 @@
 // Rodar: node --experimental-strip-types scripts/verificar-avisos-resolvedor.mts
 import assert from "node:assert/strict";
 import {
-  resolverComFonte, analistaAtendeUnidade,
+  resolverComFonte, analistaAtendeUnidade, emailsOuPadrao, emailsSomenteConfigurado,
   type DadosAviso, type FonteAvisos, type LinhaDestinatario, type PerfilAnalista,
 } from "../src/lib/avisosResolucao.ts";
+import { PADRAO_AVISOS, grupoTemPadrao, montarPayloadRestauracao } from "../src/lib/avisosPadrao.ts";
 
 let total = 0;
 async function caso(nome: string, fn: () => Promise<void> | void) {
@@ -122,6 +123,98 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("e-mail livre: nome vazio usa o próprio e-mail", async () => {
     const r = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [{ ...email("a@x.com"), nome: null }] } }), "vaga_criada", "email", null);
     assert.equal(r.emails[0].nome, "a@x.com");
+  });
+
+  // ── Fase 1b: rescisao_paga (12º evento, só sino) ──
+  await caso("rescisao_paga: novo vazio cai na lista antiga de plataforma de rescisão (sem filtro)", async () => {
+    const f = fonte({ novo: { canalAtivo: null, linhas: [] }, antigo: { canalAtivo: null, linhas: [usuario("u1"), usuario("u2")] } });
+    const r = await resolverComFonte(f, "rescisao_paga", "sino");
+    assert.equal(r.fonte, "antigo"); assert.equal(r.modo, "configurado"); assert.deepEqual(r.userIds, ["u1", "u2"]); assert.ok(!f.chamadas.includes("perfis"));
+  });
+  await caso("rescisao_paga: com a migration, a lista nova vale e não consulta a antiga", async () => {
+    const f = fonte({ novo: { canalAtivo: true, linhas: [usuario("u1")] }, antigo: { canalAtivo: null, linhas: [usuario("u9")] } });
+    const r = await resolverComFonte(f, "rescisao_paga", "sino");
+    assert.deepEqual(r.userIds, ["u1"]); assert.deepEqual(f.chamadas, ["novo"]);
+  });
+  await caso("rescisao_paga: sino desligado = ninguém", async () => {
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: false, linhas: [usuario("u1")] } }), "rescisao_paga", "sino");
+    assert.equal(r.modo, "desligado"); assert.deepEqual(r.userIds, []);
+  });
+
+  // ── Fase 1b: avisos que tinham destinatários fixos no código (portal / indicação) ──
+  const PADRAO_ANTIGO = ["olver@salmazos.com.br", "rh@salmazos.com.br"];
+  await caso("fixos: sem configuração (legado) mantém o array antigo", async () => {
+    const r = await resolverComFonte(fonte({ novo: null, antigo: { canalAtivo: null, linhas: [] } }), "portal_candidato_aprovado", "email");
+    assert.deepEqual(emailsOuPadrao(r, PADRAO_ANTIGO), PADRAO_ANTIGO);
+  });
+  await caso("fixos: falha de leitura também mantém o array antigo", async () => {
+    const r = await resolverComFonte(fonte({ novo: null, antigo: null }), "portal_candidato_aprovado", "email");
+    assert.deepEqual(emailsOuPadrao(r, PADRAO_ANTIGO), PADRAO_ANTIGO);
+  });
+  await caso("fixos: configurado usa SÓ a lista nova (desativado fica de fora)", async () => {
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [email("olver@salmazos.com.br"), email("rh@salmazos.com.br", false)] } }), "indicacao_decisao_cliente", "email");
+    assert.deepEqual(emailsOuPadrao(r, PADRAO_ANTIGO), ["olver@salmazos.com.br"]);
+  });
+  await caso("fixos: canal desligado = ninguém (não volta ao array)", async () => {
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: false, linhas: [email("olver@salmazos.com.br")] } }), "portal_candidato_aprovado", "email");
+    assert.deepEqual(emailsOuPadrao(r, PADRAO_ANTIGO), []);
+  });
+  await caso("reprovação: sem config (legado) NÃO envia nada", async () => {
+    const r = await resolverComFonte(fonte({ novo: null, antigo: { canalAtivo: null, linhas: [] } }), "portal_candidato_reprovado", "email");
+    assert.deepEqual(emailsSomenteConfigurado(r), []);
+  });
+  await caso("reprovação: desligado (como nasce) NÃO envia, mesmo com lista", async () => {
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: false, linhas: [email("olver@salmazos.com.br"), email("rh@salmazos.com.br")] } }), "portal_candidato_reprovado", "email");
+    assert.deepEqual(emailsSomenteConfigurado(r), []);
+  });
+  await caso("reprovação: ligado com lista envia só aos ativos", async () => {
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [email("olver@salmazos.com.br"), email("rh@salmazos.com.br", false)] } }), "portal_candidato_reprovado", "email");
+    assert.deepEqual(emailsSomenteConfigurado(r), ["olver@salmazos.com.br"]);
+  });
+
+  // ── Fase 1b: padrão do sistema (Vagas) e restauração ──
+  const TODOS = new Set<string>();
+  for (const evento of Object.values(PADRAO_AVISOS.vagas)) for (const c of Object.values(evento)) for (const d of c.destinatarios) if (d.tipo_destinatario === "usuario") TODOS.add(d.usuario_id);
+
+  await caso("padrão: só vagas tem padrão", () => { assert.equal(grupoTemPadrao("vagas"), true); assert.equal(grupoTemPadrao("rescisao"), false); });
+  await caso("padrão vagas: 5 eventos, espelho da carga inicial (e-mail 2/3/3/0/3, sino 7/7/7/7/3)", () => {
+    const p = PADRAO_AVISOS.vagas;
+    assert.deepEqual(Object.keys(p).sort(), ["solicitacao_vaga", "vaga_cancelada", "vaga_criada", "vaga_fechada", "vaga_reativada"]);
+    const n = (ev: string, c: "email" | "sino") => p[ev][c]!.destinatarios.length;
+    assert.deepEqual(["vaga_criada", "solicitacao_vaga", "vaga_cancelada", "vaga_fechada", "vaga_reativada"].map((ev) => n(ev, "email")), [2, 3, 3, 0, 3]);
+    assert.deepEqual(["vaga_criada", "solicitacao_vaga", "vaga_cancelada", "vaga_fechada", "vaga_reativada"].map((ev) => n(ev, "sino")), [7, 7, 7, 7, 3]);
+    assert.equal(p.vaga_fechada.email!.ativo, false);
+  });
+  await caso("padrão vagas: sem duplicados por evento/canal e todo canal ligado tem destinatário", () => {
+    for (const [ev, canais] of Object.entries(PADRAO_AVISOS.vagas)) for (const [canal, c] of Object.entries(canais)) {
+      const chaves = c.destinatarios.map((d) => (d.tipo_destinatario === "usuario" ? d.usuario_id : d.email.toLowerCase()));
+      assert.equal(new Set(chaves).size, chaves.length, `${ev}/${canal} duplicado`);
+      if (c.ativo) assert.ok(c.destinatarios.length > 0, `${ev}/${canal} ligado sem destinatário`);
+    }
+  });
+  await caso("restauração: todos ativos = payload completo, nada ignorado", () => {
+    const r = montarPayloadRestauracao("vagas", TODOS);
+    assert.deepEqual(r.ignorados, []); assert.deepEqual(r.semDestinatario, []);
+    assert.equal(r.payload.eventos.length, 5);
+    assert.equal(r.payload.eventos.flatMap((e) => e.canais).length, 10);
+  });
+  await caso("restauração: usuário inativo fica de fora e é informado", () => {
+    const sem = new Set(TODOS); const alvo = [...TODOS][0]; sem.delete(alvo);
+    const r = montarPayloadRestauracao("vagas", sem);
+    assert.ok(r.ignorados.length > 0); assert.deepEqual(r.semDestinatario, []);
+  });
+  await caso("restauração: canal ligado que ficaria vazio é sinalizado (regra do último destinatário)", () => {
+    const r = montarPayloadRestauracao("vagas", new Set());
+    assert.ok(r.semDestinatario.some((x) => x.evento === "vaga_criada" && x.canal === "sino"));
+    // vaga_fechada/e-mail está desligado e vazio: NÃO é violação
+    assert.ok(!r.semDestinatario.some((x) => x.evento === "vaga_fechada" && x.canal === "email"));
+  });
+  await caso("restauração: e-mails vão em minúsculas e usuários só com usuario_id", () => {
+    const r = montarPayloadRestauracao("vagas", TODOS);
+    const emails = r.payload.eventos.flatMap((e) => e.canais).flatMap((c) => c.destinatarios).filter((d) => d.tipo_destinatario === "email");
+    assert.ok(emails.every((d) => d.email === d.email.toLowerCase()));
+    const usu = r.payload.eventos.flatMap((e) => e.canais).flatMap((c) => c.destinatarios).filter((d) => d.tipo_destinatario === "usuario");
+    assert.ok(usu.every((d) => !("email" in d) && !!d.usuario_id));
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);
