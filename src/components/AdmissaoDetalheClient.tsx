@@ -17,6 +17,8 @@ import ModalAssinaturaEletronica from "@/components/ModalAssinaturaEletronica";
 import ModalUploadDocumentosContabilidade from "@/components/ModalUploadDocumentosContabilidade";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import CampoTelefone from "@/components/ui/CampoTelefone";
+import ModalEnviarPacoteEmail from "@/components/ModalEnviarPacoteEmail";
+import { formatarDataHoraBR } from "@/lib/emailPacoteContabilidade";
 import type { AdmissaoAdicional, AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento, AdmissaoEnvelopeAssinatura, AdmissaoDocumentoContabilidade } from "@/types";
 
 type Tab = "dados" | "documentos" | "notas";
@@ -67,6 +69,10 @@ interface AdmissaoFull {
   pdf_pacote_path: string | null;
   pdf_pacote_gerado_em: string | null;
   pdf_pacote_gerado_por: string | null;
+  // Último envio do pacote por e-mail para a contabilidade (null = nunca enviado por e-mail).
+  pacote_enviado_email_em?: string | null;
+  pacote_enviado_email_por?: string | null;
+  pacote_enviado_email_para?: string | null;
   pacote_gerado_forcado: boolean;
   pacote_gerado_justificativa: string | null;
   carta_banco_path: string | null;
@@ -109,6 +115,7 @@ const ACAO_LABEL: Record<string, string> = {
   admissao_criada: "Admissão criada",
   admissao_atualizada: "Admissão atualizada",
   admissao_pacote_gerado: "Pacote para contabilidade gerado",
+  admissao_pacote_enviado_email: "Pacote enviado por e-mail para a contabilidade",
   admissao_pacote_gerado_forcado: "Pacote gerado com pendências (forçado)",
   admissao_documento_upload_pela_equipe: "Documento enviado pela equipe",
   admissao_dados_pessoais_editados_pelo_analista: "Dados pessoais editados pelo analista",
@@ -468,6 +475,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [erroUpload, setErroUpload] = useState("");
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [abrindoPacote, setAbrindoPacote] = useState(false);
+  const [modalEmailAberto, setModalEmailAberto] = useState(false);
   const [toast, setToast] = useState("");
   const [erroPacote, setErroPacote] = useState("");
   const [solicitandoCorrecao, setSolicitandoCorrecao] = useState(false);
@@ -1488,6 +1496,15 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
               <button onClick={handleVerPacote} disabled={abrindoPacote} className="btn-outline w-full">
                 {abrindoPacote ? "Abrindo..." : "Visualizar"}
               </button>
+              <button onClick={() => setModalEmailAberto(true)} className="btn-outline w-full mt-2">
+                Enviar por e-mail
+              </button>
+              {admissao.pacote_enviado_email_em && (
+                <p className="text-xs text-gray-500 mt-2">
+                  ✉️ Enviado por e-mail em {formatarDataHoraBR(admissao.pacote_enviado_email_em)}
+                  {admissao.pacote_enviado_email_para ? ` para ${admissao.pacote_enviado_email_para}` : ""}
+                </p>
+              )}
               <button
                 onClick={handleGerarPdf}
                 disabled={!podeGerarPdf || gerandoPdf}
@@ -2603,6 +2620,14 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
             </p>
           )}
         </div>
+      )}
+
+      {modalEmailAberto && (
+        <ModalEnviarPacoteEmail
+          admissaoId={admissao.id}
+          onClose={() => setModalEmailAberto(false)}
+          onEnviado={(msg) => { setModalEmailAberto(false); showToast(msg); router.refresh(); }}
+        />
       )}
 
       {toast && (

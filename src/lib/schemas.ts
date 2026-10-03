@@ -1456,3 +1456,25 @@ export const lembreteAcaoSchema = z.object({
   acao: z.enum(["adiar", "concluir", "cancelar"]),
   nova_data: dataIsoComercial.optional(),
 });
+
+// ── Admissão: e-mail do pacote para a contabilidade ──────────────────────────
+const emailComDominio = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(200)
+  .refine((v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v), "E-mail inválido. Use o formato nome@empresa.com");
+
+export const admissaoContabilidadeEmailCreateSchema = z.object({
+  nome: z.string().trim().min(1, "Nome é obrigatório").max(200),
+  email: emailComDominio,
+});
+
+export const admissaoContabilidadeEmailUpdateSchema = z.object({
+  ativo: z.boolean(),
+});
+
+export const admissaoEnviarEmailContabilidadeSchema = z.object({
+  tempoContrato: z.string().trim().max(200).optional().nullable(),
+  reenviar: z.boolean().optional(),
+});

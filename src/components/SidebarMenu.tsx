@@ -197,6 +197,7 @@ const menuItems: MenuItemDef[] = [
           { label: "Avisos de Rescisão", href: "/painel/rescisoes-avisos-config", icon: Megaphone, requireSuperuser: true },
           { label: "Avisos de Cobrança R&S", href: "/painel/cobranca-rs-avisos-config", icon: Megaphone, requireSuperuser: true },
           { label: "Avisos de ASO Periódico", href: "/painel/funcionario-aso-avisos-config", icon: Stethoscope, requireSuperuser: true },
+          { label: "E-mail da contabilidade (Admissões)", href: "/painel/admissao-contabilidade-config", icon: Mail, requireSuperuser: true },
         ],
       },
       { label: "Acesso à Cobrança R&S", href: "/painel/cobranca-rs-acesso-config", icon: Banknote, requireSuperuser: true },

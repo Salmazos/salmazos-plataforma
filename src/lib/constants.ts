@@ -176,13 +176,27 @@ export const ENTIDADES_CONTRATANTES = [
     value: "recrutamento_selecao_terceirizacao",
     razaoSocial: "SALMAZOS RECRUTAMENTO, SELEÇÃO E TERCEIRIZAÇÃO DE SERVIÇOS LTDA",
     cnpj: "18.545.074/0001-79",
+    // Código da empresa no sistema da contabilidade e razão social sem acentos, como ela escreve
+    // (usados só no e-mail do pacote de admissão — ver emailPacoteContabilidade.ts).
+    codigoContabilidade: "293",
+    razaoSocialContabilidade: "SALMAZOS RECRUTAMENTO, SELECAO E TERCEIRIZACAO DE SERVICOS LTDA",
   },
   {
     value: "rh_servicos_terceirizados",
     razaoSocial: "SALMAZOS RH E SERVIÇOS TERCEIRIZADOS LTDA",
     cnpj: "54.986.213/0001-63",
+    codigoContabilidade: "324",
+    razaoSocialContabilidade: "SALMAZOS RH E SERVICOS TERCEIRIZADOS LTDA",
   },
 ] as const;
+
+// Tempo de contrato que vai no e-mail da contabilidade quando o cliente não informou nada
+// (vale para qualquer tipo de serviço).
+export const TEMPO_CONTRATO_PADRAO = "180 dias, prorrogável por mais 90 dias";
+
+// Cópia fixa de todo e-mail do pacote de admissão para a contabilidade — de propósito no código,
+// não editável pela tela (os destinatários "Para" é que são configuráveis).
+export const EMAIL_CONTABILIDADE_CC_FIXO = ["consultoria@salmazos.com.br", "rh@salmazos.com.br"];
 
 // Turno de trabalho do funcionário — menu fixo (não texto livre), preenchido pelo RH junto
 // com o Horário de trabalho na tela de Admissão (admissoes.turno), propagado pra
