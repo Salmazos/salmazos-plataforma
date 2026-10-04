@@ -18,9 +18,13 @@ interface IndicacaoPendenteRow {
 // (Configurações > Avisos) — sem configuração, falha de leitura ou canal desligado, ninguém vê:
 // o popup só existe quando a configuração existe. O filtro de unidade é fixo (a lista de
 // pendentes é a da unidade do usuário; sócios com acesso a todas veem todas), como em
-// GET /api/solicitacoes-indicacao-candidato. Dedup por (usuário, indicação) em
-// indicacao_candidato_popup_vistos: reaparece no próximo login enquanto houver pendente que o
-// usuário ainda não dispensou.
+// GET /api/solicitacoes-indicacao-candidato.
+//
+// REGRA DA LISTA (decisão explícita): `data` traz TODAS as indicações pendentes da unidade,
+// INCLUSIVE as que este usuário já viu. O registro de "visto" (indicacao_candidato_popup_vistos,
+// por usuário e indicação) só decide SE o popup abre: `temNovas` é true quando existe ao menos uma
+// pendente ainda não vista. Uma indicação já vista continua aparecendo na lista enquanto estiver
+// pendente e houver outra não vista; se todas estiverem vistas, o popup não abre.
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

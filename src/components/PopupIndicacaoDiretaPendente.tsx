@@ -42,10 +42,9 @@ export default function PopupIndicacaoDiretaPendente() {
     };
   }, []);
 
-  // Dispensa exatamente as indicações que estavam sendo mostradas; uma nova que chegue depois
-  // reabre o popup no próximo login.
-  async function marcarVisto() {
-    const ids = pendentes.map((p: IndicacaoPendente) => p.id);
+  // Fecha o popup e marca como vistas, para este usuário, exatamente os ids recebidos. Falha de
+  // rede é ignorada: o popup só volta a aparecer no próximo carregamento do painel.
+  async function dispensar(ids: string[]) {
     setAberto(false);
     try {
       await fetch("/api/indicacoes-popup/marcar-visto", {
@@ -58,10 +57,18 @@ export default function PopupIndicacaoDiretaPendente() {
     }
   }
 
-  // Mesmo destino do clique no sino (NotificacoesProvider): abre o modal de indicações já
-  // focado nesta indicação. Dispensa todas as mostradas, pois o popup inteiro está fechando.
+  // "Ok, entendi!" e o X: dispensam TODAS as indicações que estavam sendo mostradas; uma nova que
+  // chegue depois reabre o popup no próximo login.
+  async function marcarVisto() {
+    await dispensar(pendentes.map((p: IndicacaoPendente) => p.id));
+  }
+
+  // Clique no card: abre o modal de indicações já focado nesta indicação (mesmo destino do clique
+  // no sino, ver NotificacoesProvider) e marca como vista SÓ a clicada. As outras indicações
+  // listadas continuam não vistas: geram temNovas no próximo carregamento do painel e o popup
+  // reabre enquanto restar alguma não vista e pendente. Sem await: não atrasa a navegação.
   function abrirIndicacao(id: string) {
-    marcarVisto();
+    void dispensar([id]);
     router.push(`/painel/vagas?indicacao=${id}`);
   }
 
