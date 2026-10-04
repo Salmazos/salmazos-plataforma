@@ -6,6 +6,8 @@ import {
   type DadosAviso, type FonteAvisos, type LinhaDestinatario, type PerfilAnalista,
 } from "../src/lib/avisosResolucao.ts";
 import { PADRAO_AVISOS, grupoTemPadrao, montarPayloadRestauracao } from "../src/lib/avisosPadrao.ts";
+import { EVENTOS_POR_GRUPO, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
+import { EVENTO_POR_TIPO_PEDIDO, TIPOS_PEDIDO_CLIENTE, tiposVisiveis, chaveVisto } from "../src/lib/pedidosClientePopup.ts";
 
 let total = 0;
 async function caso(nome: string, fn: () => Promise<void> | void) {
@@ -196,7 +198,8 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     const r = montarPayloadRestauracao("vagas", TODOS);
     assert.deepEqual(r.ignorados, []); assert.deepEqual(r.semDestinatario, []);
     assert.equal(r.payload.eventos.length, 5);
-    assert.equal(r.payload.eventos.flatMap((e) => e.canais).length, 10);
+    // 10 canais de e-mail/sino + o popup de solicitacao_vaga (Fase 3, bloco 1)
+    assert.equal(r.payload.eventos.flatMap((e) => e.canais).length, 11);
   });
   await caso("restauração: usuário inativo fica de fora e é informado", () => {
     const sem = new Set(TODOS); const alvo = [...TODOS][0]; sem.delete(alvo);
@@ -287,9 +290,9 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   });
 
   // padrão Portal do cliente
-  await caso("1c padrão portal_cliente: 4 eventos; recebida com 10 analistas nos 3 canais; reprovado desligado", () => {
+  await caso("1c padrão portal_cliente: 8 eventos (4 da Fase 3); recebida com 10 analistas nos 3 canais; reprovado desligado", () => {
     const p = PADRAO_AVISOS.portal_cliente;
-    assert.deepEqual(Object.keys(p).sort(), ["indicacao_candidato_recebida", "indicacao_decisao_cliente", "portal_candidato_aprovado", "portal_candidato_reprovado"]);
+    assert.deepEqual(Object.keys(p).sort(), ["agendamento_cliente", "indicacao_candidato_recebida", "indicacao_decisao_cliente", "portal_candidato_aprovado", "portal_candidato_reprovado", "solicitacao_alteracao_pedida", "vaga_pausa_pedida", "vaga_reativacao_pedida"]);
     for (const c of ["email", "sino", "popup"] as const) assert.equal(p.indicacao_candidato_recebida[c]!.destinatarios.length, 10);
     assert.equal(p.portal_candidato_reprovado.email!.ativo, false);
     const ids = p.indicacao_candidato_recebida.popup!.destinatarios.map((d) => (d.tipo_destinatario === "usuario" ? d.usuario_id : ""));
@@ -298,13 +301,161 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("1c restauração portal_cliente: payload com popup; inativo ignorado e informado; vazio = 409", () => {
     const ids = new Set(PADRAO_AVISOS.portal_cliente.indicacao_candidato_recebida.email!.destinatarios.flatMap((d) => (d.tipo_destinatario === "usuario" ? [d.usuario_id] : [])));
     const ok = montarPayloadRestauracao("portal_cliente", ids);
-    assert.deepEqual(ok.semDestinatario, []); assert.equal(ok.payload.eventos.length, 4);
+    assert.deepEqual(ok.semDestinatario, []); assert.equal(ok.payload.eventos.length, 8);
     assert.ok(ok.payload.eventos.find((e) => e.evento === "indicacao_candidato_recebida")!.canais.some((c) => c.canal === "popup"));
     const sem = new Set(ids); sem.delete([...ids][0]);
     assert.ok(montarPayloadRestauracao("portal_cliente", sem).ignorados.length >= 3);
     const vazio = montarPayloadRestauracao("portal_cliente", new Set());
     assert.ok(vazio.semDestinatario.some((x) => x.evento === "indicacao_candidato_recebida" && x.canal === "popup"));
     assert.ok(!vazio.semDestinatario.some((x) => x.evento === "portal_candidato_reprovado"));
+  });
+
+  // ── Fase 3, bloco 1: pedidos do cliente, agendamento sem responsável e popup de solicitação ──
+  const NOVOS = [...EVENTOS_PEDIDO_CLIENTE, "agendamento_cliente"];
+  const unidadeMM = (n: number): PerfilAnalista[] => Array.from({ length: n }, (_, i) => perfil(`p${i}`, { unidade_id: i < 4 ? "MM" : "SBC", acesso_todas_unidades: i === 0 }));
+
+  await caso("3 catálogo: 4 eventos novos no grupo portal_cliente, com rótulo e nota, e solicitacao_vaga segue em vagas", () => {
+    for (const ev of NOVOS) {
+      assert.ok(EVENTOS_POR_GRUPO.portal_cliente.includes(ev), ev); assert.ok(ROTULO_EVENTO[ev], ev); assert.ok(NOTA_EVENTO[ev], ev);
+    }
+    assert.ok(EVENTOS_POR_GRUPO.vagas.includes("solicitacao_vaga")); assert.ok(!EVENTOS_POR_GRUPO.portal_cliente.includes("solicitacao_vaga"));
+  });
+  await caso("3 catálogo: popup só nos 3 pedidos e em solicitacao_vaga; agendamento só e-mail e sino", () => {
+    for (const ev of [...EVENTOS_PEDIDO_CLIENTE, "solicitacao_vaga"]) assert.deepEqual([...canaisDoEvento(ev)], ["email", "sino", "popup"], ev);
+    assert.deepEqual([...canaisDoEvento("agendamento_cliente")], ["email", "sino"]);
+    assert.deepEqual([...canaisDoEvento("vaga_criada")], ["email", "sino"]);
+  });
+  await caso("3 catálogo: textos explicam o padrão sem lista (popup de solicitação = unidade; popup de pedidos = ninguém)", () => {
+    assert.match(descricaoPadraoDoSistema("vagas", "popup", "solicitacao_vaga"), /todos os analistas ativos da unidade/);
+    for (const ev of EVENTOS_PEDIDO_CLIENTE) assert.match(descricaoPadraoDoSistema("portal_cliente", "popup", ev), /ninguém vê/);
+    for (const ev of NOVOS) assert.match(descricaoPadraoDoSistema("portal_cliente", "email", ev), /analistas da unidade/);
+    assert.match(NOTA_EVENTO.agendamento_cliente, /responsável/); assert.match(NOTA_EVENTO.agendamento_cliente, /fixa/);
+  });
+
+  for (const ev of NOVOS) for (const canal of ["email", "sino"] as const) {
+    await caso(`3 fallback (${ev}/${canal}): sem config nova e sem antiga = legado (comportamento antigo), sem lista`, async () => {
+      const r = await resolverComFonte(fonte({ novo: { canalAtivo: null, linhas: [] }, antigo: { canalAtivo: null, linhas: [] } }), ev, canal, "MM");
+      assert.equal(r.modo, "legado"); assert.deepEqual(r.userIds, []); assert.deepEqual(r.emails, []); assert.equal(r.falhou, false);
+    });
+    await caso(`3 fallback (${ev}/${canal}): tabelas novas inexistentes (erro) = legado`, async () => {
+      const r = await resolverComFonte(fonte({ novoErro: true, antigo: { canalAtivo: null, linhas: [] } }), ev, canal, "MM");
+      assert.equal(r.modo, "legado");
+    });
+    await caso(`3 canal desligado (${ev}/${canal}): ninguém, mesmo com lista`, async () => {
+      const r = await resolverComFonte(fonte({ novo: { canalAtivo: false, linhas: [usuario("p1"), email("a@x.com")] }, perfis: unidadeMM(8) }), ev, canal, "MM");
+      assert.equal(r.modo, "desligado"); assert.deepEqual(r.userIds, []); assert.deepEqual(r.emails, []);
+    });
+  }
+  await caso("3 sino de pedido: lista configurada = uma linha por usuário e filtro de unidade fixo por cima", async () => {
+    const lista = Array.from({ length: 8 }, (_, i) => usuario(`p${i}`));
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: lista }, perfis: unidadeMM(8) }), "vaga_pausa_pedida", "sino", "MM");
+    assert.equal(r.modo, "configurado"); assert.deepEqual(r.userIds.sort(), ["p0", "p1", "p2", "p3"]);
+  });
+  await caso("3 sino de pedido: usuário inativo na lista fica de fora; todos fora = lista vazia (não cai em broadcast)", async () => {
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [usuario("p1")] }, perfis: [perfil("p1", { ativo: false })] }), "vaga_reativacao_pedida", "sino", "U1");
+    assert.equal(r.modo, "configurado"); assert.deepEqual(r.userIds, []);
+  });
+  await caso("3 e-mail de pedido: e-mails livres da lista são mantidos; usuário de outra unidade é barrado", async () => {
+    const lista = [email("livre@x.com"), usuario("p0"), usuario("p5")];
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: lista }, perfis: unidadeMM(8) }), "solicitacao_alteracao_pedida", "email", "MM");
+    assert.deepEqual(r.emails.map((e) => e.email).sort(), ["livre@x.com", "p0@x.com"]);
+  });
+  await caso("3 agendamento sem responsável: carga copiada (3 e-mails, 7 no sino) dá 3 e 4 após filtro de unidade MM", async () => {
+    const sinoLista = Array.from({ length: 7 }, (_, i) => usuario(`p${i}`));
+    const sino = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: sinoLista }, perfis: unidadeMM(8) }), "agendamento_cliente", "sino", "MM");
+    assert.deepEqual(sino.userIds.sort(), ["p0", "p1", "p2", "p3"]);
+    const mail = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [email("a@x.com"), email("b@x.com"), email("c@x.com")] } }), "agendamento_cliente", "email", "MM");
+    assert.equal(mail.emails.length, 3);
+  });
+  await caso("3 isolamento: falha do sino não impede o e-mail do pedido (nem o inverso) e nada lança", async () => {
+    const erros: string[] = []; const ordem: string[] = [];
+    const r = await executarCanaisIndependentes("POST /api/portal/solicitacoes/[id]/alteracao", {
+      sino: async () => { ordem.push("sino"); throw new Error("banco fora"); },
+      email: async () => { ordem.push("email"); },
+    }, (m) => erros.push(m));
+    assert.deepEqual(ordem.sort(), ["email", "sino"]); assert.deepEqual(r.map((x) => x.ok), [false, true]); assert.equal(erros.length, 1);
+    const r2 = await executarCanaisIndependentes("t", { sino: async () => {}, email: async () => { throw new Error("smtp"); } }, () => {});
+    assert.deepEqual(r2.map((x) => x.ok), [true, false]);
+  });
+
+  // popup de solicitacao_vaga: lista, desligado e critério antigo
+  await caso("3 popup solicitacao_vaga: sem config (nem nova nem antiga) = legado → vale o critério antigo", async () => {
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: null, linhas: [] }, antigo: { canalAtivo: null, linhas: [] } }), "solicitacao_vaga", "popup");
+    assert.equal(r.modo, "legado"); assert.deepEqual(r.userIds, []); assert.equal(r.falhou, false);
+  });
+  await caso("3 popup solicitacao_vaga: tabelas novas indisponíveis (erro) = legado (critério antigo)", async () => {
+    const r = await resolverComFonte(fonte({ novoErro: true, antigo: { canalAtivo: null, linhas: [] } }), "solicitacao_vaga", "popup");
+    assert.equal(r.modo, "legado");
+  });
+  await caso("3 popup solicitacao_vaga: canal desligado = ninguém vê", async () => {
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: false, linhas: [usuario("p1")] } }), "solicitacao_vaga", "popup");
+    assert.equal(r.modo, "desligado"); assert.deepEqual(r.userIds, []);
+  });
+  await caso("3 popup solicitacao_vaga: lista configurada = só quem está nela (os 8 da carga; Victor e Susana SBC fora)", async () => {
+    const oito = Array.from({ length: 8 }, (_, i) => usuario(`p${i}`));
+    const r = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: oito } }), "solicitacao_vaga", "popup");
+    assert.equal(r.modo, "configurado"); assert.equal(r.userIds.length, 8); assert.ok(!r.userIds.includes("p8") && !r.userIds.includes("p9"));
+  });
+
+  // popup "Pedidos do cliente": por tipo, cada um com a sua lista
+  const lista = (modo: string, ...userIds: string[]) => ({ modo, userIds });
+  await caso("3 popup pedidos: cada tipo tem o seu evento e a sua lista", () => {
+    assert.deepEqual(TIPOS_PEDIDO_CLIENTE.map((t) => EVENTO_POR_TIPO_PEDIDO[t]), [...EVENTOS_PEDIDO_CLIENTE]);
+    const v = tiposVisiveis({ alteracao: lista("configurado", "u1"), reativacao: lista("configurado", "u2"), pausa: lista("configurado", "u1", "u2") }, "u1");
+    assert.deepEqual(v, ["alteracao", "pausa"]);
+  });
+  await caso("3 popup pedidos: sem config (legado), desligado e fora da lista = tipo não aparece", () => {
+    const v = tiposVisiveis({ alteracao: lista("legado"), reativacao: lista("desligado", "u1"), pausa: lista("configurado", "u9") }, "u1");
+    assert.deepEqual(v, []);
+  });
+  await caso("3 popup pedidos: chave de visto separa tipos com o mesmo id", () => {
+    assert.notEqual(chaveVisto("alteracao", "x"), chaveVisto("pausa", "x"));
+  });
+
+  // padrão (Restaurar) e carga
+  await caso("3 padrão: carga dos 4 eventos novos = e-mail 3 / sino 7 / popup 8 (agendamento sem popup); todos ligados", () => {
+    const p = PADRAO_AVISOS.portal_cliente;
+    for (const ev of EVENTOS_PEDIDO_CLIENTE) {
+      assert.deepEqual(["email", "sino", "popup"].map((c) => p[ev][c as "email"]!.destinatarios.length), [3, 7, 8], ev);
+      for (const c of ["email", "sino", "popup"] as const) assert.equal(p[ev][c]!.ativo, true);
+    }
+    assert.deepEqual(["email", "sino"].map((c) => p.agendamento_cliente[c as "email"]!.destinatarios.length), [3, 7]);
+    assert.equal(p.agendamento_cliente.popup, undefined);
+  });
+  await caso("3 padrão: popup de solicitacao_vaga (grupo Vagas) com os mesmos 8; e-mail e sino dele não mudaram", () => {
+    const sv = PADRAO_AVISOS.vagas.solicitacao_vaga;
+    assert.equal(sv.popup!.destinatarios.length, 8); assert.equal(sv.popup!.ativo, true);
+    assert.equal(sv.email!.destinatarios.length, 3); assert.equal(sv.sino!.destinatarios.length, 7);
+    const nomes = sv.popup!.destinatarios.map((d) => d.nome).join("|");
+    assert.ok(!nomes.includes("Victor") && !nomes.includes("São Bernardo"));
+  });
+  await caso("3 padrão: sem duplicados e todo canal ligado tem destinatário (portal_cliente inteiro)", () => {
+    for (const [ev, canais] of Object.entries(PADRAO_AVISOS.portal_cliente)) for (const [canal, c] of Object.entries(canais)) {
+      const chaves = c.destinatarios.map((d) => (d.tipo_destinatario === "usuario" ? d.usuario_id : d.email.toLowerCase()));
+      assert.equal(new Set(chaves).size, chaves.length, `${ev}/${canal} duplicado`);
+      if (c.ativo) assert.ok(c.destinatarios.length > 0, `${ev}/${canal} ligado sem destinatário`);
+    }
+  });
+  await caso("3 restauração Vagas recria o popup de solicitacao_vaga; usuário inativo ignorado e informado; vazio = 409", () => {
+    const todos = new Set<string>();
+    for (const ev of Object.values(PADRAO_AVISOS.vagas)) for (const c of Object.values(ev)) for (const d of c.destinatarios) if (d.tipo_destinatario === "usuario") todos.add(d.usuario_id);
+    const r = montarPayloadRestauracao("vagas", todos);
+    const sv = r.payload.eventos.find((e) => e.evento === "solicitacao_vaga")!;
+    assert.deepEqual(sv.canais.map((c) => c.canal).sort(), ["email", "popup", "sino"]);
+    assert.equal(sv.canais.find((c) => c.canal === "popup")!.destinatarios.length, 8);
+    const alvo = PADRAO_AVISOS.vagas.solicitacao_vaga.popup!.destinatarios.map((d) => (d.tipo_destinatario === "usuario" ? d.usuario_id : ""))[0];
+    const sem = new Set(todos); sem.delete(alvo);
+    assert.ok(montarPayloadRestauracao("vagas", sem).ignorados.some((x) => x.evento === "solicitacao_vaga" && x.canal === "popup"));
+    assert.ok(montarPayloadRestauracao("vagas", new Set()).semDestinatario.some((x) => x.evento === "solicitacao_vaga" && x.canal === "popup"));
+  });
+  await caso("3 restauração portal_cliente: pedidos têm popup no payload e canal ligado vazio é sinalizado (409)", () => {
+    const ids = new Set(PADRAO_AVISOS.portal_cliente.indicacao_candidato_recebida.email!.destinatarios.flatMap((d) => (d.tipo_destinatario === "usuario" ? [d.usuario_id] : [])));
+    const ok = montarPayloadRestauracao("portal_cliente", ids);
+    assert.deepEqual(ok.semDestinatario, []);
+    for (const ev of EVENTOS_PEDIDO_CLIENTE) assert.ok(ok.payload.eventos.find((e) => e.evento === ev)!.canais.some((c) => c.canal === "popup"), ev);
+    const vazio = montarPayloadRestauracao("portal_cliente", new Set());
+    assert.ok(vazio.semDestinatario.some((x) => x.evento === "vaga_pausa_pedida" && x.canal === "popup"));
+    assert.ok(vazio.semDestinatario.some((x) => x.evento === "agendamento_cliente" && x.canal === "sino"));
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);

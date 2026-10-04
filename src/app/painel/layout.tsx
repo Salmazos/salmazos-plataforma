@@ -14,6 +14,7 @@ import PopupContaReceberHortolandiaVencida from "@/components/PopupContaReceberH
 import PopupVencimentoContratoMot from "@/components/PopupVencimentoContratoMot";
 import PopupSolicitacaoVagaPendente from "@/components/PopupSolicitacaoVagaPendente";
 import PopupIndicacaoDiretaPendente from "@/components/PopupIndicacaoDiretaPendente";
+import PopupPedidosClientePendentes from "@/components/PopupPedidosClientePendentes";
 import NotificacoesProvider from "@/components/NotificacoesProvider";
 import UsuarioLogadoProvider from "@/components/UsuarioLogadoProvider";
 import { apelidoDoNomeCompleto } from "@/lib/responsaveis";
@@ -149,6 +150,7 @@ export default async function PainelLayout({
         <PopupVencimentoContratoMot />
         <PopupSolicitacaoVagaPendente />
         <PopupIndicacaoDiretaPendente />
+        <PopupPedidosClientePendentes />
       </div>
     </NotificacoesProvider>
     </UsuarioLogadoProvider>

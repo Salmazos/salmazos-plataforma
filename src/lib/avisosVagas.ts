@@ -1,7 +1,18 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { resolverDestinatarios } from "@/lib/avisos";
 
-export type EventoAvisoVaga = "vaga_criada" | "solicitacao_vaga" | "vaga_fechada" | "vaga_cancelada" | "vaga_reativada";
+// Inclui os pedidos do cliente no portal (Fase 3): mesmo mecanismo de sino/e-mail de Vagas — sem
+// configuração nova, o resultado é o modo "legado" e cada chamador mantém o comportamento antigo.
+export type EventoAvisoVaga =
+  | "vaga_criada"
+  | "solicitacao_vaga"
+  | "vaga_fechada"
+  | "vaga_cancelada"
+  | "vaga_reativada"
+  | "solicitacao_alteracao_pedida"
+  | "vaga_reativacao_pedida"
+  | "vaga_pausa_pedida"
+  | "agendamento_cliente";
 
 interface AvisoVagaEmailMode {
   modo: "legado" | "desligado" | "configurado";
@@ -60,6 +71,7 @@ interface GravarSinoAvisoVagaOpts {
   mensagem: string;
   vagaId?: string | null;
   solicitacaoVagaId?: string | null;
+  candidatoId?: string | null;
   resolvido?: ResolverAvisoVagaResult;
 }
 
@@ -71,6 +83,7 @@ export async function gravarSinoAvisoVaga({
   mensagem,
   vagaId,
   solicitacaoVagaId,
+  candidatoId,
   resolvido,
 }: GravarSinoAvisoVagaOpts): Promise<void> {
   const supabase = createServiceClient();
@@ -91,6 +104,7 @@ export async function gravarSinoAvisoVaga({
       unidade_id: unidadeId ?? null,
       vaga_id: vagaId ?? null,
       solicitacao_vaga_id: solicitacaoVagaId ?? null,
+      ...(candidatoId ? { candidato_id: candidatoId } : {}),
     });
     if (error) {
       console.error(`[gravarSinoAvisoVaga] Erro ao registrar notificação legado (evento="${evento}"):`, error.message);
@@ -111,6 +125,7 @@ export async function gravarSinoAvisoVaga({
       unidade_id: unidadeId ?? null,
       vaga_id: vagaId ?? null,
       solicitacao_vaga_id: solicitacaoVagaId ?? null,
+      ...(candidatoId ? { candidato_id: candidatoId } : {}),
     }));
 
     const { error } = await supabase.from("notificacoes_analista").insert(notificacoes);

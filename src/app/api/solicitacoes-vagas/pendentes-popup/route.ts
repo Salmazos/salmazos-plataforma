@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { resolverDestinatarios } from "@/lib/avisos";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +13,14 @@ interface SolicitacaoPendenteRow {
   confidencial: boolean;
 }
 
-// Público do popup é o mesmo do e-mail de notificação (notifyAllAnalysts): qualquer
-// analista ativo (qualquer nivel_acesso), não só diretoria/superuser — diferente do sino
-// da própria solicitação, que só vai pra diretoria/superuser (ver POST
-// /api/portal/solicitar-vaga). Confirmado com o Olver, 23/09.
+// Quem vê o popup (Configurações > Avisos, evento solicitacao_vaga, canal popup):
+//   - lista configurada  → só quem está na lista;
+//   - canal desligado    → ninguém (desligado de propósito);
+//   - sem configuração (ou falha ao ler) → critério ANTIGO: qualquer analista ativo (qualquer
+//     nivel_acesso) da unidade, o mesmo público do e-mail via notifyAllAnalysts — diferente do sino
+//     da própria solicitação, que só ia pra diretoria/superuser (ver POST
+//     /api/portal/solicitar-vaga). Confirmado com o Olver, 23/09.
+// O filtro de unidade abaixo é fixo e vale em qualquer um dos casos.
 //
 // Mesmo padrão estrutural de /api/cobrancas-rs/pendentes-popup: ESTADO PERSISTENTE (não
 // evento-do-dia) — uma solicitação criada há dias e ainda pendente continua relevante
@@ -31,13 +36,20 @@ export async function GET() {
 
   const svc = createServiceClient();
 
-  const { data: perfil } = await svc
-    .from("analistas_perfil")
-    .select("id, unidade_id, acesso_todas_unidades")
-    .eq("user_id", user.id)
-    .eq("ativo", true)
-    .maybeSingle();
+  const [lista, { data: perfil }] = await Promise.all([
+    resolverDestinatarios("solicitacao_vaga", "popup", undefined, svc),
+    svc
+      .from("analistas_perfil")
+      .select("id, unidade_id, acesso_todas_unidades")
+      .eq("user_id", user.id)
+      .eq("ativo", true)
+      .maybeSingle(),
+  ]);
   if (!perfil) return NextResponse.json({ data: [], temNovas: false });
+  if (lista.modo === "desligado") return NextResponse.json({ data: [], temNovas: false });
+  if (lista.modo === "configurado" && !lista.userIds.includes(user.id)) {
+    return NextResponse.json({ data: [], temNovas: false });
+  }
 
   // Só as solicitações da unidade do analista (sócios com acesso a todas veem todas).
   let pendentesQuery = svc

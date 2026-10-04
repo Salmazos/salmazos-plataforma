@@ -84,6 +84,11 @@ interface NotifyResponsibleOpts {
   // Usado só no broadcast de fallback (sem responsável resolvido): sino e e-mail vão pra
   // unidade do assunto, não pra todo mundo.
   unidadeId?: string | null;
+  // Opcional e aditivo: quando informado, SUBSTITUI só o broadcast de fallback (sem responsável
+  // resolvido) — o ramo do responsável acima fica exatamente como sempre foi. Usado para o fallback
+  // passar pela lista do evento em Configurações > Avisos. Quem chama garante que ele não lança;
+  // se lançar, o erro é registrado e nada derruba a ação.
+  fallbackBroadcast?: () => Promise<unknown>;
 }
 
 interface NotifyResponsibleResult extends NotifyResult {
@@ -126,6 +131,15 @@ export async function notifyResponsibleOrAll(opts: NotifyResponsibleOpts): Promi
         failed: resultado.success ? 0 : 1,
       };
     }
+  }
+
+  if (opts.fallbackBroadcast) {
+    try {
+      await opts.fallbackBroadcast();
+    } catch (err) {
+      console.error(`[notifyResponsibleOrAll] Erro no fallback configurável (tipo="${opts.tipo}"):`, err);
+    }
+    return { targeted: false, attempted: 0, succeeded: 0, failed: 0 };
   }
 
   await supabase.from("notificacoes_analista").insert({
