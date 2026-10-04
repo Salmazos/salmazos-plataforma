@@ -219,6 +219,19 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
     (u) => (canal !== "email" || !!u.email) && !lista.some((d) => d.usuario_id === u.user_id)
   );
 
+  // Ordem estável: por nome (pt-BR, sem diferenciar maiúsculas), depois e-mail e id. Não depende de
+  // `ativo` nem da ordem em que a API devolve as linhas, então a posição de uma pessoa não muda
+  // depois de Ativar, Desativar ou Remover outra.
+  const comparar = (a: string, b: string) => a.localeCompare(b, "pt-BR", { sensitivity: "base" });
+  const linhas = lista
+    .map((d) => {
+      const u = d.usuario_id ? nomeUsuario.get(d.usuario_id) : null;
+      const titulo = (d.tipo_destinatario === "usuario" ? u?.nome_completo ?? "Usuário inativo ou removido" : d.nome) ?? "";
+      const detalhe = (d.tipo_destinatario === "usuario" ? u?.email ?? "" : d.email) ?? "";
+      return { d, titulo, detalhe };
+    })
+    .sort((a, b) => comparar(a.titulo, b.titulo) || comparar(a.detalhe, b.detalhe) || (a.d.id < b.d.id ? -1 : a.d.id > b.d.id ? 1 : 0));
+
   let situacao: string;
   if (!ligado) situacao = "Desligado: ninguém recebe por este canal.";
   else if (ativos === 0) situacao = descricaoPadraoDoSistema(grupo, canal, evento);
@@ -252,10 +265,7 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
 
       {lista.length > 0 && (
         <div style={{ border: "1px solid #F3F4F6", borderRadius: 6 }} className="mb-3">
-          {lista.map((d) => {
-            const u = d.usuario_id ? nomeUsuario.get(d.usuario_id) : null;
-            const titulo = d.tipo_destinatario === "usuario" ? u?.nome_completo ?? "Usuário inativo ou removido" : d.nome;
-            const detalhe = d.tipo_destinatario === "usuario" ? u?.email ?? "" : d.email;
+          {linhas.map(({ d, titulo, detalhe }) => {
             return (
               <div key={d.id} className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 last:border-0" style={{ opacity: d.ativo ? 1 : 0.55 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -264,6 +274,8 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
                 </div>
                 <button
                   className="text-xs underline text-gray-600"
+                  aria-label={`${d.ativo ? "Desativar" : "Ativar"} ${titulo}`}
+                  title={`${d.ativo ? "Desativar" : "Ativar"} ${titulo}`}
                   disabled={bloqueado}
                   onClick={() => executar(`${d.id}:ativo`, chamar(`/api/avisos-config/destinatarios/${d.id}`, "PATCH", { ativo: !d.ativo }))}
                 >
@@ -271,9 +283,12 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
                 </button>
                 <button
                   className="text-xs underline text-red-600"
+                  aria-label={`Remover ${titulo}`}
+                  title={`Remover ${titulo}`}
                   disabled={bloqueado}
                   onClick={() => {
-                    if (window.confirm("Remover este destinatário deste aviso?")) executar(`${d.id}:rm`, chamar(`/api/avisos-config/destinatarios/${d.id}`, "DELETE"));
+                    const quem = detalhe ? `${titulo} (${detalhe})` : titulo;
+                    if (window.confirm(`Remover "${quem}" do canal ${ROTULO_CANAL[canal]} neste aviso? Esta ação não pode ser desfeita.`)) executar(`${d.id}:rm`, chamar(`/api/avisos-config/destinatarios/${d.id}`, "DELETE"));
                   }}
                 >
                   Remover
