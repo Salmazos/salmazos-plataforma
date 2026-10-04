@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { clientePodePedirAlteracao } from "@/lib/solicitacaoAlteracao";
 import { clientePodeSolicitarPausa, clientePodeSolicitarReativacao } from "@/lib/vagaPausaReativacao";
+import { resumirPedidoCliente, type LinhaPedidoCliente } from "@/lib/pedidoClienteResumo";
 
 export async function GET(request: NextRequest) {
   const supabase = await createPortalClient();
@@ -43,14 +44,24 @@ export async function GET(request: NextRequest) {
     string,
     { status: string; motivo_recusa: string | null; criado_em: string; alteracoes: Record<string, { antes: unknown; depois: unknown }> }
   > = {};
+  // Linhas de pedido por solicitação, só com o que o cliente pode ver (sem decidido_por): alimentam o
+  // selo de resultado do card (ver pedidoClienteResumo.ts). Só das solicitações DESTE cliente, já
+  // filtradas por cliente_id acima.
+  const linhasAlteracaoPorSolicitacao: Record<string, LinhaPedidoCliente[]> = {};
   if (solicitacaoIds.length > 0) {
     const { data: pedidos } = await service
       .from("solicitacao_vaga_alteracoes")
-      .select("solicitacao_vaga_id, status, motivo_recusa, criado_em, alteracoes")
+      .select("solicitacao_vaga_id, status, motivo_recusa, criado_em, decidido_em, alteracoes")
       .in("solicitacao_vaga_id", solicitacaoIds)
       .neq("status", "substituida")
       .order("criado_em", { ascending: false });
     for (const p of pedidos ?? []) {
+      (linhasAlteracaoPorSolicitacao[p.solicitacao_vaga_id] ??= []).push({
+        status: p.status,
+        criado_em: p.criado_em,
+        decidido_em: p.decidido_em,
+        motivo_recusa: p.motivo_recusa,
+      });
       const atual = alteracaoPorSolicitacao[p.solicitacao_vaga_id];
       if (!atual || (p.status === "pendente" && atual.status !== "pendente")) {
         alteracaoPorSolicitacao[p.solicitacao_vaga_id] = {
@@ -91,17 +102,28 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Pedido de pausa/reabertura pendente (ver vagaPausaReativacao.ts), indexado por vaga_id —
-  // só busca pra vagas que essa listagem já carregou, e só interessa se ainda está pendente
-  // (aprovado/recusado não trava um novo pedido).
+  // Pedidos de pausa ("encerramento") e reabertura (ver vagaPausaReativacao.ts), indexados por vaga_id —
+  // só busca pra vagas que essa listagem já carregou. O pendente trava um novo pedido; os já decididos
+  // só alimentam o selo de resultado do card (sem decidido_por, nada interno).
   const statusPendentePorVaga: Record<string, { acao: string }> = {};
+  const linhasEncerramentoPorVaga: Record<string, LinhaPedidoCliente[]> = {};
+  const linhasReativacaoPorVaga: Record<string, LinhaPedidoCliente[]> = {};
   if (vagaIds.length > 0) {
     const { data: pedidosStatus } = await service
       .from("vaga_solicitacoes_status")
-      .select("vaga_id, acao")
-      .in("vaga_id", vagaIds)
-      .eq("status", "pendente");
-    for (const p of pedidosStatus ?? []) statusPendentePorVaga[p.vaga_id] = { acao: p.acao };
+      .select("vaga_id, acao, status, criado_em, decidido_em, motivo_recusa")
+      .in("vaga_id", vagaIds);
+    for (const p of pedidosStatus ?? []) {
+      if (p.status === "pendente") statusPendentePorVaga[p.vaga_id] = { acao: p.acao };
+      const alvo = p.acao === "pausar" ? linhasEncerramentoPorVaga : p.acao === "reabrir" ? linhasReativacaoPorVaga : null;
+      if (!alvo) continue;
+      (alvo[p.vaga_id] ??= []).push({
+        status: p.status,
+        criado_em: p.criado_em,
+        decidido_em: p.decidido_em,
+        motivo_recusa: p.motivo_recusa,
+      });
+    }
   }
 
   const data = (solicitacoes ?? []).map((s) => {
@@ -118,6 +140,12 @@ export async function GET(request: NextRequest) {
       pode_solicitar_reativacao: clientePodeSolicitarReativacao(s.status, vagaStatus, !!pedidoStatus),
       status_pendente_acao: pedidoStatus?.acao ?? null,
       alteracao: alteracaoPorSolicitacao[s.id] ?? null,
+      // Resultado do pedido mais recente de cada tipo, pro selo do card (ver pedidoClienteResumo.ts).
+      pedidos: {
+        alteracao: resumirPedidoCliente(linhasAlteracaoPorSolicitacao[s.id] ?? []),
+        encerramento: s.vaga_id ? resumirPedidoCliente(linhasEncerramentoPorVaga[s.vaga_id] ?? []) : null,
+        reativacao: s.vaga_id ? resumirPedidoCliente(linhasReativacaoPorVaga[s.vaga_id] ?? []) : null,
+      },
     };
   });
 

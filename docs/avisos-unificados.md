@@ -59,9 +59,13 @@ configuração, o comportamento é exatamente o antigo em todos os canais**.
 |---|---|---|---|
 | `solicitacao_alteracao_pedida` | `api/portal/solicitacoes/[id]/alteracao` | `alteracao_solicitacao_vaga` | `alteracao_solicitacao_pedida` |
 | `vaga_reativacao_pedida` | `.../reativacao` | `vaga_reativacao_pedida` | `vaga_status_solicitado` |
-| `vaga_pausa_pedida` | `.../encerramento` | `vaga_pausa_pedida` | `vaga_status_solicitado` |
+| `vaga_pausa_pedida` ("Cliente pediu encerramento de vaga") | `.../encerramento` | `vaga_pausa_pedida` | `vaga_status_solicitado` |
 | `agendamento_cliente` | `api/portal/agendar` (só o fallback) | `agendamento_cliente` | `agendamento_cliente` |
 
+- **Rótulo na tela.** A tela de Avisos lê o nome e a explicação de cada evento do catálogo no código
+  (`ROTULO_EVENTO` e `NOTA_EVENTO` em `avisosCatalogo.ts`), não de `aviso_eventos.descricao`. Por isso renomear
+  "Cliente pediu encerramento de vaga" não exige migration; o id, o tipo de sino (`vaga_pausa_pedida`) e a ação
+  interna (`pausar`) não mudam. Aprovar ou recusar o pedido é feito no painel de Vagas, na solicitação.
 - **Código.** `src/lib/avisoPedidoCliente.ts` (`avisarPedidoCliente`) reaproveita `resolverAvisoVaga` /
   `gravarSinoAvisoVaga` / `executarCanaisIndependentes`. Sino e e-mail rodam isolados e a função nunca lança: falha de
   aviso não derruba a rota nem a gravação do pedido.
@@ -130,3 +134,15 @@ permanecer no banco sem efeito.
 Reverter o merge na `main`: `git revert -m 1 <hash do merge "Avisos unificados: fases 1, 1b e 1c">` e dar push. O código
 volta a ler só as tabelas antigas (que nunca foram alteradas). As tabelas novas podem permanecer no banco sem efeito.
 A branch `fix/avisos-unificados-fase1` fica como referência.
+
+## Ajustes pós-teste (tela de Avisos e portal)
+
+- **Erro inline na tela de Avisos.** Ações que falham na API (ativar/desativar, remover, adicionar, ligar/desligar canal,
+  restaurar padrão) mostram o erro junto da linha ou do bloco clicado, em vermelho discreto, e some sozinho em alguns
+  segundos, ao fechar ou na próxima ação. A mensagem global do topo ficou só para falha de rede. A regra do último
+  destinatário (409) não mudou.
+- **Resultado do pedido no portal do cliente** (`/portal/solicitacoes`). Cada card mostra, por tipo (alteração,
+  encerramento, reativação), o pedido mais recente: pendente ("enviado, aguardando decisão"), aprovado ou recusado com a
+  data. O motivo só aparece na recusa e é o mesmo `motivo_recusa` que o cliente já recebe por e-mail. Decididos há mais
+  de 30 dias e substituídos não aparecem. Com pedido de encerramento ou reativação pendente, o botão fica desabilitado
+  como "Pedido enviado". Sem tabela nova; a lógica está em `src/lib/pedidoClienteResumo.ts`.

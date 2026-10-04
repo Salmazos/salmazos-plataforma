@@ -29,15 +29,41 @@ interface Dados { canais: CanalCfg[]; destinatarios: Destinatario[]; usuarios: U
 
 const GRUPOS: GrupoAviso[] = ["vagas", "rescisao", "aso", "portal_cliente"];
 
-async function chamar(url: string, method: string, body?: unknown): Promise<{ ok: boolean; erro?: string }> {
+// Texto de reserva quando a API bloqueia (409) sem devolver mensagem: é a regra do último destinatário.
+const MSG_ULTIMO_DESTINATARIO =
+  "Não é possível: este é o último destinatário ativo do canal. Adicione outra pessoa antes ou desligue o canal.";
+// Quanto tempo o erro inline fica na tela antes de sumir sozinho.
+const TEMPO_ERRO_INLINE_MS = 8000;
+
+interface Resultado { ok: boolean; erro?: string; rede?: boolean }
+
+async function chamar(url: string, method: string, body?: unknown): Promise<Resultado> {
   try {
     const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
     if (res.ok) return { ok: true };
     const json = await res.json().catch(() => ({}));
-    return { ok: false, erro: json.error ?? "Não foi possível concluir a ação." };
+    const padrao = res.status === 409 ? MSG_ULTIMO_DESTINATARIO : "Não foi possível concluir a ação.";
+    return { ok: false, erro: typeof json.error === "string" && json.error ? json.error : padrao };
   } catch {
-    return { ok: false, erro: "Falha de conexão. Tente novamente." };
+    return { ok: false, erro: "Falha de conexão. Tente novamente.", rede: true };
   }
+}
+
+// Erro de uma ação, mostrado junto de onde o usuário clicou (`escopo`: id da linha, "evento:canal" do
+// bloco ou "restaurar"). A mensagem global do topo fica só para falha de rede.
+function ErroInline({ texto, onFechar }: { texto: string; onFechar: () => void }) {
+  return (
+    <div
+      role="alert"
+      className="flex items-start gap-2 text-xs rounded-md px-2.5 py-1.5 my-2"
+      style={{ background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FECACA" }}
+    >
+      <span style={{ flex: 1 }}>{texto}</span>
+      <button type="button" aria-label="Fechar mensagem" onClick={onFechar} className="underline" style={{ color: "#B91C1C" }}>
+        fechar
+      </button>
+    </div>
+  );
 }
 
 export default function AvisosConfigClient() {
@@ -47,6 +73,14 @@ export default function AvisosConfigClient() {
   const [aba, setAba] = useState<GrupoAviso>("vagas");
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<{ tipo: "erro" | "ok"; texto: string } | null>(null);
+  const [erroInline, setErroInline] = useState<{ escopo: string; texto: string } | null>(null);
+
+  // O erro inline some sozinho depois de alguns segundos.
+  useEffect(() => {
+    if (!erroInline) return;
+    const t = setTimeout(() => setErroInline(null), TEMPO_ERRO_INLINE_MS);
+    return () => clearTimeout(t);
+  }, [erroInline]);
 
   const carregar = useCallback(async () => {
     try {
@@ -69,12 +103,16 @@ export default function AvisosConfigClient() {
 
   const nomeUsuario = useMemo(() => new Map((dados?.usuarios ?? []).map((u) => [u.user_id, u])), [dados]);
 
-  async function executar(chave: string, req: Promise<{ ok: boolean; erro?: string }>) {
+  // `escopo` diz onde mostrar o erro da ação (a linha ou o bloco clicado). Só falha de rede vai para a
+  // mensagem global do topo, para a tela não "pular" quando a API bloqueia uma ação.
+  async function executar(chave: string, req: Promise<Resultado>, escopo: string) {
     setOcupado(chave);
     setMensagem(null);
+    setErroInline(null);
     const r = await req;
-    if (!r.ok) setMensagem({ tipo: "erro", texto: r.erro ?? "Erro." });
-    else await carregar();
+    if (r.ok) await carregar();
+    else if (r.rede) setMensagem({ tipo: "erro", texto: r.erro ?? "Falha de conexão. Tente novamente." });
+    else setErroInline({ escopo, texto: r.erro ?? "Não foi possível concluir a ação." });
     setOcupado(null);
     return r.ok;
   }
@@ -134,7 +172,10 @@ export default function AvisosConfigClient() {
         <div style={{ paddingTop: 16 }}>
           {grupoTemPadrao(aba) && (
             <div className="flex items-center justify-between gap-3 mb-4 pb-4 border-b border-gray-100">
-              <p className="text-xs text-gray-500">Volta os destinatários e os canais ligados deste grupo para o padrão do sistema.</p>
+              <div style={{ flex: 1 }}>
+                <p className="text-xs text-gray-500">Volta os destinatários e os canais ligados deste grupo para o padrão do sistema.</p>
+                {erroInline?.escopo === "restaurar" && <ErroInline texto={erroInline.texto} onFechar={() => setErroInline(null)} />}
+              </div>
               <button
                 className="btn-outline"
                 disabled={ocupado !== null}
@@ -142,6 +183,7 @@ export default function AvisosConfigClient() {
                   if (!window.confirm(`Isso substitui a configuração atual de ${ROTULO_GRUPO[aba]} pelo padrão do sistema. Continuar?`)) return;
                   setOcupado("restaurar");
                   setMensagem(null);
+                  setErroInline(null);
                   try {
                     const res = await fetch("/api/avisos-config/restaurar-padrao", {
                       method: "POST",
@@ -149,7 +191,7 @@ export default function AvisosConfigClient() {
                       body: JSON.stringify({ grupo: aba }),
                     });
                     const json = await res.json().catch(() => ({}));
-                    if (!res.ok) setMensagem({ tipo: "erro", texto: json.error ?? "Não foi possível restaurar o padrão." });
+                    if (!res.ok) setErroInline({ escopo: "restaurar", texto: json.error ?? "Não foi possível restaurar o padrão." });
                     else {
                       const ign = (json.data?.ignorados ?? []).length;
                       setMensagem({ tipo: "ok", texto: `Padrão de ${ROTULO_GRUPO[aba]} restaurado.${ign > 0 ? ` ${ign} usuário(s) do padrão estão inativos e ficaram de fora.` : ""}` });
@@ -183,6 +225,8 @@ export default function AvisosConfigClient() {
                     nomeUsuario={nomeUsuario}
                     ocupado={ocupado}
                     executar={executar}
+                    erroInline={erroInline}
+                    fecharErro={() => setErroInline(null)}
                   />
                 ))}
               </div>
@@ -203,10 +247,12 @@ interface BlocoProps {
   usuarios: Usuario[];
   nomeUsuario: Map<string, Usuario>;
   ocupado: string | null;
-  executar: (chave: string, req: Promise<{ ok: boolean; erro?: string }>) => Promise<boolean>;
+  executar: (chave: string, req: Promise<Resultado>, escopo: string) => Promise<boolean>;
+  erroInline: { escopo: string; texto: string } | null;
+  fecharErro: () => void;
 }
 
-function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, ocupado, executar }: BlocoProps) {
+function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, ocupado, executar, erroInline, fecharErro }: BlocoProps) {
   const ligado = cfg ? cfg.ativo : true;
   const ativos = lista.filter((d) => d.ativo).length;
   const chaveCanal = `${evento}:${canal}`;
@@ -242,7 +288,7 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
       modoNovo === "usuario" || canal !== "email"
         ? { evento, canal, tipo_destinatario: "usuario", usuario_id: usuarioNovo }
         : { evento, canal, tipo_destinatario: "email", nome: nomeNovo, email: emailNovo };
-    const ok = await executar(`${chaveCanal}:add`, chamar("/api/avisos-config/destinatarios", "POST", corpo));
+    const ok = await executar(`${chaveCanal}:add`, chamar("/api/avisos-config/destinatarios", "POST", corpo), chaveCanal);
     if (ok) { setUsuarioNovo(""); setNomeNovo(""); setEmailNovo(""); }
   }
 
@@ -256,18 +302,20 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
           type="checkbox"
           checked={ligado}
           disabled={bloqueado}
-          onChange={(e) => executar(`${chaveCanal}:canal`, chamar("/api/avisos-config/canal", "PATCH", { evento, canal, ativo: e.target.checked }))}
+          onChange={(e) => executar(`${chaveCanal}:canal`, chamar("/api/avisos-config/canal", "PATCH", { evento, canal, ativo: e.target.checked }), chaveCanal)}
         />
         <span className="text-sm font-semibold text-gray-900">{ROTULO_CANAL[canal]}</span>
         <span className="text-xs" style={{ color: ligado ? "#166534" : "#6B7280" }}>{ligado ? "ligado" : "desligado"}</span>
       </label>
       <p className="text-xs text-gray-500 mb-3">{situacao}</p>
+      {erroInline?.escopo === chaveCanal && <ErroInline texto={erroInline.texto} onFechar={fecharErro} />}
 
       {lista.length > 0 && (
         <div style={{ border: "1px solid #F3F4F6", borderRadius: 6 }} className="mb-3">
           {linhas.map(({ d, titulo, detalhe }) => {
             return (
-              <div key={d.id} className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 last:border-0" style={{ opacity: d.ativo ? 1 : 0.55 }}>
+              <div key={d.id} className="px-3 border-b border-gray-100 last:border-0">
+              <div className="flex items-center gap-2 py-2" style={{ opacity: d.ativo ? 1 : 0.55 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="text-sm text-gray-900 truncate">{titulo} <span className="text-xs text-gray-400">({d.tipo_destinatario === "usuario" ? "usuário" : "e-mail livre"})</span></div>
                   {detalhe && <div className="text-xs text-gray-500 truncate">{detalhe}</div>}
@@ -277,7 +325,7 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
                   aria-label={`${d.ativo ? "Desativar" : "Ativar"} ${titulo}`}
                   title={`${d.ativo ? "Desativar" : "Ativar"} ${titulo}`}
                   disabled={bloqueado}
-                  onClick={() => executar(`${d.id}:ativo`, chamar(`/api/avisos-config/destinatarios/${d.id}`, "PATCH", { ativo: !d.ativo }))}
+                  onClick={() => executar(`${d.id}:ativo`, chamar(`/api/avisos-config/destinatarios/${d.id}`, "PATCH", { ativo: !d.ativo }), d.id)}
                 >
                   {d.ativo ? "Desativar" : "Ativar"}
                 </button>
@@ -288,11 +336,13 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
                   disabled={bloqueado}
                   onClick={() => {
                     const quem = detalhe ? `${titulo} (${detalhe})` : titulo;
-                    if (window.confirm(`Remover "${quem}" do canal ${ROTULO_CANAL[canal]} neste aviso? Esta ação não pode ser desfeita.`)) executar(`${d.id}:rm`, chamar(`/api/avisos-config/destinatarios/${d.id}`, "DELETE"));
+                    if (window.confirm(`Remover "${quem}" do canal ${ROTULO_CANAL[canal]} neste aviso? Esta ação não pode ser desfeita.`)) executar(`${d.id}:rm`, chamar(`/api/avisos-config/destinatarios/${d.id}`, "DELETE"), d.id);
                   }}
                 >
                   Remover
                 </button>
+              </div>
+              {erroInline?.escopo === d.id && <ErroInline texto={erroInline.texto} onFechar={fecharErro} />}
               </div>
             );
           })}
