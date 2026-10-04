@@ -5,10 +5,27 @@ import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import SeletorHorarioIniciarAdmissao from "@/components/admissao/SeletorHorarioIniciarAdmissao";
 
+// Admissão pode começar com o candidato ainda em aprovado_cliente, mas "contratado" só é gravado por
+// "Finalizar processo" no Kanban (api/candidatos-vagas/[id]/finalizar) — sem isso o candidato fica
+// com admissão e funcionário criados e etapa "Retorno Cliente". Só avisa, nunca bloqueia.
+function AvisoFinalizacaoPendente({ vagaId }: { vagaId: string }) {
+  return (
+    <div className="rounded-lg p-3 mb-4 text-sm" style={{ background: "#FFFBEB", border: "1px solid #FDE68A", color: "#92400E" }}>
+      <p>Este candidato ainda não foi finalizado no Kanban. Finalize o processo (data de início) para que ele conste como contratado.</p>
+      <a href={`/painel/vagas/${vagaId}`} target="_blank" rel="noopener noreferrer" className="underline font-semibold">
+        Abrir a vaga no Kanban
+      </a>
+    </div>
+  );
+}
+
 export interface CandidatoElegivel {
   id: string;
   candidato_id: string;
   vaga_id: string;
+  // Etapa atual da candidatura (aprovado_cliente ou contratado na lista de elegíveis). Opcional:
+  // quem vem de "Disponíveis para admissão" (preSelecionado) já é contratado e não traz o campo.
+  etapa?: string | null;
   candidatos: { id: string; nome_completo: string; cargo_pretendido: string; telefone: string | null } | null;
   vagas: {
     id: string;
@@ -293,6 +310,8 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
               </div>
             )}
 
+            {selecionado?.etapa === "aprovado_cliente" && <AvisoFinalizacaoPendente vagaId={selecionado.vaga_id} />}
+
             {erro && <p className="text-red-600 text-sm mb-3">{erro}</p>}
 
             <div className="flex gap-3">
@@ -308,6 +327,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
               <p className="font-semibold text-gray-900">{selecionado?.candidatos?.nome_completo ?? "—"}</p>
               <p className="text-xs text-gray-500">{selecionado?.candidatos?.cargo_pretendido} · {selecionado?.vagas?.titulo}</p>
             </div>
+            {selecionado?.etapa === "aprovado_cliente" && <AvisoFinalizacaoPendente vagaId={selecionado.vaga_id} />}
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
               Dados da admissão — preenchidos pelo RH antes de gerar o link
             </p>
