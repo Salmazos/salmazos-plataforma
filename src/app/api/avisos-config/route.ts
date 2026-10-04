@@ -12,10 +12,12 @@ export async function GET() {
   if (acessoNegado) return acessoNegado;
 
   const svc = createServiceClient();
+  // order("id") é o desempate: listas criadas num único comando têm criado_em idêntico, e sem ele o
+  // Postgres pode devolver as linhas em outra ordem a cada consulta (a linha pula depois de um UPDATE).
   const [eventos, canais, destinatarios, usuarios] = await Promise.all([
     svc.from("aviso_eventos").select("evento, grupo, descricao, canais_suportados"),
     svc.from("aviso_eventos_canais").select("evento, canal, ativo"),
-    svc.from("aviso_destinatarios").select("id, evento, canal, tipo_destinatario, usuario_id, email, nome, ativo, criado_em").order("criado_em"),
+    svc.from("aviso_destinatarios").select("id, evento, canal, tipo_destinatario, usuario_id, email, nome, ativo, criado_em").order("criado_em").order("id"),
     svc.from("analistas_perfil").select("user_id, nome_completo, email").eq("ativo", true).order("nome_completo"),
   ]);
 
