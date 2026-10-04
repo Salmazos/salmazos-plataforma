@@ -140,7 +140,10 @@ A branch `fix/avisos-unificados-fase1` fica como referência.
 - **Erro inline na tela de Avisos.** Ações que falham na API (ativar/desativar, remover, adicionar, ligar/desligar canal,
   restaurar padrão) mostram o erro junto da linha ou do bloco clicado, em vermelho discreto, e some sozinho em alguns
   segundos, ao fechar ou na próxima ação. A mensagem global do topo ficou só para falha de rede. A regra do último
-  destinatário (409) não mudou.
+  destinatário (409) não mudou. Em desativar e remover, o 409 sempre mostra "Não é possível: este é o último
+  destinatário ativo do canal. Adicione outra pessoa antes ou desligue o canal." (`src/lib/avisosErroAcao.ts`); o aviso
+  rola até a vista sem ir ao topo. Desligar o canal nunca dá 409 (a API não bloqueia). Depois de um deploy, uma aba
+  aberta antes continua com o JavaScript antigo: recarregue a página (Ctrl+F5) para ver a versão nova.
 - **Resultado do pedido no portal do cliente** (`/portal/solicitacoes`). Cada card mostra, por tipo (alteração,
   encerramento, reativação), o pedido mais recente: pendente ("enviado, aguardando decisão"), aprovado ou recusado com a
   data. O motivo só aparece na recusa e é o mesmo `motivo_recusa` que o cliente já recebe por e-mail. Decididos há mais

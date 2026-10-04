@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { mensagemErroAcao } from "@/lib/avisosErroAcao";
 import { grupoTemPadrao } from "@/lib/avisosPadrao";
 import {
   NOTA_EVENTO,
@@ -29,21 +30,18 @@ interface Dados { canais: CanalCfg[]; destinatarios: Destinatario[]; usuarios: U
 
 const GRUPOS: GrupoAviso[] = ["vagas", "rescisao", "aso", "portal_cliente"];
 
-// Texto de reserva quando a API bloqueia (409) sem devolver mensagem: é a regra do último destinatário.
-const MSG_ULTIMO_DESTINATARIO =
-  "Não é possível: este é o último destinatário ativo do canal. Adicione outra pessoa antes ou desligue o canal.";
 // Quanto tempo o erro inline fica na tela antes de sumir sozinho.
 const TEMPO_ERRO_INLINE_MS = 8000;
 
 interface Resultado { ok: boolean; erro?: string; rede?: boolean }
 
-async function chamar(url: string, method: string, body?: unknown): Promise<Resultado> {
+// `acaoDeLinha`: desativar/remover um destinatário, onde o 409 é a regra do último destinatário ativo.
+async function chamar(url: string, method: string, body?: unknown, acaoDeLinha = false): Promise<Resultado> {
   try {
     const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
     if (res.ok) return { ok: true };
     const json = await res.json().catch(() => ({}));
-    const padrao = res.status === 409 ? MSG_ULTIMO_DESTINATARIO : "Não foi possível concluir a ação.";
-    return { ok: false, erro: typeof json.error === "string" && json.error ? json.error : padrao };
+    return { ok: false, erro: mensagemErroAcao(res.status, json, acaoDeLinha) };
   } catch {
     return { ok: false, erro: "Falha de conexão. Tente novamente.", rede: true };
   }
@@ -52,8 +50,14 @@ async function chamar(url: string, method: string, body?: unknown): Promise<Resu
 // Erro de uma ação, mostrado junto de onde o usuário clicou (`escopo`: id da linha, "evento:canal" do
 // bloco ou "restaurar"). A mensagem global do topo fica só para falha de rede.
 function ErroInline({ texto, onFechar }: { texto: string; onFechar: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Se a linha clicada estiver perto da borda da tela, traz o aviso para a vista (sem ir ao topo).
+  useEffect(() => {
+    ref.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  }, []);
   return (
     <div
+      ref={ref}
       role="alert"
       className="flex items-start gap-2 text-xs rounded-md px-2.5 py-1.5 my-2"
       style={{ background: "#FEF2F2", color: "#B91C1C", border: "1px solid #FECACA" }}
@@ -325,7 +329,7 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
                   aria-label={`${d.ativo ? "Desativar" : "Ativar"} ${titulo}`}
                   title={`${d.ativo ? "Desativar" : "Ativar"} ${titulo}`}
                   disabled={bloqueado}
-                  onClick={() => executar(`${d.id}:ativo`, chamar(`/api/avisos-config/destinatarios/${d.id}`, "PATCH", { ativo: !d.ativo }), d.id)}
+                  onClick={() => executar(`${d.id}:ativo`, chamar(`/api/avisos-config/destinatarios/${d.id}`, "PATCH", { ativo: !d.ativo }, true), d.id)}
                 >
                   {d.ativo ? "Desativar" : "Ativar"}
                 </button>
@@ -336,7 +340,7 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
                   disabled={bloqueado}
                   onClick={() => {
                     const quem = detalhe ? `${titulo} (${detalhe})` : titulo;
-                    if (window.confirm(`Remover "${quem}" do canal ${ROTULO_CANAL[canal]} neste aviso? Esta ação não pode ser desfeita.`)) executar(`${d.id}:rm`, chamar(`/api/avisos-config/destinatarios/${d.id}`, "DELETE"), d.id);
+                    if (window.confirm(`Remover "${quem}" do canal ${ROTULO_CANAL[canal]} neste aviso? Esta ação não pode ser desfeita.`)) executar(`${d.id}:rm`, chamar(`/api/avisos-config/destinatarios/${d.id}`, "DELETE", undefined, true), d.id);
                   }}
                 >
                   Remover

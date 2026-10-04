@@ -7,6 +7,7 @@ import {
 } from "../src/lib/avisosResolucao.ts";
 import { PADRAO_AVISOS, grupoTemPadrao, montarPayloadRestauracao } from "../src/lib/avisosPadrao.ts";
 import { EVENTOS_POR_GRUPO, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
+import { mensagemErroAcao, MSG_ULTIMO_DESTINATARIO, MSG_ACAO_PADRAO } from "../src/lib/avisosErroAcao.ts";
 import { resumirPedidoCliente, type LinhaPedidoCliente } from "../src/lib/pedidoClienteResumo.ts";
 import { EVENTO_POR_TIPO_PEDIDO, TIPOS_PEDIDO_CLIENTE, tiposVisiveis, chaveVisto } from "../src/lib/pedidosClientePopup.ts";
 
@@ -502,6 +503,24 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("ajuste 3: o resumo só tem status, data e motivo (nada interno vai ao cliente)", () => {
     const r = resumirPedidoCliente([{ ...pedido("recusada", "2026-10-01T10:00:00Z", "2026-10-05T15:00:00Z", "m"), decidido_por: "Analista X" } as LinhaPedidoCliente], AGORA)!;
     assert.deepEqual(Object.keys(r).sort(), ["data", "motivo_recusa", "status"]);
+  });
+
+  // ── Erro inline da tela de Avisos (409 → mensagem), sem rede ──
+  const TEXTO_409 = "Não é possível: este é o último destinatário ativo do canal. Adicione outra pessoa antes ou desligue o canal.";
+  await caso("erro inline: texto do último destinatário é exatamente o combinado", () => assert.equal(MSG_ULTIMO_DESTINATARIO, TEXTO_409));
+  await caso("erro inline: 409 em desativar/remover (ação de linha) sempre usa o texto do último destinatário, mesmo com outro texto da API", () => {
+    assert.equal(mensagemErroAcao(409, { error: "Não é possível remover ou desativar o último destinatário ativo de \"x\"…" }, true), TEXTO_409);
+    assert.equal(mensagemErroAcao(409, {}, true), TEXTO_409); assert.equal(mensagemErroAcao(409, null, true), TEXTO_409); assert.equal(mensagemErroAcao(409, undefined, true), TEXTO_409);
+  });
+  await caso("erro inline: 409 de outra ação (adicionar duplicado) mantém o texto da API", () => {
+    assert.equal(mensagemErroAcao(409, { error: "Este destinatário já está cadastrado para este aviso." }), "Este destinatário já está cadastrado para este aviso.");
+  });
+  await caso("erro inline: 409 sem texto e fora de ação de linha cai no texto do último destinatário", () => assert.equal(mensagemErroAcao(409, {}), TEXTO_409));
+  await caso("erro inline: outros status usam o texto da API (error, mensagem ou message) ou o padrão", () => {
+    assert.equal(mensagemErroAcao(400, { error: "Analista inativo ou não encontrado." }, true), "Analista inativo ou não encontrado.");
+    assert.equal(mensagemErroAcao(500, { mensagem: "falhou" }), "falhou"); assert.equal(mensagemErroAcao(500, { message: "falhou 2" }), "falhou 2");
+    assert.equal(mensagemErroAcao(500, {}), MSG_ACAO_PADRAO); assert.equal(mensagemErroAcao(404, { error: "   " }, true), MSG_ACAO_PADRAO);
+    assert.equal(mensagemErroAcao(400, { error: 42 }), MSG_ACAO_PADRAO);
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);
