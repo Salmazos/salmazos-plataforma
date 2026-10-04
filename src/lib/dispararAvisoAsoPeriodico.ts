@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { formatarDataSemFuso } from "@/lib/utils";
+import { resolverDestinatarios } from "@/lib/avisos";
 
 // ASO PERIÓDICO (admissional/renovação a cada 12 meses, funcionário ativo) — nada aqui
 // lê, escreve ou referencia `rescisoes`/`aso_documento_path` (ASO demissional), que é um
@@ -105,24 +106,21 @@ export async function dispararAvisoAsoPeriodico(
       dataVencimento
     );
 
-    const [{ data: emailDestinatarios, error: emailDestError }, { data: plataformaDestinatarios, error: plataformaDestError }] =
-      await Promise.all([
-        svc.from("funcionario_aso_avisos_email_destinatarios").select("id, nome, email").eq("ativo", true),
-        svc.from("funcionario_aso_avisos_plataforma_destinatarios").select("usuario_id"),
-      ]);
+    // Lista e liga/desliga por evento em Configurações > Avisos (fallback: tabelas antigas de ASO).
+    const evento = `aso_periodico_${momento}`;
+    const [email, sino] = await Promise.all([resolverDestinatarios(evento, "email"), resolverDestinatarios(evento, "sino")]);
 
-    if (emailDestError || plataformaDestError) {
-      console.error(
-        `[dispararAvisoAsoPeriodico] Erro ao buscar configuração global de destinatários (funcionario_id=${funcionarioId}):`,
-        emailDestError?.message ?? plataformaDestError?.message
-      );
+    if (email.falhou || sino.falhou) {
+      console.error(`[dispararAvisoAsoPeriodico] Erro ao buscar configuração de destinatários (funcionario_id=${funcionarioId})`);
       return { sucesso: false };
     }
+    const emailDestinatarios = email.modo === "configurado" ? email.emails : [];
+    const plataformaUserIds = sino.modo === "configurado" ? sino.userIds : [];
 
     let algumEmailFalhou = false;
 
     // ── Canal 1: e-mail ──────────────────────────────────────────────────────
-    if (emailDestinatarios && emailDestinatarios.length > 0) {
+    if (emailDestinatarios.length > 0) {
       const html = montarHtmlEmail(tituloEmail, corDestaque, funcionario.nome_completo, empresaNome, dataVencimento, funcionarioId);
 
       const resultados = await Promise.all(
@@ -141,12 +139,12 @@ export async function dispararAvisoAsoPeriodico(
     let plataformaFalhou = false;
 
     // ── Canal 2 e 3: sino + popup (mesma linha em notificacoes_analista alimenta os dois) ──
-    if (plataformaDestinatarios && plataformaDestinatarios.length > 0) {
-      const rows = plataformaDestinatarios.map((d) => ({
+    if (plataformaUserIds.length > 0) {
+      const rows = plataformaUserIds.map((usuarioId) => ({
         tipo: `aso_periodico_${momento}`,
         titulo,
         mensagem,
-        user_id: d.usuario_id,
+        user_id: usuarioId,
         candidato_id: null,
         funcionario_id: funcionarioId,
       }));

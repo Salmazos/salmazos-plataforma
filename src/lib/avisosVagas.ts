@@ -1,7 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { analistaAtendeUnidade } from "@/lib/notifyAllAnalysts";
-
-type ServiceClient = ReturnType<typeof createServiceClient>;
+import { resolverDestinatarios } from "@/lib/avisos";
 
 export type EventoAvisoVaga = "vaga_criada" | "solicitacao_vaga" | "vaga_fechada" | "vaga_cancelada" | "vaga_reativada";
 
@@ -11,7 +9,7 @@ interface AvisoVagaEmailMode {
 }
 
 interface AvisoVagaPlataformaMode {
-  modo: "legado" | "configurado";
+  modo: "legado" | "desligado" | "configurado";
   userIds?: string[];
 }
 
@@ -20,90 +18,37 @@ interface ResolverAvisoVagaResult {
   plataforma: AvisoVagaPlataformaMode;
 }
 
+// Quem recebe o aviso de vaga em cada canal. A decisão (tabelas novas de Avisos, com fallback
+// para as tabelas antigas de vagas) mora em resolverDestinatarios; aqui só se mantém o formato
+// que os chamadores já usam. Falha de leitura = modo legado (aviso nunca derruba a ação).
 export async function resolverAvisoVaga(
   evento: EventoAvisoVaga,
   unidadeId: string | null | undefined
 ): Promise<ResolverAvisoVagaResult> {
-  const supabase = createServiceClient();
-
+  const legado: ResolverAvisoVagaResult = { email: { modo: "legado" }, plataforma: { modo: "legado" } };
   try {
-    // Resolver modo e-mail
-    const { data: configEmail, error: errConfig } = await supabase
-      .from("aviso_vaga_config")
-      .select("email_ativo")
-      .eq("evento", evento)
-      .single();
+    // `?? null` de propósito: para vagas o filtro de analista ativo/unidade vale mesmo sem unidade.
+    const [email, sino] = await Promise.all([
+      resolverDestinatarios(evento, "email", unidadeId ?? null),
+      resolverDestinatarios(evento, "sino", unidadeId ?? null),
+    ]);
+    if (email.falhou) return legado;
 
-    if (errConfig) {
-      console.error(`[resolverAvisoVaga] Erro ao buscar config de e-mail (evento="${evento}"):`, errConfig.message);
-      return { email: { modo: "legado" }, plataforma: { modo: "legado" } };
-    }
+    const emailMode: AvisoVagaEmailMode =
+      email.modo === "configurado" ? { modo: "configurado", destinatarios: email.emails } : { modo: email.modo };
+    if (sino.falhou) return { email: emailMode, plataforma: { modo: "legado" } };
 
-    let emailMode: AvisoVagaEmailMode;
-    if (configEmail?.email_ativo === false) {
-      emailMode = { modo: "desligado" };
-    } else {
-      const { data: destinatarios, error: errDest } = await supabase
-        .from("aviso_vaga_email_destinatarios")
-        .select("nome, email")
-        .eq("evento", evento)
-        .eq("ativo", true);
-
-      if (errDest) {
-        console.error(`[resolverAvisoVaga] Erro ao buscar destinatários de e-mail (evento="${evento}"):`, errDest.message);
-        return { email: { modo: "legado" }, plataforma: { modo: "legado" } };
-      }
-
-      if ((destinatarios ?? []).length === 0) {
-        emailMode = { modo: "legado" };
-      } else {
-        emailMode = { modo: "configurado", destinatarios: destinatarios ?? [] };
-      }
-    }
-
-    // Resolver modo plataforma
-    const { data: destPlataforma, error: errPlat } = await supabase
-      .from("aviso_vaga_plataforma_destinatarios")
-      .select("usuario_id")
-      .eq("evento", evento);
-
-    if (errPlat) {
-      console.error(`[resolverAvisoVaga] Erro ao buscar destinatários de plataforma (evento="${evento}"):`, errPlat.message);
-      return { email: emailMode, plataforma: { modo: "legado" } };
-    }
-
-    const userIdsConfigured = (destPlataforma ?? []).map((d) => d.usuario_id);
-    if (userIdsConfigured.length === 0) {
-      return { email: emailMode, plataforma: { modo: "legado" } };
-    }
-
-    // Buscar analistas_perfil desses usuários
-    const { data: analistas, error: errAnalistas } = await supabase
-      .from("analistas_perfil")
-      .select("user_id, ativo, unidade_id, acesso_todas_unidades")
-      .in("user_id", userIdsConfigured);
-
-    if (errAnalistas) {
-      console.error(`[resolverAvisoVaga] Erro ao buscar analistas (evento="${evento}"):`, errAnalistas.message);
-      return { email: emailMode, plataforma: { modo: "legado" } };
-    }
-
-    // Filtrar: ativos e que passam em analistaAtendeUnidade
-    const userIdsFiltrados = (analistas ?? [])
-      .filter((a) => a.ativo === true && analistaAtendeUnidade(a, unidadeId))
-      .map((a) => a.user_id);
-
-    // Se havia usuários configurados mas nenhum passou no filtro
-    if (userIdsConfigured.length > 0 && userIdsFiltrados.length === 0) {
+    if (sino.modo === "configurado" && sino.userIds.length === 0) {
       console.warn(
         `[resolverAvisoVaga] Evento "${evento}" tem destinatários configurados, mas NENHUM passou no filtro de unidade/ativo (unidadeId="${unidadeId}")`
       );
     }
-
-    return { email: emailMode, plataforma: { modo: "configurado", userIds: userIdsFiltrados } };
+    const plataforma: AvisoVagaPlataformaMode =
+      sino.modo === "configurado" ? { modo: "configurado", userIds: sino.userIds } : { modo: sino.modo };
+    return { email: emailMode, plataforma };
   } catch (err) {
     console.error("[resolverAvisoVaga] Erro inesperado:", err);
-    return { email: { modo: "legado" }, plataforma: { modo: "legado" } };
+    return legado;
   }
 }
 
@@ -130,6 +75,11 @@ export async function gravarSinoAvisoVaga({
 }: GravarSinoAvisoVagaOpts): Promise<void> {
   const supabase = createServiceClient();
   const modo = resolvido ?? await resolverAvisoVaga(evento, unidadeId);
+
+  if (modo.plataforma.modo === "desligado") {
+    // Canal Sino desligado em Avisos: ninguém recebe.
+    return;
+  }
 
   if (modo.plataforma.modo === "legado") {
     // Modo legado: uma linha com user_id nulo e unidade_id

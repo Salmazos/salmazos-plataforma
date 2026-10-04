@@ -1370,6 +1370,42 @@ export const avisoVagaPlataformaCreateSchema = z.object({
   usuario_id: z.string().uuid(),
 });
 
+// ── Avisos unificados (Configurações > Avisos) ───────────────────────────────
+
+const avisoConfigEvento = z.string().trim().min(1).max(80);
+const avisoConfigCanal = z.enum(["email", "sino", "popup"]);
+
+export const avisoConfigCanalSchema = z.object({
+  evento: avisoConfigEvento,
+  canal: avisoConfigCanal,
+  ativo: z.boolean(),
+});
+
+export const avisoConfigDestinatarioCreateSchema = z.discriminatedUnion("tipo_destinatario", [
+  z.object({
+    evento: avisoConfigEvento,
+    canal: avisoConfigCanal,
+    tipo_destinatario: z.literal("usuario"),
+    usuario_id: z.string().uuid(),
+  }),
+  z.object({
+    evento: avisoConfigEvento,
+    canal: avisoConfigCanal,
+    tipo_destinatario: z.literal("email"),
+    nome: z.string().trim().min(1, "Nome é obrigatório").max(120),
+    email: z.string().trim().email("E-mail inválido").max(200),
+  }),
+]);
+
+// Vagas e Portal do cliente têm "padrão do sistema"; rescisão e aso entram aqui depois.
+export const avisoConfigRestaurarPadraoSchema = z.object({
+  grupo: z.enum(["vagas", "portal_cliente"]),
+});
+
+export const avisoConfigDestinatarioUpdateSchema = z.object({
+  ativo: z.boolean(),
+});
+
 // ── Comercial (funil de oportunidades) ───────────────────────────────────────
 
 const dataIsoComercial = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida (use AAAA-MM-DD).");

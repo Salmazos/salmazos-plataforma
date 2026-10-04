@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import AvisoMigradoBanner from "@/components/AvisoMigradoBanner";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import AvisosVagasConfigClient from "@/components/AvisosVagasConfigClient";
 
@@ -46,6 +47,9 @@ export default async function AvisosVagasConfigPage() {
   );
 
   return (
+    <>
+      <AvisoMigradoBanner />
     <AvisosVagasConfigClient configsPorEvento={configsPorEvento} usuarios={usuarios ?? []} />
+    </>
   );
 }

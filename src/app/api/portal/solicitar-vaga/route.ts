@@ -261,8 +261,15 @@ export async function POST(request: NextRequest) {
         console.error(
           `[POST /api/portal/solicitar-vaga] Notificação por e-mail NÃO foi entregue a ninguém para solicitacao_id=${solicitacao.id} (${motivo}).`
         );
-        if (analistas && analistas.length > 0) {
-          const alertas = analistas
+        // Somente superuser, por decisão do diretor. Consulta própria (e não `analistas`, acima):
+        // aquela lista continua decidindo o sino de nova solicitação (diretoria + superuser).
+        const { data: superusers } = await service
+          .from("analistas_perfil")
+          .select("user_id")
+          .eq("nivel_acesso", "superuser")
+          .eq("ativo", true);
+        if (superusers && superusers.length > 0) {
+          const alertas = superusers
             .filter((a) => a.user_id)
             .map((a) => ({
               tipo: "email_falhou",

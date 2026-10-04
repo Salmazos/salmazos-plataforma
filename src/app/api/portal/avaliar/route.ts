@@ -5,6 +5,9 @@ import { registrarAuditoria } from "@/lib/audit";
 import { sendEmail } from "@/lib/sendEmail";
 import { parseBody, portalAvaliarSchema } from "@/lib/schemas";
 import { buscarPerfilResponsavel } from "@/lib/perfilResponsavel";
+import { resolverDestinatarios } from "@/lib/avisos";
+import { escaparHtml } from "@/lib/emailPacoteContabilidade";
+import { emailsOuPadrao, emailsSomenteConfigurado } from "@/lib/avisosResolucao";
 
 export async function PATCH(request: NextRequest) {
   try {
@@ -375,12 +378,17 @@ export async function PATCH(request: NextRequest) {
 </div>
 </body></html>`;
 
-        // rh@ nunca esteve nessa lista — só o Olver recebia. Corrigido a pedido dele
-        // (set/2026): o RH (Andreza) precisa desses dados de admissão pra montar a
-        // documentação, e ficava sabendo da aprovação só de segunda mão.
+        // Padrão antigo (fixo no código) — vale enquanto não houver configuração em Configurações >
+        // Avisos (evento portal_candidato_aprovado). rh@ nunca esteve nessa lista até set/2026:
+        // corrigido a pedido do Olver, o RH (Andreza) precisa desses dados de admissão pra montar a
+        // documentação.
         const DESTINATARIOS_APROVACAO_CLIENTE = ["olver@salmazos.com.br", "rh@salmazos.com.br"];
+        const destinatariosAprovacao = emailsOuPadrao(
+          await resolverDestinatarios("portal_candidato_aprovado", "email"),
+          DESTINATARIOS_APROVACAO_CLIENTE
+        );
         await Promise.all(
-          DESTINATARIOS_APROVACAO_CLIENTE.map((destinatario) =>
+          destinatariosAprovacao.map((destinatario) =>
             sendEmail({
               to: destinatario,
               subject: `✅ Aprovação de Candidato — ${candidatoNome} — ${clienteNome}`,
@@ -393,6 +401,62 @@ export async function PATCH(request: NextRequest) {
         );
       } catch (emailErr) {
         console.error("[avaliar] Erro ao enviar email de notificação:", emailErr);
+      }
+    }
+
+    // E-mail interno de REPROVAÇÃO: não existia. Só sai se o aviso portal_candidato_reprovado
+    // estiver ligado e com destinatários em Configurações > Avisos (vem desligado). Nunca derruba
+    // a ação do cliente.
+    if (status === "reprovado") {
+      try {
+        const destinatariosReprovacao = emailsSomenteConfigurado(await resolverDestinatarios("portal_candidato_reprovado", "email"));
+        if (destinatariosReprovacao.length > 0) {
+          const [{ data: candR }, { data: cliR }, vagaR] = await Promise.all([
+            service.from("candidatos").select("nome_completo").eq("id", enc.candidato_id).single(),
+            service.from("clientes").select("nome").eq("id", clienteUsuario.cliente_id).single(),
+            enc.vaga_id
+              ? service.from("vagas").select("titulo").eq("id", enc.vaga_id).single()
+              : Promise.resolve({ data: null as { titulo: string } | null }),
+          ]);
+          const candidatoNomeR = candR?.nome_completo ?? "Candidato";
+          const clienteNomeR = cliR?.nome ?? "Cliente";
+          const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
+<div style="max-width:600px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
+  <div style="background:#000;padding:28px 32px;text-align:center">
+    <h1 style="color:#FFD700;margin:0;font-size:20px">Candidato Reprovado pelo Cliente</h1>
+  </div>
+  <div style="padding:28px 32px">
+    <p style="margin:0 0 4px;font-size:16px;font-weight:700;color:#111827">${escaparHtml(candidatoNomeR)}</p>
+    <p style="margin:0 0 16px;font-size:13px;color:#6B7280">${escaparHtml(clienteNomeR)}${vagaR.data?.titulo ? ` · ${escaparHtml(vagaR.data.titulo)}` : ""}</p>
+    <div style="padding:12px 16px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca">
+      <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#991B1B;text-transform:uppercase;letter-spacing:.07em">Feedback do Cliente</p>
+      <p style="margin:0;font-size:13px;color:#374151;line-height:1.6">${escaparHtml(feedback_cliente ?? "")}</p>
+    </div>
+    <div style="text-align:center;padding-top:16px;margin-top:16px;border-top:1px solid #f3f4f6">
+      <a href="https://salmazos-plataforma.vercel.app/painel/candidato/${enc.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil completo</a>
+    </div>
+  </div>
+  <div style="background:#f9fafb;padding:16px 32px;text-align:center">
+    <p style="margin:0;font-size:11px;color:#9CA3AF">Salmazos RH &amp; Serviços — Notificação automática</p>
+  </div>
+</div>
+</body></html>`;
+          await Promise.all(
+            destinatariosReprovacao.map((destinatario) =>
+              sendEmail({
+                to: destinatario,
+                subject: `Reprovação de Candidato — ${candidatoNomeR} — ${clienteNomeR}`,
+                html,
+                tipo: "reprovacao_cliente",
+                candidato_id: enc.candidato_id,
+                vaga_id: enc.vaga_id ?? undefined,
+              })
+            )
+          );
+        }
+      } catch (emailErr) {
+        console.error("[avaliar] Erro ao enviar email de reprovação:", emailErr);
       }
     }
 

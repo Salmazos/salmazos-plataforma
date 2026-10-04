@@ -1,3 +1,5 @@
+import { resolverDestinatarios } from "@/lib/avisos";
+import { emailsOuPadrao } from "@/lib/avisosResolucao";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
@@ -532,7 +534,10 @@ export async function POST(request: NextRequest, { params }: Params) {
 </div>
 </body></html>`;
 
-      const DESTINATARIOS = ["olver@salmazos.com.br", "rh@salmazos.com.br"];
+      // Padrão antigo (fixo) vale enquanto não houver config em Configurações > Avisos
+      // (evento indicacao_decisao_cliente).
+      const DESTINATARIOS_PADRAO = ["olver@salmazos.com.br", "rh@salmazos.com.br"];
+      const DESTINATARIOS = emailsOuPadrao(await resolverDestinatarios("indicacao_decisao_cliente", "email"), DESTINATARIOS_PADRAO);
       await Promise.all(
         DESTINATARIOS.map((destinatario) =>
           sendEmail({
