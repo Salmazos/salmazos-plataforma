@@ -7,6 +7,7 @@ import {
 } from "../src/lib/avisosResolucao.ts";
 import { PADRAO_AVISOS, grupoTemPadrao, montarPayloadRestauracao } from "../src/lib/avisosPadrao.ts";
 import { EVENTOS_POR_GRUPO, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
+import { resumirPedidoCliente, type LinhaPedidoCliente } from "../src/lib/pedidoClienteResumo.ts";
 import { EVENTO_POR_TIPO_PEDIDO, TIPOS_PEDIDO_CLIENTE, tiposVisiveis, chaveVisto } from "../src/lib/pedidosClientePopup.ts";
 
 let total = 0;
@@ -456,6 +457,51 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     const vazio = montarPayloadRestauracao("portal_cliente", new Set());
     assert.ok(vazio.semDestinatario.some((x) => x.evento === "vaga_pausa_pedida" && x.canal === "popup"));
     assert.ok(vazio.semDestinatario.some((x) => x.evento === "agendamento_cliente" && x.canal === "sino"));
+  });
+
+  // ── Ajustes pós-teste: rótulo do encerramento e resultado do pedido no portal ──
+  await caso("ajuste 1: evento vaga_pausa_pedida mostra 'Cliente pediu encerramento de vaga' (id e canais iguais)", () => {
+    assert.equal(ROTULO_EVENTO.vaga_pausa_pedida, "Cliente pediu encerramento de vaga");
+    assert.ok(EVENTOS_PEDIDO_CLIENTE.includes("vaga_pausa_pedida")); assert.deepEqual([...canaisDoEvento("vaga_pausa_pedida")], ["email", "sino", "popup"]);
+    assert.match(NOTA_EVENTO.vaga_pausa_pedida, /encerramento/); assert.match(NOTA_EVENTO.vaga_pausa_pedida, /painel de Vagas/);
+    assert.ok(!Object.values(ROTULO_EVENTO).some((r) => r.includes("pausa ou encerramento")));
+  });
+
+  const AGORA = new Date("2026-10-10T12:00:00Z");
+  const pedido = (status: string, criado: string, decidido: string | null = null, motivo: string | null = null): LinhaPedidoCliente => ({ status, criado_em: criado, decidido_em: decidido, motivo_recusa: motivo });
+  await caso("ajuste 3: sem pedidos = nada no card", () => assert.equal(resumirPedidoCliente([], AGORA), null));
+  await caso("ajuste 3: pendente aparece com a data de envio e sem motivo", () => {
+    const r = resumirPedidoCliente([pedido("pendente", "2026-10-09T10:00:00Z")], AGORA)!;
+    assert.deepEqual(r, { status: "pendente", data: "2026-10-09T10:00:00Z", motivo_recusa: null });
+  });
+  await caso("ajuste 3: pendente tem prioridade sobre decidido mais novo e mais antigo", () => {
+    const r = resumirPedidoCliente([pedido("recusada", "2026-10-01T10:00:00Z", "2026-10-02T10:00:00Z", "x"), pedido("pendente", "2026-10-08T10:00:00Z")], AGORA)!;
+    assert.equal(r.status, "pendente");
+  });
+  await caso("ajuste 3: recusado mostra a data da decisão e o motivo", () => {
+    const r = resumirPedidoCliente([pedido("recusada", "2026-10-01T10:00:00Z", "2026-10-05T15:00:00Z", "  Vaga já está em andamento  ")], AGORA)!;
+    assert.equal(r.status, "recusada"); assert.equal(r.data, "2026-10-05T15:00:00Z"); assert.equal(r.motivo_recusa, "Vaga já está em andamento");
+  });
+  await caso("ajuste 3: recusado sem motivo (ou só espaços) mostra só a recusa", () => {
+    assert.equal(resumirPedidoCliente([pedido("recusada", "2026-10-01T10:00:00Z", "2026-10-05T15:00:00Z", null)], AGORA)!.motivo_recusa, null);
+    assert.equal(resumirPedidoCliente([pedido("recusada", "2026-10-01T10:00:00Z", "2026-10-05T15:00:00Z", "   ")], AGORA)!.motivo_recusa, null);
+  });
+  await caso("ajuste 3: aprovado nunca expõe motivo, mesmo que exista texto gravado", () => {
+    const r = resumirPedidoCliente([pedido("aprovada", "2026-10-01T10:00:00Z", "2026-10-05T15:00:00Z", "nota interna")], AGORA)!;
+    assert.equal(r.status, "aprovada"); assert.equal(r.motivo_recusa, null);
+  });
+  await caso("ajuste 3: decidido há mais de 30 dias some; dentro dos 30 dias aparece", () => {
+    assert.equal(resumirPedidoCliente([pedido("aprovada", "2026-08-01T10:00:00Z", "2026-09-09T11:59:00Z")], AGORA), null);
+    assert.equal(resumirPedidoCliente([pedido("aprovada", "2026-08-01T10:00:00Z", "2026-09-11T12:00:00Z")], AGORA)!.status, "aprovada");
+  });
+  await caso("ajuste 3: substituído e status desconhecido nunca aparecem; o decidido mais recente vence", () => {
+    assert.equal(resumirPedidoCliente([pedido("substituida", "2026-10-08T10:00:00Z", "2026-10-09T10:00:00Z")], AGORA), null);
+    const r = resumirPedidoCliente([pedido("recusada", "2026-10-01T10:00:00Z", "2026-10-02T10:00:00Z", "a"), pedido("aprovada", "2026-10-03T10:00:00Z", "2026-10-06T10:00:00Z")], AGORA)!;
+    assert.equal(r.status, "aprovada");
+  });
+  await caso("ajuste 3: o resumo só tem status, data e motivo (nada interno vai ao cliente)", () => {
+    const r = resumirPedidoCliente([{ ...pedido("recusada", "2026-10-01T10:00:00Z", "2026-10-05T15:00:00Z", "m"), decidido_por: "Analista X" } as LinhaPedidoCliente], AGORA)!;
+    assert.deepEqual(Object.keys(r).sort(), ["data", "motivo_recusa", "status"]);
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);

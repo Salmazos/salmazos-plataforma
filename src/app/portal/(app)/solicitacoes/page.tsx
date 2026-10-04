@@ -8,6 +8,7 @@ import FormularioEdicaoSolicitacao, {
   type FormEdicaoSolicitacao,
 } from "@/components/FormularioEdicaoSolicitacao";
 import { ROTULO_MOTIVO_ENCERRAMENTO, type MotivoTipoEncerramento } from "@/lib/vagaPausaReativacao";
+import type { ResumoPedidoCliente } from "@/lib/pedidoClienteResumo";
 
 interface Solicitacao {
   id: string;
@@ -46,6 +47,49 @@ interface Solicitacao {
     criado_em: string;
     alteracoes: Record<string, { antes: unknown; depois: unknown }>;
   } | null;
+  // Resultado do pedido mais recente de cada tipo (pendente, aprovado ou recusado há até 30 dias).
+  pedidos: {
+    alteracao: ResumoPedidoCliente | null;
+    encerramento: ResumoPedidoCliente | null;
+    reativacao: ResumoPedidoCliente | null;
+  };
+}
+
+const ROTULO_TIPO_PEDIDO = { alteracao: "alteração", encerramento: "encerramento", reativacao: "reativação" } as const;
+
+const SELO_PEDIDO: Record<ResumoPedidoCliente["status"], { bg: string; borda: string; cor: string; icone: string }> = {
+  pendente: { bg: "#EFF6FF", borda: "#DBEAFE", cor: "#1E40AF", icone: "⏳" },
+  aprovada: { bg: "#F0FDF4", borda: "#BBF7D0", cor: "#166534", icone: "✓" },
+  recusada: { bg: "#FEF2F2", borda: "#FECACA", cor: "#991B1B", icone: "✗" },
+};
+
+const dataBr = (iso: string) => new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+// Selo discreto com o resultado do pedido. O texto carrega o estado (não só a cor).
+function SeloPedido({ tipo, pedido }: { tipo: keyof typeof ROTULO_TIPO_PEDIDO; pedido: ResumoPedidoCliente | null }) {
+  if (!pedido) return null;
+  const estilo = SELO_PEDIDO[pedido.status];
+  const nome = ROTULO_TIPO_PEDIDO[tipo];
+  const texto =
+    pedido.status === "pendente"
+      ? `Pedido de ${nome} enviado, aguardando decisão`
+      : `Pedido de ${nome} ${pedido.status === "aprovada" ? "aprovado" : "recusado"} em ${dataBr(pedido.data)}`;
+  return (
+    <div
+      role="status"
+      className="mt-3 rounded-lg px-3 py-2"
+      style={{ backgroundColor: estilo.bg, border: `1px solid ${estilo.borda}` }}
+    >
+      <p className="text-xs font-semibold" style={{ color: estilo.cor }}>
+        <span aria-hidden="true">{estilo.icone}</span> {texto}
+      </p>
+      {pedido.status === "recusada" && pedido.motivo_recusa && (
+        <p className="text-xs mt-1" style={{ color: estilo.cor }}>
+          Motivo: {pedido.motivo_recusa}
+        </p>
+      )}
+    </div>
+  );
 }
 
 const TIPO_BADGE: Record<string, { label: string; bg: string; color: string }> = {
@@ -298,30 +342,10 @@ export default function MinhasSolicitacoesPage() {
                   </Link>
                 )}
 
-                {/* Pedido de alteração: aguardando, ou último recusado com o motivo */}
-                {s.alteracao?.status === "pendente" && (
-                  <div className="mt-3 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
-                    <p className="text-xs font-semibold text-blue-800">
-                      {"✏️"} Alteração aguardando aprovação da Salmazos
-                    </p>
-                  </div>
-                )}
-                {s.alteracao?.status === "recusada" && s.alteracao.motivo_recusa && (
-                  <div className="mt-3 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
-                    <p className="text-xs font-bold text-red-700 uppercase mb-1">Alteração não aprovada</p>
-                    <p className="text-xs text-red-700">{s.alteracao.motivo_recusa}</p>
-                  </div>
-                )}
-
-                {/* Pedido de pausa/reabertura aguardando decisão da Salmazos */}
-                {s.status_pendente_acao && (
-                  <div className="mt-3 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
-                    <p className="text-xs font-semibold text-blue-800">
-                      {s.status_pendente_acao === "pausar" ? "⏸️" : "▶️"} Pedido de{" "}
-                      {s.status_pendente_acao === "pausar" ? "encerramento" : "reativação"} aguardando aprovação da Salmazos
-                    </p>
-                  </div>
-                )}
+                {/* Resultado do pedido mais recente de cada tipo (pendente, aprovado ou recusado) */}
+                <SeloPedido tipo="alteracao" pedido={s.pedidos.alteracao} />
+                <SeloPedido tipo="encerramento" pedido={s.pedidos.encerramento} />
+                <SeloPedido tipo="reativacao" pedido={s.pedidos.reativacao} />
 
                 {erroStatus?.id === s.id && (
                   <p className="text-xs text-red-600 mt-2">{erroStatus.msg}</p>
@@ -370,6 +394,15 @@ export default function MinhasSolicitacoesPage() {
                   </div>
                 ) : (
                   <div className="mt-3 flex justify-end gap-2 flex-wrap">
+                    {s.pedidos.reativacao?.status === "pendente" && (
+                      <button
+                        disabled
+                        aria-disabled="true"
+                        className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-400 font-semibold cursor-not-allowed"
+                      >
+                        {"▶️"} Pedido enviado
+                      </button>
+                    )}
                     {s.pode_solicitar_reativacao && (
                       <button
                         onClick={() => enviarPedidoReativacao(s.id)}
@@ -377,6 +410,15 @@ export default function MinhasSolicitacoesPage() {
                         className="text-xs px-3 py-1.5 rounded-lg border border-blue-300 text-blue-700 font-semibold hover:bg-blue-50 disabled:opacity-50"
                       >
                         {enviandoStatus === s.id ? "Enviando..." : "▶️ Solicitar reativação"}
+                      </button>
+                    )}
+                    {s.pedidos.encerramento?.status === "pendente" && (
+                      <button
+                        disabled
+                        aria-disabled="true"
+                        className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-400 font-semibold cursor-not-allowed"
+                      >
+                        {"⏸️"} Pedido enviado
                       </button>
                     )}
                     {s.pode_solicitar_pausa && (

@@ -20,7 +20,7 @@ export const EVENTOS_POR_GRUPO: Record<GrupoAviso, string[]> = {
 };
 
 // Pedidos do cliente que ficam pendentes até a Salmazos decidir (alteração de solicitação, reativação e
-// pausa/encerramento de vaga). Os três compartilham o popup "Pedidos do cliente", mas cada um tem a
+// encerramento de vaga). Os três compartilham o popup "Pedidos do cliente", mas cada um tem a
 // sua própria lista de destinatários.
 export const EVENTOS_PEDIDO_CLIENTE = ["solicitacao_alteracao_pedida", "vaga_reativacao_pedida", "vaga_pausa_pedida"] as const;
 
@@ -50,7 +50,7 @@ export const ROTULO_EVENTO: Record<string, string> = {
   indicacao_candidato_recebida: "Cliente enviou indicação direta de candidato",
   solicitacao_alteracao_pedida: "Cliente pediu alteração numa solicitação de vaga",
   vaga_reativacao_pedida: "Cliente pediu reativação de vaga",
-  vaga_pausa_pedida: "Cliente pediu pausa ou encerramento de vaga",
+  vaga_pausa_pedida: "Cliente pediu encerramento de vaga",
   agendamento_cliente: "Cliente agendou entrevista (quando o candidato não tem responsável)",
 };
 
@@ -82,7 +82,7 @@ export const NOTA_EVENTO: Record<string, string> = {
     "Dispara quando o cliente envia uma nova solicitação de vaga pelo portal. O popup lista as solicitações pendentes quando a pessoa entra no painel e abre uma vez por pessoa para cada solicitação nova; clicar abre a solicitação. Sem destinatários na lista do popup, vale o padrão antigo: todos os analistas ativos da unidade veem o popup. Com o popup desligado ninguém vê. O filtro de unidade é regra fixa. O alerta \"Falha ao notificar por e-mail\" (só superuser) continua fixo.",
   solicitacao_alteracao_pedida: `Dispara quando o cliente pede uma alteração numa solicitação de vaga que já enviou (fica pendente até a Salmazos aprovar ou recusar). O sino leva à solicitação. ${NOTA_POPUP_PEDIDOS}`,
   vaga_reativacao_pedida: `Dispara quando o cliente pede a reativação de uma vaga pausada (fica pendente até a Salmazos decidir). O sino leva à solicitação. ${NOTA_POPUP_PEDIDOS}`,
-  vaga_pausa_pedida: `Dispara quando o cliente pede a pausa ou o encerramento de uma vaga (fica pendente até a Salmazos decidir). O sino leva à solicitação. ${NOTA_POPUP_PEDIDOS}`,
+  vaga_pausa_pedida: `Dispara quando o cliente pede o encerramento de uma vaga pelo portal (o pedido fica pendente até a Salmazos decidir). Aprovar ou recusar o pedido é feito no painel de Vagas, na solicitação. O sino leva à solicitação. ${NOTA_POPUP_PEDIDOS}`,
   agendamento_cliente:
     "Dispara quando o cliente confirma a data da entrevista no portal e o candidato NÃO tem responsável definido. Quando o candidato tem responsável, o aviso vai só para ele (sino e e-mail) e essa regra continua fixa — não passa por esta lista. O filtro de unidade desta lista é fixo.",
   indicacao_candidato_recebida:
