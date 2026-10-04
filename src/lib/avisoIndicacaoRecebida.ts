@@ -75,14 +75,14 @@ async function enviarEmails(o: Opts): Promise<void> {
 
   if (succeeded > 0) return;
 
-  // Ninguém foi avisado por e-mail: mesmo alerta interno de portal/solicitar-vaga (sino para
-  // diretoria/superuser) para a indicação não passar batida.
+  // Ninguém foi avisado por e-mail: mesmo alerta interno de portal/solicitar-vaga, para a
+  // indicação não passar batida. Somente superuser, por decisão do diretor.
   const motivo = attempted === 0 ? "nenhum destinatário com e-mail para notificar" : `${attempted - succeeded}/${attempted} envio(s) de e-mail falharam`;
   console.error(`[avisarIndicacaoRecebida] Notificação por e-mail NÃO foi entregue a ninguém (solicitacao_id=${o.solicitacaoId}, ${motivo}).`);
   const { data: analistas } = await svc
     .from("analistas_perfil")
     .select("user_id")
-    .in("nivel_acesso", ["superuser", "diretoria"])
+    .eq("nivel_acesso", "superuser")
     .eq("ativo", true);
   const alertas = (analistas ?? [])
     .filter((a) => a.user_id)
