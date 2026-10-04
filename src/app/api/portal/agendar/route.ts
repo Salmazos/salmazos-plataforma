@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { notifyResponsibleOrAll } from "@/lib/notifyAllAnalysts";
+import { avisarPedidoCliente } from "@/lib/avisoPedidoCliente";
 import { parseBody, portalAgendarSchema } from "@/lib/schemas";
 
 // Fluxo leve e separado do /api/portal/avaliar: aqui o cliente só está
@@ -112,6 +113,27 @@ export async function PATCH(request: NextRequest) {
       vaga_id: enc.vaga_id ?? undefined,
       // Sem responsável resolvido, o aviso vai pra equipe da unidade do cliente.
       unidadeId: cliente?.unidade_id ?? null,
+      // O ramo do responsável (acima) é fixo e não passa por lista. Só o fallback lê a lista do evento
+      // agendamento_cliente (Configurações > Avisos); sem configuração, é o broadcast de sempre.
+      fallbackBroadcast: () =>
+        avisarPedidoCliente({
+          evento: "agendamento_cliente",
+          unidadeId: cliente?.unidade_id ?? null,
+          contexto: "PATCH /api/portal/agendar",
+          sino: {
+            tipo: "agendamento_cliente",
+            titulo: "Entrevista agendada pelo cliente",
+            mensagem: `${clienteNome} agendou a entrevista de ${candidatoNome} para ${dataFormatada}`,
+            candidatoId: enc.candidato_id,
+          },
+          email: {
+            subject: `📅 Entrevista agendada — ${candidatoNome} — ${clienteNome}`,
+            html,
+            tipo: "agendamento_cliente",
+            candidatoId: enc.candidato_id,
+            vagaId: enc.vaga_id ?? undefined,
+          },
+        }),
     });
 
     return NextResponse.json({ data: updated });

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, solicitacaoVagaUpdateSchema } from "@/lib/schemas";
 import { calcularAlteracoes, clientePodePedirAlteracao, resumoAlteracoesHtml } from "@/lib/solicitacaoAlteracao";
-import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
+import { avisarPedidoCliente } from "@/lib/avisoPedidoCliente";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { registrarAuditoria } from "@/lib/audit";
 
@@ -90,16 +90,6 @@ export async function POST(request: NextRequest, { params }: Params) {
     });
 
     const campos = Object.keys(alteracoes).length;
-    await service.from("notificacoes_analista").insert({
-      tipo: "alteracao_solicitacao_vaga",
-      titulo: `✏️ ${sol.cliente_nome ?? "Cliente"} pediu alteração na solicitação`,
-      mensagem: `${sol.cliente_nome ?? "O cliente"} pediu ${campos} alteraç${campos === 1 ? "ão" : "ões"} na solicitação de ${sol.cargo} — aguardando aprovação.`,
-      user_id: null,
-      candidato_id: null,
-      solicitacao_vaga_id: id,
-      unidade_id: sol.unidade_id,
-    });
-
     const template = getEmailTemplate("alteracao_solicitacao_pedida", {
       nome: "",
       cargo: sol.cargo,
@@ -107,11 +97,19 @@ export async function POST(request: NextRequest, { params }: Params) {
       resumoAlteracoesHtml: resumoAlteracoesHtml(alteracoes),
       solicitacaoUrl: `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas?solicitacao=${id}`,
     });
-    await notifyAllAnalysts({
-      subject: template.subject,
-      html: template.html,
-      tipo: "alteracao_solicitacao_pedida",
+    // Sino e e-mail leem a lista do evento solicitacao_alteracao_pedida (Configurações > Avisos); sem
+    // configuração, sino geral da unidade + e-mail para os analistas da unidade, como sempre foi.
+    await avisarPedidoCliente({
+      evento: "solicitacao_alteracao_pedida",
       unidadeId: sol.unidade_id,
+      contexto: "POST /api/portal/solicitacoes/[id]/alteracao",
+      sino: {
+        tipo: "alteracao_solicitacao_vaga",
+        titulo: `✏️ ${sol.cliente_nome ?? "Cliente"} pediu alteração na solicitação`,
+        mensagem: `${sol.cliente_nome ?? "O cliente"} pediu ${campos} alteraç${campos === 1 ? "ão" : "ões"} na solicitação de ${sol.cargo} — aguardando aprovação.`,
+        solicitacaoVagaId: id,
+      },
+      email: { subject: template.subject, html: template.html, tipo: "alteracao_solicitacao_pedida" },
     });
 
     return NextResponse.json({ ok: true, pedido_id: pedido.id }, { status: 201 });

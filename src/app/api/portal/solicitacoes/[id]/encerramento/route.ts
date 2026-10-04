@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, vagaSolicitarPausaSchema } from "@/lib/schemas";
 import { clientePodeSolicitarPausa, ROTULO_MOTIVO_ENCERRAMENTO } from "@/lib/vagaPausaReativacao";
-import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
+import { avisarPedidoCliente } from "@/lib/avisoPedidoCliente";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { registrarAuditoria } from "@/lib/audit";
 
@@ -93,16 +93,6 @@ export async function POST(request: NextRequest, { params }: Params) {
       detalhes: { cliente: sol.cliente_nome, pedido_id: pedido.id, motivo_tipo: parsed.data.motivo_tipo, motivo_texto: parsed.data.motivo_texto },
     });
 
-    await service.from("notificacoes_analista").insert({
-      tipo: "vaga_pausa_pedida",
-      titulo: `⏸️ ${sol.cliente_nome ?? "Cliente"} pediu encerramento da vaga`,
-      mensagem: `${sol.cliente_nome ?? "O cliente"} pediu o encerramento da vaga de ${sol.cargo} — aguardando aprovação.`,
-      user_id: null,
-      candidato_id: null,
-      solicitacao_vaga_id: sol.id,
-      unidade_id: vaga.unidade_id,
-    });
-
     const template = getEmailTemplate("vaga_status_solicitado", {
       nome: "",
       cargo: sol.cargo,
@@ -112,11 +102,18 @@ export async function POST(request: NextRequest, { params }: Params) {
       motivoTextoEncerramento: parsed.data.motivo_texto || null,
       solicitacaoUrl: `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas?solicitacao=${sol.id}`,
     });
-    await notifyAllAnalysts({
-      subject: template.subject,
-      html: template.html,
-      tipo: "vaga_status_solicitado",
+    // Lista do evento vaga_pausa_pedida (Configurações > Avisos); sem configuração, o aviso antigo.
+    await avisarPedidoCliente({
+      evento: "vaga_pausa_pedida",
       unidadeId: vaga.unidade_id,
+      contexto: "POST /api/portal/solicitacoes/[id]/encerramento",
+      sino: {
+        tipo: "vaga_pausa_pedida",
+        titulo: `⏸️ ${sol.cliente_nome ?? "Cliente"} pediu encerramento da vaga`,
+        mensagem: `${sol.cliente_nome ?? "O cliente"} pediu o encerramento da vaga de ${sol.cargo} — aguardando aprovação.`,
+        solicitacaoVagaId: sol.id,
+      },
+      email: { subject: template.subject, html: template.html, tipo: "vaga_status_solicitado" },
     });
 
     return NextResponse.json({ ok: true, pedido_id: pedido.id }, { status: 201 });

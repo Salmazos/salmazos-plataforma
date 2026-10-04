@@ -54,6 +54,21 @@ const ANALISTAS_ATIVOS: DestinatarioPadrao[] = [
   u("cb2f5a16-0a4b-457f-9b25-be5006726eec", "Victor Eduardo Oliveira"),
 ];
 
+// Quem vê hoje o popup de solicitação de vaga (e passa a ver o dos pedidos do cliente): analistas
+// ativos que atendem a unidade dos clientes (hoje só Monte Mor / Hortolândia) — os 4 sócios, que têm
+// acesso a todas as unidades, mais os 4 da unidade. Victor e a Susana de SBC ficam de fora por unidade
+// (SBC não tem cliente). Espelha a carga de supabase/migration_avisos_fase3_bloco1.sql.
+const POPUP_UNIDADE_CLIENTES: DestinatarioPadrao[] = [
+  ANDREZA,
+  u("996db358-b02c-461a-bf36-c0f2b316e7fd", "Edivan Souza Silva"),
+  u("b40f3989-eb60-4614-adb7-1790fcfaa792", "Elizabete Salmazo"),
+  GIOVANNI,
+  u("3a8bdae4-781e-4ff0-aaa7-86276848ce99", "Lucas Miguel"),
+  u("a1131df1-94bf-4c82-930e-0f80742d8ebf", "Olver Pereira dos Santos"),
+  REBECCA,
+  u("00a62f1c-757a-4ed3-a462-00574c6fa0d6", "Susana Oliveira (Monte Mor / Hortolândia)"),
+];
+
 const EMAIL_OLVER = e("Olver", "olver@salmazos.com.br");
 const EMAIL_RH = e("RH", "rh@salmazos.com.br");
 
@@ -62,6 +77,27 @@ const PADRAO_PORTAL_CLIENTE: Record<string, PadraoEvento> = {
     email: { ativo: true, destinatarios: ANALISTAS_ATIVOS },
     sino: { ativo: true, destinatarios: ANALISTAS_ATIVOS },
     popup: { ativo: true, destinatarios: ANALISTAS_ATIVOS },
+  },
+  // Fase 3: carga copiada das listas de solicitacao_vaga (e-mail: Andreza, Giovanni e Rebecca; sino: os
+  // 7 do sino de solicitação). O popup dos três pedidos usa a mesma carga do popup de solicitação.
+  solicitacao_alteracao_pedida: {
+    email: { ativo: true, destinatarios: [EMAIL_ANDREZA, EMAIL_GIOVANNI, EMAIL_REBECCA] },
+    sino: { ativo: true, destinatarios: SINO_TODOS },
+    popup: { ativo: true, destinatarios: POPUP_UNIDADE_CLIENTES },
+  },
+  vaga_reativacao_pedida: {
+    email: { ativo: true, destinatarios: [EMAIL_ANDREZA, EMAIL_GIOVANNI, EMAIL_REBECCA] },
+    sino: { ativo: true, destinatarios: SINO_TODOS },
+    popup: { ativo: true, destinatarios: POPUP_UNIDADE_CLIENTES },
+  },
+  vaga_pausa_pedida: {
+    email: { ativo: true, destinatarios: [EMAIL_ANDREZA, EMAIL_GIOVANNI, EMAIL_REBECCA] },
+    sino: { ativo: true, destinatarios: SINO_TODOS },
+    popup: { ativo: true, destinatarios: POPUP_UNIDADE_CLIENTES },
+  },
+  agendamento_cliente: {
+    email: { ativo: true, destinatarios: [EMAIL_ANDREZA, EMAIL_GIOVANNI, EMAIL_REBECCA] },
+    sino: { ativo: true, destinatarios: SINO_TODOS },
   },
   portal_candidato_aprovado: { email: { ativo: true, destinatarios: [EMAIL_OLVER, EMAIL_RH] } },
   // Nasce desligado: hoje não existe e-mail interno de reprovação.
@@ -79,6 +115,8 @@ export const PADRAO_AVISOS: Record<GrupoComPadrao, Record<string, PadraoEvento>>
     solicitacao_vaga: {
       email: { ativo: true, destinatarios: [EMAIL_REBECCA, EMAIL_ANDREZA, EMAIL_GIOVANNI] },
       sino: { ativo: true, destinatarios: SINO_TODOS },
+      // Fase 3: o popup de solicitação passa a vir de lista (antes: todo analista ativo da unidade).
+      popup: { ativo: true, destinatarios: POPUP_UNIDADE_CLIENTES },
     },
     vaga_cancelada: {
       email: { ativo: true, destinatarios: [EMAIL_REBECCA, EMAIL_ANDREZA, EMAIL_GIOVANNI] },
