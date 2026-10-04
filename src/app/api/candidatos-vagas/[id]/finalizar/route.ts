@@ -153,10 +153,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         cvFields.decisao_cobranca_registrada_em = new Date().toISOString();
       }
 
-      await supabase
+      const { error: updateCvErr } = await supabase
         .from("candidatos_vagas")
         .update(cvFields)
         .eq("id", id);
+      // Antes o erro era ignorado: a rota seguia, gravava alocação, histórico e o audit
+      // "candidato_finalizado" mesmo com a etapa sem mudar. Agora para aqui, sem efeitos colaterais.
+      if (updateCvErr) {
+        console.error(`[finalizar] Falha ao gravar contratação (cv_id=${id}):`, updateCvErr.message);
+        return NextResponse.json(
+          { error: "Não foi possível registrar a contratação (falha ao atualizar a candidatura). Nada foi alterado; tente novamente." },
+          { status: 500 }
+        );
+      }
 
       void sincronizarEncaminhamentoComEtapa(cv.candidato_id, vaga?.cliente_id ?? null, "contratado", supabase);
 
