@@ -4,6 +4,7 @@ import { registrarHistorico } from "@/lib/registrarHistorico";
 import { parseBody, encaminhamentoCreateSchema } from "@/lib/schemas";
 import { exigirContextoUnidade, podeVerUnidade, resolverUnidadeCliente } from "@/lib/unidadeAuth";
 import { normalizarDataEntrevista } from "@/lib/dataEntrevista";
+import { avisarCandidatoEnviadoAoCliente, lerEncaminhamentoAnterior } from "@/lib/avisoClienteCandidato";
 
 export async function GET(request: NextRequest) {
   const { ctx, erro } = await exigirContextoUnidade();
@@ -107,6 +108,14 @@ export async function POST(request: NextRequest) {
         .select("*, cliente:clientes(id, nome, cidade, segmento, servicos)")
         .maybeSingle();
 
+    // Estado do encaminhamento ANTES de gravar: decide se há "novo envio" para o aviso ao cliente no portal
+    // (ver avisarCandidatoEnviadoAoCliente). Leitura isolada: nunca lança nem muda o que a rota faz.
+    const leituraAnterior = await lerEncaminhamentoAnterior(supabase, {
+      candidatoId: campos.candidato_id,
+      clienteId: campos.cliente_id,
+      vagaId: campos.vaga_id,
+    });
+
     let resultado = campos.vaga_id ? await atualizarExistente(campos.vaga_id) : { data: null, error: null };
     if (!resultado.data && !resultado.error) {
       resultado = await supabase
@@ -143,6 +152,11 @@ export async function POST(request: NextRequest) {
           { onConflict: "candidato_id,vaga_id", ignoreDuplicates: true }
         );
     }
+
+    // Aviso ao cliente no portal (sino e popup, conforme Configurações > Avisos): chamada extra, isolada e
+    // que nunca lança, depois de o encaminhamento já estar gravado. O e-mail ao contato do cliente e a
+    // movimentação de etapa (candidatos/[id]/etapa) não mudam.
+    await avisarCandidatoEnviadoAoCliente(supabase, data, leituraAnterior);
 
     return NextResponse.json({ data, duplicata: existente ?? null }, { status: 201 });
   } catch (err) {
