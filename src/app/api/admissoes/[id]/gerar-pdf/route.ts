@@ -1,3 +1,4 @@
+import { avisarFuncionarioNaoCriado } from "@/lib/avisarCandidatoEventos";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { PDFDocument, PageSizes, rgb } from "pdf-lib";
@@ -369,21 +370,10 @@ export async function POST(request: NextRequest, { params }: Params) {
       entidade_id: id,
       detalhes: { erro: err instanceof Error ? err.message : String(err) },
     });
-    try {
-      await svc.from("notificacoes_analista").insert({
-        tipo: "funcionario_nao_criado_automaticamente",
-        titulo: "Funcionário não foi criado automaticamente",
-        mensagem: `O pacote de admissão de "${candidatoNome}" foi gerado, mas o registro em Funcionários não foi criado automaticamente. Verifique e crie manualmente se necessário.`,
-        user_id: null,
-        candidato_id: admissao.candidato_id,
-        vaga_id: admissao.vaga_id,
-        // Sem unidade (aviso pra todos): o RH é centralizado em Monte Mor — uma admissão de
-        // SBC com unidade aqui avisaria só a equipe de SBC, que não cuida do RH.
-        unidade_id: null,
-      });
-    } catch (notifErr) {
-      console.error(`[gerar-pdf] Falha ao notificar falha de criação de funcionário — admissao_id=${id}`, notifErr);
-    }
+    // Sino configurável (Configurações > Avisos > funcionario_nao_criado): a linha geral de sempre (sem unidade, de
+    // propósito: o RH é centralizado em Monte Mor — uma admissão de SBC com unidade aqui avisaria só a equipe de SBC,
+    // que não cuida do RH) mais a lista; não repete o mesmo aviso em 24 horas. Nunca lança.
+    await avisarFuncionarioNaoCriado(svc, { candidatoId: admissao.candidato_id, vagaId: admissao.vaga_id, candidatoNome });
   }
 
   registrarAuditoria({

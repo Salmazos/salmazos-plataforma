@@ -1,3 +1,4 @@
+import { avisarCurriculoAtualizado } from "@/lib/avisarCandidatoEventos";
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
@@ -178,11 +179,13 @@ export async function POST(request: NextRequest) {
           .eq("id", existente.id);
       }
 
-      await supabase.from("notificacoes_analista").insert({
-        tipo: "atualizacao_curriculo",
-        titulo: `Currículo atualizado: ${existente.nome_completo}`,
-        mensagem: duplicata.resumoAtualizacao,
-        candidato_id: existente.id,
+      // Sino configurável (Configurações > Avisos > candidato_curriculo_atualizado): o responsável do candidato +
+      // a lista; sem responsável resolvível, a linha geral de sempre. Nunca lança.
+      await avisarCurriculoAtualizado(supabase, {
+        candidatoId: existente.id,
+        candidatoNome: existente.nome_completo,
+        resumo: duplicata.resumoAtualizacao,
+        responsavelNome: (existente as { responsavel?: string | null }).responsavel ?? null,
       });
 
       // Re-run triagem with enriched data

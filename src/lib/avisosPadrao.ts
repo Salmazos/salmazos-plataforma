@@ -159,6 +159,12 @@ export const PADRAO_AVISOS: Record<GrupoComPadrao, Record<string, PadraoEvento>>
       sino: { ativo: true, destinatarios: [] },
       popup: { ativo: true, destinatarios: [] },
     },
+    // Avisos restantes (candidato transferido, currículo atualizado, funcionário não criado…): sino e popup ligados com a
+    // lista VAZIA (quem já era avisado sempre é); e-mail, quando o evento tem, com a mesma lista dos avisos de vaga
+    // mais parecidos (vaga_cancelada e vaga_reativada).
+    candidato_transferido: { sino: { ativo: true, destinatarios: [] } },
+    candidato_curriculo_atualizado: { sino: { ativo: true, destinatarios: [] } },
+    funcionario_nao_criado: { sino: { ativo: true, destinatarios: [] } },
   },
 };
 
@@ -171,6 +177,9 @@ const EVENTOS_SINO_COM_RESPONSAVEL: readonly string[] = [
   "garantia_rs_vencendo",
   "garantia_rs_acionada",
   "pos_venda_rs_7dias",
+  "candidato_transferido",
+  "candidato_curriculo_atualizado",
+  "funcionario_nao_criado",
 ];
 
 export function grupoTemPadrao(grupo: string): grupo is GrupoComPadrao {

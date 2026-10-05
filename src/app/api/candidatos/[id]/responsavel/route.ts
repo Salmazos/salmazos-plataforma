@@ -4,6 +4,7 @@ import { registrarHistorico } from "@/lib/registrarHistorico";
 import { parseBody, candidatoResponsavelSchema } from "@/lib/schemas";
 import { idsCandidaturasDaUnidade, resolverUnidadeUsuario } from "@/lib/unidadeAuth";
 import { buscarPerfilResponsavel } from "@/lib/perfilResponsavel";
+import { avisarCandidatoTransferido } from "@/lib/avisarCandidatoEventos";
 
 const ETAPAS_ATIVAS = ["triagem", "entrevista_salmazos", "entrevista_cliente", "aprovado_cliente"];
 
@@ -80,19 +81,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       criado_por: user.email ?? null,
     });
 
-    if (oldResponsavel) {
-      const oldAnalista = await buscarPerfilResponsavel(svc, oldResponsavel);
-
-      if (oldAnalista?.user_id) {
-        await svc.from("notificacoes_analista").insert({
-          tipo: "transferencia_responsavel",
-          titulo: "Candidato transferido",
-          mensagem: `${candidatoNome} foi transferido para ${newLabel}`,
-          candidato_id: id,
-          user_id: oldAnalista.user_id,
-        });
-      }
-    }
+    // Sino configurável (Configurações > Avisos > candidato_transferido): o responsável antigo, o novo e a lista do
+    // canal, uma linha por usuário. Nunca lança: a troca já está gravada.
+    await avisarCandidatoTransferido(svc, { candidatoId: id, candidatoNome, antigoNome: oldResponsavel, novoNome: newResponsavel });
   }
 
   return NextResponse.json({ success: true, responsavel: newResponsavel });
