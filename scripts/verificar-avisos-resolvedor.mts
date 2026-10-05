@@ -9,7 +9,7 @@ import { PADRAO_AVISOS, grupoTemPadrao, montarPayloadRestauracao } from "../src/
 import { EVENTOS_POR_GRUPO, EVENTOS_SEM_LISTA, eventoSemLista, FRASE_SEM_LISTA, ROTULO_GRUPO, grupoDoEvento, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
 import {
   canalClienteLigado, inicioJanelaAvisos, avisoVisivelParaUsuario, linkPortalValido, chaveDedupAviso, textoAvisoIndicacaoDecidida,
-  haQuantoTempo, textoAvisoCandidatoEnviado, textoAvisoEntrevista, decidirAvisoCandidatoEnviado, naoLidosDoSino, pendentesDoPopup, limitarMensagemAviso, DIAS_VISIVEL_AVISO_CLIENTE, type AvisoPortal,
+  haQuantoTempo, textoAvisoSolicitacaoDecidida, textoAvisoPedidoDecidido, tipoPedidoDaAcao, chaveDedupSolicitacaoDecidida, chaveDedupPedidoDecidido, textoAvisoCandidatoEnviado, textoAvisoEntrevista, decidirAvisoCandidatoEnviado, naoLidosDoSino, pendentesDoPopup, limitarMensagemAviso, DIAS_VISIVEL_AVISO_CLIENTE, type AvisoPortal,
 } from "../src/lib/avisoClienteRegras.ts";
 import { dataEntrevistaParaCliente, horaEntrevistaReal, decidirAvisoEntrevista } from "../src/lib/horaEntrevista.ts";
 import { mensagemErroAcao, MSG_ULTIMO_DESTINATARIO, MSG_ACAO_PADRAO } from "../src/lib/avisosErroAcao.ts";
@@ -529,8 +529,8 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   });
 
   // ── Avisos ao cliente (sino e popup no portal): bloco 1 ──
-  await caso("avisos ao cliente: grupo novo, só com a indicação decidida, rótulo e canais sino/popup", () => {
-    assert.deepEqual(EVENTOS_POR_GRUPO.avisos_cliente, ["indicacao_decidida_cliente", "candidato_enviado_cliente", "entrevista_agendada_cliente", "entrevista_remarcada_cliente"]);
+  await caso("avisos ao cliente: grupo novo, com os eventos dos 4 blocos, rótulo e canais sino/popup", () => {
+    assert.deepEqual(EVENTOS_POR_GRUPO.avisos_cliente, ["indicacao_decidida_cliente", "candidato_enviado_cliente", "entrevista_agendada_cliente", "entrevista_remarcada_cliente", "solicitacao_vaga_decidida_cliente", "pedido_vaga_decidido_cliente"]);
     assert.equal(ROTULO_GRUPO.avisos_cliente, "Avisos ao cliente");
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.deepEqual([...canaisDoEvento("indicacao_decidida_cliente")], ["sino", "popup"]);
@@ -538,7 +538,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     assert.ok(NOTA_EVENTO.indicacao_decidida_cliente.includes("Minhas Indicações"));
   });
   await caso("avisos ao cliente: evento SEM lista (só liga/desliga), sem Restaurar padrão e com a frase combinada", () => {
-    assert.deepEqual([...EVENTOS_SEM_LISTA], ["indicacao_decidida_cliente", "candidato_enviado_cliente", "entrevista_agendada_cliente", "entrevista_remarcada_cliente"]);
+    assert.deepEqual([...EVENTOS_SEM_LISTA], ["indicacao_decidida_cliente", "candidato_enviado_cliente", "entrevista_agendada_cliente", "entrevista_remarcada_cliente", "solicitacao_vaga_decidida_cliente", "pedido_vaga_decidido_cliente"]);
     assert.equal(eventoSemLista("indicacao_decidida_cliente"), true);
     assert.equal(eventoSemLista("candidato_enviado_cliente"), true);
     for (const ev of ["solicitacao_vaga", "vaga_pausa_pedida", "portal_candidato_aprovado", "rescisao_paga", ""]) assert.equal(eventoSemLista(ev), false, ev);
@@ -721,8 +721,8 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   });
 
   // ── Avisos ao cliente: bloco 3 (entrevista agendada e remarcada) ──
-  await caso("bloco 3 catálogo: 2 eventos novos no grupo (agora 4), sem lista, sino/popup, com rótulo e nota", () => {
-    assert.equal(EVENTOS_POR_GRUPO.avisos_cliente.length, 4);
+  await caso("bloco 3 catálogo: 2 eventos novos no grupo (os 4 primeiros), sem lista, sino/popup, com rótulo e nota", () => {
+    assert.deepEqual(EVENTOS_POR_GRUPO.avisos_cliente.slice(0, 4), ["indicacao_decidida_cliente", "candidato_enviado_cliente", "entrevista_agendada_cliente", "entrevista_remarcada_cliente"]);
     assert.equal(ROTULO_EVENTO.entrevista_agendada_cliente, "Entrevista agendada");
     assert.equal(ROTULO_EVENTO.entrevista_remarcada_cliente, "Entrevista remarcada");
     for (const ev of ["entrevista_agendada_cliente", "entrevista_remarcada_cliente"]) {
@@ -834,6 +834,88 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     const v = dec([AB, D1], [AB, D2]).versao;
     assert.notEqual(chaveDedupAviso("entrevista_remarcada_cliente", "enc-1", v), chaveDedupAviso("entrevista_remarcada_cliente", "enc-2", v));
     assert.ok(chaveDedupAviso("entrevista_remarcada_cliente", "enc-1", v).startsWith("entrevista_remarcada_cliente:enc-1:"));
+  });
+
+  // ── Avisos ao cliente: bloco 4 (solicitação de vaga decidida e pedido decidido) ──
+  await caso("bloco 4 catálogo: 2 eventos novos, grupo avisos_cliente passa a ter 6, sem lista, só sino e popup", () => {
+    assert.equal(EVENTOS_POR_GRUPO.avisos_cliente.length, 6);
+    assert.equal(ROTULO_EVENTO.solicitacao_vaga_decidida_cliente, "Solicitação de vaga decidida");
+    assert.equal(ROTULO_EVENTO.pedido_vaga_decidido_cliente, "Pedido do cliente decidido");
+    for (const ev of ["solicitacao_vaga_decidida_cliente", "pedido_vaga_decidido_cliente"]) {
+      assert.equal(grupoDoEvento(ev), "avisos_cliente", ev); assert.equal(eventoSemLista(ev), true, ev); assert.ok(EVENTOS_SEM_LISTA.includes(ev), ev);
+      assert.deepEqual([...canaisDoEvento(ev)], ["sino", "popup"], ev); assert.ok(NOTA_EVENTO[ev], ev);
+      assert.equal(descricaoPadraoDoSistema("avisos_cliente", "popup", ev), FRASE_SEM_LISTA, ev);
+    }
+    assert.match(NOTA_EVENTO.pedido_vaga_decidido_cliente, /sempre \"encerramento\"/); assert.match(NOTA_EVENTO.solicitacao_vaga_decidida_cliente, /Minhas Solicitações/);
+  });
+  await caso("bloco 4 catálogo: os 4 eventos antigos e os outros grupos não mudaram", () => {
+    assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
+    assert.equal(ROTULO_EVENTO.entrevista_remarcada_cliente, "Entrevista remarcada");
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 5); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(grupoTemPadrao("avisos_cliente"), false, "avisos_cliente continua sem Restaurar padrão");
+  });
+  await caso("texto da solicitação aprovada: cargo e 'já está no ar'; cargo nulo só encurta", () => {
+    const t = textoAvisoSolicitacaoDecidida({ decisao: "aprovada", cargo: "Auxiliar de Produção" });
+    assert.equal(t.titulo, "Solicitação aprovada"); assert.equal(t.mensagem, "Sua solicitação de vaga Auxiliar de Produção foi aprovada e já está no ar");
+    assert.equal(textoAvisoSolicitacaoDecidida({ decisao: "aprovada", cargo: null }).mensagem, "Sua solicitação de vaga foi aprovada e já está no ar");
+    assert.equal(textoAvisoSolicitacaoDecidida({ decisao: "aprovada", cargo: "  " }).mensagem, "Sua solicitação de vaga foi aprovada e já está no ar");
+  });
+  await caso("texto da solicitação recusada: com motivo, sem motivo (vazio/nulo) e cargo nulo", () => {
+    const t = textoAvisoSolicitacaoDecidida({ decisao: "recusada", cargo: "Operador", motivo: "  Fora do escopo  " });
+    assert.equal(t.titulo, "Solicitação não aprovada"); assert.equal(t.mensagem, "Sua solicitação Operador não foi aprovada. Motivo: Fora do escopo");
+    assert.equal(textoAvisoSolicitacaoDecidida({ decisao: "recusada", cargo: "Operador", motivo: "" }).mensagem, "Sua solicitação Operador não foi aprovada.");
+    assert.equal(textoAvisoSolicitacaoDecidida({ decisao: "recusada", cargo: "Operador", motivo: null }).mensagem, "Sua solicitação Operador não foi aprovada.");
+    assert.equal(textoAvisoSolicitacaoDecidida({ decisao: "recusada", cargo: null, motivo: "X" }).mensagem, "Sua solicitação não foi aprovada. Motivo: X");
+    assert.equal(textoAvisoSolicitacaoDecidida({ decisao: "recusada" }).mensagem, "Sua solicitação não foi aprovada.");
+  });
+  await caso("texto do pedido decidido: alteração, encerramento e reativação, aprovado e recusado (com e sem motivo)", () => {
+    assert.deepEqual(textoAvisoPedidoDecidido({ tipo: "alteracao", decisao: "aprovado", cargo: "Operador" }), { titulo: "Pedido aprovado", mensagem: "Seu pedido de alteração para Operador foi aprovado" });
+    assert.deepEqual(textoAvisoPedidoDecidido({ tipo: "encerramento", decisao: "aprovado", cargo: "Operador" }), { titulo: "Pedido aprovado", mensagem: "Seu pedido de encerramento para Operador foi aprovado" });
+    assert.equal(textoAvisoPedidoDecidido({ tipo: "reativacao", decisao: "aprovado", cargo: "Operador" }).mensagem, "Seu pedido de reativação para Operador foi aprovado");
+    assert.deepEqual(textoAvisoPedidoDecidido({ tipo: "alteracao", decisao: "recusado", cargo: "Operador", motivo: " Salário fora da faixa " }), { titulo: "Pedido não aprovado", mensagem: "Seu pedido de alteração para Operador não foi aprovado. Motivo: Salário fora da faixa" });
+    assert.equal(textoAvisoPedidoDecidido({ tipo: "encerramento", decisao: "recusado", cargo: "Operador", motivo: "" }).mensagem, "Seu pedido de encerramento para Operador não foi aprovado.");
+    assert.equal(textoAvisoPedidoDecidido({ tipo: "reativacao", decisao: "recusado", cargo: "Operador", motivo: null }).mensagem, "Seu pedido de reativação para Operador não foi aprovado.");
+  });
+  await caso("texto do pedido decidido: cargo nulo só encurta; motivo nunca aparece na aprovação", () => {
+    assert.equal(textoAvisoPedidoDecidido({ tipo: "encerramento", decisao: "aprovado", cargo: null }).mensagem, "Seu pedido de encerramento foi aprovado");
+    assert.equal(textoAvisoPedidoDecidido({ tipo: "alteracao", decisao: "recusado" }).mensagem, "Seu pedido de alteração não foi aprovado.");
+    assert.ok(!textoAvisoPedidoDecidido({ tipo: "alteracao", decisao: "aprovado", cargo: "X", motivo: "motivo antigo" }).mensagem.includes("motivo antigo"));
+  });
+  await caso("para o cliente a palavra é SEMPRE 'encerramento' (nunca pausa/pausar); acao -> tipo", () => {
+    assert.equal(tipoPedidoDaAcao("pausar"), "encerramento"); assert.equal(tipoPedidoDaAcao("reabrir"), "reativacao");
+    assert.equal(tipoPedidoDaAcao("outra"), null); assert.equal(tipoPedidoDaAcao(null), null); assert.equal(tipoPedidoDaAcao(undefined), null);
+    for (const tipo of ["alteracao", "encerramento", "reativacao"] as const) for (const decisao of ["aprovado", "recusado"] as const) {
+      const t = JSON.stringify(textoAvisoPedidoDecidido({ tipo, decisao, cargo: "Operador", motivo: "m" }));
+      assert.ok(!/paus/i.test(t), `${tipo}/${decisao}`);
+    }
+    assert.ok(!/paus/i.test(NOTA_EVENTO.pedido_vaga_decidido_cliente.replace(/\(para o cliente é sempre "encerramento"\)/, "")));
+  });
+  await caso("textos do bloco 4: nada interno (decisor, notas, observações, responsável, fee, motivo_texto)", () => {
+    const interno = { decidido_por: "Analista Interno", observacoes: "nota interna X", responsavel: "Analista Y", fee_rs_percentual: 15, motivo_texto: "texto interno" };
+    const textos = [
+      textoAvisoSolicitacaoDecidida({ decisao: "aprovada", cargo: "Operador", ...interno } as never),
+      textoAvisoSolicitacaoDecidida({ decisao: "recusada", cargo: "Operador", motivo: "ok", ...interno } as never),
+      textoAvisoPedidoDecidido({ tipo: "alteracao", decisao: "aprovado", cargo: "Operador", ...interno } as never),
+      textoAvisoPedidoDecidido({ tipo: "encerramento", decisao: "recusado", cargo: "Operador", motivo: "ok", ...interno } as never),
+    ];
+    for (const t of textos) for (const proibido of ["Analista Interno", "nota interna", "Analista Y", "15", "texto interno"]) assert.ok(!JSON.stringify(t).includes(proibido), proibido);
+  });
+  await caso("link do bloco 4: /portal/solicitacoes é válido e fica dentro do portal", () => {
+    assert.equal(linkPortalValido("/portal/solicitacoes"), true); assert.ok("/portal/solicitacoes".startsWith("/portal/"));
+  });
+  await caso("dedup do bloco 4: formato combinado, mesma decisão = mesma chave, decisão nova = chave nova", () => {
+    const D = "2026-10-20T17:30:00.123456+00:00";
+    assert.equal(chaveDedupSolicitacaoDecidida("sol-1", "aprovada", D), `solicitacao_vaga_decidida_cliente:sol-1:aprovada:${D}`);
+    assert.equal(chaveDedupSolicitacaoDecidida("sol-1", "aprovada", D), chaveDedupSolicitacaoDecidida("sol-1", "aprovada", D));
+    assert.notEqual(chaveDedupSolicitacaoDecidida("sol-1", "aprovada", D), chaveDedupSolicitacaoDecidida("sol-1", "recusada", D));
+    assert.notEqual(chaveDedupSolicitacaoDecidida("sol-1", "aprovada", D), chaveDedupSolicitacaoDecidida("sol-1", "aprovada", "2026-10-21T10:00:00+00:00"));
+    assert.notEqual(chaveDedupSolicitacaoDecidida("sol-1", "aprovada", D), chaveDedupSolicitacaoDecidida("sol-2", "aprovada", D));
+    assert.equal(chaveDedupSolicitacaoDecidida("sol-1", "recusada", null), "solicitacao_vaga_decidida_cliente:sol-1:recusada:sem-data");
+    assert.equal(chaveDedupPedidoDecidido("encerramento", "ped-1", "aprovado", D), `pedido_vaga_decidido_cliente:encerramento:ped-1:aprovado:${D}`);
+    assert.notEqual(chaveDedupPedidoDecidido("alteracao", "ped-1", "aprovado", D), chaveDedupPedidoDecidido("encerramento", "ped-1", "aprovado", D));
+    assert.notEqual(chaveDedupPedidoDecidido("alteracao", "ped-1", "aprovado", D), chaveDedupPedidoDecidido("alteracao", "ped-2", "aprovado", D));
+    assert.notEqual(chaveDedupPedidoDecidido("alteracao", "ped-1", "aprovado", D), chaveDedupPedidoDecidido("alteracao", "ped-1", "recusado", D));
+    assert.equal(chaveDedupPedidoDecidido("reativacao", "ped-1", "recusado", undefined), "pedido_vaga_decidido_cliente:reativacao:ped-1:recusado:sem-data");
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);

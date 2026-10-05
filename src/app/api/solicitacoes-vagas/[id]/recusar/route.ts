@@ -4,6 +4,7 @@ import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
 import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
+import { avisarSolicitacaoDecidida } from "@/lib/avisoClienteDecisao";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -91,6 +92,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         }
       }
     }
+
+    // Aviso no sino/popup do portal: extra, isolado (nunca lança), depois de a solicitação já estar recusada.
+    await avisarSolicitacaoDecidida(service, id, "recusada");
 
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -138,6 +138,72 @@ export function decidirAvisoCandidatoEnviado(
   return { avisar: true, versao: `reenvio:${anterior.updated_at ?? anterior.avaliado_em ?? "sem-data"}` };
 }
 
+// Textos dos avisos do bloco 4. Só o que o cliente já enxerga em /portal/solicitacoes: cargo e, na recusa, o
+// MESMO motivo que o e-mail da rota já envia ao cliente (motivo_recusa). Nunca decisor, notas, observações
+// internas nem fee. Cargo nulo só encurta a frase, nunca quebra.
+export function textoAvisoSolicitacaoDecidida(o: {
+  decisao: "aprovada" | "recusada";
+  cargo?: string | null;
+  motivo?: string | null;
+}): { titulo: string; mensagem: string } {
+  const cargo = o.cargo?.trim();
+  if (o.decisao === "aprovada") {
+    return {
+      titulo: "Solicitação aprovada",
+      mensagem: `Sua solicitação de vaga${cargo ? ` ${cargo}` : ""} foi aprovada e já está no ar`,
+    };
+  }
+  const motivo = o.motivo?.trim();
+  return {
+    titulo: "Solicitação não aprovada",
+    mensagem: `Sua solicitação${cargo ? ` ${cargo}` : ""} não foi aprovada.${motivo ? ` Motivo: ${motivo}` : ""}`,
+  };
+}
+
+export type TipoPedidoCliente = "alteracao" | "encerramento" | "reativacao";
+
+// Para o cliente a palavra é SEMPRE "encerramento" (nunca "pausa"/"pausar"), como em /portal/solicitacoes.
+const ROTULO_TIPO_PEDIDO_AVISO: Record<TipoPedidoCliente, string> = {
+  alteracao: "alteração",
+  encerramento: "encerramento",
+  reativacao: "reativação",
+};
+
+// vaga_solicitacoes_status.acao: 'pausar' é o pedido de encerramento e 'reabrir' o de reativação.
+export function tipoPedidoDaAcao(acao: string | null | undefined): TipoPedidoCliente | null {
+  if (acao === "pausar") return "encerramento";
+  if (acao === "reabrir") return "reativacao";
+  return null;
+}
+
+export function textoAvisoPedidoDecidido(o: {
+  tipo: TipoPedidoCliente;
+  decisao: "aprovado" | "recusado";
+  cargo?: string | null;
+  motivo?: string | null;
+}): { titulo: string; mensagem: string } {
+  const cargo = o.cargo?.trim();
+  const base = `Seu pedido de ${ROTULO_TIPO_PEDIDO_AVISO[o.tipo]}${cargo ? ` para ${cargo}` : ""}`;
+  if (o.decisao === "aprovado") return { titulo: "Pedido aprovado", mensagem: `${base} foi aprovado` };
+  const motivo = o.motivo?.trim();
+  return { titulo: "Pedido não aprovado", mensagem: `${base} não foi aprovado.${motivo ? ` Motivo: ${motivo}` : ""}` };
+}
+
+// Chaves de deduplicação com o instante da decisão: a mesma decisão repetida cai no índice único; uma
+// decisão nova (outro pedido, ou a mesma solicitação decidida de novo) tem outro id ou outro instante.
+export function chaveDedupSolicitacaoDecidida(solicitacaoId: string, decisao: "aprovada" | "recusada", decididoEm: string | null | undefined): string {
+  return `solicitacao_vaga_decidida_cliente:${solicitacaoId}:${decisao}:${decididoEm ?? "sem-data"}`;
+}
+
+export function chaveDedupPedidoDecidido(
+  tipo: TipoPedidoCliente,
+  pedidoId: string,
+  decisao: "aprovado" | "recusado",
+  decididoEm: string | null | undefined
+): string {
+  return `pedido_vaga_decidido_cliente:${tipo}:${pedidoId}:${decisao}:${decididoEm ?? "sem-data"}`;
+}
+
 // "há 5 min", "há 3 h", "há 2 dias" (o menu do sino mostra uma linha de tempo curta).
 export function haQuantoTempo(criadoEm: string, agora: Date = new Date()): string {
   const ms = agora.getTime() - new Date(criadoEm).getTime();
