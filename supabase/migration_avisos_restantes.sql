@@ -22,7 +22,10 @@ insert into public.aviso_eventos (evento, grupo, descricao, canais_suportados) v
    array['sino']),
   ('funcionario_nao_criado', 'vagas',
    'Falha ao criar automaticamente o funcionário ao gerar o pacote de admissão: avisa a equipe e a lista.',
-   array['sino'])
+   array['sino']),
+  ('lembrete_agendamento_pendente_analista', 'vagas',
+   'Lembrete ao analista enquanto o cliente não marca a entrevista: avisa o responsável do candidato e a lista.',
+   array['sino', 'email'])
 on conflict (evento) do nothing;
 
 -- ── 2. Liga/desliga inicial: todos os canais de cada evento ligados ──────────
@@ -30,13 +33,15 @@ on conflict (evento) do nothing;
 insert into public.aviso_eventos_canais (evento, canal, ativo) values
   ('candidato_transferido', 'sino', true),
   ('candidato_curriculo_atualizado', 'sino', true),
-  ('funcionario_nao_criado', 'sino', true)
+  ('funcionario_nao_criado', 'sino', true),
+  ('lembrete_agendamento_pendente_analista', 'sino', true),
+  ('lembrete_agendamento_pendente_analista', 'email', true)
 on conflict (evento, canal) do nothing;
 
 -- ── Conferência (somente leitura) ────────────────────────────────────────────
--- Esperado: 3 eventos, grupo vagas, com os canais_suportados acima
---   select evento, grupo, canais_suportados from public.aviso_eventos where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado') order by evento;
--- Esperado: 3 linhas, todas ativo = true
---   select evento, canal, ativo from public.aviso_eventos_canais where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado') order by evento, canal;
+-- Esperado: 4 eventos, grupo vagas, com os canais_suportados acima
+--   select evento, grupo, canais_suportados from public.aviso_eventos where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado', 'lembrete_agendamento_pendente_analista') order by evento;
+-- Esperado: 5 linhas, todas ativo = true
+--   select evento, canal, ativo from public.aviso_eventos_canais where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado', 'lembrete_agendamento_pendente_analista') order by evento, canal;
 -- Esperado: 0 (sem destinatários = e-mail no modo legado; sino = os de sempre)
---   select count(*) from public.aviso_destinatarios where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado');
+--   select count(*) from public.aviso_destinatarios where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado', 'lembrete_agendamento_pendente_analista');

@@ -28,12 +28,14 @@ export interface OpcoesSino {
   // Linha geral (user_id nulo, visível a todos): "sempre" = como hoje, além dos nominais; "se_sem_de_sempre" = só se
   // não houver destinatário de sempre; "nunca".
   geral: "sempre" | "se_sem_de_sempre" | "nunca";
+  // Filtro de unidade/ativo na lista do canal (como em Vagas); omitido = sem filtro.
+  unidadeFiltro?: string | null;
 }
 
 // SINO: sem linha de canal ou erro de leitura = ligado; só ativo = false desliga TUDO (nominais e geral).
 export async function gravarSinoConfiguravel(svc: ServiceClient, o: OpcoesSino): Promise<ResultadoCanalAviso> {
   try {
-    const lista = await resolverDestinatarios(o.evento, "sino", undefined, svc);
+    const lista = await resolverDestinatarios(o.evento, "sino", o.unidadeFiltro, svc);
     if (lista.modo === "desligado") return "desligado";
     const userIdsLista = lista.modo === "configurado" && !lista.falhou ? lista.userIds : [];
 

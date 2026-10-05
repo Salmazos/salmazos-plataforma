@@ -24,6 +24,15 @@ export const AVISOS_RESTANTES: Record<string, { rotulo: string; canais: readonly
     nota: "Dispara quando o pacote de admissão é gerado, mas o registro em Funcionários não é criado automaticamente (o RH precisa criar à mão). Sino: aviso geral para todos (sem unidade, de propósito: o RH é centralizado), além das pessoas da lista; não repete o mesmo aviso em 24 horas; desligado, ninguém recebe. A auditoria continua sempre.",
     padrao: { sino: "Ligado, sem ninguém na lista: aviso geral para todos, como sempre. Desligado: ninguém." },
   },
+  lembrete_agendamento_pendente_analista: {
+    rotulo: "Lembrete ao analista: cliente ainda não marcou a entrevista",
+    canais: ["sino", "email"],
+    nota: "Dispara pelo cron diário (6h), a cada 48 horas, enquanto o cliente não marca a entrevista de um candidato que está aguardando agendamento (o lembrete ao CLIENTE é outro aviso, em E-mails ao cliente). Com o canal ligado, o responsável ativo pelo candidato SEMPRE é avisado (sino e e-mail), além das pessoas da lista; sem responsável, vai um aviso geral para a equipe da unidade do cliente (ou só para a lista, no e-mail, se houver). Com o Sino ou o E-mail desligado, ninguém recebe aquele canal. Se o e-mail ao cliente falha e o cron tenta de novo no dia seguinte, o analista não é avisado de novo antes de 40 horas.",
+    padrao: {
+      sino: "Ligado, sem ninguém na lista: só o responsável pelo candidato é avisado (sem responsável, aviso geral da unidade do cliente). Desligado: ninguém.",
+      email: "Sem ninguém na lista: o responsável pelo candidato recebe (sem responsável, todos os analistas da unidade), como sempre. Com lista: o responsável, quando existe, mais a lista.",
+    },
+  },
 };
 export const EVENTOS_AVISOS_RESTANTES: string[] = Object.keys(AVISOS_RESTANTES);
 export const eventoAvisoRestante = (evento: string): boolean => Object.prototype.hasOwnProperty.call(AVISOS_RESTANTES, evento);
@@ -136,7 +145,7 @@ export const ROTULO_EVENTO: Record<string, string> = {
   solicitacao_alteracao_pedida: "Cliente pediu alteração numa solicitação de vaga",
   vaga_reativacao_pedida: "Cliente pediu reativação de vaga",
   vaga_pausa_pedida: "Cliente pediu encerramento de vaga",
-  agendamento_cliente: "Cliente agendou entrevista (quando o candidato não tem responsável)",
+  agendamento_cliente: "Cliente agendou entrevista",
   indicacao_decidida_cliente: "Indicação direta decidida pela Salmazos",
   candidato_enviado_cliente: "Candidato enviado ao cliente",
   entrevista_agendada_cliente: "Entrevista agendada",
@@ -236,7 +245,7 @@ export const NOTA_EVENTO: Record<string, string> = {
   vaga_reativacao_pedida: `Dispara quando o cliente pede a reativação de uma vaga pausada (fica pendente até a Salmazos decidir). O sino leva à solicitação. ${NOTA_POPUP_PEDIDOS}`,
   vaga_pausa_pedida: `Dispara quando o cliente pede o encerramento de uma vaga pelo portal (o pedido fica pendente até a Salmazos decidir). Aprovar ou recusar o pedido é feito no painel de Vagas, na solicitação. O sino leva à solicitação. ${NOTA_POPUP_PEDIDOS}`,
   agendamento_cliente:
-    "Dispara quando o cliente confirma a data da entrevista no portal e o candidato NÃO tem responsável definido. Quando o candidato tem responsável, o aviso vai só para ele (sino e e-mail) e essa regra continua fixa — não passa por esta lista. O filtro de unidade desta lista é fixo.",
+    "Dispara quando o cliente confirma a data da entrevista no portal. Quando o candidato tem responsável ativo, ele SEMPRE é avisado (sino e e-mail), além das pessoas desta lista. Quando não tem, o aviso vai para esta lista ou, sem ninguém nela, para a equipe da unidade do cliente. Com o Sino ou o E-mail desligado, ninguém recebe aquele canal (nem o responsável). O filtro de unidade desta lista é fixo.",
   indicacao_candidato_recebida:
     "Dispara quando o cliente envia uma indicação direta pelo portal. O popup lista as indicações pendentes quando a pessoa entra no painel e reaparece no próximo login enquanto houver pendente que ela não tenha dispensado; clicar abre a indicação. Quem não está na lista do popup não vê o popup (e com o popup desligado ninguém vê). O filtro de unidade é regra fixa: só recebem quem atende a unidade do cliente.",
   rescisao_paga: "Hoje este aviso só existe no sino (e no popup de login, que deriva dele).",

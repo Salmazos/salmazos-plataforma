@@ -165,6 +165,10 @@ export const PADRAO_AVISOS: Record<GrupoComPadrao, Record<string, PadraoEvento>>
     candidato_transferido: { sino: { ativo: true, destinatarios: [] } },
     candidato_curriculo_atualizado: { sino: { ativo: true, destinatarios: [] } },
     funcionario_nao_criado: { sino: { ativo: true, destinatarios: [] } },
+    lembrete_agendamento_pendente_analista: {
+      email: { ativo: true, destinatarios: [EMAIL_REBECCA, EMAIL_ANDREZA, EMAIL_GIOVANNI] },
+      sino: { ativo: true, destinatarios: [] },
+    },
   },
 };
 
@@ -180,6 +184,7 @@ const EVENTOS_SINO_COM_RESPONSAVEL: readonly string[] = [
   "candidato_transferido",
   "candidato_curriculo_atualizado",
   "funcionario_nao_criado",
+  "lembrete_agendamento_pendente_analista",
 ];
 
 export function grupoTemPadrao(grupo: string): grupo is GrupoComPadrao {
