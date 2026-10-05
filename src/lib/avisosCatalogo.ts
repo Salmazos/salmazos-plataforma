@@ -19,7 +19,7 @@ export const EVENTOS_POR_GRUPO: Record<GrupoAviso, string[]> = {
   ],
   // Avisos que a Salmazos dá AO CLIENTE (sino e popup no portal). Sem lista de pessoas: quem recebe é todo
   // usuário do portal do cliente do aviso, então a tela só liga e desliga cada canal.
-  avisos_cliente: ["indicacao_decidida_cliente", "candidato_enviado_cliente"],
+  avisos_cliente: ["indicacao_decidida_cliente", "candidato_enviado_cliente", "entrevista_agendada_cliente", "entrevista_remarcada_cliente"],
 };
 
 // Eventos sem lista de destinatários (só liga/desliga por canal). A tela não mostra lista nem
@@ -63,6 +63,8 @@ export const ROTULO_EVENTO: Record<string, string> = {
   agendamento_cliente: "Cliente agendou entrevista (quando o candidato não tem responsável)",
   indicacao_decidida_cliente: "Indicação direta decidida pela Salmazos",
   candidato_enviado_cliente: "Candidato enviado ao cliente",
+  entrevista_agendada_cliente: "Entrevista agendada",
+  entrevista_remarcada_cliente: "Entrevista remarcada",
 };
 
 // Canais que cada aviso realmente tem hoje (espelha aviso_eventos.canais_suportados). O que não
@@ -76,6 +78,8 @@ export const CANAIS_POR_EVENTO: Record<string, readonly ("email" | "sino" | "pop
   agendamento_cliente: ["email", "sino"],
   indicacao_decidida_cliente: ["sino", "popup"],
   candidato_enviado_cliente: ["sino", "popup"],
+  entrevista_agendada_cliente: ["sino", "popup"],
+  entrevista_remarcada_cliente: ["sino", "popup"],
   rescisao_paga: ["sino"],
   portal_candidato_aprovado: ["email"],
   portal_candidato_reprovado: ["email"],
@@ -91,6 +95,10 @@ const NOTA_POPUP_PEDIDOS =
   "O popup \"Pedidos do cliente\" lista os pedidos pendentes quando a pessoa entra no painel, abre uma vez por pessoa para cada pedido novo (clicar no card marca só aquele; Ok e X marcam todos os listados) e reaparece só se chegar outro pedido pendente. Quem não está na lista do popup não vê o popup (e com o popup desligado ninguém vê). O filtro de unidade é regra fixa: só recebem quem atende a unidade do cliente.";
 
 export const NOTA_EVENTO: Record<string, string> = {
+  entrevista_agendada_cliente:
+    "Avisa o cliente, no portal, quando a Salmazos define a data da entrevista de um candidato que ainda estava sem data (por exemplo, o cliente ia agendar e a Salmazos marcou). O aviso traz o candidato, a vaga e a data (com a hora, quando ela existe). Só vale para candidato ainda em aberto para o cliente. Quando o candidato já é enviado com a data marcada, o aviso é o de \"Candidato enviado ao cliente\". Quando o próprio cliente agenda, não há aviso. O clique leva à Agenda do portal. Não há lista de pessoas: recebem todos os usuários do portal daquele cliente. Sem configuração ou com o canal desligado, ninguém recebe.",
+  entrevista_remarcada_cliente:
+    "Avisa o cliente, no portal, quando a Salmazos muda a data ou o horário de uma entrevista que já tinha data. O aviso mostra a data anterior e a nova (a hora só aparece quando ela existe). Não avisa se nada mudou para o cliente nem se a data foi apenas apagada, e não vale para candidato já encerrado (aprovado, reprovado ou desistiu). O clique leva à Agenda do portal. Não há lista de pessoas: recebem todos os usuários do portal daquele cliente. Sem configuração ou com o canal desligado, ninguém recebe.",
   candidato_enviado_cliente:
     "Avisa o cliente, no portal, quando a Salmazos envia um candidato para ele avaliar (ação \"Encaminhar\" do Kanban). O aviso traz o nome do candidato, a vaga e, se já houver, a data da entrevista; o clique leva ao perfil do candidato no portal. Avisa no primeiro envio e quando um candidato já avaliado é enviado de novo; não avisa de novo se o candidato continua pendente para o cliente. O sino fica no topo do portal; o popup abre uma vez por aviso novo, quando o usuário entra. Não há lista de pessoas: recebem todos os usuários do portal daquele cliente. O e-mail ao contato do cliente não muda. Sem configuração ou com o canal desligado, ninguém recebe.",
   indicacao_decidida_cliente:

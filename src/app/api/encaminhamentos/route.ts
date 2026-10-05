@@ -5,6 +5,7 @@ import { parseBody, encaminhamentoCreateSchema } from "@/lib/schemas";
 import { exigirContextoUnidade, podeVerUnidade, resolverUnidadeCliente } from "@/lib/unidadeAuth";
 import { normalizarDataEntrevista } from "@/lib/dataEntrevista";
 import { avisarCandidatoEnviadoAoCliente, lerEncaminhamentoAnterior } from "@/lib/avisoClienteCandidato";
+import { avisarEntrevistaAoCliente } from "@/lib/avisoClienteEntrevista";
 
 export async function GET(request: NextRequest) {
   const { ctx, erro } = await exigirContextoUnidade();
@@ -157,6 +158,9 @@ export async function POST(request: NextRequest) {
     // que nunca lança, depois de o encaminhamento já estar gravado. O e-mail ao contato do cliente e a
     // movimentação de etapa (candidatos/[id]/etapa) não mudam.
     await avisarCandidatoEnviadoAoCliente(supabase, data, leituraAnterior);
+    // Reenvio de um encaminhamento que continuava aberto, com a data definida ou mudada: aviso de entrevista
+    // agendada/remarcada (o primeiro envio e o reenvio de um encerrado já são o aviso acima; nunca os dois).
+    await avisarEntrevistaAoCliente(supabase, data, leituraAnterior);
 
     return NextResponse.json({ data, duplicata: existente ?? null }, { status: 201 });
   } catch (err) {

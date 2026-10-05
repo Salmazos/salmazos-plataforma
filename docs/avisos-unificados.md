@@ -18,7 +18,7 @@ Todas com RLS: só `service_role` acessa. A função SQL `avisos_restaurar_padra
 numa única transação. As tabelas antigas (`aviso_vaga_*`, `rescisao_avisos_*`, `funcionario_aso_avisos_*`) não foram
 alteradas.
 
-## Eventos (22) e canais
+## Eventos (24) e canais
 
 | Grupo | Evento | Canais configuráveis |
 |---|---|---|
@@ -30,7 +30,7 @@ alteradas.
 | Portal do cliente | `indicacao_candidato_recebida` | e-mail, sino, popup |
 | Portal do cliente | `solicitacao_alteracao_pedida`, `vaga_reativacao_pedida`, `vaga_pausa_pedida` | e-mail, sino, popup (Fase 3) |
 | Portal do cliente | `agendamento_cliente` (só quando o candidato **não** tem responsável) | e-mail, sino (Fase 3) |
-| Avisos ao cliente | `indicacao_decidida_cliente`, `candidato_enviado_cliente` | sino, popup (sem lista de pessoas; ver "Avisos ao cliente") |
+| Avisos ao cliente | `indicacao_decidida_cliente`, `candidato_enviado_cliente`, `entrevista_agendada_cliente`, `entrevista_remarcada_cliente` | sino, popup (sem lista de pessoas; ver "Avisos ao cliente") |
 | Portal do cliente | `portal_candidato_aprovado`, `indicacao_decisao_cliente` | e-mail |
 | Portal do cliente | `portal_candidato_reprovado` | e-mail (nasce desligado: antes não existia e-mail interno de reprovação) |
 
@@ -120,7 +120,7 @@ no card ou Ok/X marcam todas as listadas) não mudaram, e nenhum dado foi migrad
 ## Verificação
 
 `node --experimental-strip-types scripts/verificar-avisos-resolvedor.mts` (resolvedor, fallback, unidade, padrão,
-restauração, isolamento de canais, catálogo, popups, pedidos do cliente e avisos ao cliente; 149 casos). Na Fase 3 três expectativas dos
+restauração, isolamento de canais, catálogo, popups, pedidos do cliente e avisos ao cliente; 166 casos). Na Fase 3 três expectativas dos
 casos antigos mudaram de propósito (popup de `solicitacao_vaga` entra no padrão de Vagas: 10 → 11 canais; Portal do
 cliente passa de 4 para 8 eventos).
 
@@ -194,8 +194,37 @@ cliente faz e a Salmazos recebe). Aba própria em Configurações > Avisos: **Av
     estado anterior e geram a mesma chave (a segunda é descartada pelo índice único); a repetição depois da primeira já
     encontra o encaminhamento aberto (não avisa); cada reenvio real parte de um estado anterior diferente. Sem vaga a
     rota sempre insere uma linha nova, então cada envio tem o seu id e o seu aviso.
-- **Próximos blocos.** 3: entrevistas (agendada, remarcada, cancelada). 4: decisão das solicitações de vaga e dos pedidos
-  de alteração, encerramento e reativação.
+- **Bloco 3: Entrevista agendada e Entrevista remarcada** (`entrevista_agendada_cliente` e
+  `entrevista_remarcada_cliente`). Migration: `supabase/migration_avisos_cliente_bloco3.sql` (2 eventos e 4 canais ligados).
+  - **O que dispara.** *Agendada*: a Salmazos define a data de um encaminhamento que ainda estava sem data. *Remarcada*:
+    a data ou o horário muda num encaminhamento que já tinha data. Quando o candidato já é enviado com a data, o aviso é o
+    de "Candidato enviado" (bloco 2), nunca os dois.
+  - **Caminhos que gravam a data do encaminhamento.** (1) `PATCH /api/encaminhamentos/[id]` (botão Remarcar do Kanban):
+    ligado. (2) `POST /api/encaminhamentos` (Encaminhar do Kanban e da vaga) quando reaproveita um encaminhamento que
+    continuava aberto e a data é definida ou mudada: ligado. (3) `POST /api/portal/agendar`: é o próprio cliente que
+    agenda, **sem aviso**. Não gravam data: `sincronizarEncaminhamento` e a decisão da indicação (criam encaminhamento
+    encerrado/aprovado), os crons de lembrete (só mexem em carimbos de lembrete) e `candidatos-vagas`
+    (`data_entrevista_salmazos` é a entrevista da Salmazos com o candidato, outra coisa).
+  - **Decisão** (`decidirAvisoEntrevista`, em `horaEntrevista.ts`): compara o estado ANTERIOR, lido antes de gravar, com
+    o novo, do jeito que o cliente enxerga a data (`dataEntrevistaParaCliente`). Sem data antes e com data agora =
+    agendada. Com data antes e data/horário diferente = remarcada. Não avisa se nada mudou (o 12:00 de convenção do Kanban
+    conta como "sem horário"; diferença de segundos também não é mudança), se só apagou a data, se não havia estado
+    anterior ou se o encaminhamento estava ou ficou encerrado (aprovado, reprovado, desistiu).
+  - **Texto.** "Entrevista agendada: {nome} — vaga {título} — dd/mm/aaaa às hh:mm" e "Entrevista remarcada: {nome} — vaga
+    {título} — de dd/mm/aaaa [às hh:mm] para dd/mm/aaaa [às hh:mm]" (a hora some quando é o 12:00 de convenção). Nome ou
+    vaga nulos só encurtam a frase. Só nome, vaga e datas.
+  - **Link.** `/portal/agenda` (calendário onde o cliente vê a data; ela lista só encaminhamento "aguardando"). No caso raro
+    de a data ser definida com o encaminhamento ainda `aguardando_agendamento_cliente`, o perfil
+    `/portal/candidato/{id do encaminhamento}`, para o clique nunca cair numa tela sem o item.
+  - **Deduplicação.** `chave_dedup = {evento}:{encaminhamento}:{versão}`; agendada: `{data nova}@{updated_at anterior}`;
+    remarcada: `{data anterior}>{data nova}@{updated_at anterior}`. Repetir a mesma requisição: a segunda lê o estado já
+    igual e não avisa. Duas simultâneas leem o mesmo estado anterior (mesma chave) e a segunda cai no índice único sem
+    lançar. Remarcações sucessivas para datas diferentes geram chaves diferentes; o `updated_at` anterior no fim evita que
+    voltar a uma data já usada (A>B, B>A, A>B) seja engolido pela chave antiga.
+  - **Isolamento.** Cada rota ganhou só linhas novas: uma leitura do estado anterior e uma chamada extra, isolada e que
+    nunca lança, depois da gravação. Histórico, e-mails, lembretes por cron e etapa não mudaram. Aviso de entrevista
+    cancelada ou de desistência não existe nesta fase.
+- **Próximo bloco.** 4: decisão das solicitações de vaga e dos pedidos de alteração, encerramento e reativação.
 
 ## Ajustes pós-teste (tela de Avisos e portal)
 

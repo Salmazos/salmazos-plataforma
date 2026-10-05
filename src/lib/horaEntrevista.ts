@@ -24,3 +24,47 @@ export function dataEntrevistaParaCliente(dataEntrevista: string | null | undefi
   const hora = horaEntrevistaReal(dataEntrevista);
   return hora ? `${data} às ${hora}` : data;
 }
+
+export type TipoAvisoEntrevista = "agendada" | "remarcada";
+
+// Encaminhamento aberto para o cliente (aguardando a entrevista ou o agendamento dele). Aprovado,
+// reprovado e desistiu estão encerrados: sem aviso de entrevista.
+const STATUS_ABERTOS_ENTREVISTA = ["aguardando", "aguardando_agendamento_cliente"];
+
+const instanteIso = (v: string | null | undefined): string | null => {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+};
+
+// Decide se uma gravação de data de entrevista gera aviso ao cliente (bloco 3 de "Avisos ao cliente").
+// Compara o estado ANTERIOR (lido antes de gravar) com o novo, do jeito que o CLIENTE enxerga a data
+// (dataEntrevistaParaCliente): duas datas que aparecem iguais não são mudança — isso trata o 12:00 de
+// convenção do Kanban como "sem horário" e ignora diferença de segundos.
+//   sem data antes e com data agora                  → "agendada"
+//   com data antes e data/horário diferente agora    → "remarcada"
+//   nova data vazia (só limpou), nenhuma mudança,
+//   encaminhamento sem estado anterior ou encerrado  → nenhum aviso (tipo null)
+// Exige encaminhamento aberto ANTES e DEPOIS: o primeiro envio e o reenvio de um encaminhamento
+// encerrado são do aviso "Candidato enviado" (bloco 2).
+// `versao` entra na chave de deduplicação: agendada = "{data nova}@{updated_at anterior}"; remarcada =
+// "{data anterior}>{data nova}@{updated_at anterior}". Duas requisições simultâneas e idênticas leem o
+// mesmo estado anterior (mesma chave); voltar depois para uma data já usada tem outro updated_at anterior,
+// então não é engolido pela chave antiga.
+export function decidirAvisoEntrevista(
+  anterior: { status?: string | null; data_entrevista?: string | null; updated_at?: string | null } | null | undefined,
+  novo: { status?: string | null; data_entrevista?: string | null } | null | undefined
+): { tipo: TipoAvisoEntrevista | null; antes: string | null; depois: string | null; versao: string } {
+  const nenhum = { tipo: null, antes: null, depois: null, versao: "" } as const;
+  if (!anterior || !novo) return nenhum;
+  if (!STATUS_ABERTOS_ENTREVISTA.includes(anterior.status ?? "") || !STATUS_ABERTOS_ENTREVISTA.includes(novo.status ?? "")) return nenhum;
+
+  const antes = dataEntrevistaParaCliente(anterior.data_entrevista);
+  const depois = dataEntrevistaParaCliente(novo.data_entrevista);
+  if (!depois) return nenhum;
+  const marca = anterior.updated_at ?? "sem-data";
+
+  if (!antes) return { tipo: "agendada", antes: null, depois, versao: `${instanteIso(novo.data_entrevista)}@${marca}` };
+  if (antes === depois) return nenhum;
+  return { tipo: "remarcada", antes, depois, versao: `${instanteIso(anterior.data_entrevista)}>${instanteIso(novo.data_entrevista)}@${marca}` };
+}
