@@ -4,10 +4,13 @@ import { registrarHistorico } from "@/lib/registrarHistorico";
 import { registrarAuditoria } from "@/lib/audit";
 import { sendEmail } from "@/lib/sendEmail";
 import { parseBody, portalAvaliarSchema } from "@/lib/schemas";
-import { buscarPerfilResponsavel } from "@/lib/perfilResponsavel";
 import { resolverDestinatarios } from "@/lib/avisos";
 import { escaparHtml } from "@/lib/emailPacoteContabilidade";
 import { emailsOuPadrao, emailsSomenteConfigurado } from "@/lib/avisosResolucao";
+import { avisarDecisaoClienteCandidato } from "@/lib/avisarDecisaoClienteCandidato";
+
+// Domínio de produção fixo nos links dos e-mails internos desta rota.
+const SITE_URL = "https://vagas.salmazos.com.br";
 
 export async function PATCH(request: NextRequest) {
   try {
@@ -55,10 +58,15 @@ export async function PATCH(request: NextRequest) {
         avaliado_em: new Date().toISOString(),
       })
       .eq("id", encaminhamento_id)
+      // Guarda de duplicidade: só grava se ainda estiver aguardando (duas requisições simultâneas passariam
+      // pela checagem acima). Quem perde a corrida recebe o mesmo 409, sem aviso nem e-mail.
+      .eq("status", "aguardando")
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (!updated)
+      return NextResponse.json({ error: "Este encaminhamento já foi avaliado." }, { status: 409 });
 
     // true quando a candidatura é R&S e a vaga não tem fee_rs_percentual configurado —
     // setado dentro do bloco "aprovado" abaixo, lido depois pra disparar notificação +
@@ -177,10 +185,9 @@ export async function PATCH(request: NextRequest) {
       criado_por: user.email ?? null,
     });
 
-    // Sino para o responsável pelo candidato — mesmo padrão de destinatário do
-    // agendamento_cliente (responsavel → analistas_perfil.user_id, com fallback
-    // broadcast). Não reaproveita notifyResponsibleOrAll porque aquele helper
-    // também dispara e-mail, e o e-mail deste fluxo já é tratado à parte abaixo.
+    // Sino interno (e popup, lido pelo painel): o responsável pelo candidato MAIS a lista do canal sino do evento,
+    // com interruptor em Configurações > Avisos (ver avisarDecisaoClienteCandidato). O e-mail deste fluxo é
+    // tratado à parte abaixo. As consultas daqui também alimentam o aviso de fee ausente.
     try {
       const [{ data: candNotif }, { data: cliNotif }, vagaNotif] = await Promise.all([
         service.from("candidatos").select("nome_completo, responsavel").eq("id", enc.candidato_id).single(),
@@ -194,25 +201,17 @@ export async function PATCH(request: NextRequest) {
       const clienteNomeNotif = cliNotif?.nome ?? "Cliente";
       const vagaTitulo = vagaNotif.data?.titulo;
 
-      const acaoVerbo = status === "aprovado" ? "aprovou" : "reprovou";
-      const mensagemNotif = vagaTitulo
-        ? `${clienteNomeNotif} ${acaoVerbo} a candidatura de ${candidatoNomeNotif} para a vaga ${vagaTitulo}`
-        : `${clienteNomeNotif} ${acaoVerbo} a candidatura de ${candidatoNomeNotif}`;
-
-      let userIdDestino: string | null = null;
-      if (candNotif?.responsavel) {
-        const analistaNotif = await buscarPerfilResponsavel(service, candNotif.responsavel);
-        userIdDestino = analistaNotif?.user_id ?? null;
-      }
-
-      await service.from("notificacoes_analista").insert({
-        tipo: status === "aprovado" ? "aprovacao_cliente" : "reprovacao_cliente",
-        titulo: status === "aprovado" ? "Candidato aprovado pelo cliente" : "Candidato reprovado pelo cliente",
-        mensagem: mensagemNotif,
-        user_id: userIdDestino,
-        candidato_id: enc.candidato_id,
-        // Só pesa quando cai no broadcast (sem responsável): vai pra unidade do cliente.
-        unidade_id: cliNotif?.unidade_id ?? null,
+      // Nunca lança: uma falha no aviso não derruba a ação do cliente nem o aviso de fee abaixo.
+      await avisarDecisaoClienteCandidato(service, {
+        decisao: status,
+        candidatoId: enc.candidato_id,
+        candidatoNome: candNotif?.nome_completo,
+        clienteNome: cliNotif?.nome,
+        vagaTitulo,
+        feedback: feedback_cliente,
+        responsavelNome: candNotif?.responsavel ?? null,
+        // Só pesa na linha geral (sem responsável e sem lista): vai pra unidade do cliente.
+        unidadeId: cliNotif?.unidade_id ?? null,
       });
 
       // Vaga R&S sem fee_rs_percentual configurado — o cliente aprova normalmente (não
@@ -369,7 +368,7 @@ export async function PATCH(request: NextRequest) {
       <p style="margin:0;font-size:13px;color:#374151;line-height:1.6">${feedback_cliente}</p>
     </div>
     <div style="text-align:center;padding-top:16px;border-top:1px solid #f3f4f6">
-      <a href="https://salmazos-plataforma.vercel.app/painel/candidato/${enc.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil completo</a>
+      <a href="${SITE_URL}/painel/candidato/${enc.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil completo</a>
     </div>
   </div>
   <div style="background:#f9fafb;padding:16px 32px;text-align:center">
@@ -434,7 +433,7 @@ export async function PATCH(request: NextRequest) {
       <p style="margin:0;font-size:13px;color:#374151;line-height:1.6">${escaparHtml(feedback_cliente ?? "")}</p>
     </div>
     <div style="text-align:center;padding-top:16px;margin-top:16px;border-top:1px solid #f3f4f6">
-      <a href="https://salmazos-plataforma.vercel.app/painel/candidato/${enc.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil completo</a>
+      <a href="${SITE_URL}/painel/candidato/${enc.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil completo</a>
     </div>
   </div>
   <div style="background:#f9fafb;padding:16px 32px;text-align:center">

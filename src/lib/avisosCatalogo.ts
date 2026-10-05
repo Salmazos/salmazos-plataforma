@@ -44,6 +44,22 @@ export const EVENTOS_EMAIL_CLIENTE = [
 ] as const;
 export const eventoEmailCliente = (evento: string): boolean => (EVENTOS_EMAIL_CLIENTE as readonly string[]).includes(evento);
 
+// Eventos "o cliente aprovou/reprovou um candidato" (grupo portal_cliente): e-mail (lista, como sempre), sino
+// (responsável do candidato + lista) e popup (só interruptor: segue as linhas nominais do sino).
+export const EVENTOS_DECISAO_CLIENTE = ["portal_candidato_aprovado", "portal_candidato_reprovado"] as const;
+export const eventoDecisaoCliente = (evento: string): boolean => (EVENTOS_DECISAO_CLIENTE as readonly string[]).includes(evento);
+// Sino e popup destes eventos podem ficar ligados com a lista VAZIA (o responsável sempre é avisado): a regra do
+// último destinatário e a restauração do padrão não se aplicam a eles.
+export const canalSemListaPermitido = (evento: string, canal: string): boolean =>
+  eventoDecisaoCliente(evento) && (canal === "sino" || canal === "popup");
+// O popup destes eventos não tem lista própria: a tela só mostra o interruptor.
+export const canalSoInterruptor = (evento: string, canal: string): boolean => eventoDecisaoCliente(evento) && canal === "popup";
+// Como a tela mostra o canal quando NÃO há linha em aviso_eventos_canais (coerente com o código que envia).
+export function ligadoSemLinha(evento: string, canal: string): boolean {
+  if (eventoDecisaoCliente(evento)) return canal !== "popup"; // e-mail e sino seguem ligados; popup só com linha
+  return canal === "email" || !eventoSemLista(evento);
+}
+
 // Eventos sem lista de destinatários (só liga/desliga por canal). A tela não mostra lista nem
 // formulário de adicionar, e a API recusa adicionar destinatário a eles.
 export const EVENTOS_SEM_LISTA: readonly string[] = [...EVENTOS_POR_GRUPO.avisos_cliente, ...EVENTOS_EMAIL_CLIENTE];
@@ -121,8 +137,8 @@ export const CANAIS_POR_EVENTO: Record<string, readonly ("email" | "sino" | "pop
   email_cliente_alteracao_decidida: ["email"],
   email_cliente_lembrete_agendamento: ["email"],
   rescisao_paga: ["sino"],
-  portal_candidato_aprovado: ["email"],
-  portal_candidato_reprovado: ["email"],
+  portal_candidato_aprovado: ["email", "sino", "popup"],
+  portal_candidato_reprovado: ["email", "sino", "popup"],
   indicacao_decisao_cliente: ["email"],
 };
 
@@ -172,9 +188,9 @@ export const NOTA_EVENTO: Record<string, string> = {
     "Dispara quando o cliente envia uma indicação direta pelo portal. O popup lista as indicações pendentes quando a pessoa entra no painel e reaparece no próximo login enquanto houver pendente que ela não tenha dispensado; clicar abre a indicação. Quem não está na lista do popup não vê o popup (e com o popup desligado ninguém vê). O filtro de unidade é regra fixa: só recebem quem atende a unidade do cliente.",
   rescisao_paga: "Hoje este aviso só existe no sino (e no popup de login, que deriva dele).",
   portal_candidato_aprovado:
-    "O sino desta aprovação continua indo para o responsável pelo candidato (regra fixa, não é lista) — por isso só o e-mail é configurável.",
+    "Dispara quando o cliente aprova um candidato no portal. E-mail: lista abaixo (padrão Olver e RH). Sino: com o canal ligado o responsável pelo candidato SEMPRE é avisado, além das pessoas da lista (a lista pode ficar vazia); sem responsável e sem lista vai um aviso geral para a equipe da unidade do cliente; desligado, ninguém recebe o sino. Popup: abre uma vez por aviso para quem recebeu o aviso nominal (o responsável e a lista do sino); não tem lista própria e vem desligado até ser ligado. O aviso traz o comentário do cliente, nunca fee nem dados de admissão.",
   portal_candidato_reprovado:
-    "Hoje não existe e-mail interno de reprovação (o sino vai para o responsável pelo candidato, regra fixa). Vem desligado: ao ligar, os destinatários abaixo passam a receber um e-mail a cada reprovação feita pelo cliente.",
+    "Dispara quando o cliente reprova um candidato no portal. E-mail: vem desligado (ao ligar, a lista abaixo recebe um e-mail a cada reprovação). Sino: com o canal ligado o responsável pelo candidato SEMPRE é avisado, além das pessoas da lista (a lista pode ficar vazia); sem responsável e sem lista vai um aviso geral para a equipe da unidade do cliente; desligado, ninguém recebe o sino. Popup: abre uma vez por aviso para quem recebeu o aviso nominal (o responsável e a lista do sino); não tem lista própria e vem desligado até ser ligado. O aviso traz o motivo informado pelo cliente.",
   indicacao_decisao_cliente:
     "E-mail enviado quando a Salmazos aprova uma indicação direta do cliente (traz os dados de admissão). Não há sino neste aviso.",
 };
@@ -199,6 +215,12 @@ export const APOIO_EMAILS_CLIENTE = "Os e-mails vão para o login de cada usuár
 
 export function descricaoPadraoDoSistema(grupo: GrupoAviso, canal: string, evento = ""): string {
   if (eventoEmailCliente(evento)) return FRASE_EMAIL_CLIENTE;
+  if (eventoDecisaoCliente(evento) && canal === "sino") {
+    return "Ligado, sem ninguém na lista: só o responsável pelo candidato é avisado (sem responsável, aviso geral da unidade do cliente). Desligado: ninguém.";
+  }
+  if (eventoDecisaoCliente(evento) && canal === "popup") {
+    return "Ligado: abre uma vez por aviso para quem recebeu o aviso nominal do sino (responsável e lista). Desligado, ou sem esta configuração: ninguém vê o popup.";
+  }
   if (eventoSemLista(evento)) return FRASE_SEM_LISTA;
   if (evento === "solicitacao_vaga" && canal === "popup") {
     return "Sem destinatários: vale o padrão antigo, todos os analistas ativos da unidade veem o popup.";

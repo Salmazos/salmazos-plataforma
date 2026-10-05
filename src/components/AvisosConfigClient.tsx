@@ -12,8 +12,10 @@ import {
   ROTULO_CANAL,
   ROTULO_EVENTO,
   ROTULO_GRUPO,
+  canalSoInterruptor,
   descricaoPadraoDoSistema,
   eventoSemLista,
+  ligadoSemLinha,
   type GrupoAviso,
 } from "@/lib/avisosCatalogo";
 
@@ -290,8 +292,9 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
   // Evento sem lista de pessoas (Avisos ao cliente): só liga/desliga por canal. Sem linha de canal de
   // sino/popup = desligado (nada era enviado ao cliente antes); sem linha do canal E-MAIL = ligado (o e-mail
   // já existia antes do interruptor), coerente com emailClienteLigado.
-  const semLista = eventoSemLista(evento);
-  const ligado = cfg ? cfg.ativo : canal === "email" || !semLista;
+  // O popup dos avisos de decisão do cliente também não tem lista (segue o sino): só o interruptor.
+  const semLista = eventoSemLista(evento) || canalSoInterruptor(evento, canal);
+  const ligado = cfg ? cfg.ativo : ligadoSemLinha(evento, canal);
   const ativos = lista.filter((d) => d.ativo).length;
   const chaveCanal = `${evento}:${canal}`;
   const [modoNovo, setModoNovo] = useState<"usuario" | "email">("usuario");

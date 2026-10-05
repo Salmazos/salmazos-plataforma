@@ -99,9 +99,18 @@ const PADRAO_PORTAL_CLIENTE: Record<string, PadraoEvento> = {
     email: { ativo: true, destinatarios: [EMAIL_ANDREZA, EMAIL_GIOVANNI, EMAIL_REBECCA] },
     sino: { ativo: true, destinatarios: SINO_TODOS },
   },
-  portal_candidato_aprovado: { email: { ativo: true, destinatarios: [EMAIL_OLVER, EMAIL_RH] } },
-  // Nasce desligado: hoje não existe e-mail interno de reprovação.
-  portal_candidato_reprovado: { email: { ativo: false, destinatarios: [EMAIL_OLVER, EMAIL_RH] } },
+  // Sino e popup: ligados com a lista VAZIA (o responsável do candidato sempre é avisado por regra no código).
+  portal_candidato_aprovado: {
+    email: { ativo: true, destinatarios: [EMAIL_OLVER, EMAIL_RH] },
+    sino: { ativo: true, destinatarios: [] },
+    popup: { ativo: true, destinatarios: [] },
+  },
+  // E-mail nasce desligado: hoje não existe e-mail interno de reprovação.
+  portal_candidato_reprovado: {
+    email: { ativo: false, destinatarios: [EMAIL_OLVER, EMAIL_RH] },
+    sino: { ativo: true, destinatarios: [] },
+    popup: { ativo: true, destinatarios: [] },
+  },
   indicacao_decisao_cliente: { email: { ativo: true, destinatarios: [EMAIL_OLVER, EMAIL_RH] } },
 };
 
@@ -134,6 +143,10 @@ export const PADRAO_AVISOS: Record<GrupoComPadrao, Record<string, PadraoEvento>>
   },
 };
 
+// Cópia de EVENTOS_DECISAO_CLIENTE (avisosCatalogo.ts): este módulo não importa outros (roda no script de
+// verificação). O script confere que as duas regras (canalSemListaPermitido e esta) dão o mesmo resultado.
+const EVENTOS_DECISAO_CLIENTE_SEM_LISTA: readonly string[] = ["portal_candidato_aprovado", "portal_candidato_reprovado"];
+
 export function grupoTemPadrao(grupo: string): grupo is GrupoComPadrao {
   return Object.prototype.hasOwnProperty.call(PADRAO_AVISOS, grupo);
 }
@@ -141,7 +154,7 @@ export function grupoTemPadrao(grupo: string): grupo is GrupoComPadrao {
 export interface PayloadRestauracao {
   eventos: {
     evento: string;
-    canais: { canal: CanalPadrao; ativo: boolean; destinatarios: Record<string, string>[] }[];
+    canais: { canal: CanalPadrao; ativo: boolean; destinatarios: Record<string, string>[]; permite_vazio?: boolean }[];
   }[];
 }
 
@@ -177,8 +190,10 @@ export function montarPayloadRestauracao(grupo: GrupoComPadrao, usuariosAtivos: 
           destinatarios.push({ tipo_destinatario: "email", nome: d.nome, email: d.email.toLowerCase() });
         }
       }
-      if (padrao.ativo && destinatarios.length === 0) semDestinatario.push({ evento, canal });
-      itens.push({ canal, ativo: padrao.ativo, destinatarios });
+      // Sino e popup dos avisos de decisão do cliente podem ficar ligados sem lista (o responsável sempre é avisado).
+      const permiteVazio = EVENTOS_DECISAO_CLIENTE_SEM_LISTA.includes(evento) && (canal === "sino" || canal === "popup");
+      if (padrao.ativo && destinatarios.length === 0 && !permiteVazio) semDestinatario.push({ evento, canal });
+      itens.push({ canal, ativo: padrao.ativo, destinatarios, ...(permiteVazio ? { permite_vazio: true } : {}) });
     }
     eventos.push({ evento, canais: itens });
   }
