@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
-import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
+import { avisarGarantiaRS } from "@/lib/avisarGarantiaRS";
+import { garantiaExpirada } from "@/lib/garantiaRS";
 import { sincronizarEncaminhamentoComEtapa } from "@/lib/sincronizarEncaminhamento";
 import { exigirAcessoCandidatoVaga } from "@/lib/unidadeAuth";
 
@@ -18,7 +19,7 @@ export async function PATCH(_request: NextRequest, { params }: Params) {
 
     const { data: cv, error: cvErr } = await supabase
       .from("candidatos_vagas")
-      .select("id, candidato_id, vaga_id, garantia_data_fim, garantia_acionada, candidatos(nome_completo)")
+      .select("id, candidato_id, vaga_id, garantia_data_fim, garantia_acionada, candidatos(nome_completo, responsavel)")
       .eq("id", id)
       .single();
 
@@ -28,25 +29,32 @@ export async function PATCH(_request: NextRequest, { params }: Params) {
     if (cv.garantia_acionada)
       return NextResponse.json({ error: "Garantia já foi acionada." }, { status: 409 });
 
+    // O prazo vale até o fim do dia do vencimento em horário de Brasília (-03:00), não em UTC.
     const garantiaFim = cv.garantia_data_fim as string | null;
-    if (garantiaFim) {
-      const fimDate = new Date(garantiaFim + "T23:59:59");
-      if (fimDate < new Date())
-        return NextResponse.json({ error: "Garantia já expirou." }, { status: 400 });
-    }
+    if (garantiaExpirada(garantiaFim))
+      return NextResponse.json({ error: "Garantia já expirou." }, { status: 400 });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const candidatoNome = (cv as any).candidatos?.nome_completo ?? "Candidato";
 
-    // Mark guarantee as used
-    await supabase
+    // Mark guarantee as used. Guarda contra clique duplo: só marca se ainda não estava acionada; quem perde a
+    // corrida recebe o mesmo 409, antes de criar vaga de reposição, histórico ou aviso.
+    const { data: marcada, error: erroMarcar } = await supabase
       .from("candidatos_vagas")
       .update({
         garantia_acionada: true,
         garantia_acionada_em: new Date().toISOString(),
         etapa: "reprovado_final",
       })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("garantia_acionada", false)
+      .select("id");
+    if (erroMarcar) {
+      console.error(`[acionar-garantia] Erro ao marcar a garantia como acionada (cv_id=${id}):`, erroMarcar.message);
+      return NextResponse.json({ error: "Erro interno." }, { status: 500 });
+    }
+    if (!marcada || marcada.length === 0)
+      return NextResponse.json({ error: "Garantia já foi acionada." }, { status: 409 });
 
     // Fetch original vaga to duplicate
     const { data: vagaOriginal } = await supabase
@@ -109,61 +117,26 @@ export async function PATCH(_request: NextRequest, { params }: Params) {
       metadata: { cv_id: id, vaga_id: cv.vaga_id, nova_vaga_id: novaVagaId },
     });
 
-    const vagaTitulo = vo?.titulo ?? "Vaga";
-    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
-<div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
-  <div style="background:#000;padding:24px 28px;text-align:center">
-    <h1 style="color:#FFD700;margin:0;font-size:18px">🔄 Garantia R&S Acionada</h1>
-  </div>
-  <div style="padding:24px 28px">
-    <div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;padding:14px 16px;margin-bottom:20px">
-      <p style="margin:0;color:#C2410C;font-size:14px;font-weight:700">Reposição gratuita iniciada</p>
-      <p style="margin:4px 0 0;color:#C2410C;font-size:13px">Uma nova vaga foi criada automaticamente.</p>
-    </div>
-    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px">
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Candidato anterior</td><td style="padding:6px 0;color:#111827">${candidatoNome}</td></tr>
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Vaga original</td><td style="padding:6px 0;color:#111827">${vagaTitulo}</td></tr>
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Cliente</td><td style="padding:6px 0;color:#111827">${clienteNome}</td></tr>
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Data acionamento</td><td style="padding:6px 0;color:#111827">${new Date().toLocaleDateString("pt-BR")}</td></tr>
-    </table>
-    ${novaVagaId ? `<div style="text-align:center"><a href="https://salmazos-plataforma.vercel.app/painel/vagas/${novaVagaId}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver nova vaga</a></div>` : ""}
-  </div>
-  <div style="background:#f9fafb;padding:12px 28px;text-align:center">
-    <p style="margin:0;font-size:11px;color:#9CA3AF">Salmazos RH — Notificação automática</p>
-  </div>
-</div>
-</body></html>`;
-
-    const resultadoNotify = await notifyAllAnalysts({
-      subject: `🔄 Garantia R&S Acionada — ${candidatoNome} — ${clienteNome}`,
-      html,
-      tipo: "garantia_acionada",
-      candidato_id: cv.candidato_id,
-      vaga_id: cv.vaga_id,
-      unidadeId: vo?.unidade_id ?? null,
-    });
-
-    if (resultadoNotify.attempted === 0) {
-      console.error(
-        `[acionar-garantia] Notificação por e-mail NÃO enviada — nenhuma tentativa registrada (cv_id=${id}).`
-      );
-    }
-
-    // Create bell notification
-    const { error: errInsertNotificacao } = await supabase.from("notificacoes_analista").insert({
-      tipo: "garantia_acionada",
-      titulo: `🔄 Garantia acionada: ${candidatoNome}`,
-      mensagem: `Reposição gratuita iniciada para ${vo?.titulo ?? "vaga"} (${clienteNome}). Nova vaga aberta.`,
-      candidato_id: cv.candidato_id,
-      unidade_id: vo?.unidade_id ?? null,
-    });
-
-    if (errInsertNotificacao) {
-      console.error(
-        `[acionar-garantia] Erro ao registrar notificação de sino (cv_id=${id}):`,
-        errInsertNotificacao.message
-      );
+    // Sino, popup e e-mail seguem Configurações > Avisos (evento garantia_rs_acionada). Nunca lança: a garantia já
+    // foi acionada e a vaga de reposição já existe.
+    try {
+      const resultadoAviso = await avisarGarantiaRS(supabase, {
+        evento: "acionada",
+        candidatoId: cv.candidato_id,
+        vagaId: cv.vaga_id,
+        candidatoNome,
+        vagaTitulo: vo?.titulo ?? null,
+        clienteNome,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        responsavelNome: (cv as any).candidatos?.responsavel ?? null,
+        unidadeId: vo?.unidade_id ?? null,
+        novaVagaId,
+      });
+      if (resultadoAviso.sino === "falhou" || resultadoAviso.email === "falhou") {
+        console.error(`[acionar-garantia] Aviso não entregue em algum canal (cv_id=${id}): sino=${resultadoAviso.sino}, e-mail=${resultadoAviso.email}.`);
+      }
+    } catch (avisoErr) {
+      console.error(`[acionar-garantia] Erro ao avisar (cv_id=${id}):`, avisoErr);
     }
 
     return NextResponse.json({ success: true, nova_vaga_id: novaVagaId });

@@ -314,6 +314,30 @@ aprovado ligado, reprovado desligado, olver@ e rh@).
   sem aviso nem e-mail.
 - O sino interno do painel (polling de 30 s e Realtime) não mudou: o aviso novo chega por ele como os outros.
 
+## Garantia R&S (equipe interna): sino, popup e e-mail
+
+Migration: `supabase/migration_avisos_garantia_rs.sql` (aditiva; não aplicada pelo código). Dois eventos novos no grupo Vagas,
+com os canais E-mail, Sino e Popup: `garantia_rs_vencendo` (cron `garantia-rs`) e `garantia_rs_acionada` (rota
+`PATCH /api/candidatos-vagas/[id]/acionar-garantia`). O cliente não recebe nada. Os tipos gravados em `notificacoes_analista` e
+`email_logs` (`alerta_garantia_rs`, `garantia_acionada`) não mudaram.
+
+- **Quando avisa:** só no último dia da garantia (sem aviso antecipado). Se o cron falhar, ele recupera até 2 dias para trás
+  (datas em Brasília); `candidatos_vagas.garantia_alerta_enviado_em` evita repetir (inclusive com o cron rodando duas vezes).
+  O carimbo só é gravado se pelo menos um canal ligado entregou, ou se todos estão desligados; se todos os ligados falharam,
+  a próxima execução tenta de novo.
+- **Sino:** o responsável do candidato (sempre) MAIS a lista do canal sino, uma linha por `user_id`; sem os dois, a linha geral
+  da unidade. Sem linha de canal ou erro de leitura = ligado; só `ativo = false` desliga tudo. Lista vazia é permitida.
+- **Popup:** estende o popup da decisão do cliente (`GET /api/decisoes-cliente-popup`): lista as linhas nominais dos tipos
+  `alerta_garantia_rs` e `garantia_acionada`, cada tipo ligado ao seu evento. Mesmas regras (lido uma vez, sem polling, 30 dias,
+  só do próprio usuário, "visto" por usuário; sem linha ou erro = não mostra).
+- **E-mail:** canal ligado sem destinatários = modo legado, exatamente como era (vencendo: analistas da unidade, sem diretoria e
+  superuser; acionada: todos os analistas da unidade). Com lista cadastrada, usa a lista. Template, assunto e tipo iguais; links
+  no domínio fixo `https://vagas.salmazos.com.br`. Em recuperação (aviso fora do dia do vencimento) o texto usa a data, não "hoje".
+- **Acionar:** o `UPDATE` só marca com `garantia_acionada = false`; quem perde a corrida recebe o mesmo 409, antes de criar a vaga
+  de reposição, o histórico ou o aviso. O prazo vale até 23:59:59 de Brasília (-03:00) do dia do vencimento.
+- **Padrão / "Restaurar padrão do grupo vagas":** sino e popup ligados com lista vazia (exceção `permite_vazio`); e-mail ligado com
+  a mesma lista de `vaga_cancelada` (Rebecca, Andreza, Giovanni). Atenção: restaurar o grupo troca o modo legado do e-mail por essa lista.
+
 ## Ajustes pós-teste (tela de Avisos e portal)
 
 - **Erro inline na tela de Avisos.** Ações que falham na API (ativar/desativar, remover, adicionar, ligar/desligar canal,

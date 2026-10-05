@@ -6,15 +6,19 @@ import {
   type DadosAviso, type FonteAvisos, type LinhaDestinatario, type PerfilAnalista,
 } from "../src/lib/avisosResolucao.ts";
 import { PADRAO_AVISOS, PADRAO_EMAIL_CLIENTE, grupoTemPadrao, montarPayloadRestauracao } from "../src/lib/avisosPadrao.ts";
-import { EVENTOS_DECISAO_CLIENTE, eventoDecisaoCliente, canalSemListaPermitido, canalSoInterruptor, ligadoSemLinha, EVENTOS_EMAIL_CLIENTE, eventoEmailCliente, FRASE_EMAIL_CLIENTE, APOIO_EMAILS_CLIENTE, EVENTOS_POR_GRUPO, EVENTOS_SEM_LISTA, eventoSemLista, FRASE_SEM_LISTA, ROTULO_GRUPO, grupoDoEvento, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
+import { EVENTOS_GARANTIA_RS, eventoGarantiaRS, eventoComResponsavelNoSino, EVENTOS_DECISAO_CLIENTE, eventoDecisaoCliente, canalSemListaPermitido, canalSoInterruptor, ligadoSemLinha, EVENTOS_EMAIL_CLIENTE, eventoEmailCliente, FRASE_EMAIL_CLIENTE, APOIO_EMAILS_CLIENTE, EVENTOS_POR_GRUPO, EVENTOS_SEM_LISTA, eventoSemLista, FRASE_SEM_LISTA, ROTULO_GRUPO, grupoDoEvento, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
 import {
   canalClienteLigado, emailClienteLigadoRegra, montarDestinatariosEmailCliente, inicioJanelaAvisos, avisoVisivelParaUsuario, linkPortalValido, chaveDedupAviso, textoAvisoIndicacaoDecidida,
   haQuantoTempo, textoAvisoSolicitacaoDecidida, textoAvisoPedidoDecidido, tipoPedidoDaAcao, chaveDedupSolicitacaoDecidida, chaveDedupPedidoDecidido, textoAvisoCandidatoEnviado, textoAvisoEntrevista, decidirAvisoCandidatoEnviado, naoLidosDoSino, pendentesDoPopup, limitarMensagemAviso, DIAS_VISIVEL_AVISO_CLIENTE, type AvisoPortal,
 } from "../src/lib/avisoClienteRegras.ts";
 import {
   EVENTO_POR_DECISAO, TIPO_NOTIFICACAO_POR_DECISAO, TIPOS_NOTIFICACAO_DECISAO, EVENTO_POR_TIPO_NOTIFICACAO, sinoDecisaoLigado, popupDecisaoLigado, textoAvisoDecisaoCliente,
-  userIdsDestinoDecisao, inicioJanelaPopupDecisao, tiposComPopupLigado, DIAS_JANELA_POPUP_DECISAO,
+  userIdsDestinoDecisao, TIPOS_NOTIFICACAO_POPUP, inicioJanelaPopupDecisao, tiposComPopupLigado, DIAS_JANELA_POPUP_DECISAO,
 } from "../src/lib/decisaoClienteCandidato.ts";
+import {
+  EVENTO_POR_GARANTIA, TIPO_NOTIFICACAO_POR_GARANTIA, DIAS_RECUPERACAO_GARANTIA, dataBrasilia, somarDiasISO, janelaAlertaGarantia, garantiaExpirada,
+  formatarDataBR, textoAvisoGarantiaVencendo, textoAvisoGarantiaAcionada, textosEmailGarantiaVencendo, deveCarimbarGarantia,
+} from "../src/lib/garantiaRS.ts";
 import { dataEntrevistaParaCliente, horaEntrevistaReal, decidirAvisoEntrevista } from "../src/lib/horaEntrevista.ts";
 import { mensagemErroAcao, MSG_ULTIMO_DESTINATARIO, MSG_ACAO_PADRAO } from "../src/lib/avisosErroAcao.ts";
 import { resumirPedidoCliente, type LinhaPedidoCliente } from "../src/lib/pedidoClienteResumo.ts";
@@ -190,27 +194,33 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   for (const evento of Object.values(PADRAO_AVISOS.vagas)) for (const c of Object.values(evento)) for (const d of c.destinatarios) if (d.tipo_destinatario === "usuario") TODOS.add(d.usuario_id);
 
   await caso("padrão: só vagas e portal_cliente têm padrão", () => { assert.equal(grupoTemPadrao("vagas"), true); assert.equal(grupoTemPadrao("portal_cliente"), true); assert.equal(grupoTemPadrao("rescisao"), false); });
-  await caso("padrão vagas: 5 eventos, espelho da carga inicial (e-mail 2/3/3/0/3, sino 7/7/7/7/3)", () => {
+  await caso("padrão vagas: 7 eventos (5 da carga inicial: e-mail 2/3/3/0/3, sino 7/7/7/7/3; mais os 2 da garantia R&S)", () => {
     const p = PADRAO_AVISOS.vagas;
-    assert.deepEqual(Object.keys(p).sort(), ["solicitacao_vaga", "vaga_cancelada", "vaga_criada", "vaga_fechada", "vaga_reativada"]);
+    assert.deepEqual(Object.keys(p).sort(), ["garantia_rs_acionada", "garantia_rs_vencendo", "solicitacao_vaga", "vaga_cancelada", "vaga_criada", "vaga_fechada", "vaga_reativada"]);
     const n = (ev: string, c: "email" | "sino") => p[ev][c]!.destinatarios.length;
     assert.deepEqual(["vaga_criada", "solicitacao_vaga", "vaga_cancelada", "vaga_fechada", "vaga_reativada"].map((ev) => n(ev, "email")), [2, 3, 3, 0, 3]);
     assert.deepEqual(["vaga_criada", "solicitacao_vaga", "vaga_cancelada", "vaga_fechada", "vaga_reativada"].map((ev) => n(ev, "sino")), [7, 7, 7, 7, 3]);
     assert.equal(p.vaga_fechada.email!.ativo, false);
+    for (const ev of ["garantia_rs_vencendo", "garantia_rs_acionada"]) {
+      assert.equal(n(ev, "email"), 3); assert.equal(p[ev].email!.ativo, true);
+      assert.deepEqual(p[ev].sino, { ativo: true, destinatarios: [] }); assert.deepEqual(p[ev].popup, { ativo: true, destinatarios: [] });
+      assert.deepEqual(p[ev].email!.destinatarios, p.vaga_cancelada.email!.destinatarios, "mesma lista de e-mail de vaga_cancelada");
+    }
   });
   await caso("padrão vagas: sem duplicados por evento/canal e todo canal ligado tem destinatário", () => {
     for (const [ev, canais] of Object.entries(PADRAO_AVISOS.vagas)) for (const [canal, c] of Object.entries(canais)) {
       const chaves = c.destinatarios.map((d) => (d.tipo_destinatario === "usuario" ? d.usuario_id : d.email.toLowerCase()));
       assert.equal(new Set(chaves).size, chaves.length, `${ev}/${canal} duplicado`);
-      if (c.ativo) assert.ok(c.destinatarios.length > 0, `${ev}/${canal} ligado sem destinatário`);
+      // Exceção deliberada: sino e popup da garantia R&S podem ficar ligados com a lista vazia.
+      if (c.ativo && !canalSemListaPermitido(ev, canal)) assert.ok(c.destinatarios.length > 0, `${ev}/${canal} ligado sem destinatário`);
     }
   });
   await caso("restauração: todos ativos = payload completo, nada ignorado", () => {
     const r = montarPayloadRestauracao("vagas", TODOS);
     assert.deepEqual(r.ignorados, []); assert.deepEqual(r.semDestinatario, []);
-    assert.equal(r.payload.eventos.length, 5);
-    // 10 canais de e-mail/sino + o popup de solicitacao_vaga (Fase 3, bloco 1)
-    assert.equal(r.payload.eventos.flatMap((e) => e.canais).length, 11);
+    assert.equal(r.payload.eventos.length, 7);
+    // 10 canais de e-mail/sino + o popup de solicitacao_vaga (Fase 3, bloco 1) + e-mail, sino e popup dos 2 da garantia R&S
+    assert.equal(r.payload.eventos.flatMap((e) => e.canais).length, 17);
   });
   await caso("restauração: usuário inativo fica de fora e é informado", () => {
     const sem = new Set(TODOS); const alvo = [...TODOS][0]; sem.delete(alvo);
@@ -552,7 +562,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     for (const canal of ["sino", "popup"]) assert.equal(descricaoPadraoDoSistema("avisos_cliente", canal, "indicacao_decidida_cliente"), FRASE_SEM_LISTA);
   });
   await caso("avisos ao cliente: os eventos e a lista dos outros grupos não mudaram", () => {
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 5); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 7); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
     assert.deepEqual([...canaisDoEvento("vaga_criada")], ["email", "sino"]);
   });
 
@@ -652,7 +662,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("bloco 2 catálogo: o evento do bloco 1 e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.deepEqual([...canaisDoEvento("indicacao_decidida_cliente")], ["sino", "popup"]);
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 5); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 7); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
   });
 
   await caso("data da entrevista para o cliente: dd/mm/aaaa às hh:mm (fuso de Brasília)", () => {
@@ -740,7 +750,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("bloco 3 catálogo: os eventos dos blocos 1 e 2 e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.equal(ROTULO_EVENTO.candidato_enviado_cliente, "Candidato enviado ao cliente");
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 5); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 7); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
   });
 
   const AB = "aguardando", AG = "aguardando_agendamento_cliente";
@@ -856,7 +866,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("bloco 4 catálogo: os 4 eventos antigos e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.equal(ROTULO_EVENTO.entrevista_remarcada_cliente, "Entrevista remarcada");
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 5); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 7); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
     assert.equal(grupoTemPadrao("avisos_cliente"), false, "avisos_cliente continua sem Restaurar padrão");
   });
   await caso("texto da solicitação aprovada: cargo e 'já está no ar'; cargo nulo só encurta", () => {
@@ -976,7 +986,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("catálogo: os 6 eventos de sino/popup não mudaram e nenhum nome colide com os e-mails ao cliente", () => {
     assert.equal(EVENTOS_POR_GRUPO.avisos_cliente.length, 6);
     for (const ev of EVENTOS_POR_GRUPO.avisos_cliente) { assert.equal(eventoEmailCliente(ev), false, ev); assert.deepEqual([...canaisDoEvento(ev)], ["sino", "popup"], ev); }
-    assert.equal(new Set([...EVENTOS_POR_GRUPO.avisos_cliente, ...LISTA_EMAIL, ...EVENTOS_POR_GRUPO.portal_cliente, ...EVENTOS_POR_GRUPO.vagas]).size, 6 + 7 + 8 + 5);
+    assert.equal(new Set([...EVENTOS_POR_GRUPO.avisos_cliente, ...LISTA_EMAIL, ...EVENTOS_POR_GRUPO.portal_cliente, ...EVENTOS_POR_GRUPO.vagas]).size, 6 + 7 + 8 + 7);
     assert.equal(EVENTOS_SEM_LISTA.length, 13);
     for (const ev of ["solicitacao_vaga", "vaga_pausa_pedida", "portal_candidato_aprovado", "rescisao_paga"]) assert.equal(eventoSemLista(ev), false, ev);
   });
@@ -1066,10 +1076,11 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("decisão do cliente, popup: janela de 30 dias e quais tipos aparecem conforme o canal popup de cada evento", () => {
     assert.equal(DIAS_JANELA_POPUP_DECISAO, 30);
     assert.equal(inicioJanelaPopupDecisao(new Date("2026-10-20T12:00:00Z")), "2026-09-20T12:00:00.000Z");
-    assert.deepEqual(tiposComPopupLigado({ aprovado: false, reprovado: false }), []);
-    assert.deepEqual(tiposComPopupLigado({ aprovado: true, reprovado: false }), ["aprovacao_cliente"]);
-    assert.deepEqual(tiposComPopupLigado({ aprovado: false, reprovado: true }), ["reprovacao_cliente"]);
-    assert.deepEqual(tiposComPopupLigado({ aprovado: true, reprovado: true }).sort(), ["aprovacao_cliente", "reprovacao_cliente"]);
+    assert.deepEqual(tiposComPopupLigado([]), []);
+    assert.deepEqual(tiposComPopupLigado(["portal_candidato_aprovado"]), ["aprovacao_cliente"]);
+    assert.deepEqual(tiposComPopupLigado(["portal_candidato_reprovado"]), ["reprovacao_cliente"]);
+    assert.deepEqual(tiposComPopupLigado(["portal_candidato_aprovado", "portal_candidato_reprovado"]).sort(), ["aprovacao_cliente", "reprovacao_cliente"]);
+    assert.deepEqual(tiposComPopupLigado(["evento_desconhecido"]), []);
   });
   await caso("decisão do cliente, catálogo: os 2 eventos têm e-mail, sino e popup; popup sem lista; e-mail inalterado", () => {
     assert.deepEqual([...EVENTOS_DECISAO_CLIENTE], ["portal_candidato_aprovado", "portal_candidato_reprovado"]);
@@ -1115,6 +1126,127 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     assert.ok(!vazio.semDestinatario.some((x) => EVENTOS_DECISAO_CLIENTE.includes(x.evento as never) && x.canal !== "email"));
     assert.ok(!vazio.semDestinatario.some((x) => x.evento === "portal_candidato_aprovado" && x.canal === "email"), "e-mail aprovado usa endereços livres (olver@ e rh@): não depende de usuário ativo");
     assert.ok(vazio.semDestinatario.some((x) => x.evento === "indicacao_candidato_recebida" && x.canal === "popup"));
+  });
+
+  // ── Garantia R&S: sino, popup e e-mail internos configuráveis ──
+  const GAR = ["garantia_rs_vencendo", "garantia_rs_acionada"];
+  await caso("garantia R&S: eventos novos no grupo vagas; os tipos de gravação de sempre (alerta_garantia_rs, garantia_acionada) não mudam", () => {
+    assert.deepEqual([...EVENTOS_GARANTIA_RS], GAR);
+    assert.deepEqual(EVENTO_POR_GARANTIA, { vencendo: "garantia_rs_vencendo", acionada: "garantia_rs_acionada" });
+    assert.deepEqual(TIPO_NOTIFICACAO_POR_GARANTIA, { vencendo: "alerta_garantia_rs", acionada: "garantia_acionada" });
+    for (const ev of GAR) {
+      assert.equal(eventoGarantiaRS(ev), true); assert.equal(eventoComResponsavelNoSino(ev), true); assert.equal(grupoDoEvento(ev), "vagas", ev);
+      assert.ok(EVENTOS_POR_GRUPO.vagas.includes(ev)); assert.deepEqual([...canaisDoEvento(ev)], ["email", "sino", "popup"], ev);
+      assert.ok(ROTULO_EVENTO[ev] && NOTA_EVENTO[ev], ev); assert.equal(eventoSemLista(ev), false, "e-mail e sino têm lista");
+      assert.match(NOTA_EVENTO[ev], /responsável pelo candidato SEMPRE/); assert.match(NOTA_EVENTO[ev], /O cliente não recebe nada/);
+    }
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 7); assert.equal(eventoGarantiaRS("vaga_criada"), false);
+  });
+  await caso("garantia R&S, tela: sino e popup vazios permitidos, popup só interruptor, e sem linha: e-mail e sino ligados, popup desligado", () => {
+    for (const ev of GAR) {
+      assert.equal(canalSemListaPermitido(ev, "sino"), true); assert.equal(canalSemListaPermitido(ev, "popup"), true); assert.equal(canalSemListaPermitido(ev, "email"), false);
+      assert.equal(canalSoInterruptor(ev, "popup"), true); assert.equal(canalSoInterruptor(ev, "sino"), false);
+      assert.equal(ligadoSemLinha(ev, "email"), true); assert.equal(ligadoSemLinha(ev, "sino"), true); assert.equal(ligadoSemLinha(ev, "popup"), false);
+      assert.match(descricaoPadraoDoSistema("vagas", "sino", ev), /só o responsável pelo candidato/); assert.match(descricaoPadraoDoSistema("vagas", "popup", ev), /ninguém vê o popup/);
+      assert.match(descricaoPadraoDoSistema("vagas", "email", ev), /como sempre/);
+    }
+    assert.match(descricaoPadraoDoSistema("vagas", "email", "garantia_rs_vencendo"), /sem diretoria e superuser/);
+    assert.doesNotMatch(descricaoPadraoDoSistema("vagas", "email", "garantia_rs_acionada"), /sem diretoria/);
+    assert.equal(canalSemListaPermitido("vaga_criada", "sino"), false, "os outros eventos de vagas seguem com a regra do último destinatário");
+    assert.equal(ligadoSemLinha("vaga_criada", "popup"), true, "regra antiga dos outros eventos de vagas não mudou");
+  });
+  await caso("garantia R&S, resolvedor: sino sem linha/erro = ligado; ativo=false desliga; lista = configurado", async () => {
+    for (const ev of GAR) {
+      assert.equal((await resolverComFonte(fonte({ novo: { canalAtivo: false, linhas: [usuario("u1")] } }), ev, "sino")).modo, "desligado", ev);
+      const semLinha = await resolverComFonte(fonte({ novo: null, antigo: { canalAtivo: null, linhas: [] } }), ev, "sino"); assert.equal(semLinha.modo, "legado"); assert.equal(semLinha.falhou, false);
+      const erro = await resolverComFonte(fonte({ novoErro: true, antigo: null }), ev, "sino"); assert.equal(erro.modo, "legado"); assert.equal(erro.falhou, true);
+      const lista = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [usuario("u1"), usuario("u2")] } }), ev, "sino"); assert.equal(lista.modo, "configurado"); assert.deepEqual(lista.userIds, ["u1", "u2"]);
+    }
+  });
+  await caso("garantia R&S, resolvedor: e-mail LIGADO SEM lista = legado (comportamento de sempre); com lista = configurado; desligado = ninguém", async () => {
+    for (const ev of GAR) {
+      const ligadoSemLista = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [] }, perfis: [] }), ev, "email", null);
+      assert.equal(ligadoSemLista.modo, "legado"); assert.equal(ligadoSemLista.falhou, false); assert.deepEqual(ligadoSemLista.emails, []);
+      const comLista = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [email("a@x.com"), email("b@x.com")] } }), ev, "email", null);
+      assert.equal(comLista.modo, "configurado"); assert.deepEqual(comLista.emails.map((e) => e.email), ["a@x.com", "b@x.com"]);
+      assert.equal((await resolverComFonte(fonte({ novo: { canalAtivo: false, linhas: [email("a@x.com")] } }), ev, "email", null)).modo, "desligado");
+      const erro = await resolverComFonte(fonte({ novoErro: true, antigo: null }), ev, "email", null); assert.equal(erro.modo, "legado"); assert.equal(erro.falhou, true);
+    }
+  });
+  await caso("garantia R&S: responsável + lista sem duplicar; sem os dois = vazio (linha geral da unidade)", () => {
+    assert.deepEqual(userIdsDestinoDecisao("resp", ["a", "resp", "b"]), ["resp", "a", "b"]);
+    assert.deepEqual(userIdsDestinoDecisao(null, []), []); assert.deepEqual(userIdsDestinoDecisao("resp", []), ["resp"]);
+  });
+  await caso("garantia R&S, texto do vencimento: usa a DATA de vencimento (nunca 'hoje') e nada interno", () => {
+    const t = textoAvisoGarantiaVencendo({ candidato: "Maria Souza", vagaTitulo: "Auxiliar", cliente: "Maxsoy", dataFim: "2026-10-20" });
+    assert.equal(t.titulo, "⚠️ Garantia R&S com vencimento em 20/10/2026: Maria Souza");
+    assert.equal(t.mensagem, 'A garantia de reposição de Maria Souza na vaga "Auxiliar" (Maxsoy) tem vencimento em 20/10/2026.');
+    assert.ok(!/hoje/i.test(t.titulo + t.mensagem));
+    const n = textoAvisoGarantiaVencendo({ dataFim: "2026-01-05" });
+    assert.equal(n.mensagem, 'A garantia de reposição de Candidato na vaga "Vaga" (Cliente) tem vencimento em 05/01/2026.');
+    const interno = textoAvisoGarantiaVencendo({ candidato: "A", vagaTitulo: "B", cliente: "C", dataFim: "2026-10-20", fee_rs_percentual: 15, admissao_fee_valor: 4200, observacoes: "nota interna", decidido_por: "Analista Interno" } as never);
+    for (const proibido of ["15", "4200", "nota interna", "Analista Interno"]) assert.ok(!JSON.stringify(interno).includes(proibido), proibido);
+  });
+  await caso("garantia R&S, texto da garantia acionada: os textos de sempre; nulos só encurtam", () => {
+    assert.deepEqual(textoAvisoGarantiaAcionada({ candidato: "Maria", vagaTitulo: "Auxiliar", cliente: "Maxsoy" }), { titulo: "🔄 Garantia acionada: Maria", mensagem: "Reposição gratuita iniciada para Auxiliar (Maxsoy). Nova vaga aberta." });
+    assert.equal(textoAvisoGarantiaAcionada({}).mensagem, "Reposição gratuita iniciada para vaga (Cliente). Nova vaga aberta.");
+    assert.equal(textoAvisoGarantiaAcionada({ vagaTitulo: null }).titulo, "🔄 Garantia acionada: Candidato");
+  });
+  await caso("garantia R&S, e-mail do vencimento: no dia sai EXATAMENTE o texto de sempre; em recuperação fala da data (nunca 'hoje')", () => {
+    const hoje = textosEmailGarantiaVencendo({ candidato: "Maria", cliente: "Maxsoy", dataFim: "2026-10-20", hojeISO: "2026-10-20" });
+    assert.deepEqual(hoje, { assunto: "⚠️ Hoje é o último dia da garantia de Maria — Maxsoy", titulo: "⚠️ Último dia da garantia R&S", destaque: "🚨 A garantia vence HOJE!" });
+    for (const dataFim of ["2026-10-19", "2026-10-18"]) {
+      const t = textosEmailGarantiaVencendo({ candidato: "Maria", cliente: "Maxsoy", dataFim, hojeISO: "2026-10-20" });
+      assert.ok(!/hoje/i.test(JSON.stringify(t)), dataFim); assert.ok(t.assunto.includes(formatarDataBR(dataFim)) && t.destaque.includes(formatarDataBR(dataFim)));
+    }
+  });
+  await caso("garantia R&S, datas em horário de Brasília: hoje, janela de recuperação de 2 dias e virada de mês", () => {
+    assert.equal(dataBrasilia(new Date("2026-10-20T09:00:00Z")), "2026-10-20");
+    assert.equal(dataBrasilia(new Date("2026-10-21T02:59:00Z")), "2026-10-20", "23:59 em Brasília ainda é dia 20");
+    assert.equal(dataBrasilia(new Date("2026-10-21T03:00:00Z")), "2026-10-21");
+    assert.equal(DIAS_RECUPERACAO_GARANTIA, 2);
+    assert.deepEqual(janelaAlertaGarantia(new Date("2026-10-20T09:00:00Z")), { inicio: "2026-10-18", fim: "2026-10-20" });
+    assert.deepEqual(janelaAlertaGarantia(new Date("2026-11-01T09:00:00Z")), { inicio: "2026-10-30", fim: "2026-11-01" });
+    assert.deepEqual(janelaAlertaGarantia(new Date("2027-01-01T09:00:00Z")), { inicio: "2026-12-30", fim: "2027-01-01" });
+    assert.equal(somarDiasISO("2026-03-01", -1), "2026-02-28");
+  });
+  await caso("garantia R&S, prazo da rota acionar: vale até o fim do dia do vencimento em Brasília (antes expirava às 20:59)", () => {
+    assert.equal(garantiaExpirada("2026-10-20", new Date("2026-10-21T01:30:00Z")), false, "22:30 do dia 20 em Brasília: ainda vale");
+    assert.equal(garantiaExpirada("2026-10-20", new Date("2026-10-21T02:59:58Z")), false);
+    assert.equal(garantiaExpirada("2026-10-20", new Date("2026-10-21T03:00:01Z")), true, "00:00:01 do dia 21 em Brasília: expirou");
+    assert.equal(garantiaExpirada("2026-10-20", new Date("2026-10-19T12:00:00Z")), false);
+    assert.equal(garantiaExpirada(null), false); assert.equal(garantiaExpirada(undefined), false); assert.equal(garantiaExpirada(""), false);
+  });
+  await caso("garantia R&S, carimbo do cron: grava se algum canal entregou ou se tudo está desligado; não grava se tudo que está ligado falhou", () => {
+    assert.equal(deveCarimbarGarantia(["enviado", "enviado"]), true);
+    assert.equal(deveCarimbarGarantia(["enviado", "falhou"]), true, "um canal entregou");
+    assert.equal(deveCarimbarGarantia(["desligado", "enviado"]), true);
+    assert.equal(deveCarimbarGarantia(["desligado", "desligado"]), true, "nada a enviar");
+    assert.equal(deveCarimbarGarantia(["falhou", "falhou"]), false);
+    assert.equal(deveCarimbarGarantia(["falhou", "desligado"]), false, "o único canal ligado falhou");
+  });
+  await caso("garantia R&S, popup: os tipos alerta_garantia_rs e garantia_acionada seguem o canal popup dos seus eventos", () => {
+    assert.deepEqual([...TIPOS_NOTIFICACAO_POPUP].sort(), ["alerta_garantia_rs", "aprovacao_cliente", "garantia_acionada", "reprovacao_cliente"]);
+    assert.equal(EVENTO_POR_TIPO_NOTIFICACAO[TIPO_NOTIFICACAO_POR_GARANTIA.vencendo], EVENTO_POR_GARANTIA.vencendo);
+    assert.equal(EVENTO_POR_TIPO_NOTIFICACAO[TIPO_NOTIFICACAO_POR_GARANTIA.acionada], EVENTO_POR_GARANTIA.acionada);
+    assert.deepEqual(tiposComPopupLigado(["garantia_rs_vencendo"]), ["alerta_garantia_rs"]);
+    assert.deepEqual(tiposComPopupLigado(["garantia_rs_acionada"]), ["garantia_acionada"]);
+    assert.deepEqual(tiposComPopupLigado(["garantia_rs_vencendo", "garantia_rs_acionada", "portal_candidato_aprovado"]).sort(), ["alerta_garantia_rs", "aprovacao_cliente", "garantia_acionada"]);
+    assert.deepEqual(tiposComPopupLigado([]), []);
+  });
+  await caso("garantia R&S, restauração do grupo vagas: sino e popup vazios com permite_vazio; e-mail com a lista de vaga_cancelada; as regras dos outros eventos seguem", () => {
+    const r = montarPayloadRestauracao("vagas", TODOS);
+    assert.deepEqual(r.semDestinatario, []);
+    const marcados: string[] = [];
+    for (const e of r.payload.eventos) for (const c of e.canais) {
+      assert.equal(c.permite_vazio === true, canalSemListaPermitido(e.evento, c.canal), `${e.evento}/${c.canal} (cópia em avisosPadrao × catálogo)`);
+      if (c.permite_vazio) marcados.push(`${e.evento}/${c.canal}`);
+    }
+    assert.deepEqual(marcados.sort(), ["garantia_rs_acionada/popup", "garantia_rs_acionada/sino", "garantia_rs_vencendo/popup", "garantia_rs_vencendo/sino"]);
+    for (const ev of GAR) assert.equal(r.payload.eventos.find((e) => e.evento === ev)!.canais.find((c) => c.canal === "email")!.destinatarios.length, 3);
+    const vazio = montarPayloadRestauracao("vagas", new Set());
+    assert.ok(!vazio.semDestinatario.some((x) => GAR.includes(x.evento) && x.canal !== "email"), "sino e popup da garantia não são 409");
+    assert.ok(vazio.semDestinatario.some((x) => x.evento === "vaga_criada" && x.canal === "sino"), "vaga_criada/sino continua exigindo destinatário");
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);

@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
+import { avisarGarantiaRS } from "@/lib/avisarGarantiaRS";
+import { dataBrasilia, deveCarimbarGarantia, janelaAlertaGarantia } from "@/lib/garantiaRS";
 
 export const dynamic = "force-dynamic";
+
+const ETAPAS_COM_GARANTIA = ["aprovado_cliente", "contratado"];
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -14,17 +17,38 @@ export async function GET(request: Request) {
   try {
     const supabase = createServiceClient();
 
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-    const hojeISO = hoje.toISOString().split("T")[0];
+    // Datas no fuso de Brasília. Alerta no último dia da garantia e, se o cron falhou, recupera até 2 dias
+    // para trás; garantia_alerta_enviado_em evita repetir (inclusive se o cron rodar duas vezes no mesmo dia).
+    const agora = new Date();
+    const { inicio, fim: hojeISO } = janelaAlertaGarantia(agora);
 
-    const { data: rows, error } = await supabase
+    const colunas =
+      "id, candidato_id, vaga_id, garantia_data_fim, candidatos(nome_completo, responsavel), vagas!candidatos_vagas_vaga_id_fkey(titulo, unidade_id, clientes(nome))";
+
+    let comCarimbo = true;
+    let { data: rows, error } = await supabase
       .from("candidatos_vagas")
-      .select("id, candidato_id, vaga_id, garantia_data_fim, admissao_fee_valor, candidatos(nome_completo), vagas!candidatos_vagas_vaga_id_fkey(titulo, unidade_id, clientes(nome))")
+      .select(colunas)
       .eq("garantia_acionada", false)
       .not("garantia_data_fim", "is", null)
-      .in("etapa", ["aprovado_cliente", "contratado"])
-      .eq("garantia_data_fim", hojeISO);
+      .in("etapa", ETAPAS_COM_GARANTIA)
+      .gte("garantia_data_fim", inicio)
+      .lte("garantia_data_fim", hojeISO)
+      .is("garantia_alerta_enviado_em", null);
+
+    if (error) {
+      // Rede de segurança: com a coluna do carimbo ainda inexistente (migration pendente) o alerta do dia continua
+      // saindo como antes (só o último dia, sem carimbo), em vez de o cron inteiro parar.
+      console.error("[garantia-rs] Query com carimbo falhou, usando a consulta antiga (só hoje, sem carimbo):", error.message);
+      comCarimbo = false;
+      ({ data: rows, error } = await supabase
+        .from("candidatos_vagas")
+        .select(colunas)
+        .eq("garantia_acionada", false)
+        .not("garantia_data_fim", "is", null)
+        .in("etapa", ETAPAS_COM_GARANTIA)
+        .eq("garantia_data_fim", hojeISO));
+    }
 
     if (error) {
       console.error("[garantia-rs] Query error:", error.message);
@@ -32,76 +56,53 @@ export async function GET(request: Request) {
     }
 
     let alertasEnviados = 0;
+    let carimbados = 0;
 
     for (const row of (rows ?? [])) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const r = row as any;
-      const candidatoNome = r.candidatos?.nome_completo ?? "Candidato";
-      const vagaTitulo = r.vagas?.titulo ?? "Vaga";
-      const clienteNome = r.vagas?.clientes?.nome ?? "Cliente";
-      const garantiaFim = r.garantia_data_fim as string;
-      const garantiaFmt = garantiaFim.split("-").reverse().join("/");
 
-      // Create bell notification
-      await supabase.from("notificacoes_analista").insert({
-        tipo: "alerta_garantia_rs",
-        titulo: `⚠️ Hoje é o último dia da garantia: ${candidatoNome}`,
-        mensagem: `Hoje (${garantiaFmt}) é o último dia da garantia de reposição de ${candidatoNome} na vaga "${vagaTitulo}" (${clienteNome}).`,
-        candidato_id: r.candidato_id,
-        unidade_id: r.vagas?.unidade_id ?? null,
-      });
-
-      // Send email alert
-      const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
-<div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
-  <div style="background:#000;padding:24px 28px;text-align:center">
-    <h1 style="color:#FFD700;margin:0;font-size:18px">⚠️ Último dia da garantia R&S</h1>
-  </div>
-  <div style="padding:24px 28px">
-    <div style="background:#FEE2E2;border:1px solid #DC262640;border-radius:8px;padding:14px 16px;margin-bottom:20px">
-      <p style="margin:0;color:#DC2626;font-size:14px;font-weight:700">🚨 A garantia vence HOJE!</p>
-      <p style="margin:4px 0 0;color:#DC2626;font-size:13px">Vencimento: <strong>${garantiaFmt}</strong></p>
-    </div>
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Candidato</td><td style="padding:6px 0;color:#111827">${candidatoNome}</td></tr>
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Vaga</td><td style="padding:6px 0;color:#111827">${vagaTitulo}</td></tr>
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Cliente</td><td style="padding:6px 0;color:#111827">${clienteNome}</td></tr>
-    </table>
-    <div style="text-align:center;margin-top:20px">
-      <a href="https://salmazos-plataforma.vercel.app/painel/candidato/${r.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil do candidato</a>
-    </div>
-  </div>
-  <div style="background:#f9fafb;padding:12px 28px;text-align:center">
-    <p style="margin:0;font-size:11px;color:#9CA3AF">Salmazos RH — Alerta automático de garantia</p>
-  </div>
-</div>
-</body></html>`;
-
-      // E-mail não vai pra diretoria/superuser (pedido explícito do Ölver, 14/09) — só pra
-      // analistas/supervisor. O sino acima continua chegando pra todo mundo, sem alteração.
-      const resultado = await notifyAllAnalysts({
-        subject: `⚠️ Hoje é o último dia da garantia de ${candidatoNome} — ${clienteNome}`,
-        html,
-        tipo: "alerta_garantia_rs",
-        candidato_id: r.candidato_id,
-        vaga_id: r.vaga_id,
-        excluirNiveisAcesso: ["diretoria", "superuser"],
+      // Nunca lança: sino, popup e e-mail seguem Configurações > Avisos (evento garantia_rs_vencendo).
+      const resultado = await avisarGarantiaRS(supabase, {
+        evento: "vencendo",
+        candidatoId: r.candidato_id,
+        vagaId: r.vaga_id,
+        candidatoNome: r.candidatos?.nome_completo,
+        vagaTitulo: r.vagas?.titulo,
+        clienteNome: r.vagas?.clientes?.nome,
+        responsavelNome: r.candidatos?.responsavel ?? null,
         unidadeId: r.vagas?.unidade_id ?? null,
+        dataFim: r.garantia_data_fim as string,
       });
 
-      if (resultado.attempted > 0) {
-        alertasEnviados++;
-      } else {
+      if (resultado.sino === "enviado" || resultado.email === "enviado") alertasEnviados++;
+
+      if (!deveCarimbarGarantia([resultado.sino, resultado.email])) {
+        // Todos os canais ligados falharam: sem carimbo, a próxima execução tenta de novo (até 2 dias).
         console.error(
-          `[cron/garantia-rs] Alerta NÃO enviado para ${candidatoNome} (candidato_id=${r.candidato_id}) — nenhuma tentativa de e-mail foi registrada.`
+          `[cron/garantia-rs] Alerta NÃO entregue para candidato_id=${r.candidato_id} (sino=${resultado.sino}, e-mail=${resultado.email}) — sem carimbo, tenta de novo na próxima execução.`
         );
+        continue;
+      }
+      if (!comCarimbo) continue;
+
+      const { error: erroCarimbo } = await supabase
+        .from("candidatos_vagas")
+        .update({ garantia_alerta_enviado_em: new Date().toISOString() })
+        .eq("id", r.id)
+        .is("garantia_alerta_enviado_em", null);
+      if (erroCarimbo) {
+        console.error(`[cron/garantia-rs] Erro ao gravar o carimbo (candidatos_vagas.id=${r.id}):`, erroCarimbo.message);
+      } else {
+        carimbados++;
       }
     }
 
     return NextResponse.json({
+      hoje: hojeISO,
       processados: (rows ?? []).length,
       alertas_enviados: alertasEnviados,
+      carimbados,
     });
   } catch (err) {
     console.error("[GET /api/cron/garantia-rs]", err);

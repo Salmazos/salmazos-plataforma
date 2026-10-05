@@ -22,10 +22,16 @@ export const TIPO_NOTIFICACAO_POR_DECISAO: Record<DecisaoCliente, string> = {
   reprovado: "reprovacao_cliente",
 };
 export const TIPOS_NOTIFICACAO_DECISAO: readonly string[] = Object.values(TIPO_NOTIFICACAO_POR_DECISAO);
+// Popup interno de avisos nominais: cada `notificacoes_analista.tipo` que ele lista e o evento cujo canal popup
+// (Configurações > Avisos) o liga ou desliga. Além das decisões do cliente, a garantia R&S usa o mesmo popup
+// (cópia dos valores de garantiaRS.ts, que este módulo não importa; o script confere que coincidem).
 export const EVENTO_POR_TIPO_NOTIFICACAO: Record<string, string> = {
   aprovacao_cliente: EVENTO_POR_DECISAO.aprovado,
   reprovacao_cliente: EVENTO_POR_DECISAO.reprovado,
+  alerta_garantia_rs: "garantia_rs_vencendo",
+  garantia_acionada: "garantia_rs_acionada",
 };
+export const TIPOS_NOTIFICACAO_POPUP: readonly string[] = Object.keys(EVENTO_POR_TIPO_NOTIFICACAO);
 
 // Sino: sem linha de canal ou erro de leitura = LIGADO (era assim antes do interruptor); só ativo === false desliga.
 export function sinoDecisaoLigado(r: { linha: { ativo: boolean | null } | null | undefined; erro: boolean }): boolean {
@@ -82,9 +88,9 @@ export function inicioJanelaPopupDecisao(agora: Date = new Date()): string {
   return new Date(agora.getTime() - DIAS_JANELA_POPUP_DECISAO * 24 * 60 * 60 * 1000).toISOString();
 }
 
-// Quais tipos de aviso o popup mostra, dado o liga/desliga do canal popup de cada evento.
-export function tiposComPopupLigado(ligados: Record<DecisaoCliente, boolean>): string[] {
-  return (Object.keys(EVENTO_POR_DECISAO) as DecisaoCliente[]).filter((d) => ligados[d]).map((d) => TIPO_NOTIFICACAO_POR_DECISAO[d]);
+// Quais tipos de aviso o popup mostra, dados os eventos que estão com o canal popup ligado.
+export function tiposComPopupLigado(eventosLigados: readonly string[]): string[] {
+  return TIPOS_NOTIFICACAO_POPUP.filter((tipo) => eventosLigados.includes(EVENTO_POR_TIPO_NOTIFICACAO[tipo]));
 }
 
 export interface DecisaoPopupItem {

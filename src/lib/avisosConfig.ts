@@ -12,7 +12,7 @@ export async function bloqueioUltimoDestinatario(
   canal: string,
   ignorarId: string
 ): Promise<string | null> {
-  // Sino e popup dos avisos de decisão do cliente podem ficar ligados com a lista vazia (o responsável sempre é avisado).
+  // Sino e popup dos avisos com responsável (decisão do cliente e garantia R&S) podem ficar ligados com a lista vazia.
   if (canalSemListaPermitido(evento, canal)) return null;
   const [{ data: cfg }, { data: outros, error }] = await Promise.all([
     svc.from("aviso_eventos_canais").select("ativo").eq("evento", evento).eq("canal", canal).maybeSingle(),
