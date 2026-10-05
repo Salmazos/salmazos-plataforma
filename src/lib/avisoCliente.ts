@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import {
   canalClienteLigado,
+  emailClienteLigadoRegra,
   limitarMensagemAviso,
   limitarTituloAviso,
   linkPortalValido,
@@ -37,6 +38,23 @@ export async function canaisClienteLigados(
 
 export async function avisoClienteLigado(evento: string, canal: CanalAvisoCliente, svc?: ServiceClient): Promise<boolean> {
   return (await canaisClienteLigados(evento, svc))[canal];
+}
+
+// Interruptor "E-mail" dos e-mails ao cliente (Configurações > Avisos > "Avisos ao cliente"). Semântica
+// INVERSA à de sino e popup: sem linha de canal ou erro de leitura = LIGADO (o e-mail já existia antes do
+// interruptor); só ativo = false explícito desliga. Uma consulta barata e NUNCA lança.
+export async function emailClienteLigado(evento: string, svc: ServiceClient = createServiceClient()): Promise<boolean> {
+  try {
+    const { data, error } = await svc.from("aviso_eventos_canais").select("ativo").eq("evento", evento).eq("canal", "email").maybeSingle();
+    if (error) {
+      console.error(`[avisoCliente] Erro ao ler o interruptor de e-mail do evento "${evento}" (segue ligado):`, error.message);
+      return emailClienteLigadoRegra({ linha: null, erro: true });
+    }
+    return emailClienteLigadoRegra({ linha: data as { ativo: boolean | null } | null, erro: false });
+  } catch (err) {
+    console.error(`[avisoCliente] Erro inesperado ao ler o interruptor de e-mail do evento "${evento}" (segue ligado):`, err);
+    return true;
+  }
 }
 
 export interface DadosAvisoCliente {

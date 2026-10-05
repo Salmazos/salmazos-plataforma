@@ -4,9 +4,11 @@ import { exigirAcessoVaga } from "@/lib/unidadeAuth";
 import { parseBody, vagaSolicitacaoStatusDecisaoSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { getEmailTemplate } from "@/lib/emailTemplates";
-import { sendEmail } from "@/lib/sendEmail";
 import { sincronizarPosicoesAbertas } from "@/lib/vagaPosicoes";
 import { avisarPedidoDecidido } from "@/lib/avisoClienteDecisao";
+import { emailClienteLigado } from "@/lib/avisoCliente";
+import { destinatariosEmailCliente } from "@/lib/destinatariosEmailCliente";
+import { enviarEmailAoCliente } from "@/lib/enviarEmailAoCliente";
 import { tipoPedidoDaAcao } from "@/lib/avisoClienteRegras";
 
 interface Params {
@@ -115,10 +117,12 @@ export async function POST(request: NextRequest, { params }: Params) {
       },
     });
 
-    // E-mail pro contato do cliente — falha aqui não desfaz a decisão, só vai pro log.
-    if (vaga.cliente_id) {
-      const { data: cliente } = await service.from("clientes").select("contato_email").eq("id", vaga.cliente_id).maybeSingle();
-      if (cliente?.contato_email) {
+    // E-mail pro cliente — falha aqui não desfaz a decisão, só vai pro log. Interruptor "E-mail" (padrão
+    // desligado: o sino do portal já avisa) e destinatários = login de cada usuário do portal (sem usuário,
+    // contato_email). cliente_id vem da vaga.
+    if (vaga.cliente_id && (await emailClienteLigado("email_cliente_vaga_status_decidido", service))) {
+      const destinatarios = await destinatariosEmailCliente(vaga.cliente_id, service);
+      if (destinatarios.length > 0) {
         const template = getEmailTemplate("vaga_status_decidido", {
           nome: "",
           cargo: vaga.titulo,
@@ -127,16 +131,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           decisaoStatus: decisao,
           motivoRecusa: parsed.data.acao === "recusar" ? parsed.data.motivo : undefined,
         });
-        const envio = await sendEmail({
-          to: cliente.contato_email,
-          subject: template.subject,
-          html: template.html,
-          tipo: "vaga_status_decidido",
-          vaga_id: id,
-        });
-        if (!envio.success) {
-          console.error(`[solicitacao-status] E-mail ao cliente não enviado (vaga_id=${id}):`, envio.error);
-        }
+        await enviarEmailAoCliente(destinatarios, { subject: template.subject, html: template.html, tipo: "vaga_status_decidido", vaga_id: id }, `solicitacao-status vaga_id=${id}`);
       }
     }
 

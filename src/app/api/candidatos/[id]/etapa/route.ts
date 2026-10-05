@@ -8,6 +8,9 @@ import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, candidatoEtapaSchema } from "@/lib/schemas";
 import { sincronizarEncaminhamentoComEtapa } from "@/lib/sincronizarEncaminhamento";
 import { idsCandidaturasDaUnidade, resolverUnidadeUsuario } from "@/lib/unidadeAuth";
+import { emailClienteLigado } from "@/lib/avisoCliente";
+import { destinatariosEmailCliente } from "@/lib/destinatariosEmailCliente";
+import { enviarEmailAoCliente } from "@/lib/enviarEmailAoCliente";
 
 const ETAPA_LABEL: Record<string, string> = {
   triagem: "Triagem",
@@ -153,24 +156,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const { data: cv } = await queryCvCliente.limit(1).single();
 
     const cliente = (cv?.vagas as any)?.clientes;
-    if (cliente?.contato_email) {
-      const { subject, html } = getEmailTemplate("candidato_entrevista_cliente", {
-        nome: "",
-        cargo: data.cargo_pretendido,
-        nomeCliente: cliente.nome ?? "",
-        nomeCandidato: data.nome_completo,
-        empresa: cliente.nome ?? "",
-      });
-      try {
-        await sendEmail({
-          to: cliente.contato_email,
-          subject,
-          html,
-          tipo: "candidato_entrevista_cliente",
-          candidato_id: id,
+    // Interruptor "E-mail" (Configurações > Avisos) e destinatários = login de cada usuário do portal do
+    // cliente (sem usuário no portal, contato_email). O cliente_id vem da vaga lida acima, nunca do request.
+    if (cv?.vagas && (await emailClienteLigado("email_cliente_candidato_entrevista", svc))) {
+      const destinatarios = await destinatariosEmailCliente((cv.vagas as any).cliente_id, svc, { contatoEmail: cliente?.contato_email ?? null });
+      if (destinatarios.length > 0) {
+        const { subject, html } = getEmailTemplate("candidato_entrevista_cliente", {
+          nome: "",
+          cargo: data.cargo_pretendido,
+          nomeCliente: cliente?.nome ?? "",
+          nomeCandidato: data.nome_completo,
+          empresa: cliente?.nome ?? "",
         });
-      } catch (emailErr) {
-        console.error(`[etapa] Erro ao enviar e-mail de entrevista ao cliente (candidato_id=${id}, cliente=${cliente.nome ?? "?"}):`, emailErr);
+        await enviarEmailAoCliente(destinatarios, { subject, html, tipo: "candidato_entrevista_cliente", candidato_id: id }, `etapa candidato_id=${id}`);
       }
     }
   }

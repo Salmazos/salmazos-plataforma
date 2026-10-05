@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { sendEmail } from "@/lib/sendEmail";
+import { emailClienteLigado } from "@/lib/avisoCliente";
+import { destinatariosEmailCliente } from "@/lib/destinatariosEmailCliente";
+import { enviarEmailAoCliente } from "@/lib/enviarEmailAoCliente";
 import { horaEntrevistaReal } from "@/lib/horaEntrevista";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +25,12 @@ export async function GET(request: Request) {
 
   try {
     const supabase = createServiceClient();
+
+    // Interruptor "E-mail" (Configurações > Avisos). Desligado: nem consulta as entrevistas. Sem linha ou erro de
+    // leitura = ligado (comportamento de sempre).
+    if (!(await emailClienteLigado("email_cliente_lembrete_entrevista_hoje", supabase))) {
+      return NextResponse.json({ desligado: true, clientes_processados: 0, clientes_notificados: 0, encaminhamentos_marcados: 0 });
+    }
 
     // Brasil não observa horário de verão desde 2019, então -03:00 é um offset
     // estável — evita puxar biblioteca de timezone só pra achar o dia de hoje.
@@ -74,9 +82,11 @@ export async function GET(request: Request) {
     let encaminhamentosMarcados = 0;
 
     for (const [clienteId, { clienteNome, clienteEmail, itens }] of porCliente) {
-      if (!clienteEmail) {
+      // Destinatários = login de cada usuário do portal (sem usuário, contato_email). clienteId vem da linha do banco.
+      const destinatarios = await destinatariosEmailCliente(clienteId, supabase, { contatoEmail: clienteEmail });
+      if (destinatarios.length === 0) {
         console.error(
-          `[cron/lembrete-entrevista-hoje] Cliente ${clienteNome} (${clienteId}) sem contato_email cadastrado — lembrete não enviado.`
+          `[cron/lembrete-entrevista-hoje] Cliente ${clienteNome} (${clienteId}) sem usuário no portal e sem contato_email cadastrado — lembrete não enviado.`
         );
         continue;
       }
@@ -117,18 +127,23 @@ export async function GET(request: Request) {
 </div>
 </body></html>`;
 
-      const resultado = await sendEmail({
-        to: clienteEmail,
-        subject: plural
-          ? `📅 Você tem ${itens.length} entrevistas hoje`
-          : `📅 Você tem entrevista hoje: ${itens[0].candidato_nome}${itens[0].hora ? ` às ${itens[0].hora}` : ""}`,
-        html,
-        tipo: "lembrete_entrevista_hoje",
-      });
+      // Um e-mail por pessoa. O carimbo de dedup vale se PELO MENOS UM envio foi aceito: uma falha em um
+      // endereço não repete o lembrete para os outros no dia seguinte.
+      const resultado = await enviarEmailAoCliente(
+        destinatarios,
+        {
+          subject: plural
+            ? `📅 Você tem ${itens.length} entrevistas hoje`
+            : `📅 Você tem entrevista hoje: ${itens[0].candidato_nome}${itens[0].hora ? ` às ${itens[0].hora}` : ""}`,
+          html,
+          tipo: "lembrete_entrevista_hoje",
+        },
+        `cron/lembrete-entrevista-hoje cliente=${clienteId}`
+      );
 
-      if (!resultado.success) {
+      if (resultado.aceitos === 0) {
         console.error(
-          `[cron/lembrete-entrevista-hoje] E-mail NÃO enviado para cliente ${clienteNome} (${clienteId}): ${resultado.error}`
+          `[cron/lembrete-entrevista-hoje] E-mail NÃO enviado para cliente ${clienteNome} (${clienteId}): nenhum dos ${destinatarios.length} destinatário(s) foi aceito.`
         );
         continue;
       }

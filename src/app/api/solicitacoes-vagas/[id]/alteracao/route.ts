@@ -5,8 +5,10 @@ import { parseBody, solicitacaoAlteracaoDecisaoSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { aplicarAlteracoesSolicitacao, resumoAlteracoesHtml, type Alteracoes } from "@/lib/solicitacaoAlteracao";
 import { getEmailTemplate } from "@/lib/emailTemplates";
-import { sendEmail } from "@/lib/sendEmail";
 import { avisarPedidoDecidido } from "@/lib/avisoClienteDecisao";
+import { emailClienteLigado } from "@/lib/avisoCliente";
+import { destinatariosEmailCliente } from "@/lib/destinatariosEmailCliente";
+import { enviarEmailAoCliente } from "@/lib/enviarEmailAoCliente";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -103,10 +105,12 @@ export async function POST(request: NextRequest, { params }: Params) {
       },
     });
 
-    // E-mail pro contato do cliente — falha aqui não desfaz a decisão, só vai pro log.
-    if (sol.cliente_id) {
-      const { data: cliente } = await service.from("clientes").select("contato_email").eq("id", sol.cliente_id).maybeSingle();
-      if (cliente?.contato_email) {
+    // E-mail pro cliente — falha aqui não desfaz a decisão, só vai pro log. Um único interruptor "E-mail"
+    // (Configurações > Avisos) para aprovada e recusada; destinatários = login de cada usuário do portal (sem
+    // usuário, contato_email). cliente_id vem da solicitação.
+    if (sol.cliente_id && (await emailClienteLigado("email_cliente_alteracao_decidida", service))) {
+      const destinatarios = await destinatariosEmailCliente(sol.cliente_id, service);
+      if (destinatarios.length > 0) {
         const template = getEmailTemplate(
           decisao === "aprovada" ? "alteracao_solicitacao_aprovada" : "alteracao_solicitacao_recusada",
           {
@@ -117,15 +121,11 @@ export async function POST(request: NextRequest, { params }: Params) {
             motivoRecusa: parsed.data.acao === "recusar" ? parsed.data.motivo : undefined,
           }
         );
-        const envio = await sendEmail({
-          to: cliente.contato_email,
-          subject: template.subject,
-          html: template.html,
-          tipo: decisao === "aprovada" ? "alteracao_solicitacao_aprovada" : "alteracao_solicitacao_recusada",
-        });
-        if (!envio.success) {
-          console.error(`[alteracao] E-mail ao cliente não enviado (solicitacao_id=${id}):`, envio.error);
-        }
+        await enviarEmailAoCliente(
+          destinatarios,
+          { subject: template.subject, html: template.html, tipo: decisao === "aprovada" ? "alteracao_solicitacao_aprovada" : "alteracao_solicitacao_recusada" },
+          `alteracao solicitacao_id=${id}`
+        );
       }
     }
 

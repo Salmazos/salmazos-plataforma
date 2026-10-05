@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { mensagemErroAcao } from "@/lib/avisosErroAcao";
 import { grupoTemPadrao } from "@/lib/avisosPadrao";
 import {
+  APOIO_EMAILS_CLIENTE,
+  EVENTOS_EMAIL_CLIENTE,
   NOTA_EVENTO,
   canaisDoEvento,
   EVENTOS_POR_GRUPO,
@@ -237,6 +239,33 @@ export default function AvisosConfigClient() {
               </div>
             </div>
           ))}
+          {aba === "avisos_cliente" && (
+            <div className="pt-2">
+              <h2 className="text-base font-bold text-gray-900 mb-1">E-mails ao cliente</h2>
+              <p className="text-xs text-gray-500 mb-4">{APOIO_EMAILS_CLIENTE}</p>
+              {EVENTOS_EMAIL_CLIENTE.map((evento) => (
+                <div key={evento} className="mb-6 pb-6 border-b border-gray-100 last:border-0">
+                  <h3 className="text-sm font-bold text-gray-900 mb-1">{ROTULO_EVENTO[evento] ?? evento}</h3>
+                  {NOTA_EVENTO[evento] && <p className="text-xs text-gray-500 mb-3">{NOTA_EVENTO[evento]}</p>}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
+                    <CanalBloco
+                      grupo={aba}
+                      evento={evento}
+                      canal="email"
+                      cfg={dados.canais.find((c) => c.evento === evento && c.canal === "email")}
+                      lista={[]}
+                      usuarios={dados.usuarios}
+                      nomeUsuario={nomeUsuario}
+                      ocupado={ocupado}
+                      executar={executar}
+                      erroInline={erroInline}
+                      fecharErro={() => setErroInline(null)}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -258,10 +287,11 @@ interface BlocoProps {
 }
 
 function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, ocupado, executar, erroInline, fecharErro }: BlocoProps) {
-  // Evento sem lista de pessoas (Avisos ao cliente): só liga/desliga por canal. Sem linha de canal =
-  // desligado (nada era enviado ao cliente antes), ao contrário dos demais eventos.
+  // Evento sem lista de pessoas (Avisos ao cliente): só liga/desliga por canal. Sem linha de canal de
+  // sino/popup = desligado (nada era enviado ao cliente antes); sem linha do canal E-MAIL = ligado (o e-mail
+  // já existia antes do interruptor), coerente com emailClienteLigado.
   const semLista = eventoSemLista(evento);
-  const ligado = cfg ? cfg.ativo : !semLista;
+  const ligado = cfg ? cfg.ativo : canal === "email" || !semLista;
   const ativos = lista.filter((d) => d.ativo).length;
   const chaveCanal = `${evento}:${canal}`;
   const [modoNovo, setModoNovo] = useState<"usuario" | "email">("usuario");

@@ -29,9 +29,24 @@ export const EVENTOS_POR_GRUPO: Record<GrupoAviso, string[]> = {
   ],
 };
 
+// E-mails que a Salmazos envia AO CLIENTE (canal único: e-mail). Também pertencem ao grupo avisos_cliente e
+// também não têm lista de pessoas (vão para o login de cada usuário do portal; sem usuário, para o contato do
+// cliente), mas ficam numa seção própria da aba. Semântica do liga/desliga INVERSA à de sino e popup: o e-mail
+// já existia antes do interruptor, então sem linha de canal = LIGADO (ver emailClienteLigado).
+export const EVENTOS_EMAIL_CLIENTE = [
+  "email_cliente_candidato_entrevista",
+  "email_cliente_lembrete_entrevista_hoje",
+  "email_cliente_vaga_aprovada",
+  "email_cliente_vaga_status_decidido",
+  "email_cliente_solicitacao_recusada",
+  "email_cliente_alteracao_decidida",
+  "email_cliente_lembrete_agendamento",
+] as const;
+export const eventoEmailCliente = (evento: string): boolean => (EVENTOS_EMAIL_CLIENTE as readonly string[]).includes(evento);
+
 // Eventos sem lista de destinatários (só liga/desliga por canal). A tela não mostra lista nem
 // formulário de adicionar, e a API recusa adicionar destinatário a eles.
-export const EVENTOS_SEM_LISTA: readonly string[] = EVENTOS_POR_GRUPO.avisos_cliente;
+export const EVENTOS_SEM_LISTA: readonly string[] = [...EVENTOS_POR_GRUPO.avisos_cliente, ...EVENTOS_EMAIL_CLIENTE];
 export const eventoSemLista = (evento: string): boolean => EVENTOS_SEM_LISTA.includes(evento);
 
 // Pedidos do cliente que ficam pendentes até a Salmazos decidir (alteração de solicitação, reativação e
@@ -74,6 +89,13 @@ export const ROTULO_EVENTO: Record<string, string> = {
   entrevista_remarcada_cliente: "Entrevista remarcada",
   solicitacao_vaga_decidida_cliente: "Solicitação de vaga decidida",
   pedido_vaga_decidido_cliente: "Pedido do cliente decidido",
+  email_cliente_candidato_entrevista: "Candidato em entrevista com o cliente",
+  email_cliente_lembrete_entrevista_hoje: "Lembrete de entrevista hoje (cron diário)",
+  email_cliente_vaga_aprovada: "Vaga aprovada (solicitação do cliente)",
+  email_cliente_vaga_status_decidido: "Pedido de encerramento ou reativação decidido",
+  email_cliente_solicitacao_recusada: "Solicitação de vaga recusada",
+  email_cliente_alteracao_decidida: "Pedido de alteração decidido (aprovado ou recusado)",
+  email_cliente_lembrete_agendamento: "Lembrete para o cliente agendar a entrevista (cron diário)",
 };
 
 // Canais que cada aviso realmente tem hoje (espelha aviso_eventos.canais_suportados). O que não
@@ -91,6 +113,13 @@ export const CANAIS_POR_EVENTO: Record<string, readonly ("email" | "sino" | "pop
   entrevista_remarcada_cliente: ["sino", "popup"],
   solicitacao_vaga_decidida_cliente: ["sino", "popup"],
   pedido_vaga_decidido_cliente: ["sino", "popup"],
+  email_cliente_candidato_entrevista: ["email"],
+  email_cliente_lembrete_entrevista_hoje: ["email"],
+  email_cliente_vaga_aprovada: ["email"],
+  email_cliente_vaga_status_decidido: ["email"],
+  email_cliente_solicitacao_recusada: ["email"],
+  email_cliente_alteracao_decidida: ["email"],
+  email_cliente_lembrete_agendamento: ["email"],
   rescisao_paga: ["sino"],
   portal_candidato_aprovado: ["email"],
   portal_candidato_reprovado: ["email"],
@@ -110,6 +139,20 @@ export const NOTA_EVENTO: Record<string, string> = {
     "Avisa o cliente, no portal, quando a Salmazos define a data da entrevista de um candidato que ainda estava sem data (por exemplo, o cliente ia agendar e a Salmazos marcou). O aviso traz o candidato, a vaga e a data (com a hora, quando ela existe). Só vale para candidato ainda em aberto para o cliente. Quando o candidato já é enviado com a data marcada, o aviso é o de \"Candidato enviado ao cliente\". Quando o próprio cliente agenda, não há aviso. O clique leva à Agenda do portal. Não há lista de pessoas: recebem todos os usuários do portal daquele cliente. Sem configuração ou com o canal desligado, ninguém recebe.",
   entrevista_remarcada_cliente:
     "Avisa o cliente, no portal, quando a Salmazos muda a data ou o horário de uma entrevista que já tinha data. O aviso mostra a data anterior e a nova (a hora só aparece quando ela existe). Não avisa se nada mudou para o cliente nem se a data foi apenas apagada, e não vale para candidato já encerrado (aprovado, reprovado ou desistiu). O clique leva à Agenda do portal. Não há lista de pessoas: recebem todos os usuários do portal daquele cliente. Sem configuração ou com o canal desligado, ninguém recebe.",
+  email_cliente_candidato_entrevista:
+    "E-mail ao cliente quando um candidato é movido para a etapa de entrevista com o cliente no Kanban. Mover de novo para a etapa envia de novo. Padrão: ligado.",
+  email_cliente_lembrete_entrevista_hoje:
+    "E-mail diário (9h) ao cliente com as entrevistas marcadas para hoje: um e-mail por cliente por dia, listando todas. Cada entrevista só é lembrada uma vez. Padrão: ligado.",
+  email_cliente_vaga_aprovada:
+    "E-mail ao cliente quando a Salmazos aprova uma solicitação de vaga e a vaga é criada. O sino e o popup \"Solicitação de vaga decidida\" já avisam o cliente no portal, por isso este e-mail vem desligado. Ligar de novo volta a enviar. Padrão: desligado.",
+  email_cliente_vaga_status_decidido:
+    "E-mail ao cliente quando a Salmazos aprova ou recusa o pedido de encerramento ou de reativação de uma vaga. O sino e o popup \"Pedido do cliente decidido\" já avisam o cliente no portal, por isso este e-mail vem desligado. Ligar de novo volta a enviar. Padrão: desligado.",
+  email_cliente_solicitacao_recusada:
+    "E-mail ao cliente quando a Salmazos recusa uma solicitação de vaga (traz o motivo). Padrão: ligado.",
+  email_cliente_alteracao_decidida:
+    "E-mail ao cliente quando a Salmazos aprova ou recusa um pedido de alteração de uma solicitação de vaga (um único interruptor para aprovada e recusada; a recusa traz o motivo). Padrão: ligado.",
+  email_cliente_lembrete_agendamento:
+    "E-mail diário (9h) ao cliente lembrando de confirmar a data da entrevista de um candidato que aguarda agendamento há mais de 48 horas; repete a cada 48 horas. O lembrete interno ao analista não passa por este interruptor. Padrão: ligado.",
   solicitacao_vaga_decidida_cliente:
     "Avisa o cliente, no portal, quando a Salmazos aprova ou recusa uma solicitação de vaga que ele enviou. Na aprovação, o aviso diz que a vaga já está no ar; na recusa, traz o motivo (o mesmo que o cliente já recebe por e-mail e vê em Minhas Solicitações). O clique leva a Minhas Solicitações. O sino fica no topo do portal; o popup abre uma vez por aviso novo, quando o usuário entra. Não há lista de pessoas: recebem todos os usuários do portal daquele cliente. Os e-mails já existentes não mudam. Sem configuração ou com o canal desligado, ninguém recebe.",
   pedido_vaga_decidido_cliente:
@@ -141,6 +184,7 @@ export type CanalFase1 = (typeof CANAIS_FASE1)[number];
 export const ROTULO_CANAL: Record<string, string> = { email: "E-mail", sino: "Sino", popup: "Popup" };
 
 export function grupoDoEvento(evento: string): GrupoAviso | null {
+  if (eventoEmailCliente(evento)) return "avisos_cliente";
   for (const g of Object.keys(EVENTOS_POR_GRUPO) as GrupoAviso[]) {
     if (EVENTOS_POR_GRUPO[g].includes(evento)) return g;
   }
@@ -149,8 +193,12 @@ export function grupoDoEvento(evento: string): GrupoAviso | null {
 
 // O que significa "sem destinatários na lista" (modo legado) em cada grupo — mostrado na tela.
 export const FRASE_SEM_LISTA = "Ligado: todos os usuários do portal do cliente recebem. Desligado: ninguém.";
+// E-mails ao cliente: o login de cada usuário do portal; sem usuário no portal, o e-mail de contato.
+export const FRASE_EMAIL_CLIENTE = "Ligado: cada usuário do portal do cliente recebe no seu login (sem usuário no portal, vai para o e-mail de contato). Desligado: ninguém recebe este e-mail.";
+export const APOIO_EMAILS_CLIENTE = "Os e-mails vão para o login de cada usuário do portal do cliente. Sem usuário no portal, vão para o e-mail de contato.";
 
 export function descricaoPadraoDoSistema(grupo: GrupoAviso, canal: string, evento = ""): string {
+  if (eventoEmailCliente(evento)) return FRASE_EMAIL_CLIENTE;
   if (eventoSemLista(evento)) return FRASE_SEM_LISTA;
   if (evento === "solicitacao_vaga" && canal === "popup") {
     return "Sem destinatários: vale o padrão antigo, todos os analistas ativos da unidade veem o popup.";

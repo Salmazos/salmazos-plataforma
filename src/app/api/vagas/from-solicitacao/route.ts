@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { parseBody, fromSolicitacaoSchema } from "@/lib/schemas";
 import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
@@ -8,6 +7,9 @@ import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 import { generateUniqueSlug } from "@/lib/slug";
 import { apelidoDoNomeCompleto } from "@/lib/responsaveis";
 import { avisarSolicitacaoDecidida } from "@/lib/avisoClienteDecisao";
+import { emailClienteLigado } from "@/lib/avisoCliente";
+import { destinatariosEmailCliente } from "@/lib/destinatariosEmailCliente";
+import { enviarEmailAoCliente } from "@/lib/enviarEmailAoCliente";
 
 export async function POST(request: NextRequest) {
   try {
@@ -103,14 +105,12 @@ export async function POST(request: NextRequest) {
       })
       .eq("id", solicitacao_id);
 
-    if (sol.cliente_id) {
-      const { data: cliente } = await service
-        .from("clientes")
-        .select("contato_email")
-        .eq("id", sol.cliente_id)
-        .single();
+    // Interruptor "E-mail" (Configurações > Avisos; padrão desligado: o sino do portal já avisa) e
+    // destinatários = login de cada usuário do portal (sem usuário, contato_email). cliente_id vem da solicitação.
+    if (sol.cliente_id && (await emailClienteLigado("email_cliente_vaga_aprovada", service))) {
+      const destinatarios = await destinatariosEmailCliente(sol.cliente_id, service);
 
-      if (cliente?.contato_email) {
+      if (destinatarios.length > 0) {
         const { subject, html } = getEmailTemplate("vaga_aprovada_cliente", {
           nome: sol.cliente_nome ?? "",
           cargo: sol.cargo,
@@ -118,17 +118,7 @@ export async function POST(request: NextRequest) {
           numPosicoes: sol.num_posicoes ?? 1,
           cidade: sol.cidade ?? undefined,
         });
-        try {
-          await sendEmail({
-            to: cliente.contato_email,
-            subject,
-            html,
-            tipo: "vaga_aprovada_cliente",
-            vaga_id: vaga.id,
-          });
-        } catch (emailErr) {
-          console.error(`[from-solicitacao] Erro ao enviar e-mail de vaga aprovada ao cliente (vaga_id=${vaga.id}, cliente=${sol.cliente_nome ?? "?"}):`, emailErr);
-        }
+        await enviarEmailAoCliente(destinatarios, { subject, html, tipo: "vaga_aprovada_cliente", vaga_id: vaga.id }, `from-solicitacao vaga_id=${vaga.id}`);
       }
     }
 

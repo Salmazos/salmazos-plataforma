@@ -184,3 +184,17 @@ export function montarPayloadRestauracao(grupo: GrupoComPadrao, usuariosAtivos: 
   }
   return { payload: { eventos }, ignorados, semDestinatario };
 }
+
+// Padrão dos e-mails ao cliente (grupo avisos_cliente, canal "email"). SÓ DOCUMENTAÇÃO: o grupo continua sem
+// "Restaurar padrão" (não entra em PADRAO_AVISOS) e o código não lê esta constante. A fonte da verdade são as
+// linhas de supabase/migration_avisos_cliente_email.sql; sem linha, o e-mail é enviado (ligado).
+export const PADRAO_EMAIL_CLIENTE: Record<string, boolean> = {
+  email_cliente_candidato_entrevista: true,
+  email_cliente_lembrete_entrevista_hoje: true,
+  // O sino e o popup do bloco 4 já cobrem estas duas movimentações.
+  email_cliente_vaga_aprovada: false,
+  email_cliente_vaga_status_decidido: false,
+  email_cliente_solicitacao_recusada: true,
+  email_cliente_alteracao_decidida: true,
+  email_cliente_lembrete_agendamento: true,
+};
