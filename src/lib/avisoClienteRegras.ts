@@ -73,6 +73,49 @@ export function textoAvisoIndicacaoDecidida(o: {
   };
 }
 
+// Texto do aviso "Candidato enviado ao cliente". Só o que o cliente já vê no portal: nome do candidato,
+// título da vaga e a data/hora da entrevista (já formatada por dataEntrevistaParaCliente). Nunca
+// observações, notas, responsável, contatos do candidato, fee nem status interno do funil. Dado nulo
+// só encurta o texto, nunca quebra.
+export function textoAvisoCandidatoEnviado(o: {
+  candidato?: string | null;
+  vagaTitulo?: string | null;
+  entrevista?: string | null;
+}): { titulo: string; mensagem: string } {
+  const nome = o.candidato?.trim();
+  const vaga = o.vagaTitulo?.trim();
+  const entrevista = o.entrevista?.trim();
+  return {
+    titulo: "Novo candidato para avaliar",
+    mensagem:
+      "Novo candidato para avaliar" +
+      (nome ? `: ${nome}` : "") +
+      (vaga ? ` — vaga ${vaga}` : "") +
+      (entrevista ? ` — entrevista em ${entrevista}` : ""),
+  };
+}
+
+// Quando o POST de /api/encaminhamentos gera aviso ao cliente. `anterior` = o encaminhamento do mesmo
+// candidato, cliente e vaga ANTES da gravação (null = não existia: primeiro envio).
+//   - primeiro envio                                   → avisa, versão "novo"
+//   - já existia e estava ENCERRADO para o cliente
+//     (aprovado, reprovado, desistiu ou já avaliado) e
+//     foi reaberto (reenvio real)                       → avisa, versão "reenvio:{updated_at anterior}"
+//   - já existia e ainda estava em aberto                → NÃO avisa (o cliente já tem esse candidato
+//     pendente; mudança de data é remarcação, tratada no bloco 3)
+// A versão sai do estado ANTERIOR: duas requisições simultâneas e idênticas veem o mesmo estado anterior
+// e geram a mesma chave (a segunda não duplica); a repetição depois da primeira já encontra o
+// encaminhamento aberto (não avisa); cada reenvio real parte de um estado anterior diferente.
+const STATUS_ENCERRADOS_PARA_CLIENTE = ["aprovado", "reprovado", "desistiu"];
+export function decidirAvisoCandidatoEnviado(
+  anterior: { status?: string | null; avaliado_em?: string | null; updated_at?: string | null } | null | undefined
+): { avisar: boolean; versao: string } {
+  if (!anterior) return { avisar: true, versao: "novo" };
+  const encerrado = STATUS_ENCERRADOS_PARA_CLIENTE.includes(anterior.status ?? "") || !!anterior.avaliado_em;
+  if (!encerrado) return { avisar: false, versao: "" };
+  return { avisar: true, versao: `reenvio:${anterior.updated_at ?? anterior.avaliado_em ?? "sem-data"}` };
+}
+
 // "há 5 min", "há 3 h", "há 2 dias" (o menu do sino mostra uma linha de tempo curta).
 export function haQuantoTempo(criadoEm: string, agora: Date = new Date()): string {
   const ms = agora.getTime() - new Date(criadoEm).getTime();

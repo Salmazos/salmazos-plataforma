@@ -9,8 +9,9 @@ import { PADRAO_AVISOS, grupoTemPadrao, montarPayloadRestauracao } from "../src/
 import { EVENTOS_POR_GRUPO, EVENTOS_SEM_LISTA, eventoSemLista, FRASE_SEM_LISTA, ROTULO_GRUPO, grupoDoEvento, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
 import {
   canalClienteLigado, inicioJanelaAvisos, avisoVisivelParaUsuario, linkPortalValido, chaveDedupAviso, textoAvisoIndicacaoDecidida,
-  haQuantoTempo, naoLidosDoSino, pendentesDoPopup, limitarMensagemAviso, DIAS_VISIVEL_AVISO_CLIENTE, type AvisoPortal,
+  haQuantoTempo, textoAvisoCandidatoEnviado, decidirAvisoCandidatoEnviado, naoLidosDoSino, pendentesDoPopup, limitarMensagemAviso, DIAS_VISIVEL_AVISO_CLIENTE, type AvisoPortal,
 } from "../src/lib/avisoClienteRegras.ts";
+import { dataEntrevistaParaCliente, horaEntrevistaReal } from "../src/lib/horaEntrevista.ts";
 import { mensagemErroAcao, MSG_ULTIMO_DESTINATARIO, MSG_ACAO_PADRAO } from "../src/lib/avisosErroAcao.ts";
 import { resumirPedidoCliente, type LinhaPedidoCliente } from "../src/lib/pedidoClienteResumo.ts";
 import { EVENTO_POR_TIPO_PEDIDO, TIPOS_PEDIDO_CLIENTE, tiposVisiveis, chaveVisto } from "../src/lib/pedidosClientePopup.ts";
@@ -529,7 +530,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
 
   // ── Avisos ao cliente (sino e popup no portal): bloco 1 ──
   await caso("avisos ao cliente: grupo novo, só com a indicação decidida, rótulo e canais sino/popup", () => {
-    assert.deepEqual(EVENTOS_POR_GRUPO.avisos_cliente, ["indicacao_decidida_cliente"]);
+    assert.deepEqual(EVENTOS_POR_GRUPO.avisos_cliente, ["indicacao_decidida_cliente", "candidato_enviado_cliente"]);
     assert.equal(ROTULO_GRUPO.avisos_cliente, "Avisos ao cliente");
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.deepEqual([...canaisDoEvento("indicacao_decidida_cliente")], ["sino", "popup"]);
@@ -537,8 +538,9 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     assert.ok(NOTA_EVENTO.indicacao_decidida_cliente.includes("Minhas Indicações"));
   });
   await caso("avisos ao cliente: evento SEM lista (só liga/desliga), sem Restaurar padrão e com a frase combinada", () => {
-    assert.deepEqual([...EVENTOS_SEM_LISTA], ["indicacao_decidida_cliente"]);
+    assert.deepEqual([...EVENTOS_SEM_LISTA], ["indicacao_decidida_cliente", "candidato_enviado_cliente"]);
     assert.equal(eventoSemLista("indicacao_decidida_cliente"), true);
+    assert.equal(eventoSemLista("candidato_enviado_cliente"), true);
     for (const ev of ["solicitacao_vaga", "vaga_pausa_pedida", "portal_candidato_aprovado", "rescisao_paga", ""]) assert.equal(eventoSemLista(ev), false, ev);
     assert.equal(grupoTemPadrao("avisos_cliente"), false);
     assert.equal(FRASE_SEM_LISTA, "Ligado: todos os usuários do portal do cliente recebem. Desligado: ninguém.");
@@ -631,6 +633,91 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     assert.deepEqual(naoLidosDoSino(lista).map((a) => a.id), ["1", "4", "5"]);
     assert.deepEqual(pendentesDoPopup(lista).map((a) => a.id), ["1", "2", "3"]);
     assert.deepEqual(pendentesDoPopup([aviso("9", { popup_visto: true })]), []);
+  });
+
+  // ── Avisos ao cliente: bloco 2 (candidato enviado ao cliente) ──
+  await caso("bloco 2 catálogo: evento 'Candidato enviado ao cliente' no grupo avisos_cliente, sem lista, sino/popup", () => {
+    assert.equal(ROTULO_EVENTO.candidato_enviado_cliente, "Candidato enviado ao cliente");
+    assert.equal(grupoDoEvento("candidato_enviado_cliente"), "avisos_cliente");
+    assert.deepEqual([...canaisDoEvento("candidato_enviado_cliente")], ["sino", "popup"]);
+    assert.equal(eventoSemLista("candidato_enviado_cliente"), true);
+    assert.equal(descricaoPadraoDoSistema("avisos_cliente", "popup", "candidato_enviado_cliente"), FRASE_SEM_LISTA);
+    assert.match(NOTA_EVENTO.candidato_enviado_cliente, /Encaminhar/); assert.match(NOTA_EVENTO.candidato_enviado_cliente, /e-mail ao contato do cliente não muda/);
+  });
+  await caso("bloco 2 catálogo: o evento do bloco 1 e os outros grupos não mudaram", () => {
+    assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
+    assert.deepEqual([...canaisDoEvento("indicacao_decidida_cliente")], ["sino", "popup"]);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 5); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+  });
+
+  await caso("data da entrevista para o cliente: dd/mm/aaaa às hh:mm (fuso de Brasília)", () => {
+    assert.equal(dataEntrevistaParaCliente("2026-10-20T17:30:00Z"), "20/10/2026 às 14:30");
+    assert.equal(dataEntrevistaParaCliente("2026-10-20T03:30:00Z"), "20/10/2026 às 00:30");
+  });
+  await caso("data da entrevista para o cliente: horário 12:00 (convenção do Kanban) fica só com a data; sem data = null", () => {
+    assert.equal(horaEntrevistaReal("2026-10-20T15:00:00Z"), null);
+    assert.equal(dataEntrevistaParaCliente("2026-10-20T15:00:00Z"), "20/10/2026");
+    assert.equal(dataEntrevistaParaCliente(null), null); assert.equal(dataEntrevistaParaCliente(undefined), null); assert.equal(dataEntrevistaParaCliente(""), null);
+    assert.equal(dataEntrevistaParaCliente("não é data"), null);
+  });
+
+  await caso("texto do candidato enviado: com vaga e SEM data de entrevista", () => {
+    const t = textoAvisoCandidatoEnviado({ candidato: "Maria Souza", vagaTitulo: "Auxiliar de Produção" });
+    assert.equal(t.titulo, "Novo candidato para avaliar");
+    assert.equal(t.mensagem, "Novo candidato para avaliar: Maria Souza — vaga Auxiliar de Produção");
+  });
+  await caso("texto do candidato enviado: COM data de entrevista (formato do portal)", () => {
+    const t = textoAvisoCandidatoEnviado({ candidato: "Maria Souza", vagaTitulo: "Auxiliar de Produção", entrevista: dataEntrevistaParaCliente("2026-10-20T17:30:00Z") });
+    assert.equal(t.mensagem, "Novo candidato para avaliar: Maria Souza — vaga Auxiliar de Produção — entrevista em 20/10/2026 às 14:30");
+  });
+  await caso("texto do candidato enviado: nome e/ou vaga nulos não quebram (texto neutro)", () => {
+    assert.equal(textoAvisoCandidatoEnviado({ candidato: null, vagaTitulo: null }).mensagem, "Novo candidato para avaliar");
+    assert.equal(textoAvisoCandidatoEnviado({ candidato: "  ", vagaTitulo: "Operador" }).mensagem, "Novo candidato para avaliar — vaga Operador");
+    assert.equal(textoAvisoCandidatoEnviado({ candidato: "Ana" }).mensagem, "Novo candidato para avaliar: Ana");
+    assert.equal(textoAvisoCandidatoEnviado({}).mensagem, "Novo candidato para avaliar");
+    assert.equal(textoAvisoCandidatoEnviado({ candidato: undefined, vagaTitulo: undefined, entrevista: null }).titulo, "Novo candidato para avaliar");
+  });
+  await caso("texto do candidato enviado: nada interno (observações, notas, responsável, contatos, fee, status do funil)", () => {
+    const entrada = { candidato: "Maria", vagaTitulo: "Operador", entrevista: "20/10/2026", observacoes: "nota interna X", responsavel: "Analista Y", telefone: "(19) 99999-0000", email: "m@x.com", fee_rs_percentual: 15, etapa: "triagem", status: "aguardando" };
+    const t = textoAvisoCandidatoEnviado(entrada as never);
+    const texto = JSON.stringify(t);
+    for (const proibido of ["nota interna", "Analista Y", "99999", "m@x.com", "15", "triagem", "aguardando"]) assert.ok(!texto.includes(proibido), proibido);
+  });
+  await caso("link do candidato enviado: perfil do candidato no portal (id do encaminhamento) e válido", () => {
+    const enc = "3f2b8c1e-9a4d-4e7b-8c55-1a2b3c4d5e6f";
+    assert.equal(linkPortalValido(`/portal/candidato/${enc}`), true);
+    assert.ok(`/portal/candidato/${enc}`.startsWith("/portal/"));
+  });
+
+  await caso("dedup do candidato enviado: primeiro envio avisa, versão 'novo'", () => {
+    assert.deepEqual(decidirAvisoCandidatoEnviado(null), { avisar: true, versao: "novo" });
+    assert.deepEqual(decidirAvisoCandidatoEnviado(undefined), { avisar: true, versao: "novo" });
+  });
+  await caso("dedup do candidato enviado: encaminhamento já aberto (nenhuma mudança) NÃO avisa de novo", () => {
+    for (const status of ["aguardando", "aguardando_agendamento_cliente"]) {
+      assert.equal(decidirAvisoCandidatoEnviado({ status, avaliado_em: null, updated_at: "2026-10-01T10:00:00Z" }).avisar, false, status);
+    }
+  });
+  await caso("dedup do candidato enviado: reenvio real (anterior encerrado) avisa com versão do estado anterior", () => {
+    for (const status of ["aprovado", "reprovado", "desistiu"]) {
+      assert.deepEqual(decidirAvisoCandidatoEnviado({ status, avaliado_em: null, updated_at: "2026-10-01T10:00:00Z" }), { avisar: true, versao: "reenvio:2026-10-01T10:00:00Z" }, status);
+    }
+    assert.equal(decidirAvisoCandidatoEnviado({ status: "aguardando", avaliado_em: "2026-10-02T09:00:00Z", updated_at: "2026-10-02T09:00:00Z" }).avisar, true);
+  });
+  await caso("dedup do candidato enviado: MESMA requisição = mesma chave; reenvio diferente = chave diferente", () => {
+    const enc = "enc-1", ev = "candidato_enviado_cliente";
+    const chave = (a: Parameters<typeof decidirAvisoCandidatoEnviado>[0]) => chaveDedupAviso(ev, enc, decidirAvisoCandidatoEnviado(a).versao);
+    const fechado = { status: "reprovado", avaliado_em: "2026-10-01T09:00:00Z", updated_at: "2026-10-01T09:00:00Z" };
+    // duas requisições simultâneas e idênticas leem o mesmo estado anterior → mesma chave (a 2ª não duplica)
+    assert.equal(chave(fechado), chave({ ...fechado }));
+    assert.equal(chave(null), chave(undefined));
+    // outro reenvio, depois de o ciclo seguinte também encerrar → estado anterior diferente → chave diferente
+    assert.notEqual(chave(fechado), chave({ ...fechado, updated_at: "2026-10-09T09:00:00Z", avaliado_em: "2026-10-09T09:00:00Z" }));
+    // primeiro envio × reenvio no mesmo encaminhamento → chaves diferentes
+    assert.notEqual(chave(null), chave(fechado));
+    // outro encaminhamento → outra chave
+    assert.notEqual(chaveDedupAviso(ev, "enc-1", "novo"), chaveDedupAviso(ev, "enc-2", "novo"));
+    assert.equal(chave(null), "candidato_enviado_cliente:enc-1:novo");
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);

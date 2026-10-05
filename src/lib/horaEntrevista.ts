@@ -13,3 +13,14 @@ export function horaEntrevistaReal(dataEntrevista: string | null | undefined): s
   });
   return hora === "12:00" ? null : hora;
 }
+
+// Data (e hora, quando é real) da entrevista no texto que o cliente lê: "20/10/2026 às 14:30" ou só
+// "20/10/2026" quando o horário é o 12:00 de convenção (ver horaEntrevistaReal). null sem data válida.
+export function dataEntrevistaParaCliente(dataEntrevista: string | null | undefined): string | null {
+  if (!dataEntrevista) return null;
+  const d = new Date(dataEntrevista);
+  if (Number.isNaN(d.getTime())) return null;
+  const data = d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric" });
+  const hora = horaEntrevistaReal(dataEntrevista);
+  return hora ? `${data} às ${hora}` : data;
+}

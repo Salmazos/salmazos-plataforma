@@ -18,7 +18,7 @@ Todas com RLS: só `service_role` acessa. A função SQL `avisos_restaurar_padra
 numa única transação. As tabelas antigas (`aviso_vaga_*`, `rescisao_avisos_*`, `funcionario_aso_avisos_*`) não foram
 alteradas.
 
-## Eventos (21) e canais
+## Eventos (22) e canais
 
 | Grupo | Evento | Canais configuráveis |
 |---|---|---|
@@ -30,7 +30,7 @@ alteradas.
 | Portal do cliente | `indicacao_candidato_recebida` | e-mail, sino, popup |
 | Portal do cliente | `solicitacao_alteracao_pedida`, `vaga_reativacao_pedida`, `vaga_pausa_pedida` | e-mail, sino, popup (Fase 3) |
 | Portal do cliente | `agendamento_cliente` (só quando o candidato **não** tem responsável) | e-mail, sino (Fase 3) |
-| Avisos ao cliente | `indicacao_decidida_cliente` | sino, popup (sem lista de pessoas; ver "Avisos ao cliente") |
+| Avisos ao cliente | `indicacao_decidida_cliente`, `candidato_enviado_cliente` | sino, popup (sem lista de pessoas; ver "Avisos ao cliente") |
 | Portal do cliente | `portal_candidato_aprovado`, `indicacao_decisao_cliente` | e-mail |
 | Portal do cliente | `portal_candidato_reprovado` | e-mail (nasce desligado: antes não existia e-mail interno de reprovação) |
 
@@ -120,7 +120,7 @@ no card ou Ok/X marcam todas as listadas) não mudaram, e nenhum dado foi migrad
 ## Verificação
 
 `node --experimental-strip-types scripts/verificar-avisos-resolvedor.mts` (resolvedor, fallback, unidade, padrão,
-restauração, isolamento de canais, catálogo, popups, pedidos do cliente e avisos ao cliente; 136 casos). Na Fase 3 três expectativas dos
+restauração, isolamento de canais, catálogo, popups, pedidos do cliente e avisos ao cliente; 149 casos). Na Fase 3 três expectativas dos
 casos antigos mudaram de propósito (popup de `solicitacao_vaga` entra no padrão de Vagas: 10 → 11 canais; Portal do
 cliente passa de 4 para 8 eventos).
 
@@ -174,8 +174,28 @@ cliente faz e a Salmazos recebe). Aba própria em Configurações > Avisos: **Av
   `POST /api/solicitacoes-indicacao-candidato/[id]/decisao` (aprovada: "Sua indicação {candidato} foi aprovada para a vaga
   {título}"; recusada: "… não foi aprovada. Motivo: {motivo_recusa}"; link `/portal/minhas-indicacoes`). Migration:
   `supabase/migration_avisos_cliente_bloco1.sql`.
-- **Próximos blocos.** 2: candidatos enviados ao cliente. 3: entrevistas (agendada, remarcada, cancelada). 4: decisão das
-  solicitações de vaga e dos pedidos de alteração, encerramento e reativação.
+- **Bloco 2: Candidato enviado ao cliente** (`candidato_enviado_cliente`). Migration:
+  `supabase/migration_avisos_cliente_bloco2.sql` (só o evento e os 2 canais ligados).
+  - **Disparo.** No fim de `POST /api/encaminhamentos` (ação "Encaminhar" do Kanban), depois de o encaminhamento
+    estar gravado, uma chamada extra e isolada (`avisarCandidatoEnviadoAoCliente`, em `avisoClienteCandidato.ts`).
+    A rota ganhou só linhas novas. O e-mail ao contato do cliente e a movimentação de etapa não mudaram.
+  - **Texto.** Título "Novo candidato para avaliar"; mensagem "Novo candidato para avaliar: {nome} — vaga {título}" e,
+    se já houver data, " — entrevista em dd/mm/aaaa às hh:mm" (`dataEntrevistaParaCliente`, que esconde o 12:00 de
+    convenção, como o portal). Nome ou vaga nulos só encurtam o texto. Nunca entram observações, notas, responsável,
+    contatos do candidato, fee nem status interno do funil.
+  - **Link.** `/portal/candidato/{id do encaminhamento}`: é o perfil onde o cliente vê e avalia o candidato (o botão
+    "Ver perfil" da página inicial do portal usa esta rota, com o id do encaminhamento).
+  - **Quando avisa.** No primeiro envio e no reenvio real (o encaminhamento anterior estava encerrado: aprovado,
+    reprovado, desistiu ou já avaliado, e foi reaberto). **Não avisa** se o encaminhamento já estava aberto para o
+    cliente (nenhuma mudança; mudar a data é remarcação, tratada no bloco 3). Sem cliente, sem usuário no portal ou sem
+    conseguir ler o estado anterior: não grava.
+  - **Deduplicação.** `chave_dedup = candidato_enviado_cliente:{encaminhamento}:{versão}`, com a versão tirada do estado
+    ANTERIOR à gravação (`novo` ou `reenvio:{updated_at anterior}`). Requisições simultâneas e idênticas leem o mesmo
+    estado anterior e geram a mesma chave (a segunda é descartada pelo índice único); a repetição depois da primeira já
+    encontra o encaminhamento aberto (não avisa); cada reenvio real parte de um estado anterior diferente. Sem vaga a
+    rota sempre insere uma linha nova, então cada envio tem o seu id e o seu aviso.
+- **Próximos blocos.** 3: entrevistas (agendada, remarcada, cancelada). 4: decisão das solicitações de vaga e dos pedidos
+  de alteração, encerramento e reativação.
 
 ## Ajustes pós-teste (tela de Avisos e portal)
 
