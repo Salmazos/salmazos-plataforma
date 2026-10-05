@@ -7,6 +7,7 @@ import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
 import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 import { generateUniqueSlug } from "@/lib/slug";
 import { apelidoDoNomeCompleto } from "@/lib/responsaveis";
+import { avisarSolicitacaoDecidida } from "@/lib/avisoClienteDecisao";
 
 export async function POST(request: NextRequest) {
   try {
@@ -130,6 +131,9 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+
+    // Aviso no sino/popup do portal: extra, isolado (nunca lança), depois de a solicitação já estar aprovada.
+    await avisarSolicitacaoDecidida(service, solicitacao_id, "aprovada");
 
     return NextResponse.json({ success: true, vaga_id: vaga.id }, { status: 201 });
   } catch (err) {

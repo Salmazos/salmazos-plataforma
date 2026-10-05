@@ -224,7 +224,35 @@ cliente faz e a Salmazos recebe). Aba própria em Configurações > Avisos: **Av
   - **Isolamento.** Cada rota ganhou só linhas novas: uma leitura do estado anterior e uma chamada extra, isolada e que
     nunca lança, depois da gravação. Histórico, e-mails, lembretes por cron e etapa não mudaram. Aviso de entrevista
     cancelada ou de desistência não existe nesta fase.
-- **Próximo bloco.** 4: decisão das solicitações de vaga e dos pedidos de alteração, encerramento e reativação.
+- **Bloco 4 (último): Solicitação de vaga decidida e Pedido do cliente decidido** (`solicitacao_vaga_decidida_cliente` e
+  `pedido_vaga_decidido_cliente`). Migration: `supabase/migration_avisos_cliente_bloco4.sql` (2 eventos e 4 canais ligados).
+  Código: `src/lib/avisoClienteDecisao.ts` (`avisarSolicitacaoDecidida`, `avisarPedidoDecidido`) e as regras puras em
+  `avisoClienteRegras.ts`.
+  - **Onde liga** (uma chamada isolada em cada rota, depois da decisão e do e-mail que a rota já enviava): solicitação
+    aprovada em `POST /api/vagas/from-solicitacao`; solicitação recusada em `PATCH /api/solicitacoes-vagas/[id]/recusar`;
+    pedido de alteração em `POST /api/solicitacoes-vagas/[id]/alteracao`; pedido de encerramento ou reativação em
+    `POST /api/vagas/[id]/solicitacao-status`. As rotas ganharam só linhas novas (nenhuma removida). Os e-mails, o status, o
+    histórico e os selos do portal não mudaram. A edição da solicitação (`PATCH /api/solicitacoes-vagas/[id]`) não decide
+    nada (só altera campos) e o pedido substituído por outro mais novo não é decisão: nenhum dos dois avisa.
+  - **Texto.** Só o que o cliente já vê em Minhas Solicitações: o cargo e, na recusa, o `motivo_recusa` (o mesmo campo que o
+    e-mail da rota envia). Aprovada: "Sua solicitação de vaga {cargo} foi aprovada e já está no ar". Recusada: "Sua
+    solicitação {cargo} não foi aprovada. Motivo: {motivo}". Pedido: "Seu pedido de {alteração|encerramento|reativação} para
+    {cargo} foi aprovado" / "... não foi aprovado. Motivo: {motivo}". Para o cliente a palavra é sempre "encerramento",
+    nunca "pausa". Cargo nulo só encurta a frase. Nunca decisor, notas, observações internas, responsável nem fee.
+  - **Link.** `/portal/solicitacoes`: lista todas as solicitações do cliente (aprovada, recusada, com o motivo) e, em cada
+    card, o selo de resultado dos pedidos de alteração, encerramento e reativação (decididos há até 30 dias).
+  - **Deduplicação.** Os dados são lidos da própria linha já gravada. Solicitação:
+    `solicitacao_vaga_decidida_cliente:{id}:{aprovada|recusada}:{aprovada_em}`. Pedido:
+    `pedido_vaga_decidido_cliente:{alteracao|encerramento|reativacao}:{id do pedido}:{aprovado|recusado}:{decidido_em}`.
+    Chamar a rota duas vezes seguidas: a segunda recebe 409 (o status já não é pendente) e nem chega ao aviso; se uma
+    chamada chegasse duas vezes ao aviso, a mesma chave cai no índice único (23505, sem lançar). Uma decisão nova tem outro
+    id de pedido ou outro instante, então gera aviso novo.
+  - **Isolamento.** `criarAvisoCliente` e os dois helpers nunca lançam: falha de rede, canal desligado, cliente sem usuário no
+    portal ou linha não encontrada só resultam em "não avisou". O aviso não depende do e-mail (e vice-versa).
+- **Fechamento da fase.** O grupo "Avisos ao cliente" tem 6 eventos, todos com sino e popup, sem lista de pessoas e sem
+  "Restaurar padrão" (liga/desliga por canal): decisão da indicação direta, candidato enviado ao cliente, entrevista
+  agendada, entrevista remarcada, solicitação de vaga decidida e pedido do cliente decidido. A política de e-mails ao
+  cliente é tratada em tarefa separada.
 
 ## Ajustes pós-teste (tela de Avisos e portal)
 

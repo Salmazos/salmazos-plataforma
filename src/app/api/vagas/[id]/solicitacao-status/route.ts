@@ -6,6 +6,8 @@ import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { sendEmail } from "@/lib/sendEmail";
 import { sincronizarPosicoesAbertas } from "@/lib/vagaPosicoes";
+import { avisarPedidoDecidido } from "@/lib/avisoClienteDecisao";
+import { tipoPedidoDaAcao } from "@/lib/avisoClienteRegras";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -137,6 +139,10 @@ export async function POST(request: NextRequest, { params }: Params) {
         }
       }
     }
+
+    // Aviso no sino/popup do portal: extra, isolado (nunca lança), depois de o pedido já estar decidido.
+    const tipoPedido = tipoPedidoDaAcao(pedido.acao);
+    if (tipoPedido) await avisarPedidoDecidido(service, tipoPedido, pedido.id);
 
     return NextResponse.json({ decisao, acao: pedido.acao, vaga_atualizada: vagaAtualizada });
   } catch (err) {

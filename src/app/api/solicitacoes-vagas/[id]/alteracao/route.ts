@@ -6,6 +6,7 @@ import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { aplicarAlteracoesSolicitacao, resumoAlteracoesHtml, type Alteracoes } from "@/lib/solicitacaoAlteracao";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { sendEmail } from "@/lib/sendEmail";
+import { avisarPedidoDecidido } from "@/lib/avisoClienteDecisao";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -127,6 +128,9 @@ export async function POST(request: NextRequest, { params }: Params) {
         }
       }
     }
+
+    // Aviso no sino/popup do portal: extra, isolado (nunca lança), depois de o pedido já estar decidido.
+    await avisarPedidoDecidido(service, "alteracao", pedido.id);
 
     if (erroVaga) {
       return NextResponse.json(

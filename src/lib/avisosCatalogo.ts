@@ -19,7 +19,14 @@ export const EVENTOS_POR_GRUPO: Record<GrupoAviso, string[]> = {
   ],
   // Avisos que a Salmazos dá AO CLIENTE (sino e popup no portal). Sem lista de pessoas: quem recebe é todo
   // usuário do portal do cliente do aviso, então a tela só liga e desliga cada canal.
-  avisos_cliente: ["indicacao_decidida_cliente", "candidato_enviado_cliente", "entrevista_agendada_cliente", "entrevista_remarcada_cliente"],
+  avisos_cliente: [
+    "indicacao_decidida_cliente",
+    "candidato_enviado_cliente",
+    "entrevista_agendada_cliente",
+    "entrevista_remarcada_cliente",
+    "solicitacao_vaga_decidida_cliente",
+    "pedido_vaga_decidido_cliente",
+  ],
 };
 
 // Eventos sem lista de destinatários (só liga/desliga por canal). A tela não mostra lista nem
@@ -65,6 +72,8 @@ export const ROTULO_EVENTO: Record<string, string> = {
   candidato_enviado_cliente: "Candidato enviado ao cliente",
   entrevista_agendada_cliente: "Entrevista agendada",
   entrevista_remarcada_cliente: "Entrevista remarcada",
+  solicitacao_vaga_decidida_cliente: "Solicitação de vaga decidida",
+  pedido_vaga_decidido_cliente: "Pedido do cliente decidido",
 };
 
 // Canais que cada aviso realmente tem hoje (espelha aviso_eventos.canais_suportados). O que não
@@ -80,6 +89,8 @@ export const CANAIS_POR_EVENTO: Record<string, readonly ("email" | "sino" | "pop
   candidato_enviado_cliente: ["sino", "popup"],
   entrevista_agendada_cliente: ["sino", "popup"],
   entrevista_remarcada_cliente: ["sino", "popup"],
+  solicitacao_vaga_decidida_cliente: ["sino", "popup"],
+  pedido_vaga_decidido_cliente: ["sino", "popup"],
   rescisao_paga: ["sino"],
   portal_candidato_aprovado: ["email"],
   portal_candidato_reprovado: ["email"],
@@ -99,6 +110,10 @@ export const NOTA_EVENTO: Record<string, string> = {
     "Avisa o cliente, no portal, quando a Salmazos define a data da entrevista de um candidato que ainda estava sem data (por exemplo, o cliente ia agendar e a Salmazos marcou). O aviso traz o candidato, a vaga e a data (com a hora, quando ela existe). Só vale para candidato ainda em aberto para o cliente. Quando o candidato já é enviado com a data marcada, o aviso é o de \"Candidato enviado ao cliente\". Quando o próprio cliente agenda, não há aviso. O clique leva à Agenda do portal. Não há lista de pessoas: recebem todos os usuários do portal daquele cliente. Sem configuração ou com o canal desligado, ninguém recebe.",
   entrevista_remarcada_cliente:
     "Avisa o cliente, no portal, quando a Salmazos muda a data ou o horário de uma entrevista que já tinha data. O aviso mostra a data anterior e a nova (a hora só aparece quando ela existe). Não avisa se nada mudou para o cliente nem se a data foi apenas apagada, e não vale para candidato já encerrado (aprovado, reprovado ou desistiu). O clique leva à Agenda do portal. Não há lista de pessoas: recebem todos os usuários do portal daquele cliente. Sem configuração ou com o canal desligado, ninguém recebe.",
+  solicitacao_vaga_decidida_cliente:
+    "Avisa o cliente, no portal, quando a Salmazos aprova ou recusa uma solicitação de vaga que ele enviou. Na aprovação, o aviso diz que a vaga já está no ar; na recusa, traz o motivo (o mesmo que o cliente já recebe por e-mail e vê em Minhas Solicitações). O clique leva a Minhas Solicitações. O sino fica no topo do portal; o popup abre uma vez por aviso novo, quando o usuário entra. Não há lista de pessoas: recebem todos os usuários do portal daquele cliente. Os e-mails já existentes não mudam. Sem configuração ou com o canal desligado, ninguém recebe.",
+  pedido_vaga_decidido_cliente:
+    "Avisa o cliente, no portal, quando a Salmazos aprova ou recusa um pedido dele: alteração de uma solicitação, encerramento ou reativação de uma vaga (para o cliente é sempre \"encerramento\"). Na recusa, o aviso traz o motivo (o mesmo que o cliente já recebe por e-mail e vê no selo do pedido). Pedido substituído por outro mais novo não gera aviso. O clique leva a Minhas Solicitações, onde o selo mostra o resultado. O sino fica no topo do portal; o popup abre uma vez por aviso novo, quando o usuário entra. Não há lista de pessoas: recebem todos os usuários do portal daquele cliente. Os e-mails já existentes não mudam. Sem configuração ou com o canal desligado, ninguém recebe.",
   candidato_enviado_cliente:
     "Avisa o cliente, no portal, quando a Salmazos envia um candidato para ele avaliar (ação \"Encaminhar\" do Kanban). O aviso traz o nome do candidato, a vaga e, se já houver, a data da entrevista; o clique leva ao perfil do candidato no portal. Avisa no primeiro envio e quando um candidato já avaliado é enviado de novo; não avisa de novo se o candidato continua pendente para o cliente. O sino fica no topo do portal; o popup abre uma vez por aviso novo, quando o usuário entra. Não há lista de pessoas: recebem todos os usuários do portal daquele cliente. O e-mail ao contato do cliente não muda. Sem configuração ou com o canal desligado, ninguém recebe.",
   indicacao_decidida_cliente:
