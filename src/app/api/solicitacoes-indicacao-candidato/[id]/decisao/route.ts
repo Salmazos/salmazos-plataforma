@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { resolverDestinatarios } from "@/lib/avisos";
 import { emailsOuPadrao } from "@/lib/avisosResolucao";
 import { NextRequest, NextResponse } from "next/server";
@@ -538,7 +539,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     ${admRows ? `<div style="margin-bottom:20px"><p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">📋 Dados para Admissão</p><table style="width:100%;border-collapse:collapse">${admRows}</table></div>` : ""}
     ${sol.curriculo_url ? `<p style="margin:0 0 20px;font-size:13px;color:#374151">📎 Currículo anexado no perfil do candidato.</p>` : ""}
     <div style="text-align:center;padding-top:16px;border-top:1px solid #f3f4f6">
-      <a href="https://salmazos-plataforma.vercel.app/painel/candidato/${candidato.id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil completo</a>
+      <a href="${SITE_URL}/painel/candidato/${candidato.id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil completo</a>
     </div>
   </div>
   <div style="background:#f9fafb;padding:16px 32px;text-align:center">

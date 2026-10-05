@@ -56,7 +56,7 @@ export async function detectarDuplicata(
     const nomeNormalizado = novosDados.nome_completo.trim();
     const telNormalizado = (novosDados.telefone ?? "").replace(/\D/g, "");
 
-    console.log("FALLBACK QUERY - nome:", nomeNormalizado, "telefone:", telNormalizado);
+    console.log("[detectarDuplicata] busca por nome + telefone (sem dado pessoal no log)");
 
     if (nomeNormalizado && telNormalizado.length >= 8) {
       const { data: resultado } = await supabase
@@ -65,7 +65,7 @@ export async function detectarDuplicata(
         .ilike("nome_completo", nomeNormalizado)
         .limit(10);
 
-      console.log("FALLBACK RESULT:", JSON.stringify(resultado));
+      console.log("[detectarDuplicata] nome + telefone: candidatos encontrados =", resultado?.length ?? 0);
 
       if (resultado?.length) {
         const key = telNormalizado.slice(-8);
@@ -88,7 +88,7 @@ export async function detectarDuplicata(
         .ilike("telefone", `%${telNormalizado.slice(-8)}%`)
         .limit(1);
 
-      console.log("PHONE FALLBACK RESULT:", JSON.stringify(resultado));
+      console.log("[detectarDuplicata] só telefone: candidatos encontrados =", resultado?.length ?? 0);
       candidatoExistente = resultado?.[0] ?? null;
     }
   }
@@ -101,7 +101,7 @@ export async function detectarDuplicata(
       .eq("email", novosDados.email)
       .limit(1);
 
-    console.log("EMAIL FALLBACK RESULT:", JSON.stringify(resultado));
+    console.log("[detectarDuplicata] e-mail: candidatos encontrados =", resultado?.length ?? 0);
     candidatoExistente = resultado?.[0] ?? null;
   }
 

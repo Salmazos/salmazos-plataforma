@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { RESCISAO_MODALIDADE_LABEL } from "@/lib/rescisaoModalidade";
@@ -15,7 +16,6 @@ type ServiceClient = ReturnType<typeof createServiceClient>;
 
 export type MomentoAvisoRescisao = "lancamento" | "vencimento_rescisao" | "vencimento_guia";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://vagas.salmazos.com.br";
 
 function moeda(v: number | null | undefined): string {
   return v != null ? Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—";

@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { avisarIndicacaoRecebida } from "@/lib/avisoIndicacaoRecebida";
@@ -135,7 +136,7 @@ export async function POST(request: NextRequest) {
     </div>
     ${dados.curriculo_url ? `<p style="margin:0 0 20px;font-size:13px;color:#374151">📎 Currículo anexado — revise a indicação no painel para baixar.</p>` : ""}
     <div style="text-align:center;padding-top:24px;border-top:1px solid #f3f4f6;margin-top:20px">
-      <a href="https://salmazos-plataforma.vercel.app/painel/vagas" style="display:inline-block;padding:12px 28px;background:#000;color:#FFD700;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700">Revisar indicação</a>
+      <a href="${SITE_URL}/painel/vagas" style="display:inline-block;padding:12px 28px;background:#000;color:#FFD700;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700">Revisar indicação</a>
     </div>
   </div>
   <div style="background:#f9fafb;padding:16px 32px;text-align:center">

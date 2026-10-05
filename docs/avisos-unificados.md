@@ -361,6 +361,33 @@ início, só nas 3 primeiras vagas de R&S do cliente).
 - **Padrão / "Restaurar padrão do grupo vagas":** sino e popup ligados com lista vazia (exceção `permite_vazio`); e-mail ligado
   com a mesma lista de `vaga_cancelada` (Rebecca, Andreza, Giovanni). Restaurar troca o modo legado do e-mail por essa lista.
 
+## Avisos restantes (antes fixos no código)
+
+Migration única: `supabase/migration_avisos_restantes.sql` (aditiva: só inserts em `aviso_eventos` e `aviso_eventos_canais`; nenhuma
+coluna, tabela, função, trigger, policy ou constraint). Onze eventos novos no grupo Vagas; os tipos gravados em
+`notificacoes_analista` e `email_logs` não mudaram. Regras comuns (as mesmas da garantia e do pós-venda): sino sem linha de canal ou
+erro de leitura = ligado e só `ativo = false` desliga tudo; popup sem linha ou erro = não mostra; e-mail sem lista = comportamento de
+sempre, com lista = só a lista; os destinatários de sempre MAIS a lista do sino, uma linha por usuário; carimbo/dedup só quando algo foi
+entregue (ou tudo está desligado). Peças comuns: `avisoConfiguravel.ts` e `avisosRestantesRegras.ts`.
+
+| Evento | Canais | Quem recebe (sempre) | Observação |
+|---|---|---|---|
+| `candidato_transferido` | sino | responsável antigo e novo | o novo responsável passou a ser avisado |
+| `candidato_curriculo_atualizado` | sino | responsável do candidato (sem ele, linha geral) | antes ia para todos |
+| `funcionario_nao_criado` | sino | linha geral sem unidade | não repete o mesmo aviso em 24 h |
+| `lembrete_agendamento_pendente_analista` | sino, e-mail | responsável ativo (sem ele, equipe da unidade) | não repete em 40 h se o e-mail ao cliente falha |
+| `lembrete_comercial` | sino, popup | o próprio vendedor; a lista recebe com o nome do vendedor | um aviso por vendedor por dia |
+| `supervisao_cliente_atrasada` | sino, e-mail, popup | sino: diretoria/superuser + supervisor; e-mail: supervisor | o sino não repete mais todo dia |
+| `conta_receber_hortolandia_atrasada` | sino, popup | diretoria/superuser | um aviso por lançamento; só o carimbo é gravado na conta |
+| `fee_rs_nao_configurado` | sino | linha geral da unidade | só os 3 avisos; cálculo do fee e decisão do cliente intactos |
+| `aniversario_mes_seguinte` | e-mail | analistas da unidade + sócios | lote mensal por unidade |
+| `aniversario_tres_dias` | sino, e-mail | linha geral da unidade + analistas e sócios | recupera até 2 dias; dedup por ano da ocorrência |
+| `aniversario_no_dia` | sino, e-mail, popup | idem | recupera até 2 dias |
+
+`agendamento_cliente` (grupo Portal do cliente) já existia: agora o responsável ativo sempre recebe e a lista também vale. Os popups
+existentes (comercial, supervisão, faturamento, aniversários) só ganharam a checagem do canal popup do evento; a lógica de estado e de
+"visto" deles não mudou. Links de e-mail via `src/lib/siteUrl.ts` (constante fixa `https://vagas.salmazos.com.br`).
+
 ## Ajustes pós-teste (tela de Avisos e portal)
 
 - **Erro inline na tela de Avisos.** Ações que falham na API (ativar/desativar, remover, adicionar, ligar/desligar canal,

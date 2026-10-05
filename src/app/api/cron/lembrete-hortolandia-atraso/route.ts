@@ -3,6 +3,13 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
 import { obterDestinatariosFaturamentoHortolandiaAtraso } from "@/lib/faturamentoHortolandiaAvisos";
 import { nomeUnidadeFaturamento } from "@/lib/faturamentoUnidades";
+import { gravarSinoConfiguravel } from "@/lib/avisoConfiguravel";
+import {
+  EVENTO_CONTA_HORTOLANDIA_ATRASADA,
+  TIPO_CONTA_HORTOLANDIA_ATRASADA,
+  deveCarimbarAviso,
+  textoContaReceberAtrasada,
+} from "@/lib/avisosRestantesRegras";
 
 export const dynamic = "force-dynamic";
 
@@ -41,34 +48,33 @@ export async function GET(request: Request) {
     for (const row of rows ?? []) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const r = row as any;
-      if (destinatarios.length === 0) {
-        console.error(
-          `[cron/lembrete-hortolandia-atraso] Nenhum destinatário resolvido (conta_id=${r.id}) — lembrete não enviado.`
-        );
-        continue;
-      }
-
       const clienteNome = (Array.isArray(r.clientes) ? r.clientes[0]?.nome : r.clientes?.nome) ?? "Cliente";
       const diasAtraso = Math.floor(
         (Date.now() - new Date(r.data_vencimento + "T00:00:00").getTime()) / 86_400_000
       );
 
-      const notificacoesSino = destinatarios.map((d) => ({
-        tipo: "conta_receber_hortolandia_atrasada",
-        titulo: `🔴 Faturamento ${nomeUnidadeFaturamento(unidadePorId.get(r.unidade_id))} atrasado há ${diasAtraso} dia${diasAtraso !== 1 ? "s" : ""}`,
-        mensagem: `${clienteNome}${r.numero_nf ? ` — NF ${r.numero_nf}` : ""} — vencida em ${r.data_vencimento
-          .split("-")
-          .reverse()
-          .join("/")}, ainda não paga.`,
-        user_id: d.user_id,
-        conta_receber_hortolandia_id: r.id,
-      }));
-      const { error: errNotif } = await supabase.from("notificacoes_analista").insert(notificacoesSino);
-      if (errNotif) {
-        console.error(
-          `[cron/lembrete-hortolandia-atraso] Erro ao gravar notificações de sino (conta_id=${r.id}):`,
-          errNotif.message
-        );
+      // Sino (Configurações > Avisos > conta_receber_hortolandia_atrasada): diretoria/superuser + lista. Nunca lança.
+      const resSino = await gravarSinoConfiguravel(supabase, {
+        evento: EVENTO_CONTA_HORTOLANDIA_ATRASADA,
+        deSempre: destinatarios.map((d) => d.user_id),
+        linha: {
+          tipo: TIPO_CONTA_HORTOLANDIA_ATRASADA,
+          ...textoContaReceberAtrasada({
+            unidade: nomeUnidadeFaturamento(unidadePorId.get(r.unidade_id)),
+            diasAtraso,
+            cliente: clienteNome,
+            numeroNf: r.numero_nf,
+            vencimentoISO: r.data_vencimento,
+          }),
+          extra: { conta_receber_hortolandia_id: r.id },
+        },
+        geral: "nunca",
+      });
+
+      // Um aviso só por lançamento: carimba quando foi ENTREGUE (ou o sino está desligado). Falha ou ninguém a quem
+      // avisar: não carimba, tenta de novo na próxima execução. A única escrita na conta é este carimbo.
+      if (!deveCarimbarAviso([resSino])) {
+        console.error(`[cron/lembrete-hortolandia-atraso] Aviso NÃO entregue (conta_id=${r.id}, sino=${resSino}) — sem carimbo, tenta de novo na próxima execução.`);
         continue;
       }
 

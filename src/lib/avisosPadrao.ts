@@ -159,6 +159,34 @@ export const PADRAO_AVISOS: Record<GrupoComPadrao, Record<string, PadraoEvento>>
       sino: { ativo: true, destinatarios: [] },
       popup: { ativo: true, destinatarios: [] },
     },
+    // Avisos restantes (candidato transferido, currículo atualizado, funcionário não criado…): sino e popup ligados com a
+    // lista VAZIA (quem já era avisado sempre é); e-mail, quando o evento tem, com a mesma lista dos avisos de vaga
+    // mais parecidos (vaga_cancelada e vaga_reativada).
+    candidato_transferido: { sino: { ativo: true, destinatarios: [] } },
+    candidato_curriculo_atualizado: { sino: { ativo: true, destinatarios: [] } },
+    funcionario_nao_criado: { sino: { ativo: true, destinatarios: [] } },
+    lembrete_agendamento_pendente_analista: {
+      email: { ativo: true, destinatarios: [EMAIL_REBECCA, EMAIL_ANDREZA, EMAIL_GIOVANNI] },
+      sino: { ativo: true, destinatarios: [] },
+    },
+    lembrete_comercial: { sino: { ativo: true, destinatarios: [] }, popup: { ativo: true, destinatarios: [] } },
+    supervisao_cliente_atrasada: {
+      email: { ativo: true, destinatarios: [EMAIL_REBECCA, EMAIL_ANDREZA, EMAIL_GIOVANNI] },
+      sino: { ativo: true, destinatarios: [] },
+      popup: { ativo: true, destinatarios: [] },
+    },
+    aniversario_mes_seguinte: { email: { ativo: true, destinatarios: [EMAIL_REBECCA, EMAIL_ANDREZA, EMAIL_GIOVANNI] } },
+    aniversario_tres_dias: {
+      email: { ativo: true, destinatarios: [EMAIL_REBECCA, EMAIL_ANDREZA, EMAIL_GIOVANNI] },
+      sino: { ativo: true, destinatarios: [] },
+    },
+    aniversario_no_dia: {
+      email: { ativo: true, destinatarios: [EMAIL_REBECCA, EMAIL_ANDREZA, EMAIL_GIOVANNI] },
+      sino: { ativo: true, destinatarios: [] },
+      popup: { ativo: true, destinatarios: [] },
+    },
+    fee_rs_nao_configurado: { sino: { ativo: true, destinatarios: [] } },
+    conta_receber_hortolandia_atrasada: { sino: { ativo: true, destinatarios: [] }, popup: { ativo: true, destinatarios: [] } },
   },
 };
 
@@ -171,6 +199,17 @@ const EVENTOS_SINO_COM_RESPONSAVEL: readonly string[] = [
   "garantia_rs_vencendo",
   "garantia_rs_acionada",
   "pos_venda_rs_7dias",
+  "candidato_transferido",
+  "candidato_curriculo_atualizado",
+  "funcionario_nao_criado",
+  "lembrete_agendamento_pendente_analista",
+  "lembrete_comercial",
+  "supervisao_cliente_atrasada",
+  "conta_receber_hortolandia_atrasada",
+  "fee_rs_nao_configurado",
+  "aniversario_mes_seguinte",
+  "aniversario_tres_dias",
+  "aniversario_no_dia",
 ];
 
 export function grupoTemPadrao(grupo: string): grupo is GrupoComPadrao {

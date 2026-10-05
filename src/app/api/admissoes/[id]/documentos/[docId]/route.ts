@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, admissaoDocumentoRevisarSchema } from "@/lib/schemas";
@@ -112,7 +113,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const candidato = (admissao as any)?.candidatos as { nome_completo: string; telefone: string } | null;
     if (admissao && candidato?.telefone) {
-      const admissaoUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/admissao/${admissao.token}`;
+      const admissaoUrl = `${SITE_URL}/admissao/${admissao.token}`;
       const label = DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === doc.tipo_documento)?.label ?? doc.tipo_documento;
       whatsappUrl = linkDocumentoRejeitadoWhatsapp(candidato.nome_completo, candidato.telefone, label, motivo_rejeicao ?? "", admissaoUrl);
     }

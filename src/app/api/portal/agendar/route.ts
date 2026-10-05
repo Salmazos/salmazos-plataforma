@@ -1,7 +1,9 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
-import { notifyResponsibleOrAll } from "@/lib/notifyAllAnalysts";
+import { avisarComResponsavel } from "@/lib/avisarComResponsavel";
+import { escaparHtml } from "@/lib/emailPacoteContabilidade";
 import { avisarPedidoCliente } from "@/lib/avisoPedidoCliente";
 import { parseBody, portalAgendarSchema } from "@/lib/schemas";
 
@@ -48,14 +50,20 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Este encaminhamento não está aguardando agendamento." }, { status: 409 });
     }
 
+    // Guarda contra clique duplo: só grava se o encaminhamento ainda aguarda o agendamento. Quem perde a corrida recebe
+    // a mesma resposta de "já agendado" de cima, sem aviso.
     const { data: updated, error } = await service
       .from("encaminhamentos")
       .update({ data_entrevista, status: "aguardando" })
       .eq("id", encaminhamento_id)
+      .eq("status", "aguardando_agendamento_cliente")
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (!updated) {
+      return NextResponse.json({ error: "Este encaminhamento não está aguardando agendamento." }, { status: 409 });
+    }
 
     const [{ data: candidato }, { data: cliente }] = await Promise.all([
       service.from("candidatos").select("nome_completo, responsavel, cargo_pretendido").eq("id", enc.candidato_id).single(),
@@ -83,17 +91,17 @@ export async function PATCH(request: NextRequest) {
     <h1 style="color:#FFD700;margin:0;font-size:20px">📅 Entrevista Agendada pelo Cliente</h1>
   </div>
   <div style="padding:28px 32px">
-    <p style="margin:0 0 16px;font-size:14px;color:#374151"><strong style="color:#111827">${clienteNome}</strong> confirmou a data da entrevista:</p>
+    <p style="margin:0 0 16px;font-size:14px;color:#374151"><strong style="color:#111827">${escaparHtml(clienteNome)}</strong> confirmou a data da entrevista:</p>
     <div style="margin-bottom:20px;padding:14px 16px;background:#F0FDF4;border-radius:10px;border:1px solid #BBF7D0">
-      <p style="margin:0;font-size:16px;font-weight:700;color:#166534">${candidatoNome}</p>
-      <p style="margin:4px 0 0;font-size:13px;color:#166534">${candidato?.cargo_pretendido ?? ""}</p>
+      <p style="margin:0;font-size:16px;font-weight:700;color:#166534">${escaparHtml(candidatoNome)}</p>
+      <p style="margin:4px 0 0;font-size:13px;color:#166534">${escaparHtml(candidato?.cargo_pretendido ?? "")}</p>
     </div>
     <table style="width:100%;border-collapse:collapse">
-      <tr><td style="padding:8px 14px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6">Cliente</td><td style="padding:8px 14px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${clienteNome}</td></tr>
+      <tr><td style="padding:8px 14px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6">Cliente</td><td style="padding:8px 14px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${escaparHtml(clienteNome)}</td></tr>
       <tr><td style="padding:8px 14px;font-weight:600;color:#6B7280;font-size:13px">Data e Horário</td><td style="padding:8px 14px;color:#111827;font-size:13px;font-weight:700">${dataFormatada}</td></tr>
     </table>
     <div style="text-align:center;padding-top:24px;border-top:1px solid #f3f4f6;margin-top:20px">
-      <a href="https://salmazos-plataforma.vercel.app/painel/candidato/${enc.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil completo</a>
+      <a href="${SITE_URL}/painel/candidato/${enc.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil completo</a>
     </div>
   </div>
   <div style="background:#f9fafb;padding:16px 32px;text-align:center">
@@ -102,37 +110,31 @@ export async function PATCH(request: NextRequest) {
 </div>
 </body></html>`;
 
-    await notifyResponsibleOrAll({
-      responsavelNome: candidato?.responsavel ?? null,
-      subject: `📅 Entrevista agendada — ${candidatoNome} — ${clienteNome}`,
-      html,
+    // Responsável ativo: SEMPRE recebe (sino + e-mail, como antes) e a lista do evento agendamento_cliente também;
+    // sem responsável vale o fallback de sempre (lista ou equipe da unidade). Sino e e-mail seguem os interruptores de
+    // Configurações > Avisos. Nunca lança: o agendamento já está gravado.
+    const tituloAviso = "Entrevista agendada pelo cliente";
+    const mensagemAviso = `${clienteNome} agendou a entrevista de ${candidatoNome} para ${dataFormatada}`;
+    const subjectAviso = `📅 Entrevista agendada — ${candidatoNome} — ${clienteNome}`;
+    await avisarComResponsavel(service, {
+      evento: "agendamento_cliente",
       tipo: "agendamento_cliente",
-      titulo: "Entrevista agendada pelo cliente",
-      mensagem: `${clienteNome} agendou a entrevista de ${candidatoNome} para ${dataFormatada}`,
-      candidato_id: enc.candidato_id,
-      vaga_id: enc.vaga_id ?? undefined,
-      // Sem responsável resolvido, o aviso vai pra equipe da unidade do cliente.
+      titulo: tituloAviso,
+      mensagem: mensagemAviso,
+      responsavelNome: candidato?.responsavel ?? null,
+      candidatoId: enc.candidato_id,
+      vagaId: enc.vaga_id ?? null,
       unidadeId: cliente?.unidade_id ?? null,
-      // O ramo do responsável (acima) é fixo e não passa por lista. Só o fallback lê a lista do evento
-      // agendamento_cliente (Configurações > Avisos); sem configuração, é o broadcast de sempre.
-      fallbackBroadcast: () =>
+      email: { subject: subjectAviso, html },
+      contexto: "PATCH /api/portal/agendar",
+      // O ramo sem responsável é o de sempre: lê a lista do evento e, sem configuração, é o broadcast da unidade.
+      fallback: () =>
         avisarPedidoCliente({
           evento: "agendamento_cliente",
           unidadeId: cliente?.unidade_id ?? null,
           contexto: "PATCH /api/portal/agendar",
-          sino: {
-            tipo: "agendamento_cliente",
-            titulo: "Entrevista agendada pelo cliente",
-            mensagem: `${clienteNome} agendou a entrevista de ${candidatoNome} para ${dataFormatada}`,
-            candidatoId: enc.candidato_id,
-          },
-          email: {
-            subject: `📅 Entrevista agendada — ${candidatoNome} — ${clienteNome}`,
-            html,
-            tipo: "agendamento_cliente",
-            candidatoId: enc.candidato_id,
-            vagaId: enc.vaga_id ?? undefined,
-          },
+          sino: { tipo: "agendamento_cliente", titulo: tituloAviso, mensagem: mensagemAviso, candidatoId: enc.candidato_id },
+          email: { subject: subjectAviso, html, tipo: "agendamento_cliente", candidatoId: enc.candidato_id, vagaId: enc.vaga_id ?? undefined },
         }),
     });
 

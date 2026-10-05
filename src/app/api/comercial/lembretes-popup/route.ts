@@ -1,3 +1,4 @@
+import { popupEventoLigado } from "@/lib/avisoConfiguravel";
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { exigirContextoComercial, hojeSaoPaulo } from "@/lib/comercial";
@@ -15,6 +16,9 @@ export async function GET() {
   if (!ctx || !ctx.vendedor) return NextResponse.json({ data: [], ja_visto: true });
 
   const svc = createServiceClient();
+
+  // Canal popup do evento lembrete_comercial (Configurações > Avisos): sem linha ou erro de leitura = não mostra.
+  if (!(await popupEventoLigado(svc, "lembrete_comercial"))) return NextResponse.json({ data: [], ja_visto: true });
   const hoje = hojeSaoPaulo();
   try {
     const lembretes = await buscarLembretesVencidos(svc, ctx.analistaId, hoje, 100);

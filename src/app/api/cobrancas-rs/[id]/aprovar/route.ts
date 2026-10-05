@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
@@ -94,7 +95,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
       feeRsPrazoCobranca: cobranca.prazo_cobranca,
       feeValor,
       tipoCobrancaRS: ehCancelamento ? "cancelamento" : "contratacao",
-      cobrancaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/cobrancas-rs?abrir=${id}`,
+      cobrancaUrl: `${SITE_URL}/painel/cobrancas-rs?abrir=${id}`,
     });
 
     const resultados = await Promise.all(

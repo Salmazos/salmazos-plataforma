@@ -1,15 +1,13 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { notifyResponsibleOrAll } from "@/lib/notifyAllAnalysts";
+import { avisarComResponsavel } from "@/lib/avisarComResponsavel";
+import { escaparHtml } from "@/lib/emailPacoteContabilidade";
 import { emailClienteLigado } from "@/lib/avisoCliente";
 import { destinatariosEmailCliente } from "@/lib/destinatariosEmailCliente";
 import { enviarEmailAoCliente } from "@/lib/enviarEmailAoCliente";
 
 export const dynamic = "force-dynamic";
-
-// Domínio de produção fixo: estes e-mails (analista e cliente) sempre abrem em vagas.salmazos.com.br, sem depender de
-// NEXT_PUBLIC_SITE_URL (que pode apontar para outro domínio ou ter barra no final).
-const SITE_URL = "https://vagas.salmazos.com.br";
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -63,8 +61,8 @@ export async function GET(request: Request) {
       <p style="margin:0;color:#92400E;font-size:14px;font-weight:700">Aguardando agendamento há ${diasLabel}</p>
     </div>
     <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Candidato</td><td style="padding:6px 0;color:#111827">${candidatoNome}</td></tr>
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Cliente</td><td style="padding:6px 0;color:#111827">${clienteNome}</td></tr>
+      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Candidato</td><td style="padding:6px 0;color:#111827">${escaparHtml(candidatoNome)}</td></tr>
+      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Cliente</td><td style="padding:6px 0;color:#111827">${escaparHtml(clienteNome)}</td></tr>
     </table>
     <div style="text-align:center;margin-top:20px">
       <a href="${SITE_URL}/painel/candidato/${r.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil do candidato</a>
@@ -76,22 +74,28 @@ export async function GET(request: Request) {
 </div>
 </body></html>`;
 
-      const resultadoAnalista = await notifyResponsibleOrAll({
-        responsavelNome: responsavel,
-        subject: `⏰ ${clienteNome} ainda não marcou a entrevista de ${candidatoNome}`,
-        html: htmlAnalista,
+      // Lembrete ao analista: o responsável ativo SEMPRE recebe (sino + e-mail, como antes) e a lista do evento
+      // lembrete_agendamento_pendente_analista também; sem responsável, aviso geral da unidade do cliente. Sino e e-mail
+      // seguem os interruptores de Configurações > Avisos. Se o e-mail ao cliente falha, o cron tenta de novo no dia
+      // seguinte: o lembrete ao analista NÃO se repete (janela de 40 horas, menor que o ciclo de 48 horas) para o sino não duplicar. Nunca lança.
+      const resultadoAnalista = await avisarComResponsavel(supabase, {
+        evento: "lembrete_agendamento_pendente_analista",
         tipo: "lembrete_agendamento_pendente_analista",
         titulo: `⏰ Aguardando agendamento há ${diasLabel}`,
         mensagem: `${clienteNome} ainda não marcou a entrevista de ${candidatoNome} — aguardando há ${diasLabel}.`,
-        candidato_id: r.candidato_id,
-        vaga_id: r.vaga_id ?? undefined,
+        responsavelNome: responsavel,
+        candidatoId: r.candidato_id,
+        vagaId: r.vaga_id ?? null,
         // Sem responsável resolvido, o lembrete vai pra equipe da unidade do cliente.
         unidadeId: r.clientes?.unidade_id ?? null,
+        email: { subject: `⏰ ${clienteNome} ainda não marcou a entrevista de ${candidatoNome}`, html: htmlAnalista },
+        semRepetirHoras: 40,
+        contexto: "cron/lembrete-agendamento",
       });
 
-      if (resultadoAnalista.attempted === 0) {
+      if (resultadoAnalista.alvo !== "repetido" && resultadoAnalista.sino !== "enviado" && resultadoAnalista.email !== "enviado" && resultadoAnalista.sino !== "n/a") {
         console.error(
-          `[cron/lembrete-agendamento] Lembrete pro analista NÃO enviado (encaminhamento_id=${r.id}) — nenhuma tentativa de e-mail foi registrada.`
+          `[cron/lembrete-agendamento] Lembrete pro analista NÃO entregue (encaminhamento_id=${r.id}): sino=${resultadoAnalista.sino}, e-mail=${resultadoAnalista.email}.`
         );
       }
 

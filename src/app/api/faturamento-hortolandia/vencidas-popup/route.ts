@@ -1,3 +1,4 @@
+import { popupEventoLigado } from "@/lib/avisoConfiguravel";
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaAuth";
@@ -35,6 +36,9 @@ export async function GET() {
   if (!ctx) return NextResponse.json({ data: [] });
 
   const svc = createServiceClient();
+
+  // Canal popup do evento conta_receber_hortolandia_atrasada (Configurações > Avisos): sem linha ou erro de leitura = não mostra.
+  if (!(await popupEventoLigado(svc, "conta_receber_hortolandia_atrasada"))) return NextResponse.json({ data: [] });
   const hojeISO = formatarDataISO(obterDataHojeBrasil());
 
   const { data: vencidasRaw, error } = await svc

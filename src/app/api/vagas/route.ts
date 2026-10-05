@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { NextRequest, NextResponse, after } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
@@ -149,7 +150,7 @@ export async function POST(request: NextRequest) {
       };
       const svcAfter = createServiceClient();
 
-      const vagaUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas/${vagaId}`;
+      const vagaUrl = `${SITE_URL}/painel/vagas/${vagaId}`;
       const template = getEmailTemplate("nova_vaga_criada", {
         nome: "",
         cargo: vagaTitulo,

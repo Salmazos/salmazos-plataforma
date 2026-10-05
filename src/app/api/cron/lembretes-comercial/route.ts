@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { hojeSaoPaulo } from "@/lib/comercial";
+import { resolverDestinatarios } from "@/lib/avisos";
+import {
+  EVENTO_LEMBRETE_COMERCIAL,
+  PREFIXO_MENSAGEM_VENDEDOR,
+  TIPO_LEMBRETE_COMERCIAL,
+  textoLembreteComercial,
+  textoLembreteComercialGestao,
+} from "@/lib/avisosRestantesRegras";
 
 export const dynamic = "force-dynamic";
 
@@ -40,36 +48,46 @@ export async function GET(request: Request) {
 
     const { data: perfis } = await supabase
       .from("analistas_perfil")
-      .select("id, user_id, ativo")
+      .select("id, user_id, ativo, nome_completo")
       .in("id", vendedorIds);
     const userPorVendedor = new Map(
       (perfis ?? []).filter((p) => p.user_id && p.ativo !== false).map((p) => [p.id as string, p.user_id as string])
     );
+    const nomePorVendedor = new Map((perfis ?? []).map((p) => [p.id as string, p.nome_completo as string | null]));
 
-    // Não duplica se o cron rodar duas vezes no mesmo dia (início do dia em Brasília).
+    // Sino (Configurações > Avisos > lembrete_comercial): sem linha de canal ou erro de leitura = ligado; só ativo = false
+    // desliga tudo. A lista do canal (por exemplo a gestão comercial) recebe o mesmo aviso com o nome do vendedor.
+    const sino = await resolverDestinatarios(EVENTO_LEMBRETE_COMERCIAL, "sino", undefined, supabase);
+    if (sino.modo === "desligado") {
+      return NextResponse.json({ vendedores: vendedorIds.length, avisos_enviados: 0, ja_avisados: 0, sino_desligado: true });
+    }
+    const listaGestao = sino.modo === "configurado" && !sino.falhou ? sino.userIds : [];
+
+    // Não duplica se o cron rodar duas vezes no mesmo dia (início do dia em Brasília). O aviso do vendedor é reconhecido
+    // pelo texto "Você tem…"; o da gestão, pelo par usuário + mensagem.
     const inicioDoDia = `${hoje}T00:00:00-03:00`;
-    const userIds = [...userPorVendedor.values()];
+    const userIds = [...new Set([...userPorVendedor.values(), ...listaGestao])];
     const { data: jaAvisados } = userIds.length
       ? await supabase
           .from("notificacoes_analista")
-          .select("user_id")
-          .eq("tipo", "lembrete_comercial")
+          .select("user_id, mensagem")
+          .eq("tipo", TIPO_LEMBRETE_COMERCIAL)
           .in("user_id", userIds)
           .gte("created_at", inicioDoDia)
-      : { data: [] as { user_id: string }[] };
-    const jaAvisadosSet = new Set((jaAvisados ?? []).map((n) => n.user_id as string));
+      : { data: [] as { user_id: string; mensagem: string }[] };
+    const jaAvisadosSet = new Set((jaAvisados ?? []).filter((n) => String(n.mensagem ?? "").startsWith(PREFIXO_MENSAGEM_VENDEDOR)).map((n) => n.user_id as string));
+    const jaGestao = new Set((jaAvisados ?? []).map((n) => `${n.user_id}|${n.mensagem}`));
 
-    const novas = [...userPorVendedor.entries()]
-      .filter(([, userId]) => !jaAvisadosSet.has(userId))
-      .map(([vendedorId, userId]) => {
-        const n = empresasPorVendedor.get(vendedorId)?.size ?? 1;
-        return {
-          tipo: "lembrete_comercial",
-          titulo: "Hora de retomar contato",
-          mensagem: `Você tem ${n} empresa${n !== 1 ? "s" : ""} esperando seu retorno.`,
-          user_id: userId,
-        };
-      });
+    const novas: { tipo: string; titulo: string; mensagem: string; user_id: string }[] = [];
+    for (const [vendedorId, userId] of userPorVendedor.entries()) {
+      const n = empresasPorVendedor.get(vendedorId)?.size ?? 1;
+      if (!jaAvisadosSet.has(userId)) novas.push({ tipo: TIPO_LEMBRETE_COMERCIAL, ...textoLembreteComercial({ quantidade: n }), user_id: userId });
+      const gestao = textoLembreteComercialGestao({ vendedor: nomePorVendedor.get(vendedorId), quantidade: n });
+      for (const gestorId of listaGestao) {
+        if (gestorId === userId || jaGestao.has(`${gestorId}|${gestao.mensagem}`)) continue;
+        novas.push({ tipo: TIPO_LEMBRETE_COMERCIAL, ...gestao, user_id: gestorId });
+      }
+    }
 
     if (novas.length > 0) {
       const { error: errNotif } = await supabase.from("notificacoes_analista").insert(novas);
