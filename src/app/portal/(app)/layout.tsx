@@ -4,6 +4,9 @@ import { PlusCircle, UserPlus } from "lucide-react";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import SidebarPortal from "@/components/SidebarPortal";
 import PopupVencimentoContratoMotPortal from "@/components/PopupVencimentoContratoMotPortal";
+import AvisosPortalProvider from "@/components/AvisosPortalProvider";
+import PortalSino from "@/components/PortalSino";
+import PopupAvisosPortal from "@/components/PopupAvisosPortal";
 
 export default async function PortalAppLayout({
   children,
@@ -61,6 +64,7 @@ export default async function PortalAppLayout({
     .maybeSingle();
 
   return (
+    <AvisosPortalProvider>
     <div className="min-h-screen bg-gray-50 flex">
       <SidebarPortal
         userEmail={user.email ?? ""}
@@ -75,7 +79,9 @@ export default async function PortalAppLayout({
               mesmo destino, visível em toda página. "Indicar Candidato" (candidato que o
               cliente já escolheu por fora, só pra registro) entrou do lado, mesmo tratamento
               — pedido do Olver de não virar item de menu lateral (set/2026). */}
-          <div className="flex justify-center gap-3 mb-6">
+          <div className="flex flex-wrap items-center gap-y-3 mb-6">
+          <div className="flex-1" />
+          <div className="flex justify-center gap-3">
             <Link
               href="/portal/solicitar-vaga"
               className="inline-flex items-center gap-1.5 transition-opacity hover:opacity-90"
@@ -109,6 +115,11 @@ export default async function PortalAppLayout({
               Indicar Candidato
             </Link>
           </div>
+          {/* Sino de avisos da Salmazos ao cliente (Configurações > Avisos > "Avisos ao cliente"). */}
+          <div className="flex-1 flex justify-end">
+            <PortalSino />
+          </div>
+          </div>
 
           {/* Logo do cliente — só renderiza se o cliente tiver logo cadastrado (upload em
               /painel/clientes). */}
@@ -128,6 +139,8 @@ export default async function PortalAppLayout({
         </div>
       </main>
       <PopupVencimentoContratoMotPortal />
+      <PopupAvisosPortal />
     </div>
+    </AvisosPortalProvider>
   );
 }

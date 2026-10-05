@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, avisoConfigDestinatarioCreateSchema } from "@/lib/schemas";
 import { checarPapelSuperuser } from "@/lib/fullAccessAuth";
 import { registrarAuditoria } from "@/lib/audit";
+import { eventoSemLista } from "@/lib/avisosCatalogo";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -14,6 +15,11 @@ export async function POST(request: NextRequest) {
   const parsed = parseBody(avisoConfigDestinatarioCreateSchema, await request.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
   const d = parsed.data;
+
+  // Avisos ao cliente não têm lista de pessoas: o destinatário é todo usuário do portal do cliente.
+  if (eventoSemLista(d.evento)) {
+    return NextResponse.json({ error: "Este aviso não tem lista de pessoas: quem recebe são os usuários do portal do cliente. Só dá para ligar ou desligar cada canal." }, { status: 400 });
+  }
 
   const svc = createServiceClient();
   const { data: ev } = await svc.from("aviso_eventos").select("evento, canais_suportados").eq("evento", d.evento).maybeSingle();

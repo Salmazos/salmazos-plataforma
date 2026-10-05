@@ -7,6 +7,8 @@ import { parseBody, indicacaoCandidatoDecisaoSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { sendEmail } from "@/lib/sendEmail";
+import { criarAvisoCliente } from "@/lib/avisoCliente";
+import { chaveDedupAviso, textoAvisoIndicacaoDecidida } from "@/lib/avisoClienteRegras";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -169,6 +171,17 @@ export async function POST(request: NextRequest, { params }: Params) {
         entidade_id: id,
         detalhes: { cliente: sol.cliente_nome, candidato_nome: sol.candidato_nome, motivo: parsed.data.motivo },
       });
+
+      // Aviso ao cliente no portal (sino e popup, conforme Configurações > Avisos). Chamada extra, isolada
+      // e que nunca lança: a decisão acima já foi gravada. Só texto que o cliente já vê (candidato, vaga e
+      // o motivo da recusa, igual a /portal/minhas-indicacoes).
+      await criarAvisoCliente("indicacao_decidida_cliente", sol.cliente_id, () => ({
+        ...textoAvisoIndicacaoDecidida({ decisao: "recusada", candidato: sol.candidato_nome, vagaTitulo: vaga?.titulo, motivo: decidida.motivo_recusa }),
+        link: "/portal/minhas-indicacoes",
+        referencia_tipo: "indicacao_candidato",
+        referencia_id: id,
+        chaveDedup: chaveDedupAviso("indicacao_decidida_cliente", id, `recusada:${decidida.decidido_em}`),
+      }));
 
       return NextResponse.json({ data: decidida });
     }
@@ -553,6 +566,15 @@ export async function POST(request: NextRequest, { params }: Params) {
     } catch (emailErr) {
       console.error("[decisao indicacao] Erro ao enviar e-mail pro RH:", emailErr);
     }
+
+    // Aviso ao cliente no portal (ver a recusa acima): extra, isolado, depois de tudo ter dado certo.
+    await criarAvisoCliente("indicacao_decidida_cliente", sol.cliente_id, () => ({
+      ...textoAvisoIndicacaoDecidida({ decisao: "aprovada", candidato: sol.candidato_nome, vagaTitulo: vaga?.titulo }),
+      link: "/portal/minhas-indicacoes",
+      referencia_tipo: "indicacao_candidato",
+      referencia_id: id,
+      chaveDedup: chaveDedupAviso("indicacao_decidida_cliente", id, `aprovada:${aprovada.decidido_em ?? nowIso}`),
+    }));
 
     return NextResponse.json({
       data: aprovada,

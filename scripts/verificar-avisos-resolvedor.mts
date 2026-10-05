@@ -6,7 +6,11 @@ import {
   type DadosAviso, type FonteAvisos, type LinhaDestinatario, type PerfilAnalista,
 } from "../src/lib/avisosResolucao.ts";
 import { PADRAO_AVISOS, grupoTemPadrao, montarPayloadRestauracao } from "../src/lib/avisosPadrao.ts";
-import { EVENTOS_POR_GRUPO, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
+import { EVENTOS_POR_GRUPO, EVENTOS_SEM_LISTA, eventoSemLista, FRASE_SEM_LISTA, ROTULO_GRUPO, grupoDoEvento, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
+import {
+  canalClienteLigado, inicioJanelaAvisos, avisoVisivelParaUsuario, linkPortalValido, chaveDedupAviso, textoAvisoIndicacaoDecidida,
+  haQuantoTempo, naoLidosDoSino, pendentesDoPopup, limitarMensagemAviso, DIAS_VISIVEL_AVISO_CLIENTE, type AvisoPortal,
+} from "../src/lib/avisoClienteRegras.ts";
 import { mensagemErroAcao, MSG_ULTIMO_DESTINATARIO, MSG_ACAO_PADRAO } from "../src/lib/avisosErroAcao.ts";
 import { resumirPedidoCliente, type LinhaPedidoCliente } from "../src/lib/pedidoClienteResumo.ts";
 import { EVENTO_POR_TIPO_PEDIDO, TIPOS_PEDIDO_CLIENTE, tiposVisiveis, chaveVisto } from "../src/lib/pedidosClientePopup.ts";
@@ -521,6 +525,112 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     assert.equal(mensagemErroAcao(500, { mensagem: "falhou" }), "falhou"); assert.equal(mensagemErroAcao(500, { message: "falhou 2" }), "falhou 2");
     assert.equal(mensagemErroAcao(500, {}), MSG_ACAO_PADRAO); assert.equal(mensagemErroAcao(404, { error: "   " }, true), MSG_ACAO_PADRAO);
     assert.equal(mensagemErroAcao(400, { error: 42 }), MSG_ACAO_PADRAO);
+  });
+
+  // ── Avisos ao cliente (sino e popup no portal): bloco 1 ──
+  await caso("avisos ao cliente: grupo novo, só com a indicação decidida, rótulo e canais sino/popup", () => {
+    assert.deepEqual(EVENTOS_POR_GRUPO.avisos_cliente, ["indicacao_decidida_cliente"]);
+    assert.equal(ROTULO_GRUPO.avisos_cliente, "Avisos ao cliente");
+    assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
+    assert.deepEqual([...canaisDoEvento("indicacao_decidida_cliente")], ["sino", "popup"]);
+    assert.equal(grupoDoEvento("indicacao_decidida_cliente"), "avisos_cliente");
+    assert.ok(NOTA_EVENTO.indicacao_decidida_cliente.includes("Minhas Indicações"));
+  });
+  await caso("avisos ao cliente: evento SEM lista (só liga/desliga), sem Restaurar padrão e com a frase combinada", () => {
+    assert.deepEqual([...EVENTOS_SEM_LISTA], ["indicacao_decidida_cliente"]);
+    assert.equal(eventoSemLista("indicacao_decidida_cliente"), true);
+    for (const ev of ["solicitacao_vaga", "vaga_pausa_pedida", "portal_candidato_aprovado", "rescisao_paga", ""]) assert.equal(eventoSemLista(ev), false, ev);
+    assert.equal(grupoTemPadrao("avisos_cliente"), false);
+    assert.equal(FRASE_SEM_LISTA, "Ligado: todos os usuários do portal do cliente recebem. Desligado: ninguém.");
+    for (const canal of ["sino", "popup"]) assert.equal(descricaoPadraoDoSistema("avisos_cliente", canal, "indicacao_decidida_cliente"), FRASE_SEM_LISTA);
+  });
+  await caso("avisos ao cliente: os eventos e a lista dos outros grupos não mudaram", () => {
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 5); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.deepEqual([...canaisDoEvento("vaga_criada")], ["email", "sino"]);
+  });
+
+  await caso("avisoClienteLigado: sem linha de canal => NÃO envia", () => {
+    assert.equal(canalClienteLigado({ linha: null, erro: false }), false);
+    assert.equal(canalClienteLigado({ linha: undefined, erro: false }), false);
+  });
+  await caso("avisoClienteLigado: erro de leitura => NÃO envia, mesmo que haja linha ligada", () => {
+    assert.equal(canalClienteLigado({ linha: { ativo: true }, erro: true }), false);
+    assert.equal(canalClienteLigado({ linha: null, erro: true }), false);
+  });
+  await caso("avisoClienteLigado: só envia com linha ativo=true (ativo false ou nulo = desligado)", () => {
+    assert.equal(canalClienteLigado({ linha: { ativo: true }, erro: false }), true);
+    assert.equal(canalClienteLigado({ linha: { ativo: false }, erro: false }), false);
+    assert.equal(canalClienteLigado({ linha: { ativo: null }, erro: false }), false);
+  });
+
+  const HOJE = new Date("2026-10-20T12:00:00Z");
+  await caso("visibilidade: janela de 30 dias esconde o mais antigo (sem apagar)", () => {
+    assert.equal(DIAS_VISIVEL_AVISO_CLIENTE, 30);
+    assert.equal(avisoVisivelParaUsuario("2026-10-19T12:00:00Z", "2026-01-01T00:00:00Z", HOJE), true);
+    assert.equal(avisoVisivelParaUsuario("2026-09-20T12:00:00Z", "2026-01-01T00:00:00Z", HOJE), true);
+    assert.equal(avisoVisivelParaUsuario("2026-09-20T11:59:59Z", "2026-01-01T00:00:00Z", HOJE), false);
+  });
+  await caso("visibilidade: o usuário só vê avisos criados DEPOIS de entrar no portal", () => {
+    assert.equal(avisoVisivelParaUsuario("2026-10-10T10:00:00Z", "2026-10-15T00:00:00Z", HOJE), false);
+    assert.equal(avisoVisivelParaUsuario("2026-10-15T00:00:00Z", "2026-10-15T00:00:00Z", HOJE), true);
+    assert.equal(avisoVisivelParaUsuario("2026-10-16T00:00:00Z", "2026-10-15T00:00:00Z", HOJE), true);
+  });
+  await caso("visibilidade: início da consulta = o mais recente entre 30 dias atrás e a entrada do usuário", () => {
+    assert.equal(inicioJanelaAvisos("2026-01-01T00:00:00Z", HOJE), "2026-09-20T12:00:00.000Z");
+    assert.equal(inicioJanelaAvisos("2026-10-15T00:00:00Z", HOJE), "2026-10-15T00:00:00.000Z");
+    assert.equal(inicioJanelaAvisos(null, HOJE), "2026-09-20T12:00:00.000Z");
+    assert.equal(inicioJanelaAvisos("não é data", HOJE), "2026-09-20T12:00:00.000Z");
+    assert.equal(avisoVisivelParaUsuario("data inválida", null, HOJE), false);
+  });
+
+  await caso("link do aviso: sempre dentro do portal (nunca URL externa nem caminho estranho)", () => {
+    for (const ok of ["/portal/minhas-indicacoes", "/portal/solicitacoes", "/portal/candidato/abc-123", "/portal/agenda?dia=2026-10-20"]) assert.equal(linkPortalValido(ok), true, ok);
+    for (const ruim of ["https://exemplo.com/portal/x", "//evil.com/portal/x", "/painel/vagas", "portal/x", "/portal", "/portal//x", "javascript:alert(1)", "/portal/x y", "/portal/<script>"]) assert.equal(linkPortalValido(ruim), false, ruim);
+  });
+  await caso("chave de deduplicação: mesma ocorrência = mesma chave; versão diferente = chave diferente", () => {
+    assert.equal(chaveDedupAviso("indicacao_decidida_cliente", "abc", "aprovada:2026-10-20T12:00:00Z"), chaveDedupAviso("indicacao_decidida_cliente", "abc", "aprovada:2026-10-20T12:00:00Z"));
+    assert.notEqual(chaveDedupAviso("indicacao_decidida_cliente", "abc", "aprovada:1"), chaveDedupAviso("indicacao_decidida_cliente", "abc", "recusada:2"));
+    assert.notEqual(chaveDedupAviso("indicacao_decidida_cliente", "abc", 1), chaveDedupAviso("indicacao_decidida_cliente", "abd", 1));
+  });
+
+  await caso("texto da indicação aprovada: candidato e vaga, nada interno", () => {
+    const t = textoAvisoIndicacaoDecidida({ decisao: "aprovada", candidato: "Maria Souza", vagaTitulo: "Auxiliar de Produção" });
+    assert.equal(t.titulo, "Indicação aprovada");
+    assert.equal(t.mensagem, "Sua indicação Maria Souza foi aprovada para a vaga Auxiliar de Produção");
+  });
+  await caso("texto da indicação recusada: traz o motivo_recusa (o mesmo que o cliente já vê)", () => {
+    const t = textoAvisoIndicacaoDecidida({ decisao: "recusada", candidato: "João Lima", vagaTitulo: "Operador", motivo: "  Vaga já preenchida  " });
+    assert.equal(t.titulo, "Indicação não aprovada");
+    assert.equal(t.mensagem, "Sua indicação João Lima não foi aprovada. Motivo: Vaga já preenchida");
+  });
+  await caso("texto da indicação: sem vaga, sem motivo ou com nome nulo não quebra (aviso nunca derruba a rota)", () => {
+    assert.equal(textoAvisoIndicacaoDecidida({ decisao: "aprovada", candidato: "Ana" }).mensagem, "Sua indicação Ana foi aprovada");
+    assert.equal(textoAvisoIndicacaoDecidida({ decisao: "recusada", candidato: "Ana", motivo: null }).mensagem, "Sua indicação Ana não foi aprovada.");
+    assert.equal(textoAvisoIndicacaoDecidida({ decisao: "aprovada", candidato: null, vagaTitulo: null }).mensagem, "Sua indicação candidato foi aprovada");
+    assert.equal(textoAvisoIndicacaoDecidida({ decisao: "aprovada", candidato: undefined }).mensagem, "Sua indicação candidato foi aprovada");
+  });
+  await caso("texto do aviso: a função só recebe candidato, vaga e motivo (nada de decidido_por, notas ou responsável)", () => {
+    const t = textoAvisoIndicacaoDecidida({ decisao: "recusada", candidato: "X", vagaTitulo: "Y", motivo: "Z", decidido_por: "Analista Interno" } as never);
+    assert.ok(!JSON.stringify(t).includes("Analista Interno"));
+  });
+  await caso("texto do aviso: mensagem muito longa é cortada", () => {
+    const longa = limitarMensagemAviso("a".repeat(900)); assert.equal(longa.length, 400); assert.ok(longa.endsWith("…"));
+  });
+
+  await caso("tempo relativo: agora, minutos, horas e dias", () => {
+    const base = new Date("2026-10-20T12:00:00Z");
+    assert.equal(haQuantoTempo("2026-10-20T11:59:30Z", base), "agora");
+    assert.equal(haQuantoTempo("2026-10-20T11:55:00Z", base), "há 5 min");
+    assert.equal(haQuantoTempo("2026-10-20T09:00:00Z", base), "há 3 h");
+    assert.equal(haQuantoTempo("2026-10-19T09:00:00Z", base), "há 1 dia");
+    assert.equal(haQuantoTempo("2026-10-17T12:00:00Z", base), "há 3 dias");
+  });
+  const aviso = (id: string, o: Partial<AvisoPortal> = {}): AvisoPortal => ({ id, titulo: "t", mensagem: "m", link: "/portal/x", created_at: "2026-10-20T10:00:00Z", canal_sino: true, canal_popup: true, lida: false, popup_visto: false, ...o });
+  await caso("sino e popup usam a mesma lista: não lidos só do canal sino; pendentes só do canal popup ainda não vistos", () => {
+    const lista = [aviso("1"), aviso("2", { lida: true }), aviso("3", { canal_sino: false }), aviso("4", { popup_visto: true }), aviso("5", { canal_popup: false })];
+    assert.deepEqual(naoLidosDoSino(lista).map((a) => a.id), ["1", "4", "5"]);
+    assert.deepEqual(pendentesDoPopup(lista).map((a) => a.id), ["1", "2", "3"]);
+    assert.deepEqual(pendentesDoPopup([aviso("9", { popup_visto: true })]), []);
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);
