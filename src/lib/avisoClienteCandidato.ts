@@ -11,6 +11,8 @@ export interface EncaminhamentoAnterior {
   status: string | null;
   avaliado_em: string | null;
   updated_at: string | null;
+  // Usado pelo aviso de entrevista agendada/remarcada (bloco 3).
+  data_entrevista?: string | null;
 }
 
 export interface LeituraEncaminhamentoAnterior {
@@ -29,7 +31,7 @@ export async function lerEncaminhamentoAnterior(
     if (!o.vagaId) return { ok: true, anterior: null };
     const { data, error } = await svc
       .from("encaminhamentos")
-      .select("status, avaliado_em, updated_at")
+      .select("status, avaliado_em, updated_at, data_entrevista")
       .eq("candidato_id", o.candidatoId)
       .eq("cliente_id", o.clienteId)
       .eq("vaga_id", o.vagaId)

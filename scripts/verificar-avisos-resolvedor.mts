@@ -9,9 +9,9 @@ import { PADRAO_AVISOS, grupoTemPadrao, montarPayloadRestauracao } from "../src/
 import { EVENTOS_POR_GRUPO, EVENTOS_SEM_LISTA, eventoSemLista, FRASE_SEM_LISTA, ROTULO_GRUPO, grupoDoEvento, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
 import {
   canalClienteLigado, inicioJanelaAvisos, avisoVisivelParaUsuario, linkPortalValido, chaveDedupAviso, textoAvisoIndicacaoDecidida,
-  haQuantoTempo, textoAvisoCandidatoEnviado, decidirAvisoCandidatoEnviado, naoLidosDoSino, pendentesDoPopup, limitarMensagemAviso, DIAS_VISIVEL_AVISO_CLIENTE, type AvisoPortal,
+  haQuantoTempo, textoAvisoCandidatoEnviado, textoAvisoEntrevista, decidirAvisoCandidatoEnviado, naoLidosDoSino, pendentesDoPopup, limitarMensagemAviso, DIAS_VISIVEL_AVISO_CLIENTE, type AvisoPortal,
 } from "../src/lib/avisoClienteRegras.ts";
-import { dataEntrevistaParaCliente, horaEntrevistaReal } from "../src/lib/horaEntrevista.ts";
+import { dataEntrevistaParaCliente, horaEntrevistaReal, decidirAvisoEntrevista } from "../src/lib/horaEntrevista.ts";
 import { mensagemErroAcao, MSG_ULTIMO_DESTINATARIO, MSG_ACAO_PADRAO } from "../src/lib/avisosErroAcao.ts";
 import { resumirPedidoCliente, type LinhaPedidoCliente } from "../src/lib/pedidoClienteResumo.ts";
 import { EVENTO_POR_TIPO_PEDIDO, TIPOS_PEDIDO_CLIENTE, tiposVisiveis, chaveVisto } from "../src/lib/pedidosClientePopup.ts";
@@ -530,7 +530,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
 
   // ── Avisos ao cliente (sino e popup no portal): bloco 1 ──
   await caso("avisos ao cliente: grupo novo, só com a indicação decidida, rótulo e canais sino/popup", () => {
-    assert.deepEqual(EVENTOS_POR_GRUPO.avisos_cliente, ["indicacao_decidida_cliente", "candidato_enviado_cliente"]);
+    assert.deepEqual(EVENTOS_POR_GRUPO.avisos_cliente, ["indicacao_decidida_cliente", "candidato_enviado_cliente", "entrevista_agendada_cliente", "entrevista_remarcada_cliente"]);
     assert.equal(ROTULO_GRUPO.avisos_cliente, "Avisos ao cliente");
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.deepEqual([...canaisDoEvento("indicacao_decidida_cliente")], ["sino", "popup"]);
@@ -538,7 +538,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     assert.ok(NOTA_EVENTO.indicacao_decidida_cliente.includes("Minhas Indicações"));
   });
   await caso("avisos ao cliente: evento SEM lista (só liga/desliga), sem Restaurar padrão e com a frase combinada", () => {
-    assert.deepEqual([...EVENTOS_SEM_LISTA], ["indicacao_decidida_cliente", "candidato_enviado_cliente"]);
+    assert.deepEqual([...EVENTOS_SEM_LISTA], ["indicacao_decidida_cliente", "candidato_enviado_cliente", "entrevista_agendada_cliente", "entrevista_remarcada_cliente"]);
     assert.equal(eventoSemLista("indicacao_decidida_cliente"), true);
     assert.equal(eventoSemLista("candidato_enviado_cliente"), true);
     for (const ev of ["solicitacao_vaga", "vaga_pausa_pedida", "portal_candidato_aprovado", "rescisao_paga", ""]) assert.equal(eventoSemLista(ev), false, ev);
@@ -718,6 +718,122 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     // outro encaminhamento → outra chave
     assert.notEqual(chaveDedupAviso(ev, "enc-1", "novo"), chaveDedupAviso(ev, "enc-2", "novo"));
     assert.equal(chave(null), "candidato_enviado_cliente:enc-1:novo");
+  });
+
+  // ── Avisos ao cliente: bloco 3 (entrevista agendada e remarcada) ──
+  await caso("bloco 3 catálogo: 2 eventos novos no grupo (agora 4), sem lista, sino/popup, com rótulo e nota", () => {
+    assert.equal(EVENTOS_POR_GRUPO.avisos_cliente.length, 4);
+    assert.equal(ROTULO_EVENTO.entrevista_agendada_cliente, "Entrevista agendada");
+    assert.equal(ROTULO_EVENTO.entrevista_remarcada_cliente, "Entrevista remarcada");
+    for (const ev of ["entrevista_agendada_cliente", "entrevista_remarcada_cliente"]) {
+      assert.equal(grupoDoEvento(ev), "avisos_cliente", ev); assert.equal(eventoSemLista(ev), true, ev);
+      assert.deepEqual([...canaisDoEvento(ev)], ["sino", "popup"], ev); assert.ok(NOTA_EVENTO[ev], ev);
+      assert.equal(descricaoPadraoDoSistema("avisos_cliente", "sino", ev), FRASE_SEM_LISTA, ev);
+    }
+    assert.match(NOTA_EVENTO.entrevista_agendada_cliente, /Agenda do portal/); assert.match(NOTA_EVENTO.entrevista_remarcada_cliente, /apagada/);
+  });
+  await caso("bloco 3 catálogo: os eventos dos blocos 1 e 2 e os outros grupos não mudaram", () => {
+    assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
+    assert.equal(ROTULO_EVENTO.candidato_enviado_cliente, "Candidato enviado ao cliente");
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 5); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+  });
+
+  const AB = "aguardando", AG = "aguardando_agendamento_cliente";
+  const D1 = "2026-10-20T17:30:00Z" /* 20/10 14:30 */, D1b = "2026-10-20T17:30:45Z", D2 = "2026-10-21T17:30:00Z", D3 = "2026-10-20T19:00:00Z" /* 20/10 16:00 */;
+  const CONV = "2026-10-20T15:00:00Z" /* 20/10 12:00 = convenção, sem horário real */, CONV2 = "2026-10-20T15:00:30Z";
+  const U = "2026-10-10T10:00:00Z";
+  const dec = (a: [string, string | null] | null, n: [string, string | null], upd = U) =>
+    decidirAvisoEntrevista(a ? { status: a[0], data_entrevista: a[1], updated_at: upd } : null, { status: n[0], data_entrevista: n[1] });
+
+  await caso("decisão entrevista: sem data antes e com data agora = AGENDADA", () => {
+    const r = dec([AG, null], [AB, D1]);
+    assert.equal(r.tipo, "agendada"); assert.equal(r.antes, null); assert.equal(r.depois, "20/10/2026 às 14:30");
+    assert.equal(dec([AB, null], [AB, D1]).tipo, "agendada");
+  });
+  await caso("decisão entrevista: com data antes e data/horário diferente agora = REMARCADA", () => {
+    const r = dec([AB, D1], [AB, D2]); assert.equal(r.tipo, "remarcada"); assert.equal(r.antes, "20/10/2026 às 14:30"); assert.equal(r.depois, "21/10/2026 às 14:30");
+    assert.equal(dec([AB, D1], [AB, D3]).tipo, "remarcada", "mesmo dia, outro horário");
+  });
+  await caso("decisão entrevista: nenhuma mudança NÃO avisa (inclui diferença de segundos)", () => {
+    assert.equal(dec([AB, D1], [AB, D1]).tipo, null); assert.equal(dec([AB, D1], [AB, D1b]).tipo, null);
+  });
+  await caso("decisão entrevista: só limpou a data (ou nova data vazia/inválida) NÃO avisa", () => {
+    assert.equal(dec([AB, D1], [AG, null]).tipo, null); assert.equal(dec([AB, D1], [AB, ""]).tipo, null); assert.equal(dec([AB, D1], [AB, "não é data"]).tipo, null);
+    assert.equal(dec([AG, null], [AG, null]).tipo, null);
+  });
+  await caso("decisão entrevista: convenção 12:00 não é mudança de horário", () => {
+    assert.equal(dec([AB, CONV], [AB, CONV2]).tipo, null, "12:00 e 12:00:30 aparecem iguais ao cliente");
+    assert.equal(dec([AB, CONV], [AB, "2026-10-21T15:00:00Z"]).tipo, "remarcada", "outro dia continua sendo remarcação");
+    const r = dec([AB, CONV], [AB, "2026-10-21T15:00:00Z"]); assert.equal(r.antes, "20/10/2026"); assert.equal(r.depois, "21/10/2026");
+    assert.equal(dec([AB, CONV], [AB, D1]).tipo, "remarcada", "passou a ter horário real no mesmo dia");
+    assert.equal(dec([AG, null], [AB, CONV]).depois, "20/10/2026", "agendada só com a data");
+  });
+  await caso("decisão entrevista: encaminhamento encerrado (antes OU depois) ou sem estado anterior NÃO avisa", () => {
+    for (const st of ["aprovado", "reprovado", "desistiu"]) {
+      assert.equal(dec([st, null], [AB, D1]).tipo, null, `antes ${st}`); assert.equal(dec([AB, D1], [st, D2]).tipo, null, `depois ${st}`);
+    }
+    assert.equal(dec(null, [AB, D1]).tipo, null); assert.equal(decidirAvisoEntrevista(undefined, { status: AB, data_entrevista: D1 }).tipo, null);
+    assert.equal(decidirAvisoEntrevista({ status: AB, data_entrevista: D1 }, null).tipo, null);
+  });
+  await caso("decisão entrevista: o primeiro envio e o reenvio de encerrado são do bloco 2 (nunca os dois avisos)", () => {
+    for (const anterior of [null, { status: "reprovado", avaliado_em: "2026-10-01T10:00:00Z", updated_at: U, data_entrevista: D1 }]) {
+      const bloco2 = decidirAvisoCandidatoEnviado(anterior).avisar;
+      const bloco3 = decidirAvisoEntrevista(anterior, { status: AB, data_entrevista: D2 }).tipo !== null;
+      assert.equal(bloco2, true); assert.equal(bloco3, false);
+    }
+    const aberto = { status: AB, avaliado_em: null, updated_at: U, data_entrevista: D1 };
+    assert.equal(decidirAvisoCandidatoEnviado(aberto).avisar, false);
+    assert.equal(decidirAvisoEntrevista(aberto, { status: AB, data_entrevista: D2 }).tipo, "remarcada");
+  });
+
+  await caso("texto da entrevista agendada: nome, vaga e data/hora; com e sem horário real", () => {
+    const comHora = textoAvisoEntrevista({ tipo: "agendada", candidato: "Maria Souza", vagaTitulo: "Auxiliar", depois: dataEntrevistaParaCliente(D1) });
+    assert.equal(comHora.titulo, "Entrevista agendada");
+    assert.equal(comHora.mensagem, "Entrevista agendada: Maria Souza — vaga Auxiliar — 20/10/2026 às 14:30");
+    assert.equal(textoAvisoEntrevista({ tipo: "agendada", candidato: "Maria", vagaTitulo: "Auxiliar", depois: dataEntrevistaParaCliente(CONV) }).mensagem, "Entrevista agendada: Maria — vaga Auxiliar — 20/10/2026");
+  });
+  await caso("texto da entrevista remarcada: de ... para ... (hora omitida quando é a convenção 12:00)", () => {
+    const t = textoAvisoEntrevista({ tipo: "remarcada", candidato: "João Lima", vagaTitulo: "Operador", antes: dataEntrevistaParaCliente(D1), depois: dataEntrevistaParaCliente(D2) });
+    assert.equal(t.titulo, "Entrevista remarcada");
+    assert.equal(t.mensagem, "Entrevista remarcada: João Lima — vaga Operador — de 20/10/2026 às 14:30 para 21/10/2026 às 14:30");
+    assert.equal(textoAvisoEntrevista({ tipo: "remarcada", candidato: "J", vagaTitulo: "O", antes: dataEntrevistaParaCliente(CONV), depois: dataEntrevistaParaCliente("2026-10-21T15:00:00Z") }).mensagem, "Entrevista remarcada: J — vaga O — de 20/10/2026 para 21/10/2026");
+    assert.equal(textoAvisoEntrevista({ tipo: "remarcada", candidato: "J", antes: "20/10/2026", depois: "22/10/2026 às 09:00" }).mensagem, "Entrevista remarcada: J — de 20/10/2026 para 22/10/2026 às 09:00");
+  });
+  await caso("texto da entrevista: nome/vaga nulos só encurtam a frase e nada interno aparece", () => {
+    assert.equal(textoAvisoEntrevista({ tipo: "agendada", candidato: null, vagaTitulo: null, depois: "20/10/2026" }).mensagem, "Entrevista agendada — 20/10/2026");
+    assert.equal(textoAvisoEntrevista({ tipo: "remarcada", candidato: "  ", vagaTitulo: undefined, antes: null, depois: "20/10/2026" }).mensagem, "Entrevista remarcada — para 20/10/2026");
+    assert.equal(textoAvisoEntrevista({ tipo: "remarcada" }).mensagem, "Entrevista remarcada");
+    const t = textoAvisoEntrevista({ tipo: "agendada", candidato: "Maria", vagaTitulo: "Operador", depois: "20/10/2026", observacoes: "nota interna", responsavel: "Analista Y", telefone: "(19) 99999-0000", fee: 15, etapa: "triagem", motivo: "motivo interno" } as never);
+    const texto = JSON.stringify(t);
+    for (const proibido of ["nota interna", "Analista Y", "99999", "motivo interno", "triagem", "15"]) assert.ok(!texto.includes(proibido), proibido);
+  });
+  await caso("link da entrevista: dentro do portal (agenda ou perfil do encaminhamento)", () => {
+    for (const l of ["/portal/agenda", "/portal/candidato/3f2b8c1e-9a4d-4e7b-8c55-1a2b3c4d5e6f"]) assert.equal(linkPortalValido(l), true, l);
+  });
+
+  await caso("dedup da entrevista: mesma requisição = mesma chave (agendada e remarcada)", () => {
+    const k = (a: [string, string | null] | null, n: [string, string | null]) => chaveDedupAviso("entrevista_x", "enc-1", dec(a, n).versao);
+    assert.equal(k([AG, null], [AB, D1]), k([AG, null], [AB, D1]), "agendada: mesma data nova, mesmo estado anterior");
+    assert.notEqual(k([AG, null], [AB, D1]), k([AG, null], [AB, D2]), "agendada para outra data = outra chave");
+    assert.equal(k([AB, D1], [AB, D2]), k([AB, D1], [AB, D2]));
+    assert.equal(dec([AB, D1], [AB, D2]).versao, `${new Date(D1).toISOString()}>${new Date(D2).toISOString()}@${U}`);
+    assert.equal(dec([AG, null], [AB, D1]).versao, `${new Date(D1).toISOString()}@${U}`);
+  });
+  await caso("dedup da entrevista: remarcações sucessivas para datas diferentes = chaves diferentes", () => {
+    const k = (a: string, n: string, upd = U) => chaveDedupAviso("entrevista_remarcada_cliente", "enc-1", dec([AB, a], [AB, n], upd).versao);
+    const chaves = new Set([k(D1, D2), k(D2, D3, "2026-10-11T10:00:00Z"), k(D3, D1, "2026-10-12T10:00:00Z")]);
+    assert.equal(chaves.size, 3);
+  });
+  await caso("dedup da entrevista: voltar a uma data já usada (A>B, B>A, A>B) NÃO é engolido: updated_at anterior muda", () => {
+    const k = (a: string, n: string, upd: string) => chaveDedupAviso("entrevista_remarcada_cliente", "enc-1", dec([AB, a], [AB, n], upd).versao);
+    const primeira = k(D1, D2, "2026-10-10T10:00:00Z"), terceira = k(D1, D2, "2026-10-12T10:00:00Z");
+    assert.notEqual(primeira, terceira);
+    assert.notEqual(chaveDedupAviso("entrevista_agendada_cliente", "enc-1", dec([AG, null], [AB, D1], "2026-10-10T10:00:00Z").versao), chaveDedupAviso("entrevista_agendada_cliente", "enc-1", dec([AG, null], [AB, D1], "2026-10-12T10:00:00Z").versao));
+  });
+  await caso("dedup da entrevista: encaminhamentos diferentes = chaves diferentes", () => {
+    const v = dec([AB, D1], [AB, D2]).versao;
+    assert.notEqual(chaveDedupAviso("entrevista_remarcada_cliente", "enc-1", v), chaveDedupAviso("entrevista_remarcada_cliente", "enc-2", v));
+    assert.ok(chaveDedupAviso("entrevista_remarcada_cliente", "enc-1", v).startsWith("entrevista_remarcada_cliente:enc-1:"));
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);

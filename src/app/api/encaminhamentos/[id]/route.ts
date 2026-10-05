@@ -4,6 +4,7 @@ import { parseBody, encaminhamentoUpdateSchema } from "@/lib/schemas";
 import { exigirAcessoEncaminhamento } from "@/lib/unidadeAuth";
 import { normalizarDataEntrevista } from "@/lib/dataEntrevista";
 import { registrarHistorico } from "@/lib/registrarHistorico";
+import { avisarEntrevistaAoCliente, lerEncaminhamentoPorId } from "@/lib/avisoClienteEntrevista";
 
 export async function PATCH(
   request: NextRequest,
@@ -44,6 +45,10 @@ export async function PATCH(
       campos.lembrete_entrevista_hoje_enviado_em = null;
     }
 
+    // Estado ANTES de gravar, só quando a data da entrevista vem no pedido: decide entre aviso de entrevista
+    // agendada ou remarcada ao cliente no portal. Leitura isolada, nunca lança.
+    const leituraEntrevista = parsed.data.data_entrevista !== undefined ? await lerEncaminhamentoPorId(supabase, id) : null;
+
     const { data, error } = await supabase
       .from("encaminhamentos")
       .update(campos)
@@ -78,6 +83,10 @@ export async function PATCH(
         });
       }
     }
+
+    // Aviso ao cliente no portal (sino e popup, conforme Configurações > Avisos): chamada extra, isolada e que
+    // nunca lança, depois de a data já estar gravada e do histórico. Nada acima mudou.
+    if (leituraEntrevista) await avisarEntrevistaAoCliente(supabase, data, leituraEntrevista);
 
     return NextResponse.json({ data });
   } catch (err) {

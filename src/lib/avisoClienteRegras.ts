@@ -95,6 +95,28 @@ export function textoAvisoCandidatoEnviado(o: {
   };
 }
 
+// Texto dos avisos "Entrevista agendada" e "Entrevista remarcada" (bloco 3). `antes` e `depois` já vêm
+// formatados por dataEntrevistaParaCliente ("dd/mm/aaaa" ou "dd/mm/aaaa às hh:mm"; o 12:00 de convenção
+// fica sem horário). Só nome do candidato, título da vaga e datas. Dado nulo só encurta, nunca quebra.
+export function textoAvisoEntrevista(o: {
+  tipo: "agendada" | "remarcada";
+  candidato?: string | null;
+  vagaTitulo?: string | null;
+  antes?: string | null;
+  depois?: string | null;
+}): { titulo: string; mensagem: string } {
+  const nome = o.candidato?.trim();
+  const vaga = o.vagaTitulo?.trim();
+  const antes = o.antes?.trim();
+  const depois = o.depois?.trim();
+  const titulo = o.tipo === "agendada" ? "Entrevista agendada" : "Entrevista remarcada";
+  let quando = "";
+  if (o.tipo === "agendada") quando = depois ? ` — ${depois}` : "";
+  else if (antes && depois) quando = ` — de ${antes} para ${depois}`;
+  else if (depois) quando = ` — para ${depois}`;
+  return { titulo, mensagem: `${titulo}${nome ? `: ${nome}` : ""}${vaga ? ` — vaga ${vaga}` : ""}${quando}` };
+}
+
 // Quando o POST de /api/encaminhamentos gera aviso ao cliente. `anterior` = o encaminhamento do mesmo
 // candidato, cliente e vaga ANTES da gravação (null = não existia: primeiro envio).
 //   - primeiro envio                                   → avisa, versão "novo"
