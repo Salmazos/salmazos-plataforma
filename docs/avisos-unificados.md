@@ -18,7 +18,7 @@ Todas com RLS: só `service_role` acessa. A função SQL `avisos_restaurar_padra
 numa única transação. As tabelas antigas (`aviso_vaga_*`, `rescisao_avisos_*`, `funcionario_aso_avisos_*`) não foram
 alteradas.
 
-## Eventos (20) e canais
+## Eventos (21) e canais
 
 | Grupo | Evento | Canais configuráveis |
 |---|---|---|
@@ -30,6 +30,7 @@ alteradas.
 | Portal do cliente | `indicacao_candidato_recebida` | e-mail, sino, popup |
 | Portal do cliente | `solicitacao_alteracao_pedida`, `vaga_reativacao_pedida`, `vaga_pausa_pedida` | e-mail, sino, popup (Fase 3) |
 | Portal do cliente | `agendamento_cliente` (só quando o candidato **não** tem responsável) | e-mail, sino (Fase 3) |
+| Avisos ao cliente | `indicacao_decidida_cliente` | sino, popup (sem lista de pessoas; ver "Avisos ao cliente") |
 | Portal do cliente | `portal_candidato_aprovado`, `indicacao_decisao_cliente` | e-mail |
 | Portal do cliente | `portal_candidato_reprovado` | e-mail (nasce desligado: antes não existia e-mail interno de reprovação) |
 
@@ -119,7 +120,7 @@ no card ou Ok/X marcam todas as listadas) não mudaram, e nenhum dado foi migrad
 ## Verificação
 
 `node --experimental-strip-types scripts/verificar-avisos-resolvedor.mts` (resolvedor, fallback, unidade, padrão,
-restauração, isolamento de canais, catálogo, popups e pedidos do cliente; 103 casos). Na Fase 3 três expectativas dos
+restauração, isolamento de canais, catálogo, popups, pedidos do cliente e avisos ao cliente; 136 casos). Na Fase 3 três expectativas dos
 casos antigos mudaram de propósito (popup de `solicitacao_vaga` entra no padrão de Vagas: 10 → 11 canais; Portal do
 cliente passa de 4 para 8 eventos).
 
@@ -134,6 +135,47 @@ permanecer no banco sem efeito.
 Reverter o merge na `main`: `git revert -m 1 <hash do merge "Avisos unificados: fases 1, 1b e 1c">` e dar push. O código
 volta a ler só as tabelas antigas (que nunca foram alteradas). As tabelas novas podem permanecer no banco sem efeito.
 A branch `fix/avisos-unificados-fase1` fica como referência.
+
+## Avisos ao cliente (sino e popup no portal)
+
+Avisos que a **Salmazos dá ao cliente**, mostrados no portal. É o sentido contrário de "Portal do cliente" (o que o
+cliente faz e a Salmazos recebe). Aba própria em Configurações > Avisos: **Avisos ao cliente**.
+
+- **Sem lista de pessoas.** O destinatário é todo usuário do portal do cliente do aviso (`cliente_usuarios`). A tela só
+  liga e desliga cada canal (sino e popup), com a frase "Ligado: todos os usuários do portal do cliente recebem.
+  Desligado: ninguém." Não há formulário de adicionar, nem "Restaurar padrão" (`grupoTemPadrao` é falso), e
+  `POST /api/avisos-config/destinatarios` devolve 400 para esses eventos (`EVENTOS_SEM_LISTA`, em `avisosCatalogo.ts`).
+  Não usam `aviso_destinatarios` nem `resolverDestinatarios`.
+- **Liga/desliga.** `avisoClienteLigado(evento, canal)` (`src/lib/avisoCliente.ts`) lê só `aviso_eventos_canais`. **Sem
+  linha de canal ou erro de leitura = NÃO envia nada** (antes nada era enviado ao cliente). Na tela, canal sem linha
+  aparece desligado.
+- **Modelo.** `portal_avisos` (um aviso por cliente e por ocorrência: `cliente_id`, `evento`, `titulo`, `mensagem`, `link`
+  sempre `/portal/…`, `referencia_tipo`, `referencia_id`, `chave_dedup` única, `canal_sino`, `canal_popup`, `created_at`;
+  índice `(cliente_id, created_at desc)`) e `portal_avisos_estado` (por usuário: `lida_em`, `popup_visto_em`; único por
+  `(aviso_id, user_id)`; as linhas nascem quando o usuário marca). RLS só `service_role`, sem acesso de anon e
+  authenticated. A leitura passa só por `api/portal/*`, com o `cliente_id` vindo do servidor.
+- **Gravação.** `criarAvisoCliente(evento, clienteId, () => dados)` grava conforme o liga/desliga ATUAL de cada canal
+  (`canal_sino` / `canal_popup`; os dois desligados = não grava; cliente sem usuário no portal = não grava). Nunca lança
+  (os dados são montados dentro do `try/catch`) e é uma chamada extra, depois da ação principal. `chave_dedup` leva
+  sufixo de versão (`chaveDedupAviso`): repetir a mesma ocorrência não duplica, um reenvio legítimo é aceito.
+- **Visibilidade.** O usuário só vê avisos dos últimos 30 dias **e** criados depois de ele entrar no portal
+  (`cliente_usuarios.created_at`). Esconder, nunca apagar (sem cron). Regras puras em `avisoClienteRegras.ts`.
+- **Portal.** `GET /api/portal/avisos` faz **uma** consulta (avisos do cliente com o estado do usuário embutido).
+  `AvisosPortalProvider` guarda a lista e a divide entre `PortalSino` (topo do portal; últimas 20, contador, "há X") e
+  `PopupAvisosPortal`. `POST /api/portal/avisos/marcar` (`{ids}` ou `{todos:true}`, `acao` = `lida` | `popup` | `ambos`)
+  só vale para avisos do cliente do usuário e nunca sobrescreve um momento já gravado. Sem polling e sem Realtime: o
+  navegador consulta ao carregar o portal e de novo só quando o usuário abre o menu do sino.
+- **Popup.** Abre na primeira carga da página se houver ao menos um aviso do canal popup ainda não visto pelo usuário;
+  lista todos os não vistos; clicar no card marca só aquele (visto + lido) e leva ao link; "Ok" e o X marcam todos os
+  listados como vistos (não marcam lidos). Uma vez por aviso por pessoa.
+- **Nunca entra nos textos:** `decidido_por`, notas internas, observações, responsável, fee, nenhum motivo que o
+  cliente já não veja.
+- **Bloco 1 (esta entrega).** Infraestrutura + `indicacao_decidida_cliente`, disparado em
+  `POST /api/solicitacoes-indicacao-candidato/[id]/decisao` (aprovada: "Sua indicação {candidato} foi aprovada para a vaga
+  {título}"; recusada: "… não foi aprovada. Motivo: {motivo_recusa}"; link `/portal/minhas-indicacoes`). Migration:
+  `supabase/migration_avisos_cliente_bloco1.sql`.
+- **Próximos blocos.** 2: candidatos enviados ao cliente. 3: entrevistas (agendada, remarcada, cancelada). 4: decisão das
+  solicitações de vaga e dos pedidos de alteração, encerramento e reativação.
 
 ## Ajustes pós-teste (tela de Avisos e portal)
 

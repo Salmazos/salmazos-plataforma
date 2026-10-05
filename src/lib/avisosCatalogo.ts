@@ -1,7 +1,7 @@
 // Catálogo dos avisos configuráveis em Configurações > Avisos (Fase 1: vagas, rescisão, ASO).
 // Módulo puro: usado no client, no server e no script de verificação.
 
-export type GrupoAviso = "vagas" | "rescisao" | "aso" | "portal_cliente";
+export type GrupoAviso = "vagas" | "rescisao" | "aso" | "portal_cliente" | "avisos_cliente";
 
 export const EVENTOS_POR_GRUPO: Record<GrupoAviso, string[]> = {
   vagas: ["vaga_criada", "vaga_reativada", "vaga_fechada", "vaga_cancelada", "solicitacao_vaga"],
@@ -17,7 +17,15 @@ export const EVENTOS_POR_GRUPO: Record<GrupoAviso, string[]> = {
     "portal_candidato_reprovado",
     "indicacao_decisao_cliente",
   ],
+  // Avisos que a Salmazos dá AO CLIENTE (sino e popup no portal). Sem lista de pessoas: quem recebe é todo
+  // usuário do portal do cliente do aviso, então a tela só liga e desliga cada canal.
+  avisos_cliente: ["indicacao_decidida_cliente"],
 };
+
+// Eventos sem lista de destinatários (só liga/desliga por canal). A tela não mostra lista nem
+// formulário de adicionar, e a API recusa adicionar destinatário a eles.
+export const EVENTOS_SEM_LISTA: readonly string[] = EVENTOS_POR_GRUPO.avisos_cliente;
+export const eventoSemLista = (evento: string): boolean => EVENTOS_SEM_LISTA.includes(evento);
 
 // Pedidos do cliente que ficam pendentes até a Salmazos decidir (alteração de solicitação, reativação e
 // encerramento de vaga). Os três compartilham o popup "Pedidos do cliente", mas cada um tem a
@@ -29,6 +37,7 @@ export const ROTULO_GRUPO: Record<GrupoAviso, string> = {
   rescisao: "Rescisão",
   aso: "ASO periódico",
   portal_cliente: "Portal do cliente",
+  avisos_cliente: "Avisos ao cliente",
 };
 
 export const ROTULO_EVENTO: Record<string, string> = {
@@ -52,6 +61,7 @@ export const ROTULO_EVENTO: Record<string, string> = {
   vaga_reativacao_pedida: "Cliente pediu reativação de vaga",
   vaga_pausa_pedida: "Cliente pediu encerramento de vaga",
   agendamento_cliente: "Cliente agendou entrevista (quando o candidato não tem responsável)",
+  indicacao_decidida_cliente: "Indicação direta decidida pela Salmazos",
 };
 
 // Canais que cada aviso realmente tem hoje (espelha aviso_eventos.canais_suportados). O que não
@@ -63,6 +73,7 @@ export const CANAIS_POR_EVENTO: Record<string, readonly ("email" | "sino" | "pop
   vaga_reativacao_pedida: ["email", "sino", "popup"],
   vaga_pausa_pedida: ["email", "sino", "popup"],
   agendamento_cliente: ["email", "sino"],
+  indicacao_decidida_cliente: ["sino", "popup"],
   rescisao_paga: ["sino"],
   portal_candidato_aprovado: ["email"],
   portal_candidato_reprovado: ["email"],
@@ -78,6 +89,8 @@ const NOTA_POPUP_PEDIDOS =
   "O popup \"Pedidos do cliente\" lista os pedidos pendentes quando a pessoa entra no painel, abre uma vez por pessoa para cada pedido novo (clicar no card marca só aquele; Ok e X marcam todos os listados) e reaparece só se chegar outro pedido pendente. Quem não está na lista do popup não vê o popup (e com o popup desligado ninguém vê). O filtro de unidade é regra fixa: só recebem quem atende a unidade do cliente.";
 
 export const NOTA_EVENTO: Record<string, string> = {
+  indicacao_decidida_cliente:
+    "Avisa o cliente, no portal, quando a Salmazos aprova ou recusa uma indicação direta que ele enviou. Na recusa, o aviso traz o motivo (o mesmo que o cliente já vê em Minhas Indicações). O sino fica no topo do portal; o popup abre uma vez por aviso novo, quando o usuário entra. Não há lista de pessoas: recebem todos os usuários do portal daquele cliente. Sem configuração ou com o canal desligado, ninguém recebe.",
   solicitacao_vaga:
     "Dispara quando o cliente envia uma nova solicitação de vaga pelo portal. O popup lista as solicitações pendentes quando a pessoa entra no painel e abre uma vez por pessoa para cada solicitação nova; clicar abre a solicitação. Sem destinatários na lista do popup, vale o padrão antigo: todos os analistas ativos da unidade veem o popup. Com o popup desligado ninguém vê. O filtro de unidade é regra fixa. O alerta \"Falha ao notificar por e-mail\" (só superuser) continua fixo.",
   solicitacao_alteracao_pedida: `Dispara quando o cliente pede uma alteração numa solicitação de vaga que já enviou (fica pendente até a Salmazos aprovar ou recusar). O sino leva à solicitação. ${NOTA_POPUP_PEDIDOS}`,
@@ -108,7 +121,10 @@ export function grupoDoEvento(evento: string): GrupoAviso | null {
 }
 
 // O que significa "sem destinatários na lista" (modo legado) em cada grupo — mostrado na tela.
+export const FRASE_SEM_LISTA = "Ligado: todos os usuários do portal do cliente recebem. Desligado: ninguém.";
+
 export function descricaoPadraoDoSistema(grupo: GrupoAviso, canal: string, evento = ""): string {
+  if (eventoSemLista(evento)) return FRASE_SEM_LISTA;
   if (evento === "solicitacao_vaga" && canal === "popup") {
     return "Sem destinatários: vale o padrão antigo, todos os analistas ativos da unidade veem o popup.";
   }

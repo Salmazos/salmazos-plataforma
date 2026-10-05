@@ -11,6 +11,7 @@ import {
   ROTULO_EVENTO,
   ROTULO_GRUPO,
   descricaoPadraoDoSistema,
+  eventoSemLista,
   type GrupoAviso,
 } from "@/lib/avisosCatalogo";
 
@@ -28,7 +29,7 @@ interface CanalCfg { evento: string; canal: string; ativo: boolean }
 interface Usuario { user_id: string; nome_completo: string; email: string | null }
 interface Dados { canais: CanalCfg[]; destinatarios: Destinatario[]; usuarios: Usuario[] }
 
-const GRUPOS: GrupoAviso[] = ["vagas", "rescisao", "aso", "portal_cliente"];
+const GRUPOS: GrupoAviso[] = ["vagas", "rescisao", "aso", "portal_cliente", "avisos_cliente"];
 
 // Quanto tempo o erro inline fica na tela antes de sumir sozinho.
 const TEMPO_ERRO_INLINE_MS = 8000;
@@ -257,7 +258,10 @@ interface BlocoProps {
 }
 
 function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, ocupado, executar, erroInline, fecharErro }: BlocoProps) {
-  const ligado = cfg ? cfg.ativo : true;
+  // Evento sem lista de pessoas (Avisos ao cliente): só liga/desliga por canal. Sem linha de canal =
+  // desligado (nada era enviado ao cliente antes), ao contrário dos demais eventos.
+  const semLista = eventoSemLista(evento);
+  const ligado = cfg ? cfg.ativo : !semLista;
   const ativos = lista.filter((d) => d.ativo).length;
   const chaveCanal = `${evento}:${canal}`;
   const [modoNovo, setModoNovo] = useState<"usuario" | "email">("usuario");
@@ -283,7 +287,8 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
     .sort((a, b) => comparar(a.titulo, b.titulo) || comparar(a.detalhe, b.detalhe) || (a.d.id < b.d.id ? -1 : a.d.id > b.d.id ? 1 : 0));
 
   let situacao: string;
-  if (!ligado) situacao = "Desligado: ninguém recebe por este canal.";
+  if (semLista) situacao = descricaoPadraoDoSistema(grupo, canal, evento);
+  else if (!ligado) situacao = "Desligado: ninguém recebe por este canal.";
   else if (ativos === 0) situacao = descricaoPadraoDoSistema(grupo, canal, evento);
   else situacao = `${ativos} destinatário${ativos > 1 ? "s" : ""} ativo${ativos > 1 ? "s" : ""}.`;
 
@@ -314,7 +319,7 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
       <p className="text-xs text-gray-500 mb-3">{situacao}</p>
       {erroInline?.escopo === chaveCanal && <ErroInline texto={erroInline.texto} onFechar={fecharErro} />}
 
-      {lista.length > 0 && (
+      {!semLista && lista.length > 0 && (
         <div style={{ border: "1px solid #F3F4F6", borderRadius: 6 }} className="mb-3">
           {linhas.map(({ d, titulo, detalhe }) => {
             return (
@@ -353,7 +358,7 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
+      {!semLista && <div className="flex flex-wrap items-center gap-2">
         {canal === "email" && (
           <select className="input-field" style={{ width: "auto" }} value={modoNovo} onChange={(e) => setModoNovo(e.target.value as "usuario" | "email")}>
             <option value="usuario">Usuário da plataforma</option>
@@ -374,7 +379,7 @@ function CanalBloco({ grupo, evento, canal, cfg, lista, usuarios, nomeUsuario, o
           </>
         )}
         <button className="btn-primary" disabled={bloqueado || !podeAdicionar} onClick={adicionar}>Adicionar</button>
-      </div>
+      </div>}
     </div>
   );
 }
