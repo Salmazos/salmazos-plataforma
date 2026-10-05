@@ -642,7 +642,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     assert.deepEqual([...canaisDoEvento("candidato_enviado_cliente")], ["sino", "popup"]);
     assert.equal(eventoSemLista("candidato_enviado_cliente"), true);
     assert.equal(descricaoPadraoDoSistema("avisos_cliente", "popup", "candidato_enviado_cliente"), FRASE_SEM_LISTA);
-    assert.match(NOTA_EVENTO.candidato_enviado_cliente, /Encaminhar/); assert.match(NOTA_EVENTO.candidato_enviado_cliente, /e-mail ao contato do cliente não muda/);
+    assert.match(NOTA_EVENTO.candidato_enviado_cliente, /Encaminhar/); assert.ok(NOTA_EVENTO.candidato_enviado_cliente.includes('O sino e o popup são independentes dos e-mails: os e-mails ao cliente são configurados na seção "E-mails ao cliente" desta aba e vão para o login de cada usuário do portal.')); assert.ok(!NOTA_EVENTO.candidato_enviado_cliente.includes("contato do cliente não muda"));
   });
   await caso("bloco 2 catálogo: o evento do bloco 1 e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
