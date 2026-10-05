@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { sendEmail } from "@/lib/sendEmail";
-import { resolverDestinatariosPosVenda } from "@/lib/posVendaRS";
+import { avisarPosVendaRS } from "@/lib/avisarPosVendaRS";
+import { deveCarimbarPosVenda, janelaInicioPosVenda, posVendaNaJanela } from "@/lib/posVendaRSRegras";
 
 export const dynamic = "force-dynamic";
 
@@ -22,9 +22,11 @@ export async function GET(request: Request) {
   try {
     const supabase = createServiceClient();
 
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-    const hojeISO = hoje.toISOString().split("T")[0];
+    // Datas no fuso de Brasília. O aviso é 7 dias corridos depois do início (mesmo cálculo já usado pra
+    // garantia_data_fim) e, se o cron falhou, recupera até 2 dias para trás: data_inicio entre (hoje - 9) e (hoje - 7).
+    // pos_venda_notificado_em evita repetir (inclusive se o cron rodar duas vezes no mesmo dia).
+    const agora = new Date();
+    const { inicioMin, inicioMax, hoje } = janelaInicioPosVenda(agora);
 
     // candidatos_vagas!vagas: usar sempre o hint de FK explícito
     // (candidatos_vagas_vaga_id_fkey) — a outra FK (reposição de garantia) causa erro de
@@ -37,6 +39,8 @@ export async function GET(request: Request) {
       )
       .is("pos_venda_notificado_em", null)
       .not("data_inicio", "is", null)
+      .gte("data_inicio", inicioMin)
+      .lte("data_inicio", inicioMax)
       .in("etapa", ["aprovado_cliente", "contratado"]);
 
     if (error) {
@@ -46,20 +50,15 @@ export async function GET(request: Request) {
 
     let processados = 0;
     let elegiveis = 0;
-    let notificacoesEnviadas = 0;
+    let avisados = 0;
+    let carimbados = 0;
 
     for (const row of (rows ?? [])) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const r = row as any;
       const vaga = r.vagas;
       if (!vaga || vaga.tipo_servico !== "recrutamento_selecao") continue;
-
-      // Alvo é exatamente hoje (gatilho de dia exato, não janela rolante) — 7 dias corridos
-      // depois do início do candidato, mesmo cálculo já usado pra garantia_data_fim.
-      const alvo = new Date(r.data_inicio + "T00:00:00");
-      alvo.setDate(alvo.getDate() + 7);
-      const alvoISO = alvo.toISOString().split("T")[0];
-      if (alvoISO !== hojeISO) continue;
+      if (!posVendaNaJanela(r.data_inicio, agora)) continue;
 
       processados++;
 
@@ -89,73 +88,41 @@ export async function GET(request: Request) {
 
       elegiveis++;
 
-      const candidatoNome = r.candidatos?.nome_completo ?? "Candidato";
-      const vagaTitulo = vaga.titulo ?? "Vaga";
-      const clienteNome = cliente.nome ?? "Cliente";
-      const dataInicioFmt = (r.data_inicio as string).split("-").reverse().join("/");
+      // Nunca lança: sino, popup e e-mail seguem Configurações > Avisos (evento pos_venda_rs_7dias).
+      const resultado = await avisarPosVendaRS(supabase, {
+        candidatoId: r.candidato_id,
+        vagaId: r.vaga_id,
+        candidatoNome: r.candidatos?.nome_completo,
+        vagaTitulo: vaga.titulo,
+        clienteNome: cliente.nome,
+        responsavelComercial: cliente.responsavel_comercial,
+        unidadeId: cliente.unidade_id ?? null,
+        dataInicio: r.data_inicio as string,
+      });
 
-      const destinatarios = await resolverDestinatariosPosVenda(cliente.responsavel_comercial, supabase, cliente.unidade_id ?? null);
+      if (resultado.sino === "enviado" || resultado.email === "enviado") avisados++;
 
-      if (destinatarios.length === 0) {
+      if (!deveCarimbarPosVenda([resultado.sino, resultado.email])) {
+        // Havia canal ligado e nada foi entregue (falha ou sem destinatário): sem carimbo, a próxima execução tenta de novo (até 2 dias).
         console.error(
-          `[cron/pos-venda-rs] Nenhum destinatário resolvido pra candidato_vaga_id=${r.id} (cliente="${clienteNome}") — notificação NÃO enviada a ninguém.`
+          `[cron/pos-venda-rs] Aviso NÃO entregue para candidato_vaga_id=${r.id} (sino=${resultado.sino}, e-mail=${resultado.email}) — sem carimbo, tenta de novo na próxima execução.`
         );
-      } else {
-        const titulo = `🤝 Hora do pós-venda: ${candidatoNome} — ${clienteNome}`;
-        const mensagem = `${candidatoNome} completou 7 dias na vaga "${vagaTitulo}" (${clienteNome}), início em ${dataInicioFmt}. Hora de fazer o contato de pós-venda com o cliente.`;
-
-        const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
-<div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
-  <div style="background:#000;padding:24px 28px;text-align:center">
-    <h1 style="color:#FFD700;margin:0;font-size:18px">🤝 Hora do pós-venda</h1>
-  </div>
-  <div style="padding:24px 28px">
-    <p style="margin:0 0 16px;color:#374151;font-size:14px">${candidatoNome} completou <strong>7 dias</strong> de contratação. É um bom momento pra fazer o contato de pós-venda com o cliente.</p>
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Cliente</td><td style="padding:6px 0;color:#111827">${clienteNome}</td></tr>
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Vaga</td><td style="padding:6px 0;color:#111827">${vagaTitulo}</td></tr>
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Candidato</td><td style="padding:6px 0;color:#111827">${candidatoNome}</td></tr>
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Início</td><td style="padding:6px 0;color:#111827">${dataInicioFmt}</td></tr>
-    </table>
-    <div style="text-align:center;margin-top:20px">
-      <a href="https://salmazos-plataforma.vercel.app/painel/candidato/${r.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil do candidato</a>
-    </div>
-  </div>
-  <div style="background:#f9fafb;padding:12px 28px;text-align:center">
-    <p style="margin:0;font-size:11px;color:#9CA3AF">Salmazos RH — Alerta automático de pós-venda</p>
-  </div>
-</div>
-</body></html>`;
-
-        await Promise.all(
-          destinatarios.map(async (d) => {
-            await supabase.from("notificacoes_analista").insert({
-              tipo: "pos_venda_rs",
-              titulo,
-              mensagem,
-              user_id: d.user_id,
-              candidato_id: r.candidato_id,
-              vaga_id: r.vaga_id,
-            });
-
-            const resultado = await sendEmail({
-              to: d.email,
-              subject: titulo,
-              html,
-              tipo: "pos_venda_rs",
-              candidato_id: r.candidato_id,
-              vaga_id: r.vaga_id,
-            });
-            if (resultado.success) notificacoesEnviadas++;
-          })
-        );
+        continue;
       }
 
-      await supabase.from("candidatos_vagas").update({ pos_venda_notificado_em: new Date().toISOString() }).eq("id", r.id);
+      const { error: erroCarimbo } = await supabase
+        .from("candidatos_vagas")
+        .update({ pos_venda_notificado_em: new Date().toISOString() })
+        .eq("id", r.id)
+        .is("pos_venda_notificado_em", null);
+      if (erroCarimbo) {
+        console.error(`[cron/pos-venda-rs] Erro ao gravar o carimbo (candidatos_vagas.id=${r.id}):`, erroCarimbo.message);
+      } else {
+        carimbados++;
+      }
     }
 
-    return NextResponse.json({ processados, elegiveis, notificacoes_enviadas: notificacoesEnviadas });
+    return NextResponse.json({ hoje, processados, elegiveis, avisados, carimbados });
   } catch (err) {
     console.error("[GET /api/cron/pos-venda-rs]", err);
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });

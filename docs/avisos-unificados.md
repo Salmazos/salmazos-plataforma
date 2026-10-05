@@ -338,6 +338,29 @@ com os canais E-mail, Sino e Popup: `garantia_rs_vencendo` (cron `garantia-rs`) 
 - **Padrão / "Restaurar padrão do grupo vagas":** sino e popup ligados com lista vazia (exceção `permite_vazio`); e-mail ligado com
   a mesma lista de `vaga_cancelada` (Rebecca, Andreza, Giovanni). Atenção: restaurar o grupo troca o modo legado do e-mail por essa lista.
 
+## Pós-venda R&S (equipe comercial): sino, popup e e-mail
+
+Migration: `supabase/migration_avisos_pos_venda_rs.sql` (aditiva; sem coluna, tabela, função, trigger nem policy novos). Um
+evento novo no grupo Vagas, `pos_venda_rs_7dias`, com E-mail, Sino e Popup. O cliente não recebe nada. Os tipos gravados
+(`pos_venda_rs` em `notificacoes_analista` e `email_logs`) não mudaram, nem a regra de negócio (7 dias corridos depois do
+início, só nas 3 primeiras vagas de R&S do cliente).
+
+- **Cron `pos-venda-rs`** (o mesmo, 0 9 * * *): seleciona `data_inicio` entre (hoje - 9) e (hoje - 7) em horário de Brasília
+  (isto é, início + 7 entre hoje - 2 e hoje), com `pos_venda_notificado_em` nulo. Os descartes (sem cliente, fora das 3
+  primeiras) continuam carimbando. O carimbo do aviso só é gravado se algo foi entregue (sino gravado ou e-mail aceito) ou se
+  todos os canais estão desligados; se havia canal ligado e nada foi entregue (falha ou sem destinatário), não carimba e a
+  execução seguinte tenta de novo, até 2 dias. Erro na consulta responde 500 (não há coluna nova, então não há fallback).
+- **Sino:** os destinatários de sempre (`resolverDestinatariosPosVenda`: responsável comercial do cliente ou, sem ele, o time
+  comercial da unidade) MAIS a lista do canal sino, uma linha por `user_id` e sem repetir. Sem linha de canal ou erro de
+  leitura = ligado; só `ativo = false` desliga tudo. A lista pode ficar vazia.
+- **Popup:** continua o `PopupPosVendaRSHoje` (avisos de pós-venda do dia, uma vez por dia por usuário), agora ligado ao
+  interruptor do canal popup do evento: sem linha ou erro de leitura = não mostra. Não usa o popup de decisões do cliente
+  (evita aviso duplicado).
+- **E-mail:** sem lista = os mesmos destinatários de sempre; com lista, só a lista. Assunto e template iguais; link no
+  domínio fixo `https://vagas.salmazos.com.br`.
+- **Padrão / "Restaurar padrão do grupo vagas":** sino e popup ligados com lista vazia (exceção `permite_vazio`); e-mail ligado
+  com a mesma lista de `vaga_cancelada` (Rebecca, Andreza, Giovanni). Restaurar troca o modo legado do e-mail por essa lista.
+
 ## Ajustes pós-teste (tela de Avisos e portal)
 
 - **Erro inline na tela de Avisos.** Ações que falham na API (ativar/desativar, remover, adicionar, ligar/desligar canal,

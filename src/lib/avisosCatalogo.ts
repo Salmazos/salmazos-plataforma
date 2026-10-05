@@ -4,7 +4,7 @@
 export type GrupoAviso = "vagas" | "rescisao" | "aso" | "portal_cliente" | "avisos_cliente";
 
 export const EVENTOS_POR_GRUPO: Record<GrupoAviso, string[]> = {
-  vagas: ["vaga_criada", "vaga_reativada", "vaga_fechada", "vaga_cancelada", "solicitacao_vaga", "garantia_rs_vencendo", "garantia_rs_acionada"],
+  vagas: ["vaga_criada", "vaga_reativada", "vaga_fechada", "vaga_cancelada", "solicitacao_vaga", "garantia_rs_vencendo", "garantia_rs_acionada", "pos_venda_rs_7dias"],
   rescisao: ["rescisao_lancamento", "rescisao_vencimento_rescisao", "rescisao_vencimento_guia", "rescisao_paga"],
   aso: ["aso_periodico_sem_registro", "aso_periodico_vencendo", "aso_periodico_atrasado"],
   portal_cliente: [
@@ -52,8 +52,13 @@ export const eventoDecisaoCliente = (evento: string): boolean => (EVENTOS_DECISA
 // (responsável do candidato + lista) e popup (só interruptor: segue as linhas nominais do sino).
 export const EVENTOS_GARANTIA_RS = ["garantia_rs_vencendo", "garantia_rs_acionada"] as const;
 export const eventoGarantiaRS = (evento: string): boolean => (EVENTOS_GARANTIA_RS as readonly string[]).includes(evento);
-// Eventos cujo sino SEMPRE avisa o responsável do candidato (mais a lista) e cujo popup segue o sino.
-export const eventoComResponsavelNoSino = (evento: string): boolean => eventoDecisaoCliente(evento) || eventoGarantiaRS(evento);
+// Pós-venda R&S (grupo vagas): e-mail (lista; sem lista vale o comportamento de sempre), sino (os destinatários de
+// sempre, responsável comercial do cliente ou time comercial da unidade, mais a lista) e popup (só interruptor).
+export const EVENTO_POS_VENDA_RS = "pos_venda_rs_7dias";
+export const eventoPosVendaRS = (evento: string): boolean => evento === EVENTO_POS_VENDA_RS;
+// Eventos cujo sino SEMPRE avisa quem já era avisado (responsável do candidato, ou responsável comercial no pós-venda),
+// mais a lista, e cujo popup segue o sino.
+export const eventoComResponsavelNoSino = (evento: string): boolean => eventoDecisaoCliente(evento) || eventoGarantiaRS(evento) || eventoPosVendaRS(evento);
 // Sino e popup destes eventos podem ficar ligados com a lista VAZIA (o responsável sempre é avisado): a regra do
 // último destinatário e a restauração do padrão não se aplicam a eles.
 export const canalSemListaPermitido = (evento: string, canal: string): boolean =>
@@ -120,6 +125,7 @@ export const ROTULO_EVENTO: Record<string, string> = {
   email_cliente_lembrete_agendamento: "Lembrete para o cliente agendar a entrevista (cron diário)",
   garantia_rs_vencendo: "Garantia R&S vencendo (último dia)",
   garantia_rs_acionada: "Garantia R&S acionada (reposição gratuita)",
+  pos_venda_rs_7dias: "Pós-venda R&S (7 dias após o início do candidato)",
 };
 
 // Canais que cada aviso realmente tem hoje (espelha aviso_eventos.canais_suportados). O que não
@@ -149,6 +155,7 @@ export const CANAIS_POR_EVENTO: Record<string, readonly ("email" | "sino" | "pop
   portal_candidato_reprovado: ["email", "sino", "popup"],
   garantia_rs_vencendo: ["email", "sino", "popup"],
   garantia_rs_acionada: ["email", "sino", "popup"],
+  pos_venda_rs_7dias: ["email", "sino", "popup"],
   indicacao_decisao_cliente: ["email"],
 };
 
@@ -169,6 +176,8 @@ export const NOTA_EVENTO: Record<string, string> = {
     "Dispara pelo cron diário (6h) no último dia da garantia de um candidato de R&S, e recupera até 2 dias para trás se o cron falhou (cada candidato é avisado uma vez). E-mail: sem ninguém na lista vale o padrão (analistas da unidade, sem diretoria e superuser); com lista, só a lista. Sino: com o canal ligado o responsável pelo candidato SEMPRE é avisado, além das pessoas da lista (a lista pode ficar vazia); sem responsável e sem lista vai um aviso geral para a equipe da unidade; desligado, ninguém recebe o sino. Popup: abre uma vez por aviso para quem recebeu o aviso nominal (o responsável e a lista do sino); não tem lista própria. O cliente não recebe nada.",
   garantia_rs_acionada:
     "Dispara quando alguém aciona a reposição gratuita de um candidato de R&S (a nova vaga já foi criada). E-mail: sem ninguém na lista vale o padrão (todos os analistas da unidade); com lista, só a lista. Sino: com o canal ligado o responsável pelo candidato SEMPRE é avisado, além das pessoas da lista (a lista pode ficar vazia); sem responsável e sem lista vai um aviso geral para a equipe da unidade; desligado, ninguém recebe o sino. Popup: abre uma vez por aviso para quem recebeu o aviso nominal (o responsável e a lista do sino); não tem lista própria. O cliente não recebe nada.",
+  pos_venda_rs_7dias:
+    "Dispara pelo cron diário (6h) 7 dias corridos depois do início de um candidato contratado em R&S, só nas 3 primeiras vagas de R&S do cliente (cliente novo), e recupera até 2 dias para trás se o cron falhou (cada candidato é avisado uma vez). Sino: com o canal ligado, os responsáveis comerciais de sempre (o responsável comercial do cliente ou, sem ele, o time comercial da unidade) SEMPRE são avisados, além das pessoas da lista (a lista pode ficar vazia); desligado, ninguém recebe o sino. E-mail: sem ninguém na lista vale o padrão (os mesmos responsáveis comerciais); com lista, só a lista. Popup: abre uma vez por dia para quem recebeu o aviso nominal do sino (os responsáveis comerciais e a lista); não tem lista própria. Se nenhum canal ligado conseguir entregar, o aviso é tentado de novo na execução seguinte. O cliente não recebe nada.",
   email_cliente_candidato_entrevista:
     "E-mail ao cliente quando um candidato é movido para a etapa de entrevista com o cliente no Kanban. Mover de novo para a etapa envia de novo. Padrão: ligado.",
   email_cliente_lembrete_entrevista_hoje:
@@ -229,6 +238,11 @@ export const APOIO_EMAILS_CLIENTE = "Os e-mails vão para o login de cada usuár
 
 export function descricaoPadraoDoSistema(grupo: GrupoAviso, canal: string, evento = ""): string {
   if (eventoEmailCliente(evento)) return FRASE_EMAIL_CLIENTE;
+  if (eventoPosVendaRS(evento)) {
+    if (canal === "sino") return "Ligado, sem ninguém na lista: só os responsáveis comerciais de sempre são avisados (o responsável comercial do cliente ou, sem ele, o time comercial da unidade). Desligado: ninguém.";
+    if (canal === "popup") return "Ligado: abre uma vez por dia para quem recebeu o aviso nominal do sino (responsáveis comerciais e lista). Desligado, ou sem esta configuração: ninguém vê o popup.";
+    if (canal === "email") return "Sem ninguém na lista: os responsáveis comerciais de sempre recebem, como sempre. Com lista: só a lista.";
+  }
   if (eventoComResponsavelNoSino(evento) && canal === "sino") {
     return "Ligado, sem ninguém na lista: só o responsável pelo candidato é avisado (sem responsável, aviso geral da unidade do cliente). Desligado: ninguém.";
   }
