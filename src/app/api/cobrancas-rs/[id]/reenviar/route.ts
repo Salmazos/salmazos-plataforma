@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { NextRequest, NextResponse, after } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelFullAccess } from "@/lib/fullAccessAuth";
@@ -89,7 +90,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
         feeRsPercentual: Number(cobranca.fee_percentual),
         feeValor: Number(cobranca.fee_valor),
         tipoCobrancaRS: ehCancelamento ? "cancelamento" : "contratacao",
-        cobrancaUrl: `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/cobrancas-rs?abrir=${id}`,
+        cobrancaUrl: `${SITE_URL}/painel/cobrancas-rs?abrir=${id}`,
       });
 
       const resultados = await Promise.all(

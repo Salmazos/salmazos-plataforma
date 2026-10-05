@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, vagaSolicitarReativacaoSchema } from "@/lib/schemas";
@@ -94,7 +95,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       cargo: sol.cargo,
       nomeCliente: sol.cliente_nome ?? undefined,
       acaoSolicitada: "reabrir",
-      solicitacaoUrl: `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas?solicitacao=${sol.id}`,
+      solicitacaoUrl: `${SITE_URL}/painel/vagas?solicitacao=${sol.id}`,
     });
     // Lista do evento vaga_reativacao_pedida (Configurações > Avisos); sem configuração, o aviso antigo.
     await avisarPedidoCliente({

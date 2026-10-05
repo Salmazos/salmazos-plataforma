@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
@@ -93,7 +94,7 @@ export async function PATCH(request: NextRequest) {
       <tr><td style="padding:8px 14px;font-weight:600;color:#6B7280;font-size:13px">Data e Horário</td><td style="padding:8px 14px;color:#111827;font-size:13px;font-weight:700">${dataFormatada}</td></tr>
     </table>
     <div style="text-align:center;padding-top:24px;border-top:1px solid #f3f4f6;margin-top:20px">
-      <a href="https://salmazos-plataforma.vercel.app/painel/candidato/${enc.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil completo</a>
+      <a href="${SITE_URL}/painel/candidato/${enc.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil completo</a>
     </div>
   </div>
   <div style="background:#f9fafb;padding:16px 32px;text-align:center">

@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { formatarDataSemFuso } from "@/lib/utils";
@@ -8,7 +9,6 @@ import { resolverDestinatarios } from "@/lib/avisos";
 // sistema completamente separado.
 export type MomentoAvisoAso = "sem_registro" | "vencendo" | "atrasado";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://vagas.salmazos.com.br";
 
 function conteudo(momento: MomentoAvisoAso, nome: string, empresa: string, dataVencimento: string | null) {
   const vencimentoFormatado = dataVencimento ? formatarDataSemFuso(dataVencimento) : null;

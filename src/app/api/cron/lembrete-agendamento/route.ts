@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { notifyResponsibleOrAll } from "@/lib/notifyAllAnalysts";
@@ -6,10 +7,6 @@ import { destinatariosEmailCliente } from "@/lib/destinatariosEmailCliente";
 import { enviarEmailAoCliente } from "@/lib/enviarEmailAoCliente";
 
 export const dynamic = "force-dynamic";
-
-// Domínio de produção fixo: estes e-mails (analista e cliente) sempre abrem em vagas.salmazos.com.br, sem depender de
-// NEXT_PUBLIC_SITE_URL (que pode apontar para outro domínio ou ter barra no final).
-const SITE_URL = "https://vagas.salmazos.com.br";
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");

@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { obterDestinatariosSupervisaoAtraso, obterDestinatarioEmailSupervisaoAtraso } from "@/lib/supervisaoAvisos";
@@ -7,7 +8,6 @@ import { obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
 
 export const dynamic = "force-dynamic";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://vagas.salmazos.com.br";
 
 function parseDataLocal(iso: string): Date {
   const [ano, mes, dia] = iso.split("-").map(Number);

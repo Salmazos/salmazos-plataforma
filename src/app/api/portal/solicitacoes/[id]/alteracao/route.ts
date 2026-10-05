@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, solicitacaoVagaUpdateSchema } from "@/lib/schemas";
@@ -95,7 +96,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       cargo: sol.cargo,
       nomeCliente: sol.cliente_nome ?? undefined,
       resumoAlteracoesHtml: resumoAlteracoesHtml(alteracoes),
-      solicitacaoUrl: `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas?solicitacao=${id}`,
+      solicitacaoUrl: `${SITE_URL}/painel/vagas?solicitacao=${id}`,
     });
     // Sino e e-mail leem a lista do evento solicitacao_alteracao_pedida (Configurações > Avisos); sem
     // configuração, sino geral da unidade + e-mail para os analistas da unidade, como sempre foi.

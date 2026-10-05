@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
@@ -36,7 +37,7 @@ export async function notificarVagaEncerrada(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vagaClienteNome = (vaga.clientes as any)?.nome ?? null;
 
-  const vagaUrl = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas/${vagaId}`;
+  const vagaUrl = `${SITE_URL}/painel/vagas/${vagaId}`;
   const template = getEmailTemplate("vaga_encerrada", {
     nome: "",
     cargo: vaga.titulo,

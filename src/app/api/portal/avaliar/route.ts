@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
@@ -9,8 +10,6 @@ import { escaparHtml } from "@/lib/emailPacoteContabilidade";
 import { emailsOuPadrao, emailsSomenteConfigurado } from "@/lib/avisosResolucao";
 import { avisarDecisaoClienteCandidato } from "@/lib/avisarDecisaoClienteCandidato";
 
-// Domínio de produção fixo nos links dos e-mails internos desta rota.
-const SITE_URL = "https://vagas.salmazos.com.br";
 
 export async function PATCH(request: NextRequest) {
   try {

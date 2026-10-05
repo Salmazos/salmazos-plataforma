@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { createServiceClient } from "@/lib/supabase/server";
 import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
 
@@ -152,7 +153,7 @@ export async function verificarSLA(): Promise<void> {
       <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Prazo limite</td><td style="padding:6px 0;color:#111827">${prazo} dia(s) útil(eis)</td></tr>
     </table>
     <div style="text-align:center;margin-top:20px">
-      <a href="https://salmazos-plataforma.vercel.app/painel/candidato/${cv.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver candidato</a>
+      <a href="${SITE_URL}/painel/candidato/${cv.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver candidato</a>
     </div>
   </div>
   <div style="background:#f9fafb;padding:12px 28px;text-align:center">

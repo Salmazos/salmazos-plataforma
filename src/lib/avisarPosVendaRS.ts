@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { createServiceClient } from "@/lib/supabase/server";
 import { resolverDestinatarios } from "@/lib/avisos";
 import { resolverDestinatariosPosVenda, type DestinatarioPosVenda } from "@/lib/posVendaRS";
@@ -13,8 +14,6 @@ import {
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
-// Domínio de produção fixo nos links dos e-mails.
-const SITE_URL = "https://vagas.salmazos.com.br";
 
 export interface DadosAvisoPosVenda {
   candidatoId: string;

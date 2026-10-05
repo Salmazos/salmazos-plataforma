@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, admissaoCreateSchema } from "@/lib/schemas";
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
     detalhes: { candidato_id, vaga_id: vaga_id ?? null, modalidade, funcao, salario, tipo_salario, horario_trabalho, data_admissao },
   });
 
-  const url = `${process.env.NEXT_PUBLIC_SITE_URL || ""}/admissao/${admissao.token}`;
+  const url = `${SITE_URL}/admissao/${admissao.token}`;
 
   let whatsappUrl: string | null = null;
   if (candidato?.telefone) {

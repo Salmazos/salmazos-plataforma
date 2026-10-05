@@ -1,3 +1,4 @@
+import { SITE_URL } from "@/lib/siteUrl";
 import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, vagaSolicitarPausaSchema } from "@/lib/schemas";
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       acaoSolicitada: "pausar",
       motivoTipoEncerramentoLabel: ROTULO_MOTIVO_ENCERRAMENTO[parsed.data.motivo_tipo],
       motivoTextoEncerramento: parsed.data.motivo_texto || null,
-      solicitacaoUrl: `${process.env.NEXT_PUBLIC_SITE_URL || ""}/painel/vagas?solicitacao=${sol.id}`,
+      solicitacaoUrl: `${SITE_URL}/painel/vagas?solicitacao=${sol.id}`,
     });
     // Lista do evento vaga_pausa_pedida (Configurações > Avisos); sem configuração, o aviso antigo.
     await avisarPedidoCliente({
