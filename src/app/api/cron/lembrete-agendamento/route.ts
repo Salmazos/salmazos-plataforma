@@ -7,6 +7,10 @@ import { enviarEmailAoCliente } from "@/lib/enviarEmailAoCliente";
 
 export const dynamic = "force-dynamic";
 
+// Domínio de produção fixo: estes e-mails (analista e cliente) sempre abrem em vagas.salmazos.com.br, sem depender de
+// NEXT_PUBLIC_SITE_URL (que pode apontar para outro domínio ou ter barra no final).
+const SITE_URL = "https://vagas.salmazos.com.br";
+
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
@@ -63,7 +67,7 @@ export async function GET(request: Request) {
       <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Cliente</td><td style="padding:6px 0;color:#111827">${clienteNome}</td></tr>
     </table>
     <div style="text-align:center;margin-top:20px">
-      <a href="https://salmazos-plataforma.vercel.app/painel/candidato/${r.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil do candidato</a>
+      <a href="${SITE_URL}/painel/candidato/${r.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil do candidato</a>
     </div>
   </div>
   <div style="background:#f9fafb;padding:12px 28px;text-align:center">
@@ -113,7 +117,7 @@ export async function GET(request: Request) {
     </div>
     <p style="margin:0 0 20px;font-size:14px;color:#374151">Assim que você confirmar, avisamos o candidato e seguimos com o processo. Leva menos de um minuto:</p>
     <div style="text-align:center">
-      <a href="https://salmazos-plataforma.vercel.app/portal/candidato/${r.id}" style="display:inline-block;padding:12px 28px;background:#000;color:#FFD700;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700">Confirmar data da entrevista</a>
+      <a href="${SITE_URL}/portal/candidato/${r.id}" style="display:inline-block;padding:12px 28px;background:#000;color:#FFD700;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700">Confirmar data da entrevista</a>
     </div>
   </div>
   <div style="background:#f9fafb;padding:16px 32px;text-align:center">
