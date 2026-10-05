@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { notifyResponsibleOrAll } from "@/lib/notifyAllAnalysts";
-import { sendEmail } from "@/lib/sendEmail";
+import { emailClienteLigado } from "@/lib/avisoCliente";
+import { destinatariosEmailCliente } from "@/lib/destinatariosEmailCliente";
+import { enviarEmailAoCliente } from "@/lib/enviarEmailAoCliente";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +16,9 @@ export async function GET(request: Request) {
 
   try {
     const supabase = createServiceClient();
+    // Interruptor "E-mail" do lembrete AO CLIENTE (Configurações > Avisos). Sem linha ou erro de leitura = ligado.
+    // O lembrete ao analista (a) não passa por ele.
+    const emailClienteAtivo = await emailClienteLigado("email_cliente_lembrete_agendamento", supabase);
     const corte = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 
     const { data: rows, error } = await supabase
@@ -88,7 +93,13 @@ export async function GET(request: Request) {
 
       // b) E-mail cordial pro cliente, lembrando de marcar a entrevista.
       let clienteEnviado = false;
-      if (clienteEmail) {
+      // Destinatários = login de cada usuário do portal (sem usuário, contato_email). cliente_id vem da linha do banco.
+      const destinatarios = emailClienteAtivo ? await destinatariosEmailCliente(r.cliente_id, supabase, { contatoEmail: clienteEmail }) : [];
+      if (!emailClienteAtivo) {
+        // Interruptor desligado: o ciclo do lembrete é dado como cumprido para o lembrete ao analista manter o
+        // mesmo ritmo de 48 horas de sempre (sem o carimbo ele passaria a repetir todo dia).
+        clienteEnviado = true;
+      } else if (destinatarios.length > 0) {
         const htmlCliente = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
 <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
@@ -111,24 +122,28 @@ export async function GET(request: Request) {
 </div>
 </body></html>`;
 
-        const resultadoCliente = await sendEmail({
-          to: clienteEmail,
-          subject: `📅 Falta pouco! Confirme a entrevista de ${candidatoNome}`,
-          html: htmlCliente,
-          tipo: "lembrete_agendamento_pendente",
-          candidato_id: r.candidato_id,
-          vaga_id: r.vaga_id ?? undefined,
-        });
+        // Um e-mail por pessoa; o carimbo vale se PELO MENOS UM envio foi aceito.
+        const resultadoCliente = await enviarEmailAoCliente(
+          destinatarios,
+          {
+            subject: `📅 Falta pouco! Confirme a entrevista de ${candidatoNome}`,
+            html: htmlCliente,
+            tipo: "lembrete_agendamento_pendente",
+            candidato_id: r.candidato_id,
+            vaga_id: r.vaga_id ?? undefined,
+          },
+          `cron/lembrete-agendamento encaminhamento_id=${r.id}`
+        );
 
-        clienteEnviado = resultadoCliente.success;
-        if (!resultadoCliente.success) {
+        clienteEnviado = resultadoCliente.aceitos > 0;
+        if (!clienteEnviado) {
           console.error(
-            `[cron/lembrete-agendamento] E-mail pro cliente NÃO enviado (encaminhamento_id=${r.id}): ${resultadoCliente.error}`
+            `[cron/lembrete-agendamento] E-mail pro cliente NÃO enviado (encaminhamento_id=${r.id}): nenhum dos ${destinatarios.length} destinatário(s) foi aceito.`
           );
         }
       } else {
         console.error(
-          `[cron/lembrete-agendamento] Cliente ${clienteNome} sem contato_email cadastrado (encaminhamento_id=${r.id}) — lembrete não enviado.`
+          `[cron/lembrete-agendamento] Cliente ${clienteNome} sem usuário no portal e sem contato_email cadastrado (encaminhamento_id=${r.id}) — lembrete não enviado.`
         );
       }
 

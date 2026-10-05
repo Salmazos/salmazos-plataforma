@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
 import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 import { avisarSolicitacaoDecidida } from "@/lib/avisoClienteDecisao";
+import { emailClienteLigado } from "@/lib/avisoCliente";
+import { destinatariosEmailCliente } from "@/lib/destinatariosEmailCliente";
+import { enviarEmailAoCliente } from "@/lib/enviarEmailAoCliente";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -64,32 +66,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-    if (sol?.cliente_id) {
-      const { data: cliente } = await service
-        .from("clientes")
-        .select("contato_email")
-        .eq("id", sol.cliente_id)
-        .single();
+    // Interruptor "E-mail" (Configurações > Avisos) e destinatários = login de cada usuário do portal (sem
+    // usuário, contato_email). cliente_id vem da solicitação gravada acima.
+    if (sol?.cliente_id && (await emailClienteLigado("email_cliente_solicitacao_recusada", service))) {
+      const destinatarios = await destinatariosEmailCliente(sol.cliente_id, service);
 
-      if (cliente?.contato_email) {
+      if (destinatarios.length > 0) {
         const { subject, html } = getEmailTemplate("solicitacao_recusada", {
           nome: sol.cliente_nome ?? "",
           cargo: sol.cargo,
           nomeCliente: sol.cliente_nome ?? "",
           motivoRecusa: motivo_recusa.trim(),
         });
-        const resultado = await sendEmail({
-          to: cliente.contato_email,
-          subject,
-          html,
-          tipo: "solicitacao_recusada",
-        });
-        if (!resultado.success) {
-          console.error(
-            `[recusar] Falha ao enviar e-mail de recusa ao cliente (solicitacao_id=${id}, cliente=${sol.cliente_nome ?? "?"}):`,
-            resultado.error
-          );
-        }
+        await enviarEmailAoCliente(destinatarios, { subject, html, tipo: "solicitacao_recusada" }, `recusar solicitacao_id=${id}`);
       }
     }
 

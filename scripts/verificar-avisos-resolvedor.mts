@@ -5,10 +5,10 @@ import {
   resolverComFonte, analistaAtendeUnidade, emailsOuPadrao, emailsSomenteConfigurado, executarCanaisIndependentes,
   type DadosAviso, type FonteAvisos, type LinhaDestinatario, type PerfilAnalista,
 } from "../src/lib/avisosResolucao.ts";
-import { PADRAO_AVISOS, grupoTemPadrao, montarPayloadRestauracao } from "../src/lib/avisosPadrao.ts";
-import { EVENTOS_POR_GRUPO, EVENTOS_SEM_LISTA, eventoSemLista, FRASE_SEM_LISTA, ROTULO_GRUPO, grupoDoEvento, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
+import { PADRAO_AVISOS, PADRAO_EMAIL_CLIENTE, grupoTemPadrao, montarPayloadRestauracao } from "../src/lib/avisosPadrao.ts";
+import { EVENTOS_EMAIL_CLIENTE, eventoEmailCliente, FRASE_EMAIL_CLIENTE, APOIO_EMAILS_CLIENTE, EVENTOS_POR_GRUPO, EVENTOS_SEM_LISTA, eventoSemLista, FRASE_SEM_LISTA, ROTULO_GRUPO, grupoDoEvento, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
 import {
-  canalClienteLigado, inicioJanelaAvisos, avisoVisivelParaUsuario, linkPortalValido, chaveDedupAviso, textoAvisoIndicacaoDecidida,
+  canalClienteLigado, emailClienteLigadoRegra, montarDestinatariosEmailCliente, inicioJanelaAvisos, avisoVisivelParaUsuario, linkPortalValido, chaveDedupAviso, textoAvisoIndicacaoDecidida,
   haQuantoTempo, textoAvisoSolicitacaoDecidida, textoAvisoPedidoDecidido, tipoPedidoDaAcao, chaveDedupSolicitacaoDecidida, chaveDedupPedidoDecidido, textoAvisoCandidatoEnviado, textoAvisoEntrevista, decidirAvisoCandidatoEnviado, naoLidosDoSino, pendentesDoPopup, limitarMensagemAviso, DIAS_VISIVEL_AVISO_CLIENTE, type AvisoPortal,
 } from "../src/lib/avisoClienteRegras.ts";
 import { dataEntrevistaParaCliente, horaEntrevistaReal, decidirAvisoEntrevista } from "../src/lib/horaEntrevista.ts";
@@ -538,7 +538,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     assert.ok(NOTA_EVENTO.indicacao_decidida_cliente.includes("Minhas Indicações"));
   });
   await caso("avisos ao cliente: evento SEM lista (só liga/desliga), sem Restaurar padrão e com a frase combinada", () => {
-    assert.deepEqual([...EVENTOS_SEM_LISTA], ["indicacao_decidida_cliente", "candidato_enviado_cliente", "entrevista_agendada_cliente", "entrevista_remarcada_cliente", "solicitacao_vaga_decidida_cliente", "pedido_vaga_decidido_cliente"]);
+    assert.deepEqual([...EVENTOS_SEM_LISTA].slice(0, 6), ["indicacao_decidida_cliente", "candidato_enviado_cliente", "entrevista_agendada_cliente", "entrevista_remarcada_cliente", "solicitacao_vaga_decidida_cliente", "pedido_vaga_decidido_cliente"]);
     assert.equal(eventoSemLista("indicacao_decidida_cliente"), true);
     assert.equal(eventoSemLista("candidato_enviado_cliente"), true);
     for (const ev of ["solicitacao_vaga", "vaga_pausa_pedida", "portal_candidato_aprovado", "rescisao_paga", ""]) assert.equal(eventoSemLista(ev), false, ev);
@@ -916,6 +916,71 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     assert.notEqual(chaveDedupPedidoDecidido("alteracao", "ped-1", "aprovado", D), chaveDedupPedidoDecidido("alteracao", "ped-2", "aprovado", D));
     assert.notEqual(chaveDedupPedidoDecidido("alteracao", "ped-1", "aprovado", D), chaveDedupPedidoDecidido("alteracao", "ped-1", "recusado", D));
     assert.equal(chaveDedupPedidoDecidido("reativacao", "ped-1", "recusado", undefined), "pedido_vaga_decidido_cliente:reativacao:ped-1:recusado:sem-data");
+  });
+
+  // ── E-mails ao cliente: interruptor "E-mail" e destinatários ──
+  const LISTA_EMAIL = ["email_cliente_candidato_entrevista", "email_cliente_lembrete_entrevista_hoje", "email_cliente_vaga_aprovada", "email_cliente_vaga_status_decidido", "email_cliente_solicitacao_recusada", "email_cliente_alteracao_decidida", "email_cliente_lembrete_agendamento"];
+  await caso("e-mail ao cliente, regra do interruptor: SEM linha = ligado; ERRO de leitura = ligado; só ativo=false desliga", () => {
+    assert.equal(emailClienteLigadoRegra({ linha: null, erro: false }), true);
+    assert.equal(emailClienteLigadoRegra({ linha: undefined, erro: false }), true);
+    assert.equal(emailClienteLigadoRegra({ linha: null, erro: true }), true);
+    assert.equal(emailClienteLigadoRegra({ linha: { ativo: false }, erro: true }), true, "erro vale mais que a linha");
+    assert.equal(emailClienteLigadoRegra({ linha: { ativo: true }, erro: false }), true);
+    assert.equal(emailClienteLigadoRegra({ linha: { ativo: false }, erro: false }), false);
+    assert.equal(emailClienteLigadoRegra({ linha: { ativo: null }, erro: false }), true, "nulo não desliga");
+  });
+  await caso("e-mail ao cliente, regra do interruptor é INVERSA à de sino/popup (sem linha: sino desliga, e-mail liga)", () => {
+    assert.equal(canalClienteLigado({ linha: null, erro: false }), false); assert.equal(emailClienteLigadoRegra({ linha: null, erro: false }), true);
+    assert.equal(canalClienteLigado({ linha: null, erro: true }), false); assert.equal(emailClienteLigadoRegra({ linha: null, erro: true }), true);
+  });
+  await caso("destinatários: 0 usuários no portal -> contato_email (último recurso)", () => {
+    assert.deepEqual(montarDestinatariosEmailCliente({ emailsLogin: [], contatoEmail: "contato@x.com", erro: false }), ["contato@x.com"]);
+    assert.deepEqual(montarDestinatariosEmailCliente({ emailsLogin: [], contatoEmail: "  contato@x.com  ", erro: false }), ["contato@x.com"]);
+  });
+  await caso("destinatários: 1, 2 e 3 usuários -> um endereço por pessoa, na ordem, sem o contato_email", () => {
+    assert.deepEqual(montarDestinatariosEmailCliente({ emailsLogin: ["a@x.com"], contatoEmail: "contato@x.com", erro: false }), ["a@x.com"]);
+    assert.deepEqual(montarDestinatariosEmailCliente({ emailsLogin: ["a@x.com", "b@x.com"], contatoEmail: "contato@x.com", erro: false }), ["a@x.com", "b@x.com"]);
+    const tres = montarDestinatariosEmailCliente({ emailsLogin: ["a@x.com", "b@x.com", "c@x.com"], contatoEmail: null, erro: false });
+    assert.deepEqual(tres, ["a@x.com", "b@x.com", "c@x.com"]);
+    for (const e of tres) assert.ok(!e.includes(",") && !e.includes(";") && !e.includes(" "), "nunca vários endereços no mesmo destinatário");
+  });
+  await caso("destinatários: duplicados (sem diferenciar maiúsculas) e vazios/nulos são ignorados", () => {
+    assert.deepEqual(montarDestinatariosEmailCliente({ emailsLogin: ["A@x.com", "a@X.com ", "", "  ", null, undefined, "b@x.com"], contatoEmail: "c@x.com", erro: false }), ["A@x.com", "b@x.com"]);
+    assert.deepEqual(montarDestinatariosEmailCliente({ emailsLogin: ["", null, "  "], contatoEmail: "c@x.com", erro: false }), ["c@x.com"], "todos vazios = como sem usuário");
+  });
+  await caso("destinatários: erro de leitura -> contato_email (nunca bloqueia), mesmo com logins em mãos", () => {
+    assert.deepEqual(montarDestinatariosEmailCliente({ emailsLogin: [], contatoEmail: "c@x.com", erro: true }), ["c@x.com"]);
+    assert.deepEqual(montarDestinatariosEmailCliente({ emailsLogin: ["a@x.com"], contatoEmail: "c@x.com", erro: true }), ["c@x.com"]);
+  });
+  await caso("destinatários: sem contato_email (nulo, vazio ou só espaços) e sem usuários -> lista vazia", () => {
+    for (const contato of [null, undefined, "", "   "]) {
+      assert.deepEqual(montarDestinatariosEmailCliente({ emailsLogin: [], contatoEmail: contato, erro: false }), [], String(contato));
+      assert.deepEqual(montarDestinatariosEmailCliente({ emailsLogin: [], contatoEmail: contato, erro: true }), [], `erro ${contato}`);
+    }
+  });
+  await caso("catálogo dos e-mails ao cliente: 7 eventos, só canal e-mail, sem lista, grupo avisos_cliente, com rótulo e nota", () => {
+    assert.deepEqual([...EVENTOS_EMAIL_CLIENTE], LISTA_EMAIL);
+    for (const ev of LISTA_EMAIL) {
+      assert.equal(eventoEmailCliente(ev), true, ev); assert.equal(grupoDoEvento(ev), "avisos_cliente", ev); assert.equal(eventoSemLista(ev), true, ev);
+      assert.deepEqual([...canaisDoEvento(ev)], ["email"], ev); assert.ok(ROTULO_EVENTO[ev] && NOTA_EVENTO[ev], ev);
+      assert.equal(descricaoPadraoDoSistema("avisos_cliente", "email", ev), FRASE_EMAIL_CLIENTE, ev);
+      assert.ok(ev.length <= 80 && ev.startsWith("email_cliente_"), ev);
+    }
+    assert.equal(APOIO_EMAILS_CLIENTE, "Os e-mails vão para o login de cada usuário do portal do cliente. Sem usuário no portal, vão para o e-mail de contato.");
+  });
+  await caso("catálogo: os 6 eventos de sino/popup não mudaram e nenhum nome colide com os e-mails ao cliente", () => {
+    assert.equal(EVENTOS_POR_GRUPO.avisos_cliente.length, 6);
+    for (const ev of EVENTOS_POR_GRUPO.avisos_cliente) { assert.equal(eventoEmailCliente(ev), false, ev); assert.deepEqual([...canaisDoEvento(ev)], ["sino", "popup"], ev); }
+    assert.equal(new Set([...EVENTOS_POR_GRUPO.avisos_cliente, ...LISTA_EMAIL, ...EVENTOS_POR_GRUPO.portal_cliente, ...EVENTOS_POR_GRUPO.vagas]).size, 6 + 7 + 8 + 5);
+    assert.equal(EVENTOS_SEM_LISTA.length, 13);
+    for (const ev of ["solicitacao_vaga", "vaga_pausa_pedida", "portal_candidato_aprovado", "rescisao_paga"]) assert.equal(eventoSemLista(ev), false, ev);
+  });
+  await caso("padrão dos e-mails ao cliente (documentação): 5 ligados e 2 desligados; grupo continua sem Restaurar padrão", () => {
+    assert.deepEqual(Object.keys(PADRAO_EMAIL_CLIENTE).sort(), [...LISTA_EMAIL].sort());
+    const desligados = Object.entries(PADRAO_EMAIL_CLIENTE).filter(([, v]) => !v).map(([k]) => k).sort();
+    assert.deepEqual(desligados, ["email_cliente_vaga_aprovada", "email_cliente_vaga_status_decidido"]);
+    assert.equal(Object.values(PADRAO_EMAIL_CLIENTE).filter(Boolean).length, 5);
+    assert.equal(grupoTemPadrao("avisos_cliente"), false);
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);

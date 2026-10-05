@@ -204,6 +204,40 @@ export function chaveDedupPedidoDecidido(
   return `pedido_vaga_decidido_cliente:${tipo}:${pedidoId}:${decisao}:${decididoEm ?? "sem-data"}`;
 }
 
+// ── E-mails ao cliente (canal "email" do grupo avisos_cliente) ──────────────────────────────────────────
+// Semântica INVERSA à de sino/popup: o e-mail já era enviado antes de existir este interruptor, então
+// sem linha de canal ou erro de leitura = LIGADO (comportamento atual). Só ativo === false desliga.
+export function emailClienteLigadoRegra(resultado: { linha: { ativo: boolean | null } | null | undefined; erro: boolean }): boolean {
+  if (resultado.erro) return true;
+  return resultado.linha?.ativo !== false;
+}
+
+// Lista final de destinatários de um e-mail ao cliente. `emailsLogin` são os e-mails de login dos usuários
+// do portal (cliente_usuarios -> auth.users). Únicos (sem diferenciar maiúsculas) e não vazios. Lista vazia
+// (cliente sem usuário no portal) ou QUALQUER erro de leitura = último recurso, o clientes.contato_email
+// (comportamento anterior); sem ele, lista vazia. Um endereço por posição: quem envia manda um e-mail por
+// pessoa, nunca vários endereços no mesmo "to".
+export function montarDestinatariosEmailCliente(o: {
+  emailsLogin: readonly (string | null | undefined)[];
+  contatoEmail: string | null | undefined;
+  erro: boolean;
+}): string[] {
+  const contato = o.contatoEmail?.trim();
+  if (o.erro) return contato ? [contato] : [];
+  const vistos = new Set<string>();
+  const lista: string[] = [];
+  for (const bruto of o.emailsLogin) {
+    const email = bruto?.trim();
+    if (!email) continue;
+    const chave = email.toLowerCase();
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    lista.push(email);
+  }
+  if (lista.length > 0) return lista;
+  return contato ? [contato] : [];
+}
+
 // "há 5 min", "há 3 h", "há 2 dias" (o menu do sino mostra uma linha de tempo curta).
 export function haQuantoTempo(criadoEm: string, agora: Date = new Date()): string {
   const ms = agora.getTime() - new Date(criadoEm).getTime();

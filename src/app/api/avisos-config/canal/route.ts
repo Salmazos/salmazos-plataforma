@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, avisoConfigCanalSchema } from "@/lib/schemas";
 import { checarPapelSuperuser } from "@/lib/fullAccessAuth";
 import { registrarAuditoria } from "@/lib/audit";
+import { eventoEmailCliente } from "@/lib/avisosCatalogo";
 
 export async function PATCH(request: NextRequest) {
   const supabase = await createClient();
@@ -14,6 +15,11 @@ export async function PATCH(request: NextRequest) {
   const parsed = parseBody(avisoConfigCanalSchema, await request.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
   const { evento, canal, ativo } = parsed.data;
+
+  // E-mails ao cliente só têm o canal e-mail (liga/desliga), nunca sino nem popup.
+  if (eventoEmailCliente(evento) && canal !== "email") {
+    return NextResponse.json({ error: "Este aviso só tem o canal e-mail." }, { status: 400 });
+  }
 
   const svc = createServiceClient();
   const { data: ev } = await svc.from("aviso_eventos").select("evento, canais_suportados").eq("evento", evento).maybeSingle();

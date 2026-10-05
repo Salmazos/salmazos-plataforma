@@ -254,6 +254,41 @@ cliente faz e a Salmazos recebe). Aba própria em Configurações > Avisos: **Av
   agendada, entrevista remarcada, solicitação de vaga decidida e pedido do cliente decidido. A política de e-mails ao
   cliente é tratada em tarefa separada.
 
+## E-mails ao cliente (interruptor "E-mail" e destinatários)
+
+Migration: `supabase/migration_avisos_cliente_email.sql` (7 eventos e 7 linhas de canal). Na tela (Configurações > Avisos,
+aba "Avisos ao cliente", seção "E-mails ao cliente") cada e-mail tem um interruptor "E-mail". Sem lista de pessoas.
+
+| Evento (`aviso_eventos`) | `email_logs.tipo` | Onde é enviado | Padrão |
+|---|---|---|---|
+| `email_cliente_candidato_entrevista` | `candidato_entrevista_cliente` | `candidatos/[id]/etapa` (etapa entrevista com o cliente) | ligado |
+| `email_cliente_lembrete_entrevista_hoje` | `lembrete_entrevista_hoje` | `cron/lembrete-entrevista-hoje` (9h) | ligado |
+| `email_cliente_vaga_aprovada` | `vaga_aprovada_cliente` | `vagas/from-solicitacao` | **desligado** |
+| `email_cliente_vaga_status_decidido` | `vaga_status_decidido` | `vagas/[id]/solicitacao-status` | **desligado** |
+| `email_cliente_solicitacao_recusada` | `solicitacao_recusada` | `solicitacoes-vagas/[id]/recusar` | ligado |
+| `email_cliente_alteracao_decidida` | `alteracao_solicitacao_aprovada` e `_recusada` (um só interruptor) | `solicitacoes-vagas/[id]/alteracao` | ligado |
+| `email_cliente_lembrete_agendamento` | `lembrete_agendamento_pendente` | `cron/lembrete-agendamento` (só o e-mail ao cliente) | ligado |
+
+- **Semântica INVERSA à de sino/popup** (`emailClienteLigado`, em `avisoCliente.ts`; regra pura `emailClienteLigadoRegra`):
+  sem linha de canal ou erro de leitura = **ligado** (o e-mail já existia); só `ativo = false` desliga. A tela mostra
+  "ligado" quando não há linha. Os dois e-mails desligados por padrão (vaga aprovada; encerramento/reativação decidido)
+  já são cobertos pelo sino e popup do bloco 4. Desligar não remove código: a rota só deixa de enviar e nada mais muda
+  (histórico, status, selos, aviso de sino). Reativar é um clique na tela. O padrão está documentado em
+  `PADRAO_EMAIL_CLIENTE` (`avisosPadrao.ts`), sem criar "Restaurar padrão" para o grupo.
+- **Destinatários** (`destinatariosEmailCliente`, em `destinatariosEmailCliente.ts`): o e-mail de LOGIN de cada usuário do
+  portal (`cliente_usuarios` -> `auth.users`, via `auth.admin.getUserById`), únicos e não vazios, e **um e-mail por pessoa**
+  (`enviarEmailAoCliente`: nunca vários endereços no mesmo "to"; cada envio tem a sua linha em `email_logs`; uma falha não
+  impede os outros). Cliente sem usuário no portal, lista vazia ou qualquer erro de leitura = `clientes.contato_email`
+  (último recurso, comportamento anterior); sem ele, ninguém. O `cliente_id` vem sempre da linha do banco, nunca do request.
+- **Crons.** Continua um e-mail por cliente por dia (o lembrete de entrevistas agrupa as entrevistas), agora enviado a cada
+  usuário do portal. O carimbo de "enviado" (`lembrete_entrevista_hoje_enviado_em`, `ultimo_lembrete_agendamento_em`) é
+  gravado se **pelo menos um** envio foi aceito pelo SMTP. Com o interruptor desligado, o cron de entrevistas nem consulta
+  as entrevistas; o de agendamento não envia ao cliente mas dá o ciclo por cumprido (carimbo) para o lembrete ao ANALISTA
+  manter o ritmo de 48 horas, e o e-mail ao analista não passa pelo interruptor.
+- **API de configuração.** `PATCH /api/avisos-config/canal` só aceita o canal `email` para estes 7 eventos;
+  `POST /api/avisos-config/destinatarios` continua devolvendo 400 (sem lista de pessoas). O grupo segue sem "Restaurar padrão",
+  então `avisos_restaurar_padrao` e a regra do último destinatário não o alcançam.
+
 ## Ajustes pós-teste (tela de Avisos e portal)
 
 - **Erro inline na tela de Avisos.** Ações que falham na API (ativar/desativar, remover, adicionar, ligar/desligar canal,
