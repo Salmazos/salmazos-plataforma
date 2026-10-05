@@ -3,6 +3,7 @@ import { resolverDestinatarios } from "@/lib/avisos";
 import { buscarPerfilResponsavel } from "@/lib/perfilResponsavel";
 import {
   EVENTO_POR_DECISAO,
+  EVENTO_POR_TIPO_NOTIFICACAO,
   TIPO_NOTIFICACAO_POR_DECISAO,
   popupDecisaoLigado,
   textoAvisoDecisaoCliente,
@@ -75,26 +76,22 @@ export async function avisarDecisaoClienteCandidato(
   }
 }
 
-// Liga/desliga do canal popup de cada evento. Sem linha ou erro de leitura = desligado (não mostra). NUNCA lança.
-export async function popupsDecisaoLigados(svc: ServiceClient): Promise<Record<DecisaoCliente, boolean>> {
-  const desligado = { aprovado: false, reprovado: false };
+// Eventos do popup interno (decisão do cliente e garantia R&S) que estão com o canal popup LIGADO. Sem linha de
+// canal ou erro de leitura = desligado (não mostra). NUNCA lança.
+export async function eventosComPopupLigado(svc: ServiceClient): Promise<string[]> {
   try {
     const { data, error } = await svc
       .from("aviso_eventos_canais")
       .select("evento, ativo")
       .eq("canal", "popup")
-      .in("evento", Object.values(EVENTO_POR_DECISAO));
+      .in("evento", Object.values(EVENTO_POR_TIPO_NOTIFICACAO));
     if (error) {
-      console.error("[popupsDecisaoLigados] Erro ao ler o canal popup (segue desligado):", error.message);
-      return desligado;
+      console.error("[eventosComPopupLigado] Erro ao ler o canal popup (segue desligado):", error.message);
+      return [];
     }
-    const linha = (evento: string) => (data ?? []).find((l) => l.evento === evento);
-    return {
-      aprovado: popupDecisaoLigado({ linha: linha(EVENTO_POR_DECISAO.aprovado), erro: false }),
-      reprovado: popupDecisaoLigado({ linha: linha(EVENTO_POR_DECISAO.reprovado), erro: false }),
-    };
+    return (data ?? []).filter((l) => popupDecisaoLigado({ linha: { ativo: l.ativo }, erro: false })).map((l) => l.evento as string);
   } catch (err) {
-    console.error("[popupsDecisaoLigados] Erro inesperado (segue desligado):", err);
-    return desligado;
+    console.error("[eventosComPopupLigado] Erro inesperado (segue desligado):", err);
+    return [];
   }
 }

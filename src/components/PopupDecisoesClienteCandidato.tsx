@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { DecisaoPopupItem } from "@/lib/decisaoClienteCandidato";
 
-// Mesmo padrão de PopupPedidosClientePendentes: uma checagem ao carregar o painel (sem polling). Quem vê é
+const ICONE_POR_TIPO: Record<string, string> = { aprovacao_cliente: "✅", reprovacao_cliente: "❌", alerta_garantia_rs: "⚠️", garantia_acionada: "🔄" };
+
+// Popup de avisos internos de candidato (decisão do cliente no portal e garantia R&S). Mesmo padrão de PopupPedidosClientePendentes: uma checagem ao carregar o painel (sem polling). Quem vê é
 // decidido inteiramente pela API: avisos nominais do próprio usuário (responsável do candidato e lista do sino),
 // com o canal popup ligado em Configurações > Avisos, ainda não vistos. Aparece uma vez por aviso por usuário.
 export default function PopupDecisoesClienteCandidato() {
@@ -67,8 +69,8 @@ export default function PopupDecisoesClienteCandidato() {
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-[#FFD700]/40">
         <div className="bg-black px-6 py-5 flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-bold text-[#FFD700]">🧑‍💼 Decisão{itens.length > 1 ? "ões" : ""} do cliente</h2>
-            <p className="text-xs text-gray-300 mt-0.5">Candidatos avaliados no portal</p>
+            <h2 className="text-lg font-bold text-[#FFD700]">🔔 Aviso{itens.length > 1 ? "s" : ""} de candidato</h2>
+            <p className="text-xs text-gray-300 mt-0.5">Decisões do cliente e garantia R&amp;S</p>
           </div>
           <button onClick={marcarTodosVistos} className="text-[#FFD700]/70 hover:text-[#FFD700] transition-colors" aria-label="Fechar">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -84,7 +86,7 @@ export default function PopupDecisoesClienteCandidato() {
               onClick={() => abrir(i)}
               className="w-full text-left flex items-start gap-3 bg-[#FFFBEB] border border-[#FFD700]/30 rounded-xl px-4 py-3"
             >
-              <span className="text-2xl leading-none">{i.tipo === "aprovacao_cliente" ? "✅" : "❌"}</span>
+              <span className="text-2xl leading-none">{ICONE_POR_TIPO[i.tipo] ?? "🔔"}</span>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-gray-900">{i.titulo}</p>
                 <p className="text-xs text-gray-600 break-words">{i.mensagem}</p>

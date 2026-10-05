@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { popupsDecisaoLigados } from "@/lib/avisarDecisaoClienteCandidato";
+import { eventosComPopupLigado } from "@/lib/avisarDecisaoClienteCandidato";
 import { inicioJanelaPopupDecisao, tiposComPopupLigado, type DecisaoPopupItem } from "@/lib/decisaoClienteCandidato";
 
 export const dynamic = "force-dynamic";
 
-// Popup "Decisões do cliente" (o cliente aprovou/reprovou um candidato), lido UMA vez ao entrar no painel (sem
+// Popup de avisos internos de candidato (o cliente aprovou/reprovou; garantia R&S vencendo/acionada), lido UMA vez ao entrar no painel (sem
 // polling). Só mostra avisos NOMINAIS do próprio usuário (user_id = quem está logado, vindo da sessão; a linha
 // geral da unidade nunca gera popup) dos últimos 30 dias que ele ainda não viu (notificacao_popup_vistos), e só
 // dos eventos cujo canal popup está ligado em Configurações > Avisos (sem linha ou erro de leitura = não mostra).
@@ -18,7 +18,7 @@ export async function GET() {
   const svc = createServiceClient();
   const vazio = () => NextResponse.json({ data: [], temNovas: false });
 
-  const tipos = tiposComPopupLigado(await popupsDecisaoLigados(svc));
+  const tipos = tiposComPopupLigado(await eventosComPopupLigado(svc));
   if (tipos.length === 0) return vazio();
 
   const { data, error } = await svc

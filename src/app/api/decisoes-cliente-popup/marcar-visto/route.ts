@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { TIPOS_NOTIFICACAO_DECISAO } from "@/lib/decisaoClienteCandidato";
+import { TIPOS_NOTIFICACAO_POPUP } from "@/lib/decisaoClienteCandidato";
 
 export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_IDS = 50;
 
-// Marca como vistos, para este usuário, os avisos de decisão do cliente que o popup mostrava (ou só o clicado).
-// Só vale para linhas que PERTENCEM ao usuário logado (user_id vindo da sessão) e são de decisão do cliente;
+// Marca como vistos, para este usuário, os avisos internos que o popup mostrava (ou só o clicado).
+// Só vale para linhas que PERTENCEM ao usuário logado (user_id vindo da sessão) e são de um tipo do popup (decisão do cliente ou garantia R&S);
 // qualquer outro id é ignorado. Não mexe em `lida`: o sino continua como estava.
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     .from("notificacoes_analista")
     .select("id")
     .eq("user_id", user.id)
-    .in("tipo", [...TIPOS_NOTIFICACAO_DECISAO])
+    .in("tipo", [...TIPOS_NOTIFICACAO_POPUP])
     .in("id", ids);
   if (erroLeitura) return NextResponse.json({ error: erroLeitura.message }, { status: 500 });
   const validos = (proprias ?? []).map((p: { id: string }) => p.id);
