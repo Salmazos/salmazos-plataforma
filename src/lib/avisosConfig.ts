@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { ROTULO_CANAL, ROTULO_EVENTO } from "@/lib/avisosCatalogo";
+import { ROTULO_CANAL, ROTULO_EVENTO, canalSemListaPermitido } from "@/lib/avisosCatalogo";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -12,6 +12,8 @@ export async function bloqueioUltimoDestinatario(
   canal: string,
   ignorarId: string
 ): Promise<string | null> {
+  // Sino e popup dos avisos de decisão do cliente podem ficar ligados com a lista vazia (o responsável sempre é avisado).
+  if (canalSemListaPermitido(evento, canal)) return null;
   const [{ data: cfg }, { data: outros, error }] = await Promise.all([
     svc.from("aviso_eventos_canais").select("ativo").eq("evento", evento).eq("canal", canal).maybeSingle(),
     svc.from("aviso_destinatarios").select("id").eq("evento", evento).eq("canal", canal).eq("ativo", true).neq("id", ignorarId).limit(1),

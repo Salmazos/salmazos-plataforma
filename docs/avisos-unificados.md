@@ -289,6 +289,31 @@ aba "Avisos ao cliente", seção "E-mails ao cliente") cada e-mail tem um interr
   `POST /api/avisos-config/destinatarios` continua devolvendo 400 (sem lista de pessoas). O grupo segue sem "Restaurar padrão",
   então `avisos_restaurar_padrao` e a regra do último destinatário não o alcançam.
 
+## Decisão do cliente (aprovou ou reprovou um candidato): sino e popup no painel
+
+Migration: `supabase/migration_avisos_decisao_cliente_popup.sql`. Reaproveita os eventos `portal_candidato_aprovado` e
+`portal_candidato_reprovado` (grupo Portal do cliente), que ganham os canais Sino e Popup além do E-mail (que não mudou:
+aprovado ligado, reprovado desligado, olver@ e rh@).
+
+- **Sino** (`avisarDecisaoClienteCandidato`, chamada por `PATCH /api/portal/avaliar` depois da decisão gravada; nunca lança):
+  o responsável do candidato (`candidatos.responsavel` -> `buscarPerfilResponsavel`) **mais** a lista do canal sino do evento,
+  uma linha por `user_id` em `notificacoes_analista` (tipos `aprovacao_cliente` e `reprovacao_cliente`), sem repetir quem
+  está nos dois. Sem responsável e sem lista: a linha geral da unidade do cliente (`user_id` nulo), como antes. Sem linha de
+  canal ou erro de leitura = ligado; só `ativo = false` desliga TUDO (responsável, lista e geral). A lista pode ficar vazia
+  (a regra do último destinatário e a restauração do padrão não se aplicam ao sino e ao popup destes 2 eventos).
+- **Texto:** "{cliente} aprovou/reprovou a candidatura de {candidato} para a vaga {título}", mais o comentário do cliente
+  (aprovação) ou o motivo (reprovação), tudo cortado em 400 caracteres. Nunca fee, dados de admissão, notas internas nem quem
+  decidiu por dentro. Link: o perfil do candidato (`candidato_id`).
+- **Popup** (`GET /api/decisoes-cliente-popup`, lido uma vez ao entrar no painel, sem polling): avisos NOMINAIS do próprio
+  usuário (`user_id` da sessão) dos últimos 30 dias que ele ainda não viu (`notificacao_popup_vistos`, por aviso e usuário), só
+  dos eventos com o canal popup ligado (sem linha ou erro de leitura = não mostra). Sem lista própria: quem vê é o responsável
+  e a lista do sino. Clicar no cartão marca só aquele e abre o candidato; Ok e X marcam os listados
+  (`POST /api/decisoes-cliente-popup/marcar-visto`, só linhas do próprio usuário). Não marca a notificação do sino como lida.
+  A linha geral da unidade nunca gera popup.
+- **Duplicidade:** o `UPDATE` do encaminhamento só grava com `status = 'aguardando'`; quem perde a corrida recebe o mesmo 409,
+  sem aviso nem e-mail.
+- O sino interno do painel (polling de 30 s e Realtime) não mudou: o aviso novo chega por ele como os outros.
+
 ## Ajustes pós-teste (tela de Avisos e portal)
 
 - **Erro inline na tela de Avisos.** Ações que falham na API (ativar/desativar, remover, adicionar, ligar/desligar canal,

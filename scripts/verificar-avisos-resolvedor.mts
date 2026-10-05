@@ -6,11 +6,15 @@ import {
   type DadosAviso, type FonteAvisos, type LinhaDestinatario, type PerfilAnalista,
 } from "../src/lib/avisosResolucao.ts";
 import { PADRAO_AVISOS, PADRAO_EMAIL_CLIENTE, grupoTemPadrao, montarPayloadRestauracao } from "../src/lib/avisosPadrao.ts";
-import { EVENTOS_EMAIL_CLIENTE, eventoEmailCliente, FRASE_EMAIL_CLIENTE, APOIO_EMAILS_CLIENTE, EVENTOS_POR_GRUPO, EVENTOS_SEM_LISTA, eventoSemLista, FRASE_SEM_LISTA, ROTULO_GRUPO, grupoDoEvento, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
+import { EVENTOS_DECISAO_CLIENTE, eventoDecisaoCliente, canalSemListaPermitido, canalSoInterruptor, ligadoSemLinha, EVENTOS_EMAIL_CLIENTE, eventoEmailCliente, FRASE_EMAIL_CLIENTE, APOIO_EMAILS_CLIENTE, EVENTOS_POR_GRUPO, EVENTOS_SEM_LISTA, eventoSemLista, FRASE_SEM_LISTA, ROTULO_GRUPO, grupoDoEvento, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
 import {
   canalClienteLigado, emailClienteLigadoRegra, montarDestinatariosEmailCliente, inicioJanelaAvisos, avisoVisivelParaUsuario, linkPortalValido, chaveDedupAviso, textoAvisoIndicacaoDecidida,
   haQuantoTempo, textoAvisoSolicitacaoDecidida, textoAvisoPedidoDecidido, tipoPedidoDaAcao, chaveDedupSolicitacaoDecidida, chaveDedupPedidoDecidido, textoAvisoCandidatoEnviado, textoAvisoEntrevista, decidirAvisoCandidatoEnviado, naoLidosDoSino, pendentesDoPopup, limitarMensagemAviso, DIAS_VISIVEL_AVISO_CLIENTE, type AvisoPortal,
 } from "../src/lib/avisoClienteRegras.ts";
+import {
+  EVENTO_POR_DECISAO, TIPO_NOTIFICACAO_POR_DECISAO, TIPOS_NOTIFICACAO_DECISAO, EVENTO_POR_TIPO_NOTIFICACAO, sinoDecisaoLigado, popupDecisaoLigado, textoAvisoDecisaoCliente,
+  userIdsDestinoDecisao, inicioJanelaPopupDecisao, tiposComPopupLigado, DIAS_JANELA_POPUP_DECISAO,
+} from "../src/lib/decisaoClienteCandidato.ts";
 import { dataEntrevistaParaCliente, horaEntrevistaReal, decidirAvisoEntrevista } from "../src/lib/horaEntrevista.ts";
 import { mensagemErroAcao, MSG_ULTIMO_DESTINATARIO, MSG_ACAO_PADRAO } from "../src/lib/avisosErroAcao.ts";
 import { resumirPedidoCliente, type LinhaPedidoCliente } from "../src/lib/pedidoClienteResumo.ts";
@@ -440,7 +444,8 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     for (const [ev, canais] of Object.entries(PADRAO_AVISOS.portal_cliente)) for (const [canal, c] of Object.entries(canais)) {
       const chaves = c.destinatarios.map((d) => (d.tipo_destinatario === "usuario" ? d.usuario_id : d.email.toLowerCase()));
       assert.equal(new Set(chaves).size, chaves.length, `${ev}/${canal} duplicado`);
-      if (c.ativo) assert.ok(c.destinatarios.length > 0, `${ev}/${canal} ligado sem destinatário`);
+      // Exceção deliberada: sino e popup dos avisos de decisão do cliente podem ficar ligados com a lista vazia.
+      if (c.ativo && !canalSemListaPermitido(ev, canal)) assert.ok(c.destinatarios.length > 0, `${ev}/${canal} ligado sem destinatário`);
     }
   });
   await caso("3 restauração Vagas recria o popup de solicitacao_vaga; usuário inativo ignorado e informado; vazio = 409", () => {
@@ -981,6 +986,135 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     assert.deepEqual(desligados, ["email_cliente_vaga_aprovada", "email_cliente_vaga_status_decidido"]);
     assert.equal(Object.values(PADRAO_EMAIL_CLIENTE).filter(Boolean).length, 5);
     assert.equal(grupoTemPadrao("avisos_cliente"), false);
+  });
+
+  // ── Decisão do cliente (aprovou/reprovou candidato): sino e popup internos ──
+  const BASE_DEC = { cliente: "Maxsoy", candidato: "Maria Souza", vagaTitulo: "Auxiliar de Produção" };
+  await caso("decisão do cliente, interruptor do SINO: sem linha = ligado; erro = ligado; só ativo=false desliga", () => {
+    assert.equal(sinoDecisaoLigado({ linha: null, erro: false }), true);
+    assert.equal(sinoDecisaoLigado({ linha: undefined, erro: false }), true);
+    assert.equal(sinoDecisaoLigado({ linha: null, erro: true }), true);
+    assert.equal(sinoDecisaoLigado({ linha: { ativo: false }, erro: true }), true, "erro vale mais que a linha");
+    assert.equal(sinoDecisaoLigado({ linha: { ativo: true }, erro: false }), true);
+    assert.equal(sinoDecisaoLigado({ linha: { ativo: false }, erro: false }), false);
+    assert.equal(sinoDecisaoLigado({ linha: { ativo: null }, erro: false }), true);
+  });
+  await caso("decisão do cliente, interruptor do POPUP: sem linha = NÃO mostra; erro = não mostra; só ativo=true liga", () => {
+    assert.equal(popupDecisaoLigado({ linha: null, erro: false }), false);
+    assert.equal(popupDecisaoLigado({ linha: undefined, erro: false }), false);
+    assert.equal(popupDecisaoLigado({ linha: null, erro: true }), false);
+    assert.equal(popupDecisaoLigado({ linha: { ativo: true }, erro: true }), false, "erro vale mais que a linha");
+    assert.equal(popupDecisaoLigado({ linha: { ativo: true }, erro: false }), true);
+    assert.equal(popupDecisaoLigado({ linha: { ativo: false }, erro: false }), false);
+    assert.equal(popupDecisaoLigado({ linha: { ativo: null }, erro: false }), false);
+  });
+  await caso("decisão do cliente: o resolvedor dá desligado só com ativo=false; sem linha ou erro cai em legado (= sino ligado)", async () => {
+    for (const ev of Object.values(EVENTO_POR_DECISAO)) {
+      assert.equal((await resolverComFonte(fonte({ novo: { canalAtivo: false, linhas: [usuario("u1")] } }), ev, "sino")).modo, "desligado", ev);
+      const semLinha = await resolverComFonte(fonte({ novo: null, antigo: { canalAtivo: null, linhas: [] } }), ev, "sino");
+      assert.equal(semLinha.modo, "legado"); assert.equal(semLinha.falhou, false);
+      const erro = await resolverComFonte(fonte({ novoErro: true, antigo: null }), ev, "sino");
+      assert.equal(erro.modo, "legado"); assert.equal(erro.falhou, true);
+      const lista = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [usuario("u1"), usuario("u2")] } }), ev, "sino");
+      assert.equal(lista.modo, "configurado"); assert.deepEqual(lista.userIds, ["u1", "u2"]);
+    }
+  });
+  await caso("decisão do cliente: responsável + lista sem duplicar; sem responsável; sem os dois = vazio (linha geral)", () => {
+    assert.deepEqual(userIdsDestinoDecisao("resp", ["a", "b"]), ["resp", "a", "b"]);
+    assert.deepEqual(userIdsDestinoDecisao("resp", ["a", "resp", "b", "a"]), ["resp", "a", "b"], "quem está nos dois não repete");
+    assert.deepEqual(userIdsDestinoDecisao(null, ["a"]), ["a"]); assert.deepEqual(userIdsDestinoDecisao(undefined, ["a", ""]), ["a"]);
+    assert.deepEqual(userIdsDestinoDecisao("resp", []), ["resp"]);
+    assert.deepEqual(userIdsDestinoDecisao(null, []), []); assert.deepEqual(userIdsDestinoDecisao("", []), []);
+  });
+  await caso("decisão do cliente, texto: aprovação com comentário e reprovação com motivo", () => {
+    const a = textoAvisoDecisaoCliente({ decisao: "aprovado", ...BASE_DEC, feedback: "  Ótimo perfil, pode contratar  " });
+    assert.equal(a.titulo, "Candidato aprovado pelo cliente");
+    assert.equal(a.mensagem, "Maxsoy aprovou a candidatura de Maria Souza para a vaga Auxiliar de Produção — Comentário do cliente: Ótimo perfil, pode contratar");
+    const r = textoAvisoDecisaoCliente({ decisao: "reprovado", ...BASE_DEC, feedback: "Perfil não aderiu à cultura da empresa" });
+    assert.equal(r.titulo, "Candidato reprovado pelo cliente");
+    assert.equal(r.mensagem, "Maxsoy reprovou a candidatura de Maria Souza para a vaga Auxiliar de Produção — Motivo: Perfil não aderiu à cultura da empresa");
+  });
+  await caso("decisão do cliente, texto: dado nulo só encurta (sem vaga, sem feedback, nomes vazios)", () => {
+    assert.equal(textoAvisoDecisaoCliente({ decisao: "aprovado", cliente: "Maxsoy", candidato: "Maria" }).mensagem, "Maxsoy aprovou a candidatura de Maria");
+    assert.equal(textoAvisoDecisaoCliente({ decisao: "reprovado", cliente: "Maxsoy", candidato: "Maria", vagaTitulo: "  ", feedback: "" }).mensagem, "Maxsoy reprovou a candidatura de Maria");
+    assert.equal(textoAvisoDecisaoCliente({ decisao: "aprovado", cliente: null, candidato: undefined, vagaTitulo: null, feedback: null }).mensagem, "Cliente aprovou a candidatura de Candidato");
+    assert.equal(textoAvisoDecisaoCliente({ decisao: "reprovado" }).mensagem, "Cliente reprovou a candidatura de Candidato");
+  });
+  await caso("decisão do cliente, texto: comentário/motivo longo é resumido (mesmo corte de limitarMensagemAviso)", () => {
+    const longo = "x".repeat(900);
+    for (const decisao of ["aprovado", "reprovado"] as const) {
+      const t = textoAvisoDecisaoCliente({ decisao, ...BASE_DEC, feedback: longo });
+      assert.equal(t.mensagem.length, 400); assert.ok(t.mensagem.endsWith("…"));
+      const completo = `Maxsoy ${decisao === "aprovado" ? "aprovou" : "reprovou"} a candidatura de Maria Souza para a vaga Auxiliar de Produção — ${decisao === "aprovado" ? "Comentário do cliente" : "Motivo"}: ${longo}`;
+      assert.equal(t.mensagem, limitarMensagemAviso(completo), "mesmo corte da função do bloco de avisos ao cliente");
+    }
+    assert.equal(limitarMensagemAviso("a".repeat(400)).length, 400);
+  });
+  await caso("decisão do cliente, texto: nada interno (fee, admissão, notas, quem decidiu)", () => {
+    const entrada = { decisao: "aprovado", ...BASE_DEC, feedback: "ok", fee_rs_percentual: 15, admissao_salario: 3500, admissao_centro_custo: "CC-77", admissao_gestor: "Gestor Secreto", observacoes: "nota interna X", decidido_por: "Analista Interno", responsavel: "Responsável Y" };
+    for (const decisao of ["aprovado", "reprovado"] as const) {
+      const texto = JSON.stringify(textoAvisoDecisaoCliente({ ...entrada, decisao } as never));
+      for (const proibido of ["15", "3500", "CC-77", "Gestor Secreto", "nota interna", "Analista Interno", "Responsável Y"]) assert.ok(!texto.includes(proibido), `${decisao}: ${proibido}`);
+    }
+  });
+  await caso("decisão do cliente: tipos de notificação e evento de cada decisão (os tipos antigos se mantêm)", () => {
+    assert.deepEqual(TIPO_NOTIFICACAO_POR_DECISAO, { aprovado: "aprovacao_cliente", reprovado: "reprovacao_cliente" });
+    assert.deepEqual([...TIPOS_NOTIFICACAO_DECISAO].sort(), ["aprovacao_cliente", "reprovacao_cliente"]);
+    assert.deepEqual(EVENTO_POR_DECISAO, { aprovado: "portal_candidato_aprovado", reprovado: "portal_candidato_reprovado" });
+    assert.equal(EVENTO_POR_TIPO_NOTIFICACAO.aprovacao_cliente, "portal_candidato_aprovado"); assert.equal(EVENTO_POR_TIPO_NOTIFICACAO.reprovacao_cliente, "portal_candidato_reprovado");
+  });
+  await caso("decisão do cliente, popup: janela de 30 dias e quais tipos aparecem conforme o canal popup de cada evento", () => {
+    assert.equal(DIAS_JANELA_POPUP_DECISAO, 30);
+    assert.equal(inicioJanelaPopupDecisao(new Date("2026-10-20T12:00:00Z")), "2026-09-20T12:00:00.000Z");
+    assert.deepEqual(tiposComPopupLigado({ aprovado: false, reprovado: false }), []);
+    assert.deepEqual(tiposComPopupLigado({ aprovado: true, reprovado: false }), ["aprovacao_cliente"]);
+    assert.deepEqual(tiposComPopupLigado({ aprovado: false, reprovado: true }), ["reprovacao_cliente"]);
+    assert.deepEqual(tiposComPopupLigado({ aprovado: true, reprovado: true }).sort(), ["aprovacao_cliente", "reprovacao_cliente"]);
+  });
+  await caso("decisão do cliente, catálogo: os 2 eventos têm e-mail, sino e popup; popup sem lista; e-mail inalterado", () => {
+    assert.deepEqual([...EVENTOS_DECISAO_CLIENTE], ["portal_candidato_aprovado", "portal_candidato_reprovado"]);
+    for (const ev of EVENTOS_DECISAO_CLIENTE) {
+      assert.equal(eventoDecisaoCliente(ev), true, ev); assert.equal(grupoDoEvento(ev), "portal_cliente", ev);
+      assert.deepEqual([...canaisDoEvento(ev)], ["email", "sino", "popup"], ev);
+      assert.equal(canalSemListaPermitido(ev, "sino"), true); assert.equal(canalSemListaPermitido(ev, "popup"), true); assert.equal(canalSemListaPermitido(ev, "email"), false);
+      assert.equal(canalSoInterruptor(ev, "popup"), true); assert.equal(canalSoInterruptor(ev, "sino"), false); assert.equal(canalSoInterruptor(ev, "email"), false);
+      assert.equal(eventoSemLista(ev), false, "continua com lista (e-mail e sino)");
+      assert.match(NOTA_EVENTO[ev], /responsável pelo candidato SEMPRE/); assert.match(NOTA_EVENTO[ev], /Popup/);
+      assert.match(descricaoPadraoDoSistema("portal_cliente", "sino", ev), /só o responsável pelo candidato/);
+      assert.match(descricaoPadraoDoSistema("portal_cliente", "popup", ev), /nenhuma|ninguém vê o popup/);
+    }
+    assert.equal(descricaoPadraoDoSistema("portal_cliente", "email", "portal_candidato_aprovado"), "Padrão do sistema: Olver e RH (olver@ e rh@) recebem.");
+    assert.equal(descricaoPadraoDoSistema("portal_cliente", "email", "portal_candidato_reprovado"), "Sem destinatários: ninguém recebe.");
+    assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8, "nenhum evento novo no grupo");
+  });
+  await caso("decisão do cliente, tela: sem linha o sino e o e-mail aparecem ligados e o popup desligado (coerente com o código)", () => {
+    for (const ev of EVENTOS_DECISAO_CLIENTE) { assert.equal(ligadoSemLinha(ev, "email"), true); assert.equal(ligadoSemLinha(ev, "sino"), true); assert.equal(ligadoSemLinha(ev, "popup"), false); }
+    assert.equal(ligadoSemLinha("indicacao_decidida_cliente", "sino"), false, "avisos ao cliente: sem linha = desligado");
+    assert.equal(ligadoSemLinha("email_cliente_vaga_aprovada", "email"), true);
+    assert.equal(ligadoSemLinha("vaga_criada", "email"), true); assert.equal(ligadoSemLinha("vaga_criada", "sino"), true);
+  });
+  await caso("decisão do cliente, padrão: sino e popup ligados com lista vazia; e-mail igual a antes (reprovado desligado)", () => {
+    const p = PADRAO_AVISOS.portal_cliente;
+    for (const ev of EVENTOS_DECISAO_CLIENTE) {
+      assert.deepEqual(p[ev].sino, { ativo: true, destinatarios: [] }); assert.deepEqual(p[ev].popup, { ativo: true, destinatarios: [] });
+      assert.equal(p[ev].email!.destinatarios.length, 2);
+    }
+    assert.equal(p.portal_candidato_aprovado.email!.ativo, true); assert.equal(p.portal_candidato_reprovado.email!.ativo, false);
+  });
+  await caso("decisão do cliente, restauração: sino e popup vazios NÃO são 409 e levam permite_vazio; as outras regras seguem", () => {
+    const r = montarPayloadRestauracao("portal_cliente", new Set(PADRAO_AVISOS.portal_cliente.indicacao_candidato_recebida.email!.destinatarios.flatMap((d) => (d.tipo_destinatario === "usuario" ? [d.usuario_id] : []))));
+    assert.deepEqual(r.semDestinatario, []);
+    const marcados: string[] = [];
+    for (const e of r.payload.eventos) for (const c of e.canais) {
+      // a cópia em avisosPadrao e a regra do catálogo têm de dar o mesmo resultado (drift = falha aqui)
+      assert.equal(c.permite_vazio === true, canalSemListaPermitido(e.evento, c.canal), `${e.evento}/${c.canal}`);
+      if (c.permite_vazio) marcados.push(`${e.evento}/${c.canal}`);
+    }
+    assert.deepEqual(marcados.sort(), ["portal_candidato_aprovado/popup", "portal_candidato_aprovado/sino", "portal_candidato_reprovado/popup", "portal_candidato_reprovado/sino"]);
+    const vazio = montarPayloadRestauracao("portal_cliente", new Set());
+    assert.ok(!vazio.semDestinatario.some((x) => EVENTOS_DECISAO_CLIENTE.includes(x.evento as never) && x.canal !== "email"));
+    assert.ok(!vazio.semDestinatario.some((x) => x.evento === "portal_candidato_aprovado" && x.canal === "email"), "e-mail aprovado usa endereços livres (olver@ e rh@): não depende de usuário ativo");
+    assert.ok(vazio.semDestinatario.some((x) => x.evento === "indicacao_candidato_recebida" && x.canal === "popup"));
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);

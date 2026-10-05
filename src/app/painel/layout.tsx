@@ -15,6 +15,7 @@ import PopupVencimentoContratoMot from "@/components/PopupVencimentoContratoMot"
 import PopupSolicitacaoVagaPendente from "@/components/PopupSolicitacaoVagaPendente";
 import PopupIndicacaoDiretaPendente from "@/components/PopupIndicacaoDiretaPendente";
 import PopupPedidosClientePendentes from "@/components/PopupPedidosClientePendentes";
+import PopupDecisoesClienteCandidato from "@/components/PopupDecisoesClienteCandidato";
 import NotificacoesProvider from "@/components/NotificacoesProvider";
 import UsuarioLogadoProvider from "@/components/UsuarioLogadoProvider";
 import { apelidoDoNomeCompleto } from "@/lib/responsaveis";
@@ -151,6 +152,7 @@ export default async function PainelLayout({
         <PopupSolicitacaoVagaPendente />
         <PopupIndicacaoDiretaPendente />
         <PopupPedidosClientePendentes />
+        <PopupDecisoesClienteCandidato />
       </div>
     </NotificacoesProvider>
     </UsuarioLogadoProvider>
