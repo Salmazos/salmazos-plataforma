@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { parseSalarioFixo } from "@/lib/constants";
+import { avisarFeeRSNaoConfigurado } from "@/lib/avisarFeeRS";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -72,14 +73,13 @@ export async function gerarCobrancaRSSeAplicavel(
     // "taxa não configurada") — reaproveita o mesmo tipo de notificação broadcast, só
     // com mensagem específica pra esse contexto (cobrança não pôde ser gerada).
     try {
-      await svc.from("notificacoes_analista").insert({
-        tipo: "fee_rs_nao_configurado",
+      await avisarFeeRSNaoConfigurado(svc, {
         titulo: "Taxa de R&S não configurada",
         mensagem: `A vaga "${vaga.titulo}" fechou com candidato contratado, mas não tem taxa (%) configurada — o rascunho de cobrança R&S não pôde ser gerado automaticamente.`,
-        user_id: null,
-        candidato_id: row.candidato_id,
-        vaga_id: vaga.id,
-        unidade_id: vaga.unidade_id,
+        candidatoId: row.candidato_id,
+        vagaId: vaga.id,
+        unidadeId: vaga.unidade_id,
+        semRepetirHoras: 24,
       });
     } catch (err) {
       console.error("[gerarCobrancaRSSeAplicavel] Erro ao notificar taxa ausente:", err);
@@ -218,14 +218,13 @@ export async function gerarCobrancaCancelamentoRSSeAplicavel(
     // Mesmo padrão de notificação já usado pra "taxa não configurada" no fluxo de
     // contratação, com mensagem equivalente pra este contexto.
     try {
-      await svc.from("notificacoes_analista").insert({
-        tipo: "fee_rs_nao_configurado",
+      await avisarFeeRSNaoConfigurado(svc, {
         titulo: "Taxa de cancelamento R&S não configurada",
         mensagem: `A vaga "${vaga.titulo}" foi cancelada, mas não tem taxa de cancelamento (%) configurada — o rascunho de cobrança de cancelamento não pôde ser gerado automaticamente.`,
-        user_id: null,
-        candidato_id: null,
-        vaga_id: vaga.id,
-        unidade_id: vaga.unidade_id,
+        candidatoId: null,
+        vagaId: vaga.id,
+        unidadeId: vaga.unidade_id,
+        semRepetirHoras: 24,
       });
     } catch (err) {
       console.error("[gerarCobrancaCancelamentoRSSeAplicavel] Erro ao notificar taxa ausente:", err);

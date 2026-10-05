@@ -131,12 +131,13 @@ export async function popupEventoLigado(svc: ServiceClient, evento: string): Pro
 // false (melhor avisar do que calar).
 export async function jaExisteAvisoRecente(
   svc: ServiceClient,
-  o: { tipo: string; candidatoId?: string | null; vagaId?: string | null; desde: string }
+  o: { tipo: string; candidatoId?: string | null; vagaId?: string | null; titulo?: string | null; desde: string }
 ): Promise<boolean> {
   try {
     let q = svc.from("notificacoes_analista").select("id").eq("tipo", o.tipo).gte("created_at", o.desde).limit(1);
     if (o.candidatoId) q = q.eq("candidato_id", o.candidatoId);
     if (o.vagaId) q = q.eq("vaga_id", o.vagaId);
+    if (o.titulo) q = q.eq("titulo", o.titulo);
     const { data, error } = await q;
     if (error) return false;
     return (data ?? []).length > 0;

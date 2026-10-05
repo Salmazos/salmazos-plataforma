@@ -10,6 +10,7 @@ export const EVENTO_FUNCIONARIO_NAO_CRIADO = "funcionario_nao_criado";
 export const EVENTO_LEMBRETE_COMERCIAL = "lembrete_comercial";
 export const EVENTO_SUPERVISAO_ATRASADA = "supervisao_cliente_atrasada";
 export const EVENTO_CONTA_HORTOLANDIA_ATRASADA = "conta_receber_hortolandia_atrasada";
+export const EVENTO_FEE_RS_NAO_CONFIGURADO = "fee_rs_nao_configurado";
 
 // `notificacoes_analista.tipo` de SEMPRE: os eventos são novos, os tipos gravados não mudaram.
 export const TIPO_TRANSFERENCIA_RESPONSAVEL = "transferencia_responsavel";
@@ -18,6 +19,7 @@ export const TIPO_FUNCIONARIO_NAO_CRIADO = "funcionario_nao_criado_automaticamen
 export const TIPO_LEMBRETE_COMERCIAL = "lembrete_comercial";
 export const TIPO_SUPERVISAO_ATRASADA = "supervisao_cliente_atrasada";
 export const TIPO_CONTA_HORTOLANDIA_ATRASADA = "conta_receber_hortolandia_atrasada";
+export const TIPO_FEE_RS_NAO_CONFIGURADO = "fee_rs_nao_configurado";
 
 // "sem_destinatario": o canal estava ligado mas não havia a quem entregar.
 export type ResultadoCanalAviso = "enviado" | "desligado" | "falhou" | "sem_destinatario";

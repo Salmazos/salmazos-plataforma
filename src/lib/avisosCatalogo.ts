@@ -61,6 +61,12 @@ export const AVISOS_RESTANTES: Record<string, { rotulo: string; canais: readonly
       popup: "Ligado: o popup de faturamento vencido abre para quem tem acesso ao módulo. Desligado, ou sem esta configuração: ninguém vê o popup.",
     },
   },
+  fee_rs_nao_configurado: {
+    rotulo: "Taxa de R&S não configurada (vaga sem fee)",
+    canais: ["sino"],
+    nota: "Dispara quando uma vaga de Recrutamento e Seleção está sem a taxa (%) configurada: na aprovação do cliente pelo portal, ao gerar a cobrança de uma contratação e ao gerar a cobrança de um cancelamento. Só avisa: o cliente continua aprovando normalmente e o fee não é calculado. Sino: aviso geral para a equipe da unidade (como sempre), além das pessoas da lista (a lista pode ficar vazia); na geração de cobrança o mesmo aviso não se repete em 24 horas; desligado, ninguém recebe. Não envia e-mail nem popup.",
+    padrao: { sino: "Ligado, sem ninguém na lista: aviso geral para a equipe da unidade, como sempre. Desligado: ninguém." },
+  },
 };
 export const EVENTOS_AVISOS_RESTANTES: string[] = Object.keys(AVISOS_RESTANTES);
 export const eventoAvisoRestante = (evento: string): boolean => Object.prototype.hasOwnProperty.call(AVISOS_RESTANTES, evento);

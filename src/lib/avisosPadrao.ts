@@ -175,6 +175,7 @@ export const PADRAO_AVISOS: Record<GrupoComPadrao, Record<string, PadraoEvento>>
       sino: { ativo: true, destinatarios: [] },
       popup: { ativo: true, destinatarios: [] },
     },
+    fee_rs_nao_configurado: { sino: { ativo: true, destinatarios: [] } },
     conta_receber_hortolandia_atrasada: { sino: { ativo: true, destinatarios: [] }, popup: { ativo: true, destinatarios: [] } },
   },
 };
@@ -195,6 +196,7 @@ const EVENTOS_SINO_COM_RESPONSAVEL: readonly string[] = [
   "lembrete_comercial",
   "supervisao_cliente_atrasada",
   "conta_receber_hortolandia_atrasada",
+  "fee_rs_nao_configurado",
 ];
 
 export function grupoTemPadrao(grupo: string): grupo is GrupoComPadrao {

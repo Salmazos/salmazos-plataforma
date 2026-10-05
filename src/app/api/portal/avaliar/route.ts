@@ -9,6 +9,7 @@ import { resolverDestinatarios } from "@/lib/avisos";
 import { escaparHtml } from "@/lib/emailPacoteContabilidade";
 import { emailsOuPadrao, emailsSomenteConfigurado } from "@/lib/avisosResolucao";
 import { avisarDecisaoClienteCandidato } from "@/lib/avisarDecisaoClienteCandidato";
+import { avisarFeeRSNaoConfigurado } from "@/lib/avisarFeeRS";
 
 
 export async function PATCH(request: NextRequest) {
@@ -220,16 +221,14 @@ export async function PATCH(request: NextRequest) {
       // operacional que interessa à diretoria como um todo, não só a quem está com o caso.
       if (feeRsAusente) {
         try {
-          await service.from("notificacoes_analista").insert({
-            tipo: "fee_rs_nao_configurado",
+          await avisarFeeRSNaoConfigurado(service, {
             titulo: "Taxa de R&S não configurada",
             mensagem: vagaTitulo
               ? `${candidatoNomeNotif} foi aprovado pelo cliente na vaga "${vagaTitulo}" (Recrutamento e Seleção), mas a vaga não tem taxa (%) configurada — o fee não foi calculado.`
               : `${candidatoNomeNotif} foi aprovado pelo cliente numa vaga de Recrutamento e Seleção sem taxa (%) configurada — o fee não foi calculado.`,
-            user_id: null,
-            candidato_id: enc.candidato_id,
-            vaga_id: enc.vaga_id,
-            unidade_id: cliNotif?.unidade_id ?? null,
+            candidatoId: enc.candidato_id,
+            vagaId: enc.vaga_id,
+            unidadeId: cliNotif?.unidade_id ?? null,
           });
         } catch (feeNotifErr) {
           console.error("[avaliar] Erro ao criar notificação de fee ausente:", feeNotifErr);
