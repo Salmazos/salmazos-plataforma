@@ -33,6 +33,34 @@ export const AVISOS_RESTANTES: Record<string, { rotulo: string; canais: readonly
       email: "Sem ninguém na lista: o responsável pelo candidato recebe (sem responsável, todos os analistas da unidade), como sempre. Com lista: o responsável, quando existe, mais a lista.",
     },
   },
+  lembrete_comercial: {
+    rotulo: "Lembrete do Comercial (empresas esperando retorno)",
+    canais: ["sino", "popup"],
+    nota: "Aviso diário (cron das 6h) para cada vendedor com lembrete do Comercial vencido ou de hoje: um aviso por vendedor por dia, que se repete todos os dias enquanto houver pendente e some quando o vendedor conclui, adia ou cancela. Sino: com o canal ligado o PRÓPRIO vendedor sempre é avisado; quem estiver na lista (por exemplo a gestão comercial) recebe o mesmo aviso com o nome do vendedor (a lista pode ficar vazia). Popup: só interruptor; o popup do vendedor lista os lembretes vencidos quando ele entra no painel, uma vez por dia. Desligado, ninguém recebe aquele canal.",
+    padrao: {
+      sino: "Ligado, sem ninguém na lista: só o próprio vendedor é avisado. Desligado: ninguém.",
+      popup: "Ligado: o vendedor vê o popup dos lembretes vencidos ao entrar no painel (uma vez por dia). Desligado, ou sem esta configuração: ninguém vê o popup.",
+    },
+  },
+  supervisao_cliente_atrasada: {
+    rotulo: "Supervisão de cliente atrasada",
+    canais: ["sino", "email", "popup"],
+    nota: "Aviso diário (cron das 6h) quando a última supervisão de um cliente com meta passou da frequência definida (ou nunca houve), repetido a cada 2 dias enquanto continuar atrasado. Sino: com o canal ligado a diretoria/superuser e o supervisor responsável do cliente sempre são avisados, além das pessoas da lista (a lista pode ficar vazia). E-mail: sem ninguém na lista vale o padrão (só o supervisor responsável); com lista, só a lista. Se o canal falhar para todos, o aviso é tentado de novo na execução seguinte. Popup: só interruptor; é o popup de supervisões pendentes, uma vez por dia por usuário. Desligado, ninguém recebe aquele canal.",
+    padrao: {
+      sino: "Ligado, sem ninguém na lista: diretoria/superuser e o supervisor responsável são avisados, como sempre. Desligado: ninguém.",
+      email: "Sem ninguém na lista: só o supervisor responsável do cliente recebe, como sempre. Com lista: só a lista.",
+      popup: "Ligado: o popup de supervisões pendentes abre uma vez por dia para quem tem acesso. Desligado, ou sem esta configuração: ninguém vê o popup.",
+    },
+  },
+  conta_receber_hortolandia_atrasada: {
+    rotulo: "Faturamento atrasado (contas a receber das unidades)",
+    canais: ["sino", "popup"],
+    nota: "Aviso diário (cron das 6h) quando um lançamento de Faturamento Unidades fica vencido e pendente: um aviso só por lançamento, nunca repetido. Sino: com o canal ligado a diretoria/superuser sempre é avisada, além das pessoas da lista (a lista pode ficar vazia); a mensagem traz cliente, NF e vencimento, nunca o valor. Sem ninguém a quem avisar, o aviso é tentado de novo no dia seguinte. Popup: só interruptor; é o popup de faturamento vencido, que o usuário dispensa uma vez por lançamento. Desligado, ninguém recebe aquele canal.",
+    padrao: {
+      sino: "Ligado, sem ninguém na lista: só a diretoria/superuser é avisada, como sempre. Desligado: ninguém.",
+      popup: "Ligado: o popup de faturamento vencido abre para quem tem acesso ao módulo. Desligado, ou sem esta configuração: ninguém vê o popup.",
+    },
+  },
 };
 export const EVENTOS_AVISOS_RESTANTES: string[] = Object.keys(AVISOS_RESTANTES);
 export const eventoAvisoRestante = (evento: string): boolean => Object.prototype.hasOwnProperty.call(AVISOS_RESTANTES, evento);

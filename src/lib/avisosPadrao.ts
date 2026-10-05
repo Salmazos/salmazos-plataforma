@@ -169,6 +169,13 @@ export const PADRAO_AVISOS: Record<GrupoComPadrao, Record<string, PadraoEvento>>
       email: { ativo: true, destinatarios: [EMAIL_REBECCA, EMAIL_ANDREZA, EMAIL_GIOVANNI] },
       sino: { ativo: true, destinatarios: [] },
     },
+    lembrete_comercial: { sino: { ativo: true, destinatarios: [] }, popup: { ativo: true, destinatarios: [] } },
+    supervisao_cliente_atrasada: {
+      email: { ativo: true, destinatarios: [EMAIL_REBECCA, EMAIL_ANDREZA, EMAIL_GIOVANNI] },
+      sino: { ativo: true, destinatarios: [] },
+      popup: { ativo: true, destinatarios: [] },
+    },
+    conta_receber_hortolandia_atrasada: { sino: { ativo: true, destinatarios: [] }, popup: { ativo: true, destinatarios: [] } },
   },
 };
 
@@ -185,6 +192,9 @@ const EVENTOS_SINO_COM_RESPONSAVEL: readonly string[] = [
   "candidato_curriculo_atualizado",
   "funcionario_nao_criado",
   "lembrete_agendamento_pendente_analista",
+  "lembrete_comercial",
+  "supervisao_cliente_atrasada",
+  "conta_receber_hortolandia_atrasada",
 ];
 
 export function grupoTemPadrao(grupo: string): grupo is GrupoComPadrao {

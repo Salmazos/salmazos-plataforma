@@ -1,3 +1,4 @@
+import { popupEventoLigado } from "@/lib/avisoConfiguravel";
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoSupervisao } from "@/lib/supervisaoAuth";
@@ -32,6 +33,9 @@ export async function GET() {
   if (!acesso) return NextResponse.json({ data: [], ja_visto: true });
 
   const svc = createServiceClient();
+
+  // Canal popup do evento supervisao_cliente_atrasada (Configurações > Avisos): sem linha ou erro de leitura = não mostra.
+  if (!(await popupEventoLigado(svc, "supervisao_cliente_atrasada"))) return NextResponse.json({ data: [], ja_visto: true });
 
   let metasQuery = svc
     .from("clientes_meta_supervisao")

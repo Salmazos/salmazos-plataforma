@@ -25,7 +25,16 @@ insert into public.aviso_eventos (evento, grupo, descricao, canais_suportados) v
    array['sino']),
   ('lembrete_agendamento_pendente_analista', 'vagas',
    'Lembrete ao analista enquanto o cliente não marca a entrevista: avisa o responsável do candidato e a lista.',
-   array['sino', 'email'])
+   array['sino', 'email']),
+  ('lembrete_comercial', 'vagas',
+   'Lembrete diário do Comercial (empresas esperando retorno): avisa o vendedor e a lista; popup do vendedor.',
+   array['sino', 'popup']),
+  ('supervisao_cliente_atrasada', 'vagas',
+   'Supervisão de cliente atrasada: avisa diretoria, supervisor responsável e a lista; e-mail ao supervisor.',
+   array['sino', 'email', 'popup']),
+  ('conta_receber_hortolandia_atrasada', 'vagas',
+   'Faturamento Unidades atrasado (conta a receber vencida): avisa a diretoria e a lista.',
+   array['sino', 'popup'])
 on conflict (evento) do nothing;
 
 -- ── 2. Liga/desliga inicial: todos os canais de cada evento ligados ──────────
@@ -35,13 +44,20 @@ insert into public.aviso_eventos_canais (evento, canal, ativo) values
   ('candidato_curriculo_atualizado', 'sino', true),
   ('funcionario_nao_criado', 'sino', true),
   ('lembrete_agendamento_pendente_analista', 'sino', true),
-  ('lembrete_agendamento_pendente_analista', 'email', true)
+  ('lembrete_agendamento_pendente_analista', 'email', true),
+  ('lembrete_comercial', 'sino', true),
+  ('lembrete_comercial', 'popup', true),
+  ('supervisao_cliente_atrasada', 'sino', true),
+  ('supervisao_cliente_atrasada', 'email', true),
+  ('supervisao_cliente_atrasada', 'popup', true),
+  ('conta_receber_hortolandia_atrasada', 'sino', true),
+  ('conta_receber_hortolandia_atrasada', 'popup', true)
 on conflict (evento, canal) do nothing;
 
 -- ── Conferência (somente leitura) ────────────────────────────────────────────
--- Esperado: 4 eventos, grupo vagas, com os canais_suportados acima
---   select evento, grupo, canais_suportados from public.aviso_eventos where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado', 'lembrete_agendamento_pendente_analista') order by evento;
--- Esperado: 5 linhas, todas ativo = true
---   select evento, canal, ativo from public.aviso_eventos_canais where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado', 'lembrete_agendamento_pendente_analista') order by evento, canal;
+-- Esperado: 7 eventos, grupo vagas, com os canais_suportados acima
+--   select evento, grupo, canais_suportados from public.aviso_eventos where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado', 'lembrete_agendamento_pendente_analista', 'lembrete_comercial', 'supervisao_cliente_atrasada', 'conta_receber_hortolandia_atrasada') order by evento;
+-- Esperado: 12 linhas, todas ativo = true
+--   select evento, canal, ativo from public.aviso_eventos_canais where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado', 'lembrete_agendamento_pendente_analista', 'lembrete_comercial', 'supervisao_cliente_atrasada', 'conta_receber_hortolandia_atrasada') order by evento, canal;
 -- Esperado: 0 (sem destinatários = e-mail no modo legado; sino = os de sempre)
---   select count(*) from public.aviso_destinatarios where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado', 'lembrete_agendamento_pendente_analista');
+--   select count(*) from public.aviso_destinatarios where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado', 'lembrete_agendamento_pendente_analista', 'lembrete_comercial', 'supervisao_cliente_atrasada', 'conta_receber_hortolandia_atrasada');

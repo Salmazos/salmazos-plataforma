@@ -7,10 +7,17 @@ export const EVENTO_CANDIDATO_TRANSFERIDO = "candidato_transferido";
 export const EVENTO_CURRICULO_ATUALIZADO = "candidato_curriculo_atualizado";
 export const EVENTO_FUNCIONARIO_NAO_CRIADO = "funcionario_nao_criado";
 
+export const EVENTO_LEMBRETE_COMERCIAL = "lembrete_comercial";
+export const EVENTO_SUPERVISAO_ATRASADA = "supervisao_cliente_atrasada";
+export const EVENTO_CONTA_HORTOLANDIA_ATRASADA = "conta_receber_hortolandia_atrasada";
+
 // `notificacoes_analista.tipo` de SEMPRE: os eventos são novos, os tipos gravados não mudaram.
 export const TIPO_TRANSFERENCIA_RESPONSAVEL = "transferencia_responsavel";
 export const TIPO_ATUALIZACAO_CURRICULO = "atualizacao_curriculo";
 export const TIPO_FUNCIONARIO_NAO_CRIADO = "funcionario_nao_criado_automaticamente";
+export const TIPO_LEMBRETE_COMERCIAL = "lembrete_comercial";
+export const TIPO_SUPERVISAO_ATRASADA = "supervisao_cliente_atrasada";
+export const TIPO_CONTA_HORTOLANDIA_ATRASADA = "conta_receber_hortolandia_atrasada";
 
 // "sem_destinatario": o canal estava ligado mas não havia a quem entregar.
 export type ResultadoCanalAviso = "enviado" | "desligado" | "falhou" | "sem_destinatario";
@@ -66,4 +73,39 @@ export function textoFuncionarioNaoCriado(o: { candidato?: string | null }): Tex
 export const HORAS_SEM_REPETIR_AVISO = 24;
 export function inicioJanelaSemRepetir(agora: Date = new Date(), horas: number = HORAS_SEM_REPETIR_AVISO): string {
   return new Date(agora.getTime() - horas * 60 * 60 * 1000).toISOString();
+}
+
+// Lembrete do Comercial: ao vendedor (o texto de sempre, "Você tem…") e, para a lista de gestão, o mesmo aviso com o nome do
+// vendedor. A mensagem do vendedor sempre começa com PREFIXO_MENSAGEM_VENDEDOR: é por ela que a dedup do dia o reconhece.
+export const PREFIXO_MENSAGEM_VENDEDOR = "Você tem ";
+export function textoLembreteComercial(o: { quantidade: number }): TextoAviso {
+  const n = o.quantidade;
+  return { titulo: "Hora de retomar contato", mensagem: `${PREFIXO_MENSAGEM_VENDEDOR}${n} empresa${n !== 1 ? "s" : ""} esperando seu retorno.` };
+}
+export function textoLembreteComercialGestao(o: { vendedor?: string | null; quantidade: number }): TextoAviso {
+  const n = o.quantidade;
+  return {
+    titulo: "Equipe comercial: retomar contato",
+    mensagem: `${o.vendedor?.trim() || "Um vendedor"} tem ${n} empresa${n !== 1 ? "s" : ""} esperando retorno.`,
+  };
+}
+
+// Supervisão atrasada: os textos de sempre. dias nulo = cliente sem nenhuma supervisão registrada.
+export function textoSupervisaoAtrasada(o: { cliente: string; dias: number | null }): TextoAviso {
+  const diasLabel = o.dias == null ? "sem registro" : `atrasado há ${o.dias} dia${o.dias !== 1 ? "s" : ""}`;
+  return { titulo: `🔴 Supervisão pendente — ${o.cliente}`, mensagem: `${o.cliente} — ${diasLabel}.` };
+}
+
+// Faturamento atrasado (lançamento a receber vencido e pendente): os textos de sempre. Só cliente, NF e datas, nunca o valor.
+export function textoContaReceberAtrasada(o: {
+  unidade: string;
+  diasAtraso: number;
+  cliente: string;
+  numeroNf?: string | null;
+  vencimentoISO: string;
+}): TextoAviso {
+  return {
+    titulo: `🔴 Faturamento ${o.unidade} atrasado há ${o.diasAtraso} dia${o.diasAtraso !== 1 ? "s" : ""}`,
+    mensagem: `${o.cliente}${o.numeroNf ? ` — NF ${o.numeroNf}` : ""} — vencida em ${o.vencimentoISO.split("-").reverse().join("/")}, ainda não paga.`,
+  };
 }
