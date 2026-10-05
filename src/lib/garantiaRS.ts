@@ -110,3 +110,12 @@ export function deveCarimbarGarantia(resultados: readonly ResultadoCanalGarantia
   if (resultados.some((r) => r === "enviado")) return true;
   return resultados.every((r) => r === "desligado");
 }
+
+// O fallback do cron (consulta antiga, sem carimbo) só vale quando a coluna do carimbo ainda não existe (migration
+// pendente). Qualquer outro erro (timeout, rede, embed) NÃO pode cair nele: sem carimbo, quem já foi avisado hoje
+// seria avisado de novo. Critério: code "42703" (undefined_column) ou mensagem citando a coluna.
+export function erroColunaCarimboInexistente(erro: { code?: string | null; message?: string | null } | null | undefined): boolean {
+  if (!erro) return false;
+  if (erro.code === "42703") return true;
+  return typeof erro.message === "string" && erro.message.includes("garantia_alerta_enviado_em");
+}

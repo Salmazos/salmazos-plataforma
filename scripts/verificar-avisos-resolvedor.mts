@@ -17,7 +17,7 @@ import {
 } from "../src/lib/decisaoClienteCandidato.ts";
 import {
   EVENTO_POR_GARANTIA, TIPO_NOTIFICACAO_POR_GARANTIA, DIAS_RECUPERACAO_GARANTIA, dataBrasilia, somarDiasISO, janelaAlertaGarantia, garantiaExpirada,
-  formatarDataBR, textoAvisoGarantiaVencendo, textoAvisoGarantiaAcionada, textosEmailGarantiaVencendo, deveCarimbarGarantia,
+  formatarDataBR, textoAvisoGarantiaVencendo, textoAvisoGarantiaAcionada, textosEmailGarantiaVencendo, deveCarimbarGarantia, erroColunaCarimboInexistente,
 } from "../src/lib/garantiaRS.ts";
 import { dataEntrevistaParaCliente, horaEntrevistaReal, decidirAvisoEntrevista } from "../src/lib/horaEntrevista.ts";
 import { mensagemErroAcao, MSG_ULTIMO_DESTINATARIO, MSG_ACAO_PADRAO } from "../src/lib/avisosErroAcao.ts";
@@ -1224,6 +1224,18 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     assert.equal(deveCarimbarGarantia(["desligado", "desligado"]), true, "nada a enviar");
     assert.equal(deveCarimbarGarantia(["falhou", "falhou"]), false);
     assert.equal(deveCarimbarGarantia(["falhou", "desligado"]), false, "o único canal ligado falhou");
+  });
+  await caso("garantia R&S, fallback do cron: só para coluna do carimbo inexistente (42703 ou mensagem citando a coluna)", () => {
+    assert.equal(erroColunaCarimboInexistente({ code: "42703", message: "qualquer" }), true);
+    assert.equal(erroColunaCarimboInexistente({ code: "42703" }), true);
+    assert.equal(erroColunaCarimboInexistente({ code: "PGRST204", message: "Could not find the 'garantia_alerta_enviado_em' column of 'candidatos_vagas' in the schema cache" }), true);
+    assert.equal(erroColunaCarimboInexistente({ message: 'column candidatos_vagas.garantia_alerta_enviado_em does not exist' }), true);
+    assert.equal(erroColunaCarimboInexistente({ code: "57014", message: "canceling statement due to statement timeout" }), false);
+    assert.equal(erroColunaCarimboInexistente({ message: "TypeError: fetch failed" }), false);
+    assert.equal(erroColunaCarimboInexistente({ code: "PGRST201", message: "Could not embed because more than one relationship was found" }), false);
+    assert.equal(erroColunaCarimboInexistente({ code: "42P01", message: 'relation "x" does not exist' }), false);
+    assert.equal(erroColunaCarimboInexistente({}), false);
+    assert.equal(erroColunaCarimboInexistente(null), false); assert.equal(erroColunaCarimboInexistente(undefined), false);
   });
   await caso("garantia R&S, popup: os tipos alerta_garantia_rs e garantia_acionada seguem o canal popup dos seus eventos", () => {
     assert.deepEqual([...TIPOS_NOTIFICACAO_POPUP].sort(), ["alerta_garantia_rs", "aprovacao_cliente", "garantia_acionada", "reprovacao_cliente"]);

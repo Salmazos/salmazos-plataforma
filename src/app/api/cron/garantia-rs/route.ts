@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { avisarGarantiaRS } from "@/lib/avisarGarantiaRS";
-import { dataBrasilia, deveCarimbarGarantia, janelaAlertaGarantia } from "@/lib/garantiaRS";
+import { dataBrasilia, deveCarimbarGarantia, erroColunaCarimboInexistente, janelaAlertaGarantia } from "@/lib/garantiaRS";
 
 export const dynamic = "force-dynamic";
 
@@ -36,10 +36,11 @@ export async function GET(request: Request) {
       .lte("garantia_data_fim", hojeISO)
       .is("garantia_alerta_enviado_em", null);
 
-    if (error) {
-      // Rede de segurança: com a coluna do carimbo ainda inexistente (migration pendente) o alerta do dia continua
-      // saindo como antes (só o último dia, sem carimbo), em vez de o cron inteiro parar.
-      console.error("[garantia-rs] Query com carimbo falhou, usando a consulta antiga (só hoje, sem carimbo):", error.message);
+    if (erroColunaCarimboInexistente(error)) {
+      // Rede de segurança SÓ para a coluna do carimbo inexistente (migration pendente): o alerta do dia continua
+      // saindo como antes (só o último dia, sem carimbo), em vez de o cron inteiro parar. Qualquer outro erro vai
+      // para a checagem abaixo (500): sem carimbo, o fallback reenviaria aviso a quem já foi avisado.
+      console.error("[garantia-rs] Coluna garantia_alerta_enviado_em inexistente, usando a consulta antiga (só hoje, sem carimbo):", error?.message);
       comCarimbo = false;
       ({ data: rows, error } = await supabase
         .from("candidatos_vagas")
