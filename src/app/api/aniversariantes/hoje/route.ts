@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
 import { checarAcessoAniversarios } from "@/lib/aniversariosAuth";
+import { popupEventoLigado } from "@/lib/avisoConfiguravel";
 import { resolverUnidadeUsuario } from "@/lib/unidadeAuth";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,9 @@ export async function GET() {
   if (acessoNegado) return acessoNegado;
 
   const svc = createServiceClient();
+
+  // Canal popup do evento aniversario_no_dia (Configurações > Avisos): sem linha ou erro de leitura = não mostra.
+  if (!(await popupEventoLigado(svc, "aniversario_no_dia"))) return NextResponse.json({ data: [], ja_visto: true });
 
   const hoje = obterDataHojeBrasil();
   const mesAtual = hoje.getMonth() + 1;

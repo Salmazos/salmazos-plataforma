@@ -1,7 +1,20 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { notifyAllAnalysts } from "@/lib/notifyAllAnalysts";
-import { obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
+import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
+import { escaparHtml } from "@/lib/emailPacoteContabilidade";
+import { enviarEmailAniversario, avisarAniversarioIndividual } from "@/lib/avisarAniversario";
+import {
+  EVENTO_ANIVERSARIO_MES_SEGUINTE,
+  EVENTO_ANIVERSARIO_NO_DIA,
+  EVENTO_ANIVERSARIO_TRES_DIAS,
+  TIPO_ANIVERSARIO_MES_SEGUINTE,
+  TIPO_ANIVERSARIO_NO_DIA,
+  TIPO_ANIVERSARIO_TRES_DIAS,
+  deveCarimbarAviso,
+  situacaoAniversario,
+  textoAniversarioNoDia,
+  textoAniversarioTresDias,
+} from "@/lib/avisosRestantesRegras";
 import { envolucroAniversario } from "@/lib/emailAniversarioTemplate";
 
 export const dynamic = "force-dynamic";
@@ -36,10 +49,6 @@ function parseMesDia(iso: string) {
   return { mes: Number(mesStr), dia: Number(diaStr) }; // mes: 1-12
 }
 
-function diasEntre(a: Date, b: Date) {
-  return Math.round((b.getTime() - a.getTime()) / 86400000);
-}
-
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
@@ -69,6 +78,7 @@ export async function GET(request: Request) {
     const anoAtual = hoje.getFullYear();
     const mesAtual = hoje.getMonth(); // 0-11
     const diaAtual = hoje.getDate();
+    const hojeISO = formatarDataISO(hoje);
 
     const { data: contatosRaw, error: errContatos } = await supabase
       .from("aniversariantes_contatos")
@@ -86,14 +96,13 @@ export async function GET(request: Request) {
     let tresDiasEnviados = 0;
     let noDiaEnviados = 0;
 
-    // Pré-busca os envios já registrados este ano — permite checar "já enviado?" ANTES de
-    // disparar o e-mail (preservando a proteção contra reprocessamento em execuções
-    // concorrentes do cron), sem precisar gravar o dedup antes de confirmar a tentativa
-    // de envio (que é a causa raiz do bug: dedup gravado mesmo com e-mail nunca enviado).
+    // Pré-busca os envios já registrados (ano passado, atual e próximo: a recuperação de 2 dias e o "faltam 3 dias" podem
+    // cruzar a virada do ano) — permite checar "já enviado?" ANTES de avisar, preservando a proteção contra
+    // reprocessamento, sem gravar o dedup antes de confirmar a entrega.
     const { data: enviosExistentes, error: errEnvios } = await supabase
       .from("aniversario_notificacoes_enviadas")
-      .select("tipo, mes_referencia, contato_id, unidade_id")
-      .eq("ano", anoAtual);
+      .select("tipo, ano, mes_referencia, contato_id, unidade_id")
+      .in("ano", [anoAtual - 1, anoAtual, anoAtual + 1]);
 
     if (errEnvios) {
       console.error("[cron/aniversarios] Erro ao buscar notificações já enviadas:", errEnvios.message);
@@ -103,11 +112,23 @@ export async function GET(request: Request) {
     // migration_sbc_notificacoes_por_unidade.sql).
     const jaEnviouMesSeguinte = (mesReferencia: number, unidadeId: string) =>
       (enviosExistentes ?? []).some(
-        (e) => e.tipo === "mes_seguinte" && e.mes_referencia === mesReferencia && e.unidade_id === unidadeId
+        (e) => e.tipo === "mes_seguinte" && e.ano === anoAtual && e.mes_referencia === mesReferencia && e.unidade_id === unidadeId
       );
 
-    const jaEnviouIndividual = (contatoId: string, tipo: "tres_dias_antes" | "no_dia") =>
-      (enviosExistentes ?? []).some((e) => e.tipo === tipo && e.contato_id === contatoId);
+    // O dedup individual é por contato, tipo e ano da OCORRÊNCIA do aniversário.
+    const jaEnviouIndividual = (contatoId: string, tipo: "tres_dias_antes" | "no_dia", anoOcorrencia: number) =>
+      (enviosExistentes ?? []).some((e) => e.tipo === tipo && e.contato_id === contatoId && e.ano === anoOcorrencia);
+
+    const registrarDedupIndividual = async (contatoId: string, tipo: "tres_dias_antes" | "no_dia", anoOcorrencia: number) => {
+      const { error: errInsert } = await supabase
+        .from("aniversario_notificacoes_enviadas")
+        .insert({ contato_id: contatoId, tipo, ano: anoOcorrencia });
+      if (errInsert && errInsert.code !== "23505") {
+        console.error(`[cron/aniversarios] Erro ao registrar dedup ${tipo}:`, errInsert.message);
+        return false;
+      }
+      return !errInsert;
+    };
 
     // --- Tipo 1: mes_seguinte (lembrete em lote, 3 dias antes do fim do mês) ---
     const ultimoDiaMes = new Date(anoAtual, mesAtual + 1, 0).getDate();
@@ -132,7 +153,7 @@ export async function GET(request: Request) {
         const linhas = doLote
           .map((c) => {
             const { dia } = parseMesDia(c.data_nascimento);
-            return `<tr><td style="padding:6px 0;color:#111827;font-weight:600">${dia.toString().padStart(2, "0")}</td><td style="padding:6px 0;color:#111827">${c.nome_contato}</td><td style="padding:6px 0;color:#6B7280">${empresaDe(c)}</td></tr>`;
+            return `<tr><td style="padding:6px 0;color:#111827;font-weight:600">${dia.toString().padStart(2, "0")}</td><td style="padding:6px 0;color:#111827">${escaparHtml(c.nome_contato)}</td><td style="padding:6px 0;color:#6B7280">${escaparHtml(empresaDe(c))}</td></tr>`;
           })
           .join("");
 
@@ -149,14 +170,17 @@ export async function GET(request: Request) {
           </table>`
         );
 
-        const resultado = await notifyAllAnalysts({
+        // E-mail (Configurações > Avisos > aniversario_mes_seguinte): sem lista = o de sempre; nunca lança.
+        const resultado = await enviarEmailAniversario(supabase, {
+          evento: EVENTO_ANIVERSARIO_MES_SEGUINTE,
+          tipo: TIPO_ANIVERSARIO_MES_SEGUINTE,
           subject: `🎂 Aniversariantes de ${nomeMes}${sufixoUnidade}`,
           html,
-          tipo: "aniversario_mes_seguinte",
           unidadeId: unidadeLoteId,
+          contexto: "cron/aniversarios mes_seguinte",
         });
 
-        if (resultado.attempted > 0) {
+        if (deveCarimbarAviso([resultado])) {
           const { error: errInsert } = await supabase
             .from("aniversario_notificacoes_enviadas")
             .insert({ tipo: "mes_seguinte", ano: anoAtual, mes_referencia: mesReferencia, unidade_id: unidadeLoteId });
@@ -168,113 +192,93 @@ export async function GET(request: Request) {
           }
         } else {
           console.error(
-            `[cron/aniversarios] mes_seguinte (${nomeMes}) NÃO enviado — nenhuma tentativa de e-mail foi registrada; dedup não gravado.`
+            `[cron/aniversarios] mes_seguinte (${nomeMes}) NÃO entregue (e-mail=${resultado}) — dedup não gravado, tenta de novo na próxima execução.`
           );
         }
       }
     }
 
-    // --- Tipos 2 e 3: por contato individual ---
+    // --- Tipos 2 e 3: por contato individual (dia exato + recuperação de até 2 dias) ---
     for (const c of contatos) {
       const { mes, dia } = parseMesDia(c.data_nascimento);
       const dataFmt = `${dia.toString().padStart(2, "0")}/${mes.toString().padStart(2, "0")}`;
       const empresa = empresaDe(c);
+      const nomeHtml = escaparHtml(c.nome_contato);
+      const empresaHtml = escaparHtml(empresa);
+      const cargoHtml = c.cargo ? escaparHtml(c.cargo) : null;
+      const situacao = situacaoAniversario(c.data_nascimento, hojeISO);
 
-      const candidatoEsteAno = new Date(anoAtual, mes - 1, dia);
-      const candidatoProxAno = new Date(anoAtual + 1, mes - 1, dia);
-      const faltam3Dias =
-        diasEntre(hoje, candidatoEsteAno) === 3 || diasEntre(hoje, candidatoProxAno) === 3;
-      const ehHoje = mes === mesAtual + 1 && dia === diaAtual;
-
-      if (faltam3Dias && !jaEnviouIndividual(c.id, "tres_dias_antes")) {
+      if (situacao.tresDias && !jaEnviouIndividual(c.id, "tres_dias_antes", situacao.tresDias.ano)) {
+        const t = textoAniversarioTresDias({ nome: c.nome_contato, empresa, dataFmt, dias: situacao.tresDias.dias });
         const html = envolucroAniversario(
-          `🎂 Faltam 3 dias!`,
+          t.tituloEmail,
           `<table style="width:100%;border-collapse:collapse;font-size:13px">
-            <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Nome</td><td style="padding:6px 0;color:#111827">${c.nome_contato}</td></tr>
-            <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Empresa</td><td style="padding:6px 0;color:#111827">${empresa}</td></tr>
-            ${c.cargo ? `<tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Cargo</td><td style="padding:6px 0;color:#111827">${c.cargo}</td></tr>` : ""}
+            <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Nome</td><td style="padding:6px 0;color:#111827">${nomeHtml}</td></tr>
+            <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Empresa</td><td style="padding:6px 0;color:#111827">${empresaHtml}</td></tr>
+            ${cargoHtml ? `<tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Cargo</td><td style="padding:6px 0;color:#111827">${cargoHtml}</td></tr>` : ""}
             <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Data</td><td style="padding:6px 0;color:#111827">${dataFmt}</td></tr>
           </table>`
         );
 
-        await supabase.from("notificacoes_analista").insert({
-          tipo: "aniversario_tres_dias",
-          titulo: `🎂 Faltam 3 dias — aniversário de ${c.nome_contato}`,
-          mensagem: `${c.nome_contato} (${empresa}) faz aniversário em 3 dias, dia ${dataFmt}.`,
-          unidade_id: c.unidade_id,
-        });
-
-        const resultado = await notifyAllAnalysts({
-          subject: `🎂 Faltam 3 dias — aniversário de ${c.nome_contato} (${empresa})`,
-          html,
-          tipo: "aniversario_tres_dias",
+        // Sino + e-mail (Configurações > Avisos > aniversario_tres_dias): o sino só é gravado aqui, depois de
+        // confirmado que o dedup ainda não existe, e o dedup grava quando algo foi ENTREGUE. Nunca lança.
+        const res = await avisarAniversarioIndividual(supabase, {
+          evento: EVENTO_ANIVERSARIO_TRES_DIAS,
+          tipo: TIPO_ANIVERSARIO_TRES_DIAS,
           unidadeId: c.unidade_id,
+          titulo: t.titulo,
+          mensagem: t.mensagem,
+          assunto: t.assunto,
+          html,
+          contexto: "cron/aniversarios tres_dias",
         });
 
-        if (resultado.attempted > 0) {
-          const { error: errInsert } = await supabase
-            .from("aniversario_notificacoes_enviadas")
-            .insert({ contato_id: c.id, tipo: "tres_dias_antes", ano: anoAtual });
-
-          if (!errInsert) {
-            tresDiasEnviados++;
-          } else if (errInsert.code !== "23505") {
-            console.error("[cron/aniversarios] Erro ao registrar dedup tres_dias_antes:", errInsert.message);
-          }
+        if (deveCarimbarAviso([res.sino, res.email])) {
+          if (await registrarDedupIndividual(c.id, "tres_dias_antes", situacao.tresDias.ano)) tresDiasEnviados++;
         } else {
           console.error(
-            `[cron/aniversarios] tres_dias_antes NÃO enviado para ${c.nome_contato} (contato_id=${c.id}) — nenhuma tentativa de e-mail foi registrada; dedup não gravado.`
+            `[cron/aniversarios] tres_dias_antes NÃO entregue para ${c.nome_contato} (contato_id=${c.id}; sino=${res.sino}, e-mail=${res.email}) — dedup não gravado, tenta de novo na próxima execução.`
           );
         }
       }
 
-      if (ehHoje && !jaEnviouIndividual(c.id, "no_dia")) {
+      if (situacao.noDia && !jaEnviouIndividual(c.id, "no_dia", situacao.noDia.ano)) {
         const contatoLinhas = [
           c.email
-            ? `<tr><td style="padding:6px 0;color:#6B7280;font-weight:600">E-mail</td><td style="padding:6px 0;color:#111827">${c.email}</td></tr>`
+            ? `<tr><td style="padding:6px 0;color:#6B7280;font-weight:600">E-mail</td><td style="padding:6px 0;color:#111827">${escaparHtml(c.email)}</td></tr>`
             : "",
           c.telefone
-            ? `<tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Telefone</td><td style="padding:6px 0;color:#111827">${c.telefone}</td></tr>`
+            ? `<tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Telefone</td><td style="padding:6px 0;color:#111827">${escaparHtml(c.telefone)}</td></tr>`
             : "",
         ].join("");
 
+        const t = textoAniversarioNoDia({ nome: c.nome_contato, empresa, dataFmt, atraso: situacao.noDia.atraso });
         const html = envolucroAniversario(
-          `🎂 Hoje é aniversário de ${c.nome_contato}!`,
+          t.tituloEmail,
           `<table style="width:100%;border-collapse:collapse;font-size:13px">
-            <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Nome</td><td style="padding:6px 0;color:#111827">${c.nome_contato}</td></tr>
-            <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Empresa</td><td style="padding:6px 0;color:#111827">${empresa}</td></tr>
-            ${c.cargo ? `<tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Cargo</td><td style="padding:6px 0;color:#111827">${c.cargo}</td></tr>` : ""}
+            <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Nome</td><td style="padding:6px 0;color:#111827">${nomeHtml}</td></tr>
+            <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Empresa</td><td style="padding:6px 0;color:#111827">${empresaHtml}</td></tr>
+            ${cargoHtml ? `<tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Cargo</td><td style="padding:6px 0;color:#111827">${cargoHtml}</td></tr>` : ""}
             ${contatoLinhas}
           </table>`
         );
 
-        await supabase.from("notificacoes_analista").insert({
-          tipo: "aniversario_no_dia",
-          titulo: `🎂 Hoje é aniversário de ${c.nome_contato}!`,
-          mensagem: `Hoje é o aniversário de ${c.nome_contato} (${empresa}).`,
-          unidade_id: c.unidade_id,
-        });
-
-        const resultado = await notifyAllAnalysts({
-          subject: `🎂 Hoje é aniversário de ${c.nome_contato} (${empresa})!`,
-          html,
-          tipo: "aniversario_no_dia",
+        const res = await avisarAniversarioIndividual(supabase, {
+          evento: EVENTO_ANIVERSARIO_NO_DIA,
+          tipo: TIPO_ANIVERSARIO_NO_DIA,
           unidadeId: c.unidade_id,
+          titulo: t.titulo,
+          mensagem: t.mensagem,
+          assunto: t.assunto,
+          html,
+          contexto: "cron/aniversarios no_dia",
         });
 
-        if (resultado.attempted > 0) {
-          const { error: errInsert } = await supabase
-            .from("aniversario_notificacoes_enviadas")
-            .insert({ contato_id: c.id, tipo: "no_dia", ano: anoAtual });
-
-          if (!errInsert) {
-            noDiaEnviados++;
-          } else if (errInsert.code !== "23505") {
-            console.error("[cron/aniversarios] Erro ao registrar dedup no_dia:", errInsert.message);
-          }
+        if (deveCarimbarAviso([res.sino, res.email])) {
+          if (await registrarDedupIndividual(c.id, "no_dia", situacao.noDia.ano)) noDiaEnviados++;
         } else {
           console.error(
-            `[cron/aniversarios] no_dia NÃO enviado para ${c.nome_contato} (contato_id=${c.id}) — nenhuma tentativa de e-mail foi registrada; dedup não gravado.`
+            `[cron/aniversarios] no_dia NÃO entregue para ${c.nome_contato} (contato_id=${c.id}; sino=${res.sino}, e-mail=${res.email}) — dedup não gravado, tenta de novo na próxima execução.`
           );
         }
       }

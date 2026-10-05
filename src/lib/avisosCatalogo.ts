@@ -67,6 +67,31 @@ export const AVISOS_RESTANTES: Record<string, { rotulo: string; canais: readonly
     nota: "Dispara quando uma vaga de Recrutamento e Seleção está sem a taxa (%) configurada: na aprovação do cliente pelo portal, ao gerar a cobrança de uma contratação e ao gerar a cobrança de um cancelamento. Só avisa: o cliente continua aprovando normalmente e o fee não é calculado. Sino: aviso geral para a equipe da unidade (como sempre), além das pessoas da lista (a lista pode ficar vazia); na geração de cobrança o mesmo aviso não se repete em 24 horas; desligado, ninguém recebe. Não envia e-mail nem popup.",
     padrao: { sino: "Ligado, sem ninguém na lista: aviso geral para a equipe da unidade, como sempre. Desligado: ninguém." },
   },
+  aniversario_mes_seguinte: {
+    rotulo: "Aniversariantes do mês seguinte (lista mensal)",
+    canais: ["email"],
+    nota: "E-mail único por unidade, 3 dias antes do fim do mês, com os contatos de clientes que fazem aniversário no mês seguinte (cron das 6h). Sem ninguém na lista vale o padrão (todos os analistas da unidade e os sócios); com lista, só a lista. Se ninguém aceitar o e-mail, ele é tentado de novo na execução seguinte. Desligado, ninguém recebe.",
+    padrao: { email: "Sem ninguém na lista: todos os analistas da unidade e os sócios recebem, como sempre. Com lista: só a lista." },
+  },
+  aniversario_tres_dias: {
+    rotulo: "Aniversário de contato de cliente: faltam 3 dias",
+    canais: ["sino", "email"],
+    nota: "Aviso (cron das 6h) 3 dias antes do aniversário de um contato de cliente; se o cron falhou, recupera até 2 dias depois (o texto passa a dizer quantos dias faltam) e cada contato é avisado uma vez por ano. Sino: aviso geral para a equipe da unidade do contato (como sempre), além das pessoas da lista (a lista pode ficar vazia). E-mail: sem ninguém na lista vale o padrão (todos os analistas da unidade e os sócios); com lista, só a lista. Desligado, ninguém recebe aquele canal.",
+    padrao: {
+      sino: "Ligado, sem ninguém na lista: aviso geral para a equipe da unidade do contato, como sempre. Desligado: ninguém.",
+      email: "Sem ninguém na lista: todos os analistas da unidade e os sócios recebem, como sempre. Com lista: só a lista.",
+    },
+  },
+  aniversario_no_dia: {
+    rotulo: "Aniversário de contato de cliente: hoje",
+    canais: ["sino", "email", "popup"],
+    nota: "Aviso (cron das 6h) no dia do aniversário de um contato de cliente; se o cron falhou, recupera até 2 dias depois (o texto passa a dizer a data) e cada contato é avisado uma vez por ano. O e-mail traz o e-mail e o telefone do contato. Sino: aviso geral para a equipe da unidade do contato (como sempre), além das pessoas da lista (a lista pode ficar vazia). E-mail: sem ninguém na lista vale o padrão (todos os analistas da unidade e os sócios); com lista, só a lista. Popup: só interruptor; é o popup de aniversariantes de hoje, uma vez por dia por usuário. Desligado, ninguém recebe aquele canal.",
+    padrao: {
+      sino: "Ligado, sem ninguém na lista: aviso geral para a equipe da unidade do contato, como sempre. Desligado: ninguém.",
+      email: "Sem ninguém na lista: todos os analistas da unidade e os sócios recebem, como sempre. Com lista: só a lista.",
+      popup: "Ligado: o popup de aniversariantes de hoje abre uma vez por dia para quem tem acesso. Desligado, ou sem esta configuração: ninguém vê o popup.",
+    },
+  },
 };
 export const EVENTOS_AVISOS_RESTANTES: string[] = Object.keys(AVISOS_RESTANTES);
 export const eventoAvisoRestante = (evento: string): boolean => Object.prototype.hasOwnProperty.call(AVISOS_RESTANTES, evento);

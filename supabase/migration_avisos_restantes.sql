@@ -37,7 +37,16 @@ insert into public.aviso_eventos (evento, grupo, descricao, canais_suportados) v
    array['sino', 'popup']),
   ('fee_rs_nao_configurado', 'vagas',
    'Vaga de R&S sem taxa (%) configurada (aprovação do cliente e geração de cobrança): avisa a equipe da unidade e a lista.',
-   array['sino'])
+   array['sino']),
+  ('aniversario_mes_seguinte', 'vagas',
+   'Lista mensal de aniversariantes do mês seguinte (contatos de clientes): e-mail à equipe da unidade ou à lista.',
+   array['email']),
+  ('aniversario_tres_dias', 'vagas',
+   'Faltam 3 dias para o aniversário de um contato de cliente: sino geral da unidade, e-mail e lista.',
+   array['sino', 'email']),
+  ('aniversario_no_dia', 'vagas',
+   'Aniversário de um contato de cliente: sino geral da unidade, e-mail, lista e popup do dia.',
+   array['sino', 'email', 'popup'])
 on conflict (evento) do nothing;
 
 -- ── 2. Liga/desliga inicial: todos os canais de cada evento ligados ──────────
@@ -55,13 +64,19 @@ insert into public.aviso_eventos_canais (evento, canal, ativo) values
   ('supervisao_cliente_atrasada', 'popup', true),
   ('conta_receber_hortolandia_atrasada', 'sino', true),
   ('conta_receber_hortolandia_atrasada', 'popup', true),
-  ('fee_rs_nao_configurado', 'sino', true)
+  ('fee_rs_nao_configurado', 'sino', true),
+  ('aniversario_mes_seguinte', 'email', true),
+  ('aniversario_tres_dias', 'sino', true),
+  ('aniversario_tres_dias', 'email', true),
+  ('aniversario_no_dia', 'sino', true),
+  ('aniversario_no_dia', 'email', true),
+  ('aniversario_no_dia', 'popup', true)
 on conflict (evento, canal) do nothing;
 
 -- ── Conferência (somente leitura) ────────────────────────────────────────────
--- Esperado: 8 eventos, grupo vagas, com os canais_suportados acima
---   select evento, grupo, canais_suportados from public.aviso_eventos where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado', 'lembrete_agendamento_pendente_analista', 'lembrete_comercial', 'supervisao_cliente_atrasada', 'conta_receber_hortolandia_atrasada', 'fee_rs_nao_configurado') order by evento;
--- Esperado: 13 linhas, todas ativo = true
---   select evento, canal, ativo from public.aviso_eventos_canais where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado', 'lembrete_agendamento_pendente_analista', 'lembrete_comercial', 'supervisao_cliente_atrasada', 'conta_receber_hortolandia_atrasada', 'fee_rs_nao_configurado') order by evento, canal;
+-- Esperado: 11 eventos, grupo vagas, com os canais_suportados acima
+--   select evento, grupo, canais_suportados from public.aviso_eventos where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado', 'lembrete_agendamento_pendente_analista', 'lembrete_comercial', 'supervisao_cliente_atrasada', 'conta_receber_hortolandia_atrasada', 'fee_rs_nao_configurado', 'aniversario_mes_seguinte', 'aniversario_tres_dias', 'aniversario_no_dia') order by evento;
+-- Esperado: 19 linhas, todas ativo = true
+--   select evento, canal, ativo from public.aviso_eventos_canais where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado', 'lembrete_agendamento_pendente_analista', 'lembrete_comercial', 'supervisao_cliente_atrasada', 'conta_receber_hortolandia_atrasada', 'fee_rs_nao_configurado', 'aniversario_mes_seguinte', 'aniversario_tres_dias', 'aniversario_no_dia') order by evento, canal;
 -- Esperado: 0 (sem destinatários = e-mail no modo legado; sino = os de sempre)
---   select count(*) from public.aviso_destinatarios where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado', 'lembrete_agendamento_pendente_analista', 'lembrete_comercial', 'supervisao_cliente_atrasada', 'conta_receber_hortolandia_atrasada', 'fee_rs_nao_configurado');
+--   select count(*) from public.aviso_destinatarios where evento in ('candidato_transferido', 'candidato_curriculo_atualizado', 'funcionario_nao_criado', 'lembrete_agendamento_pendente_analista', 'lembrete_comercial', 'supervisao_cliente_atrasada', 'conta_receber_hortolandia_atrasada', 'fee_rs_nao_configurado', 'aniversario_mes_seguinte', 'aniversario_tres_dias', 'aniversario_no_dia');

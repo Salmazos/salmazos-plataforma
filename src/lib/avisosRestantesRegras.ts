@@ -11,6 +11,9 @@ export const EVENTO_LEMBRETE_COMERCIAL = "lembrete_comercial";
 export const EVENTO_SUPERVISAO_ATRASADA = "supervisao_cliente_atrasada";
 export const EVENTO_CONTA_HORTOLANDIA_ATRASADA = "conta_receber_hortolandia_atrasada";
 export const EVENTO_FEE_RS_NAO_CONFIGURADO = "fee_rs_nao_configurado";
+export const EVENTO_ANIVERSARIO_MES_SEGUINTE = "aniversario_mes_seguinte";
+export const EVENTO_ANIVERSARIO_TRES_DIAS = "aniversario_tres_dias";
+export const EVENTO_ANIVERSARIO_NO_DIA = "aniversario_no_dia";
 
 // `notificacoes_analista.tipo` de SEMPRE: os eventos são novos, os tipos gravados não mudaram.
 export const TIPO_TRANSFERENCIA_RESPONSAVEL = "transferencia_responsavel";
@@ -20,6 +23,9 @@ export const TIPO_LEMBRETE_COMERCIAL = "lembrete_comercial";
 export const TIPO_SUPERVISAO_ATRASADA = "supervisao_cliente_atrasada";
 export const TIPO_CONTA_HORTOLANDIA_ATRASADA = "conta_receber_hortolandia_atrasada";
 export const TIPO_FEE_RS_NAO_CONFIGURADO = "fee_rs_nao_configurado";
+export const TIPO_ANIVERSARIO_MES_SEGUINTE = "aniversario_mes_seguinte";
+export const TIPO_ANIVERSARIO_TRES_DIAS = "aniversario_tres_dias";
+export const TIPO_ANIVERSARIO_NO_DIA = "aniversario_no_dia";
 
 // "sem_destinatario": o canal estava ligado mas não havia a quem entregar.
 export type ResultadoCanalAviso = "enviado" | "desligado" | "falhou" | "sem_destinatario";
@@ -109,5 +115,77 @@ export function textoContaReceberAtrasada(o: {
   return {
     titulo: `🔴 Faturamento ${o.unidade} atrasado há ${o.diasAtraso} dia${o.diasAtraso !== 1 ? "s" : ""}`,
     mensagem: `${o.cliente}${o.numeroNf ? ` — NF ${o.numeroNf}` : ""} — vencida em ${o.vencimentoISO.split("-").reverse().join("/")}, ainda não paga.`,
+  };
+}
+
+// ── Aniversários de contatos de clientes ──
+// O cron roda uma vez por dia. Além do dia exato, recupera até 2 dias para trás (o cron pode ter falhado): o dedup é a
+// tabela aniversario_notificacoes_enviadas, uma linha por contato, tipo e ano da OCORRÊNCIA do aniversário.
+export const DIAS_ANTECEDENCIA_ANIVERSARIO = 3;
+export const DIAS_RECUPERACAO_ANIVERSARIO = 2;
+
+const DIA_MS = 86_400_000;
+
+export interface SituacaoAniversario {
+  // Faltam `dias` (1 a 3) para o aniversário; `ano` é o ano em que ele cai (dedup).
+  tresDias: { dias: number; ano: number } | null;
+  // O aniversário foi há `atraso` dias (0 = hoje, até 2); `ano` é o ano do aniversário (dedup).
+  noDia: { atraso: number; ano: number } | null;
+}
+
+// dataNascimento "AAAA-MM-DD" (só mês e dia contam) e hojeISO "AAAA-MM-DD" (Brasília). Como sempre foi: o aviso "no dia" só
+// vale quando mês e dia batem exatamente (29/02 só em ano bissexto); o "faltam N dias" usa a data do ano (29/02 vira 01/03).
+export function situacaoAniversario(dataNascimento: string, hojeISO: string): SituacaoAniversario {
+  const [, mes, dia] = dataNascimento.split("-").map(Number);
+  const [hy, hm, hd] = hojeISO.split("-").map(Number);
+  const hoje = Date.UTC(hy, hm - 1, hd);
+
+  let noDia: SituacaoAniversario["noDia"] = null;
+  for (let k = 0; k <= DIAS_RECUPERACAO_ANIVERSARIO && !noDia; k++) {
+    const d = new Date(hoje - k * DIA_MS);
+    if (d.getUTCMonth() + 1 === mes && d.getUTCDate() === dia) noDia = { atraso: k, ano: d.getUTCFullYear() };
+  }
+
+  let tresDias: SituacaoAniversario["tresDias"] = null;
+  for (const ano of [hy, hy + 1]) {
+    if (tresDias) break;
+    const ocorrencia = Date.UTC(ano, mes - 1, dia);
+    const dias = Math.round((ocorrencia - hoje) / DIA_MS);
+    if (dias >= 1 && dias <= DIAS_ANTECEDENCIA_ANIVERSARIO) tresDias = { dias, ano: new Date(ocorrencia).getUTCFullYear() };
+  }
+  return { tresDias, noDia };
+}
+
+const rotuloDias = (n: number) => `${n} dia${n !== 1 ? "s" : ""}`;
+
+// Sino e e-mail do "faltam N dias". Com N = 3 (o dia de sempre) os textos são exatamente os de antes.
+export function textoAniversarioTresDias(o: { nome: string; empresa: string; dataFmt: string; dias: number }): {
+  titulo: string; mensagem: string; assunto: string; tituloEmail: string;
+} {
+  return {
+    titulo: `🎂 Faltam ${rotuloDias(o.dias)} — aniversário de ${o.nome}`,
+    mensagem: `${o.nome} (${o.empresa}) faz aniversário em ${rotuloDias(o.dias)}, dia ${o.dataFmt}.`,
+    assunto: `🎂 Faltam ${rotuloDias(o.dias)} — aniversário de ${o.nome} (${o.empresa})`,
+    tituloEmail: `🎂 Faltam ${rotuloDias(o.dias)}!`,
+  };
+}
+
+// No dia (atraso 0) os textos de sempre; numa recuperação (atraso 1 ou 2) falam da data, nunca de "hoje".
+export function textoAniversarioNoDia(o: { nome: string; empresa: string; dataFmt: string; atraso: number }): {
+  titulo: string; mensagem: string; assunto: string; tituloEmail: string;
+} {
+  if (o.atraso === 0) {
+    return {
+      titulo: `🎂 Hoje é aniversário de ${o.nome}!`,
+      mensagem: `Hoje é o aniversário de ${o.nome} (${o.empresa}).`,
+      assunto: `🎂 Hoje é aniversário de ${o.nome} (${o.empresa})!`,
+      tituloEmail: `🎂 Hoje é aniversário de ${o.nome}!`,
+    };
+  }
+  return {
+    titulo: `🎂 Aniversário de ${o.nome} — ${o.dataFmt}`,
+    mensagem: `O aniversário de ${o.nome} (${o.empresa}) foi dia ${o.dataFmt}.`,
+    assunto: `🎂 Aniversário de ${o.nome} (${o.empresa}) — ${o.dataFmt}`,
+    tituloEmail: `🎂 Aniversário de ${o.nome} — ${o.dataFmt}`,
   };
 }
