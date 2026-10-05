@@ -6,7 +6,7 @@ import {
   type DadosAviso, type FonteAvisos, type LinhaDestinatario, type PerfilAnalista,
 } from "../src/lib/avisosResolucao.ts";
 import { PADRAO_AVISOS, PADRAO_EMAIL_CLIENTE, grupoTemPadrao, montarPayloadRestauracao } from "../src/lib/avisosPadrao.ts";
-import { EVENTOS_GARANTIA_RS, eventoGarantiaRS, eventoComResponsavelNoSino, EVENTOS_DECISAO_CLIENTE, eventoDecisaoCliente, canalSemListaPermitido, canalSoInterruptor, ligadoSemLinha, EVENTOS_EMAIL_CLIENTE, eventoEmailCliente, FRASE_EMAIL_CLIENTE, APOIO_EMAILS_CLIENTE, EVENTOS_POR_GRUPO, EVENTOS_SEM_LISTA, eventoSemLista, FRASE_SEM_LISTA, ROTULO_GRUPO, grupoDoEvento, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
+import { EVENTO_POS_VENDA_RS as EVENTO_POS_VENDA_RS_CATALOGO, eventoPosVendaRS, EVENTOS_GARANTIA_RS, eventoGarantiaRS, eventoComResponsavelNoSino, EVENTOS_DECISAO_CLIENTE, eventoDecisaoCliente, canalSemListaPermitido, canalSoInterruptor, ligadoSemLinha, EVENTOS_EMAIL_CLIENTE, eventoEmailCliente, FRASE_EMAIL_CLIENTE, APOIO_EMAILS_CLIENTE, EVENTOS_POR_GRUPO, EVENTOS_SEM_LISTA, eventoSemLista, FRASE_SEM_LISTA, ROTULO_GRUPO, grupoDoEvento, EVENTOS_PEDIDO_CLIENTE, canaisDoEvento, descricaoPadraoDoSistema, NOTA_EVENTO, ROTULO_EVENTO } from "../src/lib/avisosCatalogo.ts";
 import {
   canalClienteLigado, emailClienteLigadoRegra, montarDestinatariosEmailCliente, inicioJanelaAvisos, avisoVisivelParaUsuario, linkPortalValido, chaveDedupAviso, textoAvisoIndicacaoDecidida,
   haQuantoTempo, textoAvisoSolicitacaoDecidida, textoAvisoPedidoDecidido, tipoPedidoDaAcao, chaveDedupSolicitacaoDecidida, chaveDedupPedidoDecidido, textoAvisoCandidatoEnviado, textoAvisoEntrevista, decidirAvisoCandidatoEnviado, naoLidosDoSino, pendentesDoPopup, limitarMensagemAviso, DIAS_VISIVEL_AVISO_CLIENTE, type AvisoPortal,
@@ -19,6 +19,10 @@ import {
   EVENTO_POR_GARANTIA, TIPO_NOTIFICACAO_POR_GARANTIA, DIAS_RECUPERACAO_GARANTIA, dataBrasilia, somarDiasISO, janelaAlertaGarantia, garantiaExpirada,
   formatarDataBR, textoAvisoGarantiaVencendo, textoAvisoGarantiaAcionada, textosEmailGarantiaVencendo, deveCarimbarGarantia, erroColunaCarimboInexistente,
 } from "../src/lib/garantiaRS.ts";
+import {
+  EVENTO_POS_VENDA_RS, TIPO_NOTIFICACAO_POS_VENDA_RS, EVENTO_POR_TIPO_POS_VENDA, DIAS_POS_VENDA_RS, DIAS_RECUPERACAO_POS_VENDA_RS, janelaInicioPosVenda, posVendaNaJanela,
+  textoAvisoPosVendaRS, userIdsSinoPosVenda, deveCarimbarPosVenda, dataBrasilia as dataBrasiliaPV, somarDiasISO as somarDiasISOPV,
+} from "../src/lib/posVendaRSRegras.ts";
 import { dataEntrevistaParaCliente, horaEntrevistaReal, decidirAvisoEntrevista } from "../src/lib/horaEntrevista.ts";
 import { mensagemErroAcao, MSG_ULTIMO_DESTINATARIO, MSG_ACAO_PADRAO } from "../src/lib/avisosErroAcao.ts";
 import { resumirPedidoCliente, type LinhaPedidoCliente } from "../src/lib/pedidoClienteResumo.ts";
@@ -194,14 +198,14 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   for (const evento of Object.values(PADRAO_AVISOS.vagas)) for (const c of Object.values(evento)) for (const d of c.destinatarios) if (d.tipo_destinatario === "usuario") TODOS.add(d.usuario_id);
 
   await caso("padrão: só vagas e portal_cliente têm padrão", () => { assert.equal(grupoTemPadrao("vagas"), true); assert.equal(grupoTemPadrao("portal_cliente"), true); assert.equal(grupoTemPadrao("rescisao"), false); });
-  await caso("padrão vagas: 7 eventos (5 da carga inicial: e-mail 2/3/3/0/3, sino 7/7/7/7/3; mais os 2 da garantia R&S)", () => {
+  await caso("padrão vagas: 8 eventos (5 da carga inicial: e-mail 2/3/3/0/3, sino 7/7/7/7/3; mais os 2 da garantia R&S e o pós-venda R&S)", () => {
     const p = PADRAO_AVISOS.vagas;
-    assert.deepEqual(Object.keys(p).sort(), ["garantia_rs_acionada", "garantia_rs_vencendo", "solicitacao_vaga", "vaga_cancelada", "vaga_criada", "vaga_fechada", "vaga_reativada"]);
+    assert.deepEqual(Object.keys(p).sort(), ["garantia_rs_acionada", "garantia_rs_vencendo", "pos_venda_rs_7dias", "solicitacao_vaga", "vaga_cancelada", "vaga_criada", "vaga_fechada", "vaga_reativada"]);
     const n = (ev: string, c: "email" | "sino") => p[ev][c]!.destinatarios.length;
     assert.deepEqual(["vaga_criada", "solicitacao_vaga", "vaga_cancelada", "vaga_fechada", "vaga_reativada"].map((ev) => n(ev, "email")), [2, 3, 3, 0, 3]);
     assert.deepEqual(["vaga_criada", "solicitacao_vaga", "vaga_cancelada", "vaga_fechada", "vaga_reativada"].map((ev) => n(ev, "sino")), [7, 7, 7, 7, 3]);
     assert.equal(p.vaga_fechada.email!.ativo, false);
-    for (const ev of ["garantia_rs_vencendo", "garantia_rs_acionada"]) {
+    for (const ev of ["garantia_rs_vencendo", "garantia_rs_acionada", "pos_venda_rs_7dias"]) {
       assert.equal(n(ev, "email"), 3); assert.equal(p[ev].email!.ativo, true);
       assert.deepEqual(p[ev].sino, { ativo: true, destinatarios: [] }); assert.deepEqual(p[ev].popup, { ativo: true, destinatarios: [] });
       assert.deepEqual(p[ev].email!.destinatarios, p.vaga_cancelada.email!.destinatarios, "mesma lista de e-mail de vaga_cancelada");
@@ -218,9 +222,9 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("restauração: todos ativos = payload completo, nada ignorado", () => {
     const r = montarPayloadRestauracao("vagas", TODOS);
     assert.deepEqual(r.ignorados, []); assert.deepEqual(r.semDestinatario, []);
-    assert.equal(r.payload.eventos.length, 7);
-    // 10 canais de e-mail/sino + o popup de solicitacao_vaga (Fase 3, bloco 1) + e-mail, sino e popup dos 2 da garantia R&S
-    assert.equal(r.payload.eventos.flatMap((e) => e.canais).length, 17);
+    assert.equal(r.payload.eventos.length, 8);
+    // 10 canais de e-mail/sino + o popup de solicitacao_vaga (Fase 3, bloco 1) + e-mail, sino e popup dos 2 da garantia R&S e do pós-venda R&S
+    assert.equal(r.payload.eventos.flatMap((e) => e.canais).length, 20);
   });
   await caso("restauração: usuário inativo fica de fora e é informado", () => {
     const sem = new Set(TODOS); const alvo = [...TODOS][0]; sem.delete(alvo);
@@ -562,7 +566,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     for (const canal of ["sino", "popup"]) assert.equal(descricaoPadraoDoSistema("avisos_cliente", canal, "indicacao_decidida_cliente"), FRASE_SEM_LISTA);
   });
   await caso("avisos ao cliente: os eventos e a lista dos outros grupos não mudaram", () => {
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 7); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 8); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
     assert.deepEqual([...canaisDoEvento("vaga_criada")], ["email", "sino"]);
   });
 
@@ -662,7 +666,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("bloco 2 catálogo: o evento do bloco 1 e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.deepEqual([...canaisDoEvento("indicacao_decidida_cliente")], ["sino", "popup"]);
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 7); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 8); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
   });
 
   await caso("data da entrevista para o cliente: dd/mm/aaaa às hh:mm (fuso de Brasília)", () => {
@@ -750,7 +754,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("bloco 3 catálogo: os eventos dos blocos 1 e 2 e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.equal(ROTULO_EVENTO.candidato_enviado_cliente, "Candidato enviado ao cliente");
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 7); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 8); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
   });
 
   const AB = "aguardando", AG = "aguardando_agendamento_cliente";
@@ -866,7 +870,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("bloco 4 catálogo: os 4 eventos antigos e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.equal(ROTULO_EVENTO.entrevista_remarcada_cliente, "Entrevista remarcada");
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 7); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 8); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
     assert.equal(grupoTemPadrao("avisos_cliente"), false, "avisos_cliente continua sem Restaurar padrão");
   });
   await caso("texto da solicitação aprovada: cargo e 'já está no ar'; cargo nulo só encurta", () => {
@@ -986,7 +990,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("catálogo: os 6 eventos de sino/popup não mudaram e nenhum nome colide com os e-mails ao cliente", () => {
     assert.equal(EVENTOS_POR_GRUPO.avisos_cliente.length, 6);
     for (const ev of EVENTOS_POR_GRUPO.avisos_cliente) { assert.equal(eventoEmailCliente(ev), false, ev); assert.deepEqual([...canaisDoEvento(ev)], ["sino", "popup"], ev); }
-    assert.equal(new Set([...EVENTOS_POR_GRUPO.avisos_cliente, ...LISTA_EMAIL, ...EVENTOS_POR_GRUPO.portal_cliente, ...EVENTOS_POR_GRUPO.vagas]).size, 6 + 7 + 8 + 7);
+    assert.equal(new Set([...EVENTOS_POR_GRUPO.avisos_cliente, ...LISTA_EMAIL, ...EVENTOS_POR_GRUPO.portal_cliente, ...EVENTOS_POR_GRUPO.vagas]).size, 6 + 7 + 8 + 8);
     assert.equal(EVENTOS_SEM_LISTA.length, 13);
     for (const ev of ["solicitacao_vaga", "vaga_pausa_pedida", "portal_candidato_aprovado", "rescisao_paga"]) assert.equal(eventoSemLista(ev), false, ev);
   });
@@ -1140,7 +1144,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
       assert.ok(ROTULO_EVENTO[ev] && NOTA_EVENTO[ev], ev); assert.equal(eventoSemLista(ev), false, "e-mail e sino têm lista");
       assert.match(NOTA_EVENTO[ev], /responsável pelo candidato SEMPRE/); assert.match(NOTA_EVENTO[ev], /O cliente não recebe nada/);
     }
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 7); assert.equal(eventoGarantiaRS("vaga_criada"), false);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 8); assert.equal(eventoGarantiaRS("vaga_criada"), false);
   });
   await caso("garantia R&S, tela: sino e popup vazios permitidos, popup só interruptor, e sem linha: e-mail e sino ligados, popup desligado", () => {
     for (const ev of GAR) {
@@ -1254,11 +1258,89 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
       assert.equal(c.permite_vazio === true, canalSemListaPermitido(e.evento, c.canal), `${e.evento}/${c.canal} (cópia em avisosPadrao × catálogo)`);
       if (c.permite_vazio) marcados.push(`${e.evento}/${c.canal}`);
     }
-    assert.deepEqual(marcados.sort(), ["garantia_rs_acionada/popup", "garantia_rs_acionada/sino", "garantia_rs_vencendo/popup", "garantia_rs_vencendo/sino"]);
+    assert.deepEqual(marcados.sort(), ["garantia_rs_acionada/popup", "garantia_rs_acionada/sino", "garantia_rs_vencendo/popup", "garantia_rs_vencendo/sino", "pos_venda_rs_7dias/popup", "pos_venda_rs_7dias/sino"]);
     for (const ev of GAR) assert.equal(r.payload.eventos.find((e) => e.evento === ev)!.canais.find((c) => c.canal === "email")!.destinatarios.length, 3);
     const vazio = montarPayloadRestauracao("vagas", new Set());
     assert.ok(!vazio.semDestinatario.some((x) => GAR.includes(x.evento) && x.canal !== "email"), "sino e popup da garantia não são 409");
     assert.ok(vazio.semDestinatario.some((x) => x.evento === "vaga_criada" && x.canal === "sino"), "vaga_criada/sino continua exigindo destinatário");
+  });
+
+  // ── Pós-venda R&S: sino, popup e e-mail internos configuráveis ──
+  await caso("pós-venda R&S: evento novo no grupo vagas; o tipo de gravação de sempre (pos_venda_rs) não muda; cópias de constantes coincidem", () => {
+    assert.equal(EVENTO_POS_VENDA_RS, "pos_venda_rs_7dias"); assert.equal(EVENTO_POS_VENDA_RS_CATALOGO, EVENTO_POS_VENDA_RS);
+    assert.equal(TIPO_NOTIFICACAO_POS_VENDA_RS, "pos_venda_rs");
+    assert.deepEqual(EVENTO_POR_TIPO_POS_VENDA, { pos_venda_rs: "pos_venda_rs_7dias" });
+    assert.equal(eventoPosVendaRS(EVENTO_POS_VENDA_RS), true); assert.equal(eventoPosVendaRS("vaga_criada"), false); assert.equal(eventoComResponsavelNoSino(EVENTO_POS_VENDA_RS), true);
+    assert.equal(grupoDoEvento(EVENTO_POS_VENDA_RS), "vagas"); assert.ok(EVENTOS_POR_GRUPO.vagas.includes(EVENTO_POS_VENDA_RS));
+    assert.deepEqual([...canaisDoEvento(EVENTO_POS_VENDA_RS)], ["email", "sino", "popup"]); assert.equal(eventoSemLista(EVENTO_POS_VENDA_RS), false);
+    assert.ok(ROTULO_EVENTO[EVENTO_POS_VENDA_RS] && NOTA_EVENTO[EVENTO_POS_VENDA_RS]);
+    assert.match(NOTA_EVENTO[EVENTO_POS_VENDA_RS], /responsáveis comerciais de sempre/); assert.match(NOTA_EVENTO[EVENTO_POS_VENDA_RS], /O cliente não recebe nada/);
+    assert.equal(DIAS_POS_VENDA_RS, 7); assert.equal(DIAS_RECUPERACAO_POS_VENDA_RS, 2);
+    for (const d of ["2026-10-20T09:00:00Z", "2026-10-21T02:59:00Z", "2026-10-21T03:00:00Z", "2027-01-01T09:00:00Z"]) assert.equal(dataBrasiliaPV(new Date(d)), dataBrasilia(new Date(d)));
+    assert.equal(somarDiasISOPV("2026-03-01", -1), somarDiasISO("2026-03-01", -1));
+  });
+  await caso("pós-venda R&S, tela: sino e popup vazios permitidos, popup só interruptor, sem linha: e-mail e sino ligados e popup desligado; textos próprios", () => {
+    const ev = EVENTO_POS_VENDA_RS;
+    assert.equal(canalSemListaPermitido(ev, "sino"), true); assert.equal(canalSemListaPermitido(ev, "popup"), true); assert.equal(canalSemListaPermitido(ev, "email"), false);
+    assert.equal(canalSoInterruptor(ev, "popup"), true); assert.equal(canalSoInterruptor(ev, "sino"), false);
+    assert.equal(ligadoSemLinha(ev, "email"), true); assert.equal(ligadoSemLinha(ev, "sino"), true); assert.equal(ligadoSemLinha(ev, "popup"), false);
+    assert.match(descricaoPadraoDoSistema("vagas", "sino", ev), /responsáveis comerciais de sempre/); assert.doesNotMatch(descricaoPadraoDoSistema("vagas", "sino", ev), /responsável pelo candidato/);
+    assert.match(descricaoPadraoDoSistema("vagas", "popup", ev), /ninguém vê o popup/); assert.match(descricaoPadraoDoSistema("vagas", "email", ev), /como sempre/);
+  });
+  await caso("pós-venda R&S, resolvedor: sino sem linha/erro = ligado; ativo=false desliga; e-mail ligado sem lista = legado; com lista = configurado", async () => {
+    const ev = EVENTO_POS_VENDA_RS;
+    assert.equal((await resolverComFonte(fonte({ novo: { canalAtivo: false, linhas: [usuario("u1")] } }), ev, "sino")).modo, "desligado");
+    const semLinha = await resolverComFonte(fonte({ novo: null, antigo: { canalAtivo: null, linhas: [] } }), ev, "sino"); assert.equal(semLinha.modo, "legado"); assert.equal(semLinha.falhou, false);
+    const erro = await resolverComFonte(fonte({ novoErro: true, antigo: null }), ev, "sino"); assert.equal(erro.modo, "legado"); assert.equal(erro.falhou, true);
+    const lista = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [usuario("u1"), usuario("u2")] } }), ev, "sino"); assert.equal(lista.modo, "configurado"); assert.deepEqual(lista.userIds, ["u1", "u2"]);
+    const ligadoSemLista = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [] }, perfis: [] }), ev, "email", null);
+    assert.equal(ligadoSemLista.modo, "legado"); assert.equal(ligadoSemLista.falhou, false);
+    const comLista = await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [email("a@x.com")] } }), ev, "email", null); assert.equal(comLista.modo, "configurado");
+    assert.equal((await resolverComFonte(fonte({ novo: { canalAtivo: false, linhas: [email("a@x.com")] } }), ev, "email", null)).modo, "desligado");
+    assert.equal((await resolverComFonte(fonte({ novoErro: true, antigo: null }), ev, "email", null)).modo, "legado");
+  });
+  await caso("pós-venda R&S: destinatários de sempre + lista sem duplicar, na ordem; vazio quando não há ninguém", () => {
+    assert.deepEqual(userIdsSinoPosVenda(["com1", "com2"], ["a", "com1", "b"]), ["com1", "com2", "a", "b"]);
+    assert.deepEqual(userIdsSinoPosVenda(["com1"], []), ["com1"]); assert.deepEqual(userIdsSinoPosVenda([], ["a", "a"]), ["a"]); assert.deepEqual(userIdsSinoPosVenda([], []), []);
+  });
+  await caso("pós-venda R&S, janela em Brasília: início + 7 entre hoje - 2 e hoje (início entre hoje - 9 e hoje - 7), virada de mês e de ano", () => {
+    assert.deepEqual(janelaInicioPosVenda(new Date("2026-10-20T09:00:00Z")), { inicioMin: "2026-10-11", inicioMax: "2026-10-13", hoje: "2026-10-20" });
+    assert.deepEqual(janelaInicioPosVenda(new Date("2026-10-21T02:59:00Z")), { inicioMin: "2026-10-11", inicioMax: "2026-10-13", hoje: "2026-10-20" }, "23:59 em Brasília ainda é dia 20");
+    assert.deepEqual(janelaInicioPosVenda(new Date("2026-11-03T09:00:00Z")), { inicioMin: "2026-10-25", inicioMax: "2026-10-27", hoje: "2026-11-03" });
+    assert.deepEqual(janelaInicioPosVenda(new Date("2027-01-05T09:00:00Z")), { inicioMin: "2026-12-27", inicioMax: "2026-12-29", hoje: "2027-01-05" });
+    const agora = new Date("2026-10-20T09:00:00Z");
+    for (const [ini, esperado] of [["2026-10-13", true], ["2026-10-12", true], ["2026-10-11", true], ["2026-10-10", false], ["2026-10-14", false], ["2026-10-20", false], [null, false], ["", false]] as const) assert.equal(posVendaNaJanela(ini, agora), esperado, String(ini));
+  });
+  await caso("pós-venda R&S, decisão do carimbo: entregue = grava; tudo desligado = grava; canal ligado sem entrega (falha ou sem destinatário) = NÃO grava", () => {
+    assert.equal(deveCarimbarPosVenda(["enviado", "enviado"]), true); assert.equal(deveCarimbarPosVenda(["enviado", "falhou"]), true); assert.equal(deveCarimbarPosVenda(["desligado", "enviado"]), true);
+    assert.equal(deveCarimbarPosVenda(["sem_destinatario", "enviado"]), true);
+    assert.equal(deveCarimbarPosVenda(["desligado", "desligado"]), true);
+    assert.equal(deveCarimbarPosVenda(["falhou", "falhou"]), false); assert.equal(deveCarimbarPosVenda(["sem_destinatario", "sem_destinatario"]), false);
+    assert.equal(deveCarimbarPosVenda(["desligado", "sem_destinatario"]), false); assert.equal(deveCarimbarPosVenda(["falhou", "desligado"]), false); assert.equal(deveCarimbarPosVenda(["sem_destinatario", "falhou"]), false);
+  });
+  await caso("pós-venda R&S, texto: o de sempre ('completou 7 dias', com a data de início; nunca 'hoje') e nada interno", () => {
+    const t = textoAvisoPosVendaRS({ candidato: "Maria Souza", vagaTitulo: "Auxiliar", cliente: "Maxsoy", dataInicio: "2026-10-13" });
+    assert.equal(t.titulo, "🤝 Hora do pós-venda: Maria Souza — Maxsoy");
+    assert.equal(t.mensagem, 'Maria Souza completou 7 dias na vaga "Auxiliar" (Maxsoy), início em 13/10/2026. Hora de fazer o contato de pós-venda com o cliente.');
+    assert.ok(!/hoje/i.test(t.mensagem));
+    assert.equal(textoAvisoPosVendaRS({ dataInicio: "2026-01-05" }).mensagem, 'Candidato completou 7 dias na vaga "Vaga" (Cliente), início em 05/01/2026. Hora de fazer o contato de pós-venda com o cliente.');
+    const interno = textoAvisoPosVendaRS({ candidato: "A", vagaTitulo: "B", cliente: "C", dataInicio: "2026-10-13", fee_rs_percentual: 15, admissao_fee_valor: 4200, observacoes: "nota interna", decidido_por: "Analista Interno" } as never);
+    for (const proibido of ["15", "4200", "nota interna", "Analista Interno"]) assert.ok(!JSON.stringify(interno).includes(proibido), proibido);
+  });
+  await caso("pós-venda R&S, popup: o tipo pos_venda_rs segue o canal popup do evento pos_venda_rs_7dias, e NÃO entra no popup de decisões (sem aviso duplicado)", () => {
+    assert.equal(EVENTO_POR_TIPO_POS_VENDA[TIPO_NOTIFICACAO_POS_VENDA_RS], EVENTO_POS_VENDA_RS);
+    assert.ok(!TIPOS_NOTIFICACAO_POPUP.includes(TIPO_NOTIFICACAO_POS_VENDA_RS)); assert.deepEqual(tiposComPopupLigado([EVENTO_POS_VENDA_RS]), []);
+    assert.equal(popupDecisaoLigado({ linha: null, erro: false }), false, "sem linha = não mostra"); assert.equal(popupDecisaoLigado({ linha: { ativo: true }, erro: true }), false, "erro = não mostra");
+    assert.equal(popupDecisaoLigado({ linha: { ativo: true }, erro: false }), true); assert.equal(popupDecisaoLigado({ linha: { ativo: false }, erro: false }), false);
+  });
+  await caso("pós-venda R&S, restauração do grupo vagas: sino e popup vazios com permite_vazio; e-mail com a lista de vaga_cancelada", () => {
+    const r = montarPayloadRestauracao("vagas", TODOS);
+    const ev = r.payload.eventos.find((e) => e.evento === EVENTO_POS_VENDA_RS)!;
+    assert.deepEqual(ev.canais.map((c) => c.canal).sort(), ["email", "popup", "sino"]);
+    assert.equal(ev.canais.find((c) => c.canal === "email")!.destinatarios.length, 3);
+    for (const c of ev.canais.filter((x) => x.canal !== "email")) { assert.equal(c.permite_vazio, true); assert.equal(c.destinatarios.length, 0); assert.equal(c.ativo, true); }
+    const vazio = montarPayloadRestauracao("vagas", new Set());
+    assert.ok(!vazio.semDestinatario.some((x) => x.evento === EVENTO_POS_VENDA_RS && x.canal !== "email"), "sino e popup do pós-venda não são 409");
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
+import { popupPosVendaLigado } from "@/lib/avisarDecisaoClienteCandidato";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ interface AvisoRow {
 
 // Mesmo mecanismo de PopupRescisoesHoje/avisos-hoje: conteúdo já decidido no cron
 // (api/cron/pos-venda-rs), aqui só filtra "hoje" (por usuário, via notificacoes_analista
-// já targetada por user_id) e checa se esse usuário já viu o popup hoje.
+// já targetada por user_id) e checa se esse usuário já viu o popup hoje. Só abre com o canal popup do evento ligado.
 export async function GET() {
   const supabase = await createClient();
   const {
@@ -23,6 +24,9 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const svc = createServiceClient();
+
+  // Canal popup do evento pos_venda_rs_7dias (Configurações > Avisos): sem linha ou erro de leitura = não mostra.
+  if (!(await popupPosVendaLigado(svc))) return NextResponse.json({ data: [], ja_visto: false });
 
   const hojeISO = formatarDataISO(obterDataHojeBrasil());
 

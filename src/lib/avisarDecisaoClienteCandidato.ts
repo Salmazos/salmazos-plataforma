@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { resolverDestinatarios } from "@/lib/avisos";
 import { buscarPerfilResponsavel } from "@/lib/perfilResponsavel";
+import { EVENTO_POS_VENDA_RS } from "@/lib/posVendaRSRegras";
 import {
   EVENTO_POR_DECISAO,
   EVENTO_POR_TIPO_NOTIFICACAO,
@@ -93,5 +94,20 @@ export async function eventosComPopupLigado(svc: ServiceClient): Promise<string[
   } catch (err) {
     console.error("[eventosComPopupLigado] Erro inesperado (segue desligado):", err);
     return [];
+  }
+}
+
+// Canal popup do pós-venda R&S (evento pos_venda_rs_7dias): sem linha ou erro de leitura = desligado (não mostra). NUNCA lança.
+export async function popupPosVendaLigado(svc: ServiceClient): Promise<boolean> {
+  try {
+    const { data, error } = await svc.from("aviso_eventos_canais").select("ativo").eq("evento", EVENTO_POS_VENDA_RS).eq("canal", "popup").maybeSingle();
+    if (error) {
+      console.error("[popupPosVendaLigado] Erro ao ler o canal popup (segue desligado):", error.message);
+      return false;
+    }
+    return popupDecisaoLigado({ linha: data ? { ativo: data.ativo } : null, erro: false });
+  } catch (err) {
+    console.error("[popupPosVendaLigado] Erro inesperado (segue desligado):", err);
+    return false;
   }
 }

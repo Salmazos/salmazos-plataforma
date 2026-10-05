@@ -152,10 +152,17 @@ export const PADRAO_AVISOS: Record<GrupoComPadrao, Record<string, PadraoEvento>>
       sino: { ativo: true, destinatarios: [] },
       popup: { ativo: true, destinatarios: [] },
     },
+    // Pós-venda R&S: e-mail com a mesma lista dos avisos de vaga mais parecidos; sino e popup ligados com a lista VAZIA
+    // (os responsáveis comerciais de sempre são avisados por regra no código).
+    pos_venda_rs_7dias: {
+      email: { ativo: true, destinatarios: [EMAIL_REBECCA, EMAIL_ANDREZA, EMAIL_GIOVANNI] },
+      sino: { ativo: true, destinatarios: [] },
+      popup: { ativo: true, destinatarios: [] },
+    },
   },
 };
 
-// Cópia dos eventos de EVENTOS_DECISAO_CLIENTE e EVENTOS_GARANTIA_RS (avisosCatalogo.ts): este módulo não importa
+// Cópia dos eventos de EVENTOS_DECISAO_CLIENTE, EVENTOS_GARANTIA_RS e EVENTO_POS_VENDA_RS (avisosCatalogo.ts): este módulo não importa
 // outros (roda no script de verificação). O script confere que as duas regras (canalSemListaPermitido e esta) dão
 // o mesmo resultado.
 const EVENTOS_SINO_COM_RESPONSAVEL: readonly string[] = [
@@ -163,6 +170,7 @@ const EVENTOS_SINO_COM_RESPONSAVEL: readonly string[] = [
   "portal_candidato_reprovado",
   "garantia_rs_vencendo",
   "garantia_rs_acionada",
+  "pos_venda_rs_7dias",
 ];
 
 export function grupoTemPadrao(grupo: string): grupo is GrupoComPadrao {
