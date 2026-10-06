@@ -3,7 +3,14 @@ import { resolverDestinatarios } from "@/lib/avisos";
 import { sendEmail } from "@/lib/sendEmail";
 import { gravarSinoConfiguravel } from "@/lib/avisoConfiguravel";
 import type { ResultadoCanalAviso } from "@/lib/avisosRestantesRegras";
-import { EVENTO_COBRANCA_RS_ATRASADA, TIPO_COBRANCA_ATRASADA } from "@/lib/cobrancaRSRegras";
+import {
+  EVENTO_COBRANCA_RS_AGUARDANDO_VALIDACAO,
+  EVENTO_COBRANCA_RS_ATRASADA,
+  EVENTO_COBRANCA_RS_PENDENTE_REVISAO,
+  TIPO_COBRANCA_AGUARDANDO_VALIDACAO,
+  TIPO_COBRANCA_ATRASADA,
+  TIPO_COBRANCA_PENDENTE_REVISAO,
+} from "@/lib/cobrancaRSRegras";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -95,6 +102,35 @@ export function avisarCobrancaRSSinoAtraso(svc: ServiceClient, o: OpcoesSinoAtra
     evento: EVENTO_COBRANCA_RS_ATRASADA,
     deSempre: o.userIdsDeSempre,
     linha: { tipo: TIPO_COBRANCA_ATRASADA, titulo: o.titulo, mensagem: o.mensagem, extra: { cobranca_rs_id: o.cobrancaId } },
+    geral: "nunca",
+  });
+}
+
+export interface OpcoesSinoCobrancaRS {
+  cobrancaId: string;
+  // Os de sempre (a lista do canal entra por cima, uma linha por usuário, sem repetir).
+  userIdsDeSempre: readonly string[];
+  titulo: string;
+  mensagem: string;
+}
+
+// Sino do rascunho recém-criado (cobranca_rs_pendente_revisao): sem linha de canal ou erro de leitura = ligado; só ativo = false
+// desliga tudo. Grava tipo cobranca_rs_pendente_revisao com cobranca_rs_id e candidato_id nulo. Nunca lança.
+export function avisarCobrancaRSSinoPendenteRevisao(svc: ServiceClient, o: OpcoesSinoCobrancaRS): Promise<ResultadoCanalAviso> {
+  return gravarSinoConfiguravel(svc, {
+    evento: EVENTO_COBRANCA_RS_PENDENTE_REVISAO,
+    deSempre: o.userIdsDeSempre,
+    linha: { tipo: TIPO_COBRANCA_PENDENTE_REVISAO, titulo: o.titulo, mensagem: o.mensagem, extra: { cobranca_rs_id: o.cobrancaId } },
+    geral: "nunca",
+  });
+}
+
+// Sino do lembrete de cobrança parada em "Aguardando validação" (cobranca_rs_aguardando_validacao). Nunca lança.
+export function avisarCobrancaRSSinoAguardandoValidacao(svc: ServiceClient, o: OpcoesSinoCobrancaRS): Promise<ResultadoCanalAviso> {
+  return gravarSinoConfiguravel(svc, {
+    evento: EVENTO_COBRANCA_RS_AGUARDANDO_VALIDACAO,
+    deSempre: o.userIdsDeSempre,
+    linha: { tipo: TIPO_COBRANCA_AGUARDANDO_VALIDACAO, titulo: o.titulo, mensagem: o.mensagem, extra: { cobranca_rs_id: o.cobrancaId } },
     geral: "nunca",
   });
 }
