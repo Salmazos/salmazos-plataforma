@@ -1,6 +1,7 @@
 // Verificação do resolvedor de destinatários de avisos (o projeto não tem runner de testes).
 // Rodar: node --experimental-strip-types scripts/verificar-avisos-resolvedor.mts
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   resolverComFonte, analistaAtendeUnidade, emailsOuPadrao, emailsSomenteConfigurado, executarCanaisIndependentes,
   type DadosAviso, type FonteAvisos, type LinhaDestinatario, type PerfilAnalista,
@@ -212,9 +213,9 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   for (const evento of Object.values(PADRAO_AVISOS.vagas)) for (const c of Object.values(evento)) for (const d of c.destinatarios) if (d.tipo_destinatario === "usuario") TODOS.add(d.usuario_id);
 
   await caso("padrão: só vagas e portal_cliente têm padrão", () => { assert.equal(grupoTemPadrao("vagas"), true); assert.equal(grupoTemPadrao("portal_cliente"), true); assert.equal(grupoTemPadrao("rescisao"), false); });
-  await caso("padrão vagas: 19 eventos (5 da carga inicial: e-mail 2/3/3/0/3, sino 7/7/7/7/3; mais os 2 da garantia R&S, o pós-venda R&S os 3 avisos restantes do bloco B o lembrete de agendamento do bloco C os 3 crons de lembrete do bloco D a taxa de R&S não configurada do bloco E e os 3 aniversários do bloco F)", () => {
+  await caso("padrão vagas: 24 eventos (5 da carga inicial: e-mail 2/3/3/0/3, sino 7/7/7/7/3; mais os 2 da garantia R&S, o pós-venda R&S os 3 avisos restantes do bloco B o lembrete de agendamento do bloco C os 3 crons de lembrete do bloco D a taxa de R&S não configurada do bloco E e os 3 aniversários do bloco F e os 5 avisos da cobrança R&S)", () => {
     const p = PADRAO_AVISOS.vagas;
-    assert.deepEqual(Object.keys(p).sort(), ["candidato_curriculo_atualizado", "candidato_transferido", "funcionario_nao_criado", "garantia_rs_acionada", "garantia_rs_vencendo", "conta_receber_hortolandia_atrasada", "lembrete_agendamento_pendente_analista", "lembrete_comercial", "pos_venda_rs_7dias", "solicitacao_vaga", "supervisao_cliente_atrasada", "vaga_cancelada", "vaga_criada", "vaga_fechada", "vaga_reativada", "fee_rs_nao_configurado", "aniversario_mes_seguinte", "aniversario_tres_dias", "aniversario_no_dia"].sort());
+    assert.deepEqual(Object.keys(p).sort(), ["candidato_curriculo_atualizado", "candidato_transferido", "funcionario_nao_criado", "garantia_rs_acionada", "garantia_rs_vencendo", "conta_receber_hortolandia_atrasada", "lembrete_agendamento_pendente_analista", "lembrete_comercial", "pos_venda_rs_7dias", "solicitacao_vaga", "supervisao_cliente_atrasada", "vaga_cancelada", "vaga_criada", "vaga_fechada", "vaga_reativada", "fee_rs_nao_configurado", "aniversario_mes_seguinte", "aniversario_tres_dias", "aniversario_no_dia", "cobranca_rs_gerada", "cobranca_rs_validada", "cobranca_rs_paga", "cobranca_rs_cancelada", "cobranca_rs_atrasada"].sort());
     const n = (ev: string, c: "email" | "sino") => p[ev][c]!.destinatarios.length;
     assert.deepEqual(["vaga_criada", "solicitacao_vaga", "vaga_cancelada", "vaga_fechada", "vaga_reativada"].map((ev) => n(ev, "email")), [2, 3, 3, 0, 3]);
     assert.deepEqual(["vaga_criada", "solicitacao_vaga", "vaga_cancelada", "vaga_fechada", "vaga_reativada"].map((ev) => n(ev, "sino")), [7, 7, 7, 7, 3]);
@@ -245,9 +246,9 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("restauração: todos ativos = payload completo, nada ignorado", () => {
     const r = montarPayloadRestauracao("vagas", TODOS);
     assert.deepEqual(r.ignorados, []); assert.deepEqual(r.semDestinatario, []);
-    assert.equal(r.payload.eventos.length, 19);
+    assert.equal(r.payload.eventos.length, 24);
     // 10 canais de e-mail/sino + o popup de solicitacao_vaga (Fase 3, bloco 1) + e-mail, sino e popup dos 2 da garantia R&S e do pós-venda R&S + o sino dos 3 avisos restantes do bloco B + sino e e-mail do lembrete de agendamento (bloco C) + sino/popup do comercial, sino/e-mail/popup da supervisão e sino/popup do faturamento (bloco D) + sino da taxa não configurada (bloco E) + e-mail, sino e popup dos 3 aniversários (bloco F)
-    assert.equal(r.payload.eventos.flatMap((e) => e.canais).length, 39);
+    assert.equal(r.payload.eventos.flatMap((e) => e.canais).length, 45);
   });
   await caso("restauração: usuário inativo fica de fora e é informado", () => {
     const sem = new Set(TODOS); const alvo = [...TODOS][0]; sem.delete(alvo);
@@ -589,7 +590,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     for (const canal of ["sino", "popup"]) assert.equal(descricaoPadraoDoSistema("avisos_cliente", canal, "indicacao_decidida_cliente"), FRASE_SEM_LISTA);
   });
   await caso("avisos ao cliente: os eventos e a lista dos outros grupos não mudaram", () => {
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 19); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 24); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
     assert.deepEqual([...canaisDoEvento("vaga_criada")], ["email", "sino"]);
   });
 
@@ -689,7 +690,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("bloco 2 catálogo: o evento do bloco 1 e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.deepEqual([...canaisDoEvento("indicacao_decidida_cliente")], ["sino", "popup"]);
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 19); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 24); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
   });
 
   await caso("data da entrevista para o cliente: dd/mm/aaaa às hh:mm (fuso de Brasília)", () => {
@@ -777,7 +778,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("bloco 3 catálogo: os eventos dos blocos 1 e 2 e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.equal(ROTULO_EVENTO.candidato_enviado_cliente, "Candidato enviado ao cliente");
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 19); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 24); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
   });
 
   const AB = "aguardando", AG = "aguardando_agendamento_cliente";
@@ -893,7 +894,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("bloco 4 catálogo: os 4 eventos antigos e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.equal(ROTULO_EVENTO.entrevista_remarcada_cliente, "Entrevista remarcada");
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 19); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 24); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
     assert.equal(grupoTemPadrao("avisos_cliente"), false, "avisos_cliente continua sem Restaurar padrão");
   });
   await caso("texto da solicitação aprovada: cargo e 'já está no ar'; cargo nulo só encurta", () => {
@@ -1013,7 +1014,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("catálogo: os 6 eventos de sino/popup não mudaram e nenhum nome colide com os e-mails ao cliente", () => {
     assert.equal(EVENTOS_POR_GRUPO.avisos_cliente.length, 6);
     for (const ev of EVENTOS_POR_GRUPO.avisos_cliente) { assert.equal(eventoEmailCliente(ev), false, ev); assert.deepEqual([...canaisDoEvento(ev)], ["sino", "popup"], ev); }
-    assert.equal(new Set([...EVENTOS_POR_GRUPO.avisos_cliente, ...LISTA_EMAIL, ...EVENTOS_POR_GRUPO.portal_cliente, ...EVENTOS_POR_GRUPO.vagas]).size, 6 + 7 + 8 + 19);
+    assert.equal(new Set([...EVENTOS_POR_GRUPO.avisos_cliente, ...LISTA_EMAIL, ...EVENTOS_POR_GRUPO.portal_cliente, ...EVENTOS_POR_GRUPO.vagas]).size, 6 + 7 + 8 + 24);
     assert.equal(EVENTOS_SEM_LISTA.length, 13);
     for (const ev of ["solicitacao_vaga", "vaga_pausa_pedida", "portal_candidato_aprovado", "rescisao_paga"]) assert.equal(eventoSemLista(ev), false, ev);
   });
@@ -1167,7 +1168,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
       assert.ok(ROTULO_EVENTO[ev] && NOTA_EVENTO[ev], ev); assert.equal(eventoSemLista(ev), false, "e-mail e sino têm lista");
       assert.match(NOTA_EVENTO[ev], /responsável pelo candidato SEMPRE/); assert.match(NOTA_EVENTO[ev], /O cliente não recebe nada/);
     }
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 19); assert.equal(eventoGarantiaRS("vaga_criada"), false);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 24); assert.equal(eventoGarantiaRS("vaga_criada"), false);
   });
   await caso("garantia R&S, tela: sino e popup vazios permitidos, popup só interruptor, e sem linha: e-mail e sino ligados, popup desligado", () => {
     for (const ev of GAR) {
@@ -1281,7 +1282,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
       assert.equal(c.permite_vazio === true, canalSemListaPermitido(e.evento, c.canal), `${e.evento}/${c.canal} (cópia em avisosPadrao × catálogo)`);
       if (c.permite_vazio) marcados.push(`${e.evento}/${c.canal}`);
     }
-    assert.deepEqual(marcados.sort(), ["garantia_rs_acionada/popup", "garantia_rs_acionada/sino", "garantia_rs_vencendo/popup", "garantia_rs_vencendo/sino", "pos_venda_rs_7dias/popup", "pos_venda_rs_7dias/sino"].concat(["candidato_curriculo_atualizado/sino", "candidato_transferido/sino", "funcionario_nao_criado/sino", "lembrete_agendamento_pendente_analista/sino", "lembrete_comercial/popup", "lembrete_comercial/sino", "supervisao_cliente_atrasada/popup", "supervisao_cliente_atrasada/sino", "conta_receber_hortolandia_atrasada/popup", "conta_receber_hortolandia_atrasada/sino", "fee_rs_nao_configurado/sino", "aniversario_tres_dias/sino", "aniversario_no_dia/sino", "aniversario_no_dia/popup"]).sort());
+    assert.deepEqual(marcados.sort(), ["garantia_rs_acionada/popup", "garantia_rs_acionada/sino", "garantia_rs_vencendo/popup", "garantia_rs_vencendo/sino", "pos_venda_rs_7dias/popup", "pos_venda_rs_7dias/sino"].concat(["candidato_curriculo_atualizado/sino", "candidato_transferido/sino", "cobranca_rs_atrasada/sino", "funcionario_nao_criado/sino", "lembrete_agendamento_pendente_analista/sino", "lembrete_comercial/popup", "lembrete_comercial/sino", "supervisao_cliente_atrasada/popup", "supervisao_cliente_atrasada/sino", "conta_receber_hortolandia_atrasada/popup", "conta_receber_hortolandia_atrasada/sino", "fee_rs_nao_configurado/sino", "aniversario_tres_dias/sino", "aniversario_no_dia/sino", "aniversario_no_dia/popup"]).sort());
     for (const ev of GAR) assert.equal(r.payload.eventos.find((e) => e.evento === ev)!.canais.find((c) => c.canal === "email")!.destinatarios.length, 3);
     const vazio = montarPayloadRestauracao("vagas", new Set());
     assert.ok(!vazio.semDestinatario.some((x) => GAR.includes(x.evento) && x.canal !== "email"), "sino e popup da garantia não são 409");
@@ -1646,6 +1647,65 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     assert.equal(destinatariosPagaCodigoAntigo(nova, new Set(), "u-dir2").some((d) => d.user_id === "u-dir2"), true, "código antigo: o e-mail novo da diretoria escapava da exclusão fixa");
     const trocado = PERFIS_ATUAIS.map((p) => (p.user_id === "u-giov" ? { ...p, email: "OUTRO@salmazos.com.br" } : p));
     assert.deepEqual(destinatariosPagaLegado(trocado, "u-giov").map((d) => d.email), ["OUTRO@salmazos.com.br"]);
+  });
+
+  // ── Cobrança R&S: catálogo, padrão, restauração e migration ──
+  const COBR = [...EVENTOS_COBRANCA_RS] as string[];
+  await caso("cobrança R&S, catálogo: 5 eventos no grupo vagas, rótulo e nota em português; só e-mail, e o atraso também com sino; NENHUM popup", () => {
+    for (const ev of COBR) { assert.ok(eventoAvisoRestante(ev) && EVENTOS_POR_GRUPO.vagas.includes(ev) && grupoDoEvento(ev) === "vagas", ev); assert.ok(ROTULO_EVENTO[ev].length > 5 && NOTA_EVENTO[ev].length > 40 && AVISOS_RESTANTES[ev].padrao.email, ev); assert.ok(!canaisDoEvento(ev).includes("popup"), ev); }
+    for (const ev of COBR.filter((x) => x !== "cobranca_rs_atrasada")) assert.deepEqual([...canaisDoEvento(ev)], ["email"], ev);
+    assert.deepEqual([...canaisDoEvento("cobranca_rs_atrasada")].sort(), ["email", "sino"]); assert.ok(AVISOS_RESTANTES.cobranca_rs_atrasada.padrao.sino);
+    assert.match(NOTA_EVENTO.cobranca_rs_paga, /Por padrão avisa o revisor da cobrança, sem diretoria/);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.filter((e) => e.startsWith("cobranca_rs_")).length, 5);
+    assert.deepEqual(EVENTOS_POR_GRUPO.portal_cliente.filter((e) => e.startsWith("cobranca_rs_")), []);
+  });
+  await caso("cobrança R&S, tela: e-mail sem linha = ligado (legado); sino sem linha = ligado; popup nunca existe; sino do atraso pode ficar vazio, e-mail não", () => {
+    for (const ev of COBR) { assert.equal(ligadoSemLinha(ev, "email"), true, ev); assert.equal(canalSemListaPermitido(ev, "email"), false, ev); assert.equal(canalSoInterruptor(ev, "email"), false, ev); }
+    assert.equal(ligadoSemLinha("cobranca_rs_atrasada", "sino"), true); assert.equal(canalSemListaPermitido("cobranca_rs_atrasada", "sino"), true);
+  });
+  await caso("cobrança R&S, padrão: e-mail dos 5 com lista curta (Andreza e Giovanni; validada e paga só o Giovanni, nunca diretoria na paga); sino do atraso ligado e vazio; restauração com permite_vazio só no sino", () => {
+    const p = PADRAO_AVISOS.vagas;
+    for (const ev of ["cobranca_rs_gerada", "cobranca_rs_cancelada", "cobranca_rs_atrasada"]) assert.deepEqual(p[ev].email!.destinatarios.map((d) => (d.tipo_destinatario === "email" ? d.email : "")), ["rh@salmazos.com.br", "vagas@salmazos.com.br"], ev);
+    for (const ev of ["cobranca_rs_validada", "cobranca_rs_paga"]) assert.deepEqual(p[ev].email!.destinatarios.map((d) => (d.tipo_destinatario === "email" ? d.email : "")), ["vagas@salmazos.com.br"], ev);
+    for (const ev of COBR) { assert.equal(p[ev].email!.ativo, true, ev); assert.equal(p[ev].popup, undefined, ev); }
+    for (const ev of COBR.filter((x) => x !== "cobranca_rs_atrasada")) assert.equal(p[ev].sino, undefined, ev);
+    assert.deepEqual(p.cobranca_rs_atrasada.sino, { ativo: true, destinatarios: [] });
+    const r = montarPayloadRestauracao("vagas", TODOS);
+    for (const ev of COBR) {
+      const e = r.payload.eventos.find((x) => x.evento === ev)!; assert.ok(e.canais.find((c) => c.canal === "email")!.destinatarios.length >= 1, ev);
+      for (const c of e.canais.filter((x) => x.canal === "sino")) { assert.equal(c.permite_vazio, true); assert.equal(c.destinatarios.length, 0); }
+      assert.ok(e.canais.filter((x) => x.canal === "email").every((c) => c.permite_vazio === undefined), ev);
+    }
+    assert.ok(!r.semDestinatario.some((x) => COBR.includes(x.evento)));
+  });
+  await caso("cobrança R&S, resolvedor: e-mail ligado SEM lista = legado; com lista = só a lista; desligado = ninguém; sino sem linha/erro = ligado, ativo=false desliga, lista soma", async () => {
+    for (const ev of COBR) {
+      assert.equal((await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [] }, perfis: [] }), ev, "email")).modo, "legado", ev);
+      assert.deepEqual((await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [email("a@x.com")] } }), ev, "email")).emails.map((e) => e.email), ["a@x.com"], ev);
+      assert.equal((await resolverComFonte(fonte({ novo: { canalAtivo: false, linhas: [email("a@x.com")] } }), ev, "email")).modo, "desligado", ev);
+      assert.equal((await resolverComFonte(fonte({ novo: null, antigo: { canalAtivo: null, linhas: [] } }), ev, "email")).modo, "legado", ev);
+    }
+    const s = (c: Cenario) => resolverComFonte(fonte(c), "cobranca_rs_atrasada", "sino");
+    assert.equal((await s({ novo: null, antigo: { canalAtivo: null, linhas: [] } })).modo, "legado"); assert.equal((await s({ novoErro: true, antigo: { canalAtivo: null, linhas: [] } })).modo, "legado");
+    assert.equal((await s({ novo: { canalAtivo: false, linhas: [usuario("u1")] } })).modo, "desligado"); assert.deepEqual((await s({ novo: { canalAtivo: true, linhas: [usuario("g1")] } })).userIds, ["g1"]);
+    assert.deepEqual(unirUserIds(["u-eliz", "u-giov"], ["u-giov", "u-edi"]), ["u-eliz", "u-giov", "u-edi"], "lista sem duplicar quem já recebe");
+  });
+  await caso("cobrança R&S, carimbo do atraso: grava se algo foi entregue ou se tudo está desligado; não grava se o que está ligado falhou ou não tinha a quem avisar", () => {
+    assert.equal(deveCarimbarAviso(["enviado", "falhou"]), true); assert.equal(deveCarimbarAviso(["falhou", "enviado"]), true); assert.equal(deveCarimbarAviso(["desligado", "enviado"]), true);
+    assert.equal(deveCarimbarAviso(["desligado", "desligado"]), true); assert.equal(deveCarimbarAviso(["falhou", "falhou"]), false); assert.equal(deveCarimbarAviso(["sem_destinatario", "sem_destinatario"]), false);
+    assert.equal(deveCarimbarAviso(["desligado", "falhou"]), false); assert.equal(deveCarimbarAviso(["desligado", "sem_destinatario"]), false); assert.equal(deveCarimbarAviso(["sem_destinatario", "falhou"]), false);
+  });
+  await caso("cobrança R&S, migration: 5 eventos no grupo vagas e 6 canais, iguais ao catálogo; só inserts com on conflict do nothing; sem DDL", () => {
+    const sql = readFileSync(new URL("../supabase/migration_avisos_cobranca_rs.sql", import.meta.url), "utf8");
+    const codigo = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
+    assert.ok(!/\b(alter|create|drop|trigger|policy|constraint|update|delete|grant|function)\b/i.test(codigo), "só inserts");
+    assert.equal((codigo.match(/on conflict/gi) ?? []).length, 2); assert.equal((codigo.match(/\binsert into\b/gi) ?? []).length, 2);
+    assert.ok(!/cobrancas_rs\b/.test(codigo.replace(/'cobranca_rs_[a-z]+'/g, "")), "nenhuma alteração em cobrancas_rs");
+    const eventos = [...codigo.matchAll(/\('(cobranca_rs_[a-z]+)', 'vagas',/g)].map((m) => m[1]).sort(); assert.deepEqual(eventos, [...COBR].sort());
+    for (const ev of COBR) { const m = codigo.match(new RegExp(`\\('${ev}', 'vagas',\\s*'[^']+',\\s*array\\[([^\\]]+)\\]`)); assert.ok(m, ev); assert.deepEqual(m![1].split(",").map((x) => x.trim().replace(/'/g, "")).sort(), [...canaisDoEvento(ev)].sort(), ev); }
+    const canais = [...codigo.matchAll(/\('(cobranca_rs_[a-z]+)', '(email|sino|popup)', true\)/g)].map((m) => `${m[1]}/${m[2]}`).sort();
+    assert.deepEqual(canais, COBR.flatMap((ev) => [...canaisDoEvento(ev)].map((c) => `${ev}/${c}`)).sort()); assert.equal(canais.length, 6);
+    assert.ok(!/aviso_destinatarios\b/.test(codigo), "0 destinatários");
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);

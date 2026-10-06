@@ -388,6 +388,27 @@ entregue (ou tudo está desligado). Peças comuns: `avisoConfiguravel.ts` e `avi
 existentes (comercial, supervisão, faturamento, aniversários) só ganharam a checagem do canal popup do evento; a lógica de estado e de
 "visto" deles não mudou. Links de e-mail via `src/lib/siteUrl.ts` (constante fixa `https://vagas.salmazos.com.br`).
 
+## Cobrança R&S
+
+Avisos internos da cobrança (nenhum vai ao cliente). Eventos novos no grupo Vagas (`supabase/migration_avisos_cobranca_rs.sql`, só
+inserts); o dinheiro em si (status, fee, datas, `revisado_por`, `enviado_em`, `pago_em`) não é tocado. Sem popup novo.
+
+| Evento | Canais | Quem recebe sem lista (legado) | Observação |
+|---|---|---|---|
+| `cobranca_rs_gerada` | e-mail | diretoria/superuser + o aprovador (se tiver acesso à Cobrança R&S); no reenvio, + o revisor original | cobre a aprovação e o reenvio manual; na aprovação o e-mail sai antes do UPDATE, como sempre |
+| `cobranca_rs_validada` | e-mail | só o revisor da cobrança | só na 1ª vez que o vencimento é definido |
+| `cobranca_rs_paga` | e-mail | só o revisor DESTA cobrança, se não for diretoria/superuser (por `nivel_acesso`) | antes: exclusão fixa de 4 e-mails; sem revisor ou revisor da diretoria = ninguém |
+| `cobranca_rs_cancelada` | e-mail | diretoria/superuser + quem cancelou (se tiver acesso) | |
+| `cobranca_rs_atrasada` | sino, e-mail | diretoria/superuser + revisor com acesso | cron diário; repete a cada 2 dias sem limite |
+
+- **Atraso:** o carimbo `ultimo_lembrete_atraso_em` passa a gravar quando algo foi entregue (sino ou e-mail) ou todos os canais estão
+  desligados; sem entrega (falha ou ninguém a quem avisar) não carimba e tenta de novo. Antes só o e-mail contava e o sino repetia todo dia
+  quando o e-mail falhava. Guarda contra sino duplicado no mesmo dia; datas em horário de Brasília.
+- **Padrão ("Restaurar padrão"):** e-mail com Andreza e Giovanni (validada e paga só o Giovanni); sino do atraso ligado e vazio. Só vale ao
+  clicar no botão; a migration não cria destinatários.
+- A tela antiga "Avisos de Cobrança R&S" (`/painel/cobranca-rs-avisos-config`, tabela `cobranca_rs_avisos_destinatarios`, que o código dos
+  avisos já não lia) agora redireciona para `/painel/avisos-config`; a rota e a tabela continuam.
+
 ## Ajustes pós-teste (tela de Avisos e portal)
 
 - **Erro inline na tela de Avisos.** Ações que falham na API (ativar/desativar, remover, adicionar, ligar/desligar canal,

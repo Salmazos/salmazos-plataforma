@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
-import CobrancaRSAvisosConfigClient from "@/components/CobrancaRSAvisosConfigClient";
+import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export default async function CobrancaRSAvisosConfigPage() {
+// Tela antiga (tabela cobranca_rs_avisos_destinatarios, que o código dos avisos já não lia): os avisos da Cobrança R&S
+// agora são configurados em Configurações > Avisos (grupo Vagas, eventos cobranca_rs_*). A rota e a tabela continuam
+// existindo; só o acesso é encaminhado para a tela unificada.
+export default async function CobrancaRSAvisosConfigMovidaPage() {
   const supabaseAuth = await createClient();
   const {
     data: { user },
@@ -14,11 +16,5 @@ export default async function CobrancaRSAvisosConfigPage() {
   const role = user.app_metadata?.role ?? "analista";
   if (role !== "superuser") redirect("/painel");
 
-  const svc = createServiceClient();
-  const { data: emailDestinatarios } = await svc
-    .from("cobranca_rs_avisos_destinatarios")
-    .select("*")
-    .order("nome");
-
-  return <CobrancaRSAvisosConfigClient emailDestinatariosIniciais={emailDestinatarios ?? []} />;
+  redirect("/painel/avisos-config");
 }
