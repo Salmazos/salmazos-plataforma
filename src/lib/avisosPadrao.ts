@@ -186,6 +186,18 @@ export const PADRAO_AVISOS: Record<GrupoComPadrao, Record<string, PadraoEvento>>
       popup: { ativo: true, destinatarios: [] },
     },
     fee_rs_nao_configurado: { sino: { ativo: true, destinatarios: [] } },
+    // Cobrança R&S: e-mail com a lista curta de quem acompanha o financeiro das cobranças (Andreza e Giovanni), NÃO a lista
+    // de vaga_cancelada/vaga_reativada (que inclui a Rebecca, de recrutamento): estes e-mails trazem fee, CNPJ e cliente.
+    // A cobrança paga e a validada vão só para o revisor (Giovanni), nunca para a diretoria. Sino do atraso ligado com a lista VAZIA
+    // (diretoria, superusers e revisor já são avisados por regra no código). Só vale ao clicar em "Restaurar padrão".
+    cobranca_rs_gerada: { email: { ativo: true, destinatarios: [EMAIL_ANDREZA, EMAIL_GIOVANNI] } },
+    cobranca_rs_validada: { email: { ativo: true, destinatarios: [EMAIL_GIOVANNI] } },
+    cobranca_rs_paga: { email: { ativo: true, destinatarios: [EMAIL_GIOVANNI] } },
+    cobranca_rs_cancelada: { email: { ativo: true, destinatarios: [EMAIL_ANDREZA, EMAIL_GIOVANNI] } },
+    cobranca_rs_atrasada: {
+      email: { ativo: true, destinatarios: [EMAIL_ANDREZA, EMAIL_GIOVANNI] },
+      sino: { ativo: true, destinatarios: [] },
+    },
     conta_receber_hortolandia_atrasada: { sino: { ativo: true, destinatarios: [] }, popup: { ativo: true, destinatarios: [] } },
   },
 };
@@ -210,6 +222,11 @@ const EVENTOS_SINO_COM_RESPONSAVEL: readonly string[] = [
   "aniversario_mes_seguinte",
   "aniversario_tres_dias",
   "aniversario_no_dia",
+  "cobranca_rs_gerada",
+  "cobranca_rs_validada",
+  "cobranca_rs_paga",
+  "cobranca_rs_cancelada",
+  "cobranca_rs_atrasada",
 ];
 
 export function grupoTemPadrao(grupo: string): grupo is GrupoComPadrao {

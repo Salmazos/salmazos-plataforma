@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { parseSalarioFixo } from "@/lib/constants";
 import { avisarFeeRSNaoConfigurado } from "@/lib/avisarFeeRS";
+import { destinatariosPagaLegado } from "@/lib/cobrancaRSRegras";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -369,4 +370,23 @@ export async function obterDestinatariosCobrancaRS(
   }
 
   return Array.from(destinatarios.values());
+}
+
+/**
+ * Destinatários do e-mail de "cobrança paga" quando não há lista no canal e-mail do evento cobranca_rs_paga: SÓ o revisor
+ * desta cobrança (revisadoPor), e só se ele não for diretoria nem superuser (comparado por nivel_acesso, não por e-mail
+ * fixo). Variante própria do marcar-paga: obterDestinatariosCobrancaRS não muda para os outros avisos. A regra pura está
+ * em destinatariosPagaLegado (cobrancaRSRegras.ts).
+ */
+export async function obterDestinatariosPagaCobrancaRS(
+  revisadoPor: string | null,
+  supabase?: ServiceClient
+): Promise<DestinatarioAtrasoCobranca[]> {
+  if (!revisadoPor) return [];
+  const svc = supabase ?? createServiceClient();
+  const { data: analistas } = await svc
+    .from("analistas_perfil")
+    .select("user_id, email, nome_completo, nivel_acesso")
+    .eq("ativo", true);
+  return destinatariosPagaLegado(analistas ?? [], revisadoPor);
 }

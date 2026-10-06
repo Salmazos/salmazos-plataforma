@@ -6,7 +6,8 @@ import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { parseBody, cobrancaRsCancelarSchema } from "@/lib/schemas";
 import { obterDestinatariosCobrancaRS } from "@/lib/cobrancaRS";
 import { getEmailTemplate } from "@/lib/emailTemplates";
-import { sendEmail } from "@/lib/sendEmail";
+import { avisarCobrancaRSEmail } from "@/lib/avisarCobrancaRS";
+import { EVENTO_COBRANCA_RS_CANCELADA, TIPO_EMAIL_COBRANCA_CANCELADA } from "@/lib/cobrancaRSRegras";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -92,27 +93,25 @@ export async function POST(request: NextRequest, { params }: Params) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const vagaTitulo = (cobranca.vagas as any)?.titulo ?? "—";
       const ehCancelamento = cobranca.tipo === "cancelamento";
-      const destinatarios = await obterDestinatariosCobrancaRS(user.id, svc);
-      if (destinatarios.length === 0) {
-        console.error(`[cobrancas-rs/cancelar] Nenhum destinatário resolvido pro e-mail de cancelamento (cobranca_id=${id}).`);
-        return;
-      }
-
-      const template = getEmailTemplate("cobranca_rs_cancelada", {
-        nome: "",
-        cargo: ehCancelamento ? vagaTitulo : cobranca.cargo ?? vagaTitulo,
-        nomeCliente: cobranca.cliente_nome_snapshot,
-        nomeCandidato: ehCancelamento ? undefined : cobranca.candidato_nome_snapshot ?? undefined,
-        feeValor: cobranca.fee_valor,
-        tipoCobrancaRS: cobranca.tipo,
-        justificativaCancelamento: justificativa,
+      // Aviso interno (Configurações > Avisos > cobranca_rs_cancelada): sem lista no canal e-mail, os mesmos destinatários de
+      // sempre; com lista, só a lista; desligado, ninguém.
+      await avisarCobrancaRSEmail(svc, {
+        evento: EVENTO_COBRANCA_RS_CANCELADA,
+        tipo: TIPO_EMAIL_COBRANCA_CANCELADA,
+        cobrancaId: id,
+        contexto: "cobrancas-rs/cancelar",
+        legado: () => obterDestinatariosCobrancaRS(user.id, svc),
+        montar: () =>
+          getEmailTemplate("cobranca_rs_cancelada", {
+            nome: "",
+            cargo: ehCancelamento ? vagaTitulo : cobranca.cargo ?? vagaTitulo,
+            nomeCliente: cobranca.cliente_nome_snapshot,
+            nomeCandidato: ehCancelamento ? undefined : cobranca.candidato_nome_snapshot ?? undefined,
+            feeValor: cobranca.fee_valor,
+            tipoCobrancaRS: cobranca.tipo,
+            justificativaCancelamento: justificativa,
+          }),
       });
-
-      await Promise.all(
-        destinatarios.map((d) =>
-          sendEmail({ to: d.email, subject: template.subject, html: template.html, tipo: "cobranca_rs_cancelada" })
-        )
-      ).catch((err) => console.error(`[cobrancas-rs/cancelar] Erro ao enviar e-mail de cancelamento (cobranca_id=${id}):`, err));
     } catch (err) {
       console.error(`[cobrancas-rs/cancelar] Erro ao montar e-mail de cancelamento (cobranca_id=${id}):`, err);
     }

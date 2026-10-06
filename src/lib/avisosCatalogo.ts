@@ -92,6 +92,40 @@ export const AVISOS_RESTANTES: Record<string, { rotulo: string; canais: readonly
       popup: "Ligado: o popup de aniversariantes de hoje abre uma vez por dia para quem tem acesso. Desligado, ou sem esta configuração: ninguém vê o popup.",
     },
   },
+  // Cobrança R&S (avisos internos; o dinheiro em si não passa por aqui): só o e-mail, exceto o atraso, que também tem sino.
+  cobranca_rs_gerada: {
+    rotulo: "Cobrança R&S gerada (aprovação e reenvio)",
+    canais: ["email"],
+    nota: "E-mail interno quando a cobrança é aprovada e enviada, e de novo a cada reenvio manual do aviso. Sem ninguém na lista, vai para a diretoria, os superusers e o analista que revisou a cobrança (se tiver acesso à Cobrança R&S); com lista, só para a lista. Desligado, ninguém recebe. Não envia sino nem popup.",
+    padrao: { email: "Sem ninguém na lista: diretoria, superusers e o revisor da cobrança recebem, como sempre. Com lista: só a lista. Desligado: ninguém." },
+  },
+  cobranca_rs_validada: {
+    rotulo: "Cobrança R&S validada pela diretoria",
+    canais: ["email"],
+    nota: "E-mail ao analista que revisou a cobrança, na primeira vez que a diretoria define o vencimento (correções da data depois não avisam de novo). Sem ninguém na lista, só o revisor da cobrança recebe; com lista, só a lista. Desligado, ninguém recebe. Não envia sino nem popup.",
+    padrao: { email: "Sem ninguém na lista: só o revisor da cobrança recebe, como sempre. Com lista: só a lista. Desligado: ninguém." },
+  },
+  cobranca_rs_paga: {
+    rotulo: "Cobrança R&S paga",
+    canais: ["email"],
+    nota: "Por padrão avisa o revisor da cobrança, sem diretoria: se o revisor for da diretoria ou superuser, ou a cobrança não tiver revisor, ninguém recebe. Com lista no canal e-mail, só a lista. Desligado, ninguém recebe. Não envia sino nem popup.",
+    padrao: { email: "Sem ninguém na lista: só o revisor da cobrança (nunca diretoria ou superuser), como sempre. Com lista: só a lista. Desligado: ninguém." },
+  },
+  cobranca_rs_cancelada: {
+    rotulo: "Cobrança R&S cancelada",
+    canais: ["email"],
+    nota: "E-mail interno quando uma cobrança é cancelada com justificativa. Sem ninguém na lista, vai para a diretoria, os superusers e quem cancelou (se tiver acesso à Cobrança R&S); com lista, só para a lista. Desligado, ninguém recebe. Não envia sino nem popup.",
+    padrao: { email: "Sem ninguém na lista: diretoria, superusers e quem cancelou recebem, como sempre. Com lista: só a lista. Desligado: ninguém." },
+  },
+  cobranca_rs_atrasada: {
+    rotulo: "Cobrança R&S atrasada",
+    canais: ["sino", "email"],
+    nota: "Aviso (cron das 6h) de cobrança validada com vencimento passado e ainda não paga; repete a cada 2 dias até o pagamento, sem limite. Sino: diretoria, superusers e o revisor com acesso, além das pessoas da lista (a lista pode ficar vazia); desligado, ninguém recebe. E-mail: os mesmos de sempre; com lista, só a lista. O lembrete só é dado como feito quando algo foi entregue (sino ou e-mail) ou todos os canais estão desligados; senão tenta de novo na próxima execução. Não envia popup.",
+    padrao: {
+      sino: "Ligado, sem ninguém na lista: diretoria, superusers e o revisor com acesso são avisados, como sempre. Desligado: ninguém.",
+      email: "Sem ninguém na lista: diretoria, superusers e o revisor com acesso recebem, como sempre. Com lista: só a lista. Desligado: ninguém.",
+    },
+  },
 };
 export const EVENTOS_AVISOS_RESTANTES: string[] = Object.keys(AVISOS_RESTANTES);
 export const eventoAvisoRestante = (evento: string): boolean => Object.prototype.hasOwnProperty.call(AVISOS_RESTANTES, evento);

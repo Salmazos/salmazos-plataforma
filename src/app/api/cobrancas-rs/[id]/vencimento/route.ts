@@ -5,7 +5,8 @@ import { parseBody, cobrancaRsVencimentoSchema } from "@/lib/schemas";
 import { podeRevisarCobranca } from "@/lib/fullAccessAuth";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { getEmailTemplate } from "@/lib/emailTemplates";
-import { sendEmail } from "@/lib/sendEmail";
+import { avisarCobrancaRSEmail } from "@/lib/avisarCobrancaRS";
+import { EVENTO_COBRANCA_RS_VALIDADA, TIPO_EMAIL_COBRANCA_VALIDADA } from "@/lib/cobrancaRSRegras";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -86,30 +87,33 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!atual.data_vencimento && data.data_vencimento && data.status === "validada" && data.revisado_por) {
     after(async () => {
       try {
-        const { data: analista } = await svc
-          .from("analistas_perfil")
-          .select("email, nome_completo")
-          .eq("user_id", data.revisado_por)
-          .eq("ativo", true)
-          .maybeSingle();
-
-        if (!analista?.email) {
-          console.error(`[vencimento] Analista revisor sem e-mail ativo resolvido (cobranca_id=${id}, revisado_por=${data.revisado_por}).`);
-          return;
-        }
-
-        const template = getEmailTemplate("cobranca_rs_validada_diretoria", {
-          nome: analista.nome_completo ?? "",
-          cargo: data.cargo ?? "—",
-          nomeCliente: data.cliente_nome_snapshot,
-          nomeCandidato: data.candidato_nome_snapshot ?? undefined,
-          feeRsPercentual: data.fee_percentual,
-          feeValor: data.fee_valor,
-          tipoCobrancaRS: data.tipo,
+        // Aviso interno (Configurações > Avisos > cobranca_rs_validada): sem lista no canal e-mail, só o revisor da cobrança
+        // (analista ativo com e-mail); com lista, só a lista; desligado, ninguém.
+        await avisarCobrancaRSEmail(svc, {
+          evento: EVENTO_COBRANCA_RS_VALIDADA,
+          tipo: TIPO_EMAIL_COBRANCA_VALIDADA,
+          cobrancaId: id,
+          contexto: "vencimento",
+          legado: async () => {
+            const { data: analista } = await svc
+              .from("analistas_perfil")
+              .select("email, nome_completo")
+              .eq("user_id", data.revisado_por)
+              .eq("ativo", true)
+              .maybeSingle();
+            return analista?.email ? [{ email: analista.email, nome_completo: analista.nome_completo }] : [];
+          },
+          montar: (nome) =>
+            getEmailTemplate("cobranca_rs_validada_diretoria", {
+              nome,
+              cargo: data.cargo ?? "—",
+              nomeCliente: data.cliente_nome_snapshot,
+              nomeCandidato: data.candidato_nome_snapshot ?? undefined,
+              feeRsPercentual: data.fee_percentual,
+              feeValor: data.fee_valor,
+              tipoCobrancaRS: data.tipo,
+            }),
         });
-
-        const resultado = await sendEmail({ to: analista.email, subject: template.subject, html: template.html, tipo: "cobranca_rs_validada_diretoria" });
-        if (!resultado.success) console.error(`[vencimento] Falha ao enviar e-mail de validação pro analista (cobranca_id=${id}):`, resultado.error);
       } catch (err) {
         console.error(`[vencimento] Erro ao montar/enviar e-mail de validação pro analista (cobranca_id=${id}):`, err);
       }
