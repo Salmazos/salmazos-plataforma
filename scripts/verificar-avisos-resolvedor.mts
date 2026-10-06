@@ -37,6 +37,9 @@ import {
   EVENTO_COBRANCA_RS_GERADA, EVENTO_COBRANCA_RS_VALIDADA, EVENTO_COBRANCA_RS_PAGA, EVENTO_COBRANCA_RS_CANCELADA, EVENTO_COBRANCA_RS_ATRASADA, EVENTOS_COBRANCA_RS,
   TIPO_EMAIL_COBRANCA_GERADA, TIPO_EMAIL_COBRANCA_VALIDADA, TIPO_EMAIL_COBRANCA_PAGA, TIPO_EMAIL_COBRANCA_CANCELADA, TIPO_COBRANCA_ATRASADA, DIAS_COOLDOWN_ATRASO_COBRANCA,
   dataBrasilia as dataBrasiliaCobranca, inicioDiaBrasilia, corteLembreteAtraso, diasDeAtraso, textoSinoAtrasoCobranca, destinatariosPagaLegado, type PerfilAnalistaCobranca,
+  EVENTO_COBRANCA_RS_PENDENTE_REVISAO, EVENTO_COBRANCA_RS_AGUARDANDO_VALIDACAO, TIPO_COBRANCA_PENDENTE_REVISAO, TIPO_COBRANCA_AGUARDANDO_VALIDACAO, DIAS_ESPERA_VALIDACAO, DIAS_COOLDOWN_VALIDACAO,
+  somarDiasISO as somarDiasISOCobranca, limiteDiasBrasilia, limiteEnvioValidacao, limiteCooldownValidacao, diasParadoDesde, ehErroColunaLembreteValidacao,
+  textoSinoPendenteRevisao, textoSinoAguardandoValidacao, destinatariosComAcessoCobranca, type PerfilComAcessoCobranca,
 } from "../src/lib/cobrancaRSRegras.ts";
 import { dataEntrevistaParaCliente, horaEntrevistaReal, decidirAvisoEntrevista } from "../src/lib/horaEntrevista.ts";
 import { mensagemErroAcao, MSG_ULTIMO_DESTINATARIO, MSG_ACAO_PADRAO } from "../src/lib/avisosErroAcao.ts";
@@ -213,9 +216,9 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   for (const evento of Object.values(PADRAO_AVISOS.vagas)) for (const c of Object.values(evento)) for (const d of c.destinatarios) if (d.tipo_destinatario === "usuario") TODOS.add(d.usuario_id);
 
   await caso("padrão: só vagas e portal_cliente têm padrão", () => { assert.equal(grupoTemPadrao("vagas"), true); assert.equal(grupoTemPadrao("portal_cliente"), true); assert.equal(grupoTemPadrao("rescisao"), false); });
-  await caso("padrão vagas: 24 eventos (5 da carga inicial: e-mail 2/3/3/0/3, sino 7/7/7/7/3; mais os 2 da garantia R&S, o pós-venda R&S os 3 avisos restantes do bloco B o lembrete de agendamento do bloco C os 3 crons de lembrete do bloco D a taxa de R&S não configurada do bloco E e os 3 aniversários do bloco F e os 5 avisos da cobrança R&S)", () => {
+  await caso("padrão vagas: 26 eventos (5 da carga inicial: e-mail 2/3/3/0/3, sino 7/7/7/7/3; mais os 2 da garantia R&S, o pós-venda R&S os 3 avisos restantes do bloco B o lembrete de agendamento do bloco C os 3 crons de lembrete do bloco D a taxa de R&S não configurada do bloco E e os 3 aniversários do bloco F os 5 avisos da cobrança R&S e os 2 das pendências da cobrança)", () => {
     const p = PADRAO_AVISOS.vagas;
-    assert.deepEqual(Object.keys(p).sort(), ["candidato_curriculo_atualizado", "candidato_transferido", "funcionario_nao_criado", "garantia_rs_acionada", "garantia_rs_vencendo", "conta_receber_hortolandia_atrasada", "lembrete_agendamento_pendente_analista", "lembrete_comercial", "pos_venda_rs_7dias", "solicitacao_vaga", "supervisao_cliente_atrasada", "vaga_cancelada", "vaga_criada", "vaga_fechada", "vaga_reativada", "fee_rs_nao_configurado", "aniversario_mes_seguinte", "aniversario_tres_dias", "aniversario_no_dia", "cobranca_rs_gerada", "cobranca_rs_validada", "cobranca_rs_paga", "cobranca_rs_cancelada", "cobranca_rs_atrasada"].sort());
+    assert.deepEqual(Object.keys(p).sort(), ["candidato_curriculo_atualizado", "candidato_transferido", "funcionario_nao_criado", "garantia_rs_acionada", "garantia_rs_vencendo", "conta_receber_hortolandia_atrasada", "lembrete_agendamento_pendente_analista", "lembrete_comercial", "pos_venda_rs_7dias", "solicitacao_vaga", "supervisao_cliente_atrasada", "vaga_cancelada", "vaga_criada", "vaga_fechada", "vaga_reativada", "fee_rs_nao_configurado", "aniversario_mes_seguinte", "aniversario_tres_dias", "aniversario_no_dia", "cobranca_rs_gerada", "cobranca_rs_validada", "cobranca_rs_paga", "cobranca_rs_cancelada", "cobranca_rs_atrasada", "cobranca_rs_pendente_revisao", "cobranca_rs_aguardando_validacao"].sort());
     const n = (ev: string, c: "email" | "sino") => p[ev][c]!.destinatarios.length;
     assert.deepEqual(["vaga_criada", "solicitacao_vaga", "vaga_cancelada", "vaga_fechada", "vaga_reativada"].map((ev) => n(ev, "email")), [2, 3, 3, 0, 3]);
     assert.deepEqual(["vaga_criada", "solicitacao_vaga", "vaga_cancelada", "vaga_fechada", "vaga_reativada"].map((ev) => n(ev, "sino")), [7, 7, 7, 7, 3]);
@@ -246,9 +249,9 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("restauração: todos ativos = payload completo, nada ignorado", () => {
     const r = montarPayloadRestauracao("vagas", TODOS);
     assert.deepEqual(r.ignorados, []); assert.deepEqual(r.semDestinatario, []);
-    assert.equal(r.payload.eventos.length, 24);
+    assert.equal(r.payload.eventos.length, 26);
     // 10 canais de e-mail/sino + o popup de solicitacao_vaga (Fase 3, bloco 1) + e-mail, sino e popup dos 2 da garantia R&S e do pós-venda R&S + o sino dos 3 avisos restantes do bloco B + sino e e-mail do lembrete de agendamento (bloco C) + sino/popup do comercial, sino/e-mail/popup da supervisão e sino/popup do faturamento (bloco D) + sino da taxa não configurada (bloco E) + e-mail, sino e popup dos 3 aniversários (bloco F)
-    assert.equal(r.payload.eventos.flatMap((e) => e.canais).length, 45);
+    assert.equal(r.payload.eventos.flatMap((e) => e.canais).length, 48);
   });
   await caso("restauração: usuário inativo fica de fora e é informado", () => {
     const sem = new Set(TODOS); const alvo = [...TODOS][0]; sem.delete(alvo);
@@ -590,7 +593,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     for (const canal of ["sino", "popup"]) assert.equal(descricaoPadraoDoSistema("avisos_cliente", canal, "indicacao_decidida_cliente"), FRASE_SEM_LISTA);
   });
   await caso("avisos ao cliente: os eventos e a lista dos outros grupos não mudaram", () => {
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 24); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 26); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
     assert.deepEqual([...canaisDoEvento("vaga_criada")], ["email", "sino"]);
   });
 
@@ -690,7 +693,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("bloco 2 catálogo: o evento do bloco 1 e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.deepEqual([...canaisDoEvento("indicacao_decidida_cliente")], ["sino", "popup"]);
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 24); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 26); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
   });
 
   await caso("data da entrevista para o cliente: dd/mm/aaaa às hh:mm (fuso de Brasília)", () => {
@@ -778,7 +781,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("bloco 3 catálogo: os eventos dos blocos 1 e 2 e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.equal(ROTULO_EVENTO.candidato_enviado_cliente, "Candidato enviado ao cliente");
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 24); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 26); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
   });
 
   const AB = "aguardando", AG = "aguardando_agendamento_cliente";
@@ -894,7 +897,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("bloco 4 catálogo: os 4 eventos antigos e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.equal(ROTULO_EVENTO.entrevista_remarcada_cliente, "Entrevista remarcada");
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 24); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 26); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
     assert.equal(grupoTemPadrao("avisos_cliente"), false, "avisos_cliente continua sem Restaurar padrão");
   });
   await caso("texto da solicitação aprovada: cargo e 'já está no ar'; cargo nulo só encurta", () => {
@@ -1014,7 +1017,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("catálogo: os 6 eventos de sino/popup não mudaram e nenhum nome colide com os e-mails ao cliente", () => {
     assert.equal(EVENTOS_POR_GRUPO.avisos_cliente.length, 6);
     for (const ev of EVENTOS_POR_GRUPO.avisos_cliente) { assert.equal(eventoEmailCliente(ev), false, ev); assert.deepEqual([...canaisDoEvento(ev)], ["sino", "popup"], ev); }
-    assert.equal(new Set([...EVENTOS_POR_GRUPO.avisos_cliente, ...LISTA_EMAIL, ...EVENTOS_POR_GRUPO.portal_cliente, ...EVENTOS_POR_GRUPO.vagas]).size, 6 + 7 + 8 + 24);
+    assert.equal(new Set([...EVENTOS_POR_GRUPO.avisos_cliente, ...LISTA_EMAIL, ...EVENTOS_POR_GRUPO.portal_cliente, ...EVENTOS_POR_GRUPO.vagas]).size, 6 + 7 + 8 + 26);
     assert.equal(EVENTOS_SEM_LISTA.length, 13);
     for (const ev of ["solicitacao_vaga", "vaga_pausa_pedida", "portal_candidato_aprovado", "rescisao_paga"]) assert.equal(eventoSemLista(ev), false, ev);
   });
@@ -1168,7 +1171,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
       assert.ok(ROTULO_EVENTO[ev] && NOTA_EVENTO[ev], ev); assert.equal(eventoSemLista(ev), false, "e-mail e sino têm lista");
       assert.match(NOTA_EVENTO[ev], /responsável pelo candidato SEMPRE/); assert.match(NOTA_EVENTO[ev], /O cliente não recebe nada/);
     }
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 24); assert.equal(eventoGarantiaRS("vaga_criada"), false);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 26); assert.equal(eventoGarantiaRS("vaga_criada"), false);
   });
   await caso("garantia R&S, tela: sino e popup vazios permitidos, popup só interruptor, e sem linha: e-mail e sino ligados, popup desligado", () => {
     for (const ev of GAR) {
@@ -1282,7 +1285,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
       assert.equal(c.permite_vazio === true, canalSemListaPermitido(e.evento, c.canal), `${e.evento}/${c.canal} (cópia em avisosPadrao × catálogo)`);
       if (c.permite_vazio) marcados.push(`${e.evento}/${c.canal}`);
     }
-    assert.deepEqual(marcados.sort(), ["garantia_rs_acionada/popup", "garantia_rs_acionada/sino", "garantia_rs_vencendo/popup", "garantia_rs_vencendo/sino", "pos_venda_rs_7dias/popup", "pos_venda_rs_7dias/sino"].concat(["candidato_curriculo_atualizado/sino", "candidato_transferido/sino", "cobranca_rs_atrasada/sino", "funcionario_nao_criado/sino", "lembrete_agendamento_pendente_analista/sino", "lembrete_comercial/popup", "lembrete_comercial/sino", "supervisao_cliente_atrasada/popup", "supervisao_cliente_atrasada/sino", "conta_receber_hortolandia_atrasada/popup", "conta_receber_hortolandia_atrasada/sino", "fee_rs_nao_configurado/sino", "aniversario_tres_dias/sino", "aniversario_no_dia/sino", "aniversario_no_dia/popup"]).sort());
+    assert.deepEqual(marcados.sort(), ["garantia_rs_acionada/popup", "garantia_rs_acionada/sino", "garantia_rs_vencendo/popup", "garantia_rs_vencendo/sino", "pos_venda_rs_7dias/popup", "pos_venda_rs_7dias/sino"].concat(["candidato_curriculo_atualizado/sino", "candidato_transferido/sino", "cobranca_rs_aguardando_validacao/sino", "cobranca_rs_atrasada/sino", "cobranca_rs_pendente_revisao/sino", "funcionario_nao_criado/sino", "lembrete_agendamento_pendente_analista/sino", "lembrete_comercial/popup", "lembrete_comercial/sino", "supervisao_cliente_atrasada/popup", "supervisao_cliente_atrasada/sino", "conta_receber_hortolandia_atrasada/popup", "conta_receber_hortolandia_atrasada/sino", "fee_rs_nao_configurado/sino", "aniversario_tres_dias/sino", "aniversario_no_dia/sino", "aniversario_no_dia/popup"]).sort());
     for (const ev of GAR) assert.equal(r.payload.eventos.find((e) => e.evento === ev)!.canais.find((c) => c.canal === "email")!.destinatarios.length, 3);
     const vazio = montarPayloadRestauracao("vagas", new Set());
     assert.ok(!vazio.semDestinatario.some((x) => GAR.includes(x.evento) && x.canal !== "email"), "sino e popup da garantia não são 409");
@@ -1565,7 +1568,10 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
 
   // ── Cobrança R&S ──
   await caso("cobrança R&S: eventos e tipos de e-mail/sino (os tipos gravados NÃO mudam)", () => {
-    assert.deepEqual([...EVENTOS_COBRANCA_RS], ["cobranca_rs_gerada", "cobranca_rs_validada", "cobranca_rs_paga", "cobranca_rs_cancelada", "cobranca_rs_atrasada"]);
+    assert.deepEqual([...EVENTOS_COBRANCA_RS], ["cobranca_rs_gerada", "cobranca_rs_validada", "cobranca_rs_paga", "cobranca_rs_cancelada", "cobranca_rs_atrasada", "cobranca_rs_pendente_revisao", "cobranca_rs_aguardando_validacao"]);
+    assert.equal(EVENTOS_COBRANCA_RS.length, 7); assert.equal(EVENTO_COBRANCA_RS_PENDENTE_REVISAO, "cobranca_rs_pendente_revisao"); assert.equal(EVENTO_COBRANCA_RS_AGUARDANDO_VALIDACAO, "cobranca_rs_aguardando_validacao");
+    assert.equal(TIPO_COBRANCA_PENDENTE_REVISAO, "cobranca_rs_pendente_revisao"); assert.equal(TIPO_COBRANCA_AGUARDANDO_VALIDACAO, "cobranca_rs_aguardando_validacao");
+    assert.equal(DIAS_ESPERA_VALIDACAO, 2); assert.equal(DIAS_COOLDOWN_VALIDACAO, 2);
     assert.equal(EVENTO_COBRANCA_RS_GERADA, "cobranca_rs_gerada"); assert.equal(EVENTO_COBRANCA_RS_VALIDADA, "cobranca_rs_validada"); assert.equal(EVENTO_COBRANCA_RS_PAGA, "cobranca_rs_paga");
     assert.equal(EVENTO_COBRANCA_RS_CANCELADA, "cobranca_rs_cancelada"); assert.equal(EVENTO_COBRANCA_RS_ATRASADA, "cobranca_rs_atrasada");
     assert.equal(TIPO_EMAIL_COBRANCA_GERADA, "cobranca_rs_gerada"); assert.equal(TIPO_EMAIL_COBRANCA_VALIDADA, "cobranca_rs_validada_diretoria");
@@ -1651,43 +1657,56 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
 
   // ── Cobrança R&S: catálogo, padrão, restauração e migration ──
   const COBR = [...EVENTOS_COBRANCA_RS] as string[];
-  await caso("cobrança R&S, catálogo: 5 eventos no grupo vagas, rótulo e nota em português; só e-mail, e o atraso também com sino; NENHUM popup", () => {
-    for (const ev of COBR) { assert.ok(eventoAvisoRestante(ev) && EVENTOS_POR_GRUPO.vagas.includes(ev) && grupoDoEvento(ev) === "vagas", ev); assert.ok(ROTULO_EVENTO[ev].length > 5 && NOTA_EVENTO[ev].length > 40 && AVISOS_RESTANTES[ev].padrao.email, ev); assert.ok(!canaisDoEvento(ev).includes("popup"), ev); }
-    for (const ev of COBR.filter((x) => x !== "cobranca_rs_atrasada")) assert.deepEqual([...canaisDoEvento(ev)], ["email"], ev);
-    assert.deepEqual([...canaisDoEvento("cobranca_rs_atrasada")].sort(), ["email", "sino"]); assert.ok(AVISOS_RESTANTES.cobranca_rs_atrasada.padrao.sino);
+  const COBR5 = COBR.slice(0, 5); // os 5 da primeira rodada (migration_avisos_cobranca_rs.sql)
+  const CANAIS_COBR: Record<string, string[]> = {
+    cobranca_rs_gerada: ["email"], cobranca_rs_validada: ["email"], cobranca_rs_paga: ["email"], cobranca_rs_cancelada: ["email"], cobranca_rs_atrasada: ["email", "sino"],
+    cobranca_rs_pendente_revisao: ["sino"], cobranca_rs_aguardando_validacao: ["email", "sino"],
+  };
+  await caso("cobrança R&S, catálogo: 7 eventos no grupo vagas, rótulo, nota e padrão em português para cada canal; os canais de cada um; NENHUM popup", () => {
+    for (const ev of COBR) {
+      assert.ok(eventoAvisoRestante(ev) && EVENTOS_POR_GRUPO.vagas.includes(ev) && grupoDoEvento(ev) === "vagas", ev); assert.ok(ROTULO_EVENTO[ev].length > 5 && NOTA_EVENTO[ev].length > 40, ev);
+      assert.ok(!canaisDoEvento(ev).includes("popup"), ev); assert.deepEqual([...canaisDoEvento(ev)].sort(), [...CANAIS_COBR[ev]].sort(), ev);
+      for (const c of canaisDoEvento(ev)) assert.ok((AVISOS_RESTANTES[ev].padrao as Record<string, string>)[c], `${ev}/${c}`);
+    }
     assert.match(NOTA_EVENTO.cobranca_rs_paga, /Por padrão avisa o revisor da cobrança, sem diretoria/);
-    assert.equal(EVENTOS_POR_GRUPO.vagas.filter((e) => e.startsWith("cobranca_rs_")).length, 5);
+    assert.match(NOTA_EVENTO.cobranca_rs_pendente_revisao, /quem gerou/); assert.match(NOTA_EVENTO.cobranca_rs_pendente_revisao, /Não envia e-mail nem popup/);
+    assert.match(NOTA_EVENTO.cobranca_rs_aguardando_validacao, /a cada 2 dias/); assert.match(NOTA_EVENTO.cobranca_rs_aguardando_validacao, /Não envia popup/);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.filter((e) => e.startsWith("cobranca_rs_")).length, 7);
     assert.deepEqual(EVENTOS_POR_GRUPO.portal_cliente.filter((e) => e.startsWith("cobranca_rs_")), []);
   });
-  await caso("cobrança R&S, tela: e-mail sem linha = ligado (legado); sino sem linha = ligado; popup nunca existe; sino do atraso pode ficar vazio, e-mail não", () => {
-    for (const ev of COBR) { assert.equal(ligadoSemLinha(ev, "email"), true, ev); assert.equal(canalSemListaPermitido(ev, "email"), false, ev); assert.equal(canalSoInterruptor(ev, "email"), false, ev); }
-    assert.equal(ligadoSemLinha("cobranca_rs_atrasada", "sino"), true); assert.equal(canalSemListaPermitido("cobranca_rs_atrasada", "sino"), true);
+  await caso("cobrança R&S, tela: sem linha, e-mail e sino ficam ligados (legado); popup nunca existe; sino pode ficar sem lista, e-mail não", () => {
+    for (const ev of COBR) {
+      for (const c of CANAIS_COBR[ev]) { assert.equal(ligadoSemLinha(ev, c), true, `${ev}/${c}`); assert.equal(canalSemListaPermitido(ev, c), c === "sino", `${ev}/${c}`); assert.equal(canalSoInterruptor(ev, c), false, `${ev}/${c}`); }
+      assert.equal(ligadoSemLinha(ev, "popup"), false, ev);
+    }
   });
-  await caso("cobrança R&S, padrão: e-mail dos 5 com lista curta (Andreza e Giovanni; validada e paga só o Giovanni, nunca diretoria na paga); sino do atraso ligado e vazio; restauração com permite_vazio só no sino", () => {
-    const p = PADRAO_AVISOS.vagas;
-    for (const ev of ["cobranca_rs_gerada", "cobranca_rs_cancelada", "cobranca_rs_atrasada"]) assert.deepEqual(p[ev].email!.destinatarios.map((d) => (d.tipo_destinatario === "email" ? d.email : "")), ["rh@salmazos.com.br", "vagas@salmazos.com.br"], ev);
-    for (const ev of ["cobranca_rs_validada", "cobranca_rs_paga"]) assert.deepEqual(p[ev].email!.destinatarios.map((d) => (d.tipo_destinatario === "email" ? d.email : "")), ["vagas@salmazos.com.br"], ev);
-    for (const ev of COBR) { assert.equal(p[ev].email!.ativo, true, ev); assert.equal(p[ev].popup, undefined, ev); }
-    for (const ev of COBR.filter((x) => x !== "cobranca_rs_atrasada")) assert.equal(p[ev].sino, undefined, ev);
-    assert.deepEqual(p.cobranca_rs_atrasada.sino, { ativo: true, destinatarios: [] });
+  await caso("cobrança R&S, padrão: e-mail com lista curta (Andreza e Giovanni; aguardando validação: Elizabete, Andreza e Giovanni; validada e paga só o Giovanni, nunca diretoria na paga); sinos ligados e vazios; as 2 pendências sem popup; restauração com permite_vazio só no sino", () => {
+    const p = PADRAO_AVISOS.vagas; const emails = (ev: string) => p[ev].email!.destinatarios.map((d) => (d.tipo_destinatario === "email" ? d.email : ""));
+    for (const ev of ["cobranca_rs_gerada", "cobranca_rs_cancelada", "cobranca_rs_atrasada"]) assert.deepEqual(emails(ev), ["rh@salmazos.com.br", "vagas@salmazos.com.br"], ev);
+    assert.deepEqual(emails("cobranca_rs_aguardando_validacao"), ["consultoria@salmazos.com.br", "rh@salmazos.com.br", "vagas@salmazos.com.br"]);
+    for (const ev of ["cobranca_rs_validada", "cobranca_rs_paga"]) assert.deepEqual(emails(ev), ["vagas@salmazos.com.br"], ev);
+    for (const ev of COBR) { assert.equal(p[ev].popup, undefined, ev); assert.equal(p[ev].email === undefined, !CANAIS_COBR[ev].includes("email"), ev); assert.equal(p[ev].sino === undefined, !CANAIS_COBR[ev].includes("sino"), ev); if (p[ev].email) assert.equal(p[ev].email!.ativo, true, ev); }
+    for (const ev of ["cobranca_rs_atrasada", "cobranca_rs_pendente_revisao", "cobranca_rs_aguardando_validacao"]) assert.deepEqual(p[ev].sino, { ativo: true, destinatarios: [] }, ev);
+    assert.deepEqual(Object.keys(p.cobranca_rs_pendente_revisao), ["sino"]);
     const r = montarPayloadRestauracao("vagas", TODOS);
     for (const ev of COBR) {
-      const e = r.payload.eventos.find((x) => x.evento === ev)!; assert.ok(e.canais.find((c) => c.canal === "email")!.destinatarios.length >= 1, ev);
-      for (const c of e.canais.filter((x) => x.canal === "sino")) { assert.equal(c.permite_vazio, true); assert.equal(c.destinatarios.length, 0); }
-      assert.ok(e.canais.filter((x) => x.canal === "email").every((c) => c.permite_vazio === undefined), ev);
+      const e = r.payload.eventos.find((x) => x.evento === ev)!; assert.deepEqual(e.canais.map((c) => c.canal).sort(), [...CANAIS_COBR[ev]].sort(), ev);
+      for (const c of e.canais) { if (c.canal === "email") { assert.ok(c.destinatarios.length >= 1, ev); assert.equal(c.permite_vazio, undefined, ev); } else { assert.equal(c.permite_vazio, true, ev); assert.equal(c.destinatarios.length, 0, ev); } }
     }
     assert.ok(!r.semDestinatario.some((x) => COBR.includes(x.evento)));
   });
   await caso("cobrança R&S, resolvedor: e-mail ligado SEM lista = legado; com lista = só a lista; desligado = ninguém; sino sem linha/erro = ligado, ativo=false desliga, lista soma", async () => {
-    for (const ev of COBR) {
+    for (const ev of COBR.filter((x) => CANAIS_COBR[x].includes("email"))) {
       assert.equal((await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [] }, perfis: [] }), ev, "email")).modo, "legado", ev);
       assert.deepEqual((await resolverComFonte(fonte({ novo: { canalAtivo: true, linhas: [email("a@x.com")] } }), ev, "email")).emails.map((e) => e.email), ["a@x.com"], ev);
       assert.equal((await resolverComFonte(fonte({ novo: { canalAtivo: false, linhas: [email("a@x.com")] } }), ev, "email")).modo, "desligado", ev);
       assert.equal((await resolverComFonte(fonte({ novo: null, antigo: { canalAtivo: null, linhas: [] } }), ev, "email")).modo, "legado", ev);
     }
-    const s = (c: Cenario) => resolverComFonte(fonte(c), "cobranca_rs_atrasada", "sino");
-    assert.equal((await s({ novo: null, antigo: { canalAtivo: null, linhas: [] } })).modo, "legado"); assert.equal((await s({ novoErro: true, antigo: { canalAtivo: null, linhas: [] } })).modo, "legado");
-    assert.equal((await s({ novo: { canalAtivo: false, linhas: [usuario("u1")] } })).modo, "desligado"); assert.deepEqual((await s({ novo: { canalAtivo: true, linhas: [usuario("g1")] } })).userIds, ["g1"]);
+    for (const ev of COBR.filter((x) => CANAIS_COBR[x].includes("sino"))) {
+      const s = (c: Cenario) => resolverComFonte(fonte(c), ev, "sino");
+      assert.equal((await s({ novo: null, antigo: { canalAtivo: null, linhas: [] } })).modo, "legado", ev); assert.equal((await s({ novoErro: true, antigo: { canalAtivo: null, linhas: [] } })).modo, "legado", ev);
+      assert.equal((await s({ novo: { canalAtivo: false, linhas: [usuario("u1")] } })).modo, "desligado", ev); assert.deepEqual((await s({ novo: { canalAtivo: true, linhas: [usuario("g1")] } })).userIds, ["g1"], ev);
+    }
     assert.deepEqual(unirUserIds(["u-eliz", "u-giov"], ["u-giov", "u-edi"]), ["u-eliz", "u-giov", "u-edi"], "lista sem duplicar quem já recebe");
   });
   await caso("cobrança R&S, carimbo do atraso: grava se algo foi entregue ou se tudo está desligado; não grava se o que está ligado falhou ou não tinha a quem avisar", () => {
@@ -1695,17 +1714,81 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     assert.equal(deveCarimbarAviso(["desligado", "desligado"]), true); assert.equal(deveCarimbarAviso(["falhou", "falhou"]), false); assert.equal(deveCarimbarAviso(["sem_destinatario", "sem_destinatario"]), false);
     assert.equal(deveCarimbarAviso(["desligado", "falhou"]), false); assert.equal(deveCarimbarAviso(["desligado", "sem_destinatario"]), false); assert.equal(deveCarimbarAviso(["sem_destinatario", "falhou"]), false);
   });
-  await caso("cobrança R&S, migration: 5 eventos no grupo vagas e 6 canais, iguais ao catálogo; só inserts com on conflict do nothing; sem DDL", () => {
+  await caso("cobrança R&S, migration (1ª rodada): 5 eventos no grupo vagas e 6 canais, iguais ao catálogo; só inserts com on conflict do nothing; sem DDL", () => {
     const sql = readFileSync(new URL("../supabase/migration_avisos_cobranca_rs.sql", import.meta.url), "utf8");
     const codigo = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
     assert.ok(!/\b(alter|create|drop|trigger|policy|constraint|update|delete|grant|function)\b/i.test(codigo), "só inserts");
     assert.equal((codigo.match(/on conflict/gi) ?? []).length, 2); assert.equal((codigo.match(/\binsert into\b/gi) ?? []).length, 2);
     assert.ok(!/cobrancas_rs\b/.test(codigo.replace(/'cobranca_rs_[a-z]+'/g, "")), "nenhuma alteração em cobrancas_rs");
-    const eventos = [...codigo.matchAll(/\('(cobranca_rs_[a-z]+)', 'vagas',/g)].map((m) => m[1]).sort(); assert.deepEqual(eventos, [...COBR].sort());
-    for (const ev of COBR) { const m = codigo.match(new RegExp(`\\('${ev}', 'vagas',\\s*'[^']+',\\s*array\\[([^\\]]+)\\]`)); assert.ok(m, ev); assert.deepEqual(m![1].split(",").map((x) => x.trim().replace(/'/g, "")).sort(), [...canaisDoEvento(ev)].sort(), ev); }
+    const eventos = [...codigo.matchAll(/\('(cobranca_rs_[a-z]+)', 'vagas',/g)].map((m) => m[1]).sort(); assert.deepEqual(eventos, [...COBR5].sort());
+    for (const ev of COBR5) { const m = codigo.match(new RegExp(`\\('${ev}', 'vagas',\\s*'[^']+',\\s*array\\[([^\\]]+)\\]`)); assert.ok(m, ev); assert.deepEqual(m![1].split(",").map((x) => x.trim().replace(/'/g, "")).sort(), [...canaisDoEvento(ev)].sort(), ev); }
     const canais = [...codigo.matchAll(/\('(cobranca_rs_[a-z]+)', '(email|sino|popup)', true\)/g)].map((m) => `${m[1]}/${m[2]}`).sort();
-    assert.deepEqual(canais, COBR.flatMap((ev) => [...canaisDoEvento(ev)].map((c) => `${ev}/${c}`)).sort()); assert.equal(canais.length, 6);
+    assert.deepEqual(canais, COBR5.flatMap((ev) => [...canaisDoEvento(ev)].map((c) => `${ev}/${c}`)).sort()); assert.equal(canais.length, 6);
     assert.ok(!/aviso_destinatarios\b/.test(codigo), "0 destinatários");
+  });
+
+  // ── Cobrança R&S: pendências (rascunho recém-criado e "Aguardando validação") ──
+  await caso("pendências: limites por data em Brasília (2 dias), sem depender de segundos entre execuções do cron", () => {
+    assert.equal(somarDiasISOCobranca("2026-10-07", -1), "2026-10-06"); assert.equal(somarDiasISOCobranca("2026-10-01", -1), "2026-09-30");
+    assert.equal(limiteDiasBrasilia("2026-10-07", 2), "2026-10-06T03:00:00.000Z", "início de 06/10 em Brasília");
+    assert.equal(limiteEnvioValidacao("2026-10-07"), "2026-10-06T03:00:00.000Z"); assert.equal(limiteCooldownValidacao("2026-10-07"), "2026-10-06T03:00:00.000Z");
+    // Enviada em 05/10 13:27 (16:27Z): ainda não passou 2 dias em 06/10, passa em 07/10 (por data).
+    const enviada = "2026-10-05T16:27:00.000Z"; assert.equal(enviada < limiteEnvioValidacao("2026-10-06"), false); assert.equal(enviada < limiteEnvioValidacao("2026-10-07"), true);
+    // Carimbo às 09:00:03Z de 08/09; o cron de 10/09 roda às 09:00:01Z: o lembrete volta no dia 10 (e não só no 11).
+    const carimbo = "2026-09-08T09:00:03.000Z"; assert.equal(carimbo < limiteCooldownValidacao("2026-09-09"), false); assert.equal(carimbo < limiteCooldownValidacao("2026-09-10"), true);
+    assert.equal(limiteDiasBrasilia("2026-10-07", 1), "2026-10-07T03:00:00.000Z");
+  });
+  await caso("pendências: dias parado desde o envio (Brasília) e erro de coluna ausente só para 42703 ou a coluna citada", () => {
+    assert.equal(diasParadoDesde("2026-09-08T13:23:00.000Z", "2026-10-06"), 28); assert.equal(diasParadoDesde("2026-10-05T16:27:00.000Z", "2026-10-07"), 2);
+    assert.equal(diasParadoDesde("2026-10-06T02:30:00.000Z", "2026-10-06"), 1, "23:30 de 05/10 em Brasília");
+    assert.equal(ehErroColunaLembreteValidacao({ code: "42703", message: "column does not exist" }), true);
+    assert.equal(ehErroColunaLembreteValidacao({ code: "PGRST200", message: "column cobrancas_rs.ultimo_lembrete_validacao_em does not exist" }), true);
+    for (const e of [{ code: "42P01", message: "relation x does not exist" }, { code: "PGRST301", message: "JWT expired" }, { code: "23505", message: "duplicate key" }, { message: "timeout" }, null, undefined]) assert.equal(ehErroColunaLembreteValidacao(e as any), false, JSON.stringify(e));
+  });
+  await caso("pendências: textos do sino sem valor, fee, CNPJ nem salário (contratação com candidato; cancelamento com 'taxa de cancelamento')", () => {
+    const c = textoSinoPendenteRevisao({ tipo: "contratacao", cliente: "Columbia", vaga: "Operador", candidato: "Maria" });
+    assert.equal(c.titulo, "🟡 Cobrança R&S pendente de revisão"); assert.equal(c.mensagem, "Columbia — Operador — candidato Maria: rascunho aguardando revisão.");
+    const k = textoSinoPendenteRevisao({ tipo: "cancelamento", cliente: "Columbia", vaga: "Operador", candidato: null });
+    assert.equal(k.mensagem, "Columbia — Operador — taxa de cancelamento: rascunho aguardando revisão."); assert.ok(!/candidato/.test(k.mensagem));
+    const v = textoSinoAguardandoValidacao({ dias: 4, tipo: "contratacao", cliente: "Columbia", vaga: "Operador", candidato: "Maria" });
+    assert.equal(v.titulo, "🟠 Cobrança R&S aguardando validação há 4 dias"); assert.equal(v.mensagem, "Columbia — Operador — candidato Maria: enviada para validação e ainda sem vencimento definido.");
+    assert.equal(textoSinoAguardandoValidacao({ dias: 1, tipo: "cancelamento", cliente: "C", vaga: "V" }).titulo, "🟠 Cobrança R&S aguardando validação há 1 dia");
+    for (const t of [c, k, v]) assert.ok(!/R\$|fee|cnpj|salário|salario|\d{2}\.\d{3}\.\d{3}|\d+,\d{2}/i.test(t.titulo + t.mensagem), t.mensagem);
+  });
+  const perf = (id: string, user_id: string | null, nome: string, nivel: string, email: string | null): PerfilComAcessoCobranca => ({ id, user_id, email, nome_completo: nome, nivel_acesso: nivel });
+  const PERFIS_P = [perf("p1", "u-eliz", "Elizabete", "diretoria", "consultoria@x.com"), perf("p2", "u-andr", "Andreza", "diretoria", "rh@x.com"), perf("p3", "u-luca", "Lucas", "diretoria", "comercial@x.com"), perf("p4", "u-olve", "Olver", "superuser", "olver@x.com"),
+    perf("p5", "u-giov", "Giovanni", "analista", "vagas@x.com"), perf("p6", "u-rebe", "Rebecca", "analista", "curriculos@x.com"), perf("p7", "u-edi", "Edivan", "analista", "edi@x.com"), perf("p8", null, "Sem login", "diretoria", "a@x.com"), perf("p9", "u-sem", "Sem e-mail", "diretoria", null)];
+  const ACESSO_P = new Set(["p5"]);
+  await caso("pendências, rascunho: diretoria/superuser + acesso configurado, EXCETO o gerador; gerador nulo não exclui ninguém; sem login/e-mail fora", () => {
+    const ids = (o: any) => destinatariosComAcessoCobranca(PERFIS_P, ACESSO_P, o).map((d) => d.user_id).sort();
+    assert.deepEqual(ids({}), ["u-andr", "u-eliz", "u-giov", "u-luca", "u-olve"]);
+    assert.deepEqual(ids({ excluirUserId: null }), ["u-andr", "u-eliz", "u-giov", "u-luca", "u-olve"], "cancelamento: gerador nulo");
+    assert.deepEqual(ids({ excluirUserId: "u-rebe" }), ["u-andr", "u-eliz", "u-giov", "u-luca", "u-olve"], "gerador sem acesso: nada a excluir");
+    assert.deepEqual(ids({ excluirUserId: "u-giov" }), ["u-andr", "u-eliz", "u-luca", "u-olve"], "o gerador com acesso é excluído");
+    assert.deepEqual(ids({ excluirUserId: "u-andr" }), ["u-eliz", "u-giov", "u-luca", "u-olve"], "o gerador da diretoria é excluído");
+    assert.deepEqual(destinatariosComAcessoCobranca([], ACESSO_P, {}), []);
+  });
+  await caso("pendências, aguardando validação: as mesmas pessoas que podem definir o vencimento (podeRevisarCobranca) = acesso amplo + o gerador daquela cobrança", () => {
+    const ids = (o: any) => destinatariosComAcessoCobranca(PERFIS_P, ACESSO_P, o).map((d) => d.user_id).sort();
+    assert.deepEqual(ids({ incluirUserId: "u-rebe" }), ["u-andr", "u-eliz", "u-giov", "u-luca", "u-olve", "u-rebe"]);
+    assert.deepEqual(ids({ incluirUserId: null }), ["u-andr", "u-eliz", "u-giov", "u-luca", "u-olve"], "sem gerador: só o acesso amplo");
+    assert.deepEqual(ids({ incluirUserId: "u-giov" }), ["u-andr", "u-eliz", "u-giov", "u-luca", "u-olve"], "sem duplicar quem já tem acesso");
+    assert.equal(destinatariosComAcessoCobranca(PERFIS_P, ACESSO_P, { incluirUserId: "u-rebe" }).find((d) => d.user_id === "u-rebe")!.email, "curriculos@x.com");
+  });
+  await caso("pendências, migration: só add column if not exists + inserts (2 eventos, 3 canais, on conflict do nothing); 1 coluna nullable sem default e sem índice; 0 destinatários", () => {
+    const sql = readFileSync(new URL("../supabase/migration_avisos_cobranca_pendencias.sql", import.meta.url), "utf8");
+    const codigo = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
+    const comandos = codigo.split(";").map((c) => c.trim()).filter(Boolean); assert.equal(comandos.length, 3);
+    assert.match(comandos[0], /^alter table public\.cobrancas_rs add column if not exists ultimo_lembrete_validacao_em timestamptz$/i);
+    assert.ok(!/default|not null|index|unique|references/i.test(comandos[0]), "nullable, sem default, sem índice");
+    assert.ok(!/\b(drop|create|truncate|update|delete|grant|function|trigger|policy|constraint)\b/i.test(codigo), "nenhuma outra mudança");
+    assert.equal((codigo.match(/\balter table\b/gi) ?? []).length, 1); assert.equal((codigo.match(/\binsert into\b/gi) ?? []).length, 2); assert.equal((codigo.match(/on conflict/gi) ?? []).length, 2);
+    const eventos = [...codigo.matchAll(/\('(cobranca_rs_[a-z_]+)', 'vagas',/g)].map((m) => m[1]).sort(); assert.deepEqual(eventos, ["cobranca_rs_aguardando_validacao", "cobranca_rs_pendente_revisao"]);
+    for (const ev of eventos) { const m = codigo.match(new RegExp(`\\('${ev}', 'vagas',\\s*'[^']+',\\s*array\\[([^\\]]+)\\]`)); assert.ok(m, ev); assert.deepEqual(m![1].split(",").map((x) => x.trim().replace(/'/g, "")).sort(), [...canaisDoEvento(ev)].sort(), ev); }
+    const canais = [...codigo.matchAll(/\('(cobranca_rs_[a-z_]+)', '(email|sino|popup)', true\)/g)].map((m) => `${m[1]}/${m[2]}`).sort();
+    assert.deepEqual(canais, ["cobranca_rs_aguardando_validacao/email", "cobranca_rs_aguardando_validacao/sino", "cobranca_rs_pendente_revisao/sino"]);
+    assert.ok(!/aviso_destinatarios\b/.test(codigo.replace(/--.*$/gm, "")), "0 destinatários"); assert.ok(!/update public\.cobrancas_rs|insert into public\.cobrancas_rs/i.test(codigo), "nenhum dado de cobrancas_rs alterado");
+    assert.match(sql, /Deploy ANTES desta migration é seguro/);
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);

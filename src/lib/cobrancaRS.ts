@@ -1,7 +1,13 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { parseSalarioFixo } from "@/lib/constants";
 import { avisarFeeRSNaoConfigurado } from "@/lib/avisarFeeRS";
-import { destinatariosPagaLegado } from "@/lib/cobrancaRSRegras";
+import {
+  destinatariosComAcessoCobranca,
+  destinatariosPagaLegado,
+  textoSinoPendenteRevisao,
+  type DestinatarioCobranca,
+} from "@/lib/cobrancaRSRegras";
+import { avisarCobrancaRSSinoPendenteRevisao } from "@/lib/avisarCobrancaRS";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -136,6 +142,18 @@ export async function gerarCobrancaRSSeAplicavel(
     console.error("[gerarCobrancaRSSeAplicavel] Erro ao inserir cobrança R&S:", error.message);
     return { criada: false };
   }
+
+  // Aviso do rascunho recém-criado (sino, Configurações > Avisos > cobranca_rs_pendente_revisao). Só aqui, depois do INSERT
+  // confirmado: o 23505/ja_existe acima NÃO avisa. Isolado e com await (a função serverless não pode cortá-lo), nunca lança e
+  // nunca altera o retorno nem o fluxo de quem chamou.
+  await avisarPendenteRevisaoSeguro(svc, {
+    cobrancaId: inserida.id,
+    tipo: "contratacao",
+    cliente: clienteNome,
+    vaga: vaga.titulo,
+    candidato: candidatoNome,
+    geradoPorUserId: geradoPorUserId ?? null,
+  });
 
   return { criada: true, id: inserida.id };
 }
@@ -296,6 +314,32 @@ export async function gerarCobrancaCancelamentoRSSeAplicavel(
     return { criada: false };
   }
 
+  // Aviso do rascunho recém-criado (sino). O INSERT acima não devolve o id e não foi alterado: o id vem de uma leitura da cobrança
+  // de cancelamento desta vaga (única por vaga). Só depois do INSERT confirmado; o 23505/ja_existe NÃO avisa. Isolado, com await,
+  // nunca lança e nunca altera o retorno. Cancelamento não tem gerador: ninguém é excluído.
+  try {
+    const { data: criada } = await svc
+      .from("cobrancas_rs")
+      .select("id")
+      .eq("vaga_id", vaga.id)
+      .eq("tipo", "cancelamento")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (criada?.id) {
+      await avisarPendenteRevisaoSeguro(svc, {
+        cobrancaId: criada.id,
+        tipo: "cancelamento",
+        cliente: clienteNome,
+        vaga: vaga.titulo,
+        candidato: null,
+        geradoPorUserId: null,
+      });
+    }
+  } catch (err) {
+    console.error("[gerarCobrancaCancelamentoRSSeAplicavel] Erro ao avisar o rascunho (ignorado):", err);
+  }
+
   return { criada: true };
 }
 
@@ -389,4 +433,51 @@ export async function obterDestinatariosPagaCobrancaRS(
     .select("user_id, email, nome_completo, nivel_acesso")
     .eq("ativo", true);
   return destinatariosPagaLegado(analistas ?? [], revisadoPor);
+}
+
+/**
+ * Quem pode revisar/validar cobranças: diretoria e superuser (analistas_perfil.nivel_acesso) + analistas com linha ativa em
+ * cobranca_rs_analistas_acesso — a mesma base de checarAcessoCobrancaRS. `excluirUserId` tira o gerador (já cai no modal de
+ * revisão ao contratar); `incluirUserId` soma o gerador (podeRevisarCobranca deixa quem gerou revisar e definir o vencimento da
+ * PRÓPRIA cobrança). Regra pura em destinatariosComAcessoCobranca (cobrancaRSRegras.ts). Variante nova: não altera
+ * obterDestinatariosCobrancaRS.
+ */
+export async function obterDestinatariosComAcessoCobrancaRS(
+  supabase: ServiceClient | undefined,
+  opcoes: { excluirUserId?: string | null; incluirUserId?: string | null } = {}
+): Promise<DestinatarioCobranca[]> {
+  const svc = supabase ?? createServiceClient();
+  const { data: analistas } = await svc
+    .from("analistas_perfil")
+    .select("id, user_id, email, nome_completo, nivel_acesso")
+    .eq("ativo", true);
+  const { data: acessos } = await svc.from("cobranca_rs_analistas_acesso").select("analista_perfil_id").eq("ativo", true);
+  const acessoIds = new Set((acessos ?? []).map((a) => a.analista_perfil_id as string));
+  return destinatariosComAcessoCobranca(analistas ?? [], acessoIds, opcoes);
+}
+
+/**
+ * "Aguardando validação" (aprovada_enviada sem vencimento): quem pode definir o vencimento, como a rota vencimento
+ * (podeRevisarCobranca) — diretoria/superuser, analistas com acesso configurado e o gerador daquela cobrança.
+ */
+export function obterDestinatariosValidacaoCobrancaRS(geradoPorUserId: string | null, supabase?: ServiceClient): Promise<DestinatarioCobranca[]> {
+  return obterDestinatariosComAcessoCobrancaRS(supabase, { incluirUserId: geradoPorUserId });
+}
+
+async function avisarPendenteRevisaoSeguro(
+  svc: ServiceClient,
+  d: { cobrancaId: string; tipo: "contratacao" | "cancelamento"; cliente: string; vaga: string; candidato: string | null; geradoPorUserId: string | null }
+): Promise<void> {
+  try {
+    const destinatarios = await obterDestinatariosComAcessoCobrancaRS(svc, { excluirUserId: d.geradoPorUserId });
+    const texto = textoSinoPendenteRevisao({ tipo: d.tipo, cliente: d.cliente, vaga: d.vaga, candidato: d.candidato });
+    await avisarCobrancaRSSinoPendenteRevisao(svc, {
+      cobrancaId: d.cobrancaId,
+      userIdsDeSempre: destinatarios.map((x) => x.user_id),
+      titulo: texto.titulo,
+      mensagem: texto.mensagem,
+    });
+  } catch (err) {
+    console.error(`[cobrancaRS] Erro ao avisar o rascunho pendente de revisão (cobranca_id=${d.cobrancaId}; ignorado):`, err);
+  }
 }
