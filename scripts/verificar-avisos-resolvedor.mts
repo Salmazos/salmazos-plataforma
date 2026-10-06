@@ -32,6 +32,11 @@ import {
   EVENTO_POS_VENDA_RS, TIPO_NOTIFICACAO_POS_VENDA_RS, EVENTO_POR_TIPO_POS_VENDA, DIAS_POS_VENDA_RS, DIAS_RECUPERACAO_POS_VENDA_RS, janelaInicioPosVenda, posVendaNaJanela,
   textoAvisoPosVendaRS, userIdsSinoPosVenda, deveCarimbarPosVenda, dataBrasilia as dataBrasiliaPV, somarDiasISO as somarDiasISOPV,
 } from "../src/lib/posVendaRSRegras.ts";
+import {
+  EVENTO_COBRANCA_RS_GERADA, EVENTO_COBRANCA_RS_VALIDADA, EVENTO_COBRANCA_RS_PAGA, EVENTO_COBRANCA_RS_CANCELADA, EVENTO_COBRANCA_RS_ATRASADA, EVENTOS_COBRANCA_RS,
+  TIPO_EMAIL_COBRANCA_GERADA, TIPO_EMAIL_COBRANCA_VALIDADA, TIPO_EMAIL_COBRANCA_PAGA, TIPO_EMAIL_COBRANCA_CANCELADA, TIPO_COBRANCA_ATRASADA, DIAS_COOLDOWN_ATRASO_COBRANCA,
+  dataBrasilia as dataBrasiliaCobranca, inicioDiaBrasilia, corteLembreteAtraso, diasDeAtraso, textoSinoAtrasoCobranca, destinatariosPagaLegado, type PerfilAnalistaCobranca,
+} from "../src/lib/cobrancaRSRegras.ts";
 import { dataEntrevistaParaCliente, horaEntrevistaReal, decidirAvisoEntrevista } from "../src/lib/horaEntrevista.ts";
 import { mensagemErroAcao, MSG_ULTIMO_DESTINATARIO, MSG_ACAO_PADRAO } from "../src/lib/avisosErroAcao.ts";
 import { resumirPedidoCliente, type LinhaPedidoCliente } from "../src/lib/pedidoClienteResumo.ts";
@@ -1555,6 +1560,92 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
       for (const c of e.canais.filter((x) => x.canal !== "email")) { assert.equal(c.permite_vazio, true, `${ev}/${c.canal}`); assert.equal(c.destinatarios.length, 0); }
     }
     assert.ok(!montarPayloadRestauracao("vagas", new Set()).semDestinatario.some((x) => BLOCO_F.includes(x.evento) && x.canal !== "email"));
+  });
+
+  // ── Cobrança R&S ──
+  await caso("cobrança R&S: eventos e tipos de e-mail/sino (os tipos gravados NÃO mudam)", () => {
+    assert.deepEqual([...EVENTOS_COBRANCA_RS], ["cobranca_rs_gerada", "cobranca_rs_validada", "cobranca_rs_paga", "cobranca_rs_cancelada", "cobranca_rs_atrasada"]);
+    assert.equal(EVENTO_COBRANCA_RS_GERADA, "cobranca_rs_gerada"); assert.equal(EVENTO_COBRANCA_RS_VALIDADA, "cobranca_rs_validada"); assert.equal(EVENTO_COBRANCA_RS_PAGA, "cobranca_rs_paga");
+    assert.equal(EVENTO_COBRANCA_RS_CANCELADA, "cobranca_rs_cancelada"); assert.equal(EVENTO_COBRANCA_RS_ATRASADA, "cobranca_rs_atrasada");
+    assert.equal(TIPO_EMAIL_COBRANCA_GERADA, "cobranca_rs_gerada"); assert.equal(TIPO_EMAIL_COBRANCA_VALIDADA, "cobranca_rs_validada_diretoria");
+    assert.equal(TIPO_EMAIL_COBRANCA_PAGA, "cobranca_rs_paga"); assert.equal(TIPO_EMAIL_COBRANCA_CANCELADA, "cobranca_rs_cancelada"); assert.equal(TIPO_COBRANCA_ATRASADA, "cobranca_rs_atrasada");
+    for (const ev of EVENTOS_COBRANCA_RS) assert.ok(ev.length <= 80 && /^[a-z0-9_]+$/.test(ev), ev);
+    assert.equal(DIAS_COOLDOWN_ATRASO_COBRANCA, 2);
+  });
+  await caso("cobrança R&S, datas em Brasília: 23:59 de Brasília ainda é o dia anterior em UTC; corte do cooldown é o instante exato de 2 dias", () => {
+    assert.equal(dataBrasiliaCobranca(new Date("2026-10-20T09:00:00Z")), "2026-10-20");
+    assert.equal(dataBrasiliaCobranca(new Date("2026-10-21T02:59:00Z")), "2026-10-20", "23:59 em Brasília");
+    assert.equal(dataBrasiliaCobranca(new Date("2026-10-21T03:00:00Z")), "2026-10-21");
+    assert.equal(inicioDiaBrasilia(new Date("2026-10-21T02:59:00Z")), "2026-10-20T00:00:00-03:00");
+    assert.equal(corteLembreteAtraso(new Date("2026-10-20T09:00:00Z")), "2026-10-18T09:00:00.000Z");
+  });
+  await caso("cobrança R&S: dias de atraso por data de calendário em Brasília (igual à conta antiga na hora do cron, correto fora dela)", () => {
+    assert.equal(diasDeAtraso("2026-10-16", "2026-10-20"), 4); assert.equal(diasDeAtraso("2026-10-19", "2026-10-20"), 1); assert.equal(diasDeAtraso("2026-09-30", "2026-10-01"), 1);
+    assert.equal(diasDeAtraso("2026-12-31", "2027-01-02"), 2, "virada de ano");
+    const antiga = (venc: string, agora: Date) => Math.floor((agora.getTime() - new Date(venc + "T00:00:00Z").getTime()) / 86400000); // servidor em UTC
+    for (const venc of ["2026-10-16", "2026-10-19", "2026-10-01", "2026-09-30", "2026-12-31"]) {
+      for (const hora of ["2026-10-20T09:00:00Z", "2026-11-03T09:00:00Z", "2027-01-02T09:00:00Z"]) {
+        const agora = new Date(hora);
+        if (venc >= dataBrasiliaCobranca(agora)) continue;
+        assert.equal(diasDeAtraso(venc, dataBrasiliaCobranca(agora)), antiga(venc, agora), `${venc} em ${hora}`);
+      }
+    }
+    // Às 22:00 de Brasília (01:00 UTC do dia seguinte) a conta antiga em UTC já contava um dia a mais; a nova segue o calendário de Brasília.
+    const tarde = new Date("2026-10-21T01:00:00Z");
+    assert.equal(antiga("2026-10-16", tarde), 5); assert.equal(diasDeAtraso("2026-10-16", dataBrasiliaCobranca(tarde)), 4);
+  });
+  await caso("cobrança R&S: texto do sino do atraso é o de sempre e não traz fee, valor, CNPJ nem dado bancário", () => {
+    const t = textoSinoAtrasoCobranca({ diasAtraso: 4, cliente: "Maxsoy", vaga: "Operador", vencimentoISO: "2026-10-16" });
+    assert.equal(t.titulo, "🔴 Cobrança R&S atrasada há 4 dias"); assert.equal(t.mensagem, "Maxsoy — Operador — vencida em 16/10/2026, ainda não paga.");
+    assert.equal(textoSinoAtrasoCobranca({ diasAtraso: 1, cliente: "C", vaga: "V", vencimentoISO: "2026-10-19" }).titulo, "🔴 Cobrança R&S atrasada há 1 dia");
+    assert.ok(!/R\$|fee|cnpj|banco|agência|conta|\d{2}\.\d{3}\.\d{3}/i.test(t.titulo + t.mensagem));
+  });
+
+  // Dados simulados como os de hoje: toda a diretoria/superuser é exatamente os 4 e-mails excluídos pelo código antigo; o único revisor com
+  // acesso configurado é o Giovanni; mais analistas comuns, um sem e-mail e um sem login.
+  const P = (user_id: string | null, email: string | null, nome: string, nivel: string): PerfilAnalistaCobranca & { id: string } => ({ id: `perfil-${nome}`, user_id, email, nome_completo: nome, nivel_acesso: nivel });
+  const PERFIS_ATUAIS = [
+    P("u-eliz", "consultoria@salmazos.com.br", "Elizabete Salmazo", "diretoria"), P("u-andr", "rh@salmazos.com.br", "Andreza Salmazo", "diretoria"),
+    P("u-luca", "comercial@salmazos.com.br", "Lucas Miguel", "diretoria"), P("u-olve", "olver@salmazos.com.br", "Olver Pereira", "superuser"),
+    P("u-giov", "vagas@salmazos.com.br", "Giovanni Prado", "analista"), P("u-rebe", "curriculos@salmazos.com.br", "Rebecca Zambonini", "analista"),
+    P("u-edi", "edivan@salmazos.com.br", "Edivan Souza", "analista"), P("u-sup", "supervisor@salmazos.com.br", "Supervisor Silva", "supervisor"),
+    P("u-sememail", null, "Sem E-mail", "analista"), P(null, "semlogin@salmazos.com.br", "Sem Login", "analista"),
+  ];
+  // Cópia FIEL de obterDestinatariosCobrancaRS (src/lib/cobrancaRS.ts) com o que o marcar-paga antigo passava: os 4 e-mails excluídos e sempreIncluirRevisor=true.
+  const ANTIGO_EXCLUIDOS = ["consultoria@salmazos.com.br", "rh@salmazos.com.br", "comercial@salmazos.com.br", "olver@salmazos.com.br"];
+  function destinatariosPagaCodigoAntigo(analistas: ReturnType<typeof P>[], acessoIds: Set<string>, revisadoPor: string | null) {
+    const excluirSet = new Set(ANTIGO_EXCLUIDOS.map((e) => e.toLowerCase())); const out = new Map<string, { user_id: string; email: string; nome_completo: string }>();
+    for (const a of analistas) {
+      if (!a.user_id || !a.email) continue;
+      if (excluirSet.has(a.email.toLowerCase())) continue;
+      const ehFullAccess = a.nivel_acesso === "diretoria" || a.nivel_acesso === "superuser";
+      const ehRevisor = revisadoPor != null && a.user_id === revisadoPor;
+      if (ehFullAccess || (ehRevisor && acessoIds.has(a.id)) || (ehRevisor && true)) out.set(a.user_id, { user_id: a.user_id, email: a.email, nome_completo: a.nome_completo ?? "" });
+    }
+    return [...out.values()];
+  }
+  await caso("cobrança R&S, marcar paga: a regra nova dá EXATAMENTE os mesmos destinatários do código antigo com os dados atuais, para cada revisor possível", () => {
+    const acesso = new Set(["perfil-Giovanni Prado"]);
+    const revisores: (string | null)[] = [null, "u-inexistente", ...PERFIS_ATUAIS.map((p) => p.user_id)];
+    for (const rev of revisores) {
+      const antigo = destinatariosPagaCodigoAntigo(PERFIS_ATUAIS, acesso, rev), novo = destinatariosPagaLegado(PERFIS_ATUAIS, rev);
+      assert.deepEqual(novo.map((d) => d.email).sort(), antigo.map((d) => d.email).sort(), `revisor=${rev}`);
+      assert.deepEqual(novo.map((d) => d.user_id).sort(), antigo.map((d) => d.user_id).sort(), `revisor=${rev}`);
+    }
+    assert.deepEqual(destinatariosPagaLegado(PERFIS_ATUAIS, "u-giov").map((d) => d.email), ["vagas@salmazos.com.br"], "Giovanni revisou: só ele");
+    assert.deepEqual(destinatariosPagaLegado(PERFIS_ATUAIS, "u-rebe").map((d) => d.email), ["curriculos@salmazos.com.br"], "revisor sem acesso configurado ainda recebe (sempre incluir revisor)");
+  });
+  await caso("cobrança R&S, marcar paga: revisor da diretoria/superuser, sem revisor, sem e-mail ou sem login = ninguém; NÃO é 'todos os revisores com acesso'", () => {
+    for (const rev of ["u-eliz", "u-andr", "u-luca", "u-olve", null, "", "u-sememail"]) assert.deepEqual(destinatariosPagaLegado(PERFIS_ATUAIS, rev), [], String(rev));
+    assert.deepEqual(destinatariosPagaLegado(PERFIS_ATUAIS, "u-edi").map((d) => d.email), ["edivan@salmazos.com.br"], "Giovanni (com acesso) NÃO entra quando o revisor é o Edivan");
+    assert.deepEqual(destinatariosPagaLegado([], "u-giov"), []);
+  });
+  await caso("cobrança R&S, marcar paga: compara por nivel_acesso, não por e-mail (o único desvio do código antigo é uma pessoa da diretoria com e-mail fora da lista fixa)", () => {
+    const nova = [...PERFIS_ATUAIS, P("u-dir2", "nova.diretora@salmazos.com.br", "Nova Diretora", "diretoria")];
+    assert.deepEqual(destinatariosPagaLegado(nova, "u-dir2"), [], "regra nova: diretoria nunca recebe, qualquer que seja o e-mail");
+    assert.equal(destinatariosPagaCodigoAntigo(nova, new Set(), "u-dir2").some((d) => d.user_id === "u-dir2"), true, "código antigo: o e-mail novo da diretoria escapava da exclusão fixa");
+    const trocado = PERFIS_ATUAIS.map((p) => (p.user_id === "u-giov" ? { ...p, email: "OUTRO@salmazos.com.br" } : p));
+    assert.deepEqual(destinatariosPagaLegado(trocado, "u-giov").map((d) => d.email), ["OUTRO@salmazos.com.br"]);
   });
 
   console.log(`\n${total} casos OK${process.exitCode ? " (com falhas acima)" : ""}`);
