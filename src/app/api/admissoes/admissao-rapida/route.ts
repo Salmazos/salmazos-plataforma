@@ -8,6 +8,7 @@ import { generateUniqueSlug } from "@/lib/slug";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { sincronizarEncaminhamentoComEtapa } from "@/lib/sincronizarEncaminhamento";
+import { defaultsCandidatoNovo } from "@/lib/candidatoDefaults";
 
 // "Vaga casada": o cliente já traz o candidato pronto pra registro, sem processo seletivo
 // (ver comentário completo em admissaoRapidaSchema, lib/schemas.ts). Esta rota é dedicada —
@@ -108,6 +109,9 @@ export async function POST(request: NextRequest) {
           estado: "",
           cpf: cpfLimpo || `TEMP-${Date.now()}`,
           cargo_pretendido: funcao.trim(),
+          // tempo_experiencia/turno_disponivel também são NOT NULL sem default e a Admissão Rápida não os coleta: sem estes
+          // dois o INSERT era recusado (23502) em todo candidato novo. Mesmos valores do Cadastro Rápido e da indicação direta.
+          ...defaultsCandidatoNovo(),
           etapa_kanban: "triagem",
           origem: "admissao_rapida",
         })

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ETAPAS_KANBAN } from "@/lib/constants";
 import { formatarTelefone } from "@/lib/utils";
 import CampoTelefone from "@/components/ui/CampoTelefone";
+import { TEMPO_EXPERIENCIA_PADRAO, TURNO_DISPONIVEL_PADRAO } from "@/lib/candidatoDefaults";
 
 interface Props {
   isOpen: boolean;
@@ -218,8 +219,8 @@ export default function ModalCadastroRapido({ isOpen, onClose, onCadastrado }: P
           cpf: cpf || `TEMP-${Date.now()}`,
           cidade: cidade || "",
           estado: estado || "",
-          tempo_experiencia: tempoExperiencia || "Sem experiência",
-          turno_disponivel: "Flexível",
+          tempo_experiencia: tempoExperiencia || TEMPO_EXPERIENCIA_PADRAO,
+          turno_disponivel: TURNO_DISPONIVEL_PADRAO,
           habilidades: habilidades,
           resumo_profissional: resumo || null,
           experiencias_profissionais: experiencias || null,
