@@ -1680,9 +1680,10 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
       assert.equal(ligadoSemLinha(ev, "popup"), false, ev);
     }
   });
-  await caso("cobrança R&S, padrão: e-mail com lista curta (Andreza e Giovanni; validada e paga só o Giovanni, nunca diretoria na paga); sinos ligados e vazios; as 2 pendências sem popup; restauração com permite_vazio só no sino", () => {
+  await caso("cobrança R&S, padrão: e-mail com lista curta (Andreza e Giovanni; aguardando validação: Elizabete, Andreza e Giovanni; validada e paga só o Giovanni, nunca diretoria na paga); sinos ligados e vazios; as 2 pendências sem popup; restauração com permite_vazio só no sino", () => {
     const p = PADRAO_AVISOS.vagas; const emails = (ev: string) => p[ev].email!.destinatarios.map((d) => (d.tipo_destinatario === "email" ? d.email : ""));
-    for (const ev of ["cobranca_rs_gerada", "cobranca_rs_cancelada", "cobranca_rs_atrasada", "cobranca_rs_aguardando_validacao"]) assert.deepEqual(emails(ev), ["rh@salmazos.com.br", "vagas@salmazos.com.br"], ev);
+    for (const ev of ["cobranca_rs_gerada", "cobranca_rs_cancelada", "cobranca_rs_atrasada"]) assert.deepEqual(emails(ev), ["rh@salmazos.com.br", "vagas@salmazos.com.br"], ev);
+    assert.deepEqual(emails("cobranca_rs_aguardando_validacao"), ["consultoria@salmazos.com.br", "rh@salmazos.com.br", "vagas@salmazos.com.br"]);
     for (const ev of ["cobranca_rs_validada", "cobranca_rs_paga"]) assert.deepEqual(emails(ev), ["vagas@salmazos.com.br"], ev);
     for (const ev of COBR) { assert.equal(p[ev].popup, undefined, ev); assert.equal(p[ev].email === undefined, !CANAIS_COBR[ev].includes("email"), ev); assert.equal(p[ev].sino === undefined, !CANAIS_COBR[ev].includes("sino"), ev); if (p[ev].email) assert.equal(p[ev].email!.ativo, true, ev); }
     for (const ev of ["cobranca_rs_atrasada", "cobranca_rs_pendente_revisao", "cobranca_rs_aguardando_validacao"]) assert.deepEqual(p[ev].sino, { ativo: true, destinatarios: [] }, ev);

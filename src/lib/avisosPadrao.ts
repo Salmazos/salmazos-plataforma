@@ -38,6 +38,7 @@ const SINO_TODOS: DestinatarioPadrao[] = [
 const EMAIL_REBECCA = e("Rebecca Zambonini", "curriculos@salmazos.com.br");
 const EMAIL_ANDREZA = e("Andreza Salmazo", "rh@salmazos.com.br");
 const EMAIL_GIOVANNI = e("Giovanni Prado", "vagas@salmazos.com.br");
+const EMAIL_ELIZABETE = e("Elizabete Salmazo", "consultoria@salmazos.com.br");
 
 // Os 10 analistas ativos com e-mail na carga de migration_avisos_fase1c.sql (Susana Oliveira tem
 // dois perfis, um por unidade). O filtro de unidade vale por cima na hora de enviar.
@@ -199,11 +200,11 @@ export const PADRAO_AVISOS: Record<GrupoComPadrao, Record<string, PadraoEvento>>
       sino: { ativo: true, destinatarios: [] },
     },
     // Rascunho pendente de revisão: só sino, ligado com a lista VAZIA (diretoria, superusers e quem tem acesso, menos o gerador, já
-    // são avisados por regra no código). "Aguardando validação": sino idem; e-mail com a lista curta de quem valida (Andreza e
-    // Giovanni, a confirmar). Só vale ao clicar em "Restaurar padrão".
+    // são avisados por regra no código). "Aguardando validação": sino idem; e-mail com a lista curta de quem valida (Elizabete,
+    // Andreza e Giovanni; a Elizabete valida as cobranças). Só vale ao clicar em "Restaurar padrão".
     cobranca_rs_pendente_revisao: { sino: { ativo: true, destinatarios: [] } },
     cobranca_rs_aguardando_validacao: {
-      email: { ativo: true, destinatarios: [EMAIL_ANDREZA, EMAIL_GIOVANNI] },
+      email: { ativo: true, destinatarios: [EMAIL_ELIZABETE, EMAIL_ANDREZA, EMAIL_GIOVANNI] },
       sino: { ativo: true, destinatarios: [] },
     },
     conta_receber_hortolandia_atrasada: { sino: { ativo: true, destinatarios: [] }, popup: { ativo: true, destinatarios: [] } },
