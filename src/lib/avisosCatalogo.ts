@@ -126,6 +126,21 @@ export const AVISOS_RESTANTES: Record<string, { rotulo: string; canais: readonly
       email: "Sem ninguém na lista: diretoria, superusers e o revisor com acesso recebem, como sempre. Com lista: só a lista. Desligado: ninguém.",
     },
   },
+  cobranca_rs_pendente_revisao: {
+    rotulo: "Cobrança R&S pendente de revisão (rascunho criado)",
+    canais: ["sino"],
+    nota: "Avisa no sino, assim que o rascunho de uma cobrança R&S é criado (contratação com resposta \"sim\" à cobrança, ou cancelamento de vaga com taxa), que há uma cobrança aguardando revisão. Vai para a diretoria, os superusers e quem tem acesso à Cobrança R&S, menos quem gerou a cobrança (que já abre a revisão na hora), mais as pessoas da lista (a lista pode ficar vazia). Desligado, ninguém recebe. Não envia e-mail nem popup. Não repete: avisa uma vez, quando o rascunho nasce.",
+    padrao: { sino: "Ligado, sem ninguém na lista: diretoria, superusers e quem tem acesso à Cobrança R&S (menos quem gerou) são avisados. Desligado: ninguém." },
+  },
+  cobranca_rs_aguardando_validacao: {
+    rotulo: "Cobrança R&S parada em Aguardando validação",
+    canais: ["sino", "email"],
+    nota: "Lembrete (cron das 6h) de cobrança em Aguardando validação sem data de vencimento definida, enviada há 2 dias ou mais; repete a cada 2 dias, sem limite, até o vencimento ser definido (validada) ou a cobrança ser cancelada. Vai para quem pode definir o vencimento: diretoria, superusers, quem tem acesso à Cobrança R&S e quem gerou a cobrança. Sino: esses mais a lista (pode ficar vazia). E-mail: os mesmos; com lista, só a lista. Desligado, ninguém recebe. O lembrete só é dado como feito quando algo foi entregue (sino ou e-mail) ou todos os canais estão desligados; senão tenta de novo na próxima execução. Não envia popup.",
+    padrao: {
+      sino: "Ligado, sem ninguém na lista: quem pode definir o vencimento é avisado, como sempre. Desligado: ninguém.",
+      email: "Sem ninguém na lista: quem pode definir o vencimento recebe, como sempre. Com lista: só a lista. Desligado: ninguém.",
+    },
+  },
 };
 export const EVENTOS_AVISOS_RESTANTES: string[] = Object.keys(AVISOS_RESTANTES);
 export const eventoAvisoRestante = (evento: string): boolean => Object.prototype.hasOwnProperty.call(AVISOS_RESTANTES, evento);

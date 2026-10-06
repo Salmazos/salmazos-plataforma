@@ -198,6 +198,14 @@ export const PADRAO_AVISOS: Record<GrupoComPadrao, Record<string, PadraoEvento>>
       email: { ativo: true, destinatarios: [EMAIL_ANDREZA, EMAIL_GIOVANNI] },
       sino: { ativo: true, destinatarios: [] },
     },
+    // Rascunho pendente de revisão: só sino, ligado com a lista VAZIA (diretoria, superusers e quem tem acesso, menos o gerador, já
+    // são avisados por regra no código). "Aguardando validação": sino idem; e-mail com a lista curta de quem valida (Andreza e
+    // Giovanni, a confirmar). Só vale ao clicar em "Restaurar padrão".
+    cobranca_rs_pendente_revisao: { sino: { ativo: true, destinatarios: [] } },
+    cobranca_rs_aguardando_validacao: {
+      email: { ativo: true, destinatarios: [EMAIL_ANDREZA, EMAIL_GIOVANNI] },
+      sino: { ativo: true, destinatarios: [] },
+    },
     conta_receber_hortolandia_atrasada: { sino: { ativo: true, destinatarios: [] }, popup: { ativo: true, destinatarios: [] } },
   },
 };
@@ -227,6 +235,8 @@ const EVENTOS_SINO_COM_RESPONSAVEL: readonly string[] = [
   "cobranca_rs_paga",
   "cobranca_rs_cancelada",
   "cobranca_rs_atrasada",
+  "cobranca_rs_pendente_revisao",
+  "cobranca_rs_aguardando_validacao",
 ];
 
 export function grupoTemPadrao(grupo: string): grupo is GrupoComPadrao {
