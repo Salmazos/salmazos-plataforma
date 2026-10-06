@@ -5,8 +5,9 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { podeRevisarCobranca } from "@/lib/fullAccessAuth";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { getEmailTemplate } from "@/lib/emailTemplates";
-import { sendEmail } from "@/lib/sendEmail";
 import { obterDestinatariosCobrancaRS } from "@/lib/cobrancaRS";
+import { avisarCobrancaRSEmail } from "@/lib/avisarCobrancaRS";
+import { EVENTO_COBRANCA_RS_GERADA, TIPO_EMAIL_COBRANCA_GERADA } from "@/lib/cobrancaRSRegras";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -69,45 +70,37 @@ export async function POST(_request: NextRequest, { params }: Params) {
   const salario = Number(cobranca.salario);
   const feeValor = Math.round(((salario * feePercentual) / 100) * 100) / 100;
 
-  // Mesma base de destinatários do aviso de atraso e do "cobrança paga" (obterDestinatariosCobrancaRS):
-  // PAPEIS_FULL_ACCESS + acesso configurável à tela, mas o analista com acesso configurável só
-  // entra se for o revisor desta cobrança — que é o próprio usuário aprovando agora (user.id vira
-  // revisado_por no UPDATE logo abaixo, então já dá pra passar direto, sem esperar o UPDATE
-  // terminar). Antes desta correção, o envio dependia só de cobranca_rs_avisos_destinatarios —
-  // tabela que na prática só tinha 1 e-mail ativo (olver@salmazos.com.br), deixando o resto da
-  // base sem o aviso de cobrança gerada.
-  const destinatarios = await obterDestinatariosCobrancaRS(user.id, svc);
-
-  let emailFalhou = false;
-  if (destinatarios.length > 0) {
-    const template = getEmailTemplate("cobranca_rs_gerada", {
-      nome: "",
-      cargo: ehCancelamento ? vagaTitulo : cobranca.cargo,
-      nomeCliente: cobranca.cliente_nome_snapshot,
-      nomeCandidato: ehCancelamento ? undefined : cobranca.candidato_nome_snapshot,
-      clienteCnpj: cobranca.cliente_cnpj_snapshot,
-      clienteEndereco: cobranca.cliente_endereco_snapshot,
-      clienteTelefone: cobranca.cliente_telefone_snapshot,
-      clienteEmail: cobranca.cliente_email_snapshot,
-      salario: formatarMoeda(salario),
-      dataInicio: ehCancelamento ? undefined : formatarData(cobranca.data_inicio),
-      feeRsPercentual: feePercentual,
-      feeRsPrazoCobranca: cobranca.prazo_cobranca,
-      feeValor,
-      tipoCobrancaRS: ehCancelamento ? "cancelamento" : "contratacao",
-      cobrancaUrl: `${SITE_URL}/painel/cobrancas-rs?abrir=${id}`,
-    });
-
-    const resultados = await Promise.all(
-      destinatarios.map((d) =>
-        sendEmail({ to: d.email, subject: template.subject, html: template.html, tipo: "cobranca_rs_gerada" })
-      )
-    );
-    emailFalhou = resultados.some((r) => !r.success);
-    if (emailFalhou) console.error(`[cobrancas-rs/aprovar] Falha ao enviar para 1+ destinatário(s) (cobranca_id=${id})`);
-  } else {
-    console.error(`[cobrancas-rs/aprovar] Nenhum destinatário de e-mail ativo configurado (cobranca_id=${id}) — cobrança aprovada sem envio.`);
-  }
+  // Aviso interno (Configurações > Avisos > cobranca_rs_gerada), na mesma posição de sempre: ANTES do UPDATE abaixo.
+  // Sem lista no canal e-mail vale a mesma base de antes (obterDestinatariosCobrancaRS): PAPEIS_FULL_ACCESS + acesso
+  // configurável à tela, mas o analista com acesso configurável só entra se for o revisor desta cobrança — que é o
+  // próprio usuário aprovando agora (user.id vira revisado_por no UPDATE logo abaixo, então já dá pra passar direto, sem
+  // esperar o UPDATE terminar). Com lista no canal, só a lista; desligado, ninguém. Nunca lança e nunca impede a aprovação.
+  const aviso = await avisarCobrancaRSEmail(svc, {
+    evento: EVENTO_COBRANCA_RS_GERADA,
+    tipo: TIPO_EMAIL_COBRANCA_GERADA,
+    cobrancaId: id,
+    contexto: "cobrancas-rs/aprovar",
+    legado: () => obterDestinatariosCobrancaRS(user.id, svc),
+    montar: () =>
+      getEmailTemplate("cobranca_rs_gerada", {
+        nome: "",
+        cargo: ehCancelamento ? vagaTitulo : cobranca.cargo,
+        nomeCliente: cobranca.cliente_nome_snapshot,
+        nomeCandidato: ehCancelamento ? undefined : cobranca.candidato_nome_snapshot,
+        clienteCnpj: cobranca.cliente_cnpj_snapshot,
+        clienteEndereco: cobranca.cliente_endereco_snapshot,
+        clienteTelefone: cobranca.cliente_telefone_snapshot,
+        clienteEmail: cobranca.cliente_email_snapshot,
+        salario: formatarMoeda(salario),
+        dataInicio: ehCancelamento ? undefined : formatarData(cobranca.data_inicio),
+        feeRsPercentual: feePercentual,
+        feeRsPrazoCobranca: cobranca.prazo_cobranca,
+        feeValor,
+        tipoCobrancaRS: ehCancelamento ? "cancelamento" : "contratacao",
+        cobrancaUrl: `${SITE_URL}/painel/cobrancas-rs?abrir=${id}`,
+      }),
+  });
+  const emailFalhou = aviso.algumaFalha;
 
   const { data, error } = await svc
     .from("cobrancas_rs")
@@ -141,9 +134,9 @@ export async function POST(_request: NextRequest, { params }: Params) {
       candidato: cobranca.candidato_nome_snapshot,
       fee_valor: feeValor,
       email_falhou: emailFalhou,
-      destinatarios: destinatarios.length,
+      destinatarios: aviso.destinatarios,
     },
   });
 
-  return NextResponse.json({ data, emailFalhou, destinatariosCount: destinatarios.length });
+  return NextResponse.json({ data, emailFalhou, destinatariosCount: aviso.destinatarios });
 }

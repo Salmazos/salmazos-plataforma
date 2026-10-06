@@ -3,9 +3,10 @@ import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
-import { obterDestinatariosCobrancaRS } from "@/lib/cobrancaRS";
+import { obterDestinatariosPagaCobrancaRS } from "@/lib/cobrancaRS";
 import { getEmailTemplate } from "@/lib/emailTemplates";
-import { sendEmail } from "@/lib/sendEmail";
+import { avisarCobrancaRSEmail } from "@/lib/avisarCobrancaRS";
+import { EVENTO_COBRANCA_RS_PAGA, TIPO_EMAIL_COBRANCA_PAGA } from "@/lib/cobrancaRSRegras";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -60,54 +61,42 @@ export async function POST(_request: NextRequest, { params }: Params) {
     detalhes: { cliente: data.cliente_nome_snapshot, candidato: data.candidato_nome_snapshot },
   });
 
-  // E-mail (sem sino) pros mesmos destinatários do aviso de atraso — best-effort, nunca
+  // E-mail (sem sino) ao revisor da cobrança — best-effort, nunca
   // bloqueia nem derruba a resposta: o pagamento já foi confirmado no banco antes disso.
   // after() (não uma Promise solta) garante que o runtime espera esse trabalho terminar
   // depois de enviar a resposta, em vez de arriscar a função ser congelada antes do envio
   // sair — mesmo padrão já usado em notificar-encerramento/route.ts.
   after(async () => {
     try {
-      // Toda a diretoria/superuser (Elizabete, Andreza, Lucas Miguel e Olver) é excluída só
-      // deste e-mail (pagamento confirmado): Elizabete é quem autoriza e realiza a cobrança, e
-      // os demais decidiram que também não precisam de confirmação de um pagamento que a
-      // própria diretoria fez — pedido do Olver, 23/09. Em troca, o revisor da cobrança
-      // (sempreIncluirRevisor=true) sempre recebe, mesmo sem o toggle de acesso configurável
-      // ativo nas outras telas de Cobrança R&S — qualquer analista que revisa é comissionado
-      // pela vaga fechada, precisa saber quando o pagamento sai (mesmo pedido, 23/09). Os
-      // outros e-mails de Cobrança R&S (gerada, aprovada, cancelada, atraso, reenvio)
-      // continuam chegando pra diretoria/superuser normalmente e exigindo o toggle pro
-      // revisor, sem essas duas exceções.
-      const destinatarios = await obterDestinatariosCobrancaRS(
-        data.revisado_por ?? null,
-        svc,
-        ["consultoria@salmazos.com.br", "rh@salmazos.com.br", "comercial@salmazos.com.br", "olver@salmazos.com.br"],
-        true
-      );
-      // Lista vazia é esperada, não erro: com toda a diretoria/superuser excluída, cobrança sem
-      // revisor (ou revisada por alguém da diretoria) simplesmente não gera este e-mail.
-      if (destinatarios.length === 0) {
-        console.log(`[marcar-paga] Nenhum destinatário pro e-mail de pagamento, envio pulado (cobranca_id=${id}).`);
-        return;
-      }
-
-      const template = getEmailTemplate("cobranca_rs_paga", {
-        nome: "",
-        cargo: data.cargo ?? "—",
-        nomeCliente: data.cliente_nome_snapshot,
-        nomeCandidato: data.candidato_nome_snapshot ?? undefined,
-        feeValor: data.fee_valor,
-        // Normaliza pra "YYYY-MM-DD" antes de passar pro template — data.pago_em é
-        // timestamptz completo, mas o formatador de dataPagamento (mesmo padrão de
-        // dataVencimento) espera só a parte da data.
-        dataPagamento: data.pago_em ? data.pago_em.split("T")[0] : undefined,
-        tipoCobrancaRS: data.tipo,
+      // Aviso interno (Configurações > Avisos > cobranca_rs_paga). Sem lista no canal e-mail, o legado é SÓ o revisor desta
+      // cobrança (revisado_por), e só se ele não for diretoria nem superuser (comparado por nivel_acesso): a diretoria
+      // inteira (Elizabete, Andreza, Lucas Miguel e Olver) fica de fora deste e-mail — Elizabete é quem autoriza e realiza a
+      // cobrança, e os demais decidiram que também não precisam de confirmação de um pagamento que a própria diretoria
+      // fez (pedido do Olver, 23/09). O revisor sempre recebe, mesmo sem o toggle de acesso configurável nas outras
+      // telas de Cobrança R&S: qualquer analista que revisa é comissionado pela vaga fechada, precisa saber quando o
+      // pagamento sai. Antes isso era feito excluindo 4 e-mails fixos; agora a regra não depende de endereço. Lista vazia é
+      // esperado (cobrança sem revisor, ou revisada pela diretoria): o envio é pulado. Com lista no canal, só a lista.
+      await avisarCobrancaRSEmail(svc, {
+        evento: EVENTO_COBRANCA_RS_PAGA,
+        tipo: TIPO_EMAIL_COBRANCA_PAGA,
+        cobrancaId: id,
+        contexto: "marcar-paga",
+        semDestinatarioEsperado: true,
+        legado: () => obterDestinatariosPagaCobrancaRS(data.revisado_por ?? null, svc),
+        montar: () =>
+          getEmailTemplate("cobranca_rs_paga", {
+            nome: "",
+            cargo: data.cargo ?? "—",
+            nomeCliente: data.cliente_nome_snapshot,
+            nomeCandidato: data.candidato_nome_snapshot ?? undefined,
+            feeValor: data.fee_valor,
+            // Normaliza pra "YYYY-MM-DD" antes de passar pro template — data.pago_em é
+            // timestamptz completo, mas o formatador de dataPagamento (mesmo padrão de
+            // dataVencimento) espera só a parte da data.
+            dataPagamento: data.pago_em ? data.pago_em.split("T")[0] : undefined,
+            tipoCobrancaRS: data.tipo,
+          }),
       });
-
-      await Promise.all(
-        destinatarios.map((d) =>
-          sendEmail({ to: d.email, subject: template.subject, html: template.html, tipo: "cobranca_rs_paga" })
-        )
-      ).catch((err) => console.error(`[marcar-paga] Erro ao enviar e-mail de pagamento (cobranca_id=${id}):`, err));
     } catch (err) {
       console.error(`[marcar-paga] Erro ao montar e-mail de pagamento (cobranca_id=${id}):`, err);
     }

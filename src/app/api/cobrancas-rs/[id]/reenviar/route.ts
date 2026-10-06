@@ -5,7 +5,8 @@ import { checarPapelFullAccess } from "@/lib/fullAccessAuth";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { obterDestinatariosCobrancaRS } from "@/lib/cobrancaRS";
 import { getEmailTemplate } from "@/lib/emailTemplates";
-import { sendEmail } from "@/lib/sendEmail";
+import { avisarCobrancaRSEmail } from "@/lib/avisarCobrancaRS";
+import { EVENTO_COBRANCA_RS_GERADA, TIPO_EMAIL_COBRANCA_GERADA } from "@/lib/cobrancaRSRegras";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -53,53 +54,38 @@ export async function POST(_request: NextRequest, { params }: Params) {
 
   after(async () => {
     try {
-      // Resolvido uma vez e reaproveitado nos dois registrarAuditoria abaixo (early-return
-      // sem destinatário e o caminho normal) — evita 2 consultas a analistas_perfil no mesmo
-      // request.
+      // Resolvido uma vez (uma consulta a analistas_perfil por request).
       const nomeUsuario = await resolverNomeUsuario(user.id, user.email ?? null, svc);
 
-      // Revisor da cobrança original (não necessariamente quem está reenviando agora, que
+      // Mesmo evento do aviso de aprovação (cobranca_rs_gerada, Configurações > Avisos): sem lista no canal e-mail vale a
+      // base de antes. Revisor da cobrança original (não necessariamente quem está reenviando agora, que
       // pode ser outra pessoa full-access) — cobranca.revisado_por pode ser null se por
       // algum motivo a cobrança nunca teve revisor setado; nesse caso obterDestinatariosCobrancaRS
-      // simplesmente não inclui ninguém extra além da base fixa, sem quebrar.
-      const destinatarios = await obterDestinatariosCobrancaRS(cobranca.revisado_por ?? null, svc);
-      if (destinatarios.length === 0) {
-        console.error(`[reenviar] Nenhum destinatário resolvido pro reenvio (cobranca_id=${id}).`);
-        registrarAuditoria({
-          usuario_id: user.id,
-          usuario_nome: nomeUsuario,
-          acao: "cobranca_rs_reenviada",
-          entidade: "cobrancas_rs",
-          entidade_id: id,
-          detalhes: { cliente: cobranca.cliente_nome_snapshot, candidato: cobranca.candidato_nome_snapshot, destinatarios: 0, email_falhou: null },
-        });
-        return;
-      }
-
-      const template = getEmailTemplate("cobranca_rs_gerada", {
-        nome: "",
-        cargo: ehCancelamento ? vagaTitulo : cobranca.cargo,
-        nomeCliente: cobranca.cliente_nome_snapshot,
-        nomeCandidato: ehCancelamento ? undefined : cobranca.candidato_nome_snapshot,
-        clienteCnpj: cobranca.cliente_cnpj_snapshot,
-        clienteEndereco: cobranca.cliente_endereco_snapshot,
-        clienteTelefone: cobranca.cliente_telefone_snapshot,
-        clienteEmail: cobranca.cliente_email_snapshot,
-        salario: formatarMoeda(Number(cobranca.salario)),
-        dataInicio: ehCancelamento ? undefined : formatarData(cobranca.data_inicio),
-        feeRsPercentual: Number(cobranca.fee_percentual),
-        feeValor: Number(cobranca.fee_valor),
-        tipoCobrancaRS: ehCancelamento ? "cancelamento" : "contratacao",
-        cobrancaUrl: `${SITE_URL}/painel/cobrancas-rs?abrir=${id}`,
+      // simplesmente não inclui ninguém extra além da base fixa, sem quebrar. Com lista, só a lista; desligado, ninguém.
+      const aviso = await avisarCobrancaRSEmail(svc, {
+        evento: EVENTO_COBRANCA_RS_GERADA,
+        tipo: TIPO_EMAIL_COBRANCA_GERADA,
+        cobrancaId: id,
+        contexto: "reenviar",
+        legado: () => obterDestinatariosCobrancaRS(cobranca.revisado_por ?? null, svc),
+        montar: () =>
+          getEmailTemplate("cobranca_rs_gerada", {
+            nome: "",
+            cargo: ehCancelamento ? vagaTitulo : cobranca.cargo,
+            nomeCliente: cobranca.cliente_nome_snapshot,
+            nomeCandidato: ehCancelamento ? undefined : cobranca.candidato_nome_snapshot,
+            clienteCnpj: cobranca.cliente_cnpj_snapshot,
+            clienteEndereco: cobranca.cliente_endereco_snapshot,
+            clienteTelefone: cobranca.cliente_telefone_snapshot,
+            clienteEmail: cobranca.cliente_email_snapshot,
+            salario: formatarMoeda(Number(cobranca.salario)),
+            dataInicio: ehCancelamento ? undefined : formatarData(cobranca.data_inicio),
+            feeRsPercentual: Number(cobranca.fee_percentual),
+            feeValor: Number(cobranca.fee_valor),
+            tipoCobrancaRS: ehCancelamento ? "cancelamento" : "contratacao",
+            cobrancaUrl: `${SITE_URL}/painel/cobrancas-rs?abrir=${id}`,
+          }),
       });
-
-      const resultados = await Promise.all(
-        destinatarios.map((d) =>
-          sendEmail({ to: d.email, subject: template.subject, html: template.html, tipo: "cobranca_rs_gerada" })
-        )
-      );
-      const emailFalhou = resultados.some((r) => !r.success);
-      if (emailFalhou) console.error(`[reenviar] Falha ao enviar para 1+ destinatário(s) (cobranca_id=${id})`);
 
       registrarAuditoria({
         usuario_id: user.id,
@@ -110,8 +96,9 @@ export async function POST(_request: NextRequest, { params }: Params) {
         detalhes: {
           cliente: cobranca.cliente_nome_snapshot,
           candidato: cobranca.candidato_nome_snapshot,
-          destinatarios: destinatarios.length,
-          email_falhou: emailFalhou,
+          destinatarios: aviso.destinatarios,
+          // Sem ninguém a quem enviar (ou canal desligado) o antigo gravava null; com envio, se algum falhou.
+          email_falhou: aviso.destinatarios === 0 ? null : aviso.algumaFalha,
         },
       });
     } catch (err) {
