@@ -8,6 +8,7 @@ import { parseBody, indicacaoCandidatoDecisaoSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { sendEmail } from "@/lib/sendEmail";
+import { defaultsCandidatoNovo } from "@/lib/candidatoDefaults";
 import { criarAvisoCliente } from "@/lib/avisoCliente";
 import { chaveDedupAviso, textoAvisoIndicacaoDecidida } from "@/lib/avisoClienteRegras";
 
@@ -251,8 +252,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           cidade: vaga.cidade ?? "",
           estado: vaga.estado ?? "",
           cargo_pretendido: vaga.titulo,
-          tempo_experiencia: "Sem experiência",
-          turno_disponivel: "Flexível",
+          ...defaultsCandidatoNovo(),
           curriculo_url: sol.curriculo_url ?? null,
           origem: "indicacao_direta_cliente",
           etapa_kanban: "aprovado_cliente",
