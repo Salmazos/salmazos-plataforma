@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import ModalContratoMot from "./ModalContratoMot";
 
 interface AvisoVencimentoMot {
   id: string;
@@ -15,10 +15,14 @@ interface AvisoVencimentoMot {
 // (contratoMotStatus.ts), sem depender de um cron ter rodado antes. Avisa 10 dias antes dos
 // vencimentos de 180 (aprovação de continuidade) e 270 dias (limite legal), e continua
 // avisando todo dia enquanto o limite de 270 estiver excedido.
+//
+// Clicar num aviso abre o ModalContratoMot (Prorrogar / Afastamento / Encerrar contrato) em vez de só
+// navegar pra ficha. Depois de uma ação, a lista é recarregada uma única vez (sem polling): quem foi
+// silenciado sai da lista na hora.
 export default function PopupVencimentoContratoMot() {
-  const router = useRouter();
   const [avisos, setAvisos] = useState<AvisoVencimentoMot[]>([]);
   const [aberto, setAberto] = useState(false);
+  const [selecionado, setSelecionado] = useState<AvisoVencimentoMot | null>(null);
 
   useEffect(() => {
     let cancelado = false;
@@ -51,14 +55,20 @@ export default function PopupVencimentoContratoMot() {
     }
   }
 
-  function abrirFuncionario(funcionarioId: string) {
-    marcarVisto();
-    router.push(`/painel/funcionarios/${funcionarioId}`);
+  async function recarregarLista() {
+    try {
+      const res = await fetch("/api/funcionarios/vencimento-contrato/popup");
+      if (!res.ok) return;
+      const body = await res.json();
+      const lista: AvisoVencimentoMot[] = body.data ?? [];
+      setAvisos(lista);
+      if (lista.length === 0) setAberto(false);
+    } catch {
+      // silencioso — a lista antiga continua na tela
+    }
   }
 
-  if (!aberto) return null;
-
-  return (
+  const popupJSX = (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-red-400/40">
         <div className="bg-black px-6 py-5 flex items-start justify-between">
@@ -79,7 +89,7 @@ export default function PopupVencimentoContratoMot() {
           {avisos.map((a) => (
             <button
               key={a.id}
-              onClick={() => abrirFuncionario(a.funcionario_id)}
+              onClick={() => setSelecionado(a)}
               className="w-full text-left flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3"
             >
               <span className="text-2xl leading-none">⏳</span>
@@ -98,5 +108,18 @@ export default function PopupVencimentoContratoMot() {
         </div>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {aberto && popupJSX}
+      <ModalContratoMot
+        funcionarioId={selecionado?.funcionario_id ?? null}
+        nome={selecionado?.titulo ?? ""}
+        onClose={() => setSelecionado(null)}
+        onAlterado={recarregarLista}
+        onVerFicha={marcarVisto}
+      />
+    </>
   );
 }

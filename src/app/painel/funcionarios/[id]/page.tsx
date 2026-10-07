@@ -42,10 +42,11 @@ export default async function FuncionarioDetalhePage({ params }: Params) {
   let clientesQuery = svc.from("clientes").select("id, nome").eq("ativo", true).order("nome");
   if (!ctxRH.todasUnidades) clientesQuery = clientesQuery.eq("unidade_id", ctxRH.unidadeId);
 
-  const [{ data: asos }, { data: contratos }, { data: clientes }] = await Promise.all([
+  const [{ data: asos }, { data: contratos }, { data: clientes }, { data: rescisaoDoFuncionario }] = await Promise.all([
     svc.from("funcionario_asos").select("*").eq("funcionario_id", id).is("excluido_em", null).order("data_exame", { ascending: false }),
     svc.from("funcionario_contratos").select("*").eq("funcionario_id", id).is("excluido_em", null).order("criado_em", { ascending: false }),
     clientesQuery,
+    svc.from("rescisoes").select("data_desligamento").eq("funcionario_id", id).limit(1),
   ]);
 
   // Sem FK direta entre criado_por (em funcionario_asos/funcionario_contratos) e
@@ -81,6 +82,8 @@ export default async function FuncionarioDetalhePage({ params }: Params) {
       contratosIniciais={contratosComNome}
       clientes={clientes ?? []}
       podeExcluirDocumento={podeExcluirDocumento}
+      // Funcionário ainda 'ativo' com rescisão = rescisão programada (data futura, ou data chegada e cron pendente).
+      desligamentoProgramadoEm={funcionario.status === "ativo" ? rescisaoDoFuncionario?.[0]?.data_desligamento ?? null : null}
     />
   );
 }

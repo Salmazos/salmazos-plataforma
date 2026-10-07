@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { dispararAvisosRescisao } from "@/lib/dispararAvisosRescisao";
+import { efetivarDesligamentosProgramados } from "@/lib/rescisaoProgramadaCron";
 
 export const dynamic = "force-dynamic";
 
@@ -108,7 +109,20 @@ export async function GET(request: Request) {
       }
     }
 
+    // ── Terceiro passo: efetivar desligamentos programados cuja data chegou ─────
+    // Rescisão lançada com data futura mantém o funcionário 'ativo' (POST /api/rescisoes). Quando a data chega
+    // (<= hoje em Brasília), este passo vira 'desligado'. Idempotente (só toca quem ainda está 'ativo') e
+    // auto-recuperável: critério é "<= hoje", não "= hoje", então se o cron falhar um dia, o próximo pega.
+    // Isolado em try/catch: uma falha aqui nunca derruba os dois passos de aviso acima.
+    let desligamentosEfetivados = 0;
+    try {
+      desligamentosEfetivados = await efetivarDesligamentosProgramados(supabase, hojeSP);
+    } catch (err) {
+      console.error("[cron/rescisao-avisos] Falha ao efetivar desligamentos programados:", err);
+    }
+
     return NextResponse.json({
+      desligamentos_efetivados: desligamentosEfetivados,
       vencimento_rescisao_enviados: vencimentoRescisaoEnviados,
       vencimento_rescisao_falhados: vencimentoRescisaoFalhados,
       vencimento_guia_enviados: vencimentoGuiaEnviados,

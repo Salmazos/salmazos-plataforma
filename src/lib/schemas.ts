@@ -1101,6 +1101,49 @@ export const funcionarioContratoCreateSchema = z.object({
   observacoes: z.string().trim().optional().nullable(),
 });
 
+// ── Eventos do contrato MOT (funcionario_mot_eventos) ──────────────────────────
+// Prorrogação e afastamento do aviso "Vencimentos de contrato MOT". funcionario_id e criado_por NUNCA vêm
+// do body (funcionario_id é o [id] da URL; criado_por é o usuário logado) — chaves extras são descartadas
+// pelo zod. A data do evento é limitada a [data_admissao, hoje] na rota (precisa do funcionário).
+
+export const TIPOS_EVENTO_MOT = ["prorrogacao", "afastamento_inicio", "afastamento_fim"] as const;
+export const TIPOS_BENEFICIO_MOT = ["auxilio_doenca", "acidentario", "outro"] as const;
+
+const dataISOValida = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida")
+  .refine((v) => {
+    // 2026-13-40 passa no regex mas não é data: new Date() dá Invalid Date e toISOString() lançaria exceção.
+    const d = new Date(`${v}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+  }, "Data inválida");
+
+export const funcionarioMotEventoCreateSchema = z
+  .object({
+    tipo: z.enum(TIPOS_EVENTO_MOT, { message: "Tipo de evento inválido" }),
+    data_evento: dataISOValida,
+    tipo_beneficio: z.enum(TIPOS_BENEFICIO_MOT).optional().nullable(),
+    observacoes: z.string().trim().max(2000, "Observação muito longa").optional().nullable(),
+    arquivo_path: z.string().optional().nullable(),
+    nome_arquivo_original: z.string().optional().nullable(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.tipo === "afastamento_inicio" && !v.tipo_beneficio) {
+      ctx.addIssue({ code: "custom", path: ["tipo_beneficio"], message: "Tipo de benefício é obrigatório no início do afastamento" });
+    }
+    if (v.tipo !== "afastamento_inicio" && v.tipo_beneficio) {
+      ctx.addIssue({ code: "custom", path: ["tipo_beneficio"], message: "Tipo de benefício só vale no início do afastamento" });
+    }
+    if (v.tipo !== "prorrogacao" && v.arquivo_path) {
+      ctx.addIssue({ code: "custom", path: ["arquivo_path"], message: "Anexo só vale para prorrogação" });
+    }
+  });
+
+// Correção = linha compensatória (nunca apaga nem edita o evento): só PAPEIS_FULL_ACCESS, com motivo.
+export const funcionarioMotEventoCorrigirSchema = z.object({
+  motivo: z.string().trim().min(1, "Motivo é obrigatório").max(2000, "Motivo muito longo"),
+});
+
 // Soft-delete de ASO/Contrato (corrige upload errado sem apagar de verdade — documento
 // trabalhista precisa manter rastro de auditoria). Mesmo shape pros dois, reaproveitado
 // pelas duas rotas de exclusão (ver api/funcionarios/asos/[asoId] e
@@ -1152,7 +1195,8 @@ export const pontoFuncionarioVincularSchema = z.object({
 export const rescisaoCreateSchema = z.object({
   funcionario_id: z.string().uuid(),
   empresa: z.string().trim().min(1, "Empresa é obrigatória"),
-  data_desligamento: z.string().min(1, "Data de desligamento é obrigatória"),
+  // AAAA-MM-DD: a regra de rescisão programada compara a data como string com "hoje" (rescisaoProgramada.ts).
+  data_desligamento: z.string().min(1, "Data de desligamento é obrigatória").regex(/^\d{4}-\d{2}-\d{2}$/, "Data de desligamento inválida"),
   modalidade: z.enum(["pedido_demissao", "desligamento_pela_empresa", "efetivado"]),
   entrevista_desligamento: z.boolean().optional().default(false),
   funcionario_assinou: z.boolean().optional().default(false),

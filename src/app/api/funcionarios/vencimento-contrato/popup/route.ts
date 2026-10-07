@@ -4,6 +4,7 @@ import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
 import { contextoRH } from "@/lib/rhUnidadeAuth";
 import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
 import { calcularVencimentoContratoMot, precisaAvisoPopupVencimentoMot, mensagemAvisoPopupVencimentoMot } from "@/lib/contratoMotStatus";
+import { carregarResumosMot } from "@/lib/contratoMotEventos";
 
 export const dynamic = "force-dynamic";
 
@@ -41,10 +42,14 @@ export async function GET() {
   if (!ctx.todasUnidades) funcionariosQuery = funcionariosQuery.eq("unidade_id", ctx.unidadeId);
   const { data: funcionarios } = await funcionariosQuery;
 
+  // Afastamento em aberto, prorrogação e rescisão programada silenciam o aviso (regra única em
+  // contratoMotStatus.avisoMotSilenciado). Sem evento nenhum, o resumo vem vazio e nada muda.
+  const resumos = await carregarResumosMot(svc, (funcionarios ?? []).map((f) => f.id));
+
   const avisos: AvisoVencimentoMot[] = [];
   for (const f of funcionarios ?? []) {
     const v = calcularVencimentoContratoMot(f.data_admissao as string);
-    if (precisaAvisoPopupVencimentoMot(v)) {
+    if (precisaAvisoPopupVencimentoMot(v, resumos.get(f.id))) {
       avisos.push({
         id: f.id,
         funcionario_id: f.id,
