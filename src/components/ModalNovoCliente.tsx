@@ -28,6 +28,18 @@ interface UsuarioPortal {
 
 const MAX_USUARIOS_PORTAL = 3;
 
+// Resposta 409 da trava de duplicidade (ver respostaDuplicidade em clienteDuplicidadeRota.ts): só nome, cidade e
+// situação do cadastro existente — nunca telefone, e-mail ou CNPJ dele.
+interface DuplicidadeCliente {
+  nivel: "aviso" | "bloqueio";
+  bloqueio: "cnpj" | "contato" | null;
+  existente: { id: string; nome: string; cidade: string | null; ativo: boolean } | null;
+  outraUnidade: boolean;
+  podeConfirmar: boolean;
+  podeLiberar: boolean;
+  podeReativar: boolean;
+}
+
 const FORM_VAZIO = {
   nome: "",
   contato_nome: "",
@@ -49,6 +61,7 @@ export default function ModalNovoCliente({ isOpen, cliente, unidades, onClose, o
   const [processoSimplificado, setProcessoSimplificado] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  const [duplicidade, setDuplicidade] = useState<{ mensagem: string; dados: DuplicidadeCliente } | null>(null);
   const [confirmandoInativar, setConfirmandoInativar] = useState(false);
 
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -91,6 +104,7 @@ export default function ModalNovoCliente({ isOpen, cliente, unidades, onClose, o
       setLogoUrl(cliente?.logo_url ?? null);
       setErroLogo("");
       setErro("");
+      setDuplicidade(null);
       setConfirmandoInativar(false);
       setUsuariosPortal([]);
       setMostrarFormNovoUsuario(false);
@@ -188,9 +202,10 @@ export default function ModalNovoCliente({ isOpen, cliente, unidades, onClose, o
     }
   };
 
-  const handleSalvar = async () => {
+  const handleSalvar = async (extra?: { confirmar_duplicidade?: boolean; liberar_bloqueio?: boolean }) => {
     setSalvando(true);
     setErro("");
+    setDuplicidade(null);
     try {
       const url = editando ? `/api/clientes/${cliente!.id}` : "/api/clientes";
       const method = editando ? "PATCH" : "POST";
@@ -202,12 +217,45 @@ export default function ModalNovoCliente({ isOpen, cliente, unidades, onClose, o
           servicos,
           processo_simplificado: processoSimplificado,
           ...(unidades && unidadeId ? { unidade_id: unidadeId } : {}),
+          ...extra,
         }),
       });
       const json = await res.json();
+      if (res.status === 409 && json.jaExiste && json.duplicidade) {
+        setDuplicidade({ mensagem: json.error, dados: json.duplicidade });
+        return;
+      }
       if (!res.ok) { setErro(json.error ?? "Erro ao salvar."); return; }
       onSalvo(json.data);
       onClose();
+    } catch {
+      setErro("Erro de conexão. Tente novamente.");
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  // Reativa o cadastro antigo em vez de criar outro (passa pela mesma checagem de CNPJ no servidor).
+  const handleReativarExistente = async (existenteId: string) => {
+    setSalvando(true);
+    setErro("");
+    try {
+      const res = await fetch(`/api/clientes/${existenteId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ativo: true }),
+      });
+      const json = await res.json();
+      if (res.status === 409 && json.jaExiste && json.duplicidade) {
+        setDuplicidade({ mensagem: json.error, dados: json.duplicidade });
+        return;
+      }
+      if (!res.ok) { setErro(json.error ?? "Não foi possível reativar o cadastro."); return; }
+      setDuplicidade(null);
+      onSalvo(json.data);
+      onClose();
+    } catch {
+      setErro("Erro de conexão. Tente novamente.");
     } finally {
       setSalvando(false);
     }
@@ -297,7 +345,7 @@ export default function ModalNovoCliente({ isOpen, cliente, unidades, onClose, o
         body: JSON.stringify({ ativo: !cliente!.ativo }),
       });
       const json = await res.json();
-      if (!res.ok) { setErro(json.error ?? "Erro."); return; }
+      if (!res.ok) { setConfirmandoInativar(false); setErro(json.error ?? "Erro."); return; }
       onSalvo(json.data);
       onClose();
     } finally {
@@ -720,6 +768,61 @@ export default function ModalNovoCliente({ isOpen, cliente, unidades, onClose, o
             </div>
           )}
 
+          {duplicidade && (
+            <div
+              className={`text-sm rounded-lg border px-3 py-3 space-y-2 ${
+                duplicidade.dados.nivel === "bloqueio"
+                  ? "bg-red-50 border-red-200 text-red-800"
+                  : "bg-amber-50 border-amber-200 text-amber-900"
+              }`}
+            >
+              <p className="font-medium">{duplicidade.mensagem}</p>
+              {duplicidade.dados.existente && (
+                <p>
+                  Cadastro encontrado: <strong>{duplicidade.dados.existente.nome}</strong>
+                  {duplicidade.dados.existente.cidade ? ` — ${duplicidade.dados.existente.cidade}` : ""}
+                  {" · "}
+                  {duplicidade.dados.existente.ativo ? "ativo" : "inativo"}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button type="button" className="btn-outline" disabled={salvando} onClick={() => setDuplicidade(null)}>
+                  Corrigir
+                </button>
+                {duplicidade.dados.podeReativar && duplicidade.dados.existente && !editando && (
+                  <button
+                    type="button"
+                    className="btn-primary disabled:opacity-50"
+                    disabled={salvando}
+                    onClick={() => handleReativarExistente(duplicidade.dados.existente!.id)}
+                  >
+                    Reativar cadastro antigo
+                  </button>
+                )}
+                {duplicidade.dados.nivel === "aviso" && duplicidade.dados.podeConfirmar && (
+                  <button
+                    type="button"
+                    className="btn-outline disabled:opacity-50"
+                    disabled={salvando}
+                    onClick={() => handleSalvar({ confirmar_duplicidade: true })}
+                  >
+                    {editando ? "Salvar mesmo assim" : "Cadastrar mesmo assim"}
+                  </button>
+                )}
+                {duplicidade.dados.podeLiberar && (
+                  <button
+                    type="button"
+                    className="btn-outline disabled:opacity-50"
+                    disabled={salvando}
+                    onClick={() => handleSalvar({ liberar_bloqueio: true })}
+                  >
+                    Liberar este cadastro
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {erro && (
             <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">
               {erro}
@@ -752,7 +855,7 @@ export default function ModalNovoCliente({ isOpen, cliente, unidades, onClose, o
                 Cancelar
               </button>
               <button
-                onClick={handleSalvar}
+                onClick={() => handleSalvar()}
                 disabled={salvando}
                 className="btn-primary disabled:opacity-50"
               >

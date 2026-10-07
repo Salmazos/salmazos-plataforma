@@ -34,7 +34,7 @@ export default function ModalEntrevistaSalmazos({ isOpen, candidato, onClose, on
     setClienteId(candidato.cliente_id ?? "");
     setDataEntrevista("");
     setComentario("");
-    fetch("/api/clientes")
+    fetch(candidato.cliente_id ? `/api/clientes?ativos=1&incluir=${candidato.cliente_id}` : "/api/clientes?ativos=1")
       .then((r) => r.json())
       .then((j) => setClientes(j.data ?? []))
       .catch(() => {});

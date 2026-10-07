@@ -144,6 +144,10 @@ export const clienteCreateSchema = z.object({
   // Só é respeitado pra quem tem acesso a todas as unidades; os demais criam sempre na
   // própria unidade (ver POST /api/clientes).
   unidade_id: z.string().uuid().optional(),
+  // Trava de duplicidade (lib/clienteDuplicidade.ts): "cadastrar mesmo assim" num aviso, e liberação de um
+  // bloqueio por telefone+e-mail (só PAPEIS_FULL_ACCESS; a rota responde 403 pra quem não pode).
+  confirmar_duplicidade: z.boolean().optional(),
+  liberar_bloqueio: z.boolean().optional(),
 });
 
 export const clienteUpdateSchema = z.object({
@@ -161,6 +165,8 @@ export const clienteUpdateSchema = z.object({
   endereco: z.string().optional().nullable(),
   processo_simplificado: z.boolean().optional(),
   unidade_id: z.string().uuid().optional(),
+  confirmar_duplicidade: z.boolean().optional(),
+  liberar_bloqueio: z.boolean().optional(),
 });
 
 export const clienteAtencaoEspecialSchema = z.object({

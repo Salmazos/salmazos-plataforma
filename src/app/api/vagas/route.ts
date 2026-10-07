@@ -52,6 +52,11 @@ export async function POST(request: NextRequest) {
       if (!unidadeCliente || !podeVerUnidade(ctx, unidadeCliente)) {
         return NextResponse.json({ error: "Cliente não encontrado." }, { status: 400 });
       }
+      // Cliente INATIVO não recebe vaga nova (reative o cadastro antes). Só na criação: vagas antigas dele seguem.
+      const { data: clienteDaVaga } = await supabase.from("clientes").select("ativo").eq("id", body.cliente_id).maybeSingle();
+      if (clienteDaVaga && clienteDaVaga.ativo === false) {
+        return NextResponse.json({ error: "Este cliente está inativo. Reative o cadastro dele ou escolha outro cliente." }, { status: 400 });
+      }
       unidadeId = unidadeCliente;
     } else if (ctx.todasUnidades) {
       if (!body.unidade_id) {

@@ -60,7 +60,7 @@ export default function ModalAdmissaoRapida({ isOpen, onClose, onCriado }: Props
     setErro("");
     setEnviando(false);
     setCandidatoJaExiste(null);
-    fetch("/api/clientes")
+    fetch("/api/clientes?ativos=1")
       .then((r) => r.json())
       .then((j) => setClientes((j.data ?? []).map((c: { id: string; nome: string }) => ({ id: c.id, nome: c.nome }))));
   }, [isOpen]);

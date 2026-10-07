@@ -44,7 +44,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     // fica fora do painel por enquanto.
     if (body.cliente_id) {
       const [{ data: vagaAtual }, unidadeCliente] = await Promise.all([
-        supabase.from("vagas").select("unidade_id").eq("id", id).maybeSingle(),
+        supabase.from("vagas").select("unidade_id, cliente_id").eq("id", id).maybeSingle(),
         resolverUnidadeCliente(body.cliente_id),
       ]);
       if (!vagaAtual || !unidadeCliente || unidadeCliente !== vagaAtual.unidade_id) {
@@ -52,6 +52,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           { error: "O cliente escolhido é de outra unidade. A vaga só pode ser vinculada a um cliente da mesma unidade." },
           { status: 400 }
         );
+      }
+      // Cliente INATIVO só é barrado quando o cliente da vaga MUDA: vaga que já é dele segue editável.
+      if (body.cliente_id !== vagaAtual.cliente_id) {
+        const { data: clienteNovo } = await supabase.from("clientes").select("ativo").eq("id", body.cliente_id).maybeSingle();
+        if (clienteNovo && clienteNovo.ativo === false) {
+          return NextResponse.json({ error: "Este cliente está inativo. Reative o cadastro dele ou escolha outro cliente." }, { status: 400 });
+        }
       }
     }
 

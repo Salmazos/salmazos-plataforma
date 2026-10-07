@@ -227,7 +227,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
     setReqCustom(req.custom);
     setReqInput("");
 
-    fetch("/api/clientes")
+    fetch(vaga.cliente_id ? `/api/clientes?ativos=1&incluir=${vaga.cliente_id}` : "/api/clientes?ativos=1")
       .then((r) => r.json())
       .then((j) => setClientes(j.data ?? []));
   }, [isOpen, vaga]);

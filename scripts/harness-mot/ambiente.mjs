@@ -109,6 +109,7 @@ export async function chamar(handler, { metodo = "GET", corpo, params = {}, url 
     init.headers["content-type"] = "application/json";
   }
   const req = new Request(url, init);
+  Object.defineProperty(req, "nextUrl", { value: new URL(req.url) });
   const res = await handler(req, { params: Promise.resolve(params) });
   const texto = await res.text();
   await flush();

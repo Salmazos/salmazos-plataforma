@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, cobrancaRsRascunhoSchema } from "@/lib/schemas";
 import { podeRevisarCobranca } from "@/lib/fullAccessAuth";
+import { existeCnpjEmOutroCliente } from "@/lib/clienteDuplicidade";
+import { carregarIdentidadesClientes } from "@/lib/clienteDuplicidadeRota";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -88,10 +90,28 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   // Cadastro do cliente também é atualizado, não só o snapshot desta cobrança — fica
   // completo para o futuro (próximas cobranças do mesmo cliente já vêm com o dado).
   if (atual.cliente_id && (campos.cliente_cnpj_snapshot || campos.cliente_endereco_snapshot)) {
-    const clienteUpdate: Record<string, unknown> = {};
-    if (campos.cliente_cnpj_snapshot) clienteUpdate.cnpj = campos.cliente_cnpj_snapshot;
-    if (campos.cliente_endereco_snapshot) clienteUpdate.endereco = campos.cliente_endereco_snapshot;
-    await svc.from("clientes").update(clienteUpdate).eq("id", atual.cliente_id);
+    // O CNPJ digitado na cobrança pode já ser de OUTRO cliente (qualquer status): nesse caso não se grava
+    // CNPJ nem endereço no cadastro — só loga. A cobrança em si segue normalmente, esta cópia nunca a falha.
+    let gravarNoCadastro = true;
+    if (campos.cliente_cnpj_snapshot) {
+      const identidades = await carregarIdentidadesClientes(svc);
+      if (!identidades) {
+        gravarNoCadastro = false; // sem conseguir conferir, não arrisca duplicar
+      } else if (existeCnpjEmOutroCliente(String(campos.cliente_cnpj_snapshot), identidades, atual.cliente_id)) {
+        console.error(`[PATCH /api/cobrancas-rs/[id]] CNPJ do snapshot já pertence a outro cliente — cadastro do cliente ${atual.cliente_id} não foi atualizado (cobrança ${id}).`);
+        gravarNoCadastro = false;
+      }
+    }
+    if (gravarNoCadastro) {
+      const clienteUpdate: Record<string, unknown> = {};
+      if (campos.cliente_cnpj_snapshot) clienteUpdate.cnpj = campos.cliente_cnpj_snapshot;
+      if (campos.cliente_endereco_snapshot) clienteUpdate.endereco = campos.cliente_endereco_snapshot;
+      const { error: erroCliente } = await svc.from("clientes").update(clienteUpdate).eq("id", atual.cliente_id);
+      if (erroCliente) {
+        // Inclui o 23505 do índice único de CNPJ (corrida): só loga, a cobrança já foi salva.
+        console.error(`[PATCH /api/cobrancas-rs/[id]] Não foi possível atualizar o cadastro do cliente ${atual.cliente_id}:`, erroCliente.message);
+      }
+    }
   }
 
   return NextResponse.json({ data });
