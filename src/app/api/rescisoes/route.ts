@@ -5,6 +5,7 @@ import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
 import { contextoRH, checarAcessoFuncionarioRH } from "@/lib/rhUnidadeAuth";
 import { dispararAvisosRescisao } from "@/lib/dispararAvisosRescisao";
+import { hojeBrasiliaISO, dataJaChegou, dataEhFutura, formatarDataBR } from "@/lib/rescisaoProgramada";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -73,6 +74,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Este funcionário já está desligado." }, { status: 400 });
   }
 
+  // Com rescisão programada o funcionário segue 'ativo' até a data — então o status sozinho já não impede
+  // um segundo lançamento (duplo clique, outra pessoa do RH). Uma rescisão por funcionário.
+  const { data: rescisaoExistente } = await svc
+    .from("rescisoes")
+    .select("id, data_desligamento")
+    .eq("funcionario_id", parsed.data.funcionario_id)
+    .limit(1);
+  if (rescisaoExistente && rescisaoExistente.length > 0) {
+    return NextResponse.json(
+      { error: `Este funcionário já tem uma rescisão lançada (desligamento em ${formatarDataBR(rescisaoExistente[0].data_desligamento)}).` },
+      { status: 409 }
+    );
+  }
+
+  // DECISÃO DO OLVER: data de desligamento futura = rescisão programada — o funcionário continua 'ativo' até a
+  // data chegar (quem vira 'desligado' é o passo do cron rescisao-avisos). Data de hoje ou passada se comporta
+  // exatamente como antes: vira 'desligado' no ato.
+  const hojeISO = hojeBrasiliaISO();
+  const rescisaoProgramada = dataEhFutura(parsed.data.data_desligamento, hojeISO);
+
   const { data: rescisao, error } = await svc
     .from("rescisoes")
     .insert({
@@ -96,16 +117,20 @@ export async function POST(request: NextRequest) {
     })
     .select()
     .single();
+  // 23505 = índice único rescisoes_funcionario_id_unico (migration_rescisoes_funcionario_unico.sql): duas
+  // requisições passaram juntas pelo guard acima (check-then-insert) e o banco barrou a segunda.
+  if (error?.code === "23505") {
+    return NextResponse.json({ error: "Este funcionário já tem uma rescisão lançada." }, { status: 409 });
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   // A rescisão já foi criada com sucesso nesse ponto — a mudança de status do funcionário
   // é consequência dela, não pré-condição. Uma falha aqui não deve apagar o lançamento já
   // salvo; só fica registrada pra correção manual (mesmo padrão anti-void já usado na
   // criação automática de funcionarios em gerar-pdf/route.ts).
-  const { error: statusError } = await svc
-    .from("funcionarios")
-    .update({ status: "desligado" })
-    .eq("id", parsed.data.funcionario_id);
+  const { error: statusError } = dataJaChegou(parsed.data.data_desligamento, hojeISO)
+    ? await svc.from("funcionarios").update({ status: "desligado" }).eq("id", parsed.data.funcionario_id)
+    : { error: null };
   if (statusError) {
     console.error(
       `[rescisoes] Rescisão ${rescisao.id} criada mas falha ao atualizar status do funcionário ${parsed.data.funcionario_id}:`,
@@ -119,7 +144,12 @@ export async function POST(request: NextRequest) {
     acao: "rescisao_criada",
     entidade: "rescisoes",
     entidade_id: rescisao.id,
-    detalhes: { funcionario_id: parsed.data.funcionario_id, empresa: parsed.data.empresa, modalidade: parsed.data.modalidade },
+    detalhes: {
+      funcionario_id: parsed.data.funcionario_id,
+      empresa: parsed.data.empresa,
+      modalidade: parsed.data.modalidade,
+      ...(rescisaoProgramada ? { programada: true, data_desligamento: parsed.data.data_desligamento } : {}),
+    },
   });
 
   // Disparo síncrono do momento "lançamento" — anti-void: aguardado, mas

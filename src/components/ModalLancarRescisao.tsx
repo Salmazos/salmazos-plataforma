@@ -4,9 +4,13 @@ import { useEffect, useState } from "react";
 import CamposRescisaoForm, { VALORES_RESCISAO_VAZIOS, valoresRescisaoValidos, type ValoresRescisao } from "@/components/CamposRescisaoForm";
 import type { FuncionarioRow } from "./FuncionariosPageClient";
 
+// Só os campos que o modal usa — assim o ModalContratoMot (popup do aviso MOT) abre este mesmo fluxo de
+// rescisão sem precisar montar uma linha completa de FuncionarioRow.
+export type FuncionarioRescisaoAlvo = Pick<FuncionarioRow, "id" | "nome_completo" | "cargo" | "empresa" | "clientes">;
+
 interface Props {
   isOpen: boolean;
-  funcionario: FuncionarioRow | null;
+  funcionario: FuncionarioRescisaoAlvo | null;
   onClose: () => void;
   onLancado: () => void;
 }

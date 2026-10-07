@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
-import { calcularVencimentoContratoMot } from "@/lib/contratoMotStatus";
+import { calcularVencimentoContratoMot, aplicarSilencioPortal } from "@/lib/contratoMotStatus";
+import { carregarResumosMot } from "@/lib/contratoMotEventos";
 import VencimentoContratoPortalListClient, {
   type VencimentoContratoPortalRow,
 } from "@/components/VencimentoContratoPortalListClient";
@@ -35,9 +36,13 @@ export default async function PortalVencimentoContratoPage() {
     .eq("status", "ativo")
     .not("data_admissao", "is", null);
 
+  const resumos = await carregarResumosMot(service, (funcionarios ?? []).map((f) => f.id));
+
   const linhas: VencimentoContratoPortalRow[] = (funcionarios ?? [])
     .map((f) => {
-      const v = calcularVencimentoContratoMot(f.data_admissao as string);
+      // Aviso silenciado (afastamento, rescisão programada, prorrogação na faixa dos 180) vira o rótulo
+      // neutro "Em acompanhamento" — o portal nunca recebe o motivo (dado de saúde, LGPD).
+      const v = aplicarSilencioPortal(calcularVencimentoContratoMot(f.data_admissao as string), resumos.get(f.id));
       return {
         id: f.id,
         nomeCompleto: f.nome_completo,

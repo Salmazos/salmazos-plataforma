@@ -96,6 +96,37 @@ export const CONTRATO_MOT_FAIXA_INFO: Record<ContratoMotFaixa, { bg: string; tex
   limite_excedido: { bg: "#FEE2E2", text: "#991B1B", label: "Vencido" },
 };
 
+// Resumo dos eventos do contrato MOT de UM funcionário (prorrogação, afastamento, rescisão programada) —
+// montado por carregarResumosMot (contratoMotEventos.ts). Funcionário sem nenhum evento não tem resumo
+// (undefined): todas as regras abaixo se comportam exatamente como antes dos eventos existirem.
+export interface ResumoContratoMot {
+  afastadoEmAberto: boolean;
+  afastadoDesde: string | null;
+  diasAfastado: number | null;
+  prorrogado: boolean;
+  rescisaoProgramadaEm: string | null;
+}
+
+// Regra única de silêncio do aviso (popup do painel, popup do portal e relatórios). DECISÃO DO OLVER:
+// (a) afastamento em aberto silencia tudo — o aviso volta quando o afastamento é encerrado; (b) rescisão
+// programada silencia tudo; (c) prorrogação silencia SÓ o aviso dos 180 dias (faixa de continuidade) — o
+// aviso do limite de 270 continua, porque a prorrogação não move o limite legal.
+export function avisoMotSilenciado(faixa: ContratoMotFaixa, resumo?: ResumoContratoMot | null): boolean {
+  if (!resumo) return false;
+  if (resumo.afastadoEmAberto) return true;
+  if (resumo.rescisaoProgramadaEm) return true;
+  return resumo.prorrogado && faixa === "aprovacao_continuidade";
+}
+
+// Portal do Cliente: o cliente nunca vê afastamento, benefício ou observação (dado de saúde, LGPD). Quando o
+// aviso está silenciado, a linha do relatório troca o rótulo de alerta por um neutro — sem dizer o motivo.
+export const CONTRATO_MOT_ROTULO_NEUTRO_PORTAL = { bg: "#F3F4F6", text: "#374151", label: "Em acompanhamento" };
+
+export function aplicarSilencioPortal(v: VencimentoContratoMot, resumo?: ResumoContratoMot | null): VencimentoContratoMot {
+  if (!avisoMotSilenciado(v.faixa, resumo)) return v;
+  return { ...v, ...CONTRATO_MOT_ROTULO_NEUTRO_PORTAL };
+}
+
 export interface VencimentoContratoMot {
   diasTrabalhados: number;
   vencimento90: string;
@@ -154,7 +185,8 @@ export function calcularVencimentoContratoMot(dataAdmissao: string): VencimentoC
 // janela de 10 dias de antecedência — ou já excedido (270 pra trás), que fica em aviso
 // permanente até ser resolvido (efetivação ou desligamento). O vencimento de 90 dias nunca
 // gera popup (renovação automática, sem ação).
-export function precisaAvisoPopupVencimentoMot(v: VencimentoContratoMot): boolean {
+export function precisaAvisoPopupVencimentoMot(v: VencimentoContratoMot, resumo?: ResumoContratoMot | null): boolean {
+  if (avisoMotSilenciado(v.faixa, resumo)) return false;
   if (v.faixa === "limite_excedido") return true;
   if (v.faixa === "aprovacao_continuidade" || v.faixa === "proximo_limite") {
     return v.diasParaProximoVencimento <= DIAS_ANTECEDENCIA_POPUP;

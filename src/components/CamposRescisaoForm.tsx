@@ -76,6 +76,9 @@ export default function CamposRescisaoForm({
           onChange={(e) => onAlterar("dataDesligamento", e.target.value)}
           className="input-field"
         />
+        <p className="text-xs text-gray-400 mt-1">
+          Data futura = rescisão programada: o funcionário continua ativo até essa data.
+        </p>
       </div>
 
       <div className="mb-3">

@@ -10,6 +10,7 @@ import ModalRegistrarAso from "./ModalRegistrarAso";
 import ModalRegistrarContrato from "./ModalRegistrarContrato";
 import ModalEditarFuncionario from "./ModalEditarFuncionario";
 import ModalExcluirDocumento from "./ModalExcluirDocumento";
+import ContratoMotPainel from "./ContratoMotPainel";
 import { AvatarFuncionario } from "./FuncionariosPageClient";
 
 export interface FuncionarioDetalhe {
@@ -61,6 +62,8 @@ interface Props {
   // restrito que o acesso geral à tela (supervisor/dp também acessam Funcionários, mas
   // não podem apagar um registro já lançado).
   podeExcluirDocumento: boolean;
+  // Rescisão lançada com data futura: o funcionário continua 'ativo' até a data (null = sem rescisão programada).
+  desligamentoProgramadoEm: string | null;
 }
 
 const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
@@ -68,7 +71,7 @@ const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> 
   desligado: { label: "Desligado", bg: "#FEE2E2", text: "#991B1B" },
 };
 
-export default function FuncionarioDetalheClient({ funcionario: funcionarioInicial, asosIniciais, contratosIniciais, clientes, podeExcluirDocumento }: Props) {
+export default function FuncionarioDetalheClient({ funcionario: funcionarioInicial, asosIniciais, contratosIniciais, clientes, podeExcluirDocumento, desligamentoProgramadoEm }: Props) {
   const router = useRouter();
   const [funcionario, setFuncionario] = useState(funcionarioInicial);
   const [modalEditarAberto, setModalEditarAberto] = useState(false);
@@ -237,6 +240,11 @@ export default function FuncionarioDetalheClient({ funcionario: funcionarioInici
             <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: statusFuncionario.bg, color: statusFuncionario.text }}>
               {statusFuncionario.label}
             </span>
+            {desligamentoProgramadoEm && (
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "#FCE7F3", color: "#9D174D" }}>
+                Desligamento programado para {formatarDataSemFuso(desligamentoProgramadoEm)}
+              </span>
+            )}
             <button onClick={() => setModalEditarAberto(true)} className="btn-outline text-sm">
               Editar
             </button>
@@ -270,6 +278,14 @@ export default function FuncionarioDetalheClient({ funcionario: funcionarioInici
           </div>
         </div>
       </div>
+
+      {funcionario.tipo_servico === "mao_obra_temporaria" && (
+        <div className="card mb-6">
+          <p className="section-title mb-1">Contrato MOT</p>
+          <p className="text-xs text-gray-400 mb-4">Prorrogação, afastamento e encerramento do contrato de mão de obra temporária.</p>
+          <ContratoMotPainel funcionarioId={funcionario.id} onAlterado={() => router.refresh()} />
+        </div>
+      )}
 
       <div className="card mb-6">
         <div className="flex items-center justify-between mb-1">

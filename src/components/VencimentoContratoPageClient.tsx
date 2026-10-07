@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { formatarDataSemFuso } from "@/lib/utils";
 import type { ContratoMotFaixa } from "@/lib/contratoMotStatus";
+import type { SeloMot } from "@/lib/contratoMotEventos";
 
 export interface VencimentoContratoRow {
   id: string;
@@ -21,6 +22,8 @@ export interface VencimentoContratoRow {
   bg: string;
   text: string;
   label: string;
+  // Só presente pra quem tem afastamento, prorrogação ou rescisão programada.
+  selos?: SeloMot[];
 }
 
 interface ClienteOption {
@@ -153,6 +156,23 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
                     >
                       {l.label}
                     </span>
+                    {l.selos?.map((s) => (
+                      <span
+                        key={s.texto}
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          background: s.bg,
+                          color: s.text,
+                          whiteSpace: "nowrap",
+                          marginLeft: 6,
+                        }}
+                      >
+                        {s.texto}
+                      </span>
+                    ))}
                   </td>
                   <td style={{ ...TD_STYLE, color: "#374151" }}>{formatarDataSemFuso(l.vencimento90)}</td>
                   <td style={{ ...TD_STYLE, color: "#374151" }}>{formatarDataSemFuso(l.vencimento180)}</td>

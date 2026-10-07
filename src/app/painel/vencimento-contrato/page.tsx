@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { podeAcessarFuncionarios } from "@/lib/funcionariosAuth";
 import { calcularVencimentoContratoMot } from "@/lib/contratoMotStatus";
+import { carregarResumosMot, selosRelatorioMot } from "@/lib/contratoMotEventos";
 import { contextoRH } from "@/lib/rhUnidadeAuth";
 import SemAcessoPainel from "@/components/SemAcessoPainel";
 import VencimentoContratoPageClient, { type VencimentoContratoRow } from "@/components/VencimentoContratoPageClient";
@@ -46,9 +47,14 @@ export default async function VencimentoContratoPage() {
   const clienteIdsComMot = new Set((funcionarios ?? []).map((f) => f.cliente_id).filter(Boolean));
   const clientesFiltro = (clientes ?? []).filter((c) => clienteIdsComMot.has(c.id));
 
+  const resumos = await carregarResumosMot(svc, (funcionarios ?? []).map((f) => f.id));
+
   const linhas: VencimentoContratoRow[] = (funcionarios ?? [])
     .map((f) => {
       const v = calcularVencimentoContratoMot(f.data_admissao as string);
+      // Selos (Afastado / Prorrogado / Rescisão programada) só existem pra quem tem evento — a linha de
+      // quem não tem fica exatamente como era (sem a chave "selos").
+      const selos = selosRelatorioMot(resumos.get(f.id));
       // O embed clientes(nome) pode vir como objeto ou array conforme a inferência do
       // supabase-js — cast explícito pra as duas formas em vez de depender da inferência.
       const cliente = f.clientes as { nome: string } | { nome: string }[] | null;
@@ -59,6 +65,7 @@ export default async function VencimentoContratoPage() {
         empresa: (Array.isArray(cliente) ? cliente[0]?.nome : cliente?.nome) ?? f.empresa ?? "—",
         dataAdmissao: f.data_admissao as string,
         ...v,
+        ...(selos.length > 0 ? { selos } : {}),
       };
     })
     // Do mais perto do vencimento pro mais longe — inclui os já excedidos (dias negativos)

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
 import { calcularVencimentoContratoMot, precisaAvisoPopupVencimentoMot, mensagemAvisoPopupVencimentoMot } from "@/lib/contratoMotStatus";
+import { carregarResumosMot } from "@/lib/contratoMotEventos";
 
 export const dynamic = "force-dynamic";
 
@@ -39,10 +40,14 @@ export async function GET() {
     .eq("status", "ativo")
     .not("data_admissao", "is", null);
 
+  // Mesma regra de silêncio do painel; o portal só recebe "tem aviso ou não" — nada de afastamento,
+  // benefício ou observação (dado de saúde, LGPD) sai desta rota.
+  const resumos = await carregarResumosMot(service, (funcionarios ?? []).map((f) => f.id));
+
   const avisos: AvisoVencimentoMot[] = [];
   for (const f of funcionarios ?? []) {
     const v = calcularVencimentoContratoMot(f.data_admissao as string);
-    if (precisaAvisoPopupVencimentoMot(v)) {
+    if (precisaAvisoPopupVencimentoMot(v, resumos.get(f.id))) {
       avisos.push({
         id: f.id,
         titulo: f.nome_completo,
