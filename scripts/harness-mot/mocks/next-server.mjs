@@ -4,3 +4,7 @@ export class NextResponse extends Response {
   }
 }
 export class NextRequest extends Request {}
+export function after(fn) {
+  const p = Promise.resolve().then(() => (typeof fn === "function" ? fn() : fn)).catch(() => {});
+  (globalThis.__PENDENTES__ ??= []).push(p);
+}

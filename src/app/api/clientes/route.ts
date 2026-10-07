@@ -3,8 +3,20 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, clienteCreateSchema } from "@/lib/schemas";
 import { checarAcessoClientes } from "@/lib/comercialAuth";
 import { obterContextoUnidade } from "@/lib/unidadeAuth";
+import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
+import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
+import { avaliarDuplicidade } from "@/lib/clienteDuplicidade";
+import {
+  carregarIdentidadesClientes,
+  decidirDuplicidade,
+  MSG_CNPJ_JA_ATIVO,
+  MSG_FALHA_CHECAGEM,
+  MSG_FALHA_SALVAR,
+} from "@/lib/clienteDuplicidadeRota";
 
-export async function GET() {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function GET(request: NextRequest) {
   const authClient = await createClient();
   const {
     data: { user },
@@ -25,6 +37,13 @@ export async function GET() {
     .select("*")
     .order("nome");
   if (!ctx.todasUnidades) query = query.eq("unidade_id", ctx.unidadeId);
+  // ?ativos=1 — seletores de "criar/vincular" (vaga, entrevista, admissão rápida) não oferecem cliente inativo.
+  // Sem o parâmetro a resposta é a de sempre (relatórios, filtros e gestão precisam enxergar os inativos).
+  // ?incluir=<id> mantém na lista um cliente específico mesmo inativo (a vaga já vinculada a ele).
+  if (request.nextUrl.searchParams.get("ativos") === "1") {
+    const incluir = request.nextUrl.searchParams.get("incluir");
+    query = incluir && UUID.test(incluir) ? query.or(`ativo.eq.true,id.eq.${incluir}`) : query.eq("ativo", true);
+  }
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data });
@@ -55,6 +74,29 @@ export async function POST(request: NextRequest) {
     const unidadeId = ctx.todasUnidades && parsed.data.unidade_id ? parsed.data.unidade_id : ctx.unidadeId;
 
     const supabase = createServiceClient();
+
+    // Trava de duplicidade (global: todas as unidades, ativos e inativos; uma consulta, comparação em memória).
+    const papelFull = PAPEIS_FULL_ACCESS.includes(user.app_metadata?.role ?? "analista");
+    const identidades = await carregarIdentidadesClientes(supabase);
+    if (!identidades) return NextResponse.json({ error: MSG_FALHA_CHECAGEM }, { status: 500 });
+    const duplicidade = avaliarDuplicidade(
+      {
+        nome: parsed.data.nome,
+        cnpj: parsed.data.cnpj,
+        contato_telefone: parsed.data.contato_telefone,
+        contato_email: parsed.data.contato_email,
+        endereco: parsed.data.endereco,
+      },
+      identidades,
+      { papelFull, unidadesPermitidas: ctx.todasUnidades ? "todas" : [ctx.unidadeId] }
+    );
+    const decisao = decidirDuplicidade(
+      duplicidade,
+      { confirmar: parsed.data.confirmar_duplicidade === true, liberar: parsed.data.liberar_bloqueio === true },
+      papelFull
+    );
+    if (decisao.tipo === "responder") return decisao.resposta;
+
     const { data, error } = await supabase
       .from("clientes")
       .insert({
@@ -75,7 +117,24 @@ export async function POST(request: NextRequest) {
       })
       .select()
       .single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      // 23505 = índice único de CNPJ entre ativos (migration_clientes_cnpj_ativo_unico.sql): corrida entre duas requisições.
+      if (error.code === "23505") return NextResponse.json({ error: MSG_CNPJ_JA_ATIVO }, { status: 409 });
+      console.error("[POST /api/clientes] Erro ao gravar cliente:", error.message);
+      return NextResponse.json({ error: MSG_FALHA_SALVAR }, { status: 500 });
+    }
+
+    if (decisao.tipo === "confirmada" || decisao.tipo === "liberada") {
+      // Auditoria só com ids e motivos.
+      registrarAuditoria({
+        usuario_id: user.id,
+        usuario_nome: await resolverNomeUsuario(user.id, user.email ?? null, supabase),
+        acao: decisao.tipo === "liberada" ? "cliente_bloqueio_liberado" : "cliente_duplicidade_confirmada",
+        entidade: "clientes",
+        entidade_id: data.id,
+        detalhes: { existente_id: decisao.resultado.existenteId, motivos: decisao.resultado.motivos },
+      });
+    }
     return NextResponse.json({ data }, { status: 201 });
   } catch (err) {
     console.error("[POST /api/clientes]", err);

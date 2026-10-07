@@ -3,6 +3,17 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, clienteUpdateSchema } from "@/lib/schemas";
 import { checarAcessoClientes } from "@/lib/comercialAuth";
 import { checarAcessoCliente, resolverUnidadeUsuario } from "@/lib/unidadeAuth";
+import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
+import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
+import { avaliarDuplicidade, camposIdentidadeAlterados, type CandidatoCliente } from "@/lib/clienteDuplicidade";
+import {
+  carregarIdentidadesClientes,
+  decidirDuplicidade,
+  MSG_CNPJ_JA_ATIVO,
+  MSG_FALHA_CHECAGEM,
+  MSG_FALHA_SALVAR,
+  type DecisaoDuplicidade,
+} from "@/lib/clienteDuplicidadeRota";
 
 export async function PATCH(
   request: NextRequest,
@@ -55,6 +66,54 @@ export async function PATCH(
       }
     }
 
+    // Trava de duplicidade: só avalia quando mudou nome, CNPJ, telefone, e-mail ou o cadastro está sendo
+    // REATIVADO (ativo false→true), comparando com o valor atual no banco. O próprio cliente fica de fora e
+    // só os campos alterados entram (editar o contato de um cadastro que já convive com um "gêmeo" não trava).
+    const papelFull = PAPEIS_FULL_ACCESS.includes(user.app_metadata?.role ?? "analista");
+    let decisaoDuplicidade: DecisaoDuplicidade = { tipo: "livre" };
+    let reativando = false;
+    const gatilho =
+      body.nome !== undefined || body.cnpj !== undefined || body.contato_telefone !== undefined ||
+      body.contato_email !== undefined || body.ativo === true;
+    if (gatilho) {
+      const identidades = await carregarIdentidadesClientes(supabase);
+      if (!identidades) return NextResponse.json({ error: MSG_FALHA_CHECAGEM }, { status: 500 });
+      const atual = identidades.find((c) => c.id === id);
+      if (atual) {
+        reativando = body.ativo === true && !atual.ativo;
+        const mudancas = { nome: body.nome, cnpj: body.cnpj, contato_telefone: body.contato_telefone, contato_email: body.contato_email };
+        const alterados = camposIdentidadeAlterados(atual, mudancas, reativando);
+        // Reativação "pura" (nenhum campo de identidade mudou junto): só valem os BLOQUEIOS (CNPJ igual a outro
+        // cliente; telefone E e-mail iguais ao mesmo cliente, liberável só por full access). Aviso de sinal único
+        // ou nome parecido não se aplica. Se a mesma requisição também mexe em nome/CNPJ/contato, esses campos
+        // seguem a regra normal de edição.
+        const reativacaoPura = reativando && camposIdentidadeAlterados(atual, mudancas, false).size === 0;
+        if (alterados.size > 0) {
+          const efetivo: CandidatoCliente = {
+            nome: body.nome !== undefined ? body.nome : atual.nome,
+            cnpj: body.cnpj !== undefined ? body.cnpj : atual.cnpj,
+            contato_telefone: body.contato_telefone !== undefined ? body.contato_telefone : atual.contato_telefone,
+            contato_email: body.contato_email !== undefined ? body.contato_email : atual.contato_email,
+            endereco: body.endereco !== undefined ? body.endereco : atual.endereco,
+          };
+          const ctxUnidade = await resolverUnidadeUsuario(user);
+          const duplicidade = avaliarDuplicidade(efetivo, identidades, {
+            papelFull,
+            unidadesPermitidas: ctxUnidade?.todasUnidades ? "todas" : ctxUnidade ? [ctxUnidade.unidadeId] : [],
+            ignorarId: id,
+            camposConsiderados: alterados,
+          });
+          decisaoDuplicidade = decidirDuplicidade(
+            duplicidade,
+            { confirmar: parsed.data.confirmar_duplicidade === true, liberar: parsed.data.liberar_bloqueio === true },
+            papelFull,
+            reativacaoPura
+          );
+          if (decisaoDuplicidade.tipo === "responder") return decisaoDuplicidade.resposta;
+        }
+      }
+    }
+
     const campos: Record<string, unknown> = {};
     if (body.nome !== undefined) campos.nome = body.nome;
     if (body.contato_nome !== undefined) campos.contato_nome = body.contato_nome;
@@ -78,7 +137,30 @@ export async function PATCH(
       .select()
       .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      // 23505 = índice único de CNPJ entre ativos (migration_clientes_cnpj_ativo_unico.sql).
+      if (error.code === "23505") return NextResponse.json({ error: MSG_CNPJ_JA_ATIVO }, { status: 409 });
+      console.error("[PATCH /api/clientes/[id]] Erro ao atualizar cliente:", error.message);
+      return NextResponse.json({ error: MSG_FALHA_SALVAR }, { status: 500 });
+    }
+
+    // Auditoria só com ids e motivos: confirmou duplicidade, liberou bloqueio, reativou.
+    const nomeAuditoria = reativando || decisaoDuplicidade.tipo === "confirmada" || decisaoDuplicidade.tipo === "liberada"
+      ? await resolverNomeUsuario(user.id, user.email ?? null, supabase)
+      : null;
+    if (decisaoDuplicidade.tipo === "confirmada" || decisaoDuplicidade.tipo === "liberada") {
+      registrarAuditoria({
+        usuario_id: user.id,
+        usuario_nome: nomeAuditoria,
+        acao: decisaoDuplicidade.tipo === "liberada" ? "cliente_bloqueio_liberado" : "cliente_duplicidade_confirmada",
+        entidade: "clientes",
+        entidade_id: id,
+        detalhes: { existente_id: decisaoDuplicidade.resultado.existenteId, motivos: decisaoDuplicidade.resultado.motivos },
+      });
+    }
+    if (reativando) {
+      registrarAuditoria({ usuario_id: user.id, usuario_nome: nomeAuditoria, acao: "cliente_reativado", entidade: "clientes", entidade_id: id, detalhes: { cliente_id: id } });
+    }
 
     // Contatos aniversariantes do cliente acompanham a troca de unidade dele.
     if (novaUnidadeId !== undefined) {

@@ -71,6 +71,7 @@ function passa(linha, f) {
     case "is": return f.val === null ? v === null || v === undefined : v === f.val;
     case "notis": return f.val === null ? !(v === null || v === undefined) : v !== f.val;
     case "gt": return v !== null && v !== undefined && v > f.val;
+    case "or": return f.val.some((sub) => passa(linha, sub));
     case "gte": return v !== null && v !== undefined && v >= f.val;
     case "lt": return v !== null && v !== undefined && v < f.val;
     case "lte": return v !== null && v !== undefined && v <= f.val;
@@ -119,6 +120,17 @@ class Consulta {
   neq(col, val) { this.filtros.push({ col, op: "neq", val }); return this; }
   in(col, val) { this.filtros.push({ col, op: "in", val }); return this; }
   is(col, val) { this.filtros.push({ col, op: "is", val }); return this; }
+  // .or("ativo.eq.true,id.eq.X") — só eq, o que as rotas de clientes usam.
+  or(expr) {
+    const subs = expr.split(",").map((p) => {
+      const [col, op, ...resto] = p.split(".");
+      const bruto = resto.join(".");
+      if (op !== "eq") throw new Error(`or não suportado no memdb: ${op}`);
+      return { col, op, val: bruto === "true" ? true : bruto === "false" ? false : bruto };
+    });
+    this.filtros.push({ col: "__or__", op: "or", val: subs });
+    return this;
+  }
   not(col, op, val) { this.filtros.push({ col, op: `not${op}`, val }); return this; }
   gt(col, val) { this.filtros.push({ col, op: "gt", val }); return this; }
   gte(col, val) { this.filtros.push({ col, op: "gte", val }); return this; }

@@ -216,7 +216,7 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades
     }
     setErro("");
     setUnidadeId("");
-    fetch("/api/clientes")
+    fetch("/api/clientes?ativos=1")
       .then((r) => r.json())
       .then((j) => setClientes(j.data ?? []));
   }, [isOpen, vaga]);
