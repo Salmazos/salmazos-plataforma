@@ -8,6 +8,7 @@ import {
   type TipoDocumentoContabilidade,
   type DocumentoObrigatoriedade,
 } from "@/lib/contabilidadeDocumentosMatch";
+import { calcularEstadoUpload, type StatusLinha } from "@/lib/contabilidadeUploadEstado";
 import type { AdmissaoDocumentoContabilidade } from "@/types";
 
 interface Props {
@@ -36,8 +37,6 @@ interface ConfirmacaoPendente {
   tipoDetectado: TipoDocumentoContabilidade | null;
   file: File;
 }
-
-type StatusLinha = "locked" | "pending" | "uploading" | "done" | "pulado";
 
 const TAMANHO_MAX = 15 * 1024 * 1024; // 15MB
 
@@ -99,13 +98,13 @@ async function visualizarArquivoContabilidade(
 // Salário Família, Termo de Responsabilidade) — substituiu o antigo botão único de
 // seleção múltipla (risco de upload errado/fora de ordem com lotes grandes). Os 4
 // primeiros destravam um de cada vez, na ordem fixa da lista.
-// Os 3 últimos NÃO são "opcionais soltos" — regra real do negócio: o pacote da
-// contabilidade sempre tem 4 documentos OU 7, nunca uma quantidade intermediária (ex:
-// não existe pacote só com o 5º, ou só com 5º+6º sem o 7º). Por isso só o 5º (Ficha de
-// IR) tem escolha real de "enviar ou pular" — é o único ponto de decisão, e essa decisão
-// vale pro grupo inteiro: pular o 5º pula os outros 2 juntos (pacote de 4); enviar o 5º
-// destrava o 6º e o 7º como obrigatórios sequenciais, padronizados igual aos 4
-// primeiros (sem botão de pular individual neles).
+// Os 3 últimos não são "opcionais soltos": o pacote válido é 4 fixos, 4 + Ficha de IR (5º),
+// 4 + Salário Família (6º) + Termo de Responsabilidade (7º), ou os 7. A Ficha de IR tem
+// decisão própria de enviar/pular. O 6º e o 7º são um PAR — ou vêm os dois ou nenhum —, com
+// um único "Pular" no 6º (cônjuge gera Ficha de IR mas não Salário Família, que depende de
+// filho até 14 anos; caso real da admissão f1e8ea96). Enviar o 6º torna o 7º obrigatório.
+// Pular a Ficha de IR continua pulando o par junto (como sempre foi), mas o par pode ser
+// reaberto enviando o 6º. A regra está em lib/contabilidadeUploadEstado.ts (função pura).
 // O keyword-matching (contabilidadeDocumentosMatch.ts) deixou de ser detecção em lote e
 // virou CONFIRMAÇÃO por linha: ao soltar um arquivo numa linha específica, comparamos o
 // tipo detectado pelo nome com o tipo esperado da linha — só pedimos confirmação extra
@@ -126,9 +125,10 @@ export default function ModalUploadDocumentosContabilidade({
 }: Props) {
   const [etapa, setEtapa] = useState<1 | 2>(1);
   const [documentos, setDocumentos] = useState<AdmissaoDocumentoContabilidade[]>(documentosIniciais);
-  // Decisão única, no 5º documento (Ficha de IR): pula o grupo inteiro dos 3 opcionais
-  // (pacote fica só com os 4 obrigatórios) — ver comentário acima do componente.
-  const [pulouOpcionais, setPulouOpcionais] = useState(false);
+  // Duas decisões independentes — ver comentário acima do componente: pular a Ficha de IR (5º)
+  // e pular o par Salário Família + Termo de Responsabilidade (6º e 7º).
+  const [pulouFichaIr, setPulouFichaIr] = useState(false);
+  const [pulouPar, setPulouPar] = useState(false);
   const [enviandoTipo, setEnviandoTipo] = useState<TipoDocumentoContabilidade | null>(null);
   const [erroPorTipo, setErroPorTipo] = useState<Partial<Record<TipoDocumentoContabilidade, string>>>({});
   const [confirmacaoPendente, setConfirmacaoPendente] = useState<ConfirmacaoPendente | null>(null);
@@ -151,7 +151,8 @@ export default function ModalUploadDocumentosContabilidade({
     if (!isOpen) return;
     setEtapa(1);
     setDocumentos(documentosIniciais);
-    setPulouOpcionais(false);
+    setPulouFichaIr(false);
+    setPulouPar(false);
     setEnviandoTipo(null);
     setErroPorTipo({});
     setConfirmacaoPendente(null);
@@ -185,46 +186,14 @@ export default function ModalUploadDocumentosContabilidade({
   const labelsFaltando = faltando.map((d) => d.label);
   const podeEnviarFinal = faltando.length === 0 && nome.trim().length > 0 && email.trim().length > 0;
 
-  const estaConfirmado = (tipo: TipoDocumentoContabilidade) => documentos.some((doc) => doc.tipo_documento === tipo);
-  // Só os 4 documentos base destravam os opcionais (Ficha de IR/Salário Família/Termo de
-  // Responsabilidade) — documentos condicionais de cliente (ex: os 2 da Novacki) não têm
-  // relação com esse grupo e não podem bloqueá-lo (bug real, corrigido a partir do caso
-  // da admissão 0721b031-9ed5-4a70-9d93-0b79aa6268e2).
-  const obrigatoriosBaseOk = listaCompleta
-    .filter((d) => d.obrigatorio && !d.cliente_id)
-    .every((d) => estaConfirmado(d.tipo_documento));
-  // Todos os obrigatórios (base + condicionais de cliente) — continua exigido pra avançar
-  // pra etapa 2 e pro envio final.
-  const todosObrigatoriosOk = listaCompleta.filter((d) => d.obrigatorio).every((d) => estaConfirmado(d.tipo_documento));
-  const opcionais = listaCompleta.filter((d) => !d.obrigatorio); // [Ficha de IR, Salário Família, Termo de Responsabilidade]
-  const primeiroOpcional = opcionais[0];
-  // O grupo "iniciou" assim que o 5º (Ficha de IR) é confirmado — a partir daí os outros
-  // 2 são obrigatórios, não têm mais opção de pular individualmente.
-  const grupoOpcionalIniciado = primeiroOpcional ? estaConfirmado(primeiroOpcional.tipo_documento) : false;
-  const opcionaisResolvidos = pulouOpcionais || opcionais.every((d) => estaConfirmado(d.tipo_documento));
-  const podeAvancarEtapa1 = todosObrigatoriosOk && opcionaisResolvidos;
-
-  // Trava sequencial: obrigatório só destrava depois do obrigatório anterior confirmado.
-  // Nos opcionais, só o 1º (Ficha de IR) tem decisão real de enviar/pular; se ele foi
-  // enviado, o 2º e o 3º viram obrigatórios sequenciais (mesma trava dos 4 primeiros); se
-  // ele foi pulado, os outros 2 ficam resolvidos junto (pacote de 4 documentos).
-  function statusLinha(def: DocumentoObrigatoriedade, index: number): StatusLinha {
-    if (estaConfirmado(def.tipo_documento)) return "done";
-    if (enviandoTipo === def.tipo_documento) return "uploading";
-    if (def.obrigatorio) {
-      const anteriores = listaCompleta.slice(0, index).filter((d) => d.obrigatorio);
-      const anterioresOk = anteriores.every((d) => estaConfirmado(d.tipo_documento));
-      return anterioresOk ? "pending" : "locked";
-    }
-    if (!obrigatoriosBaseOk) return "locked";
-    const indexOpcional = opcionais.findIndex((o) => o.tipo_documento === def.tipo_documento);
-    if (indexOpcional === 0) return pulouOpcionais ? "pulado" : "pending";
-    if (pulouOpcionais) return "pulado";
-    if (!grupoOpcionalIniciado) return "locked";
-    const anterioresOpcionais = opcionais.slice(0, indexOpcional);
-    const anterioresOk = anterioresOpcionais.every((o) => estaConfirmado(o.tipo_documento));
-    return anterioresOk ? "pending" : "locked";
-  }
+  const { status: statusPorLinha, obrigatoriosBaseOk, podeAvancarEtapa1 } = calcularEstadoUpload({
+    lista: listaCompleta,
+    confirmados: new Set<TipoDocumentoContabilidade>(documentos.map((doc) => doc.tipo_documento as TipoDocumentoContabilidade)),
+    enviandoTipo,
+    pulouFichaIr,
+    pulouPar,
+  });
+  const statusLinha = (index: number): StatusLinha => statusPorLinha[index];
 
   // Os 7 tipos já têm posição calibrada na tabela fixa (ver lib/zapsignPosicoes.ts) — só
   // informativo agora, não bloqueia mais nada.
@@ -256,9 +225,14 @@ export default function ModalUploadDocumentosContabilidade({
         const semEsseTipo = prev.filter((d) => d.tipo_documento !== tipo);
         return [...semEsseTipo, resultado.documento];
       });
-      // Se o 5º tinha sido pulado e o usuário mudou de ideia e enviou um arquivo pra ele,
-      // isso reabre o grupo inteiro (6º e 7º voltam a ser obrigatórios).
-      setPulouOpcionais((prev) => (prev ? false : prev));
+      // Enviar o arquivo de um item pulado desfaz o pulo. Se a Ficha de IR tinha sido pulada
+      // (o que pulou o par junto), reabre também o par (6º e 7º voltam a ser obrigatórios).
+      if (tipo === "ficha_ir") {
+        if (pulouFichaIr) setPulouPar(false);
+        setPulouFichaIr(false);
+      } else if (tipo === "salario_familia" || tipo === "termo_responsabilidade") {
+        setPulouPar(false);
+      }
     }
     setEnviandoTipo(null);
     setSubstituindoTipo(null);
@@ -298,7 +272,11 @@ export default function ModalUploadDocumentosContabilidade({
     }
   };
 
-  const handlePularOpcionais = () => setPulouOpcionais(true);
+  const handlePularFichaIr = () => {
+    setPulouFichaIr(true);
+    setPulouPar(true);
+  };
+  const handlePularPar = () => setPulouPar(true);
 
   const handleMontarEnviar = async () => {
     if (!podeEnviarFinalComContratante) return;
@@ -344,23 +322,23 @@ export default function ModalUploadDocumentosContabilidade({
         {etapa === 1 && (
           <div className="p-6 space-y-4">
             <div className="rounded-lg p-3 text-xs" style={{ background: "#F3F4F6", color: "#374151" }}>
-              Envie um PDF por vez, na ordem das linhas abaixo. O pacote da contabilidade sempre vem com 4 documentos
-              ou com 7 — nunca uma quantidade intermediária. Por isso só a Ficha de IR tem escolha de enviar ou pular;
-              se ela vier, a Ficha de Salário Família e o Termo de Responsabilidade passam a ser obrigatórios também.
+              Envie um PDF por vez, na ordem das linhas abaixo. A Ficha de IR pode ser enviada ou pulada. A Ficha de
+              Salário Família e o Termo de Responsabilidade vão juntos: ou os dois são enviados, ou os dois são pulados
+              (botão &quot;pular salário família&quot;, para quem não tem filhos até 14 anos).
             </div>
 
             <div className="space-y-2">
               {listaCompleta.map((d, index) => {
-                const status = statusLinha(d, index);
-                const ehPrimeiroOpcional = !d.obrigatorio && primeiroOpcional?.tipo_documento === d.tipo_documento;
+                const status = statusLinha(index);
+                const ehFichaIr = d.tipo_documento === "ficha_ir";
+                const ehSalarioFamilia = d.tipo_documento === "salario_familia";
                 const info: { texto: string; cor: string } = (() => {
                   switch (status) {
                     case "locked":
-                      if (d.obrigatorio) return { texto: "⏳ Aguardando documento anterior", cor: "#9CA3AF" };
-                      if (!obrigatoriosBaseOk) return { texto: "⏳ Aguardando obrigatórios", cor: "#9CA3AF" };
-                      return { texto: "⏳ Aguardando decisão da Ficha de IR", cor: "#9CA3AF" };
+                      if (!d.obrigatorio && !obrigatoriosBaseOk) return { texto: "⏳ Aguardando obrigatórios", cor: "#9CA3AF" };
+                      return { texto: "⏳ Aguardando documento anterior", cor: "#9CA3AF" };
                     case "pending":
-                      if (ehPrimeiroOpcional) return { texto: "— Envie ou pule (define os 2 últimos)", cor: "#B45309" };
+                      if (ehFichaIr) return { texto: "— Envie ou pule", cor: "#B45309" };
                       return { texto: "⚠️ Pendente", cor: "#DC2626" };
                     case "uploading":
                       return { texto: "Enviando...", cor: "#2563EB" };
@@ -383,7 +361,7 @@ export default function ModalUploadDocumentosContabilidade({
                       <span style={{ color: info.cor, fontWeight: 600, whiteSpace: "nowrap" }}>{info.texto}</span>
                     </div>
 
-                    {(status === "pending" || (status === "pulado" && ehPrimeiroOpcional)) && (
+                    {(status === "pending" || (status === "pulado" && (ehFichaIr || ehSalarioFamilia))) && (
                       <div className="flex items-center gap-3 mt-2">
                         <label className="btn-outline text-xs cursor-pointer inline-block px-3 py-1.5">
                           {status === "pulado" ? "Enviar arquivo" : "Selecionar arquivo PDF"}
@@ -397,9 +375,14 @@ export default function ModalUploadDocumentosContabilidade({
                             }}
                           />
                         </label>
-                        {ehPrimeiroOpcional && status === "pending" && (
-                          <button onClick={handlePularOpcionais} className="text-xs" style={{ color: "#9CA3AF" }}>
+                        {ehFichaIr && status === "pending" && (
+                          <button onClick={handlePularFichaIr} className="text-xs" style={{ color: "#9CA3AF" }}>
                             Pular
+                          </button>
+                        )}
+                        {ehSalarioFamilia && status === "pending" && (
+                          <button onClick={handlePularPar} className="text-xs" style={{ color: "#9CA3AF" }}>
+                            Sem filhos até 14 anos - pular salário família
                           </button>
                         )}
                       </div>
