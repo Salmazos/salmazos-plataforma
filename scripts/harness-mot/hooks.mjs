@@ -16,6 +16,7 @@ const MOCKS = {
   "@/lib/supabase/server": "supabase-server.mjs",
   "@/lib/dispararAvisosRescisao": "disparar-avisos.mjs",
   "@vercel/functions": "vercel-functions.mjs",
+  "@/lib/sendEmail": "send-email.mjs",
   "next/server": "next-server.mjs",
   "next/navigation": "next-navigation.mjs",
   "next/link": "stub-component.mjs",

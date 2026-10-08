@@ -153,6 +153,7 @@ export const EVENTOS_POR_GRUPO: Record<GrupoAviso, string[]> = {
   aso: ["aso_periodico_sem_registro", "aso_periodico_vencendo", "aso_periodico_atrasado"],
   portal_cliente: [
     "indicacao_candidato_recebida",
+    "indicacao_candidato_editada_cliente",
     "solicitacao_alteracao_pedida",
     "vaga_reativacao_pedida",
     "vaga_pausa_pedida",
@@ -250,6 +251,7 @@ export const ROTULO_EVENTO: Record<string, string> = {
   portal_candidato_reprovado: "Cliente reprovou candidato (portal)",
   indicacao_decisao_cliente: "Indicação direta aprovada pela Salmazos",
   indicacao_candidato_recebida: "Cliente enviou indicação direta de candidato",
+  indicacao_candidato_editada_cliente: "Cliente editou uma indicação direta de candidato",
   solicitacao_alteracao_pedida: "Cliente pediu alteração numa solicitação de vaga",
   vaga_reativacao_pedida: "Cliente pediu reativação de vaga",
   vaga_pausa_pedida: "Cliente pediu encerramento de vaga",
@@ -277,6 +279,7 @@ export const ROTULO_EVENTO: Record<string, string> = {
 // está aqui suporta e-mail e sino.
 export const CANAIS_POR_EVENTO: Record<string, readonly ("email" | "sino" | "popup")[]> = {
   indicacao_candidato_recebida: ["email", "sino", "popup"],
+  indicacao_candidato_editada_cliente: ["email", "sino"],
   solicitacao_vaga: ["email", "sino", "popup"],
   solicitacao_alteracao_pedida: ["email", "sino", "popup"],
   vaga_reativacao_pedida: ["email", "sino", "popup"],
@@ -356,6 +359,8 @@ export const NOTA_EVENTO: Record<string, string> = {
     "Dispara quando o cliente confirma a data da entrevista no portal. Quando o candidato tem responsável ativo, ele SEMPRE é avisado (sino e e-mail), além das pessoas desta lista. Quando não tem, o aviso vai para esta lista ou, sem ninguém nela, para a equipe da unidade do cliente. Com o Sino ou o E-mail desligado, ninguém recebe aquele canal (nem o responsável). O filtro de unidade desta lista é fixo.",
   indicacao_candidato_recebida:
     "Dispara quando o cliente envia uma indicação direta pelo portal. O popup lista as indicações pendentes quando a pessoa entra no painel e reaparece no próximo login enquanto houver pendente que ela não tenha dispensado; clicar abre a indicação. Quem não está na lista do popup não vê o popup (e com o popup desligado ninguém vê). O filtro de unidade é regra fixa: só recebem quem atende a unidade do cliente.",
+  indicacao_candidato_editada_cliente:
+    "Dispara quando o cliente altera, pelo portal, uma indicação direta que já enviou (enquanto está em análise ou aprovada e ainda sem admissão iniciada). O sino e o e-mail dizem quais campos mudaram (telefone mascarado; salário com valor); no e-mail há a tabela Campo / Antes / Depois e, se algum dado não pôde ser atualizado no cadastro do candidato, o motivo. Em indicação aprovada o sino leva ao perfil do candidato; em análise, à indicação. Não há popup. O filtro de unidade é regra fixa: só recebem quem atende a unidade do cliente.",
   rescisao_paga: "Hoje este aviso só existe no sino (e no popup de login, que deriva dele).",
   portal_candidato_aprovado:
     "Dispara quando o cliente aprova um candidato no portal. E-mail: lista abaixo (padrão Olver e RH). Sino: com o canal ligado o responsável pelo candidato SEMPRE é avisado, além das pessoas da lista (a lista pode ficar vazia); sem responsável e sem lista vai um aviso geral para a equipe da unidade do cliente; desligado, ninguém recebe o sino. Popup: abre uma vez por aviso para quem recebeu o aviso nominal (o responsável e a lista do sino); não tem lista própria e vem desligado até ser ligado. O aviso traz o comentário do cliente, nunca fee nem dados de admissão.",
@@ -421,6 +426,9 @@ export function descricaoPadraoDoSistema(grupo: GrupoAviso, canal: string, event
     return canal === "popup"
       ? "Sem destinatários: ninguém vê o popup."
       : "Padrão do sistema: todos os analistas da unidade do cliente recebem.";
+  }
+  if (evento === "indicacao_candidato_editada_cliente") {
+    return "Padrão do sistema: todos os analistas da unidade do cliente recebem.";
   }
   if (grupo === "portal_cliente") {
     return evento === "portal_candidato_reprovado"

@@ -4,6 +4,8 @@ import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { avisarIndicacaoRecebida } from "@/lib/avisoIndicacaoRecebida";
 import { parseBody, portalIndicarCandidatoSchema } from "@/lib/schemas";
 import { resolverUnidadeCliente } from "@/lib/unidadeAuth";
+import { hojeBrasiliaISO } from "@/lib/rescisaoProgramada";
+import { validarDataInicio } from "@/lib/indicacaoEdicao";
 
 const TIPO_LABEL: Record<string, string> = {
   recrutamento_selecao: "Recrutamento e Seleção",
@@ -55,6 +57,12 @@ export async function POST(request: NextRequest) {
     const parsed = parseBody(portalIndicarCandidatoSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const dados = parsed.data;
+
+    // Data de início não pode estar no passado (Brasília). "Hoje" é calculado nesta requisição.
+    if (dados.admissao_data_inicio) {
+      const erroData = validarDataInicio(dados.admissao_data_inicio, hojeBrasiliaISO());
+      if (erroData) return NextResponse.json({ error: erroData }, { status: 400 });
+    }
 
     // Vaga precisa ser do próprio cliente e estar aberta — nunca confia no vaga_id só porque
     // veio no body (o mesmo cuidado de portal/avaliar com encaminhamento_id).

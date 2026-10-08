@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { TURNOS_FUNCIONARIO } from "@/lib/constants";
+import { nomeArquivoCurriculoValido } from "@/lib/indicacaoEdicao";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -933,6 +934,15 @@ export const portalIndicarCandidatoSchema = z.object({
 // Revisão do analista antes de aprovar — ele pode ajustar qualquer campo que o cliente
 // mandou (inclusive nome/telefone/vaga, se tiver digitado errado) antes de confirmar.
 export const indicacaoCandidatoEditSchema = portalIndicarCandidatoSchema.partial();
+
+// Edição da indicação pelo PRÓPRIO cliente (portal). Mesmos campos da criação, todos opcionais, e
+// `.strict()` de propósito: cliente_id, status, candidato_id e campos de decisão nunca vêm do body —
+// chave desconhecida é rejeitada em vez de ignorada em silêncio.
+// curriculo_url na edição aceita só o nome gerado pela tela (sem "/" nem ".."): a criação não muda.
+export const portalEditarIndicacaoSchema = portalIndicarCandidatoSchema
+  .partial()
+  .extend({ curriculo_url: z.string().refine(nomeArquivoCurriculoValido, "nome de arquivo inválido").nullable().optional() })
+  .strict();
 
 export const indicacaoCandidatoDecisaoSchema = z.discriminatedUnion("acao", [
   z.object({ acao: z.literal("aprovar"), candidato_existente_id: z.string().uuid().optional() }),

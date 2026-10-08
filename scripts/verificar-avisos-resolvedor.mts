@@ -342,9 +342,9 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   });
 
   // padrão Portal do cliente
-  await caso("1c padrão portal_cliente: 8 eventos (4 da Fase 3); recebida com 10 analistas nos 3 canais; reprovado desligado", () => {
+  await caso("1c padrão portal_cliente: 9 eventos (4 da Fase 3 + a edição de indicação); recebida com 10 analistas nos 3 canais; reprovado desligado", () => {
     const p = PADRAO_AVISOS.portal_cliente;
-    assert.deepEqual(Object.keys(p).sort(), ["agendamento_cliente", "indicacao_candidato_recebida", "indicacao_decisao_cliente", "portal_candidato_aprovado", "portal_candidato_reprovado", "solicitacao_alteracao_pedida", "vaga_pausa_pedida", "vaga_reativacao_pedida"]);
+    assert.deepEqual(Object.keys(p).sort(), ["agendamento_cliente", "indicacao_candidato_editada_cliente", "indicacao_candidato_recebida", "indicacao_decisao_cliente", "portal_candidato_aprovado", "portal_candidato_reprovado", "solicitacao_alteracao_pedida", "vaga_pausa_pedida", "vaga_reativacao_pedida"]);
     for (const c of ["email", "sino", "popup"] as const) assert.equal(p.indicacao_candidato_recebida[c]!.destinatarios.length, 10);
     assert.equal(p.portal_candidato_reprovado.email!.ativo, false);
     const ids = p.indicacao_candidato_recebida.popup!.destinatarios.map((d) => (d.tipo_destinatario === "usuario" ? d.usuario_id : ""));
@@ -353,7 +353,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("1c restauração portal_cliente: payload com popup; inativo ignorado e informado; vazio = 409", () => {
     const ids = new Set(PADRAO_AVISOS.portal_cliente.indicacao_candidato_recebida.email!.destinatarios.flatMap((d) => (d.tipo_destinatario === "usuario" ? [d.usuario_id] : [])));
     const ok = montarPayloadRestauracao("portal_cliente", ids);
-    assert.deepEqual(ok.semDestinatario, []); assert.equal(ok.payload.eventos.length, 8);
+    assert.deepEqual(ok.semDestinatario, []); assert.equal(ok.payload.eventos.length, 9);
     assert.ok(ok.payload.eventos.find((e) => e.evento === "indicacao_candidato_recebida")!.canais.some((c) => c.canal === "popup"));
     const sem = new Set(ids); sem.delete([...ids][0]);
     assert.ok(montarPayloadRestauracao("portal_cliente", sem).ignorados.length >= 3);
@@ -593,7 +593,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     for (const canal of ["sino", "popup"]) assert.equal(descricaoPadraoDoSistema("avisos_cliente", canal, "indicacao_decidida_cliente"), FRASE_SEM_LISTA);
   });
   await caso("avisos ao cliente: os eventos e a lista dos outros grupos não mudaram", () => {
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 26); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 26); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 9);
     assert.deepEqual([...canaisDoEvento("vaga_criada")], ["email", "sino"]);
   });
 
@@ -693,7 +693,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("bloco 2 catálogo: o evento do bloco 1 e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.deepEqual([...canaisDoEvento("indicacao_decidida_cliente")], ["sino", "popup"]);
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 26); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 26); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 9);
   });
 
   await caso("data da entrevista para o cliente: dd/mm/aaaa às hh:mm (fuso de Brasília)", () => {
@@ -781,7 +781,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("bloco 3 catálogo: os eventos dos blocos 1 e 2 e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.equal(ROTULO_EVENTO.candidato_enviado_cliente, "Candidato enviado ao cliente");
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 26); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 26); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 9);
   });
 
   const AB = "aguardando", AG = "aguardando_agendamento_cliente";
@@ -897,7 +897,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("bloco 4 catálogo: os 4 eventos antigos e os outros grupos não mudaram", () => {
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.equal(ROTULO_EVENTO.entrevista_remarcada_cliente, "Entrevista remarcada");
-    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 26); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8);
+    assert.equal(EVENTOS_POR_GRUPO.vagas.length, 26); assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 9);
     assert.equal(grupoTemPadrao("avisos_cliente"), false, "avisos_cliente continua sem Restaurar padrão");
   });
   await caso("texto da solicitação aprovada: cargo e 'já está no ar'; cargo nulo só encurta", () => {
@@ -1017,7 +1017,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   await caso("catálogo: os 6 eventos de sino/popup não mudaram e nenhum nome colide com os e-mails ao cliente", () => {
     assert.equal(EVENTOS_POR_GRUPO.avisos_cliente.length, 6);
     for (const ev of EVENTOS_POR_GRUPO.avisos_cliente) { assert.equal(eventoEmailCliente(ev), false, ev); assert.deepEqual([...canaisDoEvento(ev)], ["sino", "popup"], ev); }
-    assert.equal(new Set([...EVENTOS_POR_GRUPO.avisos_cliente, ...LISTA_EMAIL, ...EVENTOS_POR_GRUPO.portal_cliente, ...EVENTOS_POR_GRUPO.vagas]).size, 6 + 7 + 8 + 26);
+    assert.equal(new Set([...EVENTOS_POR_GRUPO.avisos_cliente, ...LISTA_EMAIL, ...EVENTOS_POR_GRUPO.portal_cliente, ...EVENTOS_POR_GRUPO.vagas]).size, 6 + 7 + 9 + 26);
     assert.equal(EVENTOS_SEM_LISTA.length, 13);
     for (const ev of ["solicitacao_vaga", "vaga_pausa_pedida", "portal_candidato_aprovado", "rescisao_paga"]) assert.equal(eventoSemLista(ev), false, ev);
   });
@@ -1127,7 +1127,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     }
     assert.equal(descricaoPadraoDoSistema("portal_cliente", "email", "portal_candidato_aprovado"), "Padrão do sistema: Olver e RH (olver@ e rh@) recebem.");
     assert.equal(descricaoPadraoDoSistema("portal_cliente", "email", "portal_candidato_reprovado"), "Sem destinatários: ninguém recebe.");
-    assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 8, "nenhum evento novo no grupo");
+    assert.equal(EVENTOS_POR_GRUPO.portal_cliente.length, 9, "o grupo ganhou só a edição de indicação (indicacao_candidato_editada_cliente)");
   });
   await caso("decisão do cliente, tela: sem linha o sino e o e-mail aparecem ligados e o popup desligado (coerente com o código)", () => {
     for (const ev of EVENTOS_DECISAO_CLIENTE) { assert.equal(ligadoSemLinha(ev, "email"), true); assert.equal(ligadoSemLinha(ev, "sino"), true); assert.equal(ligadoSemLinha(ev, "popup"), false); }
@@ -1774,6 +1774,23 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     assert.deepEqual(ids({ incluirUserId: null }), ["u-andr", "u-eliz", "u-giov", "u-luca", "u-olve"], "sem gerador: só o acesso amplo");
     assert.deepEqual(ids({ incluirUserId: "u-giov" }), ["u-andr", "u-eliz", "u-giov", "u-luca", "u-olve"], "sem duplicar quem já tem acesso");
     assert.equal(destinatariosComAcessoCobranca(PERFIS_P, ACESSO_P, { incluirUserId: "u-rebe" }).find((d) => d.user_id === "u-rebe")!.email, "curriculos@x.com");
+  });
+  await caso("edição de indicação pelo cliente: evento no grupo portal_cliente, só e-mail e sino (sem popup), padrão = analistas ativos; migration só adiciona", () => {
+    const ev = "indicacao_candidato_editada_cliente";
+    assert.ok(EVENTOS_POR_GRUPO.portal_cliente.includes(ev)); assert.equal(grupoDoEvento(ev), "portal_cliente");
+    assert.equal(ROTULO_EVENTO[ev], "Cliente editou uma indicação direta de candidato"); assert.ok(NOTA_EVENTO[ev]);
+    assert.deepEqual([...canaisDoEvento(ev)], ["email", "sino"]);
+    const p = PADRAO_AVISOS.portal_cliente[ev];
+    assert.deepEqual(Object.keys(p).sort(), ["email", "sino"]);
+    assert.deepEqual(p.email!.destinatarios, PADRAO_AVISOS.portal_cliente.indicacao_candidato_recebida.email!.destinatarios);
+    assert.equal(p.email!.ativo, true); assert.equal(p.sino!.ativo, true);
+    assert.equal(descricaoPadraoDoSistema("portal_cliente", "email", ev), "Padrão do sistema: todos os analistas da unidade do cliente recebem.");
+    const sql = readFileSync(new URL("../supabase/migration_aviso_indicacao_editada.sql", import.meta.url), "utf8");
+    const codigo = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
+    assert.ok(!/\b(alter|drop|create|truncate|update|delete|grant|function|trigger|policy|constraint)\b/i.test(codigo), "só inserts");
+    assert.equal((codigo.match(/\binsert into\b/gi) ?? []).length, 2); assert.equal((codigo.match(/on conflict/gi) ?? []).length, 2);
+    assert.ok(/'portal_cliente'/.test(codigo) && /array\['email', 'sino'\]/.test(codigo) && !/popup/.test(codigo));
+    assert.ok(!/aviso_destinatarios/.test(codigo), "0 destinatários: com a lista vazia vale o padrão analistas da unidade");
   });
   await caso("pendências, migration: só add column if not exists + inserts (2 eventos, 3 canais, on conflict do nothing); 1 coluna nullable sem default e sem índice; 0 destinatários", () => {
     const sql = readFileSync(new URL("../supabase/migration_avisos_cobranca_pendencias.sql", import.meta.url), "utf8");
