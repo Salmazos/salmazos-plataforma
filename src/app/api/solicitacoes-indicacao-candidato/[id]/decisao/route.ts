@@ -71,6 +71,16 @@ async function reverterCriados(
   return resultado;
 }
 
+// Depois de um UPDATE condicional que não casou nenhuma linha: o status ainda é "pendente" quando a linha
+// foi ALTERADA (updated_at mudou — o cliente editou a indicação pelo portal, ou outro analista a ajustou)
+// no meio da análise; qualquer outro status significa que ela já foi DECIDIDA.
+async function motivoDoConflito(service: ReturnType<typeof createServiceClient>, id: string): Promise<"alterada" | "decidida"> {
+  const { data } = await service.from("solicitacoes_indicacao_candidato").select("status").eq("id", id).maybeSingle();
+  return data?.status === "pendente" ? "alterada" : "decidida";
+}
+
+const MSG_ALTERADA = "Esta indicação foi alterada enquanto era analisada. Recarregue e confira os dados antes de decidir.";
+
 function gerarSuffixoAleatorio(): string {
   return Math.random().toString(36).substring(2, 10);
 }
@@ -158,11 +168,18 @@ export async function POST(request: NextRequest, { params }: Params) {
         })
         .eq("id", id)
         .eq("status", "pendente")
+        // updated_at lido junto com `sol`: se o cliente editou a indicação depois que a analista abriu a
+        // tela, a decisão não passa (e a analista decide em cima dos dados novos).
+        .eq("updated_at", sol.updated_at)
         .select("*")
         .single();
 
       if (!decidida) {
-        return NextResponse.json({ error: "A indicação mudou de status enquanto era analisada." }, { status: 409 });
+        const motivo = await motivoDoConflito(service, id);
+        return NextResponse.json(
+          { error: motivo === "alterada" ? MSG_ALTERADA : "A indicação mudou de status enquanto era analisada." },
+          { status: 409 }
+        );
       }
 
       registrarAuditoria({
@@ -392,6 +409,10 @@ export async function POST(request: NextRequest, { params }: Params) {
       })
       .eq("id", id)
       .eq("status", "pendente")
+      // Mesma proteção da recusa: os dados copiados para candidato/candidatura saíram de `sol`; se a
+      // indicação foi editada depois da leitura, a aprovação é desfeita (rollback abaixo) e refeita sobre
+      // os dados novos.
+      .eq("updated_at", sol.updated_at)
       .select("*")
       .maybeSingle();
 
@@ -462,15 +483,19 @@ export async function POST(request: NextRequest, { params }: Params) {
         return NextResponse.json({ error: "Falha ao reverter: esta indicação foi decidida por outro analista. Conferir banco de dados (registros órfãos)." }, { status: 500 });
       }
 
+      const motivo = await motivoDoConflito(service, id);
       await registrarAuditoria({
         usuario_id: user.id,
         usuario_nome: usuarioNome,
         acao: "indicacao_candidato_aprovacao_concorrente",
         entidade: "solicitacoes_indicacao_candidato",
         entidade_id: id,
-        detalhes: { candidato_id_criado: candidato.id },
+        detalhes: { candidato_id_criado: candidato.id, motivo },
       });
-      return NextResponse.json({ error: "Esta indicação já foi decidida por outro analista." }, { status: 409 });
+      return NextResponse.json(
+        { error: motivo === "alterada" ? MSG_ALTERADA : "Esta indicação já foi decidida por outro analista." },
+        { status: 409 }
+      );
     }
 
     await registrarHistorico({
