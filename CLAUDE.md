@@ -103,10 +103,13 @@ com dados de candidatos, clientes e admissões reais.
 contra casos reais assinados (Eliane para os 4 obrigatórios, Poliana para os 3 opcionais),
 que substituiu uma tentativa anterior de detecção de posição por texto-âncora em tempo real
 (`pdfAnchors.ts`, mantido no repo mas não usado no fluxo principal — mostrou-se frágil).
-**Regra de negócio real dos 7 documentos**: o pacote da contabilidade só existe com 4
-documentos OU 7, nunca quantidade intermediária. Só a Ficha de IR (5º) tem escolha real de
-enviar/pular; se ela vier, os outros 2 (Salário Família, Termo Responsabilidade) tornam-se
-obrigatórios e sequenciais, sem opção de pular individual. Se alguma vez a contabilidade
+**Regra de negócio real dos 7 documentos**: depois dos 4 fixos, o pacote válido é 4, 4 + Ficha
+de IR (5º), 4 + Salário Família (6º) + Termo de Responsabilidade (7º), ou os 7. A Ficha de IR
+tem decisão própria de enviar/pular; o 6º e o 7º são um par (ou vêm os dois ou nenhum), com
+um único botão "pular salário família" no 6º — cônjuge gera Ficha de IR mas não Salário
+Família, que depende de filho até 14 anos. Enviar o 6º torna o 7º obrigatório. Pular a Ficha
+de IR continua pulando o par junto (reversível enviando o 6º). Regra em
+`src/lib/contabilidadeUploadEstado.ts`; o servidor (`montar-enviar`) só exige os 4 fixos (a confirmar com o RH). Se alguma vez a contabilidade
 trocar o gerador/modelo do PDF, essas coordenadas ficam desatualizadas silenciosamente — não
 há checagem automática de "o texto esperado está mesmo aqui".
 
