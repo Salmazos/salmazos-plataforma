@@ -79,6 +79,11 @@ const PADRAO_PORTAL_CLIENTE: Record<string, PadraoEvento> = {
     sino: { ativo: true, destinatarios: ANALISTAS_ATIVOS },
     popup: { ativo: true, destinatarios: ANALISTAS_ATIVOS },
   },
+  // Sem popup (decisão de negócio): só e-mail e sino, para os analistas ativos como na indicação recebida.
+  indicacao_candidato_editada_cliente: {
+    email: { ativo: true, destinatarios: ANALISTAS_ATIVOS },
+    sino: { ativo: true, destinatarios: ANALISTAS_ATIVOS },
+  },
   // Fase 3: carga copiada das listas de solicitacao_vaga (e-mail: Andreza, Giovanni e Rebecca; sino: os
   // 7 do sino de solicitação). O popup dos três pedidos usa a mesma carga do popup de solicitação.
   solicitacao_alteracao_pedida: {

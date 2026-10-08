@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import ModalEditarIndicacaoCliente from "@/components/ModalEditarIndicacaoCliente";
 
 interface Indicacao {
   id: string;
@@ -11,6 +12,8 @@ interface Indicacao {
   motivo_recusa: string | null;
   decidido_em: string | null;
   created_at: string;
+  // Calculado no servidor; o PATCH revalida sempre.
+  pode_editar: boolean;
 }
 
 const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
@@ -28,25 +31,29 @@ export default function MinhasIndicacoesPage() {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [indicacoes, setIndicacoes] = useState<Indicacao[]>([]);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [aviso, setAviso] = useState("");
+
+  const carregar = useCallback(async () => {
+    try {
+      const res = await fetch("/api/portal/minhas-indicacoes");
+      const json = await res.json();
+      if (!res.ok) {
+        setErro(json.error || "Erro ao carregar indicações.");
+        return;
+      }
+      setIndicacoes(json.data ?? []);
+    } catch (e) {
+      console.error("Erro:", e);
+      setErro("Erro ao carregar indicações.");
+    } finally {
+      setCarregando(false);
+    }
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/portal/minhas-indicacoes");
-        const json = await res.json();
-        if (!res.ok) {
-          setErro(json.error || "Erro ao carregar indicações.");
-          return;
-        }
-        setIndicacoes(json.data ?? []);
-      } catch (e) {
-        console.error("Erro:", e);
-        setErro("Erro ao carregar indicações.");
-      } finally {
-        setCarregando(false);
-      }
-    })();
-  }, []);
+    carregar();
+  }, [carregar]);
 
   if (carregando) {
     return (
@@ -76,6 +83,7 @@ export default function MinhasIndicacoesPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Minhas Indicações</h1>
+      {aviso && <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{aviso}</p>}
       {indicacoes.map((ind) => {
         const statusInfo = STATUS_BADGE[ind.status] || { label: ind.status, bg: "bg-gray-100", text: "text-gray-800" };
         return (
@@ -93,11 +101,29 @@ export default function MinhasIndicacoesPage() {
                 {ind.status === "recusada" && ind.motivo_recusa && (
                   <p className="text-gray-600 text-xs text-right max-w-xs">{ind.motivo_recusa}</p>
                 )}
+                {ind.pode_editar ? (
+                  <button onClick={() => { setAviso(""); setEditandoId(ind.id); }} className="text-xs font-semibold text-gray-700 border border-gray-300 rounded-lg px-3 py-1 hover:bg-gray-50">
+                    Editar
+                  </button>
+                ) : (
+                  ind.status === "aprovada" && <p className="text-gray-400 text-xs text-right max-w-xs">Já em andamento; fale com a Salmazos.</p>
+                )}
               </div>
             </div>
           </div>
         );
       })}
+      {editandoId && (
+        <ModalEditarIndicacaoCliente
+          indicacaoId={editandoId}
+          onClose={() => setEditandoId(null)}
+          onSalvo={(mensagem) => {
+            setEditandoId(null);
+            setAviso(mensagem);
+            carregar();
+          }}
+        />
+      )}
     </div>
   );
 }

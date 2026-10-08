@@ -7,6 +7,7 @@
 const RELACOES = {
   rescisoes: { funcionarios: { alvo: "funcionarios", local: "funcionario_id" } },
   funcionarios: { clientes: { alvo: "clientes", local: "cliente_id" } },
+  solicitacoes_indicacao_candidato: { vagas: { alvo: "vagas", local: "vaga_id" } },
 };
 
 export function criarDb(seed = {}) {
@@ -200,6 +201,13 @@ class Consulta {
 
   async executar() {
     this.db.consultas.push({ tabela: this.tabela, op: this.op });
+    // Gancho de uso único (db.ganchos["tabela.op"] = fn): roda ANTES da operação — simula outra pessoa mexendo
+    // na linha entre a leitura e a escrita da rota (corrida entre cliente e analista).
+    const gancho = this.db.ganchos?.[`${this.tabela}.${this.op}`];
+    if (gancho) {
+      delete this.db.ganchos[`${this.tabela}.${this.op}`];
+      await gancho();
+    }
     const falha = this.db.falhas[`${this.tabela}.${this.op}`];
     if (falha) return { data: null, error: typeof falha === "object" ? falha : { message: falha } };
 
