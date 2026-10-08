@@ -109,7 +109,7 @@ tem decisão própria de enviar/pular; o 6º e o 7º são um par (ou vêm os doi
 um único botão "pular salário família" no 6º — cônjuge gera Ficha de IR mas não Salário
 Família, que depende de filho até 14 anos. Enviar o 6º torna o 7º obrigatório. Pular a Ficha
 de IR continua pulando o par junto (reversível enviando o 6º). Regra em
-`src/lib/contabilidadeUploadEstado.ts`; o servidor (`montar-enviar`) só exige os 4 fixos (a confirmar com o RH). Se alguma vez a contabilidade
+`src/lib/contabilidadeUploadEstado.ts`; o servidor (`montar-enviar`) só exige os 4 fixos (confirmado com o RH). Se alguma vez a contabilidade
 trocar o gerador/modelo do PDF, essas coordenadas ficam desatualizadas silenciosamente — não
 há checagem automática de "o texto esperado está mesmo aqui".
 

@@ -2,13 +2,12 @@
 // (ModalUploadDocumentosContabilidade.tsx), extraída como função pura para poder ser
 // verificada sem renderizar o modal (ver scripts/verificar-upload-contabilidade-estado.mts).
 //
-// ASSUNÇÃO DE NEGÓCIO (a confirmar com o RH: que o Termo de Responsabilidade é o do
-// salário-família): depois dos 4 fixos, o pacote válido é
-// 4 fixos, 4 + Ficha de IR, 4 + Salário Família + Termo de Responsabilidade, ou os 7. A
+// REGRA DE NEGÓCIO CONFIRMADA COM O RH: o Termo de Responsabilidade é o do salário-família
+// (Portaria MPAS 3.040/82), por isso 6º e 7º formam um par. Depois dos 4 fixos, o pacote
+// válido é 4 fixos, 4 + Ficha de IR, 4 + Salário Família + Termo de Responsabilidade, ou os 7. A
 // Ficha de IR (5º) é decidida sozinha (enviar/pular); Salário Família (6º) e Termo de
-// Responsabilidade (7º) são um PAR: ou vêm os dois, ou nenhum. Motivo: o Termo de
-// Responsabilidade acompanha o Salário Família, e o Salário Família só se aplica a quem tem
-// filho até 14 anos — o cônjuge gera Ficha de IR mas não gera Salário Família (caso real:
+// Responsabilidade (7º) são um PAR: ou vêm os dois, ou nenhum. O Salário Família só se
+// aplica a quem tem filho até 14 anos — o cônjuge gera Ficha de IR mas não gera Salário Família (caso real:
 // admissão f1e8ea96, que ficava travada no 6º item).
 import type { DocumentoObrigatoriedade, TipoDocumentoContabilidade } from "./contabilidadeDocumentosMatch";
 
