@@ -365,7 +365,7 @@ export default function AvisosVagasConfigClient({ configsPorEvento, usuarios }: 
 
           {/* ── Plataforma ─────────────────────────────────────────────────────── */}
           <div>
-            <p className="section-title mb-1">Destinatários de plataforma (sino + pop-up de login)</p>
+            <p className="section-title mb-1">Destinatários de plataforma (sino)</p>
             <p className="text-xs text-gray-400 mb-4">Precisa ser usuário cadastrado no painel. Marque para incluir, desmarque para remover. Cada pessoa marcada só recebe os avisos das vagas da unidade que ela atende (ou de todas, se tiver acesso a todas as unidades).</p>
 
             {usuarios.length === 0 ? (

@@ -352,15 +352,16 @@ export interface DestinatarioAtrasoCobranca {
 /**
  * Destinatários compartilhados dos avisos de Cobrança R&S (cobranca_rs_gerada, cron
  * lembrete-cobranca-atraso, e-mail de cobrança marcada como paga, e o reenvio manual): base
- * fixa (PAPEIS_FULL_ACCESS + cobranca_rs_avisos_destinatarios ativos — mesma query de leitura
- * usada em /painel/cobranca-rs-acesso-config, sem alterar checarAcessoCobrancaRS em si, que só
- * checa um usuário por vez) + o analista com acesso configurável, mas SÓ se ele for o revisor
+ * fixa (analistas ativos, com user_id e e-mail, cujo analistas_perfil.nivel_acesso é "diretoria" ou "superuser" — os mesmos
+ * valores de PAPEIS_FULL_ACCESS, comparados aqui pela coluna) + o analista com acesso configurável (cobranca_rs_analistas_acesso),
+ * mas SÓ se ele for o revisor
  * daquela cobrança específica (cobrancas_rs.revisado_por, que guarda auth.users.id — comparado
  * contra analistas_perfil.user_id, não contra .id). Não usa mais responsavel_comercial do
  * cliente (removido — deixou de fazer parte da regra de negócio deste fluxo). revisadoPor pode
  * ser null (cobrança ainda não tem revisor — ex: cron de atraso processando uma cobrança cujo
  * revisor nunca foi setado por algum motivo): nesse caso nenhum analista extra entra, só a base
- * fixa, sem quebrar nem cair pra broadcast geral.
+ * fixa, sem quebrar nem cair pra broadcast geral. A tabela antiga cobranca_rs_avisos_destinatarios NÃO entra neste cálculo: hoje
+ * só as rotas api/cobranca-rs-avisos-config a leem e gravam (tela antiga, que redireciona para Configurações > Avisos).
  *
  * excluirEmails (opcional, aditivo): remove analista(s) específico(s) do resultado final pelo
  * e-mail cadastrado — usado só pelo e-mail de "cobrança paga" (marcar-paga/route.ts) pra tirar
