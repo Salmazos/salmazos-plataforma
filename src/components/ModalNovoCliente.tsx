@@ -7,6 +7,7 @@ import { useUsuarioLogado } from "@/components/UsuarioLogadoProvider";
 import { responsaveisDaUnidade, responsavelPadrao, opcoesResponsavel } from "@/lib/responsaveis";
 import type { Cliente } from "@/types";
 import CampoTelefone from "@/components/ui/CampoTelefone";
+import { validarSenhaPortal, PLACEHOLDER_SENHA_PORTAL, ITENS_CHECKLIST_SENHA_PORTAL } from "@/lib/senhaPortal";
 
 interface Props {
   isOpen: boolean;
@@ -728,7 +729,7 @@ export default function ModalNovoCliente({ isOpen, cliente, unidades, onClose, o
                         type={mostrarNovaSenha ? "text" : "password"}
                         value={novaSenha}
                         onChange={(e) => setNovaSenha(e.target.value)}
-                        placeholder="Mínimo 6 caracteres"
+                        placeholder={PLACEHOLDER_SENHA_PORTAL}
                         className="input-field text-sm pr-9"
                       />
                       <button
@@ -740,6 +741,7 @@ export default function ModalNovoCliente({ isOpen, cliente, unidades, onClose, o
                         {mostrarNovaSenha ? <EyeOff size={14} /> : <Eye size={14} />}
                       </button>
                     </div>
+                    <ChecklistSenhaPortal senha={novaSenha} />
                   </div>
                   {erroNovoUsuario && (
                     <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
@@ -750,7 +752,7 @@ export default function ModalNovoCliente({ isOpen, cliente, unidades, onClose, o
                     <button
                       type="button"
                       onClick={handleAdicionarUsuario}
-                      disabled={adicionandoUsuario || !novoEmail.trim() || novaSenha.length < 6}
+                      disabled={adicionandoUsuario || !novoEmail.trim() || !validarSenhaPortal(novaSenha).ok}
                       className="text-sm px-4 py-2 rounded-lg bg-black text-[#FFD700] font-medium transition-colors hover:bg-gray-800 disabled:opacity-50"
                     >
                       {adicionandoUsuario ? "Criando..." : "Criar usuário"}
@@ -869,6 +871,23 @@ export default function ModalNovoCliente({ isOpen, cliente, unidades, onClose, o
   );
 }
 
+// Checklist sempre visível: o analista vê o que falta antes de errar. Só estado local, sem rede.
+function ChecklistSenhaPortal({ senha }: { senha: string }) {
+  const resultado = validarSenhaPortal(senha);
+  return (
+    <ul className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5" aria-label="Requisitos da senha">
+      {ITENS_CHECKLIST_SENHA_PORTAL.map(({ chave, rotulo }) => {
+        const atendido = resultado[chave];
+        return (
+          <li key={chave} className={`text-xs ${atendido ? "text-green-700" : "text-gray-400"}`}>
+            <span aria-hidden="true">{atendido ? "✓" : "○"}</span> {rotulo}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function UsuarioPortalRow({
   usuario,
   onSalvarEmail,
@@ -962,7 +981,7 @@ function UsuarioPortalRow({
               type={mostrarSenha ? "text" : "password"}
               value={senha}
               onChange={(e) => { setSenha(e.target.value); setErroSenha(""); }}
-              placeholder="Nova senha (mínimo 6 caracteres)"
+              placeholder={PLACEHOLDER_SENHA_PORTAL}
               className="input-field text-sm pr-9"
             />
             <button
@@ -974,13 +993,14 @@ function UsuarioPortalRow({
               {mostrarSenha ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
           </div>
+          <ChecklistSenhaPortal senha={senha} />
           {erroSenha && <p className="text-xs text-red-600">{erroSenha}</p>}
           {senhaSalva && <p className="text-xs text-green-700">Senha atualizada!</p>}
           <div className="flex gap-2">
             <button
               type="button"
               onClick={handleSalvarSenha}
-              disabled={salvandoSenha || senha.length < 6}
+              disabled={salvandoSenha || !validarSenhaPortal(senha).ok}
               className="text-xs px-3 py-1.5 rounded-lg bg-black text-[#FFD700] font-medium disabled:opacity-50"
             >
               {salvandoSenha ? "Salvando..." : "Confirmar nova senha"}
