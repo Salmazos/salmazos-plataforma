@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import MatchScoreBadge from "./MatchScoreBadge";
+import { resumirPortal } from "@/lib/portalResumo";
 
 interface CandidatoResumo {
   id: string;
@@ -67,11 +68,12 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos, emAv
   const reprovadosList = encaminhamentos.filter((e) => e.status === "reprovado");
   const historicoList  = [...aprovadosList, ...reprovadosList];
 
-  const totalGeral     = emAvaliacao.length + encaminhamentos.length;
-  const emAvaliacaoCount = emAvaliacao.length;
-  const aguardandoCount  = aguardandoList.length;
-  const aprovadosCount   = aprovadosList.length;
-  const reprovadosCount  = reprovadosList.length;
+  const resumo = resumirPortal(emAvaliacao.length, encaminhamentos.map((e) => e.status));
+  const totalGeral       = resumo.total;
+  const emAvaliacaoCount = resumo.emTriagem;
+  const aguardandoCount  = resumo.aguardando;
+  const aprovadosCount   = resumo.aprovados;
+  const reprovadosCount  = resumo.reprovados;
 
   return (
     <div>
