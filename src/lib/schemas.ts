@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TURNOS_FUNCIONARIO } from "@/lib/constants";
 import { nomeArquivoCurriculoValido } from "@/lib/indicacaoEdicao";
+import { validarSenhaPortal, mensagemSenhaPortalInvalida } from "@/lib/senhaPortal";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -282,11 +283,15 @@ export const emailSendSchema = z.object({
 
 // ── Portal acesso ────────────────────────────────────────────────────────────
 
+const senhaPortalSchema = z.string().refine((s) => validarSenhaPortal(s).ok, {
+  error: (iss) => mensagemSenhaPortalInvalida(validarSenhaPortal(typeof iss.input === "string" ? iss.input : "")),
+});
+
 export const portalAcessoSchema = z.object({
   cliente_id: z.string().uuid(),
   nome: z.string().optional(),
   email: z.string().email(),
-  senha: z.string().min(6),
+  senha: senhaPortalSchema,
 });
 
 export const portalAcessoUpdateSchema = z.object({
@@ -294,7 +299,7 @@ export const portalAcessoUpdateSchema = z.object({
   user_id: z.string().uuid(),
   nome: z.string().optional(),
   email: z.string().email().optional(),
-  senha: z.string().min(6).optional(),
+  senha: senhaPortalSchema.optional(),
 });
 
 export const portalAcessoDeleteSchema = z.object({

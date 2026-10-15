@@ -9,6 +9,7 @@ import {
 } from "@/lib/schemas";
 import { checarAcessoClientes } from "@/lib/comercialAuth";
 import { checarAcessoCliente } from "@/lib/unidadeAuth";
+import { validarSenhaPortal, mensagemSenhaPortalInvalida, traduzirErroSenhaSupabase } from "@/lib/senhaPortal";
 
 const MAX_USUARIOS_POR_CLIENTE = 3;
 
@@ -29,7 +30,20 @@ function mensagemErroAuth(msg: string | undefined): string {
   if (msg && /already.*registered|already.*exists|duplicate/i.test(msg)) {
     return "Este e-mail já está em uso por outra conta.";
   }
+  const erroSenha = traduzirErroSenhaSupabase(msg);
+  if (erroSenha) return erroSenha;
+  // Mensagens de senha em inglês nunca chegam à tela: se o Supabase falar de senha sem casar com
+  // nenhum padrão conhecido, cai na mensagem genérica em vez de repassar o texto cru.
+  if (msg && /password/i.test(msg)) return "A senha informada não foi aceita pelo sistema. Escolha outra.";
   return msg || "Erro ao processar a solicitação.";
+}
+
+// Falha no campo senha vira só a mensagem em pt-BR (sem o prefixo "senha:" do parseBody global).
+// Roda DEPOIS da autorização e do limite de usuários, para não revelar nada a quem não tem acesso.
+function erroDeSenha(senha: unknown): string | null {
+  if (typeof senha !== "string") return "Informe a senha.";
+  const r = validarSenhaPortal(senha);
+  return r.ok ? null : mensagemSenhaPortalInvalida(r);
 }
 
 export async function GET(request: NextRequest) {
@@ -83,9 +97,10 @@ export async function POST(request: NextRequest) {
     if (acessoNegado) return acessoNegado;
 
     const body = await request.json();
-    const parsed = parseBody(portalAcessoSchema, body);
+    // A senha é validada mais abaixo, depois do acesso ao cliente e do limite de usuários.
+    const parsed = parseBody(portalAcessoSchema.omit({ senha: true }), body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
-    const { cliente_id, nome, email, senha } = parsed.data;
+    const { cliente_id, nome, email } = parsed.data;
     const bloqueioUnidade = await checarAcessoCliente(user, cliente_id);
     if (bloqueioUnidade) return bloqueioUnidade;
 
@@ -102,6 +117,10 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       );
     }
+
+    const erroSenha = erroDeSenha(body.senha);
+    if (erroSenha) return NextResponse.json({ error: erroSenha }, { status: 400 });
+    const senha = body.senha as string;
 
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
       email,
@@ -140,9 +159,10 @@ export async function PATCH(request: NextRequest) {
     if (acessoNegado) return acessoNegado;
 
     const body = await request.json();
-    const parsed = parseBody(portalAcessoUpdateSchema, body);
+    // A senha é validada mais abaixo, depois do acesso ao cliente e da checagem de vínculo.
+    const parsed = parseBody(portalAcessoUpdateSchema.omit({ senha: true }), body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
-    const { cliente_id, user_id, nome, email, senha } = parsed.data;
+    const { cliente_id, user_id, nome, email } = parsed.data;
     const bloqueioUnidade = await checarAcessoCliente(user, cliente_id);
     if (bloqueioUnidade) return bloqueioUnidade;
 
@@ -160,6 +180,12 @@ export async function PATCH(request: NextRequest) {
 
     if (!link) {
       return NextResponse.json({ error: "Usuário não encontrado para este cliente." }, { status: 404 });
+    }
+
+    const senha: string | undefined = body.senha;
+    if (senha !== undefined) {
+      const erroSenha = erroDeSenha(senha);
+      if (erroSenha) return NextResponse.json({ error: erroSenha }, { status: 400 });
     }
 
     const updates: { email?: string; password?: string; user_metadata?: Record<string, unknown> } = {};
