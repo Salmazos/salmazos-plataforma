@@ -1,12 +1,11 @@
 import { redirect } from "next/navigation";
-import AvisoMigradoBanner from "@/components/AvisoMigradoBanner";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
-import RescisoesAvisosConfigClient from "@/components/RescisoesAvisosConfigClient";
-import { avisosEmailRescisaoAtivos } from "@/lib/dispararAvisosRescisao";
+import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export default async function RescisoesAvisosConfigPage() {
+// Tela antiga (tabelas rescisao_avisos_* e chave rescisao_avisos_email_ativo): os avisos agora são configurados em Configurações > Avisos. A rota de API e as tabelas
+// antigas continuam existindo; só o acesso é encaminhado para a tela unificada.
+export default async function RescisoesAvisosConfigMovidaPage() {
   const supabaseAuth = await createClient();
   const {
     data: { user },
@@ -16,33 +15,5 @@ export default async function RescisoesAvisosConfigPage() {
   const role = user.app_metadata?.role ?? "analista";
   if (role !== "superuser") redirect("/painel");
 
-  const svc = createServiceClient();
-
-  const [{ data: emailDestinatarios }, { data: plataformaDestinatariosRaw }, { data: usuarios }, emailAtivo] = await Promise.all([
-    svc.from("rescisao_avisos_email_destinatarios").select("*").order("nome"),
-    svc.from("rescisao_avisos_plataforma_destinatarios").select("*").order("criado_em"),
-    svc.from("analistas_perfil").select("user_id, nome_completo, email").eq("ativo", true).order("nome_completo"),
-    avisosEmailRescisaoAtivos(),
-  ]);
-
-  // Sem FK direta entre rescisao_avisos_plataforma_destinatarios e analistas_perfil (as
-  // duas só referenciam auth.users separadamente) — resolve o nome aqui em vez de um
-  // embed do PostgREST, que não existe pra esse relacionamento.
-  const nomePorUserId = new Map((usuarios ?? []).map((u) => [u.user_id, u.nome_completo]));
-  const plataformaDestinatarios = (plataformaDestinatariosRaw ?? []).map((d) => ({
-    ...d,
-    nome_completo: nomePorUserId.get(d.usuario_id) ?? "Usuário removido",
-  }));
-
-  return (
-    <>
-      <AvisoMigradoBanner />
-    <RescisoesAvisosConfigClient
-      emailAtivoInicial={emailAtivo}
-      emailDestinatariosIniciais={emailDestinatarios ?? []}
-      plataformaDestinatariosIniciais={plataformaDestinatarios}
-      usuarios={usuarios ?? []}
-    />
-    </>
-  );
+  redirect("/painel/avisos-config");
 }
