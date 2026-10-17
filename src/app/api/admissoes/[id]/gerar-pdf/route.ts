@@ -1,12 +1,13 @@
 import { avisarFuncionarioNaoCriado } from "@/lib/avisarCandidatoEventos";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { PDFDocument, PageSizes, rgb } from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
 import { registrarAuditoria } from "@/lib/audit";
 import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
 import { parseBody, admissaoGerarPdfSchema } from "@/lib/schemas";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
-import { PdfWriter, PW, PH, ML, safe, BLACK, YELLOW, DARK, GRAY, embutirImagemComprimida } from "@/lib/pdfWriter";
+import { ordenarDocumentosPacote, anexarDocumentosAoPacote, inserirIndiceEBookmarks } from "@/lib/pacoteOrdem";
+import { PdfWriter, PW, PH, ML, safe, BLACK, YELLOW, DARK, GRAY } from "@/lib/pdfWriter";
 import { desenharFichaCadastral, desenharAutorizacaoSindical, desenharSolicitacaoValeTransporte } from "@/lib/admissaoDocumentosPdf";
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import type { AdmissaoAdicional, AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento } from "@/types";
@@ -237,36 +238,23 @@ export async function POST(request: NextRequest, { params }: Params) {
   });
 
   // ── Documentos anexados (imagens/PDFs incorporados) ─────────
-  const naoEmbutidos: string[] = [];
-  for (const doc of docs) {
-    if (!doc.storage_path) continue;
-    const label = DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === doc.tipo_documento)?.label ?? doc.tipo_documento;
-
-    const { data: fileBlob, error: dlError } = await svc.storage.from("admissao-docs").download(doc.storage_path);
-    if (dlError || !fileBlob) { naoEmbutidos.push(label); continue; }
-
-    const bytes = new Uint8Array(await fileBlob.arrayBuffer());
-    const ext = doc.storage_path.split(".").pop()?.toLowerCase() ?? "";
-
-    try {
-      if (ext === "jpg" || ext === "jpeg" || ext === "png") {
-        const img = await embutirImagemComprimida(pdfDoc, bytes, ext);
-        const docPage = pdfDoc.addPage(PageSizes.A4);
-        docPage.drawText(label, { x: ML, y: PH - ML, size: 12, font: w.bold, color: DARK });
-        const scale = Math.min((PW - ML * 2) / img.width, (PH - ML * 2 - 30) / img.height, 1);
-        docPage.drawImage(img, { x: ML, y: ML, width: img.width * scale, height: img.height * scale });
-      } else if (ext === "pdf") {
-        const subDoc = await PDFDocument.load(bytes);
-        const copiedPages = await pdfDoc.copyPages(subDoc, subDoc.getPageIndices());
-        copiedPages.forEach((p) => pdfDoc.addPage(p));
-      } else {
-        // HEIC e outros formatos não suportados nativamente pelo pdf-lib
-        naoEmbutidos.push(label);
-      }
-    } catch {
-      naoEmbutidos.push(label);
-    }
-  }
+  // Ordem fixa (a mesma do formulário público) e determinística: a semeadura da admissão faz
+  // todas as linhas nascerem com o mesmo created_at, então a ordem do banco não serve.
+  const labelPorTipo = (tipo: string) => DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === tipo)?.label ?? tipo;
+  const docsOrdenados = ordenarDocumentosPacote(docs, DOCUMENTOS_ADMISSAO.map((d) => d.tipo_documento)).filter((d) => d.storage_path);
+  const anexos = await anexarDocumentosAoPacote({
+    pdfDoc,
+    w,
+    admissaoId: id,
+    docs: docsOrdenados,
+    labelPorTipo,
+    baixar: async (path) => {
+      const { data: fileBlob, error: dlError } = await svc.storage.from("admissao-docs").download(path);
+      if (dlError || !fileBlob) return null;
+      return new Uint8Array(await fileBlob.arrayBuffer());
+    },
+  });
+  const { naoEmbutidos, motivosNaoIncorporados } = anexos;
 
   if (naoEmbutidos.length > 0) {
     w.newPage();
@@ -275,6 +263,8 @@ export async function POST(request: NextRequest, { params }: Params) {
     w.y -= 6;
     for (const label of naoEmbutidos) w.drawText(`• ${label}`, w.regular, 10, DARK);
   }
+
+  await inserirIndiceEBookmarks(pdfDoc, w, anexos);
 
   const pdfBytes = await pdfDoc.save();
 
@@ -385,6 +375,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     detalhes: {
       storage_path: uploadPath,
       documentos_nao_incorporados: naoEmbutidos,
+      motivos_nao_incorporados: motivosNaoIncorporados,
       ...(geradoComPendencias
         ? { forcado: true, justificativa, documentos_pendentes: labelsPendentes }
         : {}),
