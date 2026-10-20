@@ -152,13 +152,20 @@ esperar "(b) A não vê a proposta de B pelo id"            "$(como authenticate
 esperar "(b) B não vê as revisões de A"                   "$(como authenticated "$B_U" "select count(*) from proposta_revisoes where proposta_id='$PA'")" 0
 esperar "(c) gestor vê todas"                             "$(como authenticated "$G_U" "select count(*) from propostas")" "$TOTAL"
 esperar "(c) gestor vê todas as revisões"                 "$(como authenticated "$G_U" "select count(*) from proposta_revisoes")" "$($PSQL -c 'select count(*) from proposta_revisoes')"
-esperar "(c) gestor NÃO altera (update afeta 0)"          "$(como authenticated "$G_U" "with x as (update propostas set cliente_nome='x' returning 1) select count(*) from x")" 0
-esperar "(d) A tenta UPDATE na proposta de B: 0 linhas"   "$(como authenticated "$A_U" "with x as (update propostas set cliente_nome='hack' where id='$PB' returning 1) select count(*) from x")" 0
-esperar "(d) A tenta mover proposta própria p/ B: barrado" "$(erro_de authenticated "$A_U" "update propostas set vendedor_id='$B' where id='$PA'" | sed 's/ for table.*/ for table/')" "ERROR:  new row violates row-level security policy for table"
-esperar "(d) A tenta INSERT como se fosse B: barrado"     "$(erro_de authenticated "$A_U" "insert into propostas (numero,modelo,ano,sequencial,unidade_id,vendedor_id,cliente_nome) values ('TS-9999/26','TS',2026,9999,'$UNI','$B','h')" | sed 's/ for table.*/ for table/')" "ERROR:  new row violates row-level security policy for table"
-esperar "(d) A tenta INSERT revisão na proposta de B: barrado" "$(erro_de authenticated "$A_U" "insert into proposta_revisoes (proposta_id,revisao,conteudo,template_versao) values ('$PB',7,'{}',1)" | sed 's/ for table.*/ for table/')" "ERROR:  new row violates row-level security policy for table"
+esperar "(c) gestor tenta UPDATE: sem privilégio"       "$(erro_de authenticated "$G_U" "update propostas set cliente_nome='x'")" "ERROR:  permission denied for table propostas"
+CONT_ANTES=$($PSQL -c "select ultimo from proposta_contadores where modelo='RS'")
+esperar "(d) A tenta UPDATE na proposta de B: sem privilégio" "$(erro_de authenticated "$A_U" "update propostas set cliente_nome='hack' where id='$PB'")" "ERROR:  permission denied for table propostas"
+esperar "(d) A tenta UPDATE da própria (situacao): sem privilégio" "$(erro_de authenticated "$A_U" "update propostas set situacao='aceita' where id='$PA'")" "ERROR:  permission denied for table propostas"
+esperar "(d) A tenta INSERT com número forjado: sem privilégio" "$(erro_de authenticated "$A_U" "insert into propostas (numero,modelo,ano,sequencial,unidade_id,vendedor_id,cliente_nome) values ('RS-0052/26','RS',2026,52,'$UNI','$A','h')")" "ERROR:  permission denied for table propostas"
+esperar "(d) A tenta INSERT como se fosse B: sem privilégio" "$(erro_de authenticated "$A_U" "insert into propostas (numero,modelo,ano,sequencial,unidade_id,vendedor_id,cliente_nome) values ('TS-9999/26','TS',2026,9999,'$UNI','$B','h')")" "ERROR:  permission denied for table propostas"
+esperar "(d) A tenta INSERT em proposta_revisoes: sem privilégio" "$(erro_de authenticated "$A_U" "insert into proposta_revisoes (proposta_id,revisao,conteudo,template_versao) values ('$PA',7,'{}',1)")" "ERROR:  permission denied for table proposta_revisoes"
+esperar "(d) A tenta INSERT em proposta_historico: sem privilégio" "$(erro_de authenticated "$A_U" "insert into proposta_historico (proposta_id,para) values ('$PA','aceita')")" "ERROR:  permission denied for table proposta_historico"
 esperar "(d) A tenta DELETE (até na própria): sem privilégio" "$(erro_de authenticated "$A_U" "delete from propostas where id='$PA'")" "ERROR:  permission denied for table propostas"
 esperar "(d) propostas de B intactas"                     "$($PSQL -c "select count(*) from propostas where vendedor_id='$B' and cliente_nome like 'ClienteB%'")" 2
+esperar "(d) proposta de A intacta (situacao rascunho)"   "$($PSQL -c "select situacao from propostas where id='$PA'")" rascunho
+esperar "(d) contador RS não mudou após as tentativas"    "$($PSQL -c "select ultimo from proposta_contadores where modelo='RS'")" "$CONT_ANTES"
+NOVO_RS=$($PSQL -c "set role service_role; select numero from criar_proposta('RS','$UNI','$A',null,null,'Pos-ataque',null,'{}'::jsonb,1,15)" | tail -1)
+esperar "(d) criação normal de RS continua (próximo = $((CONT_ANTES + 1)))" "$NOVO_RS" "$(printf 'RS-%04d/26' $((CONT_ANTES + 1)))"
 for t in propostas proposta_revisoes proposta_historico proposta_contadores; do
   esperar "(e) anon sem acesso a $t" "$(erro_de anon "$A_U" "select count(*) from $t")" "ERROR:  permission denied for table $t"
 done

@@ -14,6 +14,10 @@
 --   insert into proposta_contadores (modelo, ano, ultimo) values ('RS', 2026, 52)
 --   on conflict (modelo, ano) do update set ultimo = greatest(proposta_contadores.ultimo, excluded.ultimo);
 --
+-- O papel authenticated SÓ LÊ (select, filtrado por RLS). Toda escrita passa pelas APIs com service role: assim
+-- o vendedor, com o próprio JWT direto no PostgREST, não forja número (que travaria o contador) nem altera
+-- numero/situacao/sequencial fora da API.
+--
 -- Propostas nunca são apagadas (só canceladas) e revisões/histórico são imutáveis, inclusive para o service
 -- role (trigger). Limpeza legítima (ex.: dado de teste) só por SQL de superusuário, desligando o trigger:
 --   alter table public.proposta_revisoes  disable trigger proposta_revisoes_imutavel;
@@ -112,33 +116,30 @@ drop trigger if exists proposta_historico_imutavel on public.proposta_historico;
 create trigger proposta_historico_imutavel before update or delete on public.proposta_historico
   for each row execute function public.proposta_registro_imutavel();
 
--- Privilégios: anon nada; authenticated só o que as policies usam; contador só service role.
+-- Privilégios: anon nada; authenticated só SELECT (nenhuma escrita); contador só service role.
 -- Proposta nunca é apagada (sem DELETE para ninguém além de superusuário).
 revoke all on public.proposta_contadores from anon, authenticated;
 revoke all on public.propostas           from anon, authenticated;
 revoke all on public.proposta_revisoes   from anon, authenticated;
 revoke all on public.proposta_historico  from anon, authenticated;
-grant select, insert, update on public.propostas          to authenticated;
-grant select, insert         on public.proposta_revisoes  to authenticated;
-grant select, insert         on public.proposta_historico to authenticated;
+grant select on public.propostas, public.proposta_revisoes, public.proposta_historico to authenticated;
 
--- RLS no mesmo molde de oportunidades: vendedor vê/edita as próprias; gestor (diretoria/superuser) só lê.
+-- RLS no molde de oportunidades, só leitura: vendedor vê as próprias; gestor (diretoria/superuser) vê todas.
 alter table public.proposta_contadores enable row level security;  -- sem policy: só service role
 alter table public.propostas           enable row level security;
 alter table public.proposta_revisoes   enable row level security;
 alter table public.proposta_historico  enable row level security;
 
-drop policy if exists propostas_vendedor_all on public.propostas;  -- nome de uma versão anterior (FOR ALL incluía DELETE)
+-- Policies de escrita de versões anteriores desta migration (caso já tenham sido aplicadas): removidas.
+drop policy if exists propostas_vendedor_all on public.propostas;
+drop policy if exists propostas_vendedor_insert on public.propostas;
+drop policy if exists propostas_vendedor_update on public.propostas;
+drop policy if exists proposta_revisoes_vendedor_insert on public.proposta_revisoes;
+drop policy if exists proposta_historico_vendedor_insert on public.proposta_historico;
+
 drop policy if exists propostas_vendedor_select on public.propostas;
 create policy propostas_vendedor_select on public.propostas for select to authenticated
   using (vendedor_id = (select public.meu_analista_id()));
-drop policy if exists propostas_vendedor_insert on public.propostas;
-create policy propostas_vendedor_insert on public.propostas for insert to authenticated
-  with check (vendedor_id = (select public.meu_analista_id()));
-drop policy if exists propostas_vendedor_update on public.propostas;
-create policy propostas_vendedor_update on public.propostas for update to authenticated
-  using (vendedor_id = (select public.meu_analista_id()))
-  with check (vendedor_id = (select public.meu_analista_id()));
 drop policy if exists propostas_gestor_select on public.propostas;
 create policy propostas_gestor_select on public.propostas for select to authenticated
   using ((select public.is_gestor_comercial()));
@@ -146,9 +147,6 @@ create policy propostas_gestor_select on public.propostas for select to authenti
 drop policy if exists proposta_revisoes_vendedor_select on public.proposta_revisoes;
 create policy proposta_revisoes_vendedor_select on public.proposta_revisoes for select to authenticated
   using (exists (select 1 from public.propostas p where p.id = proposta_id and p.vendedor_id = (select public.meu_analista_id())));
-drop policy if exists proposta_revisoes_vendedor_insert on public.proposta_revisoes;
-create policy proposta_revisoes_vendedor_insert on public.proposta_revisoes for insert to authenticated
-  with check (exists (select 1 from public.propostas p where p.id = proposta_id and p.vendedor_id = (select public.meu_analista_id())));
 drop policy if exists proposta_revisoes_gestor_select on public.proposta_revisoes;
 create policy proposta_revisoes_gestor_select on public.proposta_revisoes for select to authenticated
   using ((select public.is_gestor_comercial()));
@@ -156,9 +154,6 @@ create policy proposta_revisoes_gestor_select on public.proposta_revisoes for se
 drop policy if exists proposta_historico_vendedor_select on public.proposta_historico;
 create policy proposta_historico_vendedor_select on public.proposta_historico for select to authenticated
   using (exists (select 1 from public.propostas p where p.id = proposta_id and p.vendedor_id = (select public.meu_analista_id())));
-drop policy if exists proposta_historico_vendedor_insert on public.proposta_historico;
-create policy proposta_historico_vendedor_insert on public.proposta_historico for insert to authenticated
-  with check (exists (select 1 from public.propostas p where p.id = proposta_id and p.vendedor_id = (select public.meu_analista_id())));
 drop policy if exists proposta_historico_gestor_select on public.proposta_historico;
 create policy proposta_historico_gestor_select on public.proposta_historico for select to authenticated
   using ((select public.is_gestor_comercial()));
