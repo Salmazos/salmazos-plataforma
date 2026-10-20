@@ -73,6 +73,11 @@ function passa(linha, f) {
     case "in": return f.val.includes(v);
     case "is": return f.val === null ? v === null || v === undefined : v === f.val;
     case "notis": return f.val === null ? !(v === null || v === undefined) : v !== f.val;
+    // .not("etapa", "in", "(ganho,perdido)") — a lista chega como texto no formato do PostgREST.
+    case "notin": {
+      const lista = Array.isArray(f.val) ? f.val : String(f.val).replace(/^\(|\)$/g, "").split(",").map((x) => x.trim());
+      return !lista.includes(v);
+    }
     case "gt": return v !== null && v !== undefined && v > f.val;
     case "or": return f.val.some((sub) => passa(linha, sub));
     case "gte": return v !== null && v !== undefined && v >= f.val;
