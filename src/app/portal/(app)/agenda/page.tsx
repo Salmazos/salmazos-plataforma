@@ -24,7 +24,7 @@ export default async function PortalAgendaPage() {
   // ainda está "aguardando_agendamento_cliente" não tem data pra plotar aqui.
   const { data: encRows } = await service
     .from("encaminhamentos")
-    .select("id, data_entrevista, candidatos(nome_completo, cargo_pretendido), vagas(titulo)")
+    .select("id, data_entrevista, local_entrevista, candidatos(nome_completo, cargo_pretendido), vagas(titulo)")
     .eq("cliente_id", clienteUsuario.cliente_id)
     .eq("status", "aguardando")
     .not("data_entrevista", "is", null)
@@ -37,6 +37,7 @@ export default async function PortalAgendaPage() {
     candidato_nome: e.candidatos?.nome_completo ?? "Candidato",
     cargo_pretendido: e.candidatos?.cargo_pretendido ?? null,
     vaga_titulo: e.vagas?.titulo ?? null,
+    local_entrevista: e.local_entrevista ?? null,
   }));
 
   return <PortalAgendaClient eventos={eventos} />;

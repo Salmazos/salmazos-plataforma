@@ -4,6 +4,7 @@ import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import PortalAvaliacaoBtn from "@/components/PortalAvaliacaoBtn";
 import MatchScoreBadge from "@/components/MatchScoreBadge";
 import { BotaoCurriculo } from "@/components/BotaoCurriculo";
+import { dataEntrevistaParaCliente } from "@/lib/horaEntrevista";
 import type { MatchDetalhes } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +45,7 @@ export default async function PortalCandidatoPage({ params }: Props) {
   const { data: enc } = await service
     .from("encaminhamentos")
     .select(
-      `id, status, data_entrevista, feedback_cliente, avaliado_em, vaga_id,
+      `id, status, data_entrevista, local_entrevista, feedback_cliente, avaliado_em, vaga_id,
        candidatos(
          id, nome_completo, cargo_pretendido, cidade, estado,
          habilidades, resumo_profissional, resumo_candidato,
@@ -152,6 +153,13 @@ export default async function PortalCandidatoPage({ params }: Props) {
             <p className="text-xs text-gray-400 mt-0.5">
               {c.cidade} – {c.estado}
             </p>
+            {enc.data_entrevista && (
+              <p className="text-xs text-gray-500 mt-1 break-words">
+                {"📅"} Entrevista: {dataEntrevistaParaCliente(enc.data_entrevista) ?? "—"}
+                {" · "}
+                {"📍"} {enc.local_entrevista ?? "Local não informado"}
+              </p>
+            )}
             {matchScore != null && (
               <div className="mt-2">
                 <MatchScoreBadge score={matchScore} size="md" />

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { formatarData } from "@/lib/utils";
+import { dataEntrevistaParaCliente } from "@/lib/horaEntrevista";
 import { STATUS_ENCAMINHAMENTO, TIPOS_SERVICO } from "@/lib/constants";
 import type { Encaminhamento, StatusEncaminhamento } from "@/types";
 
@@ -131,7 +132,10 @@ function EncaminhamentoItem({
             {enc.cliente?.cidade && <span>{enc.cliente.cidade}</span>}
             {enc.cliente?.segmento && <span>· {enc.cliente.segmento}</span>}
             {enc.data_entrevista && (
-              <span>· Entrevista: {formatarData(enc.data_entrevista)}</span>
+              <span>· Entrevista: {dataEntrevistaParaCliente(enc.data_entrevista) ?? formatarData(enc.data_entrevista)}</span>
+            )}
+            {enc.data_entrevista && enc.local_entrevista && (
+              <span title={enc.local_entrevista}>· Local: {enc.local_entrevista}</span>
             )}
           </div>
           {enc.tipo_servico && (() => {

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { TURNOS_FUNCIONARIO } from "@/lib/constants";
 import { nomeArquivoCurriculoValido } from "@/lib/indicacaoEdicao";
 import { validarSenhaPortal, mensagemSenhaPortalInvalida } from "@/lib/senhaPortal";
+import { normalizarLocalEntrevista, LOCAL_ENTREVISTA_MAX } from "@/lib/localEntrevista";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -214,6 +215,8 @@ export const encaminhamentoCreateSchema = z.object({
   tipo_servico: z.string().optional(),
   observacoes: z.string().optional(),
   vaga_id: z.string().uuid().optional().nullable(),
+  // Opcional ao encaminhar: a normalização (trim, controles, 200 caracteres) acontece na rota antes de gravar.
+  local_entrevista: z.string().max(LOCAL_ENTREVISTA_MAX).optional().nullable(),
 }).refine(
   (data) => data.status === "aguardando_agendamento_cliente" || !!data.data_entrevista,
   { message: "Informe a data da entrevista.", path: ["data_entrevista"] }
@@ -223,6 +226,8 @@ export const encaminhamentoUpdateSchema = z.object({
   status: z.enum(["aguardando", "aprovado", "reprovado", "desistiu", "aguardando_agendamento_cliente"]).optional(),
   observacoes: z.string().optional(),
   data_entrevista: z.string().min(1).refine(v => !isNaN(Date.parse(v)), "Data inválida").optional(),
+  // Vazio/null limpa o campo; a normalização acontece na rota antes de gravar.
+  local_entrevista: z.string().max(LOCAL_ENTREVISTA_MAX).optional().nullable(),
 });
 
 // ── Candidato sub-routes ─────────────────────────────────────────────────────
@@ -906,6 +911,11 @@ export const portalAvaliarSchema = z.object({
 export const portalAgendarSchema = z.object({
   encaminhamento_id: z.string().uuid(),
   data_entrevista: z.string().min(1),
+  // Obrigatório no portal: depois de normalizar (trim, quebras de linha, espaços repetidos) não pode ficar vazio.
+  local_entrevista: z
+    .string()
+    .max(LOCAL_ENTREVISTA_MAX, `O local deve ter no máximo ${LOCAL_ENTREVISTA_MAX} caracteres.`)
+    .refine((v) => normalizarLocalEntrevista(v) !== null, "Informe o local da entrevista."),
 });
 
 // ── Indicação direta de candidato pelo cliente (portal) ────────────────────────

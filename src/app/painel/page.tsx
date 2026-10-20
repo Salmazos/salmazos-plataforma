@@ -89,6 +89,7 @@ export default async function PainelPage() {
     encaminhamento_tipo_servico: tipoServicoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`) ?? null,
     encaminhamento_status: agendamentoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`)?.status ?? null,
     encaminhamento_data_entrevista: agendamentoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`)?.data_entrevista ?? null,
+    encaminhamento_local_entrevista: agendamentoPorCandidatura.get(`${cv.candidatos.id}|${cv.vaga_id}`)?.local_entrevista ?? null,
     // candidatos_vagas.cliente_id é exceção manual (renegociação para outro cliente);
     // na ausência, o padrão é o cliente já vinculado à vaga.
     cliente_id: cv.cliente_id ?? cv.vagas.cliente_id ?? null,

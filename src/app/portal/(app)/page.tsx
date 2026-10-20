@@ -28,7 +28,7 @@ export default async function PortalPage() {
     service
       .from("encaminhamentos")
       .select(
-        "id, status, data_entrevista, feedback_cliente, avaliado_em, created_at, candidatos(id, nome_completo, cargo_pretendido, cidade, estado, habilidades)"
+        "id, status, data_entrevista, local_entrevista, feedback_cliente, avaliado_em, created_at, candidatos(id, nome_completo, cargo_pretendido, cidade, estado, habilidades)"
       )
       .eq("cliente_id", clienteId)
       .order("created_at", { ascending: false }),
@@ -102,6 +102,7 @@ export default async function PortalPage() {
       id: e.id,
       status: e.status,
       data_entrevista: e.data_entrevista,
+      local_entrevista: e.local_entrevista ?? null,
       feedback_cliente: e.feedback_cliente ?? undefined,
       avaliado_em: e.avaliado_em ?? undefined,
       match_score: matchMap[cid],

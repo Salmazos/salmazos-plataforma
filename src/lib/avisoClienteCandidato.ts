@@ -60,6 +60,7 @@ export async function avisarCandidatoEnviadoAoCliente(
     candidato_id: string | null;
     vaga_id: string | null;
     data_entrevista: string | null;
+    local_entrevista?: string | null;
   },
   leitura: LeituraEncaminhamentoAnterior
 ): Promise<boolean> {
@@ -90,6 +91,7 @@ export async function avisarCandidatoEnviadoAoCliente(
           candidato: (candidato.data as { nome_completo?: string | null } | null)?.nome_completo,
           vagaTitulo: (vaga.data as { titulo?: string | null } | null)?.titulo,
           entrevista: dataEntrevistaParaCliente(encaminhamento.data_entrevista),
+          local: encaminhamento.local_entrevista,
         }),
         link: `/portal/candidato/${encaminhamento.id}`,
         referencia_tipo: "encaminhamento",

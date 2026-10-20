@@ -1,6 +1,6 @@
 // Regras PURAS dos "Avisos ao cliente" (sino e popup no portal): sem imports de servidor, usadas
 // no servidor, nos componentes do portal e no script de verificação
-// (scripts/verificar-avisos-resolvedor.mts).
+// (scripts/verificar-avisos-resolvedor.mts, que roda com strip-types: este arquivo não pode importar outros .ts).
 
 export type CanalAvisoCliente = "sino" | "popup";
 
@@ -48,7 +48,33 @@ export function chaveDedupAviso(evento: string, referenciaId: string, versao: st
 
 const limitar = (texto: string, max: number) => (texto.length > max ? `${texto.slice(0, max - 1)}…` : texto);
 export const limitarTituloAviso = (t: string) => limitar(t.trim(), 120);
-export const limitarMensagemAviso = (t: string) => limitar(t.trim(), 400);
+const LIMITE_MENSAGEM_AVISO = 400;
+export const limitarMensagemAviso = (t: string) => limitar(t.trim(), LIMITE_MENSAGEM_AVISO);
+
+// Tamanho do local (texto livre, até 200 caracteres no banco) dentro de uma mensagem curta de sino.
+export const LOCAL_MAX_EM_AVISO = 80;
+
+// Local para mensagem curta: espaços colapsados e corte em `max` caracteres com reticências. null sem local.
+export function truncarLocalParaAviso(local: string | null | undefined, max: number = LOCAL_MAX_EM_AVISO): string | null {
+  const n = (local ?? "").replace(/\s+/g, " ").trim();
+  if (!n) return null;
+  const caracteres = Array.from(n);
+  return caracteres.length > max ? `${caracteres.slice(0, max - 1).join("").trimEnd()}…` : n;
+}
+
+// Acrescenta " — local: X" ao FIM da mensagem. A parte da data/candidato (`base`) nunca é cortada: o local é
+// truncado primeiro (80 caracteres) e, se ainda assim passar de `maxTotal`, encolhe até caber; sem espaço
+// razoável, o local é omitido. Sem local, devolve a mensagem exatamente como veio.
+export function anexarLocalAMensagem(base: string, local: string | null | undefined, maxTotal: number = LIMITE_MENSAGEM_AVISO): string {
+  const curto = truncarLocalParaAviso(local);
+  if (!curto) return base;
+  const prefixo = " — local: ";
+  const sobra = maxTotal - base.length - prefixo.length;
+  if (sobra < 10) return base;
+  const caracteres = Array.from(curto);
+  const final = caracteres.length > sobra ? `${caracteres.slice(0, sobra - 1).join("").trimEnd()}…` : curto;
+  return `${base}${prefixo}${final}`;
+}
 
 // Texto da decisão da indicação direta. Usa SÓ o que o cliente já vê em /portal/minhas-indicacoes:
 // nome do candidato que ele indicou, título da vaga e, na recusa, o motivo_recusa. Nunca quem decidiu.
@@ -81,18 +107,18 @@ export function textoAvisoCandidatoEnviado(o: {
   candidato?: string | null;
   vagaTitulo?: string | null;
   entrevista?: string | null;
+  // Local da entrevista (opcional): vai ao FIM, truncado, sem nunca cortar a data (ver anexarLocalAMensagem).
+  local?: string | null;
 }): { titulo: string; mensagem: string } {
   const nome = o.candidato?.trim();
   const vaga = o.vagaTitulo?.trim();
   const entrevista = o.entrevista?.trim();
-  return {
-    titulo: "Novo candidato para avaliar",
-    mensagem:
-      "Novo candidato para avaliar" +
-      (nome ? `: ${nome}` : "") +
-      (vaga ? ` — vaga ${vaga}` : "") +
-      (entrevista ? ` — entrevista em ${entrevista}` : ""),
-  };
+  const base =
+    "Novo candidato para avaliar" +
+    (nome ? `: ${nome}` : "") +
+    (vaga ? ` — vaga ${vaga}` : "") +
+    (entrevista ? ` — entrevista em ${entrevista}` : "");
+  return { titulo: "Novo candidato para avaliar", mensagem: entrevista ? anexarLocalAMensagem(base, o.local, LIMITE_MENSAGEM_AVISO) : base };
 }
 
 // Texto dos avisos "Entrevista agendada" e "Entrevista remarcada" (bloco 3). `antes` e `depois` já vêm
@@ -104,6 +130,8 @@ export function textoAvisoEntrevista(o: {
   vagaTitulo?: string | null;
   antes?: string | null;
   depois?: string | null;
+  // Local digitado pelo cliente/equipe: vai ao FIM da mensagem, truncado, sem nunca cortar a data (ver anexarLocalAMensagem).
+  local?: string | null;
 }): { titulo: string; mensagem: string } {
   const nome = o.candidato?.trim();
   const vaga = o.vagaTitulo?.trim();
@@ -114,7 +142,8 @@ export function textoAvisoEntrevista(o: {
   if (o.tipo === "agendada") quando = depois ? ` — ${depois}` : "";
   else if (antes && depois) quando = ` — de ${antes} para ${depois}`;
   else if (depois) quando = ` — para ${depois}`;
-  return { titulo, mensagem: `${titulo}${nome ? `: ${nome}` : ""}${vaga ? ` — vaga ${vaga}` : ""}${quando}` };
+  const base = `${titulo}${nome ? `: ${nome}` : ""}${vaga ? ` — vaga ${vaga}` : ""}${quando}`;
+  return { titulo, mensagem: anexarLocalAMensagem(base, o.local, LIMITE_MENSAGEM_AVISO) };
 }
 
 // Quando o POST de /api/encaminhamentos gera aviso ao cliente. `anterior` = o encaminhamento do mesmo
