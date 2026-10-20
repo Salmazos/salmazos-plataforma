@@ -79,6 +79,7 @@ export default function PortalAvaliacaoBtn({
   const [agendarAberto, setAgendarAberto] = useState(false);
   const [agendarData, setAgendarData] = useState("");
   const [agendarHora, setAgendarHora] = useState("");
+  const [agendarLocal, setAgendarLocal] = useState("");
   const [agendarSalvando, setAgendarSalvando] = useState(false);
   const [agendarErro, setAgendarErro] = useState("");
   const [agendarTentou, setAgendarTentou] = useState(false);
@@ -140,6 +141,7 @@ export default function PortalAvaliacaoBtn({
     if (acao === "aprovado" && precisaAgendar) {
       setAgendarData("");
       setAgendarHora("");
+      setAgendarLocal("");
       setAgendarErro("");
       setAgendarTentou(false);
       setAgendarAberto(true);
@@ -160,6 +162,10 @@ export default function PortalAvaliacaoBtn({
       setAgendarErro("Informe a data e o horário.");
       return;
     }
+    if (!agendarLocal.trim()) {
+      setAgendarErro("Informe o local da entrevista.");
+      return;
+    }
     const dataHora = new Date(`${agendarData}T${agendarHora}:00`);
     if (Number.isNaN(dataHora.getTime()) || dataHora.getTime() <= Date.now()) {
       setAgendarErro("Escolha uma data e horário no futuro.");
@@ -171,7 +177,7 @@ export default function PortalAvaliacaoBtn({
       const res = await fetch("/api/portal/agendar", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ encaminhamento_id: encaminhamentoId, data_entrevista: dataHora.toISOString() }),
+        body: JSON.stringify({ encaminhamento_id: encaminhamentoId, data_entrevista: dataHora.toISOString(), local_entrevista: agendarLocal.trim() }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -752,6 +758,17 @@ export default function PortalAvaliacaoBtn({
                   onChange={(e) => setAgendarHora(e.target.value)}
                   className="input-field w-full"
                   style={agendarTentou && !agendarHora ? inv : undefined}
+                />
+              </Field>
+              <Field label="Local" required>
+                <input
+                  type="text"
+                  value={agendarLocal}
+                  onChange={(e) => setAgendarLocal(e.target.value)}
+                  maxLength={200}
+                  placeholder="Ex.: Sala de RH, Rua das Flores, 100"
+                  className="input-field w-full"
+                  style={agendarTentou && !agendarLocal.trim() ? inv : undefined}
                 />
               </Field>
 

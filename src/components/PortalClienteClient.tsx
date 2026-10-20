@@ -18,6 +18,7 @@ export interface EncaminhamentoPortal {
   id: string;
   status: string;
   data_entrevista: string | null;
+  local_entrevista?: string | null;
   feedback_cliente?: string;
   avaliado_em?: string;
   match_score?: number;
@@ -248,6 +249,11 @@ export default function PortalClienteClient({ nomeCliente, encaminhamentos, emAv
                     <p className="text-xs mt-1 truncate" style={{ color: "#6B7280" }}>
                       {"📋"} {enc.vaga_titulo ?? "Banco de Talentos"}
                     </p>
+                    {enc.data_entrevista && (
+                      <p className="text-xs mt-1 truncate" style={{ color: "#6B7280" }} title={enc.local_entrevista ?? undefined}>
+                        {"📍"} {enc.local_entrevista ?? "Local não informado"}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
                     {enc.match_score != null && (

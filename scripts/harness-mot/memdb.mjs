@@ -8,6 +8,8 @@ const RELACOES = {
   rescisoes: { funcionarios: { alvo: "funcionarios", local: "funcionario_id" } },
   funcionarios: { clientes: { alvo: "clientes", local: "cliente_id" } },
   solicitacoes_indicacao_candidato: { vagas: { alvo: "vagas", local: "vaga_id" } },
+  // Local da entrevista (scripts/verificar-local-entrevista.mts): rotas de encaminhamentos e o cron "entrevista hoje".
+  encaminhamentos: { clientes: { alvo: "clientes", local: "cliente_id" }, candidatos: { alvo: "candidatos", local: "candidato_id" } },
 };
 
 export function criarDb(seed = {}) {

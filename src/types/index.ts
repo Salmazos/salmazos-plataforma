@@ -254,6 +254,7 @@ export interface KanbanCard {
   encaminhamento_tipo_servico: string | null;
   encaminhamento_status: string | null;
   encaminhamento_data_entrevista: string | null;
+  encaminhamento_local_entrevista: string | null;
   cliente_id: string | null;
   cliente_nome: string | null;
   processo_simplificado: boolean;
@@ -392,6 +393,7 @@ export interface Encaminhamento {
   candidato_id: string;
   cliente_id: string;
   data_entrevista: string | null;
+  local_entrevista?: string | null;
   status: StatusEncaminhamento;
   tipo_servico?: string;
   observacoes?: string;

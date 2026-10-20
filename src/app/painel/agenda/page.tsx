@@ -11,6 +11,7 @@ interface AgendaItem {
   id: string;
   candidato_id: string;
   data_entrevista: string;
+  local_entrevista?: string | null;
   status: string;
   tipo_servico: string | null;
   observacoes: string | null;
@@ -87,6 +88,7 @@ function generateICS(item: AgendaItem): string {
     `Candidato: ${escapeICS(candidatoNome)}`,
     vagaTitulo ? `Vaga: ${escapeICS(vagaTitulo)}` : "",
     clienteNome ? `Cliente: ${escapeICS(clienteNome)}` : "",
+    item.local_entrevista ? `Local: ${escapeICS(item.local_entrevista)}` : "",
     item.observacoes ? `Observações: ${escapeICS(item.observacoes)}` : "",
   ].filter(Boolean);
 
@@ -678,6 +680,7 @@ export default function AgendaPage() {
                   <th style={{ ...thStyle, textAlign: "left" }}>Cliente</th>
                   <th style={{ ...thStyle, textAlign: "left" }}>Vaga</th>
                   <th style={{ ...thStyle, textAlign: "center" }}>Data</th>
+                  <th style={{ ...thStyle, textAlign: "left" }}>Local</th>
                   <th style={{ ...thStyle, textAlign: "center" }}>Analista</th>
                   <th style={{ ...thStyle, textAlign: "center" }}>Status</th>
                   <th style={{ ...thStyle, textAlign: "center" }}></th>
@@ -762,6 +765,20 @@ export default function AgendaPage() {
                         }}
                       >
                         {fmtDate(item.data_entrevista)}
+                      </td>
+
+                      {/* Local */}
+                      <td
+                        style={{ padding: "10px 12px", fontSize: 13, color: "#6B7280", maxWidth: 200 }}
+                        title={item.local_entrevista ?? undefined}
+                      >
+                        {item.local_entrevista ? (
+                          <span style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {item.local_entrevista}
+                          </span>
+                        ) : (
+                          <span style={{ color: "#D1D5DB" }}>—</span>
+                        )}
                       </td>
 
                       {/* Analista */}

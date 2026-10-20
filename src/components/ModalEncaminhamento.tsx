@@ -26,6 +26,7 @@ interface Props {
     tipo_servico: string;
     observacoes: string;
     vaga_id?: string;
+    local_entrevista?: string;
   }) => Promise<void>;
 }
 
@@ -57,6 +58,7 @@ export default function ModalEncaminhamento({
   const [clienteId, setClienteId] = useState("");
   const [modoEnvio, setModoEnvio] = useState<"direto" | "agendamento">("direto");
   const [dataEntrevista, setDataEntrevista] = useState("");
+  const [localEntrevista, setLocalEntrevista] = useState("");
   const [tipoServico, setTipoServico] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [forcarEnvio, setForcarEnvio] = useState(false);
@@ -94,6 +96,7 @@ export default function ModalEncaminhamento({
     setClienteId(clienteIdInicial ?? "");
     setModoEnvio("direto");
     setDataEntrevista("");
+    setLocalEntrevista("");
     setTipoServico(tipoServicoInicial ?? "");
     setObservacoes("");
     setErro("");
@@ -164,6 +167,8 @@ export default function ModalEncaminhamento({
       await onConfirmar({
         cliente_id: clienteId,
         data_entrevista: precisaData ? dataEntrevista : null,
+        // Opcional: só vai quando a Salmazos já define a data aqui.
+        local_entrevista: precisaData && localEntrevista.trim() ? localEntrevista.trim() : undefined,
         status: precisaData ? "aguardando" : "aguardando_agendamento_cliente",
         tipo_servico: tipoServico,
         observacoes: obsCompleta,
@@ -446,6 +451,23 @@ export default function ModalEncaminhamento({
                   {tentouEnviar && !dataEntrevista && (
                     <p className="text-red-500 text-xs mt-1">Informe a data da entrevista.</p>
                   )}
+                </div>
+              )}
+
+              {/* Local (opcional) */}
+              {precisaData && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    Local da entrevista
+                  </label>
+                  <input
+                    type="text"
+                    value={localEntrevista}
+                    onChange={(e) => setLocalEntrevista(e.target.value)}
+                    maxLength={200}
+                    placeholder="Opcional. Ex.: Sala de RH, Rua das Flores, 100"
+                    className="input-field"
+                  />
                 </div>
               )}
 

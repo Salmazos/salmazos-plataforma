@@ -45,6 +45,7 @@ export async function avisarEntrevistaAoCliente(
     vaga_id: string | null;
     status: string | null;
     data_entrevista: string | null;
+    local_entrevista?: string | null;
   },
   leitura: LeituraEncaminhamentoAnterior
 ): Promise<boolean> {
@@ -78,6 +79,7 @@ export async function avisarEntrevistaAoCliente(
           vagaTitulo: (vaga.data as { titulo?: string | null } | null)?.titulo,
           antes: decisao.antes,
           depois: decisao.depois,
+          local: encaminhamento.local_entrevista,
         }),
         link: encaminhamento.status === "aguardando" ? "/portal/agenda" : `/portal/candidato/${encaminhamento.id}`,
         referencia_tipo: "encaminhamento",

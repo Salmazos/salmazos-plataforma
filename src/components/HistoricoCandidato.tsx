@@ -376,6 +376,17 @@ export default function HistoricoCandidato({ candidatoId }: Props) {
                         : ""}
                     </p>
                   )}
+                  {entry.metadata && entry.tipo === "encaminhamento" && entry.metadata.alteracao === "local_entrevista" && (
+                    <p style={{ margin: "4px 0 0", fontSize: 11, color: "#9CA3AF", wordBreak: "break-word" }}>
+                      Local alterado de {String(entry.metadata.local_entrevista_anterior ?? "não informado")} para{" "}
+                      {String(entry.metadata.local_entrevista ?? "não informado")}
+                    </p>
+                  )}
+                  {entry.metadata && entry.tipo === "encaminhamento" && entry.metadata.alteracao !== "local_entrevista" && entry.metadata.local_entrevista != null && (
+                    <p style={{ margin: "4px 0 0", fontSize: 11, color: "#9CA3AF", wordBreak: "break-word" }}>
+                      Local: {String(entry.metadata.local_entrevista)}
+                    </p>
+                  )}
                   {entry.metadata && entry.tipo === "etapa_alterada" && entry.metadata.etapa != null && (
                     <p style={{ margin: "4px 0 0", fontSize: 11, color: "#9CA3AF" }}>
                       Nova etapa: {String(entry.metadata.etapa).replace(/_/g, " ")}

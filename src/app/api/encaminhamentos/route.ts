@@ -4,6 +4,7 @@ import { registrarHistorico } from "@/lib/registrarHistorico";
 import { parseBody, encaminhamentoCreateSchema } from "@/lib/schemas";
 import { exigirContextoUnidade, podeVerUnidade, resolverUnidadeCliente } from "@/lib/unidadeAuth";
 import { normalizarDataEntrevista } from "@/lib/dataEntrevista";
+import { normalizarLocalEntrevista } from "@/lib/localEntrevista";
 import { avisarCandidatoEnviadoAoCliente, lerEncaminhamentoAnterior } from "@/lib/avisoClienteCandidato";
 import { avisarEntrevistaAoCliente } from "@/lib/avisoClienteEntrevista";
 
@@ -81,6 +82,9 @@ export async function POST(request: NextRequest) {
       candidato_id: parsed.data.candidato_id,
       cliente_id: parsed.data.cliente_id,
       data_entrevista: normalizarDataEntrevista(parsed.data.data_entrevista),
+      // Opcional ao encaminhar. No reencaminhamento (spread de `campos` abaixo) o null limpa o local do ciclo
+      // anterior, a menos que um novo local venha informado.
+      local_entrevista: normalizarLocalEntrevista(parsed.data.local_entrevista),
       status: parsed.data.status,
       tipo_servico: body.tipo_servico || null,
       observacoes: body.observacoes || null,
@@ -140,6 +144,7 @@ export async function POST(request: NextRequest) {
         encaminhamento_id: data.id,
         cliente_id: data.cliente_id,
         data_entrevista: data.data_entrevista,
+        ...(data.local_entrevista ? { local_entrevista: data.local_entrevista } : {}),
         tipo_servico: data.tipo_servico ?? null,
       },
     });

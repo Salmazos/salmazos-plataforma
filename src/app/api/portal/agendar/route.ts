@@ -6,6 +6,8 @@ import { avisarComResponsavel } from "@/lib/avisarComResponsavel";
 import { escaparHtml } from "@/lib/emailPacoteContabilidade";
 import { avisarPedidoCliente } from "@/lib/avisoPedidoCliente";
 import { parseBody, portalAgendarSchema } from "@/lib/schemas";
+import { normalizarLocalEntrevista } from "@/lib/localEntrevista";
+import { anexarLocalAMensagem } from "@/lib/avisoClienteRegras";
 
 // Fluxo leve e separado do /api/portal/avaliar: aqui o cliente só está
 // confirmando QUANDO pode receber o candidato pra entrevista — nenhuma
@@ -32,6 +34,9 @@ export async function PATCH(request: NextRequest) {
     const parsed = parseBody(portalAgendarSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const { encaminhamento_id, data_entrevista } = parsed.data;
+    // O schema já garante que o local não fica vazio depois de normalizar; a normalização em si é do servidor.
+    const localEntrevista = normalizarLocalEntrevista(parsed.data.local_entrevista);
+    if (!localEntrevista) return NextResponse.json({ error: "Informe o local da entrevista." }, { status: 400 });
 
     // Nunca confia só na validação do navegador do cliente pra "data no futuro".
     if (Number.isNaN(new Date(data_entrevista).getTime()) || new Date(data_entrevista).getTime() <= Date.now()) {
@@ -54,7 +59,7 @@ export async function PATCH(request: NextRequest) {
     // a mesma resposta de "já agendado" de cima, sem aviso.
     const { data: updated, error } = await service
       .from("encaminhamentos")
-      .update({ data_entrevista, status: "aguardando" })
+      .update({ data_entrevista, local_entrevista: localEntrevista, status: "aguardando" })
       .eq("id", encaminhamento_id)
       .eq("status", "aguardando_agendamento_cliente")
       .select()
@@ -80,8 +85,8 @@ export async function PATCH(request: NextRequest) {
     void registrarHistorico({
       candidato_id: enc.candidato_id,
       tipo: "agendamento_cliente",
-      descricao: `Cliente confirmou entrevista para ${dataFormatada}`,
-      metadata: { encaminhamento_id, cliente_id: clienteUsuario.cliente_id, data_entrevista },
+      descricao: `Cliente confirmou entrevista para ${dataFormatada} — local: ${localEntrevista}`,
+      metadata: { encaminhamento_id, cliente_id: clienteUsuario.cliente_id, data_entrevista, local_entrevista: localEntrevista },
     });
 
     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
@@ -99,6 +104,7 @@ export async function PATCH(request: NextRequest) {
     <table style="width:100%;border-collapse:collapse">
       <tr><td style="padding:8px 14px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6">Cliente</td><td style="padding:8px 14px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${escaparHtml(clienteNome)}</td></tr>
       <tr><td style="padding:8px 14px;font-weight:600;color:#6B7280;font-size:13px">Data e Horário</td><td style="padding:8px 14px;color:#111827;font-size:13px;font-weight:700">${dataFormatada}</td></tr>
+      <tr><td style="padding:8px 14px;font-weight:600;color:#6B7280;font-size:13px;border-top:1px solid #f3f4f6">Local</td><td style="padding:8px 14px;color:#111827;font-size:13px;border-top:1px solid #f3f4f6">${escaparHtml(localEntrevista)}</td></tr>
     </table>
     <div style="text-align:center;padding-top:24px;border-top:1px solid #f3f4f6;margin-top:20px">
       <a href="${SITE_URL}/painel/candidato/${enc.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil completo</a>
@@ -114,7 +120,8 @@ export async function PATCH(request: NextRequest) {
     // sem responsável vale o fallback de sempre (lista ou equipe da unidade). Sino e e-mail seguem os interruptores de
     // Configurações > Avisos. Nunca lança: o agendamento já está gravado.
     const tituloAviso = "Entrevista agendada pelo cliente";
-    const mensagemAviso = `${clienteNome} agendou a entrevista de ${candidatoNome} para ${dataFormatada}`;
+    // O local é truncado primeiro (anexarLocalAMensagem): a data nunca é cortada.
+    const mensagemAviso = anexarLocalAMensagem(`${clienteNome} agendou a entrevista de ${candidatoNome} para ${dataFormatada}`, localEntrevista);
     const subjectAviso = `📅 Entrevista agendada — ${candidatoNome} — ${clienteNome}`;
     await avisarComResponsavel(service, {
       evento: "agendamento_cliente",

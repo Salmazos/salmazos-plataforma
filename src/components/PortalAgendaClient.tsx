@@ -9,6 +9,7 @@ export interface EventoAgenda {
   candidato_nome: string;
   cargo_pretendido: string | null;
   vaga_titulo: string | null;
+  local_entrevista: string | null;
 }
 
 const MESES = [
@@ -185,6 +186,9 @@ export default function PortalAgendaClient({ eventos }: { eventos: EventoAgenda[
                       <p className="text-xs text-gray-500 truncate">
                         {ev.cargo_pretendido}
                         {ev.vaga_titulo && ` · ${ev.vaga_titulo}`}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate" title={ev.local_entrevista ?? undefined}>
+                        {"📍"} {ev.local_entrevista ?? "Local não informado"}
                       </p>
                     </div>
                     <span className="text-xs font-semibold text-gray-500 shrink-0">

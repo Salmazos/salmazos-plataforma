@@ -4,6 +4,8 @@ import { emailClienteLigado } from "@/lib/avisoCliente";
 import { destinatariosEmailCliente } from "@/lib/destinatariosEmailCliente";
 import { enviarEmailAoCliente } from "@/lib/enviarEmailAoCliente";
 import { horaEntrevistaReal } from "@/lib/horaEntrevista";
+import { escaparHtml } from "@/lib/emailPacoteContabilidade";
+import { normalizarLocalEntrevista } from "@/lib/localEntrevista";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +16,7 @@ interface EntrevistaHoje {
   candidato_nome: string;
   cargo: string | null;
   hora: string | null;
+  local: string | null;
 }
 
 export async function GET(request: Request) {
@@ -41,7 +44,7 @@ export async function GET(request: Request) {
     const { data: rows, error } = await supabase
       .from("encaminhamentos")
       .select(
-        "id, candidato_id, cliente_id, vaga_id, data_entrevista, candidatos(nome_completo, cargo_pretendido), clientes(nome, contato_email)"
+        "id, candidato_id, cliente_id, vaga_id, data_entrevista, local_entrevista, candidatos(nome_completo, cargo_pretendido), clientes(nome, contato_email)"
       )
       .eq("status", "aguardando")
       .gte("data_entrevista", inicioDia)
@@ -74,6 +77,7 @@ export async function GET(request: Request) {
         candidato_nome: r.candidatos?.nome_completo ?? "Candidato",
         cargo: r.candidatos?.cargo_pretendido ?? null,
         hora,
+        local: normalizarLocalEntrevista(r.local_entrevista),
       });
       porCliente.set(clienteId, entry);
     }
@@ -97,6 +101,7 @@ export async function GET(request: Request) {
             <td style="padding:8px 14px;font-weight:600;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${it.candidato_nome}</td>
             <td style="padding:8px 14px;color:#374151;font-size:13px;border-bottom:1px solid #f3f4f6">${it.cargo ?? "—"}</td>
             <td style="padding:8px 14px;color:#1D4ED8;font-weight:700;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">${it.hora ?? "—"}</td>
+            <td style="padding:8px 14px;color:#374151;font-size:13px;border-bottom:1px solid #f3f4f6">${it.local ? escaparHtml(it.local) : "—"}</td>
           </tr>`
         )
         .join("");
@@ -116,6 +121,7 @@ export async function GET(request: Request) {
         <td style="padding:8px 14px;font-weight:700;color:#6B7280;font-size:11px;text-transform:uppercase">Candidato</td>
         <td style="padding:8px 14px;font-weight:700;color:#6B7280;font-size:11px;text-transform:uppercase">Cargo</td>
         <td style="padding:8px 14px;font-weight:700;color:#6B7280;font-size:11px;text-transform:uppercase">Horário</td>
+        <td style="padding:8px 14px;font-weight:700;color:#6B7280;font-size:11px;text-transform:uppercase">Local</td>
       </tr>
       ${linhas}
     </table>

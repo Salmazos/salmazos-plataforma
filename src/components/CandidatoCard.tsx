@@ -13,7 +13,7 @@ import { getProximasEtapas, getComportamentoEtapa, getEtapaLabel, getEtapaAnteri
 import { useUsuarioLogado, unidadeDaTela } from "./UsuarioLogadoProvider";
 import { nomesCompletosDaUnidade, opcoesResponsavel } from "@/lib/responsaveis";
 import { Pencil } from "lucide-react";
-import { horaEntrevistaReal } from "@/lib/horaEntrevista";
+import { horaEntrevistaReal, dataEntrevistaParaCliente } from "@/lib/horaEntrevista";
 
 type Analista = { id: string; nome_completo: string; email: string };
 
@@ -51,6 +51,7 @@ export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Prop
   const [modalRemarcar, setModalRemarcar] = useState(false);
   const [dataRemarcar, setDataRemarcar] = useState("");
   const [horaRemarcar, setHoraRemarcar] = useState("");
+  const [localRemarcar, setLocalRemarcar] = useState("");
   const [salvarRemarcar, setSalvarRemarcar] = useState(false);
   const [erroRemarcar, setErroRemarcar] = useState("");
 
@@ -150,7 +151,7 @@ export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Prop
               <div className="mt-0.5">
                 {card.encaminhamento_data_entrevista ? (
                   <div className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                    <span>{"📅"} {formatarData(card.encaminhamento_data_entrevista)}</span>
+                    <span>{"📅"} {dataEntrevistaParaCliente(card.encaminhamento_data_entrevista) ?? formatarData(card.encaminhamento_data_entrevista)}</span>
                     <button
                       onClick={() => {
                         const iso = card.encaminhamento_data_entrevista!;
@@ -166,7 +167,10 @@ export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Prop
                         setDataRemarcar(dataFormatada);
 
                         const hora = horaEntrevistaReal(iso);
-                        setHoraRemarcar(hora ? hora.replace(":", "") : "");
+                        // O input type="time" exige "HH:MM"; sem os dois pontos o valor era inválido e o PATCH
+                        // da data falhava ("Data inválida") em entrevista com horário real.
+                        setHoraRemarcar(hora ?? "");
+                        setLocalRemarcar(card.encaminhamento_local_entrevista ?? "");
 
                         setErroRemarcar("");
                         setModalRemarcar(true);
@@ -182,6 +186,14 @@ export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Prop
                     {"⏳"} Aguardando agendamento do cliente
                   </span>
                 ) : null}
+                {card.encaminhamento_data_entrevista && card.encaminhamento_local_entrevista && (
+                  <p
+                    className="mt-0.5 text-[10px] text-blue-700 truncate"
+                    title={card.encaminhamento_local_entrevista}
+                  >
+                    {"📍"} {card.encaminhamento_local_entrevista}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -355,6 +367,20 @@ export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Prop
               />
               <p className="text-xs text-gray-500 mt-1">Se vazio, será preenchido com 12:00 (meio-dia)</p>
             </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Local (opcional)
+              </label>
+              <input
+                type="text"
+                value={localRemarcar}
+                onChange={(e) => setLocalRemarcar(e.target.value)}
+                maxLength={200}
+                disabled={salvarRemarcar}
+                placeholder="Ex.: Sala de RH, Rua das Flores, 100"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+              />
+            </div>
             {erroRemarcar && (
               <div className="mb-4 p-2 bg-red-50 border border-red-200 rounded-md">
                 <p className="text-sm text-red-700">{erroRemarcar}</p>
@@ -391,7 +417,7 @@ export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Prop
                     const res = await fetch(`/api/encaminhamentos/${card.encaminhamento_id}`, {
                       method: "PATCH",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ data_entrevista: novaData }),
+                      body: JSON.stringify({ data_entrevista: novaData, local_entrevista: localRemarcar }),
                     });
                     if (!res.ok) {
                       const json = await res.json().catch(() => ({}));
