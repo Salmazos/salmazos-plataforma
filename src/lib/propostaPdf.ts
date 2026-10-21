@@ -22,6 +22,7 @@ const ESPACO_ENTRE_LOGOS = 12;
 const LIMITE_CACHE = 64;
 const ALTURA_LOGO_CABECALHO = 50;
 const LARGURA_MAX_LOGO_CABECALHO_PX = 800;
+const LADO_MAXIMO_ENTRADA_PX = 1200;
 
 const ALTURA_CABECALHO_CHEIO = 90;
 const ALTURA_CABECALHO_COMPACTO = 32;
@@ -41,10 +42,35 @@ export function formatarDataBr(iso: string): string {
   return `${d}/${m}/${a}`;
 }
 
-function quebrar(texto: string, font: PDFFont, size: number, largura: number): string[] {
+// Palavra mais larga que a linha (endereço, CNPJ, e-mail sem espaço) é dividida por caractere, como último recurso,
+// em vez de passar da margem.
+function dividirPalavra(palavra: string, font: PDFFont, size: number, largura: number): string[] {
+  const partes: string[] = [];
+  let atual = "";
+  for (const ch of palavra) {
+    const tentativa = atual + ch;
+    if (atual && font.widthOfTextAtSize(tentativa, size) > largura) {
+      partes.push(atual);
+      atual = ch;
+    } else {
+      atual = tentativa;
+    }
+  }
+  if (atual) partes.push(atual);
+  return partes;
+}
+
+export function quebrar(texto: string, font: PDFFont, size: number, largura: number): string[] {
   const linhas: string[] = [];
   let linha = "";
   for (const palavra of limpar(texto).split(" ")) {
+    if (font.widthOfTextAtSize(palavra, size) > largura) {
+      if (linha) linhas.push(linha);
+      const partes = dividirPalavra(palavra, font, size, largura);
+      linhas.push(...partes.slice(0, -1));
+      linha = partes[partes.length - 1] ?? "";
+      continue;
+    }
     const tentativa = linha ? `${linha} ${palavra}` : palavra;
     if (linha && font.widthOfTextAtSize(tentativa, size) > largura) {
       linhas.push(linha);
@@ -78,8 +104,10 @@ async function listarArquivos(pasta: string, extensoes: string[]): Promise<strin
 }
 
 // Fundo branco, sem margem em volta e dentro da caixa 300x120 (até 2x de ampliação), sempre em PNG.
+// Reduz primeiro (as margens encolhem junto): logos de milhares de pixels não passam inteiros pelo flatten e pelo trim.
 export async function prepararLogoCliente(bytes: Buffer): Promise<Buffer> {
-  const achatada = await sharp(bytes).flatten({ background: "#ffffff" }).png().toBuffer();
+  const reduzida = await sharp(bytes).resize({ width: LADO_MAXIMO_ENTRADA_PX, height: LADO_MAXIMO_ENTRADA_PX, fit: "inside", withoutEnlargement: true }).png().toBuffer();
+  const achatada = await sharp(reduzida).flatten({ background: "#ffffff" }).png().toBuffer();
   let base = achatada;
   try {
     const aparada = await sharp(achatada).trim({ threshold: 10 }).toBuffer();

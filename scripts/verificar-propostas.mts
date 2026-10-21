@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
-import { PDFDocument, PDFName, PDFRawStream } from "pdf-lib";
+import { PDFDocument, PDFName, PDFRawStream, StandardFonts } from "pdf-lib";
 import {
   SITUACOES, TRANSICOES, podeTransicionar, ehFinal, modoEdicao, modeloDisponivel, somarDiasUteis, calcularValidadeAte,
   diasRestantes, deveVencer, formatarNumeroProposta, numeroComRevisao, etapaAposSituacao, textoFollowUp,
@@ -18,7 +18,8 @@ import {
 import { hojeSaoPaulo } from "@/lib/comercial";
 import { ENDERECOS_RODAPE_PROPOSTA } from "@/lib/propostaAssets";
 import { ENDERECO_FISCAL_SALMAZOS } from "@/lib/admissaoConstants";
-import { gerarPdfProposta, calcularGrade, carregarLogosClientes, prepararLogoCliente, CAIXA_LOGO_W, CAIXA_LOGO_H } from "@/lib/propostaPdf";
+import { gerarPdfProposta, calcularGrade, carregarLogosClientes, prepararLogoCliente, quebrar, CAIXA_LOGO_W, CAIXA_LOGO_H } from "@/lib/propostaPdf";
+import { CW } from "@/lib/pdfWriter";
 import * as rotaLista from "@/app/api/comercial/propostas/route";
 import * as rotaId from "@/app/api/comercial/propostas/[id]/route";
 import * as rotaSit from "@/app/api/comercial/propostas/[id]/situacao/route";
@@ -288,6 +289,42 @@ await caso("grade: PNG com transparência vira fundo branco (sem alfa) e a marge
   assert.deepEqual([data[0], data[1], data[2]], [0, 0, 0], "o primeiro pixel já é o logo (margem aparada)");
   assert.equal(info.channels, 3);
 });
+await caso("grade: logo GRANDE (3375x6000 RGBA com margens transparentes) cabe na caixa 300x120, sem alfa e com a margem aparada", async () => {
+  const bloco = await sharp({ create: { width: 2000, height: 700, channels: 4, background: "#cc2222" } }).png().toBuffer();
+  const grande = await sharp({ create: { width: 3375, height: 6000, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: bloco, left: 700, top: 2500 }]).png().toBuffer();
+  const saida = await prepararLogoCliente(grande);
+  const m = await sharp(saida).metadata();
+  assert.ok(m.width! <= CAIXA_LOGO_W && m.height! <= CAIXA_LOGO_H, `${m.width}x${m.height}`);
+  assert.equal(m.width, CAIXA_LOGO_W, "o lado limitante encosta na caixa");
+  assert.equal(m.hasAlpha, false);
+  const { data, info } = await sharp(saida).raw().toBuffer({ resolveWithObject: true });
+  const px = (x: number, y: number) => [data[(y * info.width + x) * info.channels], data[(y * info.width + x) * info.channels + 1], data[(y * info.width + x) * info.channels + 2]];
+  // A proporção do logo (2000x700) se mantém sem sobra de margem: 300 de largura dá ~105 de altura (a borda suaviza 1px).
+  assert.ok(Math.abs(m.height! - 105) <= 2, `altura ${m.height}`);
+  for (const [x, y] of [[3, 3], [info.width - 4, 3], [3, info.height - 4], [info.width - 4, info.height - 4]]) {
+    const [r, g, b] = px(x, y);
+    assert.ok(r > 180 && g < 80 && b < 80, `a 3px do canto (${x},${y}) já é o logo, sem margem branca: ${[r, g, b]}`);
+  }
+});
+await caso("quebra: palavra sem espaços (endereço de 120 caracteres) é dividida por caractere e nenhuma linha passa da margem", async () => {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const longa = "Rua".padEnd(120, "abcdefghijklmnopqrstuvwxyz");
+  assert.equal(longa.length, 120);
+  for (const [texto, largura] of [[longa, CW], [`Endereço: ${longa} fim`, CW], [longa, CW - 60], ["a ".repeat(30) + longa, 200]] as [string, number][]) {
+    const linhas = quebrar(texto, font, 10.5, largura);
+    assert.ok(linhas.length >= 2, "precisou quebrar");
+    for (const l of linhas) assert.ok(font.widthOfTextAtSize(l, 10.5) <= largura + 1e-6, `linha de ${font.widthOfTextAtSize(l, 10.5).toFixed(1)}pt > ${largura}: ${l}`);
+    assert.equal(linhas.join("").replace(/ /g, ""), texto.replace(/ /g, ""), "nenhum caractere se perde");
+  }
+  assert.deepEqual(quebrar("curto e normal", font, 10.5, CW), ["curto e normal"]);
+});
+await caso("quebra: o PDF com endereço de 120 caracteres sem espaço é gerado (sem estourar)", async () => {
+  const s2 = { ...snapBase, cliente_endereco: "R".repeat(120), cliente_cnpj: "9".repeat(120) };
+  const bytes = await gerarPdfProposta(s2, { pastaCabecalho: path.join(tmp, "x"), pastaClientes: path.join(tmp, "x") });
+  assert.equal(new TextDecoder().decode(bytes.slice(0, 5)), "%PDF-");
+});
 await caso("grade: células iguais, 4 por linha, última linha centralizada (14 logos = 4+4+4+2)", () => {
   const g = calcularGrade(14);
   assert.deepEqual(g.linhas.map((l) => l.xs.length), [4, 4, 4, 2]);
@@ -387,6 +424,7 @@ function novoDb(extra: Record<string, unknown[]> = {}) {
   db.rpcs = { criar_proposta: rpcCriarProposta };
   db.rpcChamadas = [];
   db.imutaveis = IMUTAVEIS;
+  db.cascatas = { oportunidades: [{ tabela: "oportunidade_interacoes", col: "oportunidade_id" }] };
   db.unicos = undefined;
   return db;
 }
@@ -520,6 +558,44 @@ await caso("enviar: empresa sem oportunidade aberta → CRIA oportunidade em pro
   assert.equal(rev.conteudo.data_emissao, HOJE);
   assert.equal(rev.conteudo.validade_ate, p.validade_ate);
   assert.ok(db.tabelas.proposta_historico.some((h: any) => h.de === "rascunho" && h.para === "enviada" && h.autor_id === V));
+});
+const CLIENTE = "99999999-9999-4999-8999-aaaaaaaaaaaa";
+await caso("enviar: oportunidade CRIADA leva o cliente_id da empresa (quando existe) e a anotação de origem no histórico do Funil", async () => {
+  const db = novoDb();
+  db.tabelas.empresas_visitadas.find((e: any) => e.id === EMP).cliente_id = CLIENTE;
+  const { id, r, numero } = await enviar(db);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const o = opps(db)[0];
+  assert.equal(o.cliente_id, CLIENTE);
+  const notas = db.tabelas.oportunidade_interacoes.filter((i: any) => i.oportunidade_id === o.id);
+  assert.equal(notas.length, 1);
+  assert.deepEqual({ tipo: notas[0].tipo, autor: notas[0].autor_id, desc: notas[0].descricao }, { tipo: "anotacao", autor: V, desc: `Oportunidade criada ao marcar a proposta ${numero} como enviada.` });
+  assert.equal(proposta(db, id).oportunidade_id, o.id);
+});
+await caso("enviar: empresa sem cliente vinculado → cliente_id null; falha ao gravar a anotação só registra erro (não desfaz o envio)", async () => {
+  const db = novoDb();
+  const erros: string[] = [];
+  const original = console.error;
+  console.error = (...a: unknown[]) => { erros.push(a.join(" ")); };
+  try {
+    db.falhas["oportunidade_interacoes.insert"] = "boom";
+    const { id, r } = await enviar(db);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(proposta(db, id).situacao, "enviada");
+    assert.equal(opps(db)[0].cliente_id, null);
+    assert.equal(db.tabelas.oportunidade_interacoes.length, 0);
+  } finally { console.error = original; }
+  assert.ok(erros.some((e) => e.includes("Anotação de origem")), "registrou o erro");
+});
+await caso("enviar: se a Rev. 0 falhar, o desfazer remove a oportunidade criada E o histórico dela (cascata); a anotação de origem não sobra", async () => {
+  const db = novoDb();
+  const c = await criar(db);
+  db.falhas["proposta_revisoes.insert"] = "boom";
+  const r = await situacao(db, c.body.data.id, { para: "enviada", valor_estimado: 5000 });
+  assert.equal(r.status, 500);
+  assert.equal(opps(db).length, 0);
+  assert.equal(db.tabelas.oportunidade_interacoes.length, 0, "interações da oportunidade apagada caíram junto");
+  assert.equal(proposta(db, c.body.data.id).situacao, "rascunho");
 });
 await caso("enviar: oportunidade aberta do próprio vendedor em fase anterior → MOVE para proposta_enviada (mesmo id, sem segunda)", async () => {
   const o = SEMENTE_OPP({ etapa: "contato_feito" });

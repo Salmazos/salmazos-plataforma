@@ -302,12 +302,13 @@ async function efeitoEnviada(
     };
   } else {
     // Só havia oportunidade ganha/perdida (ou nenhuma): abre uma nova, sem reabrir a antiga.
+    const { data: empresa } = await svc.from("empresas_visitadas").select("cliente_id").eq("id", p.empresa_visitada_id).maybeSingle();
     const { data, error } = await svc.from("oportunidades").insert({
       unidade_id: p.unidade_id,
       vendedor_id: ctx.analistaId,
       empresa: p.cliente_nome,
       empresa_visitada_id: p.empresa_visitada_id,
-      cliente_id: null,
+      cliente_id: empresa?.cliente_id ?? null,
       contato_nome: p.aos_cuidados ?? null,
       origem: "outro",
       servico_interesse: servico,
@@ -321,6 +322,15 @@ async function efeitoEnviada(
       return falha(500, `Não foi possível criar a oportunidade no Funil: ${error?.message ?? "sem retorno"}`);
     }
     oportunidade = data;
+    // Deixa a origem visível no card do Funil. Só registra: se falhar não desfaz nada.
+    const { error: origemErr } = await svc.from("oportunidade_interacoes").insert({
+      oportunidade_id: data.id,
+      autor_id: ctx.analistaId,
+      tipo: "anotacao",
+      descricao: `Oportunidade criada ao marcar a proposta ${p.numero} como enviada.`,
+    });
+    if (origemErr) console.error("[propostas] Anotação de origem da oportunidade não gravada:", origemErr.message);
+    // As interações da oportunidade caem junto (oportunidade_interacoes.oportunidade_id é ON DELETE CASCADE).
     desfazerOportunidade = async () => {
       await svc.from("oportunidades").delete().eq("id", data.id);
     };

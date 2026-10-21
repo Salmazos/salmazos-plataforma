@@ -125,6 +125,8 @@ export default function PropostaDetalheClient({ id, avisoInicial }: { id: string
   const aberta = d.situacao === "enviada" || d.situacao === "em_negociacao";
   const escreve = !somenteLeitura;
   const urlPdf = `/api/comercial/propostas/${d.id}/pdf`;
+  // Rascunho gera do conteúdo atual; as demais só têm PDF se foram enviadas (têm revisão). Cancelada sem nunca ter sido enviada não tem.
+  const temPdf = d.situacao === "rascunho" || d.revisoes.length > 0;
   const par = (rotulo: string, valor: React.ReactNode) => (
     <div><div style={{ fontSize: 12, color: "#6B7280", fontWeight: 600 }}>{rotulo}</div><div style={{ fontSize: 14, color: "#111827" }}>{valor || "—"}</div></div>
   );
@@ -142,7 +144,7 @@ export default function PropostaDetalheClient({ id, avisoInicial }: { id: string
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <a href={urlPdf} target="_blank" rel="noopener noreferrer" style={{ ...btnSecundario, textDecoration: "none", display: "inline-block" }}>{d.situacao === "rascunho" ? "Gerar PDF do rascunho" : `Gerar PDF (Rev. ${d.revisao_atual})`}</a>
+          {temPdf && <a href={urlPdf} target="_blank" rel="noopener noreferrer" style={{ ...btnSecundario, textDecoration: "none", display: "inline-block" }}>{d.situacao === "rascunho" ? "Gerar PDF do rascunho" : `Gerar PDF (Rev. ${d.revisao_atual})`}</a>}
           {escreve && podeEditar && !editando && <button style={btnSecundario} onClick={abrirEdicao}>Editar</button>}
           {escreve && d.situacao === "rascunho" && <button style={btnPrimario} onClick={() => setModalEnviada(true)}>Marcei como enviada</button>}
           {escreve && d.situacao === "enviada" && <button style={btnSecundario} onClick={() => setAcao("em_negociacao")}>Em negociação</button>}

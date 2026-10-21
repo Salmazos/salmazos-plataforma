@@ -267,6 +267,11 @@ class Consulta {
     }
     if (this.op === "delete") {
       this.db.tabelas[this.tabela] = tabela.filter((l) => !alvos.includes(l));
+      // db.cascatas = { tabela: [{ tabela, col }] }: imita ON DELETE CASCADE das chaves estrangeiras.
+      for (const c of this.db.cascatas?.[this.tabela] ?? []) {
+        const ids = alvos.map((l) => l.id);
+        this.db.tabelas[c.tabela] = (this.db.tabelas[c.tabela] ?? []).filter((x) => !ids.includes(x[c.col]));
+      }
       return this.retorna ? this.finalizar(alvos.map((l) => projetar(l, interpretarSelect(this.cols).colunas))) : { data: null, error: null };
     }
     throw new Error(`op não suportada: ${this.op}`);
