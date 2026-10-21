@@ -28,23 +28,31 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
   // Carteira da unidade do vendedor (a rota já filtra por unidade). Uma busca por pausa na digitação, sem repetição automática.
   useEffect(() => {
     if (temporizador.current) clearTimeout(temporizador.current);
+    // O clearTimeout só cancela a busca que ainda não saiu; `cancelado` descarta a resposta de uma que já estava em andamento.
+    let cancelado = false;
     temporizador.current = setTimeout(async () => {
       try {
         const r = await lerResposta<{ data: EmpresaOpc[] }>(await fetch(`/api/comercial/empresas?q=${encodeURIComponent(busca.trim())}`));
+        if (cancelado) return;
         if (r.ok) { setEmpresas(r.json.data ?? []); setErroBusca(""); }
         else setErroBusca(r.json.error ?? "Não foi possível buscar as empresas.");
       } catch {
+        if (cancelado) return;
         setErroBusca("Não foi possível buscar as empresas.");
       }
     }, busca ? 300 : 0);
-    return () => { if (temporizador.current) clearTimeout(temporizador.current); };
+    return () => {
+      cancelado = true;
+      if (temporizador.current) clearTimeout(temporizador.current);
+    };
   }, [busca]);
 
   function escolher(e: EmpresaOpc) {
     setEmpresa(e);
     const principal = e.contatos.find((c) => c.principal) ?? e.contatos[0];
     setContatoId(principal?.id ?? "");
-    setCampos((c) => ({ ...c, aos_cuidados: principal?.nome ?? c.aos_cuidados }));
+    // Recomeça do zero: A/C, CNPJ, endereço e condições da empresa anterior não podem vazar para esta.
+    setCampos({ ...camposPadrao(), aos_cuidados: principal?.nome ?? "" });
   }
 
   // A lista da Carteira só traz o NOME do vendedor da oportunidade aberta: é o que dá para comparar aqui.
