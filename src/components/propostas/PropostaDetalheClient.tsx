@@ -7,7 +7,7 @@ import { formatarPct, PADROES_RS, type CondicoesRs } from "@/lib/propostaModelos
 import CamposProposta, { camposDeProposta, conteudoDoForm, validadeDoForm, type CamposForm } from "@/components/propostas/CamposProposta";
 import ModalMarcarEnviada from "@/components/propostas/ModalMarcarEnviada";
 import ModalSituacaoProposta, { type AcaoSituacao } from "@/components/propostas/ModalSituacaoProposta";
-import { Aviso, btnPerigo, btnPrimario, btnSecundario, cardStyle, fmtData, fmtDataHora, fmtMoeda, lerResposta, SituacaoBadge, ValidadeTexto } from "@/components/propostas/propostasUi";
+import { Aviso, btnPerigo, btnPrimario, btnSecundario, cardStyle, fmtData, fmtDataHora, fmtMoeda, lerEApagarAvisoProposta, lerResposta, SituacaoBadge, ValidadeTexto } from "@/components/propostas/propostasUi";
 
 interface Revisao { id: string; revisao: number; template_versao: number; vendedor_nome: string | null; created_at: string }
 interface Historico { id: string; de: string | null; para: string; autor_nome: string | null; observacao: string | null; created_at: string }
@@ -24,14 +24,14 @@ const ROTULO_HISTORICO = (h: Historico) =>
   : h.de === h.para ? "Revisão emitida"
   : `${ROTULO_SITUACAO[h.de as SituacaoProposta] ?? h.de} → ${ROTULO_SITUACAO[h.para as SituacaoProposta] ?? h.para}`;
 
-export default function PropostaDetalheClient({ id, avisoInicial }: { id: string; avisoInicial: string | null }) {
+export default function PropostaDetalheClient({ id }: { id: string }) {
   const [d, setD] = useState<Detalhe | null>(null);
   const [hoje, setHoje] = useState("");
   const [podeEditar, setPodeEditar] = useState(false);
   const [somenteLeitura, setSomenteLeitura] = useState(true);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(true);
-  const [aviso, setAviso] = useState<string | null>(avisoInicial);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [editando, setEditando] = useState(false);
   const [form, setForm] = useState<CamposForm | null>(null);
   const [contatos, setContatos] = useState<Contato[]>([]);
@@ -58,6 +58,10 @@ export default function PropostaDetalheClient({ id, avisoInicial }: { id: string
     }
   }, [id]);
   useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => {
+    const a = lerEApagarAvisoProposta(id);
+    if (a) setAviso(a);
+  }, [id]);
 
   async function abrirEdicao() {
     if (!d) return;

@@ -45,7 +45,7 @@ export default function ModalSituacaoProposta({ acao, onClose, onConfirmar }: Pr
   }
 
   return (
-    <Modal titulo={t.titulo} onClose={onClose}>
+    <Modal titulo={t.titulo} onClose={onClose} bloqueado={enviando}>
       <p style={{ margin: "0 0 12px", fontSize: 14, color: "#374151" }}>{t.explicacao}</p>
       {acao === "recusada" && (
         <div style={{ marginBottom: 12 }}>

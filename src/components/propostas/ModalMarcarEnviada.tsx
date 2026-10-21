@@ -41,7 +41,7 @@ export default function ModalMarcarEnviada({ numero, clienteNome, condicoes, val
   );
 
   return (
-    <Modal titulo="Marcei como enviada" onClose={onClose}>
+    <Modal titulo="Marcei como enviada" onClose={onClose} bloqueado={enviando}>
       <div style={{ marginBottom: 14 }}>
         <label style={labelStyle}>Valor estimado da proposta *</label>
         <CampoMoeda value={valor || null} onChange={setValor} placeholder="R$ 0,00" style={{ padding: "9px 12px", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 14, width: "100%", boxSizing: "border-box" }} />

@@ -5,13 +5,12 @@ import PropostaDetalheClient from "@/components/propostas/PropostaDetalheClient"
 
 export const dynamic = "force-dynamic";
 
-export default async function PropostaDetalhePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ aviso?: string }> }) {
+export default async function PropostaDetalhePage({ params }: { params: Promise<{ id: string }> }) {
   const supabaseAuth = await createClient();
   const { data: { user } } = await supabaseAuth.auth.getUser();
   if (!user) redirect("/login");
   if (!(await podeAcessarFunilComercial(user))) redirect("/painel");
 
   const { id } = await params;
-  const { aviso } = await searchParams;
-  return <PropostaDetalheClient id={id} avisoInicial={aviso ?? null} />;
+  return <PropostaDetalheClient id={id} />;
 }

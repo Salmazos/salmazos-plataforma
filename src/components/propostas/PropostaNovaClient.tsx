@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { rotuloEtapa } from "@/lib/comercialRotulos";
 import { MODELOS, MODELOS_ATIVOS, ROTULO_MODELO, type ModeloProposta } from "@/lib/propostas";
 import CamposProposta, { camposPadrao, conteudoDoForm, validadeDoForm, type CamposForm } from "@/components/propostas/CamposProposta";
-import { Aviso, btnPrimario, btnSecundario, cardStyle, inputStyle, labelStyle, lerResposta } from "@/components/propostas/propostasUi";
+import { Aviso, btnPrimario, btnSecundario, cardStyle, inputStyle, labelStyle, lerResposta, guardarAvisoProposta } from "@/components/propostas/propostasUi";
 
 interface Contato { id: string; nome: string; cargo: string | null; principal: boolean }
 interface EmpresaOpc { id: string; nome: string; contatos: Contato[]; oportunidade_aberta: { id: string; vendedor_nome: string | null; etapa: string } | null }
@@ -74,7 +74,8 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
       }));
       if (!r.ok) { setErro(r.json.error ?? "Não foi possível criar a proposta."); return; }
       navegou = true;
-      router.push(`/painel/comercial/propostas/${r.json.data.id}${r.json.aviso ? `?aviso=${encodeURIComponent(r.json.aviso)}` : ""}`);
+      guardarAvisoProposta(r.json.data.id, r.json.aviso);
+      router.push(`/painel/comercial/propostas/${r.json.data.id}`);
     } catch {
       setErro("Não foi possível criar a proposta.");
     } finally {

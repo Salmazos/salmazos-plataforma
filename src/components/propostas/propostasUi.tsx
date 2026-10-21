@@ -67,13 +67,15 @@ export function ValidadeTexto({ validadeAte, situacao, hoje }: { validadeAte: st
   return <span style={{ color: critico ? "#B91C1C" : "#374151", fontWeight: critico ? 700 : 400 }}>{fmtData(validadeAte)}{sufixo}</span>;
 }
 
-export function Modal({ titulo, onClose, children, largo }: { titulo: string; onClose: () => void; children: React.ReactNode; largo?: boolean }) {
+// `bloqueado` ignora o fechamento (fundo escuro e X) enquanto uma gravação está em andamento: fechar a janela não cancelaria a requisição.
+export function Modal({ titulo, onClose, children, largo, bloqueado }: { titulo: string; onClose: () => void; children: React.ReactNode; largo?: boolean; bloqueado?: boolean }) {
+  const fechar = () => { if (!bloqueado) onClose(); };
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={fechar}>
       <div style={{ background: "#fff", borderRadius: 14, padding: 22, width: "100%", maxWidth: largo ? 720 : 520, maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#111827" }}>{titulo}</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#6B7280" }} aria-label="Fechar">×</button>
+          <button onClick={fechar} disabled={bloqueado} style={{ background: "none", border: "none", fontSize: 22, cursor: bloqueado ? "not-allowed" : "pointer", color: "#6B7280" }} aria-label="Fechar">×</button>
         </div>
         {children}
       </div>
@@ -91,4 +93,18 @@ export async function lerResposta<T = Record<string, unknown>>(r: Response): Pro
   let json = {} as T & { error?: string };
   try { json = await r.json(); } catch { /* resposta sem corpo */ }
   return { ok: r.ok, status: r.status, json };
+}
+
+// Aviso devolvido ao criar a proposta, entregue à tela de detalhe pelo sessionStorage (uma leitura só). Sem storage, o aviso simplesmente não aparece.
+const chaveAviso = (id: string) => `proposta-aviso:${id}`;
+export function guardarAvisoProposta(id: string, texto: string | null) {
+  if (!texto) return;
+  try { sessionStorage.setItem(chaveAviso(id), texto); } catch { /* storage indisponível */ }
+}
+export function lerEApagarAvisoProposta(id: string): string | null {
+  try {
+    const t = sessionStorage.getItem(chaveAviso(id));
+    if (t !== null) sessionStorage.removeItem(chaveAviso(id));
+    return t;
+  } catch { return null; }
 }
