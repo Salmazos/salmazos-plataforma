@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import Link from "next/link";
 import { calcularValidadeAte } from "@/lib/propostas";
 import { formatarPct, type CondicoesRs } from "@/lib/propostaModelos";
@@ -23,13 +23,17 @@ export default function ModalMarcarEnviada({ numero, clienteNome, condicoes, val
   const [valor, setValor] = useState<number>(valorInicial ?? 0);
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  // O ref fecha a janela entre o clique e a nova renderização: dois cliques seguidos enviam uma vez só.
+  const emAndamento = useRef(false);
 
   async function confirmar() {
+    if (emAndamento.current) return;
     if (!(valor > 0)) { setErro("Informe o valor estimado (maior que zero)."); return; }
+    emAndamento.current = true;
     setEnviando(true);
     setErro("");
     const msg = await onConfirmar(valor);
-    if (msg) { setErro(msg); setEnviando(false); }
+    if (msg) { setErro(msg); setEnviando(false); emAndamento.current = false; }
   }
 
   const linha = (rotulo: string, texto: string) => (

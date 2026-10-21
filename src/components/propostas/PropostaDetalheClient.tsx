@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ROTULO_MODELO, ROTULO_SITUACAO, numeroComRevisao, type SituacaoProposta } from "@/lib/propostas";
 import { formatarPct, PADROES_RS, type CondicoesRs } from "@/lib/propostaModelos";
@@ -38,6 +38,7 @@ export default function PropostaDetalheClient({ id, avisoInicial }: { id: string
   const [contatoId, setContatoId] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erroEdicao, setErroEdicao] = useState("");
+  const salvandoAgora = useRef(false);
   const [modalEnviada, setModalEnviada] = useState(false);
   const [acao, setAcao] = useState<AcaoSituacao | null>(null);
 
@@ -67,12 +68,16 @@ export default function PropostaDetalheClient({ id, avisoInicial }: { id: string
       try {
         const r = await lerResposta<{ data: Contato[] }>(await fetch(`/api/comercial/empresas/${d.empresa_visitada_id}/contatos`));
         if (r.ok) setContatos(r.json.data ?? []);
-      } catch { /* sem a lista, o A/C continua digitável */ }
+        else setErroEdicao(r.json.error ?? "Não foi possível carregar os contatos da empresa. O A/C continua digitável.");
+      } catch {
+        setErroEdicao("Não foi possível carregar os contatos da empresa. O A/C continua digitável.");
+      }
     }
   }
 
   async function salvar() {
-    if (!d || !form) return;
+    if (!d || !form || salvandoAgora.current) return;
+    salvandoAgora.current = true;
     setSalvando(true);
     setErroEdicao("");
     try {
@@ -86,7 +91,17 @@ export default function PropostaDetalheClient({ id, avisoInicial }: { id: string
           conteudo: conteudoDoForm(form),
         }),
       }));
-      if (!r.ok) { setErroEdicao(r.json.error ?? "Não foi possível salvar."); return; }
+      if (!r.ok) {
+        if (r.status === 409) {
+          // Alguém mexeu na proposta (ou a situação mudou): descarta a edição e mostra o que está salvo agora.
+          setEditando(false);
+          setAviso(`${r.json.error ?? "A proposta foi alterada."} A proposta foi recarregada; refaça a edição.`);
+          await carregar();
+          return;
+        }
+        setErroEdicao(r.json.error ?? "Não foi possível salvar.");
+        return;
+      }
       setEditando(false);
       setAviso(d.situacao === "rascunho" ? null : `Revisão ${d.revisao_atual + 1} emitida. Gere o PDF desta revisão para enviar ao cliente.`);
       await carregar();
@@ -94,6 +109,7 @@ export default function PropostaDetalheClient({ id, avisoInicial }: { id: string
       setErroEdicao("Não foi possível salvar.");
     } finally {
       setSalvando(false);
+      salvandoAgora.current = false;
     }
   }
 

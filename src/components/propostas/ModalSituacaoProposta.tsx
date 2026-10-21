@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { ROTULO_MOTIVO_PERDA } from "@/lib/comercialRotulos";
 import { Aviso, btnPerigo, btnPrimario, btnSecundario, inputStyle, labelStyle, Modal } from "@/components/propostas/propostasUi";
 
@@ -26,19 +26,22 @@ export default function ModalSituacaoProposta({ acao, onClose, onConfirmar }: Pr
   const [observacao, setObservacao] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const emAndamento = useRef(false);
 
   async function confirmar() {
+    if (emAndamento.current) return;
     if (acao === "recusada") {
       if (!categoria) { setErro("Escolha o motivo de a proposta não ter sido aceita."); return; }
       if (categoria === "outro" && !motivo.trim()) { setErro("Descreva o motivo, já que você escolheu \"Outro motivo\"."); return; }
     }
+    emAndamento.current = true;
     setEnviando(true);
     setErro("");
     const msg = await onConfirmar({
       ...(acao === "recusada" ? { motivo_perda_categoria: categoria, motivo_perda: motivo.trim() || undefined } : {}),
       observacao: observacao.trim() || undefined,
     });
-    if (msg) { setErro(msg); setEnviando(false); }
+    if (msg) { setErro(msg); setEnviando(false); emAndamento.current = false; }
   }
 
   return (

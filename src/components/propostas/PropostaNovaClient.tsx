@@ -21,6 +21,8 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
   const [campos, setCampos] = useState<CamposForm>(camposPadrao());
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const [erroBusca, setErroBusca] = useState("");
+  const emAndamento = useRef(false);
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Carteira da unidade do vendedor (a rota já filtra por unidade). Uma busca por pausa na digitação, sem repetição automática.
@@ -29,8 +31,11 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
     temporizador.current = setTimeout(async () => {
       try {
         const r = await lerResposta<{ data: EmpresaOpc[] }>(await fetch(`/api/comercial/empresas?q=${encodeURIComponent(busca.trim())}`));
-        if (r.ok) setEmpresas(r.json.data ?? []);
-      } catch { /* a lista fica como estava */ }
+        if (r.ok) { setEmpresas(r.json.data ?? []); setErroBusca(""); }
+        else setErroBusca(r.json.error ?? "Não foi possível buscar as empresas.");
+      } catch {
+        setErroBusca("Não foi possível buscar as empresas.");
+      }
     }, busca ? 300 : 0);
     return () => { if (temporizador.current) clearTimeout(temporizador.current); };
   }, [busca]);
@@ -47,9 +52,13 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
   const abertaDeOutro = empresa?.oportunidade_aberta && empresa.oportunidade_aberta.vendedor_nome !== meuNome ? empresa.oportunidade_aberta : null;
 
   async function criar() {
+    if (emAndamento.current) return;
     if (!empresa) { setErro("Escolha a empresa da Carteira."); return; }
+    emAndamento.current = true;
     setSalvando(true);
     setErro("");
+    // Depois de criar, o botão continua travado até a navegação: sem isso um segundo clique criaria outra proposta.
+    let navegou = false;
     try {
       const r = await lerResposta<{ data: { id: string }; aviso: string | null }>(await fetch("/api/comercial/propostas", {
         method: "POST",
@@ -64,11 +73,15 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
         }),
       }));
       if (!r.ok) { setErro(r.json.error ?? "Não foi possível criar a proposta."); return; }
+      navegou = true;
       router.push(`/painel/comercial/propostas/${r.json.data.id}${r.json.aviso ? `?aviso=${encodeURIComponent(r.json.aviso)}` : ""}`);
     } catch {
       setErro("Não foi possível criar a proposta.");
     } finally {
-      setSalvando(false);
+      if (!navegou) {
+        setSalvando(false);
+        emAndamento.current = false;
+      }
     }
   }
 
@@ -104,6 +117,7 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
         ) : (
           <>
             <input style={inputStyle} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Digite parte do nome da empresa" />
+            {erroBusca && <div style={{ marginTop: 8 }}><Aviso tipo="erro">{erroBusca}</Aviso></div>}
             <div style={{ marginTop: 8, maxHeight: 220, overflowY: "auto", border: "1px solid #E5E7EB", borderRadius: 8 }}>
               {empresas.length === 0 ? <div style={{ padding: 12, color: "#6B7280", fontSize: 13 }}>Nenhuma empresa da Carteira da sua unidade encontrada.</div> : empresas.map((e) => (
                 <button key={e.id} type="button" onClick={() => escolher(e)} style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 12px", border: "none", borderBottom: "1px solid #F3F4F6", background: "#fff", cursor: "pointer", fontSize: 14 }}>
