@@ -32,7 +32,7 @@ export default function PropostasListaClient({ podeCriar, gestor, vendedores }: 
       const qs = new URLSearchParams();
       if (modelo) qs.set("modelo", modelo);
       if (vendedor) qs.set("vendedor", vendedor);
-      const r = await lerResposta<{ data: PropostaResumo[]; hoje: string }>(await fetch(`/api/comercial/propostas${qs.size ? `?${qs}` : ""}`));
+      const r = await lerResposta<{ data: PropostaResumo[]; hoje: string }>(await fetch(`/api/comercial/propostas${qs.toString() ? `?${qs.toString()}` : ""}`));
       if (!r.ok) { setErro(r.json.error ?? "Não foi possível carregar as propostas."); return; }
       setPropostas(r.json.data ?? []);
       setHoje(r.json.hoje ?? "");
