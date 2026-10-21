@@ -1608,3 +1608,35 @@ export const admissaoEnviarEmailContabilidadeSchema = z.object({
     })
     .optional(),
 });
+
+// ── Propostas (Comercial) ────────────────────────────────────────────────────
+// Empresa, cliente, vendedor e unidade nunca vêm do corpo: o servidor os resolve pela empresa da Carteira e pelo contexto.
+
+export const propostaCreateSchema = z.object({
+  modelo: z.enum(["RS", "MOT", "TS"]),
+  empresa_visitada_id: z.string().uuid("Escolha uma empresa da Carteira."),
+  contato_id: z.string().uuid().optional().nullable(),
+  aos_cuidados: z.string().trim().max(200).optional().nullable(),
+  validade_dias: z.coerce.number().int().min(1, "A validade vai de 1 a 90 dias.").max(90, "A validade vai de 1 a 90 dias.").optional(),
+  // Validado por modelo em propostaModelos.ts (validarConteudo).
+  conteudo: z.unknown().optional(),
+});
+
+export const propostaUpdateSchema = z.object({
+  // Versão que a tela carregou: se a proposta mudou desde então, a gravação é recusada (409).
+  updated_at: z.string().min(1, "Recarregue a proposta antes de salvar."),
+  contato_id: z.string().uuid().optional().nullable(),
+  aos_cuidados: z.string().trim().max(200).optional().nullable(),
+  validade_dias: z.coerce.number().int().min(1, "A validade vai de 1 a 90 dias.").max(90, "A validade vai de 1 a 90 dias.").optional(),
+  conteudo: z.unknown().optional(),
+});
+
+export const propostaSituacaoSchema = z.object({
+  para: z.enum(["rascunho", "enviada", "em_negociacao", "aceita", "recusada", "vencida", "cancelada"]),
+  // Obrigatório ao marcar como enviada (é o valor que vai para a oportunidade do Funil).
+  valor_estimado: z.coerce.number().positive("Informe o valor estimado (maior que zero).").max(100000000).optional(),
+  // Obrigatórios ao recusar (mesma lista de motivos do Funil).
+  motivo_perda_categoria: motivoPerdaCategoria.optional(),
+  motivo_perda: z.string().trim().max(500).optional().nullable(),
+  observacao: z.string().trim().max(500).optional().nullable(),
+});

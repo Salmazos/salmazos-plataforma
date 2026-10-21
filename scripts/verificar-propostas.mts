@@ -1,6 +1,11 @@
 // Verificação de Propostas (o projeto não tem runner de testes). Sem banco real: tudo roda em memória.
 // Rodar: node --no-warnings --import ./scripts/harness-mot/register.mjs scripts/verificar-propostas.mts
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import sharp from "sharp";
+import { PDFDocument, PDFName, PDFRawStream } from "pdf-lib";
 import {
   SITUACOES, TRANSICOES, podeTransicionar, ehFinal, modoEdicao, modeloDisponivel, somarDiasUteis, calcularValidadeAte,
   diasRestantes, deveVencer, formatarNumeroProposta, numeroComRevisao, etapaAposSituacao, textoFollowUp,
@@ -10,6 +15,16 @@ import {
   condicoesRsSchema, conteudoRsSchema, PADROES_RS, validarConteudo, itensRs, montarSnapshot, snapshotPropostaSchema,
   MENSAGEM_MODELO_INDISPONIVEL,
 } from "@/lib/propostaModelos";
+import { hojeSaoPaulo } from "@/lib/comercial";
+import { ENDERECOS_RODAPE_PROPOSTA } from "@/lib/propostaAssets";
+import { ENDERECO_FISCAL_SALMAZOS } from "@/lib/admissaoConstants";
+import { gerarPdfProposta, calcularGrade, carregarLogosClientes, prepararLogoCliente, CAIXA_LOGO_W, CAIXA_LOGO_H } from "@/lib/propostaPdf";
+import * as rotaLista from "@/app/api/comercial/propostas/route";
+import * as rotaId from "@/app/api/comercial/propostas/[id]/route";
+import * as rotaSit from "@/app/api/comercial/propostas/[id]/situacao/route";
+import * as rotaPdf from "@/app/api/comercial/propostas/[id]/pdf/route";
+import * as rotaPainel from "@/app/api/comercial/propostas/painel/route";
+import { criarDb } from "../scripts/harness-mot/memdb.mjs";
 
 let total = 0;
 async function caso(nome: string, fn: () => Promise<void> | void) {
@@ -206,5 +221,682 @@ await caso("snapshot: reúne tudo o que o PDF usa e passa no próprio schema", (
   });
   assert.ok(snapshotPropostaSchema.safeParse(JSON.parse(JSON.stringify(s))).success);
 });
+
+
+// ═══════════════════════════ PDF: grade de logos de clientes ═══════════════════════════
+
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "proposta-pdf-"));
+const png = async (w: number, h: number, cor: string, borda = 6) =>
+  sharp({ create: { width: w + borda * 2, height: h + borda * 2, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 0 } } })
+    .composite([{ input: await sharp({ create: { width: w, height: h, channels: 4, background: cor } }).png().toBuffer(), left: borda, top: borda }]).png().toBuffer();
+const pastaClientes = path.join(tmp, "clientes");
+fs.mkdirSync(pastaClientes);
+fs.writeFileSync(path.join(pastaClientes, "b_alta.png"), await png(100, 400, "#cc2222"));
+fs.writeFileSync(path.join(pastaClientes, "A_larga.PNG"), await png(400, 50, "#2255cc"));
+fs.writeFileSync(path.join(pastaClientes, "c_pequena.jpg"), await sharp({ create: { width: 92, height: 44, channels: 3, background: "#22aa44" } }).jpeg().toBuffer());
+fs.writeFileSync(path.join(pastaClientes, "quebrada.png"), "isto nao e uma imagem");
+fs.writeFileSync(path.join(pastaClientes, "leia-me.txt"), "ignorado");
+const snapBase = montarSnapshot({
+  modelo: "RS", numero: "RS-0053/26", revisao: 0, templateVersao: 1, dataEmissao: "2026-10-20", validadeDias: 15, validadeAte: "2026-11-04",
+  clienteNome: "Empresa X", aosCuidados: null, conteudo: {}, vendedorNome: "Vendedor", vendedorTelefone: null,
+});
+async function contarPaginasEImagens(bytes: Uint8Array) {
+  const doc = await PDFDocument.load(bytes);
+  let imagens = 0;
+  for (const [, obj] of doc.context.enumerateIndirectObjects()) {
+    if (obj instanceof PDFRawStream && obj.dict.get(PDFName.of("Subtype")) === PDFName.of("Image")) imagens++;
+  }
+  return { paginas: doc.getPageCount(), imagens };
+}
+const avisos: string[] = [];
+const warnOriginal = console.warn;
+
+await caso("grade: pasta com 3 PNG/JPG + 1 corrompido + 1 .txt → PDF gerado, corrompido e .txt ignorados (com aviso)", async () => {
+  console.warn = (...a: unknown[]) => { avisos.push(a.join(" ")); };
+  try {
+    const bytes = await gerarPdfProposta(snapBase, { pastaCabecalho: path.join(tmp, "nao-existe"), pastaClientes });
+    assert.equal(new TextDecoder().decode(bytes.slice(0, 5)), "%PDF-");
+    const { paginas, imagens } = await contarPaginasEImagens(bytes);
+    assert.equal(paginas, 2, "página 1 + página dos clientes");
+    assert.equal(imagens, 3, "só as 3 imagens válidas (sem cabeçalho)");
+  } finally { console.warn = warnOriginal; }
+  assert.ok(avisos.some((a) => a.includes("quebrada.png")), "avisou do arquivo corrompido");
+  assert.ok(!avisos.some((a) => a.includes("leia-me")), ".txt nem é lido");
+});
+await caso("grade: ordem alfabética sem diferenciar maiúscula/minúscula (A_larga.PNG, b_alta.png, c_pequena.jpg)", async () => {
+  console.warn = () => {};
+  try { assert.deepEqual((await carregarLogosClientes(pastaClientes)).map((l) => l.nome), ["A_larga.PNG", "b_alta.png", "c_pequena.jpg"]); }
+  finally { console.warn = warnOriginal; }
+});
+await caso("grade: logos 100x400, 400x50 e 92x44 cabem na caixa 300x120 (sem passar de 2x de ampliação)", async () => {
+  console.warn = () => {};
+  try {
+    const dims: Record<string, [number, number]> = {};
+    for (const l of await carregarLogosClientes(pastaClientes)) { const m = await sharp(l.png).metadata(); dims[l.nome] = [m.width!, m.height!]; }
+    assert.deepEqual(dims["b_alta.png"], [30, 120]);
+    assert.deepEqual(dims["A_larga.PNG"], [300, 38]);
+    assert.deepEqual(dims["c_pequena.jpg"], [184, 88]);
+    for (const [w, h] of Object.values(dims)) assert.ok(w <= CAIXA_LOGO_W && h <= CAIXA_LOGO_H);
+  } finally { console.warn = warnOriginal; }
+});
+await caso("grade: PNG com transparência vira fundo branco (sem alfa) e a margem em volta é aparada", async () => {
+  const saida = await prepararLogoCliente(await png(200, 60, "#000000", 40));
+  const m = await sharp(saida).metadata();
+  assert.equal(m.hasAlpha, false);
+  assert.equal(m.width, 300, "200x60 aparado → ampliado ao teto da caixa (1,5x)");
+  const { data, info } = await sharp(saida).raw().toBuffer({ resolveWithObject: true });
+  assert.deepEqual([data[0], data[1], data[2]], [0, 0, 0], "o primeiro pixel já é o logo (margem aparada)");
+  assert.equal(info.channels, 3);
+});
+await caso("grade: células iguais, 4 por linha, última linha centralizada (14 logos = 4+4+4+2)", () => {
+  const g = calcularGrade(14);
+  assert.deepEqual(g.linhas.map((l) => l.xs.length), [4, 4, 4, 2]);
+  for (const l of g.linhas) {
+    const centro = (l.xs[0] + (l.xs[l.xs.length - 1] + g.celulaW)) / 2;
+    assert.ok(Math.abs(centro - 595.28 / 2) < 0.01, `linha centralizada (${centro})`);
+  }
+  assert.ok(Math.abs(g.celulaH / g.celulaW - CAIXA_LOGO_H / CAIXA_LOGO_W) < 1e-9, "todas as células têm a proporção 300x120");
+  const xs = g.linhas[0].xs;
+  for (let i = 1; i < xs.length; i++) assert.ok(Math.abs(xs[i] - xs[i - 1] - (xs[1] - xs[0])) < 1e-9, "mesmo passo entre células");
+});
+await caso("grade: muitos logos paginam (60 logos → mais de 2 páginas)", async () => {
+  const cheia = path.join(tmp, "muitos");
+  fs.mkdirSync(cheia);
+  const um = await png(120, 40, "#334455");
+  for (let i = 0; i < 60; i++) fs.writeFileSync(path.join(cheia, `l${String(i).padStart(2, "0")}.png`), um);
+  const { paginas } = await contarPaginasEImagens(await gerarPdfProposta(snapBase, { pastaCabecalho: path.join(tmp, "x"), pastaClientes: cheia }));
+  assert.ok(paginas >= 3, `paginas=${paginas}`);
+});
+await caso("grade: pasta vazia, só com .txt ou inexistente → PDF de 1 página (sem a página de clientes)", async () => {
+  const vazia = path.join(tmp, "vazia"); fs.mkdirSync(vazia);
+  const soTxt = path.join(tmp, "so-txt"); fs.mkdirSync(soTxt); fs.writeFileSync(path.join(soTxt, "a.txt"), "x");
+  for (const pasta of [vazia, soTxt, path.join(tmp, "inexistente")]) {
+    const { paginas } = await contarPaginasEImagens(await gerarPdfProposta(snapBase, { pastaCabecalho: path.join(tmp, "x"), pastaClientes: pasta }));
+    assert.equal(paginas, 1, pasta);
+  }
+});
+await caso("cabeçalho: com PNG na pasta usa a imagem; sem pasta cai na faixa preta com texto dourado (sem quebrar)", async () => {
+  const cab = path.join(tmp, "cab"); fs.mkdirSync(cab);
+  fs.writeFileSync(path.join(cab, "logo.png"), await png(800, 360, "#FFD700", 20));
+  const sem = await contarPaginasEImagens(await gerarPdfProposta(snapBase, { pastaCabecalho: path.join(tmp, "nao"), pastaClientes: path.join(tmp, "nao") }));
+  const com = await contarPaginasEImagens(await gerarPdfProposta(snapBase, { pastaCabecalho: cab, pastaClientes: path.join(tmp, "nao") }));
+  assert.equal(sem.imagens, 0);
+  assert.ok(com.imagens >= 1);
+});
+await caso("rodapé: exatamente as 4 linhas aprovadas (3 unidades + site/Instagram), sem o endereço fiscal; não quebra a paginação", async () => {
+  assert.deepEqual(ENDERECOS_RODAPE_PROPOSTA, [
+    "Rua Hipólito Piva, nº 30 – Centro – Monte Mor | SP – Tel.: 19 – 3217-7899",
+    "Rua Zacarias Costa Camargo, nº 752 – Remanso Campineiro – Hortolândia | SP – Tel.: 19 – 3819-3919",
+    "Rua Jurubatuba, nº 336 – Centro – São Bernardo do Campo | SP – Tel.: 11 – 96695-4751",
+    "www.salmazos.com.br | @salmazosrh",
+  ]);
+  assert.ok(!ENDERECOS_RODAPE_PROPOSTA.includes(ENDERECO_FISCAL_SALMAZOS));
+  const { paginas } = await contarPaginasEImagens(await gerarPdfProposta(snapBase, { pastaCabecalho: path.join(tmp, "x"), pastaClientes: path.join(tmp, "x") }));
+  assert.equal(paginas, 1);
+});
+await caso("PDF: sem telefone do vendedor omite a linha; texto longo e caracteres fora do WinAnsi não derrubam", async () => {
+  const longo = { ...snapBase, cliente_nome: "Empresa ".repeat(60) + "→ ✓ 😀", aos_cuidados: "Fulano ".repeat(40), vendedor_telefone: null };
+  const bytes = await gerarPdfProposta(longo, { pastaCabecalho: path.join(tmp, "x"), pastaClientes: path.join(tmp, "x") });
+  assert.equal(new TextDecoder().decode(bytes.slice(0, 5)), "%PDF-");
+  await assert.rejects(() => gerarPdfProposta({ ...snapBase, modelo: "MOT" }), /Modelo ainda não disponível/);
+});
+
+// ═══════════════════════════ API: rotas de Propostas contra o banco em memória ═══════════════════════════
+
+const U = "11111111-1111-4111-8111-111111111111", U2 = "11111111-1111-4111-8111-222222222222";
+const V = "22222222-2222-4222-8222-222222222222", V2 = "33333333-3333-4333-8333-333333333333", DIR = "44444444-4444-4444-8444-444444444444";
+const EMP = "55555555-5555-4555-8555-555555555555", EMP_OUTRA_UNIDADE = "55555555-5555-4555-8555-666666666666";
+const CT = "66666666-6666-4666-8666-666666666666", CT_FORA = "66666666-6666-4666-8666-777777777777";
+const HOJE = hojeSaoPaulo();
+const ANO = Number(HOJE.slice(0, 4));
+const AA = String(ANO).slice(-2);
+const IMUTAVEIS = ["proposta_revisoes", "proposta_historico"];
+
+// Imita criar_proposta do banco com fórmula própria (independente de formatarNumeroProposta): contador por modelo+ano.
+function rpcCriarProposta(a: Record<string, unknown>, db: ReturnType<typeof criarDb>) {
+  if (!["RS", "MOT", "TS"].includes(a.p_modelo as string)) return { data: null, error: { message: `Modelo de proposta inválido: ${a.p_modelo}` } };
+  (db as any).rpcChamadas.push(a);
+  const cont = db.tabelas.proposta_contadores;
+  let c = cont.find((x: any) => x.modelo === a.p_modelo && x.ano === ANO);
+  if (!c) { c = { modelo: a.p_modelo, ano: ANO, ultimo: 0 }; cont.push(c); }
+  c.ultimo += 1;
+  const agora = new Date().toISOString();
+  const linha = {
+    id: crypto.randomUUID(), numero: `${a.p_modelo}-${String(c.ultimo).padStart(4, "0")}/${String(ANO).slice(-2)}`, modelo: a.p_modelo, ano: ANO, sequencial: c.ultimo,
+    revisao_atual: 0, situacao: "rascunho", unidade_id: a.p_unidade_id, vendedor_id: a.p_vendedor_id, empresa_visitada_id: a.p_empresa_visitada_id, oportunidade_id: a.p_oportunidade_id,
+    cliente_nome: a.p_cliente_nome, aos_cuidados: a.p_aos_cuidados, conteudo: a.p_conteudo, template_versao: a.p_template_versao, validade_dias: a.p_validade_dias,
+    validade_ate: null, valor_estimado: null, enviada_em: null, created_at: agora, updated_at: agora,
+  };
+  db.tabelas.propostas.push(linha);
+  return { data: structuredClone(linha), error: null };
+}
+
+function novoDb(extra: Record<string, unknown[]> = {}) {
+  const db: any = criarDb({
+    analistas_perfil: [
+      { id: V, user_id: "u-v", nome_completo: "Vendedor", telefone: "(19) 99999-0000", nivel_acesso: "analista", unidade_id: U, acesso_todas_unidades: false, perfil_comercial: true, ativo: true },
+      { id: V2, user_id: "u-v2", nome_completo: "Outro", telefone: null, nivel_acesso: "analista", unidade_id: U, acesso_todas_unidades: false, perfil_comercial: true, ativo: true },
+      { id: DIR, user_id: "u-dir", nome_completo: "Diretora", telefone: null, nivel_acesso: "diretoria", unidade_id: U, acesso_todas_unidades: true, perfil_comercial: false, ativo: true },
+    ],
+    empresas_visitadas: [{ id: EMP, nome: "Empresa X", cliente_id: null, unidade_id: U }, { id: EMP_OUTRA_UNIDADE, nome: "Empresa Y", cliente_id: null, unidade_id: U2 }],
+    empresa_contatos: [{ id: CT, nome: "Ana Contato", empresa_visitada_id: EMP }, { id: CT_FORA, nome: "Fora", empresa_visitada_id: EMP_OUTRA_UNIDADE }],
+    oportunidades: [], lembretes: [], oportunidade_interacoes: [], propostas: [], proposta_revisoes: [], proposta_historico: [],
+    proposta_contadores: [{ modelo: "RS", ano: ANO, ultimo: 52 }],
+    ...extra,
+  });
+  db.rpcs = { criar_proposta: rpcCriarProposta };
+  db.rpcChamadas = [];
+  db.imutaveis = IMUTAVEIS;
+  db.unicos = undefined;
+  return db;
+}
+type Chamada = { status: number; body: any };
+async function chamar(db: any, usuario: string | null, fn: (...a: any[]) => Promise<Response>, { metodo = "GET", url = "http://x/api", corpo, id }: { metodo?: string; url?: string; corpo?: unknown; id?: string } = {}): Promise<Chamada> {
+  db.usuario = usuario ? { id: usuario, email: `${usuario}@t.local`, app_metadata: { role: usuario === "u-dir" ? "diretoria" : "analista" } } : null;
+  globalThis.__DB__ = db;
+  const req = Object.assign(new Request(url, { method: metodo, headers: { "Content-Type": "application/json" }, body: corpo === undefined ? undefined : JSON.stringify(corpo) }), { nextUrl: new URL(url) });
+  const r = await fn(req, { params: Promise.resolve({ id }) });
+  const tipo = r.headers.get("content-type") ?? "";
+  return { status: r.status, body: tipo.includes("json") ? await r.json() : new Uint8Array(await r.arrayBuffer()) };
+}
+const criar = (db: any, corpo: Record<string, unknown> = {}, usuario = "u-v") => chamar(db, usuario, rotaLista.POST, { metodo: "POST", corpo: { modelo: "RS", empresa_visitada_id: EMP, ...corpo } });
+const situacao = (db: any, id: string, corpo: Record<string, unknown>, usuario = "u-v") => chamar(db, usuario, rotaSit.POST, { metodo: "POST", id, corpo });
+const detalhe = (db: any, id: string, usuario = "u-v") => chamar(db, usuario, rotaId.GET, { id });
+const proposta = (db: any, id: string) => db.tabelas.propostas.find((p: any) => p.id === id);
+const opps = (db: any) => db.tabelas.oportunidades;
+const SEMENTE_OPP = (extra: Record<string, unknown> = {}) => ({
+  id: crypto.randomUUID(), unidade_id: U, vendedor_id: V, empresa: "Empresa X", empresa_visitada_id: EMP, contato_id: null, etapa: "contato_feito",
+  proxima_acao: "Ligar", proxima_acao_em: "2030-01-10", valor_estimado: null, servico_interesse: null, fechada_em: null, motivo_perda: null,
+  motivo_perda_categoria: null, updated_at: "2026-10-01T10:00:00.000Z", ...extra,
+});
+async function enviar(db: any, valor = 5000, corpoCriar: Record<string, unknown> = {}) {
+  const c = await criar(db, corpoCriar);
+  const id = c.body.data.id as string;
+  const r = await situacao(db, id, { para: "enviada", valor_estimado: valor });
+  return { id, r, numero: c.body.data.numero as string };
+}
+
+await caso("criar: número vem do rpc e segue a regra RS-0053/26; campos de identidade vêm do servidor, não do corpo", async () => {
+  const db = novoDb();
+  const forjado = { vendedor_id: V2, unidade_id: U2, cliente_nome: "Forjado", numero: "RS-9999/26", situacao: "aceita", p_modelo: "TS" };
+  const r = await criar(db, { ...forjado, contato_id: CT });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.data.numero, `RS-0053/${AA}`);
+  if (ANO === 2026) assert.equal(r.body.data.numero, "RS-0053/26");
+  assert.equal(r.body.data.situacao, "rascunho");
+  assert.equal(r.body.data.vendedor_id, V);
+  assert.equal(r.body.data.unidade_id, U);
+  assert.equal(r.body.data.cliente_nome, "Empresa X");
+  assert.equal(r.body.data.aos_cuidados, "Ana Contato");
+  assert.equal(r.body.data.validade_dias, 15);
+  assert.equal(r.body.data.template_versao, 1);
+  assert.deepEqual(r.body.data.conteudo.condicoes, PADROES_RS);
+  assert.equal(db.rpcChamadas.length, 1);
+  assert.equal(db.rpcChamadas[0].p_vendedor_id, V);
+  assert.equal(db.rpcChamadas[0].p_modelo, "RS");
+  const r2 = await criar(db);
+  assert.equal(r2.body.data.numero, `RS-0054/${AA}`);
+  assert.equal(db.tabelas.proposta_historico.filter((h: any) => h.para === "rascunho").length, 2);
+});
+await caso("criar: MOT e TS → 400 'Modelo ainda não disponível.'; modelo inexistente → 400; contador intacto", async () => {
+  const db = novoDb();
+  for (const modelo of ["MOT", "TS"]) {
+    const r = await criar(db, { modelo });
+    assert.equal(r.status, 400);
+    assert.equal(r.body.error, "Modelo ainda não disponível.");
+  }
+  assert.equal((await criar(db, { modelo: "XX" })).status, 400);
+  assert.equal(db.rpcChamadas.length, 0);
+  assert.equal(db.tabelas.proposta_contadores[0].ultimo, 52);
+});
+await caso("criar: percentual apagado → 400 'Informe o percentual.' (nada é criado)", async () => {
+  const db = novoDb();
+  const r = await criar(db, { conteudo: { condicoes: { taxa_sem_reposicao_pct: "" } } });
+  assert.equal(r.status, 400);
+  assert.ok(r.body.error.includes("Informe o percentual."), r.body.error);
+  assert.equal(db.tabelas.propostas.length, 0);
+});
+await caso("criar: gestor sem perfil comercial → 403; sem login → 401; empresa de outra unidade → 404; contato de outra empresa → 400", async () => {
+  const db = novoDb();
+  assert.equal((await criar(db, {}, "u-dir")).status, 403);
+  assert.equal((await chamar(db, null, rotaLista.POST, { metodo: "POST", corpo: { modelo: "RS", empresa_visitada_id: EMP } })).status, 401);
+  assert.equal((await criar(db, { empresa_visitada_id: EMP_OUTRA_UNIDADE })).status, 404);
+  assert.equal((await criar(db, { contato_id: CT_FORA })).status, 400);
+  assert.equal(db.tabelas.propostas.length, 0);
+});
+await caso("criar: oportunidade aberta de OUTRO vendedor só avisa (não bloqueia, não vincula); a do próprio é vinculada", async () => {
+  const dbOutro = novoDb({ oportunidades: [SEMENTE_OPP({ vendedor_id: V2, etapa: "reuniao_visita" })] });
+  const r = await criar(dbOutro);
+  assert.equal(r.status, 201);
+  assert.match(r.body.aviso, /Já existe uma oportunidade aberta para esta empresa \(vendedor: Outro/);
+  assert.equal(r.body.data.oportunidade_id, null);
+  const propria = SEMENTE_OPP();
+  const dbProprio = novoDb({ oportunidades: [propria] });
+  const r2 = await criar(dbProprio);
+  assert.equal(r2.body.aviso, null);
+  assert.equal(r2.body.data.oportunidade_id, propria.id);
+});
+
+await caso("enviar: sem valor → 400 e a proposta continua rascunho (nada no Funil)", async () => {
+  const db = novoDb();
+  const c = await criar(db);
+  const r = await situacao(db, c.body.data.id, { para: "enviada" });
+  assert.equal(r.status, 400);
+  assert.match(r.body.error, /valor estimado/i);
+  assert.equal((await situacao(db, c.body.data.id, { para: "enviada", valor_estimado: 0 })).status, 400);
+  assert.equal(proposta(db, c.body.data.id).situacao, "rascunho");
+  assert.equal(opps(db).length, 0);
+  assert.equal(db.tabelas.lembretes.length, 0);
+});
+await caso("enviar: empresa sem oportunidade aberta → CRIA oportunidade em proposta_enviada, follow-up +3 dias úteis e Rev. 0", async () => {
+  const db = novoDb();
+  const { id, r, numero } = await enviar(db, 7500);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const p = proposta(db, id);
+  assert.equal(p.situacao, "enviada");
+  assert.equal(p.valor_estimado, 7500);
+  assert.equal(p.validade_ate, calcularValidadeAte(HOJE, 15));
+  assert.ok(p.enviada_em);
+  assert.equal(opps(db).length, 1);
+  const o = opps(db)[0];
+  assert.deepEqual(
+    { etapa: o.etapa, vendedor_id: o.vendedor_id, unidade_id: o.unidade_id, empresa_visitada_id: o.empresa_visitada_id, valor: o.valor_estimado, servico: o.servico_interesse, acao: o.proxima_acao, em: o.proxima_acao_em },
+    { etapa: "proposta_enviada", vendedor_id: V, unidade_id: U, empresa_visitada_id: EMP, valor: 7500, servico: "Recrutamento e Seleção", acao: `Follow-up da proposta ${numero}`, em: somarDiasUteis(HOJE, 3) },
+  );
+  assert.equal(p.oportunidade_id, o.id);
+  const l = db.tabelas.lembretes;
+  assert.equal(l.length, 1);
+  assert.deepEqual(
+    { tipo: l[0].tipo, status: l[0].status, oportunidade_id: l[0].oportunidade_id, empresa: l[0].empresa_visitada_id, vendedor: l[0].vendedor_id, texto: l[0].texto, data: l[0].data_lembrete },
+    { tipo: "retorno", status: "pendente", oportunidade_id: o.id, empresa: EMP, vendedor: V, texto: `Follow-up da proposta ${numero}`, data: somarDiasUteis(HOJE, 3) },
+  );
+  assert.equal(db.tabelas.proposta_revisoes.length, 1);
+  const rev = db.tabelas.proposta_revisoes[0];
+  assert.equal(rev.revisao, 0);
+  assert.ok(snapshotPropostaSchema.safeParse(rev.conteudo).success);
+  assert.equal(rev.conteudo.numero, numero);
+  assert.equal(rev.conteudo.vendedor_nome, "Vendedor");
+  assert.equal(rev.conteudo.vendedor_telefone, "(19) 99999-0000");
+  assert.equal(rev.conteudo.data_emissao, HOJE);
+  assert.equal(rev.conteudo.validade_ate, p.validade_ate);
+  assert.ok(db.tabelas.proposta_historico.some((h: any) => h.de === "rascunho" && h.para === "enviada" && h.autor_id === V));
+});
+await caso("enviar: oportunidade aberta do próprio vendedor em fase anterior → MOVE para proposta_enviada (mesmo id, sem segunda)", async () => {
+  const o = SEMENTE_OPP({ etapa: "contato_feito" });
+  const db = novoDb({ oportunidades: [o] });
+  const { id, r, numero } = await enviar(db, 3000);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(opps(db).length, 1);
+  assert.equal(opps(db)[0].id, o.id);
+  assert.equal(opps(db)[0].etapa, "proposta_enviada");
+  assert.equal(opps(db)[0].proxima_acao, `Follow-up da proposta ${numero}`);
+  assert.equal(proposta(db, id).oportunidade_id, o.id);
+  assert.ok(db.tabelas.oportunidade_interacoes.some((i: any) => i.tipo === "mudanca_etapa" && /Contato feito → Proposta enviada/.test(i.descricao)));
+});
+await caso("enviar: oportunidade já em proposta_enviada → etapa não muda; atualiza ação, data, valor e REAPROVEITA o lembrete pendente (sem duplicar)", async () => {
+  const o = SEMENTE_OPP({ etapa: "proposta_enviada", valor_estimado: 100, servico_interesse: "Outro serviço", proxima_acao: "Antiga", proxima_acao_em: "2030-01-01" });
+  const numeroEsperado = `RS-0053/${AA}`;
+  const db = novoDb({
+    oportunidades: [o],
+    lembretes: [{ id: "l-existente", oportunidade_id: o.id, tipo: "retorno", status: "pendente", texto: `Follow-up da proposta ${numeroEsperado}`, data_lembrete: "2000-01-01", vendedor_id: V }],
+  });
+  const { id, r, numero } = await enviar(db, 9000);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(numero, numeroEsperado);
+  const x = opps(db)[0];
+  assert.deepEqual({ etapa: x.etapa, valor: x.valor_estimado, acao: x.proxima_acao, em: x.proxima_acao_em }, { etapa: "proposta_enviada", valor: 9000, acao: `Follow-up da proposta ${numero}`, em: somarDiasUteis(HOJE, 3) });
+  assert.equal(db.tabelas.oportunidade_interacoes.length, 0, "sem mudança de etapa não há registro de fase");
+  assert.equal(db.tabelas.lembretes.length, 1, "o lembrete existente foi reaproveitado");
+  assert.equal(db.tabelas.lembretes[0].id, "l-existente");
+  assert.equal(db.tabelas.lembretes[0].data_lembrete, somarDiasUteis(HOJE, 3));
+  assert.equal(proposta(db, id).oportunidade_id, o.id);
+});
+await caso("enviar: oportunidade aberta de OUTRO vendedor → 409 com a mensagem do Funil; proposta segue rascunho; nada gravado", async () => {
+  const db = novoDb({ oportunidades: [SEMENTE_OPP({ vendedor_id: V2, etapa: "reuniao_visita" })] });
+  const { id, r } = await enviar(db);
+  assert.equal(r.status, 409);
+  assert.match(r.body.error, /Já existe uma oportunidade aberta para esta empresa \(vendedor: Outro, fase: Reunião\/Visita\)/);
+  assert.equal(proposta(db, id).situacao, "rascunho");
+  assert.equal(proposta(db, id).enviada_em, null);
+  assert.equal(opps(db).length, 1);
+  assert.equal(db.tabelas.lembretes.length, 0);
+  assert.equal(db.tabelas.proposta_revisoes.length, 0);
+  assert.equal(db.tabelas.proposta_historico.filter((h: any) => h.para === "enviada").length, 0);
+});
+await caso("enviar: empresa só com oportunidade ganho/perdido → CRIA nova em proposta_enviada e não reabre a antiga", async () => {
+  const antiga = SEMENTE_OPP({ etapa: "perdido", fechada_em: "2026-01-01T00:00:00.000Z", motivo_perda_categoria: "sem_retorno" });
+  const ganha = SEMENTE_OPP({ etapa: "ganho", fechada_em: "2026-02-01T00:00:00.000Z", valor_estimado: 10, servico_interesse: "X" });
+  const db = novoDb({ oportunidades: [antiga, ganha] });
+  const copiaAntes = structuredClone([antiga, ganha]);
+  const { id, r } = await enviar(db);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(opps(db).length, 3);
+  assert.deepEqual(opps(db).slice(0, 2), copiaAntes, "as antigas ficam exatamente como estavam");
+  const nova = opps(db)[2];
+  assert.equal(nova.etapa, "proposta_enviada");
+  assert.equal(proposta(db, id).oportunidade_id, nova.id);
+});
+await caso("enviar: se o lembrete não puder ser criado → 500, proposta volta a rascunho, Funil desfeito (criada some / movida é restaurada), sem Rev.", async () => {
+  const dbNova = novoDb();
+  dbNova.falhas["lembretes.insert"] = "boom";
+  const a = await enviar(dbNova);
+  assert.equal(a.r.status, 500);
+  assert.equal(proposta(dbNova, a.id).situacao, "rascunho");
+  assert.equal(proposta(dbNova, a.id).enviada_em, null);
+  assert.equal(opps(dbNova).length, 0, "a oportunidade criada foi desfeita");
+  assert.equal(dbNova.tabelas.proposta_revisoes.length, 0);
+
+  const o = SEMENTE_OPP({ etapa: "contato_feito" });
+  const dbMov = novoDb({ oportunidades: [structuredClone(o)] });
+  dbMov.falhas["lembretes.insert"] = "boom";
+  const b = await enviar(dbMov);
+  assert.equal(b.r.status, 500);
+  assert.equal(proposta(dbMov, b.id).situacao, "rascunho");
+  const restaurada = opps(dbMov)[0];
+  assert.deepEqual({ etapa: restaurada.etapa, acao: restaurada.proxima_acao, valor: restaurada.valor_estimado }, { etapa: "contato_feito", acao: "Ligar", valor: null });
+});
+await caso("enviar: se a Rev. 0 não puder ser gravada → 500 e tudo é desfeito (proposta rascunho, Funil e follow-up desfeitos)", async () => {
+  const db = novoDb();
+  const c = await criar(db);
+  db.falhas["proposta_revisoes.insert"] = "boom";
+  const r = await situacao(db, c.body.data.id, { para: "enviada", valor_estimado: 5000 });
+  assert.equal(r.status, 500);
+  assert.equal(proposta(db, c.body.data.id).situacao, "rascunho");
+  assert.equal(opps(db).length, 0);
+  assert.ok(db.tabelas.lembretes.every((l: any) => l.status === "cancelado"), "follow-up cancelado");
+  delete db.falhas["proposta_revisoes.insert"];
+  const ok = await situacao(db, c.body.data.id, { para: "enviada", valor_estimado: 5000 });
+  assert.equal(ok.status, 200, "depois da falha dá para enviar normalmente");
+  assert.equal(db.tabelas.proposta_revisoes.length, 1);
+});
+await caso("enviar: corrida (outra pessoa muda a proposta entre a leitura e a gravação) → 409 e nada é gravado", async () => {
+  const db = novoDb();
+  const c = await criar(db);
+  const id = c.body.data.id;
+  db.ganchos = { "propostas.update": async () => { proposta(db, id).situacao = "cancelada"; } };
+  const r = await situacao(db, id, { para: "enviada", valor_estimado: 5000 });
+  assert.equal(r.status, 409);
+  assert.equal(opps(db).length, 0);
+  assert.equal(db.tabelas.proposta_revisoes.length, 0);
+});
+
+await caso("situação: 'vencida' → 400 (automática); 'rascunho' → 400; transições fora da tabela → 409", async () => {
+  const db = novoDb();
+  const c = await criar(db);
+  const id = c.body.data.id;
+  const v = await situacao(db, id, { para: "vencida" });
+  assert.equal(v.status, 400);
+  assert.match(v.body.error, /automática/);
+  assert.equal((await situacao(db, id, { para: "rascunho" })).status, 400);
+  for (const para of ["em_negociacao", "aceita", "recusada"]) {
+    const r = await situacao(db, id, { para, motivo_perda_categoria: "sem_retorno" });
+    assert.equal(r.status, 409, para);
+  }
+  assert.equal((await situacao(db, id, { para: "cancelada" })).status, 200);
+  for (const para of ["enviada", "em_negociacao", "aceita", "recusada", "cancelada"]) {
+    assert.equal((await situacao(db, id, { para, valor_estimado: 1, motivo_perda_categoria: "sem_retorno" })).status, 409, `cancelada → ${para}`);
+  }
+  assert.equal((await situacao(db, id, { para: "inexistente" })).status, 400);
+});
+await caso("em negociação: oportunidade em proposta_enviada vai para negociacao; follow-up continua pendente", async () => {
+  const db = novoDb();
+  const { id, numero } = await enviar(db);
+  const r = await situacao(db, id, { para: "em_negociacao" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(proposta(db, id).situacao, "em_negociacao");
+  assert.equal(opps(db)[0].etapa, "negociacao");
+  assert.equal(db.tabelas.lembretes.find((l: any) => l.texto === `Follow-up da proposta ${numero}`).status, "pendente");
+});
+await caso("aceita → oportunidade ganho e cancela SÓ o follow-up desta proposta (outros lembretes ficam)", async () => {
+  const db = novoDb();
+  const { id, numero } = await enviar(db, 12000);
+  db.tabelas.lembretes.push(
+    { id: "outro-1", oportunidade_id: opps(db)[0].id, tipo: "retorno", status: "pendente", texto: "Follow-up da proposta RS-0001/26" },
+    { id: "outro-2", oportunidade_id: null, tipo: "retorno", status: "pendente", texto: `Follow-up da proposta ${numero}` },
+  );
+  const r = await situacao(db, id, { para: "aceita" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(proposta(db, id).situacao, "aceita");
+  assert.equal(opps(db)[0].etapa, "ganho");
+  assert.ok(opps(db)[0].fechada_em);
+  assert.equal(db.tabelas.lembretes.find((l: any) => l.texto === `Follow-up da proposta ${numero}` && l.oportunidade_id === opps(db)[0].id).status, "cancelado");
+  assert.equal(db.tabelas.lembretes.find((l: any) => l.id === "outro-1").status, "pendente");
+  assert.equal(db.tabelas.lembretes.find((l: any) => l.id === "outro-2").status, "pendente");
+});
+await caso("recusada: exige categoria ('outro' exige texto); com categoria → oportunidade perdido (+ reconectar +90) e follow-up cancelado", async () => {
+  const db = novoDb();
+  const { id, numero } = await enviar(db);
+  assert.equal((await situacao(db, id, { para: "recusada" })).status, 400);
+  assert.equal((await situacao(db, id, { para: "recusada", motivo_perda_categoria: "outro" })).status, 400);
+  assert.equal(proposta(db, id).situacao, "enviada");
+  assert.equal(opps(db)[0].etapa, "proposta_enviada");
+  const r = await situacao(db, id, { para: "recusada", motivo_perda_categoria: "valor_acima_orcamento", observacao: "Achou caro" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(proposta(db, id).situacao, "recusada");
+  const o = opps(db)[0];
+  assert.deepEqual({ etapa: o.etapa, cat: o.motivo_perda_categoria }, { etapa: "perdido", cat: "valor_acima_orcamento" });
+  const reconectar = db.tabelas.lembretes.find((l: any) => l.tipo === "reconectar");
+  assert.equal(reconectar.status, "pendente");
+  assert.equal(reconectar.data_lembrete, calcularValidadeAte(HOJE, 90));
+  assert.equal(db.tabelas.lembretes.find((l: any) => l.texto === `Follow-up da proposta ${numero}`).status, "cancelado");
+  const h = db.tabelas.proposta_historico.find((x: any) => x.para === "recusada");
+  assert.match(h.observacao, /Valor acima do orçamento/);
+});
+await caso("recusada: se o Funil falhar (perda não grava) a proposta volta ao que era", async () => {
+  const db = novoDb();
+  const { id } = await enviar(db);
+  db.falhas["lembretes.insert"] = "boom";
+  const r = await situacao(db, id, { para: "recusada", motivo_perda_categoria: "sem_retorno" });
+  assert.equal(r.status, 500);
+  assert.equal(proposta(db, id).situacao, "enviada");
+  assert.equal(opps(db)[0].etapa, "proposta_enviada");
+});
+await caso("cancelada: não mexe na oportunidade, só cancela o follow-up pendente (rascunho e enviada)", async () => {
+  const db = novoDb();
+  const { id, numero } = await enviar(db);
+  const r = await situacao(db, id, { para: "cancelada", observacao: "Cliente desistiu" });
+  assert.equal(r.status, 200);
+  assert.equal(opps(db)[0].etapa, "proposta_enviada");
+  assert.equal(db.tabelas.lembretes.find((l: any) => l.texto === `Follow-up da proposta ${numero}`).status, "cancelado");
+  const c = await criar(db);
+  assert.equal((await situacao(db, c.body.data.id, { para: "cancelada" })).status, 200);
+});
+await caso("aceita/recusada quando a oportunidade aberta é de OUTRO vendedor: proposta muda, Funil não é tocado, com aviso", async () => {
+  const db = novoDb();
+  const { id } = await enviar(db);
+  opps(db)[0].vendedor_id = V2;
+  const r = await situacao(db, id, { para: "aceita" });
+  assert.equal(r.status, 200);
+  assert.match(r.body.aviso, /outro vendedor/);
+  assert.equal(opps(db)[0].etapa, "proposta_enviada");
+});
+
+await caso("editar rascunho: no lugar (sem revisão), com validação de percentual e de contato", async () => {
+  const db = novoDb();
+  const c = await criar(db);
+  const id = c.body.data.id;
+  const upd = (corpo: Record<string, unknown>, usuario = "u-v") => chamar(db, usuario, rotaId.PATCH, { metodo: "PATCH", id, corpo });
+  const ok = await upd({ updated_at: proposta(db, id).updated_at, validade_dias: 30, conteudo: { cliente_cnpj: "11", condicoes: { taxa_sem_reposicao_pct: 40 } }, contato_id: CT });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(proposta(db, id).revisao_atual, 0);
+  assert.equal(proposta(db, id).validade_dias, 30);
+  assert.equal(proposta(db, id).conteudo.condicoes.taxa_sem_reposicao_pct, 40);
+  assert.equal(proposta(db, id).aos_cuidados, "Ana Contato");
+  assert.equal(db.tabelas.proposta_revisoes.length, 0);
+  assert.equal((await upd({ updated_at: proposta(db, id).updated_at, conteudo: { condicoes: { taxa_cancelamento_pct: "" } } })).status, 400);
+  assert.equal((await upd({ updated_at: proposta(db, id).updated_at, contato_id: CT_FORA })).status, 400);
+  assert.equal((await upd({ updated_at: "2000-01-01T00:00:00.000Z", validade_dias: 20 })).status, 409, "versão velha");
+  assert.equal(proposta(db, id).validade_dias, 30);
+  assert.equal(proposta(db, id).cliente_nome, "Empresa X", "cliente não é editável pelo corpo");
+  const forjar = await upd({ updated_at: proposta(db, id).updated_at, cliente_nome: "X", numero: "RS-1/26", vendedor_id: V2, situacao: "aceita" });
+  assert.equal(forjar.status, 200);
+  assert.deepEqual({ n: proposta(db, id).numero, v: proposta(db, id).vendedor_id, s: proposta(db, id).situacao, c: proposta(db, id).cliente_nome }, { n: c.body.data.numero, v: V, s: "rascunho", c: "Empresa X" });
+});
+await caso("editar proposta enviada: cria Rev. 1 (mesmo número), Rev. 0 fica idêntica, validade recomeça de hoje", async () => {
+  const db = novoDb();
+  const { id, numero } = await enviar(db);
+  const rev0Antes = structuredClone(db.tabelas.proposta_revisoes[0]);
+  proposta(db, id).validade_ate = "2026-10-21"; // ainda válida, mas perto de vencer
+  const r = await chamar(db, "u-v", rotaId.PATCH, { metodo: "PATCH", id, corpo: { updated_at: proposta(db, id).updated_at, validade_dias: 20, conteudo: { condicoes: { taxa_sem_reposicao_pct: 40 } } } });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const p = proposta(db, id);
+  assert.equal(p.numero, numero);
+  assert.equal(p.revisao_atual, 1);
+  assert.equal(p.situacao, "enviada");
+  assert.equal(p.validade_ate, calcularValidadeAte(HOJE, 20));
+  assert.equal(db.tabelas.proposta_revisoes.length, 2);
+  assert.deepEqual(db.tabelas.proposta_revisoes[0], rev0Antes, "Rev. 0 intacta");
+  const rev1 = db.tabelas.proposta_revisoes[1];
+  assert.equal(rev1.revisao, 1);
+  assert.equal(rev1.conteudo.condicoes.taxa_sem_reposicao_pct, 40);
+  assert.equal(db.tabelas.proposta_revisoes[0].conteudo.condicoes.taxa_sem_reposicao_pct, 45);
+  assert.equal(rev1.conteudo.numero, numero);
+  assert.ok(db.tabelas.proposta_historico.some((h: any) => /Revisão 1 emitida/.test(h.observacao)));
+  // Duas edições seguidas com a MESMA versão: a segunda perde (409) e não cria Rev. 2.
+  const velha = await chamar(db, "u-v", rotaId.PATCH, { metodo: "PATCH", id, corpo: { updated_at: "2000-01-01T00:00:00.000Z", validade_dias: 10 } });
+  assert.equal(velha.status, 409);
+  assert.equal(db.tabelas.proposta_revisoes.length, 2);
+});
+await caso("editar: falha ao gravar a revisão → proposta volta ao estado anterior (sem revisão pela metade)", async () => {
+  const db = novoDb();
+  const { id } = await enviar(db);
+  const antes = structuredClone(proposta(db, id));
+  db.falhas["proposta_revisoes.insert"] = "boom";
+  const r = await chamar(db, "u-v", rotaId.PATCH, { metodo: "PATCH", id, corpo: { updated_at: antes.updated_at, validade_dias: 40, conteudo: { condicoes: { taxa_sem_reposicao_pct: 10 } } } });
+  assert.equal(r.status, 500);
+  const p = proposta(db, id);
+  assert.deepEqual({ rev: p.revisao_atual, dias: p.validade_dias, ate: p.validade_ate, c: p.conteudo }, { rev: 0, dias: antes.validade_dias, ate: antes.validade_ate, c: antes.conteudo });
+});
+await caso("editar: proposta aceita/recusada/vencida/cancelada → 409 (não edita mais)", async () => {
+  for (const final of ["aceita", "recusada", "vencida", "cancelada"]) {
+    const db = novoDb();
+    const c = await criar(db);
+    proposta(db, c.body.data.id).situacao = final;
+    const r = await chamar(db, "u-v", rotaId.PATCH, { metodo: "PATCH", id: c.body.data.id, corpo: { updated_at: proposta(db, c.body.data.id).updated_at, validade_dias: 5 } });
+    assert.equal(r.status, 409, final);
+  }
+});
+
+await caso("vencimento: a listagem vence enviada/em negociação expiradas (sem cron), 1x só, com histórico sem autor e follow-up cancelado", async () => {
+  const db = novoDb();
+  const a = await enviar(db);
+  const b = await enviar(db, 100, { empresa_visitada_id: EMP });
+  // b: outra empresa não existe no seed; reaproveita a EMP (oportunidade do mesmo vendedor já aberta)
+  proposta(db, a.id).validade_ate = calcularValidadeAte(HOJE, -1);
+  proposta(db, b.id).situacao = "em_negociacao";
+  proposta(db, b.id).validade_ate = calcularValidadeAte(HOJE, -3);
+  const rascunho = await criar(db);
+  const aceita = await criar(db);
+  proposta(db, aceita.body.data.id).situacao = "aceita";
+  proposta(db, aceita.body.data.id).validade_ate = "2000-01-01";
+  const l1 = await chamar(db, "u-v", rotaLista.GET);
+  assert.equal(l1.status, 200);
+  assert.equal(proposta(db, a.id).situacao, "vencida");
+  assert.equal(proposta(db, b.id).situacao, "vencida");
+  assert.equal(proposta(db, rascunho.body.data.id).situacao, "rascunho");
+  assert.equal(proposta(db, aceita.body.data.id).situacao, "aceita");
+  const h1 = db.tabelas.proposta_historico.filter((h: any) => h.para === "vencida");
+  assert.equal(h1.length, 2);
+  assert.ok(h1.every((h: any) => h.autor_id === null && h.observacao === "Validade expirada."));
+  assert.equal(db.tabelas.lembretes.find((l: any) => l.texto === `Follow-up da proposta ${a.numero}`).status, "cancelado");
+  const snapshot = structuredClone(db.tabelas.propostas);
+  await chamar(db, "u-v", rotaLista.GET);
+  await detalhe(db, a.id);
+  assert.equal(db.tabelas.proposta_historico.filter((h: any) => h.para === "vencida").length, 2, "idempotente");
+  assert.deepEqual(db.tabelas.propostas.map((p: any) => p.situacao), snapshot.map((p: any) => p.situacao));
+  assert.equal(opps(db)[0].etapa, "proposta_enviada", "vencer não mexe no Funil");
+});
+await caso("vencimento: o detalhe também varre; no último dia de validade ainda está válida; depois de vencida não aceita 'aceita' (409)", async () => {
+  const db = novoDb();
+  const { id } = await enviar(db);
+  proposta(db, id).validade_ate = HOJE;
+  assert.equal((await detalhe(db, id)).body.data.situacao, "enviada");
+  proposta(db, id).validade_ate = calcularValidadeAte(HOJE, -1);
+  const d = await detalhe(db, id);
+  assert.equal(d.body.data.situacao, "vencida");
+  assert.equal((await situacao(db, id, { para: "aceita" })).status, 409);
+});
+
+await caso("acesso: outro vendedor recebe 404 (GET, PATCH, situação, PDF); gestor lê (somenteLeitura) mas escreve → 403", async () => {
+  const db = novoDb();
+  const c = await criar(db);
+  const id = c.body.data.id;
+  assert.equal((await detalhe(db, id, "u-v2")).status, 404);
+  assert.equal((await chamar(db, "u-v2", rotaId.PATCH, { metodo: "PATCH", id, corpo: { updated_at: proposta(db, id).updated_at, validade_dias: 9 } })).status, 404);
+  assert.equal((await situacao(db, id, { para: "cancelada" }, "u-v2")).status, 404);
+  assert.equal((await chamar(db, "u-v2", rotaPdf.GET, { id })).status, 404);
+  assert.equal(proposta(db, id).situacao, "rascunho");
+  assert.equal(proposta(db, id).validade_dias, 15);
+  const g = await detalhe(db, id, "u-dir");
+  assert.equal(g.status, 200);
+  assert.equal(g.body.somenteLeitura, true);
+  assert.equal(g.body.podeEditar, false);
+  assert.equal((await chamar(db, "u-dir", rotaId.PATCH, { metodo: "PATCH", id, corpo: { updated_at: proposta(db, id).updated_at } })).status, 403);
+  assert.equal((await situacao(db, id, { para: "cancelada" }, "u-dir")).status, 403);
+  assert.equal((await detalhe(db, "inexistente")).status, 404);
+});
+await caso("listagem: vendedor só vê as próprias; gestor vê todas e filtra por situação/vendedor; sem login 401", async () => {
+  const db = novoDb();
+  await criar(db);
+  await criar(db, {}, "u-v2");
+  const minha = await chamar(db, "u-v", rotaLista.GET);
+  assert.equal(minha.body.data.length, 1);
+  assert.equal(minha.body.data[0].vendedor_nome, "Vendedor");
+  assert.equal(minha.body.somenteLeitura, false);
+  const todas = await chamar(db, "u-dir", rotaLista.GET);
+  assert.equal(todas.body.data.length, 2);
+  assert.equal(todas.body.somenteLeitura, true);
+  assert.equal((await chamar(db, "u-dir", rotaLista.GET, { url: `http://x/api?vendedor=${V2}` })).body.data.length, 1);
+  assert.equal((await chamar(db, "u-dir", rotaLista.GET, { url: "http://x/api?situacao=aceita" })).body.data.length, 0);
+  assert.equal((await chamar(db, null, rotaLista.GET)).status, 401);
+});
+await caso("painel: gestor vê totais por situação/modelo/vendedor; vendedor → 403", async () => {
+  const db = novoDb();
+  await criar(db);
+  await enviar(db, 800);
+  const a = await chamar(db, "u-dir", rotaPainel.GET);
+  assert.equal(a.status, 200);
+  assert.equal(a.body.total, 2);
+  assert.deepEqual(a.body.por_situacao, { rascunho: 1, enviada: 1 });
+  assert.deepEqual(a.body.por_modelo, { RS: 2 });
+  assert.equal(a.body.por_vendedor[0].vendedor_nome, "Vendedor");
+  assert.equal((await chamar(db, "u-v", rotaPainel.GET)).status, 403);
+});
+await caso("PDF (rota): rascunho usa o conteúdo atual; Rev. 0 e Rev. 1 saem dos snapshots; rev inexistente 404; rev inválida 400", async () => {
+  const db = novoDb();
+  const { id } = await enviar(db);
+  const pdf = (rev?: string) => chamar(db, "u-v", rotaPdf.GET, { id, url: `http://x/api${rev === undefined ? "" : `?rev=${rev}`}` });
+  const atual = await pdf();
+  assert.equal(atual.status, 200);
+  assert.equal(new TextDecoder().decode((atual.body as Uint8Array).slice(0, 5)), "%PDF-");
+  assert.equal((await pdf("0")).status, 200);
+  assert.equal((await pdf("7")).status, 404);
+  assert.equal((await pdf("abc")).status, 400);
+  assert.equal((await pdf("-1")).status, 400);
+  await chamar(db, "u-v", rotaId.PATCH, { metodo: "PATCH", id, corpo: { updated_at: proposta(db, id).updated_at, conteudo: { condicoes: { taxa_sem_reposicao_pct: 40 } } } });
+  assert.equal((await pdf("1")).status, 200);
+  const r = await criar(db, {});
+  assert.equal((await chamar(db, "u-v", rotaPdf.GET, { id: r.body.data.id })).status, 200, "rascunho gera PDF do conteúdo atual");
+});
+await caso("imutabilidade e permanência: nenhum update/delete em proposta_revisoes/proposta_historico e nenhum delete em propostas, em todo o teste de API", async () => {
+  const db = novoDb();
+  const { id } = await enviar(db);
+  await chamar(db, "u-v", rotaId.PATCH, { metodo: "PATCH", id, corpo: { updated_at: proposta(db, id).updated_at, validade_dias: 25 } });
+  await situacao(db, id, { para: "em_negociacao" });
+  await situacao(db, id, { para: "aceita" });
+  const c2 = await criar(db);
+  await situacao(db, c2.body.data.id, { para: "cancelada" });
+  proposta(db, id).validade_ate = "2000-01-01";
+  await chamar(db, "u-v", rotaLista.GET);
+  for (const q of db.consultas) {
+    if (IMUTAVEIS.includes(q.tabela)) assert.ok(q.op === "insert" || q.op === "select", `${q.tabela}.${q.op}`);
+    if (q.tabela === "propostas") assert.ok(q.op !== "delete", "propostas.delete");
+  }
+  assert.ok(db.consultas.some((q: any) => q.tabela === "proposta_revisoes" && q.op === "insert"));
+  assert.ok(db.consultas.some((q: any) => q.tabela === "proposta_historico" && q.op === "insert"));
+  assert.equal(db.tabelas.propostas.length, 2);
+});
+
+fs.rmSync(tmp, { recursive: true, force: true });
 
 console.log(`\n${total} casos OK${process.exitCode ? " (com FALHAS acima)" : ""}`);

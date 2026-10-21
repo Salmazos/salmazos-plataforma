@@ -257,6 +257,10 @@ class Consulta {
     if (this.tabela === "funcionario_mot_eventos") {
       return { data: null, error: { message: "funcionario_mot_eventos é append-only" } };
     }
+    // db.imutaveis = ["tabela"]: imita o trigger do banco que barra update/delete (valendo também para o service role).
+    if (this.db.imutaveis?.includes(this.tabela)) {
+      return { data: null, error: { code: "42501", message: `registro imutável: ${this.op.toUpperCase()} em ${this.tabela} não é permitido` } };
+    }
     if (this.op === "update") {
       for (const l of alvos) Object.assign(l, this.payload);
       return this.retorna ? this.finalizar(alvos.map((l) => projetar(l, interpretarSelect(this.cols).colunas))) : { data: null, error: null };
@@ -273,6 +277,14 @@ export function criarClienteServico(db) {
   const falhaStorage = (chave) => (db.falhas[chave] ? { data: null, error: { message: db.falhas[chave] } } : null);
   return {
     from: (tabela) => new Consulta(db, tabela),
+    // db.rpcs = { nome: (args, db) => ({ data, error }) }: o teste fornece o comportamento da função SQL.
+    rpc: async (nome, args) => {
+      const falha = db.falhas[`rpc.${nome}`];
+      if (falha) return { data: null, error: typeof falha === "object" ? falha : { message: falha } };
+      const h = db.rpcs?.[nome];
+      if (!h) return { data: null, error: { message: `rpc não mockada no memdb: ${nome}` } };
+      return h(args, db);
+    },
     storage: {
       from: (balde) => ({
         createSignedUploadUrl: async (caminho) => falhaStorage("storage.upload") ?? ({ data: { signedUrl: `https://stub/${balde}/up/${caminho}`, path: caminho, token: "tk" }, error: null }),
