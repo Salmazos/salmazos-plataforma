@@ -15,11 +15,13 @@ interface Props {
   hoje: string;
   valorInicial: number | null;
   vendedorTemTelefone: boolean;
+  // Só quem tem Funil vê promessa de oportunidade/follow-up; sem ele a proposta apenas se registra.
+  temFunil: boolean;
   onClose: () => void;
   onConfirmar: (valor: number) => Promise<string | null>;
 }
 
-export default function ModalMarcarEnviada({ numero, clienteNome, condicoes, validadeDias, hoje, valorInicial, vendedorTemTelefone, onClose, onConfirmar }: Props) {
+export default function ModalMarcarEnviada({ numero, clienteNome, condicoes, validadeDias, hoje, valorInicial, vendedorTemTelefone, temFunil, onClose, onConfirmar }: Props) {
   const [valor, setValor] = useState<number>(valorInicial ?? 0);
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -45,7 +47,7 @@ export default function ModalMarcarEnviada({ numero, clienteNome, condicoes, val
       <div style={{ marginBottom: 14 }}>
         <label style={labelStyle}>Valor estimado da proposta *</label>
         <CampoMoeda value={valor || null} onChange={setValor} placeholder="R$ 0,00" style={{ padding: "9px 12px", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 14, width: "100%", boxSizing: "border-box" }} />
-        <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>Este valor vai para a oportunidade do Funil.</div>
+        <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{temFunil ? "Este valor vai para a oportunidade do Funil." : "Este valor fica registrado na proposta."}</div>
       </div>
 
       <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10, padding: 12, marginBottom: 12 }}>
@@ -64,7 +66,11 @@ export default function ModalMarcarEnviada({ numero, clienteNome, condicoes, val
       {!vendedorTemTelefone && (
         <Aviso tipo="alerta">Seu telefone não está no perfil e não aparecerá no PDF. <Link href="/painel/meu-perfil" style={{ fontWeight: 700, color: "inherit", textDecoration: "underline" }}>Abrir Meu Perfil</Link></Aviso>
       )}
-      <Aviso tipo="info">A plataforma não envia e-mail: o PDF é gerado aqui e você o envia ao cliente. Ao confirmar, o Funil recebe a oportunidade em &quot;Proposta enviada&quot; e um lembrete de follow-up para 3 dias úteis.</Aviso>
+      <Aviso tipo="info">
+        {temFunil
+          ? <>A plataforma não envia e-mail: o PDF é gerado aqui e você o envia ao cliente. Ao confirmar, o Funil recebe a oportunidade em &quot;Proposta enviada&quot; e um lembrete de follow-up para 3 dias úteis.</>
+          : <>A plataforma não envia e-mail: o PDF é gerado aqui e você o envia ao cliente. Ao confirmar, a proposta passa para Enviada e a validade começa a contar.</>}
+      </Aviso>
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
 
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>

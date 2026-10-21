@@ -29,6 +29,8 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
   const [hoje, setHoje] = useState("");
   const [podeEditar, setPodeEditar] = useState(false);
   const [somenteLeitura, setSomenteLeitura] = useState(true);
+  // Até o servidor responder, nenhum texto promete efeito no Funil.
+  const [temFunil, setTemFunil] = useState(false);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -44,12 +46,13 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
 
   const carregar = useCallback(async () => {
     try {
-      const r = await lerResposta<{ data: Detalhe; hoje: string; podeEditar: boolean; somenteLeitura: boolean }>(await fetch(`/api/comercial/propostas/${id}`));
+      const r = await lerResposta<{ data: Detalhe; hoje: string; podeEditar: boolean; somenteLeitura: boolean; temFunil?: boolean }>(await fetch(`/api/comercial/propostas/${id}`));
       if (!r.ok) { setErro(r.status === 404 ? "Proposta não encontrada." : r.json.error ?? "Não foi possível carregar a proposta."); return; }
       setD(r.json.data);
       setHoje(r.json.hoje);
       setPodeEditar(r.json.podeEditar);
       setSomenteLeitura(r.json.somenteLeitura);
+      setTemFunil(r.json.temFunil === true);
       setErro("");
     } catch {
       setErro("Não foi possível carregar a proposta.");
@@ -70,7 +73,7 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
     setEditando(true);
     if (d.empresa_visitada_id) {
       try {
-        const r = await lerResposta<{ data: Contato[] }>(await fetch(`/api/comercial/empresas/${d.empresa_visitada_id}/contatos`));
+        const r = await lerResposta<{ data: Contato[] }>(await fetch(`/api/comercial/propostas/empresas/${d.empresa_visitada_id}/contatos`));
         if (r.ok) setContatos(r.json.data ?? []);
         else setErroEdicao(r.json.error ?? "Não foi possível carregar os contatos da empresa. O A/C continua digitável.");
       } catch {
@@ -236,11 +239,11 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
       {modalEnviada && (
         <ModalMarcarEnviada
           numero={d.numero} clienteNome={d.cliente_nome} condicoes={condicoes} validadeDias={d.validade_dias} hoje={hoje}
-          valorInicial={d.valor_estimado} vendedorTemTelefone={!!d.vendedor_telefone?.trim()}
+          valorInicial={d.valor_estimado} vendedorTemTelefone={!!d.vendedor_telefone?.trim()} temFunil={temFunil}
           onClose={() => setModalEnviada(false)} onConfirmar={(valor) => mudarSituacao({ para: "enviada", valor_estimado: valor })}
         />
       )}
-      {acao && <ModalSituacaoProposta acao={acao} onClose={() => setAcao(null)} onConfirmar={(dados) => mudarSituacao({ para: acao, ...dados })} />}
+      {acao && <ModalSituacaoProposta acao={acao} temFunil={temFunil} onClose={() => setAcao(null)} onConfirmar={(dados) => mudarSituacao({ para: acao, ...dados })} />}
     </div>
   );
 }

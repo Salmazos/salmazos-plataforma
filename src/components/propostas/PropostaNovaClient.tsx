@@ -9,7 +9,8 @@ import CamposProposta, { camposPadrao, conteudoDoForm, validadeDoForm, type Camp
 import { Aviso, btnPrimario, btnSecundario, cardStyle, inputStyle, labelStyle, lerResposta, guardarAvisoProposta } from "@/components/propostas/propostasUi";
 
 interface Contato { id: string; nome: string; cargo: string | null; principal: boolean }
-interface EmpresaOpc { id: string; nome: string; contatos: Contato[]; oportunidade_aberta: { id: string; vendedor_nome: string | null; etapa: string } | null }
+// oportunidade_aberta só vem para quem tem Funil; sem o campo, não há aviso de oportunidade de outro vendedor.
+interface EmpresaOpc { id: string; nome: string; contatos: Contato[]; oportunidade_aberta?: { id: string; vendedor_nome: string | null; etapa: string } | null }
 
 export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
   const router = useRouter();
@@ -32,7 +33,7 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
     let cancelado = false;
     temporizador.current = setTimeout(async () => {
       try {
-        const r = await lerResposta<{ data: EmpresaOpc[] }>(await fetch(`/api/comercial/empresas?q=${encodeURIComponent(busca.trim())}`));
+        const r = await lerResposta<{ data: EmpresaOpc[] }>(await fetch(`/api/comercial/propostas/empresas?q=${encodeURIComponent(busca.trim())}`));
         if (cancelado) return;
         if (r.ok) { setEmpresas(r.json.data ?? []); setErroBusca(""); }
         else setErroBusca(r.json.error ?? "Não foi possível buscar as empresas.");

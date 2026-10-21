@@ -6,21 +6,30 @@ import { Aviso, btnPerigo, btnPrimario, btnSecundario, inputStyle, labelStyle, M
 
 export type AcaoSituacao = "em_negociacao" | "aceita" | "recusada" | "cancelada";
 
-const TEXTOS: Record<AcaoSituacao, { titulo: string; explicacao: string; botao: string }> = {
+const TEXTOS_COM_FUNIL: Record<AcaoSituacao, { titulo: string; explicacao: string; botao: string }> = {
   em_negociacao: { titulo: "Em negociação", explicacao: "A proposta passa para Em negociação. Se a oportunidade do Funil estiver em Proposta enviada, ela acompanha para Negociação. O lembrete de follow-up continua.", botao: "Marcar em negociação" },
   aceita: { titulo: "Proposta aceita", explicacao: "A oportunidade do Funil passa para Venda fechada e o lembrete de follow-up desta proposta é cancelado.", botao: "Marcar como aceita" },
   recusada: { titulo: "Proposta recusada", explicacao: "A oportunidade do Funil passa para Não desta vez, com um lembrete para reconectar em 90 dias, e o follow-up desta proposta é cancelado.", botao: "Marcar como recusada" },
   cancelada: { titulo: "Cancelar proposta", explicacao: "A proposta é cancelada e não poderá mais ser alterada. O Funil não é alterado; só o lembrete de follow-up desta proposta é cancelado.", botao: "Cancelar proposta" },
 };
 
+// Sem Funil (acesso a Propostas só por liberação) nada é prometido além do registro da própria proposta.
+const TEXTOS_SEM_FUNIL: Record<AcaoSituacao, { titulo: string; explicacao: string; botao: string }> = {
+  em_negociacao: { titulo: "Em negociação", explicacao: "A proposta passa para Em negociação.", botao: "Marcar em negociação" },
+  aceita: { titulo: "Proposta aceita", explicacao: "A proposta é marcada como aceita.", botao: "Marcar como aceita" },
+  recusada: { titulo: "Proposta recusada", explicacao: "A proposta é marcada como recusada. Informe o motivo.", botao: "Marcar como recusada" },
+  cancelada: { titulo: "Cancelar proposta", explicacao: "A proposta é cancelada e não poderá mais ser alterada.", botao: "Cancelar proposta" },
+};
+
 interface Props {
   acao: AcaoSituacao;
+  temFunil: boolean;
   onClose: () => void;
   onConfirmar: (dados: { motivo_perda_categoria?: string; motivo_perda?: string; observacao?: string }) => Promise<string | null>;
 }
 
-export default function ModalSituacaoProposta({ acao, onClose, onConfirmar }: Props) {
-  const t = TEXTOS[acao];
+export default function ModalSituacaoProposta({ acao, temFunil, onClose, onConfirmar }: Props) {
+  const t = (temFunil ? TEXTOS_COM_FUNIL : TEXTOS_SEM_FUNIL)[acao];
   const [categoria, setCategoria] = useState("");
   const [motivo, setMotivo] = useState("");
   const [observacao, setObservacao] = useState("");
