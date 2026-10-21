@@ -33,6 +33,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     data: {
       ...proposta,
       vendedor_nome: vendedor?.nome_completo ?? null,
+      vendedor_telefone: vendedor?.telefone ?? null,
       revisoes: revisoes ?? [],
       historico: (historico ?? []).map((h) => ({ ...h, autor_nome: h.autor_id ? nomePorId.get(h.autor_id as string) ?? null : null })),
     },

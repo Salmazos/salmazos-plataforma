@@ -850,16 +850,23 @@ await caso("listagem: vendedor só vê as próprias; gestor vê todas e filtra p
   assert.equal((await chamar(db, "u-dir", rotaLista.GET, { url: "http://x/api?situacao=aceita" })).body.data.length, 0);
   assert.equal((await chamar(db, null, rotaLista.GET)).status, 401);
 });
-await caso("painel: gestor vê totais por situação/modelo/vendedor; vendedor → 403", async () => {
+await caso("painel: gestor vê totais por situação/modelo/vendedor, valor em aberto e propostas vencendo em 7 dias; vendedor → 403", async () => {
   const db = novoDb();
   await criar(db);
-  await enviar(db, 800);
-  const a = await chamar(db, "u-dir", rotaPainel.GET);
-  assert.equal(a.status, 200);
-  assert.equal(a.body.total, 2);
-  assert.deepEqual(a.body.por_situacao, { rascunho: 1, enviada: 1 });
-  assert.deepEqual(a.body.por_modelo, { RS: 2 });
-  assert.equal(a.body.por_vendedor[0].vendedor_nome, "Vendedor");
+  const a = await enviar(db, 800);
+  const b = await enviar(db, 200);
+  proposta(db, a.id).validade_ate = calcularValidadeAte(HOJE, 5);
+  proposta(db, b.id).validade_ate = calcularValidadeAte(HOJE, 30);
+  const r = await chamar(db, "u-dir", rotaPainel.GET);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.total, 3);
+  assert.deepEqual(r.body.por_situacao, { rascunho: 1, enviada: 2 });
+  assert.deepEqual(r.body.por_modelo, { RS: 3 });
+  assert.equal(r.body.valor_em_aberto, 1000);
+  assert.equal(r.body.por_vendedor[0].vendedor_nome, "Vendedor");
+  assert.equal(r.body.por_vendedor[0].valor_aberto, 1000);
+  assert.deepEqual(r.body.vencendo_em_7_dias.map((v: any) => v.numero), [a.numero]);
+  assert.equal(r.body.vencendo_em_7_dias[0].vendedor_nome, "Vendedor");
   assert.equal((await chamar(db, "u-v", rotaPainel.GET)).status, 403);
 });
 await caso("PDF (rota): rascunho usa o conteúdo atual; Rev. 0 e Rev. 1 saem dos snapshots; rev inexistente 404; rev inválida 400", async () => {

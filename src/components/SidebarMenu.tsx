@@ -40,6 +40,7 @@ import {
   Wallet,
   KeyRound,
   FileSpreadsheet,
+  FileText,
 } from "lucide-react";
 
 interface Props {
@@ -140,6 +141,7 @@ const menuItems: MenuItemDef[] = [
       { label: "Carteira de Clientes", href: "/painel/empresas-visitadas", icon: MapPin, requireCarteiraClientes: true },
       { label: "Gestão de Clientes", href: "/painel/gestao-clientes", icon: AlertTriangle, requireGestaoClientes: true },
       { label: "Funil Comercial", href: "/painel/comercial", icon: TrendingUp, requireFunilComercial: true },
+      { label: "Propostas", href: "/painel/comercial/propostas", icon: FileText, requireFunilComercial: true },
     ],
   },
   {
@@ -310,7 +312,10 @@ export default function SidebarMenu({
   // qualquer submenu — senão, como toda rota do painel começa com "/painel", o item/grupo que
   // contém o link "Painel" ficaria destacado em qualquer página do sistema.
   function hrefMatches(href: string) {
-    return href === "/painel" ? pathname === "/painel" : pathname.startsWith(href);
+    if (href === "/painel") return pathname === "/painel";
+    // "/painel/comercial/propostas" também começa com "/painel/comercial": o Funil não pode ficar destacado junto com Propostas.
+    if (href === "/painel/comercial") return pathname.startsWith(href) && !pathname.startsWith("/painel/comercial/propostas");
+    return pathname.startsWith(href);
   }
 
   function isActive(href: string, submenu?: MenuItemDef["submenu"]) {
