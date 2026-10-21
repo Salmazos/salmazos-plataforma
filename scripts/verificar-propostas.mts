@@ -1270,7 +1270,7 @@ await caso("(i) rotas de empresas: só id, nome e contatos da unidade; oportunid
   assert.deepEqual((await chamar(db, "u-lib", rotaEmpresas.GET, { url: "http://x/api?q=EMPRES" })).body.data.map((e: any) => e.id), [EMP], "busca sem diferenciar maiúscula");
   assert.deepEqual((await chamar(db, "u-lib", rotaEmpresas.GET, { url: "http://x/api?q=zzz" })).body.data, []);
   assert.deepEqual((await chamar(db, "u-lib", rotaEmpresas.GET, { url: "http://x/api?q=%25" })).body.data, [], "% digitado é literal");
-  assert.deepEqual((await chamar(db, "u-dirl", rotaEmpresas.GET)).body.data.map((e: any) => e.id).sort(), [EMP, EMP_OUTRA_UNIDADE].sort(), "acesso a todas as unidades");
+  assert.deepEqual((await chamar(db, "u-dirl", rotaEmpresas.GET)).body.data.map((e: any) => e.id), [EMP], "acesso a todas as unidades é ignorado: só a unidade do usuário");
 
   const ct = await chamar(db, "u-lib", rotaEmpresaContatos.GET, { id: EMP });
   assert.equal(ct.status, 200);
@@ -1279,7 +1279,11 @@ await caso("(i) rotas de empresas: só id, nome e contatos da unidade; oportunid
   assert.equal((await chamar(db, "u-dir", rotaEmpresaContatos.GET, { id: EMP })).status, 403, "leitor");
   assert.equal((await chamar(db, "u-dir", rotaEmpresas.GET)).body.error, MSG_SO_ACOMPANHA);
   assert.equal((await chamar(db, "u-sem", rotaEmpresaContatos.GET, { id: EMP })).body.error, MSG_SEM_ACESSO);
-  assert.equal((await chamar(db, "u-dirl", rotaEmpresaContatos.GET, { id: EMP_OUTRA_UNIDADE })).status, 200, "acesso a todas as unidades");
+  assert.equal((await chamar(db, "u-dirl", rotaEmpresaContatos.GET, { id: EMP_OUTRA_UNIDADE })).status, 404, "acesso a todas as unidades é ignorado nos contatos");
+  assert.equal((await chamar(db, "u-dirl", rotaEmpresaContatos.GET, { id: EMP })).status, 200);
+  db.tabelas.analistas_perfil.find((a: any) => a.id === LIB).unidade_id = null;
+  assert.deepEqual((await chamar(db, "u-lib", rotaEmpresas.GET)).body.data, [], "sem unidade definida: lista vazia");
+  assert.equal((await chamar(db, "u-lib", rotaEmpresaContatos.GET, { id: EMP })).status, 404, "sem unidade definida: 404");
 });
 
 await caso("(j) quem perdeu o perfil_comercial mas está liberado age sem Funil, mesmo em proposta antiga com oportunidade_id", async () => {
@@ -1300,6 +1304,45 @@ await caso("(j) quem perdeu o perfil_comercial mas está liberado age sem Funil,
   assert.deepEqual(consultasFunil(db), []);
   assert.deepEqual(estadoFunil(db), antes, "oportunidade e lembrete intactos (o lembrete segue pendente)");
   assert.equal(db.tabelas.lembretes[0].status, "pendente");
+});
+
+await caso("(k) erro ao ler a exceção de acesso NEGA (403 em todas as rotas, vale para perfil_comercial e gestor) e o filtro do gestor falha vazio; podeAcessarAba segue no padrão", async () => {
+  const db = novoDb();
+  liberar(db, LIB, true);
+  const id = (await criar(db, {})).body.data.id as string;
+  db.falhas["usuario_acesso_customizado.select"] = "falha simulada na leitura";
+  const rotas: [string, (u: string) => Promise<Chamada>][] = [
+    ["lista GET", (u) => chamar(db, u, rotaLista.GET)],
+    ["lista POST", (u) => chamar(db, u, rotaLista.POST, { metodo: "POST", corpo: { modelo: "RS", empresa_visitada_id: EMP } })],
+    ["detalhe GET", (u) => chamar(db, u, rotaId.GET, { id })],
+    ["detalhe PATCH", (u) => chamar(db, u, rotaId.PATCH, { metodo: "PATCH", id, corpo: { updated_at: "x" } })],
+    ["situação POST", (u) => chamar(db, u, rotaSit.POST, { metodo: "POST", id, corpo: { para: "cancelada" } })],
+    ["pdf GET", (u) => chamar(db, u, rotaPdf.GET, { id })],
+    ["painel GET", (u) => chamar(db, u, rotaPainel.GET)],
+    ["empresas GET", (u) => chamar(db, u, rotaEmpresas.GET)],
+    ["contatos GET", (u) => chamar(db, u, rotaEmpresaContatos.GET, { id: EMP })],
+  ];
+  const erroEsperado = console.error;
+  console.error = () => {};
+  try {
+    for (const usuario of ["u-v", "u-dir", "u-lib"]) {
+      for (const [nome, rodar] of rotas) {
+        const r = await rodar(usuario);
+        assert.equal(r.status, 403, `${usuario} ${nome}: ${JSON.stringify(r.body)}`);
+        assert.equal(r.body.error, MSG_SEM_ACESSO, `${usuario} ${nome}`);
+      }
+    }
+    globalThis.__DB__ = db;
+    const { createServiceClient } = await import("@/lib/supabase/server");
+    assert.deepEqual(await listarQuemPodeEscreverPropostas(createServiceClient(), { unidadeId: U, todasUnidades: true }), [], "filtro do gestor: falha segura (vazio)");
+    assert.equal(await podeAcessarPropostas({ id: "u-v", app_metadata: { role: "analista" } } as any), false);
+    // O podeAcessarAba que os outros módulos usam NÃO mudou: no erro continua caindo no padrão do papel.
+    assert.equal(await podeAcessarAba({ id: "u-v", app_metadata: { role: "analista" } } as any, CHAVE_ABA, true), true);
+    assert.equal(await podeAcessarAba({ id: "u-v", app_metadata: { role: "analista" } } as any, CHAVE_ABA, false), false);
+  } finally { console.error = erroEsperado; }
+  assert.equal(proposta(db, id).situacao, "rascunho", "nada foi alterado");
+  delete db.falhas["usuario_acesso_customizado.select"];
+  assert.equal((await chamar(db, "u-v", rotaLista.GET)).status, 200, "voltou ao normal sem o erro");
 });
 
 fs.rmSync(tmp, { recursive: true, force: true });

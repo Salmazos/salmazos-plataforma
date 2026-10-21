@@ -18,7 +18,7 @@ export interface ContextoPropostas extends ContextoComercial {
 // Fonte única do acesso a Propostas (menu, páginas e rotas):
 //  - acessar = analista ativo E (exceção individual, se houver; senão perfil_comercial OU gestor). Mesma conta do
 //    podeAcessarAba, mas lendo a exceção uma vez só para também separar "liberado de propósito" do padrão.
-//    liberado=false bloqueia tudo, inclusive quem tem perfil_comercial e o gestor.
+//    liberado=false bloqueia tudo, inclusive quem tem perfil_comercial e o gestor. Erro ao ler a exceção = acesso negado.
 //  - escrever = acessar E (perfil_comercial OU liberado=true). O gestor só pelo padrão apenas lê.
 //  - temFunil = perfil_comercial ATUAL de quem faz a ação.
 export async function resolverContextoPropostas(user: User): Promise<ContextoPropostas | null> {
@@ -33,7 +33,10 @@ export async function resolverContextoPropostas(user: User): Promise<ContextoPro
   const role = user.app_metadata?.role ?? "analista";
   const perfilComercial = perfil.perfil_comercial === true;
   const gestor = role === "superuser" || perfil.nivel_acesso === "diretoria" || perfil.nivel_acesso === "superuser";
-  const excecao = await excecaoExplicitaAba(perfil.id, CHAVE_ABA_PROPOSTAS);
+  const leitura = await excecaoExplicitaAba(perfil.id, CHAVE_ABA_PROPOSTAS);
+  // Não conseguir ler a exceção nega o acesso (falha segura): um liberado=false não pode ser ignorado por causa de um erro.
+  if (leitura.erro) return null;
+  const excecao = leitura.excecao;
 
   const acessa = excecao ?? (perfilComercial || gestor);
   if (!acessa) return null;
@@ -63,16 +66,21 @@ export async function exigirContextoPropostas(
 }
 
 // Filtro de vendedor do gestor: quem hoje pode escrever em Propostas (perfil_comercial ou liberado=true), ativo e sem bloqueio.
+// Falha segura: se não for possível ler os perfis ou as exceções (sem elas não dá para saber quem está bloqueado), a lista vem vazia.
 export async function listarQuemPodeEscreverPropostas(
   svc: ReturnType<typeof createServiceClient>,
   alcance: { unidadeId: string | null; todasUnidades: boolean }
 ): Promise<{ id: string; nome_completo: string }[]> {
   let q = svc.from("analistas_perfil").select("id, nome_completo, perfil_comercial").eq("ativo", true).order("nome_completo");
   if (!alcance.todasUnidades && alcance.unidadeId) q = q.eq("unidade_id", alcance.unidadeId);
-  const [{ data: perfis }, { data: excecoes }] = await Promise.all([
+  const [{ data: perfis, error: erroPerfis }, { data: excecoes, error: erroExcecoes }] = await Promise.all([
     q,
     svc.from("usuario_acesso_customizado").select("analista_perfil_id, liberado").eq("chave_aba", CHAVE_ABA_PROPOSTAS),
   ]);
+  if (erroPerfis || erroExcecoes) {
+    console.error("[propostas] Filtro de vendedores indisponível:", (erroPerfis ?? erroExcecoes)?.message);
+    return [];
+  }
   const porAnalista = new Map((excecoes ?? []).map((e) => [e.analista_perfil_id as string, e.liberado === true]));
   return (perfis ?? [])
     .filter((p) => {

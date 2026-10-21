@@ -8,7 +8,8 @@ function escapeLike(s: string): string {
 
 // Empresas da Carteira para escolher na proposta. Só id, nome e contatos: quem tem acesso a Propostas por liberação
 // individual não passa pelas rotas do Funil, e a oportunidade aberta (vendedor e fase) só sai para quem tem Funil.
-// O service client ignora RLS, então o filtro de unidade fica aqui.
+// O service client ignora RLS, então o filtro de unidade fica aqui: SEMPRE a unidade do usuário (mesma regra do
+// criarRascunho, que só aceita empresa da própria unidade), mesmo para quem tem acesso a todas as unidades.
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -16,15 +17,10 @@ export async function GET(request: NextRequest) {
   if (erro) return erro;
   if (!ctx.podeEscrever) return NextResponse.json({ error: MSG_SO_ACOMPANHA_PROPOSTAS }, { status: 403 });
 
+  if (!ctx.unidadeId) return NextResponse.json({ data: [] });
+
   const svc = createServiceClient();
-  let query = svc.from("empresas_visitadas").select("id, nome").order("nome", { ascending: true }).limit(20);
-  if (ctx.todasUnidades) {
-    // sem filtro de unidade
-  } else if (ctx.unidadeId) {
-    query = query.eq("unidade_id", ctx.unidadeId);
-  } else {
-    return NextResponse.json({ data: [] });
-  }
+  let query = svc.from("empresas_visitadas").select("id, nome").eq("unidade_id", ctx.unidadeId).order("nome", { ascending: true }).limit(20);
   const q = (request.nextUrl.searchParams.get("q") ?? "").trim();
   if (q) query = query.ilike("nome", `%${escapeLike(q)}%`);
 
