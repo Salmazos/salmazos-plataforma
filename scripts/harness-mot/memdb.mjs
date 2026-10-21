@@ -79,6 +79,19 @@ function passa(linha, f) {
       return !lista.includes(v);
     }
     case "gt": return v !== null && v !== undefined && v > f.val;
+    // .ilike("nome", "%abc%"): % e _ são curingas; "\\" escapa o próximo caractere (como o escapeLike das rotas).
+    case "ilike": {
+      let re = "";
+      const padrao = String(f.val);
+      for (let i = 0; i < padrao.length; i++) {
+        const ch = padrao[i];
+        if (ch === "\\" && i + 1 < padrao.length) re += padrao[++i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        else if (ch === "%") re += ".*";
+        else if (ch === "_") re += ".";
+        else re += ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }
+      return v !== null && v !== undefined && new RegExp(`^${re}$`, "i").test(String(v));
+    }
     case "or": return f.val.some((sub) => passa(linha, sub));
     case "gte": return v !== null && v !== undefined && v >= f.val;
     case "lt": return v !== null && v !== undefined && v < f.val;
@@ -140,6 +153,7 @@ class Consulta {
     return this;
   }
   not(col, op, val) { this.filtros.push({ col, op: `not${op}`, val }); return this; }
+  ilike(col, val) { this.filtros.push({ col, op: "ilike", val }); return this; }
   gt(col, val) { this.filtros.push({ col, op: "gt", val }); return this; }
   gte(col, val) { this.filtros.push({ col, op: "gte", val }); return this; }
   lt(col, val) { this.filtros.push({ col, op: "lt", val }); return this; }

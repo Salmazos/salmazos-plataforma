@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, propostaCreateSchema } from "@/lib/schemas";
-import { exigirContextoComercial, hojeSaoPaulo } from "@/lib/comercial";
+import { hojeSaoPaulo } from "@/lib/comercial";
+import { exigirContextoPropostas, MSG_SO_ACOMPANHA_PROPOSTAS } from "@/lib/propostasAcesso";
 import { criarRascunho, varrerVencidas } from "@/lib/propostaServico";
 
 const COLUNAS_LISTA = "id, numero, modelo, revisao_atual, situacao, cliente_nome, aos_cuidados, vendedor_id, unidade_id, validade_ate, valor_estimado, enviada_em, created_at, updated_at";
@@ -10,7 +11,7 @@ const COLUNAS_LISTA = "id, numero, modelo, revisao_atual, situacao, cliente_nome
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const { ctx, erro } = await exigirContextoComercial(user);
+  const { ctx, erro } = await exigirContextoPropostas(user);
   if (erro) return erro;
 
   const svc = createServiceClient();
@@ -43,16 +44,16 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     data: (data ?? []).map((p) => ({ ...p, vendedor_nome: nomePorId.get(p.vendedor_id as string) ?? null })),
     hoje,
-    somenteLeitura: !ctx.vendedor,
+    somenteLeitura: !ctx.podeEscrever,
   });
 }
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const { ctx, erro } = await exigirContextoComercial(user);
+  const { ctx, erro } = await exigirContextoPropostas(user);
   if (erro) return erro;
-  if (!ctx.vendedor) return NextResponse.json({ error: "Seu perfil só acompanha as propostas, não cria." }, { status: 403 });
+  if (!ctx.podeEscrever) return NextResponse.json({ error: MSG_SO_ACOMPANHA_PROPOSTAS }, { status: 403 });
 
   const parsed = parseBody(propostaCreateSchema, await request.json());
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });

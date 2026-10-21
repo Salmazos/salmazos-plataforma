@@ -34,3 +34,16 @@ export async function podeAcessarAba(
 
   return comportamentoPadraoPorPapel;
 }
+
+// Lê só a exceção individual cadastrada (true = liberado, false = bloqueado, null = sem exceção). O podeAcessarAba
+// mistura exceção e padrão num único booleano; quem precisa distinguir "liberado de propósito" do "padrão do papel"
+// (ex.: Propostas, onde liberar dá direito de escrever e o padrão de gestor só lê) usa esta.
+export async function excecaoExplicitaAba(analistaPerfilId: string, chaveAba: string): Promise<boolean | null> {
+  const { data } = await createServiceClient()
+    .from("usuario_acesso_customizado")
+    .select("liberado")
+    .eq("analista_perfil_id", analistaPerfilId)
+    .eq("chave_aba", chaveAba)
+    .maybeSingle();
+  return data ? data.liberado === true : null;
+}

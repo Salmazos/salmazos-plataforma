@@ -25,6 +25,11 @@ import * as rotaId from "@/app/api/comercial/propostas/[id]/route";
 import * as rotaSit from "@/app/api/comercial/propostas/[id]/situacao/route";
 import * as rotaPdf from "@/app/api/comercial/propostas/[id]/pdf/route";
 import * as rotaPainel from "@/app/api/comercial/propostas/painel/route";
+import * as rotaEmpresas from "@/app/api/comercial/propostas/empresas/route";
+import * as rotaEmpresaContatos from "@/app/api/comercial/propostas/empresas/[id]/contatos/route";
+import { podeAcessarPropostas, listarQuemPodeEscreverPropostas } from "@/lib/propostasAcesso";
+import { podeAcessarAba } from "@/lib/acessoCustomizadoAuth";
+import { ABAS_POR_CHAVE } from "@/lib/abasConfig";
 import { criarDb } from "../scripts/harness-mot/memdb.mjs";
 
 let total = 0;
@@ -384,6 +389,9 @@ const U = "11111111-1111-4111-8111-111111111111", U2 = "11111111-1111-4111-8111-
 const V = "22222222-2222-4222-8222-222222222222", V2 = "33333333-3333-4333-8333-333333333333", DIR = "44444444-4444-4444-8444-444444444444";
 const EMP = "55555555-5555-4555-8555-555555555555", EMP_OUTRA_UNIDADE = "55555555-5555-4555-8555-666666666666";
 const CT = "66666666-6666-4666-8666-666666666666", CT_FORA = "66666666-6666-4666-8666-777777777777";
+// Perfis da liberação individual (aba comercial_propostas em usuario_acesso_customizado).
+const LIB = "77777777-7777-4777-8777-000000000001", SEM = "77777777-7777-4777-8777-000000000002", INA = "77777777-7777-4777-8777-000000000003";
+const DIRL = "77777777-7777-4777-8777-000000000004", DIRB = "77777777-7777-4777-8777-000000000005", PERDEU = "77777777-7777-4777-8777-000000000006";
 const HOJE = hojeSaoPaulo();
 const ANO = Number(HOJE.slice(0, 4));
 const AA = String(ANO).slice(-2);
@@ -414,7 +422,14 @@ function novoDb(extra: Record<string, unknown[]> = {}) {
       { id: V, user_id: "u-v", nome_completo: "Vendedor", telefone: "(19) 99999-0000", nivel_acesso: "analista", unidade_id: U, acesso_todas_unidades: false, perfil_comercial: true, ativo: true },
       { id: V2, user_id: "u-v2", nome_completo: "Outro", telefone: null, nivel_acesso: "analista", unidade_id: U, acesso_todas_unidades: false, perfil_comercial: true, ativo: true },
       { id: DIR, user_id: "u-dir", nome_completo: "Diretora", telefone: null, nivel_acesso: "diretoria", unidade_id: U, acesso_todas_unidades: true, perfil_comercial: false, ativo: true },
+      { id: LIB, user_id: "u-lib", nome_completo: "Selecionadora", telefone: "(19) 98888-0000", nivel_acesso: "analista", unidade_id: U, acesso_todas_unidades: false, perfil_comercial: false, ativo: true },
+      { id: SEM, user_id: "u-sem", nome_completo: "Sem acesso", telefone: null, nivel_acesso: "analista", unidade_id: U, acesso_todas_unidades: false, perfil_comercial: false, ativo: true },
+      { id: INA, user_id: "u-ina", nome_completo: "Inativa", telefone: null, nivel_acesso: "analista", unidade_id: U, acesso_todas_unidades: false, perfil_comercial: true, ativo: false },
+      { id: DIRL, user_id: "u-dirl", nome_completo: "Diretor liberado", telefone: null, nivel_acesso: "diretoria", unidade_id: U, acesso_todas_unidades: true, perfil_comercial: false, ativo: true },
+      { id: DIRB, user_id: "u-dirb", nome_completo: "Diretor bloqueado", telefone: null, nivel_acesso: "diretoria", unidade_id: U, acesso_todas_unidades: true, perfil_comercial: false, ativo: true },
+      { id: PERDEU, user_id: "u-perdeu", nome_completo: "Ex-vendedor", telefone: null, nivel_acesso: "analista", unidade_id: U, acesso_todas_unidades: false, perfil_comercial: false, ativo: true },
     ],
+    usuario_acesso_customizado: [],
     empresas_visitadas: [{ id: EMP, nome: "Empresa X", cliente_id: null, unidade_id: U }, { id: EMP_OUTRA_UNIDADE, nome: "Empresa Y", cliente_id: null, unidade_id: U2 }],
     empresa_contatos: [{ id: CT, nome: "Ana Contato", empresa_visitada_id: EMP }, { id: CT_FORA, nome: "Fora", empresa_visitada_id: EMP_OUTRA_UNIDADE }],
     oportunidades: [], lembretes: [], oportunidade_interacoes: [], propostas: [], proposta_revisoes: [], proposta_historico: [],
@@ -430,7 +445,7 @@ function novoDb(extra: Record<string, unknown[]> = {}) {
 }
 type Chamada = { status: number; body: any };
 async function chamar(db: any, usuario: string | null, fn: (...a: any[]) => Promise<Response>, { metodo = "GET", url = "http://x/api", corpo, id }: { metodo?: string; url?: string; corpo?: unknown; id?: string } = {}): Promise<Chamada> {
-  db.usuario = usuario ? { id: usuario, email: `${usuario}@t.local`, app_metadata: { role: usuario === "u-dir" ? "diretoria" : "analista" } } : null;
+  db.usuario = usuario ? { id: usuario, email: `${usuario}@t.local`, app_metadata: { role: ["u-dir", "u-dirl", "u-dirb"].includes(usuario) ? "diretoria" : "analista" } } : null;
   globalThis.__DB__ = db;
   const req = Object.assign(new Request(url, { method: metodo, headers: { "Content-Type": "application/json" }, body: corpo === undefined ? undefined : JSON.stringify(corpo) }), { nextUrl: new URL(url) });
   const r = await fn(req, { params: Promise.resolve({ id }) });
@@ -978,6 +993,313 @@ await caso("imutabilidade e permanência: nenhum update/delete em proposta_revis
   assert.ok(db.consultas.some((q: any) => q.tabela === "proposta_revisoes" && q.op === "insert"));
   assert.ok(db.consultas.some((q: any) => q.tabela === "proposta_historico" && q.op === "insert"));
   assert.equal(db.tabelas.propostas.length, 2);
+});
+
+
+// ═══════════════════ Acesso liberado individualmente (usuario_acesso_customizado, chave comercial_propostas) ═══════════════════
+
+const CHAVE_ABA = "comercial_propostas";
+const MSG_SEM_ACESSO = "Você não tem acesso a Propostas.";
+const MSG_SO_ACOMPANHA = "Seu perfil só acompanha as propostas, não cria.";
+const liberar = (db: any, analista: string, liberado: boolean) => db.tabelas.usuario_acesso_customizado.push({ analista_perfil_id: analista, chave_aba: CHAVE_ABA, liberado });
+const TABELAS_FUNIL = ["oportunidades", "oportunidade_interacoes", "lembretes"];
+const consultasFunil = (db: any) => db.consultas.filter((q: any) => TABELAS_FUNIL.includes(q.tabela));
+const estadoFunil = (db: any) => structuredClone({ o: db.tabelas.oportunidades, i: db.tabelas.oportunidade_interacoes, l: db.tabelas.lembretes });
+const MOTIVO = { motivo_perda_categoria: "outro", motivo_perda: "Fechou com outra empresa" };
+const patchProposta = (db: any, id: string, usuario: string, corpo: Record<string, unknown>) =>
+  chamar(db, usuario, rotaId.PATCH, { metodo: "PATCH", id, corpo: { updated_at: proposta(db, id).updated_at, ...corpo } });
+
+await caso("abasConfig: chave comercial_propostas ('Propostas', grupo 'Comercial')", () => {
+  const aba = ABAS_POR_CHAVE.get(CHAVE_ABA);
+  assert.ok(aba);
+  assert.equal(aba!.rotulo, "Propostas");
+  assert.equal(aba!.grupo, "Comercial");
+});
+
+await caso("(a) só liberado=true (sem perfil_comercial) cria, edita e envia as próprias", async () => {
+  const db = novoDb();
+  liberar(db, LIB, true);
+  const c = await criar(db, { contato_id: CT }, "u-lib");
+  assert.equal(c.status, 201, JSON.stringify(c.body));
+  const id = c.body.data.id as string;
+  assert.equal(c.body.data.vendedor_id, LIB);
+  assert.equal(c.body.data.unidade_id, U);
+  assert.equal(c.body.aviso, null);
+  const ed = await patchProposta(db, id, "u-lib", { validade_dias: 20 });
+  assert.equal(ed.status, 200, JSON.stringify(ed.body));
+  assert.equal(proposta(db, id).validade_dias, 20);
+  const env = await situacao(db, id, { para: "enviada", valor_estimado: 7000 }, "u-lib");
+  assert.equal(env.status, 200, JSON.stringify(env.body));
+  const p = proposta(db, id);
+  assert.equal(p.situacao, "enviada");
+  assert.equal(Number(p.valor_estimado), 7000);
+  assert.equal(p.validade_ate, calcularValidadeAte(HOJE, 20));
+  assert.deepEqual(db.tabelas.proposta_revisoes.filter((r: any) => r.proposta_id === id).map((r: any) => r.revisao), [0]);
+  assert.ok(db.tabelas.proposta_historico.some((h: any) => h.proposta_id === id && h.de === "rascunho" && h.para === "enviada" && h.autor_id === LIB));
+  const rev1 = await patchProposta(db, id, "u-lib", { validade_dias: 30 });
+  assert.equal(rev1.status, 200, JSON.stringify(rev1.body));
+  assert.equal(proposta(db, id).revisao_atual, 1);
+  assert.equal((await situacao(db, id, { para: "em_negociacao" }, "u-lib")).status, 200);
+  assert.equal((await situacao(db, id, { para: "aceita" }, "u-lib")).status, 200);
+  const d = await detalhe(db, id, "u-lib");
+  assert.equal(d.status, 200);
+  assert.equal(d.body.temFunil, false);
+  assert.equal(d.body.somenteLeitura, false);
+});
+
+await caso("(b) quem só tem a liberação gera ZERO consulta/escrita no Funil em todas as situações, sem 409/aviso de oportunidade alheia e com oportunidade_id nulo", async () => {
+  const db = novoDb();
+  liberar(db, LIB, true);
+  db.tabelas.oportunidades.push(SEMENTE_OPP({ vendedor_id: V2, etapa: "contato_feito" }));
+  db.tabelas.lembretes.push({ id: crypto.randomUUID(), vendedor_id: V2, oportunidade_id: db.tabelas.oportunidades[0].id, tipo: "retorno", status: "pendente", texto: "Ligar", data_lembrete: "2030-01-10" });
+  const antes = estadoFunil(db);
+  db.consultas.length = 0;
+
+  const c1 = await criar(db, {}, "u-lib");
+  assert.equal(c1.status, 201); assert.equal(c1.body.aviso, null, "sem aviso de oportunidade de outro vendedor");
+  const id1 = c1.body.data.id as string;
+  const e1 = await situacao(db, id1, { para: "enviada", valor_estimado: 3000 }, "u-lib");
+  assert.equal(e1.status, 200, "sem 409 do Funil: " + JSON.stringify(e1.body)); assert.equal(e1.body.aviso, null);
+  assert.equal((await situacao(db, id1, { para: "em_negociacao" }, "u-lib")).status, 200);
+  const ac = await situacao(db, id1, { para: "aceita" }, "u-lib");
+  assert.equal(ac.status, 200); assert.equal(ac.body.aviso, null);
+  const id2 = (await criar(db, {}, "u-lib")).body.data.id as string;
+  assert.equal((await situacao(db, id2, { para: "enviada", valor_estimado: 100 }, "u-lib")).status, 200);
+  const rec = await situacao(db, id2, { para: "recusada", ...MOTIVO }, "u-lib");
+  assert.equal(rec.status, 200, JSON.stringify(rec.body)); assert.equal(rec.body.aviso, null);
+  const id3 = (await criar(db, {}, "u-lib")).body.data.id as string;
+  assert.equal((await situacao(db, id3, { para: "cancelada" }, "u-lib")).status, 200);
+  const id4 = (await criar(db, {}, "u-lib")).body.data.id as string;
+  assert.equal((await situacao(db, id4, { para: "enviada", valor_estimado: 50 }, "u-lib")).status, 200);
+  assert.equal((await situacao(db, id4, { para: "cancelada" }, "u-lib")).status, 200);
+
+  assert.deepEqual(consultasFunil(db), [], "nenhuma consulta (nem leitura) em oportunidades, interações ou lembretes");
+  assert.deepEqual(estadoFunil(db), antes, "Funil intacto");
+  for (const id of [id1, id2, id3, id4]) assert.equal(proposta(db, id).oportunidade_id, null);
+  assert.deepEqual(["aceita", "recusada", "cancelada", "cancelada"], [id1, id2, id3, id4].map((id) => proposta(db, id).situacao));
+});
+
+await caso("(c) com perfil_comercial tudo igual (+3 dias úteis, aceita→ganho, recusada→perdido+reconectar, 409), mesmo se também estiver liberado", async () => {
+  const db = novoDb();
+  liberar(db, V, true);
+  const { id, r, numero } = await enviar(db);
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(opps(db).length, 1);
+  assert.equal(opps(db)[0].etapa, "proposta_enviada");
+  assert.equal(proposta(db, id).oportunidade_id, opps(db)[0].id);
+  const lemb = db.tabelas.lembretes.find((l: any) => l.oportunidade_id === opps(db)[0].id && l.tipo === "retorno");
+  assert.ok(lemb && lemb.status === "pendente");
+  assert.equal(lemb.data_lembrete, somarDiasUteis(HOJE, 3));
+  assert.equal(lemb.texto, textoFollowUp(numero));
+  assert.equal((await detalhe(db, id)).body.temFunil, true);
+  assert.equal((await situacao(db, id, { para: "aceita" })).status, 200);
+  assert.equal(opps(db)[0].etapa, "ganho");
+  assert.equal(db.tabelas.lembretes.find((l: any) => l.id === lemb.id).status, "cancelado");
+  const seg = await enviar(db, 800);
+  assert.equal(seg.r.status, 200);
+  const nova = opps(db).find((o: any) => o.etapa === "proposta_enviada");
+  assert.ok(nova && nova.id !== opps(db)[0].id);
+  assert.equal((await situacao(db, seg.id, { para: "recusada", ...MOTIVO })).status, 200);
+  assert.equal(opps(db).find((o: any) => o.id === nova.id).etapa, "perdido");
+  assert.ok(db.tabelas.lembretes.some((l: any) => l.oportunidade_id === nova.id && l.tipo === "reconectar" && l.status === "pendente"));
+  const db2 = novoDb();
+  db2.tabelas.oportunidades.push(SEMENTE_OPP({ vendedor_id: V2 }));
+  const c = await criar(db2, {});
+  const r2 = await situacao(db2, c.body.data.id, { para: "enviada", valor_estimado: 10 });
+  assert.equal(r2.status, 409);
+  assert.equal(proposta(db2, c.body.data.id).situacao, "rascunho");
+});
+
+await caso("(d) sem nenhuma liberação nem perfil: 403 'Você não tem acesso a Propostas.' em todas as rotas; sem login 401", async () => {
+  const db = novoDb();
+  const id = (await criar(db, {})).body.data.id as string;
+  const chamadas: [string, (u: string | null) => Promise<Chamada>][] = [
+    ["lista GET", (u) => chamar(db, u, rotaLista.GET)],
+    ["lista POST", (u) => chamar(db, u, rotaLista.POST, { metodo: "POST", corpo: { modelo: "RS", empresa_visitada_id: EMP } })],
+    ["detalhe GET", (u) => chamar(db, u, rotaId.GET, { id })],
+    ["detalhe PATCH", (u) => chamar(db, u, rotaId.PATCH, { metodo: "PATCH", id, corpo: { updated_at: "x" } })],
+    ["situação POST", (u) => chamar(db, u, rotaSit.POST, { metodo: "POST", id, corpo: { para: "cancelada" } })],
+    ["pdf GET", (u) => chamar(db, u, rotaPdf.GET, { id })],
+    ["painel GET", (u) => chamar(db, u, rotaPainel.GET)],
+    ["empresas GET", (u) => chamar(db, u, rotaEmpresas.GET)],
+    ["contatos GET", (u) => chamar(db, u, rotaEmpresaContatos.GET, { id: EMP })],
+  ];
+  for (const [nome, rodar] of chamadas) {
+    const r = await rodar("u-sem");
+    assert.equal(r.status, 403, `${nome}: ${JSON.stringify(r.body)}`);
+    assert.equal(r.body.error, MSG_SEM_ACESSO, nome);
+    assert.equal((await rodar(null)).status, 401, `${nome} sem login`);
+  }
+  assert.equal(proposta(db, id).situacao, "rascunho", "nada foi alterado");
+  globalThis.__DB__ = db;
+  assert.equal(await podeAcessarPropostas({ id: "u-sem", app_metadata: { role: "analista" } } as any), false);
+});
+
+await caso("(e) liberado=false bloqueia até quem tem perfil_comercial e o gestor; padrão ≡ podeAcessarAba nos 3 estados", async () => {
+  const db = novoDb();
+  const id = (await criar(db, {})).body.data.id as string;
+  liberar(db, V, false);
+  liberar(db, DIRB, false);
+  for (const [nome, r] of [
+    ["lista", await chamar(db, "u-v", rotaLista.GET)],
+    ["criar", await criar(db, {}, "u-v")],
+    ["detalhe da própria", await detalhe(db, id, "u-v")],
+    ["situação da própria", await situacao(db, id, { para: "cancelada" }, "u-v")],
+    ["pdf da própria", await chamar(db, "u-v", rotaPdf.GET, { id })],
+    ["gestor bloqueado: lista", await chamar(db, "u-dirb", rotaLista.GET)],
+    ["gestor bloqueado: painel", await chamar(db, "u-dirb", rotaPainel.GET)],
+  ] as [string, Chamada][]) {
+    assert.equal(r.status, 403, `${nome}: ${JSON.stringify(r.body)}`);
+    assert.equal(r.body.error, MSG_SEM_ACESSO, nome);
+  }
+  assert.equal(proposta(db, id).situacao, "rascunho");
+  assert.equal((await chamar(db, "u-dir", rotaPainel.GET)).status, 200, "gestor sem exceção continua com acesso");
+  liberar(db, LIB, true);
+  globalThis.__DB__ = db;
+  const quem = (uid: string, role = "analista") => ({ id: uid, app_metadata: { role } }) as any;
+  // [usuário, papel, acessa (resultado final), padrão do papel (perfil_comercial OU gestor)]
+  const esperado: [string, string, boolean, boolean][] = [
+    ["u-v", "analista", false, true], ["u-v2", "analista", true, true], ["u-lib", "analista", true, false], ["u-sem", "analista", false, false],
+    ["u-dir", "diretoria", true, true], ["u-dirb", "diretoria", false, true],
+  ];
+  for (const [uid, role, acessa, padrao] of esperado) {
+    const u = quem(uid, role);
+    assert.equal(await podeAcessarPropostas(u), acessa, `podeAcessarPropostas ${uid}`);
+    assert.equal(await podeAcessarAba(u, CHAVE_ABA, padrao), acessa, `podeAcessarAba ${uid} (mesma conta)`);
+  }
+});
+
+await caso("(f) gestor sem liberação lê tudo e escreve 403; gestor com liberado=true cria e edita só as próprias e continua vendo tudo", async () => {
+  const db = novoDb();
+  const idV = (await criar(db, {})).body.data.id as string;
+  const lista = await chamar(db, "u-dir", rotaLista.GET);
+  assert.equal(lista.status, 200);
+  assert.equal(lista.body.somenteLeitura, true);
+  assert.ok(lista.body.data.some((p: any) => p.id === idV));
+  const det = await detalhe(db, idV, "u-dir");
+  assert.equal(det.status, 200); assert.equal(det.body.somenteLeitura, true); assert.equal(det.body.podeEditar, false); assert.equal(det.body.temFunil, false);
+  const nova = await criar(db, {}, "u-dir");
+  assert.equal(nova.status, 403); assert.equal(nova.body.error, MSG_SO_ACOMPANHA);
+  assert.equal((await patchProposta(db, idV, "u-dir", { validade_dias: 30 })).status, 403);
+  assert.equal((await situacao(db, idV, { para: "cancelada" }, "u-dir")).status, 403);
+  assert.equal((await chamar(db, "u-dir", rotaEmpresas.GET)).status, 403, "leitor não busca empresas");
+  assert.equal((await chamar(db, "u-dir", rotaPainel.GET)).status, 200);
+
+  liberar(db, DIRL, true);
+  const propria = await criar(db, {}, "u-dirl");
+  assert.equal(propria.status, 201, JSON.stringify(propria.body));
+  const idL = propria.body.data.id as string;
+  assert.equal(propria.body.data.vendedor_id, DIRL);
+  assert.equal((await patchProposta(db, idL, "u-dirl", { validade_dias: 22 })).status, 200);
+  const listaL = await chamar(db, "u-dirl", rotaLista.GET);
+  assert.equal(listaL.body.somenteLeitura, false);
+  assert.deepEqual(new Set(listaL.body.data.map((p: any) => p.id)), new Set([idV, idL]), "continua vendo tudo");
+  const alheia = await detalhe(db, idV, "u-dirl");
+  assert.equal(alheia.status, 200); assert.equal(alheia.body.somenteLeitura, true);
+  assert.equal((await patchProposta(db, idV, "u-dirl", { validade_dias: 30 })).status, 403, "não edita a de outro");
+  assert.equal((await situacao(db, idV, { para: "cancelada" }, "u-dirl")).status, 403);
+  db.consultas.length = 0;
+  assert.equal((await situacao(db, idL, { para: "enviada", valor_estimado: 900 }, "u-dirl")).status, 200);
+  assert.deepEqual(consultasFunil(db), [], "gestor liberado também não tem Funil");
+  assert.equal((await chamar(db, "u-dirl", rotaPainel.GET)).status, 200);
+});
+
+await caso("(f2) filtro de vendedor do gestor lista quem pode escrever: perfil_comercial ou liberado=true, ativo, sem bloqueio", async () => {
+  const db = novoDb();
+  liberar(db, LIB, true); liberar(db, DIRL, true); liberar(db, V2, false); liberar(db, INA, true);
+  globalThis.__DB__ = db;
+  const { createServiceClient } = await import("@/lib/supabase/server");
+  const lista = await listarQuemPodeEscreverPropostas(createServiceClient(), { unidadeId: U, todasUnidades: true });
+  assert.deepEqual(new Set(lista.map((x) => x.id)), new Set([V, LIB, DIRL]));
+  assert.ok(!lista.some((x) => x.id === V2), "bloqueado fora");
+  assert.ok(!lista.some((x) => x.id === INA), "inativo fora");
+  assert.ok(!lista.some((x) => x.id === SEM || x.id === PERDEU || x.id === DIR), "sem permissão de escrita fora");
+});
+
+await caso("(g) analista inativo (mesmo com perfil_comercial e liberado=true): 403 e sem acesso", async () => {
+  const db = novoDb();
+  liberar(db, INA, true);
+  const r = await chamar(db, "u-ina", rotaLista.GET);
+  assert.equal(r.status, 403); assert.equal(r.body.error, MSG_SEM_ACESSO);
+  assert.equal((await criar(db, {}, "u-ina")).status, 403);
+  globalThis.__DB__ = db;
+  assert.equal(await podeAcessarPropostas({ id: "u-ina", app_metadata: { role: "analista" } } as any), false);
+});
+
+await caso("(h) proposta de outro vendedor: vendedor e usuário liberado recebem 404 em GET, PATCH, situação e PDF", async () => {
+  const db = novoDb();
+  liberar(db, LIB, true);
+  const id = (await criar(db, {})).body.data.id as string;
+  for (const u of ["u-v2", "u-lib"]) {
+    assert.equal((await detalhe(db, id, u)).status, 404, `${u} GET`);
+    assert.equal((await chamar(db, u, rotaId.PATCH, { metodo: "PATCH", id, corpo: { updated_at: proposta(db, id).updated_at, validade_dias: 30 } })).status, 404, `${u} PATCH`);
+    assert.equal((await situacao(db, id, { para: "cancelada" }, u)).status, 404, `${u} situação`);
+    assert.equal((await chamar(db, u, rotaPdf.GET, { id })).status, 404, `${u} PDF`);
+    assert.ok(!(await chamar(db, u, rotaLista.GET)).body.data.some((p: any) => p.id === id), `${u} lista`);
+  }
+  assert.equal(proposta(db, id).situacao, "rascunho");
+});
+
+await caso("(i) rotas de empresas: só id, nome e contatos da unidade; oportunidade_aberta só para quem tem Funil", async () => {
+  const db = novoDb({
+    empresa_contatos: [
+      { id: CT, nome: "Ana Contato", cargo: "RH", telefone: "(19) 1111-1111", email: "ana@x.com", principal: true, empresa_visitada_id: EMP },
+      { id: CT_FORA, nome: "Fora", cargo: null, telefone: null, email: null, principal: true, empresa_visitada_id: EMP_OUTRA_UNIDADE },
+    ],
+  });
+  liberar(db, LIB, true); liberar(db, DIRL, true);
+  db.tabelas.oportunidades.push(SEMENTE_OPP({ vendedor_id: V2, etapa: "reuniao_visita" }));
+  const comFunil = await chamar(db, "u-v", rotaEmpresas.GET);
+  assert.equal(comFunil.status, 200, JSON.stringify(comFunil.body));
+  assert.deepEqual(comFunil.body.data.map((e: any) => e.id), [EMP], "só a Carteira da unidade");
+  assert.deepEqual(Object.keys(comFunil.body.data[0]).sort(), ["contatos", "id", "nome", "oportunidade_aberta"]);
+  assert.equal(comFunil.body.data[0].oportunidade_aberta.vendedor_nome, "Outro");
+  assert.equal(comFunil.body.data[0].oportunidade_aberta.etapa, "reuniao_visita");
+  assert.deepEqual(Object.keys(comFunil.body.data[0].contatos[0]).sort(), ["cargo", "id", "nome", "principal"], "sem telefone nem e-mail");
+
+  db.consultas.length = 0;
+  const semFunil = await chamar(db, "u-lib", rotaEmpresas.GET);
+  assert.equal(semFunil.status, 200);
+  assert.deepEqual(semFunil.body.data.map((e: any) => e.id), [EMP]);
+  assert.deepEqual(Object.keys(semFunil.body.data[0]).sort(), ["contatos", "id", "nome"], "sem oportunidade_aberta");
+  assert.deepEqual(Object.keys(semFunil.body.data[0].contatos[0]).sort(), ["cargo", "id", "nome", "principal"]);
+  assert.equal(semFunil.body.data[0].contatos[0].nome, "Ana Contato");
+  assert.ok(!JSON.stringify(semFunil.body).includes("Outro"), "nome do vendedor do Funil não vaza");
+  assert.deepEqual(db.consultas.filter((q: any) => q.tabela === "oportunidades"), [], "nem lê oportunidades");
+
+  assert.deepEqual((await chamar(db, "u-lib", rotaEmpresas.GET, { url: "http://x/api?q=EMPRES" })).body.data.map((e: any) => e.id), [EMP], "busca sem diferenciar maiúscula");
+  assert.deepEqual((await chamar(db, "u-lib", rotaEmpresas.GET, { url: "http://x/api?q=zzz" })).body.data, []);
+  assert.deepEqual((await chamar(db, "u-lib", rotaEmpresas.GET, { url: "http://x/api?q=%25" })).body.data, [], "% digitado é literal");
+  assert.deepEqual((await chamar(db, "u-dirl", rotaEmpresas.GET)).body.data.map((e: any) => e.id).sort(), [EMP, EMP_OUTRA_UNIDADE].sort(), "acesso a todas as unidades");
+
+  const ct = await chamar(db, "u-lib", rotaEmpresaContatos.GET, { id: EMP });
+  assert.equal(ct.status, 200);
+  assert.deepEqual(Object.keys(ct.body.data[0]).sort(), ["cargo", "id", "nome", "principal"]);
+  assert.equal((await chamar(db, "u-lib", rotaEmpresaContatos.GET, { id: EMP_OUTRA_UNIDADE })).status, 404, "contatos de empresa de outra unidade");
+  assert.equal((await chamar(db, "u-dir", rotaEmpresaContatos.GET, { id: EMP })).status, 403, "leitor");
+  assert.equal((await chamar(db, "u-dir", rotaEmpresas.GET)).body.error, MSG_SO_ACOMPANHA);
+  assert.equal((await chamar(db, "u-sem", rotaEmpresaContatos.GET, { id: EMP })).body.error, MSG_SEM_ACESSO);
+  assert.equal((await chamar(db, "u-dirl", rotaEmpresaContatos.GET, { id: EMP_OUTRA_UNIDADE })).status, 200, "acesso a todas as unidades");
+});
+
+await caso("(j) quem perdeu o perfil_comercial mas está liberado age sem Funil, mesmo em proposta antiga com oportunidade_id", async () => {
+  const db = novoDb();
+  liberar(db, PERDEU, true);
+  const opp = SEMENTE_OPP({ vendedor_id: PERDEU, etapa: "proposta_enviada" });
+  db.tabelas.oportunidades.push(opp);
+  const id = (await criar(db, {}, "u-perdeu")).body.data.id as string;
+  assert.equal(proposta(db, id).oportunidade_id, null);
+  proposta(db, id).oportunidade_id = opp.id; // vínculo de quando ele ainda tinha Funil
+  const lembrete = { id: crypto.randomUUID(), vendedor_id: PERDEU, oportunidade_id: opp.id, tipo: "retorno", status: "pendente", texto: textoFollowUp(proposta(db, id).numero), data_lembrete: "2030-01-10" };
+  db.tabelas.lembretes.push(lembrete);
+  const antes = estadoFunil(db);
+  db.consultas.length = 0;
+  assert.equal((await situacao(db, id, { para: "enviada", valor_estimado: 1200 }, "u-perdeu")).status, 200);
+  assert.equal(proposta(db, id).oportunidade_id, opp.id, "o vínculo antigo não é sobrescrito");
+  assert.equal((await situacao(db, id, { para: "aceita" }, "u-perdeu")).status, 200);
+  assert.deepEqual(consultasFunil(db), []);
+  assert.deepEqual(estadoFunil(db), antes, "oportunidade e lembrete intactos (o lembrete segue pendente)");
+  assert.equal(db.tabelas.lembretes[0].status, "pendente");
 });
 
 fs.rmSync(tmp, { recursive: true, force: true });

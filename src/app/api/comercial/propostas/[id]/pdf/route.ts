@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { exigirContextoComercial } from "@/lib/comercial";
+import { exigirContextoPropostas } from "@/lib/propostasAcesso";
 import { carregarProposta, podeVerProposta, snapshotParaPdf } from "@/lib/propostaServico";
 import { gerarPdfProposta } from "@/lib/propostaPdf";
 
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const { ctx, erro } = await exigirContextoComercial(user);
+  const { ctx, erro } = await exigirContextoPropostas(user);
   if (erro) return erro;
 
   const svc = createServiceClient();

@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, propostaSituacaoSchema } from "@/lib/schemas";
-import { exigirContextoComercial, hojeSaoPaulo } from "@/lib/comercial";
+import { hojeSaoPaulo } from "@/lib/comercial";
+import { exigirContextoPropostas } from "@/lib/propostasAcesso";
 import { carregarProposta, ehDonoDaProposta, mudarSituacao, podeVerProposta, varrerVencidas } from "@/lib/propostaServico";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const { ctx, erro } = await exigirContextoComercial(user);
+  const { ctx, erro } = await exigirContextoPropostas(user);
   if (erro) return erro;
 
   const svc = createServiceClient();

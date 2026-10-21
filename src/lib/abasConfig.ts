@@ -18,6 +18,7 @@ export const ABAS_CONFIG: AbaConfig[] = [
   { chave: "comercial_clientes", rotulo: "Clientes", grupo: "Comercial" },
   { chave: "comercial_carteira", rotulo: "Carteira de Clientes", grupo: "Comercial" },
   { chave: "comercial_gestao", rotulo: "Gestão de Clientes", grupo: "Comercial" },
+  { chave: "comercial_propostas", rotulo: "Propostas", grupo: "Comercial" },
 
   { chave: "rh_admissoes", rotulo: "Admissões", grupo: "RH" },
   { chave: "rh_funcionarios", rotulo: "Funcionários", grupo: "RH" },

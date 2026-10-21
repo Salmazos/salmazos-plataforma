@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { exigirContextoComercial, hojeSaoPaulo } from "@/lib/comercial";
+import { hojeSaoPaulo } from "@/lib/comercial";
+import { exigirContextoPropostas } from "@/lib/propostasAcesso";
 import { varrerVencidas } from "@/lib/propostaServico";
 import { calcularValidadeAte } from "@/lib/propostas";
 
@@ -8,7 +9,7 @@ import { calcularValidadeAte } from "@/lib/propostas";
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const { ctx, erro } = await exigirContextoComercial(user);
+  const { ctx, erro } = await exigirContextoPropostas(user);
   if (erro) return erro;
   if (!ctx.gestor) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
 

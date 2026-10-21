@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, propostaUpdateSchema } from "@/lib/schemas";
-import { exigirContextoComercial, hojeSaoPaulo } from "@/lib/comercial";
+import { hojeSaoPaulo } from "@/lib/comercial";
+import { exigirContextoPropostas } from "@/lib/propostasAcesso";
 import { carregarProposta, editarProposta, ehDonoDaProposta, podeVerProposta, varrerVencidas } from "@/lib/propostaServico";
 import { modoEdicao, type SituacaoProposta } from "@/lib/propostas";
 
@@ -9,7 +10,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const { ctx, erro } = await exigirContextoComercial(user);
+  const { ctx, erro } = await exigirContextoPropostas(user);
   if (erro) return erro;
 
   const svc = createServiceClient();
@@ -40,6 +41,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     hoje,
     podeEditar: ehDonoDaProposta(ctx, proposta) && modoEdicao(proposta.situacao as SituacaoProposta) !== null,
     somenteLeitura: !ehDonoDaProposta(ctx, proposta),
+    temFunil: ctx.temFunil,
   });
 }
 
@@ -47,7 +49,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  const { ctx, erro } = await exigirContextoComercial(user);
+  const { ctx, erro } = await exigirContextoPropostas(user);
   if (erro) return erro;
 
   const svc = createServiceClient();

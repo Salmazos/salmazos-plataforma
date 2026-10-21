@@ -3,6 +3,7 @@ import type { createServiceClient } from "@/lib/supabase/server";
 import type { propostaCreateSchema, propostaSituacaoSchema, propostaUpdateSchema } from "@/lib/schemas";
 import { hojeSaoPaulo, mensagemOportunidadeAberta, type ContextoComercial } from "@/lib/comercial";
 import { ROTULO_MOTIVO_PERDA } from "@/lib/comercialRotulos";
+import { MSG_SO_ACOMPANHA_PROPOSTAS, type ContextoPropostas } from "@/lib/propostasAcesso";
 import { atualizarOportunidade, type OportunidadeLinha } from "@/lib/oportunidadeEtapa";
 import {
   FOLLOWUP_DIAS_UTEIS, ROTULO_SITUACAO, SERVICO_POR_MODELO, SITUACOES_ESCOLHIDAS_PELO_VENDEDOR, VALIDADE_PADRAO_DIAS,
@@ -20,12 +21,12 @@ export type Resultado<T> = { ok: true; data: T; aviso?: string } | { ok: false; 
 const falha = (status: number, error: string): { ok: false; status: number; error: string } => ({ ok: false, status, error });
 
 // Toda escrita roda com o service role (o papel authenticated só lê): o dono é conferido aqui, em código.
-export function ehDonoDaProposta(ctx: ContextoComercial, p: PropostaLinha): boolean {
-  return ctx.vendedor && p.vendedor_id === ctx.analistaId;
+export function ehDonoDaProposta(ctx: ContextoPropostas, p: PropostaLinha): boolean {
+  return ctx.podeEscrever && p.vendedor_id === ctx.analistaId;
 }
 
 // Leitura: o vendedor vê as próprias; o gestor vê as da sua unidade (ou todas, com acesso a todas as unidades).
-export function podeVerProposta(ctx: ContextoComercial, p: PropostaLinha): boolean {
+export function podeVerProposta(ctx: ContextoPropostas, p: PropostaLinha): boolean {
   if (ehDonoDaProposta(ctx, p)) return true;
   if (!ctx.gestor) return false;
   return ctx.todasUnidades || !ctx.unidadeId || p.unidade_id === ctx.unidadeId;
@@ -148,8 +149,8 @@ export async function snapshotParaPdf(svc: Svc, p: PropostaLinha, revisao: numbe
 
 // ── Criar rascunho ───────────────────────────────────────────────────────────
 
-export async function criarRascunho(svc: Svc, ctx: ContextoComercial, d: z.infer<typeof propostaCreateSchema>): Promise<Resultado<PropostaLinha>> {
-  if (!ctx.vendedor) return falha(403, "Seu perfil só acompanha as propostas, não cria.");
+export async function criarRascunho(svc: Svc, ctx: ContextoPropostas, d: z.infer<typeof propostaCreateSchema>): Promise<Resultado<PropostaLinha>> {
+  if (!ctx.podeEscrever) return falha(403, MSG_SO_ACOMPANHA_PROPOSTAS);
   if (!ctx.unidadeId) return falha(400, "Seu perfil não tem unidade definida.");
   if (!modeloDisponivel(d.modelo)) return falha(400, MENSAGEM_MODELO_INDISPONIVEL);
   const conteudo = validarConteudo(d.modelo, d.conteudo);
@@ -166,7 +167,8 @@ export async function criarRascunho(svc: Svc, ctx: ContextoComercial, d: z.infer
   }
 
   // Aviso (não bloqueia): outra pessoa já tem oportunidade aberta nesta empresa. Só será barrado ao marcar como enviada.
-  const aberta = await buscarOportunidadeAberta(svc, empresa.id);
+  // Quem não tem Funil (acesso só por liberação) não lê nem se vincula a oportunidades.
+  const aberta = ctx.temFunil ? await buscarOportunidadeAberta(svc, empresa.id) : null;
   const aviso = aberta && aberta.vendedor_id !== ctx.analistaId ? (await mensagemOportunidadeAberta(svc, empresa.id)) ?? undefined : undefined;
 
   const { data, error } = await svc.rpc("criar_proposta", {
@@ -189,7 +191,7 @@ export async function criarRascunho(svc: Svc, ctx: ContextoComercial, d: z.infer
 
 // ── Editar ───────────────────────────────────────────────────────────────────
 
-export async function editarProposta(svc: Svc, ctx: ContextoComercial, p: PropostaLinha, d: z.infer<typeof propostaUpdateSchema>): Promise<Resultado<PropostaLinha>> {
+export async function editarProposta(svc: Svc, ctx: ContextoPropostas, p: PropostaLinha, d: z.infer<typeof propostaUpdateSchema>): Promise<Resultado<PropostaLinha>> {
   const modo = modoEdicao(p.situacao as SituacaoProposta);
   if (!modo) return falha(409, `Uma proposta ${ROTULO_SITUACAO[p.situacao as SituacaoProposta].toLowerCase()} não pode mais ser editada.`);
   if (d.updated_at !== p.updated_at) return falha(409, "A proposta foi alterada desde que você a abriu. Recarregue e tente de novo.");
@@ -408,7 +410,7 @@ async function efeitoAcompanhamento(
   };
 }
 
-export async function mudarSituacao(svc: Svc, ctx: ContextoComercial, p: PropostaLinha, d: z.infer<typeof propostaSituacaoSchema>): Promise<Resultado<PropostaLinha>> {
+export async function mudarSituacao(svc: Svc, ctx: ContextoPropostas, p: PropostaLinha, d: z.infer<typeof propostaSituacaoSchema>): Promise<Resultado<PropostaLinha>> {
   const para = d.para as SituacaoProposta;
   const de = p.situacao as SituacaoProposta;
   if (!SITUACOES_ESCOLHIDAS_PELO_VENDEDOR.includes(para)) {
@@ -442,8 +444,9 @@ export async function mudarSituacao(svc: Svc, ctx: ContextoComercial, p: Propost
   };
 
   // 2) Funil e follow-up. Se falhar, a proposta volta ao que era (nunca fica "enviada" sem follow-up/oportunidade).
+  // Sem Funil (acesso só por liberação) a proposta apenas se registra: nada de oportunidade, interação ou lembrete.
   let efeito: EfeitoFunil = { oportunidadeId: null, desfazer: async () => {} };
-  if (para === "enviada" || para === "em_negociacao" || para === "aceita" || para === "recusada") {
+  if (ctx.temFunil && (para === "enviada" || para === "em_negociacao" || para === "aceita" || para === "recusada")) {
     const r = para === "enviada" ? await efeitoEnviada(svc, ctx, p, d.valor_estimado as number) : await efeitoAcompanhamento(svc, ctx, p, para, d);
     if (!r.ok) {
       await reverter();
@@ -455,7 +458,9 @@ export async function mudarSituacao(svc: Svc, ctx: ContextoComercial, p: Propost
   let atual = reservada;
   if (para === "enviada") {
     // 3) Liga a oportunidade e grava a Rev. 0 (snapshot do momento do clique). Falha aqui desfaz tudo: nada imutável foi gravado antes.
-    const { data: ligada } = await svc.from("propostas").update({ oportunidade_id: efeito.oportunidadeId }).eq("id", p.id).select().maybeSingle();
+    // Sem Funil, o vínculo que a proposta já tinha (de quando o autor tinha Funil) não é sobrescrito.
+    const oportunidadeId = ctx.temFunil ? efeito.oportunidadeId : (p.oportunidade_id ?? null);
+    const { data: ligada } = await svc.from("propostas").update({ oportunidade_id: oportunidadeId }).eq("id", p.id).select().maybeSingle();
     const vendedor = await dadosDoVendedor(svc, p.vendedor_id);
     const { error } = ligada
       ? await svc.from("proposta_revisoes").insert({
@@ -474,7 +479,7 @@ export async function mudarSituacao(svc: Svc, ctx: ContextoComercial, p: Propost
       return falha(500, `Não foi possível registrar a revisão inicial: ${error.message}`);
     }
     atual = ligada as PropostaLinha;
-  } else if (para === "aceita" || para === "recusada" || para === "cancelada") {
+  } else if (ctx.temFunil && (para === "aceita" || para === "recusada" || para === "cancelada")) {
     // Vencida/cancelada não mexem no Funil, só no follow-up pendente desta proposta.
     const ok = await cancelarFollowUp(svc, p);
     if (!ok) efeito.aviso = "A proposta mudou de situação, mas o lembrete de follow-up não pôde ser cancelado.";
