@@ -1,7 +1,7 @@
 // Modelos de proposta: schemas Zod, padrões configuráveis, texto fixo e snapshot do documento.
 // Percentuais e prazos nunca ficam fixos no texto: vêm de `condicoes` (padrão editável por proposta).
 import { z } from "zod";
-import { MODELOS_ATIVOS, type ModeloProposta } from "@/lib/propostas";
+import { MODELOS_ATIVOS, emailParaAssinatura, type ModeloProposta } from "@/lib/propostas";
 import { textoDesenhavel } from "@/lib/propostaTexto";
 
 // v2: texto introdutório editável, frase de efeito, cláusulas adicionais, marca d'água, logo maior e mais respiro antes da assinatura.
@@ -157,6 +157,8 @@ export const snapshotPropostaSchema = z.object({
   validade_ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   vendedor_nome: z.string(),
   vendedor_telefone: z.string().nullable(),
+  // Ausente em snapshots emitidos antes do campo existir.
+  vendedor_email: z.string().nullable().optional(),
 });
 export type SnapshotProposta = z.infer<typeof snapshotPropostaSchema>;
 
@@ -173,6 +175,7 @@ export interface EntradaSnapshot {
   conteudo: unknown;
   vendedorNome: string;
   vendedorTelefone: string | null;
+  vendedorEmail?: string | null;
 }
 
 export function montarSnapshot(e: EntradaSnapshot): SnapshotProposta {
@@ -196,5 +199,6 @@ export function montarSnapshot(e: EntradaSnapshot): SnapshotProposta {
     validade_ate: e.validadeAte,
     vendedor_nome: e.vendedorNome,
     vendedor_telefone: e.vendedorTelefone?.trim() || null,
+    vendedor_email: emailParaAssinatura(e.vendedorEmail),
   };
 }

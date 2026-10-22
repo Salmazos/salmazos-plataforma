@@ -8,7 +8,7 @@ import sharp from "sharp";
 import { PDFDocument, PDFName, PDFRawStream, StandardFonts } from "pdf-lib";
 import {
   SITUACOES, TRANSICOES, podeTransicionar, ehFinal, modoEdicao, modeloDisponivel, somarDiasUteis, calcularValidadeAte,
-  diasRestantes, deveVencer, formatarNumeroProposta, numeroComRevisao, etapaAposSituacao, textoFollowUp,
+  diasRestantes, deveVencer, formatarNumeroProposta, numeroComRevisao, etapaAposSituacao, textoFollowUp, siglaDoVendedor, emailParaAssinatura, MSG_NOME_INCOMPLETO,
   SITUACOES_ESCOLHIDAS_PELO_VENDEDOR, type SituacaoProposta,
 } from "@/lib/propostas";
 import {
@@ -118,9 +118,9 @@ await caso("deveVencer: só enviada/em negociação, só depois do último dia, 
 
 // ── Número ───────────────────────────────────────────────────────────────────
 await caso("número: RS-0053/26, preenchimento de zeros, ano de 2 dígitos e Rev.", () => {
-  assert.equal(formatarNumeroProposta("RS", 2026, 53), "RS-0053/26");
-  assert.equal(formatarNumeroProposta("MOT", 2027, 1), "MOT-0001/27");
-  assert.equal(formatarNumeroProposta("RS", 2026, 12345), "RS-12345/26");
+  assert.equal(formatarNumeroProposta("OS", 2026, 53), "OS-0053/26");
+  assert.equal(formatarNumeroProposta("ES", 2027, 1), "ES-0001/27");
+  assert.equal(formatarNumeroProposta("OL", 2026, 12345), "OL-12345/26");
   assert.equal(numeroComRevisao("RS-0053/26", 0), "RS-0053/26");
   assert.equal(numeroComRevisao("RS-0053/26", 2), "RS-0053/26 – Rev. 2");
   assert.equal(textoFollowUp("RS-0053/26"), "Follow-up da proposta RS-0053/26");
@@ -227,7 +227,7 @@ await caso("snapshot: reúne tudo o que o PDF usa e passa no próprio schema", (
   assert.deepEqual(s, {
     modelo: "RS", numero: "RS-0053/26", revisao: 0, template_versao: 1, data_emissao: "2026-10-20", cliente_nome: "Empresa X",
     cliente_cnpj: "11.111.111/0001-11", cliente_endereco: null, aos_cuidados: "Ana", condicoes: { ...PADROES_RS, prazo_faturamento_dias: 21 },
-    validade_dias: 15, validade_ate: "2026-11-04", vendedor_nome: "Vendedor", vendedor_telefone: null,
+    validade_dias: 15, validade_ate: "2026-11-04", vendedor_nome: "Vendedor", vendedor_telefone: null, vendedor_email: null,
     texto_introdutorio: TEXTO_INTRODUTORIO_PADRAO_RS, clausulas_adicionais: [],
   });
   assert.ok(snapshotPropostaSchema.safeParse(JSON.parse(JSON.stringify(s))).success);
@@ -585,9 +585,10 @@ const ANO = Number(HOJE.slice(0, 4));
 const AA = String(ANO).slice(-2);
 const IMUTAVEIS = ["proposta_revisoes", "proposta_historico"];
 
-// Imita criar_proposta do banco com fórmula própria (independente de formatarNumeroProposta): contador por modelo+ano.
+// Imita criar_proposta do banco (versão com p_sigla) com fórmula própria (independente de formatarNumeroProposta): contador por modelo+ano.
 function rpcCriarProposta(a: Record<string, unknown>, db: ReturnType<typeof criarDb>) {
   if (!["RS", "MOT", "TS"].includes(a.p_modelo as string)) return { data: null, error: { message: `Modelo de proposta inválido: ${a.p_modelo}` } };
+  if (typeof a.p_sigla !== "string" || !/^[A-Z]{1,4}$/.test(a.p_sigla)) return { data: null, error: { message: `Sigla de proposta inválida: ${a.p_sigla ?? "(nula)"}` } };
   (db as any).rpcChamadas.push(a);
   const cont = db.tabelas.proposta_contadores;
   let c = cont.find((x: any) => x.modelo === a.p_modelo && x.ano === ANO);
@@ -595,7 +596,7 @@ function rpcCriarProposta(a: Record<string, unknown>, db: ReturnType<typeof cria
   c.ultimo += 1;
   const agora = new Date().toISOString();
   const linha = {
-    id: crypto.randomUUID(), numero: `${a.p_modelo}-${String(c.ultimo).padStart(4, "0")}/${String(ANO).slice(-2)}`, modelo: a.p_modelo, ano: ANO, sequencial: c.ultimo,
+    id: crypto.randomUUID(), numero: `${a.p_sigla}-${String(c.ultimo).padStart(4, "0")}/${String(ANO).slice(-2)}`, modelo: a.p_modelo, ano: ANO, sequencial: c.ultimo,
     revisao_atual: 0, situacao: "rascunho", unidade_id: a.p_unidade_id, vendedor_id: a.p_vendedor_id, empresa_visitada_id: a.p_empresa_visitada_id, oportunidade_id: a.p_oportunidade_id,
     cliente_nome: a.p_cliente_nome, aos_cuidados: a.p_aos_cuidados, conteudo: a.p_conteudo, template_versao: a.p_template_versao, validade_dias: a.p_validade_dias,
     validade_ate: null, valor_estimado: null, enviada_em: null, created_at: agora, updated_at: agora,
@@ -607,7 +608,7 @@ function rpcCriarProposta(a: Record<string, unknown>, db: ReturnType<typeof cria
 function novoDb(extra: Record<string, unknown[]> = {}) {
   const db: any = criarDb({
     analistas_perfil: [
-      { id: V, user_id: "u-v", nome_completo: "Vendedor", telefone: "(19) 99999-0000", nivel_acesso: "analista", unidade_id: U, acesso_todas_unidades: false, perfil_comercial: true, ativo: true },
+      { id: V, user_id: "u-v", nome_completo: "Vendedor", email: "vendedor@salmazos.com.br", telefone: "(19) 99999-0000", nivel_acesso: "analista", unidade_id: U, acesso_todas_unidades: false, perfil_comercial: true, ativo: true },
       { id: V2, user_id: "u-v2", nome_completo: "Outro", telefone: null, nivel_acesso: "analista", unidade_id: U, acesso_todas_unidades: false, perfil_comercial: true, ativo: true },
       { id: DIR, user_id: "u-dir", nome_completo: "Diretora", telefone: null, nivel_acesso: "diretoria", unidade_id: U, acesso_todas_unidades: true, perfil_comercial: false, ativo: true },
       { id: LIB, user_id: "u-lib", nome_completo: "Selecionadora", telefone: "(19) 98888-0000", nivel_acesso: "analista", unidade_id: U, acesso_todas_unidades: false, perfil_comercial: false, ativo: true },
@@ -657,13 +658,14 @@ async function enviar(db: any, valor = 5000, corpoCriar: Record<string, unknown>
   return { id, r, numero: c.body.data.numero as string };
 }
 
-await caso("criar: número vem do rpc e segue a regra RS-0053/26; campos de identidade vêm do servidor, não do corpo", async () => {
+await caso("criar: número vem do rpc e segue a regra VE-0053/26 (sigla do vendedor); campos de identidade vêm do servidor, não do corpo", async () => {
   const db = novoDb();
   const forjado = { vendedor_id: V2, unidade_id: U2, cliente_nome: "Forjado", numero: "RS-9999/26", situacao: "aceita", p_modelo: "TS" };
   const r = await criar(db, { ...forjado, contato_id: CT });
   assert.equal(r.status, 201, JSON.stringify(r.body));
-  assert.equal(r.body.data.numero, `RS-0053/${AA}`);
-  if (ANO === 2026) assert.equal(r.body.data.numero, "RS-0053/26");
+  assert.equal(r.body.data.numero, `VE-0053/${AA}`);
+  if (ANO === 2026) assert.equal(r.body.data.numero, "VE-0053/26");
+  assert.equal(db.rpcChamadas[0].p_sigla, "VE", "sigla = iniciais do nome do vendedor logado ('Vendedor' tem uma palavra → 2 letras)");
   assert.equal(r.body.data.situacao, "rascunho");
   assert.equal(r.body.data.vendedor_id, V);
   assert.equal(r.body.data.unidade_id, U);
@@ -678,7 +680,7 @@ await caso("criar: número vem do rpc e segue a regra RS-0053/26; campos de iden
   assert.equal(db.rpcChamadas[0].p_vendedor_id, V);
   assert.equal(db.rpcChamadas[0].p_modelo, "RS");
   const r2 = await criar(db);
-  assert.equal(r2.body.data.numero, `RS-0054/${AA}`);
+  assert.equal(r2.body.data.numero, `VE-0054/${AA}`);
   assert.equal(db.tabelas.proposta_historico.filter((h: any) => h.para === "rascunho").length, 2);
 });
 await caso("criar: MOT e TS → 400 'Modelo ainda não disponível.'; modelo inexistente → 400; contador intacto", async () => {
@@ -816,7 +818,7 @@ await caso("enviar: oportunidade aberta do próprio vendedor em fase anterior �
 });
 await caso("enviar: oportunidade já em proposta_enviada → etapa não muda; atualiza ação, data, valor e REAPROVEITA o lembrete pendente (sem duplicar)", async () => {
   const o = SEMENTE_OPP({ etapa: "proposta_enviada", valor_estimado: 100, servico_interesse: "Outro serviço", proxima_acao: "Antiga", proxima_acao_em: "2030-01-01" });
-  const numeroEsperado = `RS-0053/${AA}`;
+  const numeroEsperado = `VE-0053/${AA}`;
   const db = novoDb({
     oportunidades: [o],
     lembretes: [{ id: "l-existente", oportunidade_id: o.id, tipo: "retorno", status: "pendente", texto: `Follow-up da proposta ${numeroEsperado}`, data_lembrete: "2000-01-01", vendedor_id: V }],
@@ -1039,6 +1041,75 @@ await caso("editar proposta enviada: cria Rev. 1 (mesmo número), Rev. 0 fica id
   const velha = await chamar(db, "u-v", rotaId.PATCH, { metodo: "PATCH", id, corpo: { updated_at: "2000-01-01T00:00:00.000Z", validade_dias: 10 } });
   assert.equal(velha.status, 409);
   assert.equal(db.tabelas.proposta_revisoes.length, 2);
+});
+// ═══════════════════════════ Sigla do número e e-mail da assinatura ═══════════════════════════
+
+await caso("siglaDoVendedor: iniciais (1ª da primeira + 1ª da última), sem partículas, sem acento, só A-Z", () => {
+  for (const [nome, esperado] of [
+    ["Olver Pereira dos Santos", "OS"], ["Elizabete Salmazo", "ES"], ["Victor Eduardo Oliveira", "VO"], ["Álvaro de Souza", "AS"],
+    ["Ölver", "OL"], ["Ana", "AN"], ["  maria   da  silva ", "MS"], ["José das Neves e Silva", "JS"], ["ÁLVARO", "AL"],
+    ["João D'Ávila", "JD"], ["Ana-Maria Souza", "AS"], ["X", "X"], ["Çelik Öztürk", "CO"],
+  ] as [string, string][]) assert.equal(siglaDoVendedor(nome), esperado, nome);
+  for (const ruim of ["de da", "", "   ", null, undefined, "123 456", "e", "dos das", "!!! ???"]) assert.equal(siglaDoVendedor(ruim as any), null, String(ruim));
+  for (const nome of ["Olver Pereira dos Santos", "Ölver", "Çelik Öztürk", "A B C D E F"]) assert.match(siglaDoVendedor(nome)!, /^[A-Z]{1,4}$/);
+});
+await caso("emailParaAssinatura: só @salmazos.com.br (sem diferenciar maiúscula); outro domínio, subdomínio, vazio ou lixo → null", () => {
+  assert.equal(emailParaAssinatura("ana@salmazos.com.br"), "ana@salmazos.com.br");
+  assert.equal(emailParaAssinatura("  Ana.Silva@SALMAZOS.COM.BR "), "Ana.Silva@SALMAZOS.COM.BR");
+  for (const ruim of ["ana@gmail.com", "ana@salmazos.com", "ana@x.salmazos.com.br", "ana@salmazos.com.br.evil.com", "salmazos.com.br", "@salmazos.com.br", "a b@salmazos.com.br", "", "   ", null, undefined])
+    assert.equal(emailParaAssinatura(ruim as any), null, String(ruim));
+});
+await caso("snapshot e PDF: e-mail corporativo vai para o snapshot e sai em linha própria depois do telefone; e-mail pessoal nunca", async () => {
+  const com = snapV2({}, {});
+  const base = (email: string | null) => montarSnapshot({ modelo: "RS", numero: "OS-0053/26", revisao: 0, templateVersao: 2, dataEmissao: "2026-10-20", validadeDias: 15, validadeAte: "2026-11-04",
+    clienteNome: "Empresa X", aosCuidados: null, conteudo: {}, vendedorNome: "Olver Pereira dos Santos", vendedorTelefone: "(19) 99999-0000", vendedorEmail: email });
+  assert.equal(base("olver@salmazos.com.br").vendedor_email, "olver@salmazos.com.br");
+  assert.equal(base("olverpera@gmail.com").vendedor_email, null);
+  assert.equal(base(null).vendedor_email, null);
+  assert.equal(com.vendedor_email, null, "sem e-mail informado → sem campo");
+  assert.ok(snapshotPropostaSchema.safeParse(JSON.parse(JSON.stringify(base("a@salmazos.com.br")))).success);
+  if (!TEM_PDFTOTEXT) return;
+  const linhas = textoPdfPorPagina(await gerarV2(base("olver@salmazos.com.br")))[0].split("\n").map((l) => l.trim());
+  const i = linhas.indexOf("(19) 99999-0000");
+  assert.ok(i > 0 && linhas[i + 1] === "olver@salmazos.com.br", "e-mail na linha logo abaixo do telefone");
+  assert.ok(linhas.indexOf("Olver Pereira dos Santos") < i);
+  assert.ok(!linhas.some((l) => l.includes("gmail")));
+  const sem = textoPdfPorPagina(await gerarV2(base("olverpera@gmail.com")))[0];
+  assert.ok(!sem.includes("gmail"), "e-mail pessoal não sai");
+  const v1 = textoPdfPorPagina(await gerarV2({ ...base("olver@salmazos.com.br"), template_versao: 1 }))[0];
+  assert.ok(!v1.includes("olver@salmazos.com.br"), "revisão v1 já emitida não ganha e-mail");
+});
+await caso("criar (API): a sigla vem do nome do vendedor logado e fica fixa; e-mail corporativo entra no snapshot da Rev. 0, pessoal não", async () => {
+  const db = novoDb();
+  db.tabelas.analistas_perfil.find((a: any) => a.id === V).nome_completo = "Olver Pereira dos Santos";
+  const c = await criar(db);
+  assert.equal(c.status, 201, JSON.stringify(c.body));
+  assert.equal(c.body.data.numero, `OS-0053/${AA}`);
+  assert.equal(db.rpcChamadas[0].p_sigla, "OS");
+  db.tabelas.analistas_perfil.find((a: any) => a.id === V).nome_completo = "Outro Nome Qualquer";
+  const e = await situacao(db, c.body.data.id, { para: "enviada", valor_estimado: 1000 });
+  assert.equal(e.status, 200, JSON.stringify(e.body));
+  assert.equal(proposta(db, c.body.data.id).numero, `OS-0053/${AA}`, "o número não muda se o nome mudar depois");
+  assert.equal(db.tabelas.proposta_revisoes[0].conteudo.vendedor_email, "vendedor@salmazos.com.br");
+  const db2 = novoDb();
+  db2.tabelas.analistas_perfil.find((a: any) => a.id === V).email = "olverpera@gmail.com";
+  const c2 = await criar(db2);
+  await situacao(db2, c2.body.data.id, { para: "enviada", valor_estimado: 1000 });
+  assert.equal(db2.tabelas.proposta_revisoes[0].conteudo.vendedor_email, null);
+  assert.ok(!JSON.stringify(db2.tabelas.proposta_revisoes).includes("gmail"));
+});
+await caso("criar (API): nome vazio, só com partículas ou sem letras → 400 'Complete seu nome no perfil…', sem chamar o rpc e sem mexer no contador", async () => {
+  for (const nome of ["", "   ", "de da", "123", null]) {
+    const db = novoDb();
+    db.tabelas.analistas_perfil.find((a: any) => a.id === V).nome_completo = nome;
+    const r = await criar(db);
+    assert.equal(r.status, 400, String(nome));
+    assert.equal(r.body.error, MSG_NOME_INCOMPLETO);
+    assert.equal(MSG_NOME_INCOMPLETO, "Complete seu nome no perfil para criar propostas.");
+    assert.equal(db.rpcChamadas.length, 0);
+    assert.equal(db.tabelas.propostas.length, 0);
+    assert.equal(db.tabelas.proposta_contadores.find((c: any) => c.modelo === "RS").ultimo, 52);
+  }
 });
 await caso("conteúdo novo (API): criar com introdução e cláusulas grava no conteudo; editar rascunho no lugar; enviada gera Rev. 1 com o snapshot novo e Rev. 0 intacta", async () => {
   const db = novoDb();

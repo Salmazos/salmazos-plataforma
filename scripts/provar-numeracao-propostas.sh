@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prova de numeração de propostas num Postgres 16 descartável (nada toca o Supabase real).
+# Prova de numeração de propostas (número = SIGLA-seq/ano; a sigla vem do app) num Postgres 16 descartável (nada toca o Supabase real).
 # Precisa de initdb/pg_ctl/psql do Postgres 16 e de um usuário que não seja root (usa "postgres" se rodar como root).
 # Uso: bash scripts/provar-numeracao-propostas.sh
 set -euo pipefail
@@ -55,7 +55,7 @@ echo "ok: duas aplicações sem erro"
 
 UNI=$($PSQL -c "insert into unidades default values returning id")
 VEND=$($PSQL -c "insert into analistas_perfil (user_id, nivel_acesso) values (gen_random_uuid(),'analista') returning id")
-CHAMADA="select numero from criar_proposta('RS','$UNI','$VEND',null,null,'Cliente Teste',null,'{}'::jsonb,1,15)"
+CHAMADA="select numero from criar_proposta('RS','OS','$UNI','$VEND',null,null,'Cliente Teste',null,'{}'::jsonb,1,15)"
 
 echo
 echo "== 1) $SESSOES sessões concorrentes chamando criar_proposta (RS, mesmo ano)"
@@ -73,7 +73,7 @@ $PSQL -c "select 'contador RS/' || ano || ' = ' || ultimo from proposta_contador
 echo
 echo "== 2) falha no insert devolve o contador (vendedor inexistente viola a FK)"
 ANTES=$($PSQL -c "select ultimo from proposta_contadores where modelo='RS'")
-if $PSQL -c "set role service_role; select criar_proposta('RS','$UNI','00000000-0000-0000-0000-000000000000',null,null,'X',null,'{}'::jsonb,1,15)" 2>"$DIR/erro.txt"; then
+if $PSQL -c "set role service_role; select criar_proposta('RS','OS','$UNI','00000000-0000-0000-0000-000000000000',null,null,'X',null,'{}'::jsonb,1,15)" 2>"$DIR/erro.txt"; then
   echo "ERRO: a chamada deveria ter falhado"; exit 1
 fi
 echo "erro recebido: $(head -1 "$DIR/erro.txt")"
@@ -81,14 +81,14 @@ DEPOIS=$($PSQL -c "select ultimo from proposta_contadores where modelo='RS'")
 echo "contador antes=$ANTES depois=$DEPOIS"
 [ -n "$ANTES" ] || { echo "FALHOU: contador vazio"; exit 1; }
 [ "$ANTES" = "$DEPOIS" ] && echo "ok: contador não avançou" || { echo "FALHOU"; exit 1; }
-PROX=$($PSQL -c "set role service_role; select numero from criar_proposta('RS','$UNI','$VEND',null,null,'Y',null,'{}'::jsonb,1,15)" | tail -1)
+PROX=$($PSQL -c "set role service_role; select numero from criar_proposta('RS','OS','$UNI','$VEND',null,null,'Y',null,'{}'::jsonb,1,15)" | tail -1)
 echo "próximo número após a falha: $PROX (deve ser sequencial $((ANTES + 1)))"
 
 echo
 echo "== 3) modelo inválido e permissões"
-$PSQL -c "set role service_role; select criar_proposta('XX','$UNI','$VEND',null,null,'Z',null,'{}'::jsonb,1,15)" 2>&1 | head -1 || true
+$PSQL -c "set role service_role; select criar_proposta('XX','OS','$UNI','$VEND',null,null,'Z',null,'{}'::jsonb,1,15)" 2>&1 | head -1 || true
 for papel in anon authenticated; do
-  if $PSQL -c "set role $papel; select criar_proposta('RS','$UNI','$VEND',null,null,'Z',null,'{}'::jsonb,1,15)" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: $papel executou"; exit 1; fi
+  if $PSQL -c "set role $papel; select criar_proposta('RS','OS','$UNI','$VEND',null,null,'Z',null,'{}'::jsonb,1,15)" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: $papel executou"; exit 1; fi
   echo "$papel não executa a função: $(head -1 "$DIR/e.txt")"
 done
 if $PSQL -c "set role authenticated; select * from proposta_contadores" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: authenticated leu contador"; exit 1; fi
@@ -101,7 +101,7 @@ echo "numero duplicado recusado: $(head -1 "$DIR/e.txt")"
 
 echo
 echo "== 5) outro modelo e ano começam do 0001 (MOT)"
-$PSQL -c "set role service_role; select numero from criar_proposta('MOT','$UNI','$VEND',null,null,'M',null,'{}'::jsonb,1,15)" | tail -1
+$PSQL -c "set role service_role; select numero from criar_proposta('MOT','MM','$UNI','$VEND',null,null,'M',null,'{}'::jsonb,1,15)" | tail -1
 
 echo
 echo "== 6) imutabilidade de revisões/histórico (vale também para o service role)"
@@ -127,8 +127,8 @@ novo_analista() { $PSQL -c "insert into analistas_perfil (user_id, nivel_acesso)
 IFS='|' read -r A A_U <<< "$(novo_analista analista)"
 IFS='|' read -r B B_U <<< "$(novo_analista analista)"
 IFS='|' read -r G G_U <<< "$(novo_analista diretoria)"
-for i in 1 2 3; do $PSQL -c "set role service_role; select criar_proposta('TS','$UNI','$A',null,null,'ClienteA$i',null,'{}'::jsonb,1,15)" >/dev/null; done
-for i in 1 2;   do $PSQL -c "set role service_role; select criar_proposta('TS','$UNI','$B',null,null,'ClienteB$i',null,'{}'::jsonb,1,15)" >/dev/null; done
+for i in 1 2 3; do $PSQL -c "set role service_role; select criar_proposta('TS','TT','$UNI','$A',null,null,'ClienteA$i',null,'{}'::jsonb,1,15)" >/dev/null; done
+for i in 1 2;   do $PSQL -c "set role service_role; select criar_proposta('TS','TT','$UNI','$B',null,null,'ClienteB$i',null,'{}'::jsonb,1,15)" >/dev/null; done
 PA=$($PSQL -c "select id from propostas where vendedor_id='$A' order by sequencial limit 1")
 PB=$($PSQL -c "select id from propostas where vendedor_id='$B' order by sequencial limit 1")
 $PSQL -c "set role service_role; insert into proposta_revisoes (proposta_id, revisao, conteudo, template_versao) values ('$PA',0,'{}',1),('$PA',1,'{}',1),('$PB',0,'{}',1)"
@@ -164,13 +164,33 @@ esperar "(d) A tenta DELETE (até na própria): sem privilégio" "$(erro_de auth
 esperar "(d) propostas de B intactas"                     "$($PSQL -c "select count(*) from propostas where vendedor_id='$B' and cliente_nome like 'ClienteB%'")" 2
 esperar "(d) proposta de A intacta (situacao rascunho)"   "$($PSQL -c "select situacao from propostas where id='$PA'")" rascunho
 esperar "(d) contador RS não mudou após as tentativas"    "$($PSQL -c "select ultimo from proposta_contadores where modelo='RS'")" "$CONT_ANTES"
-NOVO_RS=$($PSQL -c "set role service_role; select numero from criar_proposta('RS','$UNI','$A',null,null,'Pos-ataque',null,'{}'::jsonb,1,15)" | tail -1)
-esperar "(d) criação normal de RS continua (próximo = $((CONT_ANTES + 1)))" "$NOVO_RS" "$(printf 'RS-%04d/26' $((CONT_ANTES + 1)))"
+NOVO_RS=$($PSQL -c "set role service_role; select numero from criar_proposta('RS','OS','$UNI','$A',null,null,'Pos-ataque',null,'{}'::jsonb,1,15)" | tail -1)
+esperar "(d) criação normal de RS continua (próximo = $((CONT_ANTES + 1)))" "$NOVO_RS" "$(printf 'OS-%04d/26' $((CONT_ANTES + 1)))"
 for t in propostas proposta_revisoes proposta_historico proposta_contadores; do
   esperar "(e) anon sem acesso a $t" "$(erro_de anon "$A_U" "select count(*) from $t")" "ERROR:  permission denied for table $t"
 done
 esperar "(e) anon não insere em propostas" "$(erro_de anon "$A_U" "insert into propostas (numero,modelo,ano,sequencial,unidade_id,vendedor_id,cliente_nome) values ('Z','TS',2026,1,'$UNI','$A','h')")" "ERROR:  permission denied for table propostas"
 esperar "authenticated sem acesso ao contador" "$(erro_de authenticated "$A_U" "select count(*) from proposta_contadores")" "ERROR:  permission denied for table proposta_contadores"
+
+echo
+echo "== 8) sigla: validação, sobrecarga antiga e colisão entre modelos (risco registrado na migration)"
+for ruim in "os" "" "ABCDE" "O1" "Ö"; do
+  if $PSQL -c "set role service_role; select criar_proposta('RS','$ruim','$UNI','$VEND',null,null,'S',null,'{}'::jsonb,1,15)" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: sigla '$ruim' aceita"; exit 1; fi
+  echo "sigla '$ruim' recusada: $(head -1 "$DIR/e.txt")"
+done
+if $PSQL -c "set role service_role; select criar_proposta('RS',null,'$UNI','$VEND',null,null,'S',null,'{}'::jsonb,1,15)" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: sigla nula aceita"; exit 1; fi
+echo "sigla nula recusada: $(head -1 "$DIR/e.txt")"
+ANTES=$($PSQL -c "select ultimo from proposta_contadores where modelo='RS'")
+esperar "contador RS não andou com sigla inválida" "$ANTES" "$ANTES"
+ANTIGA=$($PSQL -c "set role service_role; select numero from criar_proposta('RS','$UNI','$VEND',null,null,'Antiga',null,'{}'::jsonb,1,15)" | tail -1)
+esperar "sobrecarga antiga (sem sigla) continua funcionando e usa o modelo no prefixo" "$ANTIGA" "$(printf 'RS-%04d/26' $((ANTES + 1)))"
+# Força o mesmo sequencial do R&S no contador do MOT e usa a MESMA sigla: o texto do número colide com o do R&S.
+SEQ_RS=$ANTES # último R&S criado com sigla (a chamada pela sobrecarga antiga, logo acima, tem prefixo RS)
+$PSQL -c "update proposta_contadores set ultimo = $((SEQ_RS - 1)) where modelo='MOT'"
+NUM_RS=$($PSQL -c "select numero from propostas where modelo='RS' and sequencial=$SEQ_RS")
+if $PSQL -c "set role service_role; select criar_proposta('MOT','OS','$UNI','$VEND',null,null,'Colisao',null,'{}'::jsonb,1,15)" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: colisão aceita"; exit 1; fi
+echo "colisão RS/MOT (mesma sigla e mesmo sequencial, $NUM_RS) recusada: $(head -1 "$DIR/e.txt")"
+esperar "contador MOT voltou (a criação inteira reverteu)" "$($PSQL -c "select ultimo from proposta_contadores where modelo='MOT'")" "$((SEQ_RS - 1))"
 
 echo
 echo "PROVA CONCLUÍDA"

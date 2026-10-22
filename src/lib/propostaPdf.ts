@@ -393,6 +393,7 @@ export async function gerarPdfProposta(snap: SnapshotProposta, opcoes: OpcoesPdf
     { texto: ASSINATURA_RS, font: bold },
     { texto: snap.vendedor_nome, font: regular },
     ...(snap.vendedor_telefone ? [{ texto: snap.vendedor_telefone, font: regular }] : []),
+    ...(v2 && snap.vendedor_email ? [{ texto: snap.vendedor_email, font: regular }] : []),
   ];
   if (v2) e.blocoIndivisivel(assinatura);
   else {

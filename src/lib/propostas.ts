@@ -99,8 +99,34 @@ export function deveVencer(situacao: SituacaoProposta, validadeAte: string | nul
 
 // ── Numeração (a oficial vem de criar_proposta no banco; estas funções só formatam/exibem) ────
 
-export function formatarNumeroProposta(modelo: ModeloProposta, ano: number, sequencial: number): string {
-  return `${modelo}-${String(sequencial).padStart(4, "0")}/${String(ano % 100).padStart(2, "0")}`;
+export function formatarNumeroProposta(sigla: string, ano: number, sequencial: number): string {
+  return `${sigla}-${String(sequencial).padStart(4, "0")}/${String(ano % 100).padStart(2, "0")}`;
+}
+
+export const MSG_NOME_INCOMPLETO = "Complete seu nome no perfil para criar propostas.";
+const PARTICULAS_NOME = new Set(["DE", "DA", "DO", "DAS", "DOS", "E"]);
+
+// Sigla do número da proposta: 1ª letra da primeira palavra + 1ª letra da última, sem de/da/do/das/dos/e, sem acento, só A-Z
+// (Olver Pereira dos Santos → OS). Nome de uma palavra: as 2 primeiras letras (Ölver → OL). Sem letras aproveitáveis: null
+// (quem chama recusa, em vez de inventar uma sigla).
+export function siglaDoVendedor(nome: string | null | undefined): string | null {
+  const palavras = (nome ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .split(/\s+/)
+    .map((p) => p.replace(/[^A-Z]/g, ""))
+    .filter((p) => p !== "" && !PARTICULAS_NOME.has(p));
+  if (palavras.length === 0) return null;
+  if (palavras.length === 1) return palavras[0].slice(0, 2);
+  return palavras[0][0] + palavras[palavras.length - 1][0];
+}
+
+// A assinatura só mostra e-mail da empresa: o e-mail do perfil é o de login e pode ser pessoal.
+const EMAIL_CORPORATIVO = /^[^\s@]+@salmazos\.com\.br$/i;
+export function emailParaAssinatura(email: string | null | undefined): string | null {
+  const e = (email ?? "").trim();
+  return EMAIL_CORPORATIVO.test(e) ? e : null;
 }
 
 export function numeroComRevisao(numero: string, revisao: number): string {

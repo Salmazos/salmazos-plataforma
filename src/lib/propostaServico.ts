@@ -6,8 +6,8 @@ import { ROTULO_MOTIVO_PERDA } from "@/lib/comercialRotulos";
 import { MSG_SO_ACOMPANHA_PROPOSTAS, type ContextoPropostas } from "@/lib/propostasAcesso";
 import { atualizarOportunidade, type OportunidadeLinha } from "@/lib/oportunidadeEtapa";
 import {
-  FOLLOWUP_DIAS_UTEIS, ROTULO_SITUACAO, SERVICO_POR_MODELO, SITUACOES_ESCOLHIDAS_PELO_VENDEDOR, VALIDADE_PADRAO_DIAS,
-  calcularValidadeAte, etapaAposSituacao, modeloDisponivel, modoEdicao, podeTransicionar, somarDiasUteis, textoFollowUp,
+  FOLLOWUP_DIAS_UTEIS, MSG_NOME_INCOMPLETO, ROTULO_SITUACAO, SERVICO_POR_MODELO, SITUACOES_ESCOLHIDAS_PELO_VENDEDOR, VALIDADE_PADRAO_DIAS,
+  calcularValidadeAte, etapaAposSituacao, modeloDisponivel, modoEdicao, podeTransicionar, siglaDoVendedor, somarDiasUteis, textoFollowUp,
   type ModeloProposta, type SituacaoProposta,
 } from "@/lib/propostas";
 import { MENSAGEM_MODELO_INDISPONIVEL, MODELOS_PROPOSTA, montarSnapshot, validarConteudo, type SnapshotProposta } from "@/lib/propostaModelos";
@@ -37,9 +37,10 @@ export async function carregarProposta(svc: Svc, id: string): Promise<PropostaLi
   return data ?? null;
 }
 
-async function dadosDoVendedor(svc: Svc, vendedorId: string): Promise<{ nome: string; telefone: string | null }> {
-  const { data } = await svc.from("analistas_perfil").select("nome_completo, telefone").eq("id", vendedorId).maybeSingle();
-  return { nome: data?.nome_completo ?? "", telefone: data?.telefone ?? null };
+type DadosVendedor = { nome: string; telefone: string | null; email: string | null };
+async function dadosDoVendedor(svc: Svc, vendedorId: string): Promise<DadosVendedor> {
+  const { data } = await svc.from("analistas_perfil").select("nome_completo, telefone, email").eq("id", vendedorId).maybeSingle();
+  return { nome: data?.nome_completo ?? "", telefone: data?.telefone ?? null, email: data?.email ?? null };
 }
 
 export async function buscarOportunidadeAberta(svc: Svc, empresaId: string): Promise<OportunidadeLinha | null> {
@@ -116,7 +117,7 @@ async function resolverContato(
   return { ok: true, nome: c.nome };
 }
 
-function snapshotDa(p: PropostaLinha, vendedor: { nome: string; telefone: string | null }, revisao: number, emissao: string, validadeAte: string): SnapshotProposta {
+function snapshotDa(p: PropostaLinha, vendedor: DadosVendedor, revisao: number, emissao: string, validadeAte: string): SnapshotProposta {
   return montarSnapshot({
     modelo: p.modelo as ModeloProposta,
     numero: p.numero,
@@ -130,6 +131,7 @@ function snapshotDa(p: PropostaLinha, vendedor: { nome: string; telefone: string
     conteudo: p.conteudo,
     vendedorNome: vendedor.nome,
     vendedorTelefone: vendedor.telefone,
+    vendedorEmail: vendedor.email,
   });
 }
 
@@ -155,6 +157,9 @@ export async function criarRascunho(svc: Svc, ctx: ContextoPropostas, d: z.infer
   if (!modeloDisponivel(d.modelo)) return falha(400, MENSAGEM_MODELO_INDISPONIVEL);
   const conteudo = validarConteudo(d.modelo, d.conteudo);
   if (!conteudo.ok) return falha(400, conteudo.error);
+  // A sigla do número sai do nome do vendedor e fica fixa na criação; sem nome aproveitável não se inventa sigla.
+  const sigla = siglaDoVendedor((await dadosDoVendedor(svc, ctx.analistaId)).nome);
+  if (!sigla) return falha(400, MSG_NOME_INCOMPLETO);
 
   const { data: empresa } = await svc.from("empresas_visitadas").select("id, nome, cliente_id, unidade_id").eq("id", d.empresa_visitada_id).maybeSingle();
   if (!empresa || empresa.unidade_id !== ctx.unidadeId) return falha(404, "Empresa não encontrada na Carteira da sua unidade.");
@@ -173,6 +178,7 @@ export async function criarRascunho(svc: Svc, ctx: ContextoPropostas, d: z.infer
 
   const { data, error } = await svc.rpc("criar_proposta", {
     p_modelo: d.modelo,
+    p_sigla: sigla,
     p_unidade_id: ctx.unidadeId,
     p_vendedor_id: ctx.analistaId,
     p_empresa_visitada_id: empresa.id,
