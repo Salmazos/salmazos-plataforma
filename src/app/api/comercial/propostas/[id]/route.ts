@@ -3,7 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, propostaUpdateSchema } from "@/lib/schemas";
 import { hojeSaoPaulo } from "@/lib/comercial";
 import { exigirContextoPropostas } from "@/lib/propostasAcesso";
-import { carregarProposta, editarProposta, ehDonoDaProposta, podeVerProposta, varrerVencidas } from "@/lib/propostaServico";
+import { buscarOportunidadeAberta, carregarProposta, editarProposta, ehDonoDaProposta, podeVerProposta, varrerVencidas } from "@/lib/propostaServico";
 import { modoEdicao, type SituacaoProposta } from "@/lib/propostas";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -30,6 +30,15 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const { data: nomes } = autores.length ? await svc.from("analistas_perfil").select("id, nome_completo").in("id", autores) : { data: [] as { id: string; nome_completo: string }[] };
   const nomePorId = new Map((nomes ?? []).map((n) => [n.id, n.nome_completo]));
 
+  // Só um booleano, só para quem tem Funil e é o dono: diz se recusar/aceitar mexe numa oportunidade DELE (a mesma regra do
+  // efeitoAcompanhamento: aberta da empresa e do próprio vendedor), para a tela exigir o motivo que o "perdido" do Funil pede.
+  // Nada da oportunidade (nem de outra pessoa) é devolvido.
+  let oportunidadeAbertaPropria = false;
+  if (ctx.temFunil && ehDonoDaProposta(ctx, proposta) && proposta.empresa_visitada_id && (proposta.situacao === "enviada" || proposta.situacao === "em_negociacao")) {
+    const aberta = await buscarOportunidadeAberta(svc, proposta.empresa_visitada_id);
+    oportunidadeAbertaPropria = !!aberta && aberta.vendedor_id === ctx.analistaId;
+  }
+
   return NextResponse.json({
     data: {
       ...proposta,
@@ -42,6 +51,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     podeEditar: ehDonoDaProposta(ctx, proposta) && modoEdicao(proposta.situacao as SituacaoProposta) !== null,
     somenteLeitura: !ehDonoDaProposta(ctx, proposta),
     temFunil: ctx.temFunil,
+    oportunidadeAbertaPropria,
   });
 }
 

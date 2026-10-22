@@ -4,10 +4,10 @@ import React, { useRef, useState } from "react";
 import { ROTULO_MOTIVO_PERDA } from "@/lib/comercialRotulos";
 import { Aviso, btnPerigo, btnPrimario, btnSecundario, inputStyle, labelStyle, Modal } from "@/components/propostas/propostasUi";
 
-export type AcaoSituacao = "em_negociacao" | "aceita" | "recusada" | "cancelada";
+// "Em negociação" não tem mais botão (a API ainda aceita); a tela só registra o desfecho.
+export type AcaoSituacao = "aceita" | "recusada" | "cancelada";
 
 const TEXTOS_COM_FUNIL: Record<AcaoSituacao, { titulo: string; explicacao: string; botao: string }> = {
-  em_negociacao: { titulo: "Em negociação", explicacao: "A proposta passa para Em negociação. Se a oportunidade do Funil estiver em Proposta enviada, ela acompanha para Negociação. O lembrete de follow-up continua.", botao: "Marcar em negociação" },
   aceita: { titulo: "Proposta aceita", explicacao: "A oportunidade do Funil passa para Venda fechada e o lembrete de follow-up desta proposta é cancelado.", botao: "Marcar como aceita" },
   recusada: { titulo: "Proposta recusada", explicacao: "A oportunidade do Funil passa para Não desta vez, com um lembrete para reconectar em 90 dias, e o follow-up desta proposta é cancelado.", botao: "Marcar como recusada" },
   cancelada: { titulo: "Cancelar proposta", explicacao: "A proposta é cancelada e não poderá mais ser alterada. O Funil não é alterado; só o lembrete de follow-up desta proposta é cancelado.", botao: "Cancelar proposta" },
@@ -15,20 +15,21 @@ const TEXTOS_COM_FUNIL: Record<AcaoSituacao, { titulo: string; explicacao: strin
 
 // Sem Funil (acesso a Propostas só por liberação) nada é prometido além do registro da própria proposta.
 const TEXTOS_SEM_FUNIL: Record<AcaoSituacao, { titulo: string; explicacao: string; botao: string }> = {
-  em_negociacao: { titulo: "Em negociação", explicacao: "A proposta passa para Em negociação.", botao: "Marcar em negociação" },
   aceita: { titulo: "Proposta aceita", explicacao: "A proposta é marcada como aceita.", botao: "Marcar como aceita" },
-  recusada: { titulo: "Proposta recusada", explicacao: "A proposta é marcada como recusada. Informe o motivo.", botao: "Marcar como recusada" },
+  recusada: { titulo: "Proposta recusada", explicacao: "A proposta é marcada como recusada. O motivo é opcional.", botao: "Marcar como recusada" },
   cancelada: { titulo: "Cancelar proposta", explicacao: "A proposta é cancelada e não poderá mais ser alterada.", botao: "Cancelar proposta" },
 };
 
 interface Props {
   acao: AcaoSituacao;
   temFunil: boolean;
+  // Recusada obriga o motivo quando há oportunidade própria aberta no Funil (o "perdido" do Funil o exige); senão é opcional.
+  exigeMotivo: boolean;
   onClose: () => void;
   onConfirmar: (dados: { motivo_perda_categoria?: string; motivo_perda?: string; observacao?: string }) => Promise<string | null>;
 }
 
-export default function ModalSituacaoProposta({ acao, temFunil, onClose, onConfirmar }: Props) {
+export default function ModalSituacaoProposta({ acao, temFunil, exigeMotivo, onClose, onConfirmar }: Props) {
   const t = (temFunil ? TEXTOS_COM_FUNIL : TEXTOS_SEM_FUNIL)[acao];
   const [categoria, setCategoria] = useState("");
   const [motivo, setMotivo] = useState("");
@@ -40,27 +41,29 @@ export default function ModalSituacaoProposta({ acao, temFunil, onClose, onConfi
   async function confirmar() {
     if (emAndamento.current) return;
     if (acao === "recusada") {
-      if (!categoria) { setErro("Escolha o motivo de a proposta não ter sido aceita."); return; }
+      if (exigeMotivo && !categoria) { setErro("Escolha o motivo de a proposta não ter sido aceita."); return; }
       if (categoria === "outro" && !motivo.trim()) { setErro("Descreva o motivo, já que você escolheu \"Outro motivo\"."); return; }
     }
     emAndamento.current = true;
     setEnviando(true);
     setErro("");
     const msg = await onConfirmar({
-      ...(acao === "recusada" ? { motivo_perda_categoria: categoria, motivo_perda: motivo.trim() || undefined } : {}),
+      ...(acao === "recusada" && categoria ? { motivo_perda_categoria: categoria, motivo_perda: motivo.trim() || undefined } : {}),
       observacao: observacao.trim() || undefined,
     });
     if (msg) { setErro(msg); setEnviando(false); emAndamento.current = false; }
   }
+
+  const motivoPendente = acao === "recusada" && exigeMotivo && (!categoria || (categoria === "outro" && !motivo.trim()));
 
   return (
     <Modal titulo={t.titulo} onClose={onClose} bloqueado={enviando}>
       <p style={{ margin: "0 0 12px", fontSize: 14, color: "#374151" }}>{t.explicacao}</p>
       {acao === "recusada" && (
         <div style={{ marginBottom: 12 }}>
-          <label style={labelStyle}>Motivo *</label>
+          <label style={labelStyle}>{exigeMotivo ? "Motivo *" : "Motivo (opcional)"}</label>
           <select style={inputStyle} value={categoria} onChange={(e) => setCategoria(e.target.value)}>
-            <option value="">Escolha o motivo…</option>
+            <option value="">{exigeMotivo ? "Escolha o motivo…" : "Sem motivo"}</option>
             {Object.entries(ROTULO_MOTIVO_PERDA).map(([codigo, rotulo]) => <option key={codigo} value={codigo}>{rotulo}</option>)}
           </select>
           {categoria === "outro" && <textarea style={{ ...inputStyle, marginTop: 8, minHeight: 70 }} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Descreva o motivo" maxLength={500} />}
@@ -73,7 +76,7 @@ export default function ModalSituacaoProposta({ acao, temFunil, onClose, onConfi
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
         <button style={btnSecundario} onClick={onClose} disabled={enviando}>Voltar</button>
-        <button style={{ ...(acao === "cancelada" || acao === "recusada" ? btnPerigo : btnPrimario), opacity: enviando ? 0.6 : 1 }} onClick={confirmar} disabled={enviando}>{enviando ? "Salvando…" : t.botao}</button>
+        <button style={{ ...(acao === "cancelada" || acao === "recusada" ? btnPerigo : btnPrimario), opacity: enviando || motivoPendente ? 0.6 : 1 }} onClick={confirmar} disabled={enviando || motivoPendente}>{enviando ? "Salvando…" : t.botao}</button>
       </div>
     </Modal>
   );

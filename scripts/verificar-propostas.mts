@@ -754,10 +754,12 @@ await caso("aceita → oportunidade ganho e cancela SÓ o follow-up desta propos
   assert.equal(db.tabelas.lembretes.find((l: any) => l.id === "outro-1").status, "pendente");
   assert.equal(db.tabelas.lembretes.find((l: any) => l.id === "outro-2").status, "pendente");
 });
-await caso("recusada: exige categoria ('outro' exige texto); com categoria → oportunidade perdido (+ reconectar +90) e follow-up cancelado", async () => {
+await caso("recusada: 'outro' exige texto; sem motivo, quem tem Funil e oportunidade aberta própria é barrado pelo 'perdido' do Funil (nada muda); com categoria → oportunidade perdido (+ reconectar +90) e follow-up cancelado", async () => {
   const db = novoDb();
   const { id, numero } = await enviar(db);
-  assert.equal((await situacao(db, id, { para: "recusada" })).status, 400);
+  const semMotivo = await situacao(db, id, { para: "recusada" });
+  assert.equal(semMotivo.status, 400);
+  assert.match(semMotivo.body.error, /motivo/i);
   assert.equal((await situacao(db, id, { para: "recusada", motivo_perda_categoria: "outro" })).status, 400);
   assert.equal(proposta(db, id).situacao, "enviada");
   assert.equal(opps(db)[0].etapa, "proposta_enviada");
@@ -1343,6 +1345,143 @@ await caso("(k) erro ao ler a exceção de acesso NEGA (403 em todas as rotas, v
   assert.equal(proposta(db, id).situacao, "rascunho", "nada foi alterado");
   delete db.falhas["usuario_acesso_customizado.select"];
   assert.equal((await chamar(db, "u-v", rotaLista.GET)).status, 200, "voltou ao normal sem o erro");
+});
+
+await caso("(l) fluxo simplificado: enviada → aceita/recusada/cancelada direto (sem passar por negociação); enviada → em_negociacao segue permitida na API", async () => {
+  const db = novoDb();
+  const a = await enviar(db);
+  assert.equal((await situacao(db, a.id, { para: "aceita" })).status, 200);
+  assert.equal(proposta(db, a.id).situacao, "aceita");
+  assert.equal(opps(db)[0].etapa, "ganho", "Funil: proposta_enviada → ganho direto");
+  assert.deepEqual(db.tabelas.proposta_historico.filter((h: any) => h.proposta_id === a.id).map((h: any) => `${h.de}>${h.para}`), ["null>rascunho", "rascunho>enviada", "enviada>aceita"]);
+
+  const db2 = novoDb();
+  const r = await enviar(db2);
+  assert.equal((await situacao(db2, r.id, { para: "recusada", ...MOTIVO })).status, 200);
+  assert.equal(proposta(db2, r.id).situacao, "recusada");
+  assert.equal(opps(db2)[0].etapa, "perdido", "Funil: proposta_enviada → perdido direto");
+  assert.ok(!db2.tabelas.proposta_historico.some((h: any) => h.para === "em_negociacao"));
+
+  const db3 = novoDb();
+  const c = await enviar(db3);
+  assert.equal((await situacao(db3, c.id, { para: "cancelada" })).status, 200);
+  assert.equal(proposta(db3, c.id).situacao, "cancelada");
+  assert.equal(opps(db3)[0].etapa, "proposta_enviada", "cancelar não mexe no Funil");
+
+  const db4 = novoDb();
+  const n = await enviar(db4);
+  assert.equal((await situacao(db4, n.id, { para: "em_negociacao" })).status, 200, "API ainda aceita (sem botão)");
+});
+
+await caso("(m) recusada SEM motivo (sem Funil): grava, histórico sem 'Motivo:' e sem quebrar; 'outro' sem texto continua 400; motivo informado continua gravado", async () => {
+  const db = novoDb();
+  liberar(db, LIB, true);
+  const mk = async () => {
+    const c = await criar(db, { contato_id: CT }, "u-lib");
+    const id = c.body.data.id as string;
+    assert.equal((await situacao(db, id, { para: "enviada", valor_estimado: 3000 }, "u-lib")).status, 200);
+    return id;
+  };
+  const id1 = await mk();
+  const r1 = await situacao(db, id1, { para: "recusada" }, "u-lib");
+  assert.equal(r1.status, 200, JSON.stringify(r1.body));
+  assert.equal(proposta(db, id1).situacao, "recusada");
+  const h1 = db.tabelas.proposta_historico.find((h: any) => h.proposta_id === id1 && h.para === "recusada");
+  assert.equal(h1.observacao, null);
+
+  const id2 = await mk();
+  assert.equal((await situacao(db, id2, { para: "recusada", motivo_perda_categoria: "outro" }, "u-lib")).status, 400);
+  assert.equal(proposta(db, id2).situacao, "enviada");
+  const r2 = await situacao(db, id2, { para: "recusada", observacao: "Cliente sumiu" }, "u-lib");
+  assert.equal(r2.status, 200);
+  assert.equal(db.tabelas.proposta_historico.find((h: any) => h.proposta_id === id2 && h.para === "recusada").observacao, "Cliente sumiu");
+
+  const id3 = await mk();
+  assert.equal((await situacao(db, id3, { para: "recusada", motivo_perda_categoria: "sem_retorno" }, "u-lib")).status, 200);
+  assert.match(db.tabelas.proposta_historico.find((h: any) => h.proposta_id === id3 && h.para === "recusada").observacao, /Motivo: /);
+  assert.equal(db.tabelas.oportunidades.length, 0, "sem Funil nada é criado");
+});
+
+await caso("(n) com Funil, recusada sem motivo e SEM oportunidade aberta (ou de outro vendedor) grava normalmente", async () => {
+  const db = novoDb();
+  const { id } = await enviar(db);
+  db.tabelas.oportunidades[0].vendedor_id = V2;
+  const r = await situacao(db, id, { para: "recusada" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(proposta(db, id).situacao, "recusada");
+  assert.equal(opps(db)[0].etapa, "proposta_enviada", "oportunidade alheia não é tocada");
+});
+
+await caso("(o) legado: proposta já em em_negociacao aceita/recusa/cancela normalmente (Funil: negociacao → ganho/perdido); sem motivo ok sem Funil", async () => {
+  for (const [para, extra, etapa] of [["aceita", {}, "ganho"], ["recusada", MOTIVO, "perdido"], ["cancelada", {}, "negociacao"]] as const) {
+    const db = novoDb();
+    const { id } = await enviar(db);
+    assert.equal((await situacao(db, id, { para: "em_negociacao" })).status, 200);
+    assert.equal(opps(db)[0].etapa, "negociacao");
+    const r = await situacao(db, id, { para, ...extra });
+    assert.equal(r.status, 200, `${para}: ${JSON.stringify(r.body)}`);
+    assert.equal(proposta(db, id).situacao, para);
+    assert.equal(opps(db)[0].etapa, etapa, para);
+  }
+  const db = novoDb();
+  liberar(db, LIB, true);
+  const c = await criar(db, { contato_id: CT }, "u-lib");
+  const id = c.body.data.id as string;
+  assert.equal((await situacao(db, id, { para: "enviada", valor_estimado: 1000 }, "u-lib")).status, 200);
+  proposta(db, id).situacao = "em_negociacao";
+  assert.equal((await situacao(db, id, { para: "recusada" }, "u-lib")).status, 200);
+  assert.equal(proposta(db, id).situacao, "recusada");
+  const d = await detalhe(db, id, "u-lib");
+  assert.equal(d.status, 200);
+});
+
+await caso("(p) GET devolve oportunidadeAbertaPropria só com Funil + dono + oportunidade aberta DELE; nunca dado de outra pessoa; sem Funil zero consulta ao Funil", async () => {
+  const db = novoDb();
+  const { id } = await enviar(db);
+  const d1 = await detalhe(db, id);
+  assert.equal(d1.body.temFunil, true);
+  assert.equal(d1.body.oportunidadeAbertaPropria, true, "oportunidade aberta do próprio vendedor");
+  assert.ok(!/etapa_funil|proxima_acao|"etapa":"proposta_enviada"/.test(JSON.stringify(d1.body)), "nenhum campo da oportunidade na resposta (só o booleano)");
+
+  db.tabelas.oportunidades[0].vendedor_id = V2;
+  assert.equal((await detalhe(db, id)).body.oportunidadeAbertaPropria, false, "oportunidade aberta de OUTRO vendedor");
+  assert.ok(!JSON.stringify((await detalhe(db, id)).body).includes(V2), "id do outro vendedor não vaza");
+
+  db.tabelas.oportunidades[0].vendedor_id = V;
+  db.tabelas.oportunidades[0].etapa = "ganho";
+  assert.equal((await detalhe(db, id)).body.oportunidadeAbertaPropria, false, "oportunidade já fechada");
+  db.tabelas.oportunidades[0].etapa = "proposta_enviada";
+
+  const gestor = await detalhe(db, id, "u-dir");
+  assert.equal(gestor.body.oportunidadeAbertaPropria, false, "gestor (não é o dono) não recebe");
+
+  const rasc = (await criar(db, {})).body.data.id as string;
+  assert.equal((await detalhe(db, rasc)).body.oportunidadeAbertaPropria, false, "rascunho: não há o que recusar");
+
+  const dbl = novoDb();
+  liberar(dbl, LIB, true);
+  const c = await criar(dbl, { contato_id: CT }, "u-lib");
+  const idl = c.body.data.id as string;
+  assert.equal((await situacao(dbl, idl, { para: "enviada", valor_estimado: 1000 }, "u-lib")).status, 200);
+  dbl.tabelas.oportunidades.push(SEMENTE_OPP({ vendedor_id: LIB, etapa: "contato_feito" }));
+  dbl.consultas.length = 0;
+  const dl = await detalhe(dbl, idl, "u-lib");
+  assert.equal(dl.body.temFunil, false);
+  assert.equal(dl.body.oportunidadeAbertaPropria, false);
+  assert.deepEqual(consultasFunil(dbl), [], "sem Funil: nenhuma consulta ao Funil no GET");
+});
+
+await caso("(q) recusada: sem motivo e com oportunidade própria aberta → 400 do Funil com mensagem legível e NADA muda; com motivo passa (é o que a tela agora exige antes de enviar)", async () => {
+  const db = novoDb();
+  const { id } = await enviar(db);
+  assert.equal((await detalhe(db, id)).body.oportunidadeAbertaPropria, true);
+  const antes = JSON.stringify(opps(db));
+  const r = await situacao(db, id, { para: "recusada" });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error, "Escolha o motivo de a oportunidade não ter avançado desta vez.");
+  assert.equal(proposta(db, id).situacao, "enviada");
+  assert.equal(JSON.stringify(opps(db)), antes);
+  assert.equal((await situacao(db, id, { para: "recusada", motivo_perda_categoria: "sem_retorno" })).status, 200);
 });
 
 fs.rmSync(tmp, { recursive: true, force: true });

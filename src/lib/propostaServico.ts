@@ -419,10 +419,9 @@ export async function mudarSituacao(svc: Svc, ctx: ContextoPropostas, p: Propost
   if (!podeTransicionar(de, para)) return falha(409, `Não é possível passar de ${ROTULO_SITUACAO[de]} para ${ROTULO_SITUACAO[para]}.`);
 
   if (para === "enviada" && !(d.valor_estimado != null && d.valor_estimado > 0)) return falha(400, "Informe o valor estimado (maior que zero) para marcar como enviada.");
-  if (para === "recusada") {
-    if (!d.motivo_perda_categoria) return falha(400, "Escolha o motivo de a proposta não ter sido aceita.");
-    if (d.motivo_perda_categoria === "outro" && !d.motivo_perda?.trim()) return falha(400, "Descreva o motivo, já que você escolheu \"Outro motivo\".");
-  }
+  // O motivo da recusa é opcional na proposta; se a categoria "outro" foi escolhida, o texto continua obrigatório.
+  // Com Funil e oportunidade própria aberta, quem exige o motivo é o "perdido" do Funil (atualizarOportunidade).
+  if (para === "recusada" && d.motivo_perda_categoria === "outro" && !d.motivo_perda?.trim()) return falha(400, "Descreva o motivo, já que você escolheu \"Outro motivo\".");
 
   // 1) Reserva a mudança (condicional à situação e à versão lidas): quem chegar depois recebe 409.
   const hoje = hojeSaoPaulo();
@@ -485,7 +484,7 @@ export async function mudarSituacao(svc: Svc, ctx: ContextoPropostas, p: Propost
     if (!ok) efeito.aviso = "A proposta mudou de situação, mas o lembrete de follow-up não pôde ser cancelado.";
   }
 
-  const observacao = para === "recusada"
+  const observacao = para === "recusada" && d.motivo_perda_categoria
     ? `Motivo: ${ROTULO_MOTIVO_PERDA[d.motivo_perda_categoria as string] ?? d.motivo_perda_categoria}${d.motivo_perda?.trim() ? ` (${d.motivo_perda.trim()})` : ""}${d.observacao ? ` — ${d.observacao}` : ""}`
     : d.observacao ?? null;
   const gravou = await registrarHistorico(svc, { proposta_id: p.id, de, para, autor_id: ctx.analistaId, observacao });

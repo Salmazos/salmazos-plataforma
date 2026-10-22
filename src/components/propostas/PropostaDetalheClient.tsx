@@ -31,6 +31,8 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
   const [somenteLeitura, setSomenteLeitura] = useState(true);
   // Até o servidor responder, nenhum texto promete efeito no Funil.
   const [temFunil, setTemFunil] = useState(false);
+  // Recusar mexe numa oportunidade própria do Funil, e o "perdido" do Funil exige motivo.
+  const [oportunidadeAbertaPropria, setOportunidadeAbertaPropria] = useState(false);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -46,13 +48,14 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
 
   const carregar = useCallback(async () => {
     try {
-      const r = await lerResposta<{ data: Detalhe; hoje: string; podeEditar: boolean; somenteLeitura: boolean; temFunil?: boolean }>(await fetch(`/api/comercial/propostas/${id}`));
+      const r = await lerResposta<{ data: Detalhe; hoje: string; podeEditar: boolean; somenteLeitura: boolean; temFunil?: boolean; oportunidadeAbertaPropria?: boolean }>(await fetch(`/api/comercial/propostas/${id}`));
       if (!r.ok) { setErro(r.status === 404 ? "Proposta não encontrada." : r.json.error ?? "Não foi possível carregar a proposta."); return; }
       setD(r.json.data);
       setHoje(r.json.hoje);
       setPodeEditar(r.json.podeEditar);
       setSomenteLeitura(r.json.somenteLeitura);
       setTemFunil(r.json.temFunil === true);
+      setOportunidadeAbertaPropria(r.json.temFunil === true && r.json.oportunidadeAbertaPropria === true);
       setErro("");
     } catch {
       setErro("Não foi possível carregar a proposta.");
@@ -170,7 +173,6 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
           {temPdf && <a href={urlPdf} target="_blank" rel="noopener noreferrer" style={{ ...btnSecundario, textDecoration: "none", display: "inline-block" }}>{d.situacao === "rascunho" ? "Gerar PDF do rascunho" : `Gerar PDF (Rev. ${d.revisao_atual})`}</a>}
           {escreve && podeEditar && !editando && <button style={btnSecundario} onClick={abrirEdicao}>Editar</button>}
           {escreve && d.situacao === "rascunho" && <button style={btnPrimario} onClick={() => setModalEnviada(true)}>Marcei como enviada</button>}
-          {escreve && d.situacao === "enviada" && <button style={btnSecundario} onClick={() => setAcao("em_negociacao")}>Em negociação</button>}
           {escreve && aberta && <button style={btnPrimario} onClick={() => setAcao("aceita")}>Aceita</button>}
           {escreve && aberta && <button style={btnPerigo} onClick={() => setAcao("recusada")}>Recusada</button>}
           {escreve && (d.situacao === "rascunho" || aberta) && <button style={btnPerigo} onClick={() => setAcao("cancelada")}>Cancelar</button>}
@@ -243,7 +245,7 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
           onClose={() => setModalEnviada(false)} onConfirmar={(valor) => mudarSituacao({ para: "enviada", valor_estimado: valor })}
         />
       )}
-      {acao && <ModalSituacaoProposta acao={acao} temFunil={temFunil} onClose={() => setAcao(null)} onConfirmar={(dados) => mudarSituacao({ para: acao, ...dados })} />}
+      {acao && <ModalSituacaoProposta acao={acao} temFunil={temFunil} exigeMotivo={oportunidadeAbertaPropria} onClose={() => setAcao(null)} onConfirmar={(dados) => mudarSituacao({ para: acao, ...dados })} />}
     </div>
   );
 }

@@ -54,7 +54,8 @@ export default function PropostaPainelGestao() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
         <div style={cardStyle}>
           <h3 style={{ margin: "0 0 10px", fontSize: 15, fontWeight: 800 }}>Por situação</h3>
-          {SITUACOES.map((s) => (
+          {/* Em negociação não é mais registrada; a linha só aparece enquanto houver proposta legada nessa situação. */}
+          {SITUACOES.filter((s) => s !== "em_negociacao" || (dados.por_situacao[s] ?? 0) > 0).map((s) => (
             <div key={s} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 14 }}>
               <span>{ROTULO_SITUACAO[s]}</span><strong>{dados.por_situacao[s] ?? 0}</strong>
             </div>

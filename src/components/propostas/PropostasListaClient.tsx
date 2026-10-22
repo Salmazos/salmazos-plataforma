@@ -77,7 +77,7 @@ export default function PropostasListaClient({ podeCriar, gestor, vendedores }: 
         <>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
             <button style={chip(situacao === "")} onClick={() => setSituacao("")}>Todas ({propostas.length})</button>
-            {SITUACOES.map((s) => <button key={s} style={chip(situacao === s)} onClick={() => setSituacao(s)}>{ROTULO_SITUACAO[s]} ({contagem[s] ?? 0})</button>)}
+            {SITUACOES.filter((s) => s !== "em_negociacao").map((s) => <button key={s} style={chip(situacao === s)} onClick={() => setSituacao(s)}>{ROTULO_SITUACAO[s]} ({contagem[s] ?? 0})</button>)}
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
             <select style={{ ...inputStyle, width: 220 }} value={modelo} onChange={(e) => setModelo(e.target.value)} aria-label="Filtrar por modelo">

@@ -1635,7 +1635,7 @@ export const propostaSituacaoSchema = z.object({
   para: z.enum(["rascunho", "enviada", "em_negociacao", "aceita", "recusada", "vencida", "cancelada"]),
   // Obrigatório ao marcar como enviada (é o valor que vai para a oportunidade do Funil).
   valor_estimado: z.coerce.number().positive("Informe o valor estimado (maior que zero).").max(100000000).optional(),
-  // Obrigatórios ao recusar (mesma lista de motivos do Funil).
+  // Opcionais ao recusar (mesma lista de motivos do Funil); "outro" exige o texto em motivo_perda.
   motivo_perda_categoria: motivoPerdaCategoria.optional(),
   motivo_perda: z.string().trim().max(500).optional().nullable(),
   observacao: z.string().trim().max(500).optional().nullable(),
