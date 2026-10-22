@@ -28,6 +28,9 @@ const ALTURA_CABECALHO_CHEIO_V2 = 110;
 // Marca d'água: logo grande e pálido, centralizado, atrás do texto em todas as páginas.
 const LARGURA_MARCA_DAGUA = CW * 0.9;
 const OPACIDADE_MARCA_DAGUA = 0.14;
+// Respiro em volta da frase de efeito (v2): cerca de uma linha em branco a mais do que antes (4 acima, 8 abaixo).
+const ESPACO_ACIMA_FRASE = 4 + 15;
+const ESPACO_ABAIXO_FRASE = 8 + 15;
 const LARGURA_MAX_LOGO_CABECALHO_PX = 800;
 const LADO_MAXIMO_ENTRADA_PX = 1200;
 
@@ -288,17 +291,26 @@ class Escritor {
     }
   }
 
+  // Altura de um item numerado (mesma conta de item()): usada para manter a frase de efeito junto da 1.1.
+  alturaItem(texto: string): number {
+    const size = 10.5;
+    return quebrar(texto, this.regular, size, CW - 30).length * size * 1.45 + 4;
+  }
+
   // Linha única centralizada em negrito, com filete amarelo fino logo abaixo. O texto é fixo do template: o tamanho
-  // diminui só o necessário para caber em UMA linha (nunca quebra em duas).
-  fraseDeEfeito(texto: string) {
+  // diminui só o necessário para caber em UMA linha (nunca quebra em duas). Nunca fica sozinha no fim da página: se a frase
+  // e o primeiro item (`textoPrimeiroItem`) não cabem juntos, vai para a página seguinte, sem somar o respiro de cima.
+  fraseDeEfeito(texto: string, textoPrimeiroItem: string) {
     const t = limpar(texto);
     let size = 11;
     while (size > 8 && this.bold.widthOfTextAtSize(t, size) > CW) size -= 0.25;
-    this.garantirEspaco(size + 16);
+    const alturaFrase = size * 1.4 + 8;
+    if (this.cabe(ESPACO_ACIMA_FRASE + alturaFrase + ESPACO_ABAIXO_FRASE + this.alturaItem(textoPrimeiroItem))) this.y -= ESPACO_ACIMA_FRASE;
+    else this.novaPagina(false);
     const w = this.bold.widthOfTextAtSize(t, size);
     this.page.drawText(t, { x: (PW - w) / 2, y: this.y, size, font: this.bold, color: BLACK });
     this.page.drawLine({ start: { x: (PW - w) / 2, y: this.y - 5 }, end: { x: (PW + w) / 2, y: this.y - 5 }, thickness: 1.2, color: YELLOW });
-    this.y -= size * 1.4 + 8;
+    this.y -= alturaFrase + ESPACO_ABAIXO_FRASE;
   }
 
   // Validade + assinatura são UM bloco: se não cabe inteiro, vai inteiro para a página seguinte (nunca a validade numa página
@@ -398,9 +410,7 @@ export async function gerarPdfProposta(snap: SnapshotProposta, opcoes: OpcoesPdf
   // Template v2: introdução e frase de efeito antes da 1.1. Revisões v1 já emitidas não ganham nada disso.
   if (v2) {
     if (snap.texto_introdutorio) e.textoLivre(snap.texto_introdutorio);
-    e.espaco(4);
-    e.fraseDeEfeito(FRASE_EFEITO_RS);
-    e.espaco(8);
+    e.fraseDeEfeito(FRASE_EFEITO_RS, itensRs(snap.condicoes)[0].texto);
   }
 
   for (const item of itensRs(snap.condicoes)) e.item(item.numero, item.texto);

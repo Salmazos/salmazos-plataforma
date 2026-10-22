@@ -605,7 +605,8 @@ await caso("paginação v2 (a): texto curto → bloco na página 1 e grade INTEI
   assert.equal(r.paginas, 2);
   assert.equal(r.pagina, 0);
   assert.deepEqual(paginaDe(r.pgs, "clientes:"), [1]);
-  assert.equal(r.ops[1].imagens.length, 14 + 1, "14 logos de clientes + marca d'água, todos na página 2");
+  const nLogos = fs.readdirSync(CLIENTES_REAL).filter((n) => /\.(png|jpe?g)$/i.test(n)).length;
+  assert.equal(r.ops[1].imagens.length, nLogos + 1, `${nLogos} logos de clientes + marca d'água, todos na página 2`);
 });
 await caso("paginação v2 (b): introdução longa + 2 cláusulas (o caso da assinatura órfã) → validade+assinatura juntas na página 2, com a grade logo abaixo; 2 páginas", async () => {
   if (!TEM_PDFTOTEXT) return;
@@ -650,7 +651,8 @@ await caso("paginação v2 (d): varredura até a validade cair exatamente no fim
 await caso("paginação v2 (e): poucos logos cabem na mesma página, abaixo da assinatura e acima do rodapé; v1 continua começando a grade em página nova", async () => {
   const pasta = path.join(tmp, "quatro"); fs.mkdirSync(pasta);
   for (const n of fs.readdirSync(CLIENTES_REAL).slice(0, 4)) fs.copyFileSync(path.join(CLIENTES_REAL, n), path.join(pasta, n));
-  const curto = snapEmail({ texto_introdutorio: "Olá, seguem as condições." });
+  // Sem A/C nem telefone e com uma linha de introdução: sobra espaço para 1 linha de logos embaixo da assinatura, mesmo com o respiro maior da frase.
+  const curto = { ...snapEmail({ texto_introdutorio: "Olá." }), aos_cuidados: null, vendedor_telefone: null };
   const bytes = await gerarV2(curto, true, pasta);
   assert.equal((await contarPaginasEImagens(bytes)).paginas, 1, "v2: grade na página 1");
   const ops = await operacoesPorPagina(bytes);
@@ -679,6 +681,50 @@ await caso("paginação v2: grade grande (60 logos) não cabe embaixo da assinat
     const topoGrade = pgs[pGrade].find((w) => w.t === "clientes:")!;
     assert.ok(topoGrade.y0 < 80, "título da grade no topo da página nova");
   }
+});
+// ═══════════════════════════ Frase de efeito: respiro e nunca sozinha no fim da página ═══════════════════════════
+
+// Folgas medidas ANTES do ajuste (texto a texto, em pt): 13,2 acima da frase e 21,6 abaixo, até a 1.1. O ajuste soma ~15 em cada lado.
+const FOLGA_ANTES = { acima: 13.2, abaixo: 21.6 };
+const introEmLinhas = (n: number) => Array.from({ length: n }, (_, i) => `Linha ${i + 1}`).join("\n");
+function medirFrase(pgs: { y0: number; y1: number; t: string }[][]) {
+  const pf = paginaDe(pgs, "Contrate");
+  assert.equal(pf.length, 1, "frase aparece uma vez");
+  const corpo = pgs[pf[0]].filter((w) => w.y0 > 20 && w.y0 < 770);
+  const fr = corpo.find((w) => w.t === "Contrate")!;
+  const acima = corpo.filter((w) => w.y1 < fr.y0 - 0.5);
+  const p11 = paginaDe(pgs, "1.1");
+  const u11 = pgs[p11[0]].find((w) => w.t === "1.1")!;
+  return { paginaFrase: pf[0], pagina11: p11[0], frase: fr, gapAcima: acima.length ? fr.y0 - Math.max(...acima.map((w) => w.y1)) : null, gapAbaixo: p11[0] === pf[0] ? u11.y0 - fr.y1 : null };
+}
+await caso("frase de efeito (v2): ~15pt a mais acima e abaixo; v1 intacto (1.1 e validade nas mesmas posições de antes)", async () => {
+  if (!TEM_PDFTOTEXT) return;
+  for (const conteudo of [{}, { texto_introdutorio: INTRO_MAX, clausulas_adicionais: [clausulaDe(600), clausulaDe(600)] }]) {
+    const m = medirFrase(palavrasPorPagina(await gerarV2(snapEmail(conteudo))));
+    assert.equal(m.paginaFrase, m.pagina11);
+    assert.ok(Math.abs(m.gapAcima! - (FOLGA_ANTES.acima + 15)) < 1, `acima ${m.gapAcima}`);
+    assert.ok(Math.abs(m.gapAbaixo! - (FOLGA_ANTES.abaixo + 15)) < 1, `abaixo ${m.gapAbaixo}`);
+  }
+  const v1 = palavrasPorPagina(await gerarV2({ ...snapEmail({}), template_versao: 1 }))[0];
+  const y = (t: string) => v1.find((w) => w.t === t)!.y0;
+  assert.ok(Math.abs(y("1.1") - 203.561) < 0.01 && Math.abs(y("Validade") - 450.711) < 0.01, `v1: 1.1=${y("1.1")} validade=${y("Validade")}`);
+  assert.ok(!v1.some((w) => w.t === "Contrate"));
+});
+await caso("frase de efeito (v2): varredura de 1 a 70 linhas de introdução → a frase NUNCA fica sem a 1.1 na mesma página; no topo de página nova não soma respiro acima", async () => {
+  if (!TEM_PDFTOTEXT) return;
+  let transicoes = 0, anterior = -1;
+  for (let n = 1; n <= 70; n++) {
+    const bytes = await gerarV2(snapEmail({ texto_introdutorio: introEmLinhas(n) }), true, CLIENTES_REAL);
+    const pgs = palavrasPorPagina(bytes);
+    const m = medirFrase(pgs);
+    assert.equal(m.pagina11, m.paginaFrase, `n=${n}: frase na página ${m.paginaFrase + 1} e 1.1 na ${m.pagina11 + 1}`);
+    if (m.paginaFrase > 0 && m.gapAcima === null) assert.ok(m.frase.y0 < 60, `n=${n}: frase no topo sem respiro somado (y=${m.frase.y0})`);
+    else assert.ok(Math.abs(m.gapAcima! - (FOLGA_ANTES.acima + 15)) < 1, `n=${n}: gap acima ${m.gapAcima}`);
+    if (anterior >= 0 && m.paginaFrase !== anterior) transicoes++;
+    anterior = m.paginaFrase;
+    if (n % 7 === 0 || n === 23 || n === 24) await conferirLayoutV2(bytes, `intro ${n} linhas`);
+  }
+  assert.ok(transicoes >= 2, `a varredura atravessou ${transicoes} limites de página`);
 });
 await caso("PDF v2: a frase de efeito cabe numa linha na largura útil (sem reduzir abaixo de 8pt) e a assinatura ganha respiro (v2 > v1)", async () => {
   const doc = await PDFDocument.create();
