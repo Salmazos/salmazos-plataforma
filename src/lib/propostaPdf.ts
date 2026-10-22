@@ -3,7 +3,8 @@ import path from "path";
 import sharp from "sharp";
 import { PDFDocument, PDFFont, PDFImage, PDFPage, PageSizes, StandardFonts } from "pdf-lib";
 import { BLACK, CW, DARK, GRAY, ML, PH, PW, YELLOW } from "@/lib/pdfWriter";
-import { ASSINATURA_RS, TITULO_RS, itensRs, type SnapshotProposta } from "@/lib/propostaModelos";
+import { ASSINATURA_RS, FRASE_EFEITO_RS, TEMPLATE_VERSAO_COM_INTRODUCAO, TITULO_RS, itensAdicionais, itensRs, type SnapshotProposta } from "@/lib/propostaModelos";
+import { paragrafosDesenhaveis, textoDesenhavel } from "@/lib/propostaTexto";
 import { numeroComRevisao } from "@/lib/propostas";
 import { ENDERECOS_RODAPE_PROPOSTA, PASTA_CABECALHO_PROPOSTA, PASTA_CLIENTES_PROPOSTA } from "@/lib/propostaAssets";
 
@@ -21,6 +22,12 @@ const LOGOS_POR_LINHA = 4;
 const ESPACO_ENTRE_LOGOS = 12;
 const LIMITE_CACHE = 64;
 const ALTURA_LOGO_CABECALHO = 50;
+// Template v2: logo maior (70pt de altura, ~155pt de largura) e faixa preta proporcional; o título da proposta fica abaixo da faixa.
+const ALTURA_LOGO_CABECALHO_V2 = 70;
+const ALTURA_CABECALHO_CHEIO_V2 = 110;
+// Marca d'água: logo grande e pálido, centralizado, atrás do texto em todas as páginas.
+const LARGURA_MARCA_DAGUA = CW * 0.9;
+const OPACIDADE_MARCA_DAGUA = 0.08;
 const LARGURA_MAX_LOGO_CABECALHO_PX = 800;
 const LADO_MAXIMO_ENTRADA_PX = 1200;
 
@@ -28,14 +35,8 @@ const ALTURA_CABECALHO_CHEIO = 90;
 const ALTURA_CABECALHO_COMPACTO = 32;
 const TAMANHO_RODAPE = 7.5;
 
-// Helvetica padrão (WinAnsi) não desenha tudo: o que não cabe vira espaço em vez de derrubar o PDF.
-const FORA_DO_WINANSI = new RegExp(
-  `[^\\x20-\\x7E\\xA0-\\xFF${String.fromCharCode(0x2013, 0x2014, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2026, 0x20ac)}]`,
-  "g"
-);
-function limpar(texto: string | null | undefined): string {
-  return (texto ?? "").replace(/\s+/g, " ").replace(FORA_DO_WINANSI, " ").trim();
-}
+// Helvetica padrão (WinAnsi) não desenha tudo: a regra de sanitização está em propostaTexto (emoji e afins são omitidos, nunca derrubam o PDF).
+const limpar = textoDesenhavel;
 
 export function formatarDataBr(iso: string): string {
   const [a, m, d] = iso.split("-");
@@ -179,7 +180,8 @@ class Escritor {
     readonly regular: PDFFont,
     readonly bold: PDFFont,
     readonly logoCabecalho: PDFImage | null,
-    readonly rodape: string[]
+    readonly rodape: string[],
+    readonly v2 = false
   ) {}
 
   private get reservadoRodape(): number {
@@ -188,12 +190,14 @@ class Escritor {
 
   novaPagina(cheia: boolean) {
     this.page = this.doc.addPage(PageSizes.A4);
-    const altura = cheia ? ALTURA_CABECALHO_CHEIO : ALTURA_CABECALHO_COMPACTO;
+    if (this.v2 && this.logoCabecalho) this.desenharMarcaDagua(this.logoCabecalho);
+    const altura = cheia ? (this.v2 ? ALTURA_CABECALHO_CHEIO_V2 : ALTURA_CABECALHO_CHEIO) : ALTURA_CABECALHO_COMPACTO;
+    const alturaLogo = this.v2 ? ALTURA_LOGO_CABECALHO_V2 : ALTURA_LOGO_CABECALHO;
     this.page.drawRectangle({ x: 0, y: PH - altura, width: PW, height: altura, color: BLACK });
     if (cheia && this.logoCabecalho) {
-      const escala = ALTURA_LOGO_CABECALHO / this.logoCabecalho.height;
+      const escala = alturaLogo / this.logoCabecalho.height;
       const largura = this.logoCabecalho.width * escala;
-      this.page.drawImage(this.logoCabecalho, { x: (PW - largura) / 2, y: PH - altura + (altura - ALTURA_LOGO_CABECALHO) / 2, width: largura, height: ALTURA_LOGO_CABECALHO });
+      this.page.drawImage(this.logoCabecalho, { x: (PW - largura) / 2, y: PH - altura + (altura - alturaLogo) / 2, width: largura, height: alturaLogo });
     } else {
       const texto = "SALMAZOS RH & SERVIÇOS";
       const tamanho = cheia ? 20 : 12;
@@ -207,6 +211,15 @@ class Escritor {
       yRodape -= TAMANHO_RODAPE + 3;
     }
     this.y = PH - altura - 24;
+  }
+
+  // Desenhada ANTES de todo o resto da página, então fica atrás do texto. Centralizada na área útil (entre a faixa e o rodapé).
+  private desenharMarcaDagua(logo: PDFImage) {
+    const largura = LARGURA_MARCA_DAGUA;
+    const altura = (logo.height * largura) / logo.width;
+    const topo = PH - ALTURA_CABECALHO_COMPACTO;
+    const base = this.reservadoRodape;
+    this.page.drawImage(logo, { x: (PW - largura) / 2, y: base + (topo - base - altura) / 2, width: largura, height: altura, opacity: OPACIDADE_MARCA_DAGUA });
   }
 
   garantirEspaco(necessario: number) {
@@ -262,6 +275,40 @@ class Escritor {
     }
   }
 
+  // Texto livre em parágrafos (quebras de linha do vendedor viram parágrafos), com um respiro entre eles.
+  textoLivre(texto: string) {
+    for (const par of paragrafosDesenhaveis(texto)) {
+      this.paragrafo(par);
+      this.y -= 4;
+    }
+  }
+
+  // Linha única centralizada em negrito, com filete amarelo fino logo abaixo. O texto é fixo do template: o tamanho
+  // diminui só o necessário para caber em UMA linha (nunca quebra em duas).
+  fraseDeEfeito(texto: string) {
+    const t = limpar(texto);
+    let size = 11;
+    while (size > 8 && this.bold.widthOfTextAtSize(t, size) > CW) size -= 0.25;
+    this.garantirEspaco(size + 16);
+    const w = this.bold.widthOfTextAtSize(t, size);
+    this.page.drawText(t, { x: (PW - w) / 2, y: this.y, size, font: this.bold, color: BLACK });
+    this.page.drawLine({ start: { x: (PW - w) / 2, y: this.y - 5 }, end: { x: (PW + w) / 2, y: this.y - 5 }, thickness: 1.2, color: YELLOW });
+    this.y -= size * 1.4 + 8;
+  }
+
+  // Linhas que ficam juntas na mesma página: se o bloco inteiro não cabe, vai todo para a página seguinte.
+  blocoIndivisivel(linhas: { texto: string; font: PDFFont }[], size = 10.5) {
+    const medidas = linhas.map((l) => ({ ...l, partes: quebrar(l.texto, l.font, size, CW) }));
+    const altura = medidas.reduce((soma, l) => soma + l.partes.length * size * 1.45, 0);
+    this.garantirEspaco(altura + 4);
+    for (const l of medidas) {
+      for (const parte of l.partes) {
+        this.page.drawText(parte, { x: ML, y: this.y, size, font: l.font, color: DARK });
+        this.y -= size * 1.45;
+      }
+    }
+  }
+
   faixaTitulo(texto: string) {
     this.garantirEspaco(34);
     this.page.drawRectangle({ x: ML, y: this.y - 20, width: CW, height: 24, color: BLACK });
@@ -312,7 +359,8 @@ export async function gerarPdfProposta(snap: SnapshotProposta, opcoes: OpcoesPdf
   const bytesCabecalho = await carregarLogoCabecalho(opcoes.pastaCabecalho ?? PASTA_CABECALHO_PROPOSTA);
   const logoCabecalho = bytesCabecalho ? await doc.embedPng(bytesCabecalho) : null;
   const rodape = (opcoes.enderecosRodape ?? ENDERECOS_RODAPE_PROPOSTA).map(limpar).filter(Boolean);
-  const e = new Escritor(doc, regular, bold, logoCabecalho, rodape);
+  const v2 = snap.template_versao >= TEMPLATE_VERSAO_COM_INTRODUCAO;
+  const e = new Escritor(doc, regular, bold, logoCabecalho, rodape, v2);
 
   e.novaPagina(true);
   e.centralizado(TITULO_RS, bold, 13);
@@ -325,16 +373,32 @@ export async function gerarPdfProposta(snap: SnapshotProposta, opcoes: OpcoesPdf
   e.campo("Data", formatarDataBr(snap.data_emissao));
   e.espaco(10);
 
+  // Template v2: introdução e frase de efeito antes da 1.1. Revisões v1 já emitidas não ganham nada disso.
+  if (v2) {
+    if (snap.texto_introdutorio) e.textoLivre(snap.texto_introdutorio);
+    e.espaco(4);
+    e.fraseDeEfeito(FRASE_EFEITO_RS);
+    e.espaco(8);
+  }
+
   for (const item of itensRs(snap.condicoes)) e.item(item.numero, item.texto);
+  if (v2) for (const item of itensAdicionais(snap.clausulas_adicionais ?? [])) e.item(item.numero, item.texto);
 
   e.espaco(6);
   e.paragrafo(`Validade da proposta: ${snap.validade_dias} dias corridos, até ${formatarDataBr(snap.validade_ate)}.`);
 
-  e.espaco(14);
-  e.garantirEspaco(70);
-  e.paragrafo(ASSINATURA_RS, bold);
-  e.paragrafo(snap.vendedor_nome);
-  if (snap.vendedor_telefone) e.paragrafo(snap.vendedor_telefone);
+  // v2: cerca de 2 linhas em branco a mais antes da assinatura, e o bloco da assinatura nunca se parte entre páginas.
+  e.espaco(v2 ? 44 : 14);
+  const assinatura = [
+    { texto: ASSINATURA_RS, font: bold },
+    { texto: snap.vendedor_nome, font: regular },
+    ...(snap.vendedor_telefone ? [{ texto: snap.vendedor_telefone, font: regular }] : []),
+  ];
+  if (v2) e.blocoIndivisivel(assinatura);
+  else {
+    e.garantirEspaco(70);
+    for (const l of assinatura) e.paragrafo(l.texto, l.font);
+  }
 
   await desenharGradeClientes(e, await carregarLogosClientes(opcoes.pastaClientes ?? PASTA_CLIENTES_PROPOSTA));
 

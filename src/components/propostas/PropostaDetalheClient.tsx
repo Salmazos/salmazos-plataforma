@@ -13,7 +13,7 @@ interface Revisao { id: string; revisao: number; template_versao: number; vended
 interface Historico { id: string; de: string | null; para: string; autor_nome: string | null; observacao: string | null; created_at: string }
 interface Detalhe {
   id: string; numero: string; modelo: string; revisao_atual: number; situacao: SituacaoProposta; cliente_nome: string; aos_cuidados: string | null;
-  empresa_visitada_id: string | null; conteudo: { cliente_cnpj?: string | null; cliente_endereco?: string | null; condicoes?: CondicoesRs } | null;
+  empresa_visitada_id: string | null; conteudo: { cliente_cnpj?: string | null; cliente_endereco?: string | null; condicoes?: CondicoesRs; texto_introdutorio?: string | null; clausulas_adicionais?: string[] } | null;
   validade_dias: number; validade_ate: string | null; valor_estimado: number | null; enviada_em: string | null; updated_at: string;
   vendedor_nome: string | null; vendedor_telefone: string | null; revisoes: Revisao[]; historico: Historico[];
 }
@@ -214,6 +214,14 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
               {par("Faturamento", `até ${condicoes.prazo_faturamento_dias} dias`)}
             </div>
           </div>
+          {(d.conteudo?.clausulas_adicionais?.length ?? 0) > 0 && (
+            <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 14, paddingTop: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Cláusulas adicionais</div>
+              {d.conteudo?.clausulas_adicionais?.map((c, i) => (
+                <div key={i} style={{ fontSize: 14, color: "#111827", marginBottom: 6 }}><strong>1.{8 + i}</strong> {c}</div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

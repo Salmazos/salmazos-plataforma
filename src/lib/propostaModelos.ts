@@ -2,8 +2,16 @@
 // Percentuais e prazos nunca ficam fixos no texto: vêm de `condicoes` (padrão editável por proposta).
 import { z } from "zod";
 import { MODELOS_ATIVOS, type ModeloProposta } from "@/lib/propostas";
+import { textoDesenhavel } from "@/lib/propostaTexto";
 
-export const TEMPLATE_VERSAO_ATUAL = 1;
+// v2: texto introdutório editável, frase de efeito, cláusulas adicionais, marca d'água, logo maior e mais respiro antes da assinatura.
+// Revisões já emitidas guardam a versão que usaram e o PDF delas continua saindo no layout dessa versão (ver propostaPdf).
+export const TEMPLATE_VERSAO_ATUAL = 2;
+export const TEMPLATE_VERSAO_COM_INTRODUCAO = 2;
+
+export const MAX_TEXTO_INTRODUTORIO = 1000;
+export const MAX_CLAUSULAS_ADICIONAIS = 10;
+export const MAX_CLAUSULA_ADICIONAL = 600;
 
 // Campo apagado de propósito ("", só espaços, null) é erro: z.coerce.number() o transformaria em 0 e o PDF do cliente
 // sairia com "Taxa de 0%". Só `undefined` (campo ausente) usa o padrão.
@@ -37,11 +45,28 @@ export type CondicoesRs = z.infer<typeof condicoesRsSchema>;
 
 const textoOpcional = (max: number) => z.string().trim().max(max).optional().nullable();
 
+// Texto livre do vendedor: precisa sobrar algo desenhável depois da sanitização (só emoji, por exemplo, não vale).
+const textoIntroducao = z
+  .string()
+  .trim()
+  .max(MAX_TEXTO_INTRODUTORIO, `O texto introdutório vai até ${MAX_TEXTO_INTRODUTORIO} caracteres.`)
+  .refine((t) => t === "" || textoDesenhavel(t) !== "", "O texto introdutório só tem caracteres que o PDF não consegue imprimir.")
+  .optional()
+  .nullable();
+const clausulaAdicional = z
+  .string()
+  .trim()
+  .min(1, "Preencha a cláusula adicional ou remova-a.")
+  .max(MAX_CLAUSULA_ADICIONAL, `Cada cláusula adicional vai até ${MAX_CLAUSULA_ADICIONAL} caracteres.`)
+  .refine((t) => textoDesenhavel(t) !== "", "A cláusula adicional só tem caracteres que o PDF não consegue imprimir.");
+
 // O que fica em propostas.conteudo (jsonb) no modelo R&S. CNPJ e endereço do cliente não têm coluna própria.
 export const conteudoRsSchema = z.object({
   cliente_cnpj: textoOpcional(30),
   cliente_endereco: textoOpcional(300),
   condicoes: condicoesRsSchema.prefault({}),
+  texto_introdutorio: textoIntroducao,
+  clausulas_adicionais: z.array(clausulaAdicional).max(MAX_CLAUSULAS_ADICIONAIS, `Use no máximo ${MAX_CLAUSULAS_ADICIONAIS} cláusulas adicionais.`).default([]),
 });
 export type ConteudoRs = z.infer<typeof conteudoRsSchema>;
 
@@ -67,6 +92,13 @@ export function validarConteudo(modelo: string, bruto: unknown):
 // ── Texto fixo do modelo R&S (template_versao 1) ────────────────────────────
 
 export const TITULO_RS = "PROPOSTA COMERCIAL: RECRUTAMENTO & SELEÇÃO";
+export const TEXTO_INTRODUTORIO_PADRAO_RS = [
+  "Prezados,",
+  "Agradecemos a oportunidade de apresentar a proposta da Salmazos RH para o recrutamento e seleção de profissionais da sua empresa. Há mais de uma década buscamos, para cada vaga, candidatos alinhados ao perfil e à cultura da sua equipe, com agilidade e transparência em todas as etapas.",
+  "Seguem as condições do nosso serviço. Ficamos à disposição para qualquer esclarecimento.",
+].join("\n");
+// Fixa no template (não editável): entra entre o texto introdutório e a cláusula 1.1 a partir do template v2.
+export const FRASE_EFEITO_RS = "Contrate com clareza: acompanhe cada vaga em tempo real pelo portal do cliente Salmazos.";
 export const ASSINATURA_RS = "SALMAZOS – Recrutamento, Seleção, Terceirização de Serviços (desde 2013)";
 
 export function formatarPct(valor: number): string {
@@ -99,6 +131,11 @@ export function itensRs(c: CondicoesRs): ItemProposta[] {
   ];
 }
 
+// Cláusulas livres do vendedor seguem a numeração das fixas (1.1 a 1.7): 1.8, 1.9, 1.10...
+export function itensAdicionais(clausulas: string[]): ItemProposta[] {
+  return clausulas.map((texto, i) => ({ numero: `1.${8 + i}`, texto }));
+}
+
 // ── Snapshot: tudo o que o PDF usa ──────────────────────────────────────────
 // Cada revisão grava este documento inteiro; o PDF de uma revisão sai só dele, nunca de dados vivos.
 
@@ -113,6 +150,9 @@ export const snapshotPropostaSchema = z.object({
   cliente_endereco: z.string().nullable(),
   aos_cuidados: z.string().nullable(),
   condicoes: condicoesRsSchema,
+  // Ausentes nos snapshots do template v1 (emitidos antes destes campos existirem).
+  texto_introdutorio: z.string().optional(),
+  clausulas_adicionais: z.array(z.string()).optional(),
   validade_dias: z.number().int(),
   validade_ate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   vendedor_nome: z.string(),
@@ -137,6 +177,7 @@ export interface EntradaSnapshot {
 
 export function montarSnapshot(e: EntradaSnapshot): SnapshotProposta {
   const conteudo = conteudoRsSchema.parse(e.conteudo ?? {});
+  const introducao = conteudo.texto_introdutorio?.trim();
   return {
     modelo: e.modelo,
     numero: e.numero,
@@ -148,6 +189,9 @@ export function montarSnapshot(e: EntradaSnapshot): SnapshotProposta {
     cliente_endereco: conteudo.cliente_endereco?.trim() || null,
     aos_cuidados: e.aosCuidados?.trim() || null,
     condicoes: conteudo.condicoes,
+    // Texto vazio (ou só com o que o PDF não imprime) usa o padrão: o snapshot sempre guarda o texto que saiu no PDF.
+    texto_introdutorio: introducao && textoDesenhavel(introducao) !== "" ? introducao : TEXTO_INTRODUTORIO_PADRAO_RS,
+    clausulas_adicionais: conteudo.clausulas_adicionais,
     validade_dias: e.validadeDias,
     validade_ate: e.validadeAte,
     vendedor_nome: e.vendedorNome,

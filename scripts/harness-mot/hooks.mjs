@@ -34,7 +34,8 @@ export async function resolve(specifier, context, nextResolve) {
   if (MOCKS[specifier]) {
     return { url: pathToFileURL(path.join(HARNESS_DIR, "mocks", MOCKS[specifier])).href, shortCircuit: true };
   }
-  if (specifier.startsWith("@/components/")) {
+  // HARNESS_COMPONENTES_REAIS=1: smoke de tela (react-test-renderer) carrega os componentes de verdade em vez do stub.
+  if (specifier.startsWith("@/components/") && !process.env.HARNESS_COMPONENTES_REAIS) {
     return { url: pathToFileURL(path.join(HARNESS_DIR, "mocks", "stub-component.mjs")).href, shortCircuit: true };
   }
   if (specifier.startsWith("@/")) {

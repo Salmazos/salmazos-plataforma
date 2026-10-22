@@ -13,8 +13,12 @@ import {
 } from "@/lib/propostas";
 import {
   condicoesRsSchema, conteudoRsSchema, PADROES_RS, validarConteudo, itensRs, montarSnapshot, snapshotPropostaSchema,
-  MENSAGEM_MODELO_INDISPONIVEL,
+  MENSAGEM_MODELO_INDISPONIVEL, TEMPLATE_VERSAO_ATUAL, TEXTO_INTRODUTORIO_PADRAO_RS, FRASE_EFEITO_RS, ASSINATURA_RS, itensAdicionais,
+  MAX_CLAUSULAS_ADICIONAIS, MAX_CLAUSULA_ADICIONAL, MAX_TEXTO_INTRODUTORIO,
 } from "@/lib/propostaModelos";
+import { textoDesenhavel, caracteresOmitidos, paragrafosDesenhaveis } from "@/lib/propostaTexto";
+import { execFileSync } from "node:child_process";
+import { decodePDFRawStream, PDFRef, PDFDict, PDFArray } from "pdf-lib";
 import { hojeSaoPaulo } from "@/lib/comercial";
 import { ENDERECOS_RODAPE_PROPOSTA } from "@/lib/propostaAssets";
 import { ENDERECO_FISCAL_SALMAZOS } from "@/lib/admissaoConstants";
@@ -224,6 +228,7 @@ await caso("snapshot: reúne tudo o que o PDF usa e passa no próprio schema", (
     modelo: "RS", numero: "RS-0053/26", revisao: 0, template_versao: 1, data_emissao: "2026-10-20", cliente_nome: "Empresa X",
     cliente_cnpj: "11.111.111/0001-11", cliente_endereco: null, aos_cuidados: "Ana", condicoes: { ...PADROES_RS, prazo_faturamento_dias: 21 },
     validade_dias: 15, validade_ate: "2026-11-04", vendedor_nome: "Vendedor", vendedor_telefone: null,
+    texto_introdutorio: TEXTO_INTRODUTORIO_PADRAO_RS, clausulas_adicionais: [],
   });
   assert.ok(snapshotPropostaSchema.safeParse(JSON.parse(JSON.stringify(s))).success);
 });
@@ -383,6 +388,189 @@ await caso("PDF: sem telefone do vendedor omite a linha; texto longo e caractere
   await assert.rejects(() => gerarPdfProposta({ ...snapBase, modelo: "MOT" }), /Modelo ainda não disponível/);
 });
 
+// ═══════════════════════════ Texto introdutório, cláusulas adicionais, frase, marca d'água, sanitização ═══════════════════════════
+
+const CABECALHO_REAL = path.join(process.cwd(), "public", "propostas", "cabecalho");
+const SEM_PASTA = path.join(tmp, "x");
+const snapV2 = (conteudo: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) => ({
+  ...montarSnapshot({
+    modelo: "RS", numero: "RS-0053/26", revisao: 0, templateVersao: 2, dataEmissao: "2026-10-20", validadeDias: 15, validadeAte: "2026-11-04",
+    clienteNome: "Empresa X", aosCuidados: "Ana", conteudo, vendedorNome: "Vendedor de Teste", vendedorTelefone: "(19) 99999-0000",
+  }),
+  ...extra,
+});
+const gerarV2 = (snap: any, comLogo = true) => gerarPdfProposta(snap, { pastaCabecalho: comLogo ? CABECALHO_REAL : SEM_PASTA, pastaClientes: SEM_PASTA });
+function textoPdfPorPagina(bytes: Uint8Array): string[] {
+  const f = path.join(tmp, `t-${Math.random().toString(36).slice(2)}.pdf`);
+  fs.writeFileSync(f, bytes);
+  return execFileSync("pdftotext", ["-layout", f, "-"], { encoding: "utf8" }).split("\f").slice(0, -1);
+}
+const TEM_PDFTOTEXT = (() => { try { execFileSync("pdftotext", ["-v"], { stdio: "ignore" }); return true; } catch { return false; } })();
+// Conta quantas vezes cada página desenha uma imagem (operador Do) e se há transparência (ExtGState com ca).
+async function operacoesPorPagina(bytes: Uint8Array) {
+  const doc = await PDFDocument.load(bytes);
+  return doc.getPages().map((pg) => {
+    let texto = "";
+    const conts = pg.node.Contents();
+    const lista: any[] = conts instanceof PDFArray ? conts.asArray().map((r) => doc.context.lookup(r)) : conts ? [conts] : [];
+    for (const c of lista) texto += Buffer.from(decodePDFRawStream(c as PDFRawStream).decode()).toString("latin1") + "\n";
+    const gs = [...texto.matchAll(/\/(GS\d+) gs/g)].length;
+    const opacidades: number[] = [];
+    const res = pg.node.Resources();
+    const ext = res?.lookup(PDFName.of("ExtGState"), PDFDict);
+    if (ext) for (const k of ext.keys()) { const d = ext.lookup(k, PDFDict); const ca = d.get(PDFName.of("ca")); if (ca) opacidades.push(Number(ca.toString())); }
+    return { desenhosDeImagem: [...texto.matchAll(/\/\S+ Do\b/g)].length, opacidades, gs };
+  });
+}
+
+await caso("sanitização: nenhum caractere de 0 a U+30FF (e blocos de emoji) derruba a Helvetica; emoji some sem deixar espaço duplo", async () => {
+  const doc = await PDFDocument.create();
+  const fontes = [await doc.embedFont(StandardFonts.Helvetica), await doc.embedFont(StandardFonts.HelveticaBold)];
+  const faixas: [number, number][] = [[0, 0x30ff], [0x1f000, 0x1faff], [0xe000, 0xe0ff], [0xff00, 0xffef]];
+  let n = 0;
+  for (const [a, b] of faixas) for (let cp = a; cp <= b; cp++) {
+    if (cp >= 0xd800 && cp <= 0xdfff) continue;
+    const t = textoDesenhavel(`a${String.fromCodePoint(cp)}b`);
+    for (const f of fontes) f.widthOfTextAtSize(t, 10.5); // lança se algum caractere não for codificável
+    n++;
+  }
+  assert.ok(n > 14000, `${n} pontos de código testados`);
+  assert.equal(textoDesenhavel("a 😀 b"), "a b");
+  assert.equal(textoDesenhavel("Prezados 😀, ok 🚀."), "Prezados, ok.", "sem espaço sobrando antes da pontuação");
+  assert.equal(textoDesenhavel("a , b"), "a , b", "sem omissão, o texto do vendedor não é mexido");
+  assert.equal(textoDesenhavel("fam\u{1F468}\u200d\u{1F469}\u200d\u{1F467}ília \u2764\uFE0F ok"), "família ok");
+  assert.equal(textoDesenhavel("Ölver Álvaro Ção — “aspas” ‘simples’ – € • …"), "Ölver Álvaro Ção — “aspas” ‘simples’ – € • …");
+  assert.equal(textoDesenhavel("ő ū Ž ł"), "o u Ž", "acento fora do Latin-1 vira a letra base; o que não decompõe é omitido");
+  assert.equal(textoDesenhavel("a‑b − c"), "a-b - c");
+  assert.equal(textoDesenhavel(null), "");
+  assert.deepEqual(caracteresOmitidos("ok 😀 ✓ → ok 😀"), ["😀", "✓", "→"]);
+  assert.deepEqual(caracteresOmitidos("Só “texto” normal — e acentos çãé"), []);
+  assert.deepEqual(paragrafosDesenhaveis("Um\n\n  Dois 😀 \r\nTrês"), ["Um", "Dois", "Três"]);
+});
+await caso("itens adicionais: numeração em sequência depois da 1.7 (1.8, 1.9, 1.10…)", () => {
+  assert.deepEqual(itensAdicionais(["a", "b", "c"]).map((i) => i.numero), ["1.8", "1.9", "1.10"]);
+  assert.equal(itensAdicionais(Array(10).fill("x"))[9].numero, "1.17");
+  assert.deepEqual(itensAdicionais([]), []);
+  assert.equal(itensRs(PADROES_RS).at(-1)!.numero, "1.7");
+});
+await caso("Zod: introdução ≤1000, até 10 cláusulas de ≤600, cláusula vazia/só emoji recusada, campos ausentes têm padrão", () => {
+  const ok = (c: unknown) => conteudoRsSchema.safeParse(c);
+  assert.deepEqual(ok({}).data?.clausulas_adicionais, []);
+  assert.equal(ok({}).data?.texto_introdutorio, undefined);
+  assert.ok(ok({ texto_introdutorio: "x".repeat(MAX_TEXTO_INTRODUTORIO) }).success);
+  assert.ok(!ok({ texto_introdutorio: "x".repeat(MAX_TEXTO_INTRODUTORIO + 1) }).success);
+  assert.ok(ok({ texto_introdutorio: "   " }).success, "vazio é aceito (o PDF usa o padrão)");
+  assert.ok(!ok({ texto_introdutorio: "😀😀" }).success, "só emoji não tem o que imprimir");
+  assert.ok(ok({ clausulas_adicionais: Array(MAX_CLAUSULAS_ADICIONAIS).fill("c".repeat(MAX_CLAUSULA_ADICIONAL)) }).success);
+  assert.ok(!ok({ clausulas_adicionais: Array(MAX_CLAUSULAS_ADICIONAIS + 1).fill("c") }).success, "11 cláusulas");
+  assert.ok(!ok({ clausulas_adicionais: ["c".repeat(MAX_CLAUSULA_ADICIONAL + 1)] }).success, "601 caracteres");
+  assert.ok(!ok({ clausulas_adicionais: ["ok", "  "] }).success, "cláusula em branco");
+  assert.ok(!ok({ clausulas_adicionais: ["🙂"] }).success, "cláusula só com emoji");
+  assert.ok(!ok({ clausulas_adicionais: "texto" }).success);
+  assert.deepEqual(ok({ clausulas_adicionais: ["  a  "] }).data?.clausulas_adicionais, ["a"], "aparada");
+});
+await caso("snapshot: introdução vazia/em branco usa o padrão; texto próprio é mantido; cláusulas entram no snapshot", () => {
+  assert.equal(snapV2({ texto_introdutorio: "  " }).texto_introdutorio, TEXTO_INTRODUTORIO_PADRAO_RS);
+  assert.equal(snapV2({ texto_introdutorio: "" }).texto_introdutorio, TEXTO_INTRODUTORIO_PADRAO_RS);
+  assert.equal(snapV2({}).texto_introdutorio, TEXTO_INTRODUTORIO_PADRAO_RS);
+  assert.equal(snapV2({ texto_introdutorio: " Olá, tudo bem? " }).texto_introdutorio, "Olá, tudo bem?");
+  assert.deepEqual(snapV2({ clausulas_adicionais: ["Primeira", "Segunda"] }).clausulas_adicionais, ["Primeira", "Segunda"]);
+  assert.ok(snapshotPropostaSchema.safeParse(JSON.parse(JSON.stringify(snapV2({ clausulas_adicionais: ["x"] })))).success);
+  assert.ok(TEXTO_INTRODUTORIO_PADRAO_RS.length <= MAX_TEXTO_INTRODUTORIO);
+  assert.ok(snapshotPropostaSchema.safeParse({ ...JSON.parse(JSON.stringify(snapBase)), texto_introdutorio: undefined, clausulas_adicionais: undefined }).success, "snapshot v1 sem os campos novos continua válido");
+});
+await caso("PDF v2: logo maior, marca d'água (opacidade 8%) em TODAS as páginas, mais uma imagem de cabeçalho só na 1ª", async () => {
+  const longa = "Cláusula adicional de teste com bastante texto para ocupar linhas e forçar a quebra de página no documento. ".repeat(5).trim().slice(0, MAX_CLAUSULA_ADICIONAL);
+  const bytes = await gerarV2(snapV2({ clausulas_adicionais: Array(10).fill(longa) }));
+  const ops = await operacoesPorPagina(bytes);
+  assert.ok(ops.length >= 2, `paginas=${ops.length}`);
+  assert.equal(ops[0].desenhosDeImagem, 2, "página 1: logo do cabeçalho + marca d'água");
+  for (const o of ops.slice(1)) assert.equal(o.desenhosDeImagem, 1, "demais páginas: só a marca d'água");
+  for (const o of ops) assert.ok(o.opacidades.includes(0.08), `opacidade 0,08 em todas as páginas: ${o.opacidades}`);
+});
+await caso("PDF v2 sem logo na pasta: não quebra (sem marca d'água) e mantém o texto", async () => {
+  const bytes = await gerarV2(snapV2({}), false);
+  const { imagens } = await contarPaginasEImagens(bytes);
+  assert.equal(imagens, 0);
+});
+await caso("PDF v1 (revisão já emitida) continua no layout antigo: sem introdução, frase, cláusulas adicionais nem marca d'água", async () => {
+  const v1 = { ...snapV2({ clausulas_adicionais: ["Não deve aparecer"], texto_introdutorio: "Nem esta" }), template_versao: 1 };
+  const bytes = await gerarV2(v1);
+  const ops = await operacoesPorPagina(bytes);
+  assert.equal(ops.length, 1);
+  assert.equal(ops[0].desenhosDeImagem, 1, "só o logo do cabeçalho");
+  assert.deepEqual(ops[0].opacidades, []);
+  const legado: any = JSON.parse(JSON.stringify(v1));
+  delete legado.texto_introdutorio; delete legado.clausulas_adicionais;
+  assert.equal(new TextDecoder().decode((await gerarV2(legado)).slice(0, 5)), "%PDF-", "snapshot gravado antes dos campos novos existirem");
+  if (TEM_PDFTOTEXT) {
+    const [pg] = textoPdfPorPagina(bytes);
+    for (const proibido of ["Prezados", FRASE_EFEITO_RS, "Não deve aparecer", "1.8"]) assert.ok(!pg.includes(proibido), proibido);
+    assert.ok(pg.includes("1.7") && pg.includes("Validade da proposta"));
+  }
+});
+await caso("PDF v2 (texto): introdução própria e cláusulas 1.8…1.10 aparecem em ordem; frase de efeito inteira numa linha entre a introdução e a 1.1", async () => {
+  if (!TEM_PDFTOTEXT) return;
+  const bytes = await gerarV2(snapV2({ texto_introdutorio: "Olá, equipe.\nSegundo parágrafo.", clausulas_adicionais: ["Alfa extra", "Beta extra", "Gama extra"] }));
+  const [pg] = textoPdfPorPagina(bytes);
+  const linhas = pg.split("\n");
+  const idx = (t: string) => linhas.findIndex((l) => l.includes(t));
+  assert.ok(idx("Olá, equipe.") >= 0 && idx("Segundo parágrafo.") > idx("Olá, equipe."));
+  assert.ok(idx(FRASE_EFEITO_RS) > idx("Segundo parágrafo."), "frase inteira em UMA linha, depois da introdução");
+  assert.ok(idx("1.1") > idx(FRASE_EFEITO_RS), "e antes da cláusula 1.1");
+  assert.ok(!pg.includes("Prezados"), "o texto padrão não aparece quando há texto próprio");
+  assert.ok(idx("1.7") < idx("1.8") && idx("1.8") < idx("1.9") && idx("1.9") < idx("1.10"));
+  assert.ok(linhas[idx("1.8")].includes("Alfa extra") && linhas[idx("1.9")].includes("Beta extra") && linhas[idx("1.10")].includes("Gama extra"));
+  assert.ok(idx("Validade da proposta") > idx("1.10"));
+  const padrao = textoPdfPorPagina(await gerarV2(snapV2({})))[0];
+  assert.ok(padrao.includes("Prezados,") && padrao.includes("Ficamos à disposição para qualquer esclarecimento."));
+});
+await caso("PDF v2 (segurança): emoji, aspas curvas, travessão e símbolos em introdução, cláusulas e campos não derrubam; texto desenhável é preservado", async () => {
+  const especial = "Reunião às 9h 😀 — “confirmada” ‘ok’ • 5% ✓ → ★ ñ ő 日本 \u200d é ç ã";
+  const bytes = await gerarV2(snapV2({ texto_introdutorio: especial, clausulas_adicionais: [especial, "🙂 só depois do emoji", "Palavra".padEnd(MAX_CLAUSULA_ADICIONAL, "X")] }, { cliente_nome: especial, aos_cuidados: especial, vendedor_nome: "José 😀 Ölver" }));
+  assert.equal(new TextDecoder().decode(bytes.slice(0, 5)), "%PDF-");
+  if (!TEM_PDFTOTEXT) return;
+  const todo = textoPdfPorPagina(bytes).join("\n");
+  for (const t of ["Reunião às 9h", "“confirmada”", "5%", "só depois do emoji", "José", "Ölver"]) assert.ok(todo.includes(t), t);
+  assert.ok(!/[\u{1F300}-\u{1FAFF}]/u.test(todo), "nenhum emoji no PDF");
+});
+await caso("PDF v2 (paginação): textos longos quebram sem passar da margem; a assinatura nunca é cortada nem partida entre páginas (varredura de tamanhos)", async () => {
+  if (!TEM_PDFTOTEXT) return;
+  let paginasMax = 0;
+  for (let palavras = 0; palavras <= 160; palavras += 8) {
+    for (const nClausulas of [0, 3, 10]) {
+      const clausula = Array.from({ length: palavras + 1 }, (_, i) => `palavra${i}`).join(" ").slice(0, MAX_CLAUSULA_ADICIONAL);
+      const intro = Array.from({ length: palavras * 3 + 1 }, (_, i) => `texto${i}`).join(" ").slice(0, MAX_TEXTO_INTRODUTORIO);
+      const pgs = textoPdfPorPagina(await gerarV2(snapV2({ texto_introdutorio: intro, clausulas_adicionais: Array(nClausulas).fill(clausula) })));
+      paginasMax = Math.max(paginasMax, pgs.length);
+      const onde = (t: string) => pgs.map((p, i) => (p.includes(t) ? i : -1)).filter((i) => i >= 0);
+      const assin = [onde("SALMAZOS – Recrutamento"), onde("Vendedor de Teste"), onde("(19) 99999-0000")];
+      for (const a of assin) assert.equal(a.length, 1, `assinatura presente uma vez (palavras=${palavras}, n=${nClausulas})`);
+      assert.ok(assin[0][0] === assin[1][0] && assin[1][0] === assin[2][0], `bloco da assinatura numa só página (palavras=${palavras}, n=${nClausulas}): ${assin.map((a) => a[0])}`);
+      assert.deepEqual(onde("Validade da proposta").length, 1);
+      for (const t of ["texto0", "1.1", "1.7"]) assert.ok(pgs.join("\n").includes(t), t);
+    }
+  }
+  assert.ok(paginasMax >= 2, "a varredura chegou a produzir mais de uma página");
+});
+await caso("PDF v2: a frase de efeito cabe numa linha na largura útil (sem reduzir abaixo de 8pt) e a assinatura ganha respiro (v2 > v1)", async () => {
+  const doc = await PDFDocument.create();
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  assert.ok(bold.widthOfTextAtSize(FRASE_EFEITO_RS, 8) <= CW);
+  assert.equal(quebrar(FRASE_EFEITO_RS, bold, 8, CW).length, 1);
+  if (!TEM_PDFTOTEXT) return;
+  const y = async (snap: any) => {
+    const f = path.join(tmp, `bbox-${Math.random().toString(36).slice(2)}.pdf`);
+    fs.writeFileSync(f, await gerarV2(snap));
+    const x = execFileSync("pdftotext", ["-bbox", f, "-"], { encoding: "utf8" });
+    const pos = (w: string) => Number([...x.matchAll(new RegExp(`yMin="([\\d.]+)"[^>]*>${w}<`, "g"))].pop()![1]);
+    return { validade: pos("Validade"), assinatura: pos("SALMAZOS") };
+  };
+  const v2 = await y(snapV2({}));
+  const v1 = await y({ ...snapV2({}), template_versao: 1 });
+  assert.ok(v2.assinatura - v2.validade > v1.assinatura - v1.validade + 25, `v2=${v2.assinatura - v2.validade} v1=${v1.assinatura - v1.validade}`);
+});
+
 // ═══════════════════════════ API: rotas de Propostas contra o banco em memória ═══════════════════════════
 
 const U = "11111111-1111-4111-8111-111111111111", U2 = "11111111-1111-4111-8111-222222222222";
@@ -482,8 +670,10 @@ await caso("criar: número vem do rpc e segue a regra RS-0053/26; campos de iden
   assert.equal(r.body.data.cliente_nome, "Empresa X");
   assert.equal(r.body.data.aos_cuidados, "Ana Contato");
   assert.equal(r.body.data.validade_dias, 15);
-  assert.equal(r.body.data.template_versao, 1);
+  assert.equal(r.body.data.template_versao, TEMPLATE_VERSAO_ATUAL);
+  assert.equal(TEMPLATE_VERSAO_ATUAL, 2);
   assert.deepEqual(r.body.data.conteudo.condicoes, PADROES_RS);
+  assert.deepEqual(r.body.data.conteudo.clausulas_adicionais, []);
   assert.equal(db.rpcChamadas.length, 1);
   assert.equal(db.rpcChamadas[0].p_vendedor_id, V);
   assert.equal(db.rpcChamadas[0].p_modelo, "RS");
@@ -849,6 +1039,45 @@ await caso("editar proposta enviada: cria Rev. 1 (mesmo número), Rev. 0 fica id
   const velha = await chamar(db, "u-v", rotaId.PATCH, { metodo: "PATCH", id, corpo: { updated_at: "2000-01-01T00:00:00.000Z", validade_dias: 10 } });
   assert.equal(velha.status, 409);
   assert.equal(db.tabelas.proposta_revisoes.length, 2);
+});
+await caso("conteúdo novo (API): criar com introdução e cláusulas grava no conteudo; editar rascunho no lugar; enviada gera Rev. 1 com o snapshot novo e Rev. 0 intacta", async () => {
+  const db = novoDb();
+  const conteudo = { texto_introdutorio: "Olá!", clausulas_adicionais: ["Primeira", "Segunda"] };
+  const c = await criar(db, { conteudo });
+  assert.equal(c.status, 201, JSON.stringify(c.body));
+  const id = c.body.data.id;
+  assert.deepEqual(proposta(db, id).conteudo.clausulas_adicionais, ["Primeira", "Segunda"]);
+  assert.equal(proposta(db, id).conteudo.texto_introdutorio, "Olá!");
+  const upd = (corpo: Record<string, unknown>) => chamar(db, "u-v", rotaId.PATCH, { metodo: "PATCH", id, corpo });
+  const r1 = await upd({ updated_at: proposta(db, id).updated_at, conteudo: { ...conteudo, clausulas_adicionais: ["Segunda", "Primeira", "Terceira"] } });
+  assert.equal(r1.status, 200, JSON.stringify(r1.body));
+  assert.deepEqual(proposta(db, id).conteudo.clausulas_adicionais, ["Segunda", "Primeira", "Terceira"], "ordem escolhida");
+  assert.equal(db.tabelas.proposta_revisoes.length, 0, "rascunho não gera revisão");
+  const e = await situacao(db, id, { para: "enviada", valor_estimado: 5000 });
+  assert.equal(e.status, 200, JSON.stringify(e.body));
+  const rev0 = structuredClone(db.tabelas.proposta_revisoes[0]);
+  assert.deepEqual(rev0.conteudo.clausulas_adicionais, ["Segunda", "Primeira", "Terceira"]);
+  assert.equal(rev0.conteudo.texto_introdutorio, "Olá!");
+  assert.equal(rev0.template_versao, TEMPLATE_VERSAO_ATUAL);
+  const r2 = await upd({ updated_at: proposta(db, id).updated_at, conteudo: { texto_introdutorio: "", clausulas_adicionais: ["Só esta"] } });
+  assert.equal(r2.status, 200, JSON.stringify(r2.body));
+  assert.equal(proposta(db, id).revisao_atual, 1);
+  assert.deepEqual(db.tabelas.proposta_revisoes[0], rev0, "Rev. 0 intacta");
+  assert.deepEqual(db.tabelas.proposta_revisoes[1].conteudo.clausulas_adicionais, ["Só esta"]);
+  assert.equal(db.tabelas.proposta_revisoes[1].conteudo.texto_introdutorio, TEXTO_INTRODUTORIO_PADRAO_RS, "vazio → padrão no snapshot");
+});
+await caso("conteúdo novo (API): 11 cláusulas, 601 caracteres, introdução >1000, cláusula vazia/só emoji → 400 e nada grava; proposta aceita/recusada não edita", async () => {
+  const db = novoDb();
+  for (const conteudo of [
+    { clausulas_adicionais: Array(11).fill("x") }, { clausulas_adicionais: ["x".repeat(601)] }, { texto_introdutorio: "x".repeat(1001) },
+    { clausulas_adicionais: [""] }, { clausulas_adicionais: ["😀"] }, { texto_introdutorio: "😀" },
+  ]) assert.equal((await criar(db, { conteudo })).status, 400, JSON.stringify(conteudo).slice(0, 60));
+  assert.equal(db.tabelas.propostas.length, 0);
+  const { id } = await enviar(db);
+  await situacao(db, id, { para: "aceita" });
+  const r = await chamar(db, "u-v", rotaId.PATCH, { metodo: "PATCH", id, corpo: { updated_at: proposta(db, id).updated_at, conteudo: { clausulas_adicionais: ["x"] } } });
+  assert.equal(r.status, 409);
+  assert.deepEqual(proposta(db, id).conteudo.clausulas_adicionais ?? [], []);
 });
 await caso("editar: falha ao gravar a revisão → proposta volta ao estado anterior (sem revisão pela metade)", async () => {
   const db = novoDb();
