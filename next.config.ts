@@ -7,6 +7,11 @@ const nextConfig: NextConfig = {
   // identificar a causa do erro #418.
   productionBrowserSourceMaps: true,
   serverExternalPackages: ["sharp"],
+  // O PDF da proposta lê public/propostas/** com fs em tempo de execução (nada é importado), então o Next não
+  // enxerga essas pastas sozinho: sem isto elas ficam de fora do bundle da função na Vercel.
+  outputFileTracingIncludes: {
+    "/api/comercial/propostas/[id]/pdf": ["./public/propostas/**/*"],
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "*.supabase.co" },

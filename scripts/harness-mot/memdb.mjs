@@ -73,7 +73,25 @@ function passa(linha, f) {
     case "in": return f.val.includes(v);
     case "is": return f.val === null ? v === null || v === undefined : v === f.val;
     case "notis": return f.val === null ? !(v === null || v === undefined) : v !== f.val;
+    // .not("etapa", "in", "(ganho,perdido)") — a lista chega como texto no formato do PostgREST.
+    case "notin": {
+      const lista = Array.isArray(f.val) ? f.val : String(f.val).replace(/^\(|\)$/g, "").split(",").map((x) => x.trim());
+      return !lista.includes(v);
+    }
     case "gt": return v !== null && v !== undefined && v > f.val;
+    // .ilike("nome", "%abc%"): % e _ são curingas; "\\" escapa o próximo caractere (como o escapeLike das rotas).
+    case "ilike": {
+      let re = "";
+      const padrao = String(f.val);
+      for (let i = 0; i < padrao.length; i++) {
+        const ch = padrao[i];
+        if (ch === "\\" && i + 1 < padrao.length) re += padrao[++i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        else if (ch === "%") re += ".*";
+        else if (ch === "_") re += ".";
+        else re += ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }
+      return v !== null && v !== undefined && new RegExp(`^${re}$`, "i").test(String(v));
+    }
     case "or": return f.val.some((sub) => passa(linha, sub));
     case "gte": return v !== null && v !== undefined && v >= f.val;
     case "lt": return v !== null && v !== undefined && v < f.val;
@@ -135,6 +153,7 @@ class Consulta {
     return this;
   }
   not(col, op, val) { this.filtros.push({ col, op: `not${op}`, val }); return this; }
+  ilike(col, val) { this.filtros.push({ col, op: "ilike", val }); return this; }
   gt(col, val) { this.filtros.push({ col, op: "gt", val }); return this; }
   gte(col, val) { this.filtros.push({ col, op: "gte", val }); return this; }
   lt(col, val) { this.filtros.push({ col, op: "lt", val }); return this; }
@@ -252,12 +271,21 @@ class Consulta {
     if (this.tabela === "funcionario_mot_eventos") {
       return { data: null, error: { message: "funcionario_mot_eventos é append-only" } };
     }
+    // db.imutaveis = ["tabela"]: imita o trigger do banco que barra update/delete (valendo também para o service role).
+    if (this.db.imutaveis?.includes(this.tabela)) {
+      return { data: null, error: { code: "42501", message: `registro imutável: ${this.op.toUpperCase()} em ${this.tabela} não é permitido` } };
+    }
     if (this.op === "update") {
       for (const l of alvos) Object.assign(l, this.payload);
       return this.retorna ? this.finalizar(alvos.map((l) => projetar(l, interpretarSelect(this.cols).colunas))) : { data: null, error: null };
     }
     if (this.op === "delete") {
       this.db.tabelas[this.tabela] = tabela.filter((l) => !alvos.includes(l));
+      // db.cascatas = { tabela: [{ tabela, col }] }: imita ON DELETE CASCADE das chaves estrangeiras.
+      for (const c of this.db.cascatas?.[this.tabela] ?? []) {
+        const ids = alvos.map((l) => l.id);
+        this.db.tabelas[c.tabela] = (this.db.tabelas[c.tabela] ?? []).filter((x) => !ids.includes(x[c.col]));
+      }
       return this.retorna ? this.finalizar(alvos.map((l) => projetar(l, interpretarSelect(this.cols).colunas))) : { data: null, error: null };
     }
     throw new Error(`op não suportada: ${this.op}`);
@@ -268,6 +296,14 @@ export function criarClienteServico(db) {
   const falhaStorage = (chave) => (db.falhas[chave] ? { data: null, error: { message: db.falhas[chave] } } : null);
   return {
     from: (tabela) => new Consulta(db, tabela),
+    // db.rpcs = { nome: (args, db) => ({ data, error }) }: o teste fornece o comportamento da função SQL.
+    rpc: async (nome, args) => {
+      const falha = db.falhas[`rpc.${nome}`];
+      if (falha) return { data: null, error: typeof falha === "object" ? falha : { message: falha } };
+      const h = db.rpcs?.[nome];
+      if (!h) return { data: null, error: { message: `rpc não mockada no memdb: ${nome}` } };
+      return h(args, db);
+    },
     storage: {
       from: (balde) => ({
         createSignedUploadUrl: async (caminho) => falhaStorage("storage.upload") ?? ({ data: { signedUrl: `https://stub/${balde}/up/${caminho}`, path: caminho, token: "tk" }, error: null }),

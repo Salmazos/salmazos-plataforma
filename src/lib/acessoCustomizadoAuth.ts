@@ -34,3 +34,25 @@ export async function podeAcessarAba(
 
   return comportamentoPadraoPorPapel;
 }
+
+// Lê só a exceção individual cadastrada (true = liberado, false = bloqueado, null = sem exceção). O podeAcessarAba
+// mistura exceção e padrão num único booleano; quem precisa distinguir "liberado de propósito" do "padrão do papel"
+// (ex.: Propostas, onde liberar dá direito de escrever e o padrão de gestor só lê) usa esta. Diferente do podeAcessarAba
+// (que, num erro de leitura, cai no padrão do papel), aqui o erro é devolvido: quem chama decide negar o acesso, porque
+// "não consegui ler" não pode virar "não há bloqueio" (liberado=false precisa valer mesmo com o banco falhando).
+export async function excecaoExplicitaAba(
+  analistaPerfilId: string,
+  chaveAba: string
+): Promise<{ erro: false; excecao: boolean | null } | { erro: true }> {
+  const { data, error } = await createServiceClient()
+    .from("usuario_acesso_customizado")
+    .select("liberado")
+    .eq("analista_perfil_id", analistaPerfilId)
+    .eq("chave_aba", chaveAba)
+    .maybeSingle();
+  if (error) {
+    console.error("[acesso] Não foi possível ler a exceção de acesso:", chaveAba, error.message);
+    return { erro: true };
+  }
+  return { erro: false, excecao: data ? data.liberado === true : null };
+}
