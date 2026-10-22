@@ -399,7 +399,17 @@ const snapV2 = (conteudo: Record<string, unknown> = {}, extra: Record<string, un
   }),
   ...extra,
 });
-const gerarV2 = (snap: any, comLogo = true) => gerarPdfProposta(snap, { pastaCabecalho: comLogo ? CABECALHO_REAL : SEM_PASTA, pastaClientes: SEM_PASTA });
+const CLIENTES_REAL = path.join(process.cwd(), "public", "propostas", "clientes");
+const gerarV2 = (snap: any, comLogo = true, pastaClientes = SEM_PASTA) => gerarPdfProposta(snap, { pastaCabecalho: comLogo ? CABECALHO_REAL : SEM_PASTA, pastaClientes });
+// Palavras com posição (pdftotext -bbox), por página; y cresce para baixo. O rodapé reservado começa em 842 - 66 = 776.
+const TOPO_RODAPE = 842 - 66;
+function palavrasPorPagina(bytes: Uint8Array): { y0: number; y1: number; t: string }[][] {
+  const f = path.join(tmp, `bb-${Math.random().toString(36).slice(2)}.pdf`);
+  fs.writeFileSync(f, bytes);
+  const x = execFileSync("pdftotext", ["-bbox", f, "-"], { encoding: "utf8" });
+  return x.split("<page ").slice(1).map((blk) => [...blk.matchAll(/<word xMin="[\d.]+" yMin="([\d.]+)" xMax="[\d.]+" yMax="([\d.]+)">([^<]*)<\/word>/g)].map((m) => ({ y0: Number(m[1]), y1: Number(m[2]), t: m[3] })));
+}
+const paginaDe = (pgs: { t: string }[][], palavra: string) => pgs.flatMap((p, i) => (p.some((w) => w.t === palavra) ? [i] : []));
 function textoPdfPorPagina(bytes: Uint8Array): string[] {
   const f = path.join(tmp, `t-${Math.random().toString(36).slice(2)}.pdf`);
   fs.writeFileSync(f, bytes);
@@ -419,7 +429,17 @@ async function operacoesPorPagina(bytes: Uint8Array) {
     const res = pg.node.Resources();
     const ext = res?.lookup(PDFName.of("ExtGState"), PDFDict);
     if (ext) for (const k of ext.keys()) { const d = ext.lookup(k, PDFDict); const ca = d.get(PDFName.of("ca")); if (ca) opacidades.push(Number(ca.toString())); }
-    return { desenhosDeImagem: [...texto.matchAll(/\/\S+ Do\b/g)].length, opacidades, gs };
+    // Posição de cada imagem desenhada: última translação (1 0 0 1 x y cm) + escala (w 0 0 h 0 0 cm) antes do "Do".
+    const imagens: { x: number; y: number; w: number; h: number }[] = [];
+    let pos = { x: 0, y: 0 }, tam = { w: 0, h: 0 };
+    for (const l of texto.split("\n")) {
+      let m = l.match(/^1 0 0 1 (\S+) (\S+) cm$/);
+      if (m && !(m[1] === "0" && m[2] === "0")) pos = { x: Number(m[1]), y: Number(m[2]) };
+      m = l.match(/^(\S+) 0 0 (\S+) 0 0 cm$/);
+      if (m && m[1] !== "1") tam = { w: Number(m[1]), h: Number(m[2]) };
+      if (/^\/\S+ Do$/.test(l)) imagens.push({ ...pos, ...tam });
+    }
+    return { desenhosDeImagem: [...texto.matchAll(/\/\S+ Do\b/g)].length, opacidades, gs, imagens };
   });
 }
 
@@ -479,14 +499,14 @@ await caso("snapshot: introdução vazia/em branco usa o padrão; texto próprio
   assert.ok(TEXTO_INTRODUTORIO_PADRAO_RS.length <= MAX_TEXTO_INTRODUTORIO);
   assert.ok(snapshotPropostaSchema.safeParse({ ...JSON.parse(JSON.stringify(snapBase)), texto_introdutorio: undefined, clausulas_adicionais: undefined }).success, "snapshot v1 sem os campos novos continua válido");
 });
-await caso("PDF v2: logo maior, marca d'água (opacidade 8%) em TODAS as páginas, mais uma imagem de cabeçalho só na 1ª", async () => {
+await caso("PDF v2: logo maior, marca d'água (opacidade 14%) em TODAS as páginas, mais uma imagem de cabeçalho só na 1ª", async () => {
   const longa = "Cláusula adicional de teste com bastante texto para ocupar linhas e forçar a quebra de página no documento. ".repeat(5).trim().slice(0, MAX_CLAUSULA_ADICIONAL);
   const bytes = await gerarV2(snapV2({ clausulas_adicionais: Array(10).fill(longa) }));
   const ops = await operacoesPorPagina(bytes);
   assert.ok(ops.length >= 2, `paginas=${ops.length}`);
   assert.equal(ops[0].desenhosDeImagem, 2, "página 1: logo do cabeçalho + marca d'água");
   for (const o of ops.slice(1)) assert.equal(o.desenhosDeImagem, 1, "demais páginas: só a marca d'água");
-  for (const o of ops) assert.ok(o.opacidades.includes(0.08), `opacidade 0,08 em todas as páginas: ${o.opacidades}`);
+  for (const o of ops) assert.ok(o.opacidades.includes(0.14), `opacidade 0,14 em todas as páginas: ${o.opacidades}`);
 });
 await caso("PDF v2 sem logo na pasta: não quebra (sem marca d'água) e mantém o texto", async () => {
   const bytes = await gerarV2(snapV2({}), false);
@@ -552,6 +572,113 @@ await caso("PDF v2 (paginação): textos longos quebram sem passar da margem; a 
     }
   }
   assert.ok(paginasMax >= 2, "a varredura chegou a produzir mais de uma página");
+});
+// ═══════════════════════════ Paginação v2: bloco validade+assinatura e grade de clientes ═══════════════════════════
+
+const INTRO_MAX = "Prezados, agradecemos a oportunidade de apresentar a proposta da Salmazos RH para o recrutamento e seleção de profissionais da sua empresa. ".repeat(10).slice(0, MAX_TEXTO_INTRODUTORIO);
+const clausulaDe = (L: number) => "Cláusula adicional: prazo de reposição, faturamento e cancelamento valem para todas as vagas deste período, sem prejuízo das demais condições, e podem ser renegociados por escrito entre as partes. ".repeat(4).slice(0, L).trim();
+const snapEmail = (conteudo: Record<string, unknown> = {}) => montarSnapshot({ modelo: "RS", numero: "OS-0053/26", revisao: 0, templateVersao: 2, dataEmissao: "2026-10-20", validadeDias: 15, validadeAte: "2026-11-04",
+  clienteNome: "Empresa X", aosCuidados: "Ana", conteudo, vendedorNome: "Vendedor de Teste", vendedorTelefone: "(19) 99999-0000", vendedorEmail: "vendedor@salmazos.com.br" });
+// Invariantes de qualquer PDF v2: validade e assinatura (até o e-mail) na MESMA página; grade (se houver) inteira numa página; nada abaixo do rodapé reservado.
+async function conferirLayoutV2(bytes: Uint8Array, rotulo: string) {
+  const pgs = palavrasPorPagina(bytes);
+  const val = paginaDe(pgs, "Validade"), assin = paginaDe(pgs, "Recrutamento,"), email = paginaDe(pgs, "vendedor@salmazos.com.br");
+  assert.deepEqual([val.length, assin.length, email.length], [1, 1, 1], `${rotulo}: cada parte do bloco aparece uma vez`);
+  assert.ok(val[0] === assin[0] && assin[0] === email[0], `${rotulo}: validade/assinatura/e-mail na mesma página (${val}/${assin}/${email})`);
+  assert.ok(paginaDe(pgs, "clientes:").length <= 1, `${rotulo}: título da grade uma vez`);
+  pgs.forEach((p, i) => {
+    const corpo = p.filter((w) => w.y0 > 20 && w.y0 < 770);
+    assert.ok(corpo.every((w) => w.y1 <= TOPO_RODAPE), `${rotulo}: texto invade o rodapé na página ${i + 1}`);
+  });
+  const ops = await operacoesPorPagina(bytes);
+  assert.equal(ops.length, pgs.length);
+  ops.forEach((o, i) => {
+    assert.ok(o.imagens.every((im) => im.y >= 66 - 1e-6 || im.y > 700), `${rotulo}: imagem abaixo do topo do rodapé na página ${i + 1}: ${o.imagens.map((im) => im.y)}`);
+    assert.ok(o.opacidades.includes(0.14), `${rotulo}: marca d'água na página ${i + 1}`);
+  });
+  return { pgs, pagina: val[0], paginas: pgs.length, ops };
+}
+
+await caso("paginação v2 (a): texto curto → bloco na página 1 e grade INTEIRA na página 2 (não cabe embaixo da assinatura)", async () => {
+  if (!TEM_PDFTOTEXT) return;
+  const r = await conferirLayoutV2(await gerarV2(snapEmail(), true, CLIENTES_REAL), "a");
+  assert.equal(r.paginas, 2);
+  assert.equal(r.pagina, 0);
+  assert.deepEqual(paginaDe(r.pgs, "clientes:"), [1]);
+  assert.equal(r.ops[1].imagens.length, 14 + 1, "14 logos de clientes + marca d'água, todos na página 2");
+});
+await caso("paginação v2 (b): introdução longa + 2 cláusulas (o caso da assinatura órfã) → validade+assinatura juntas na página 2, com a grade logo abaixo; 2 páginas", async () => {
+  if (!TEM_PDFTOTEXT) return;
+  const r = await conferirLayoutV2(await gerarV2(snapEmail({ texto_introdutorio: INTRO_MAX, clausulas_adicionais: [clausulaDe(600), clausulaDe(600)] }), true, CLIENTES_REAL), "b");
+  assert.equal(r.paginas, 2);
+  assert.equal(r.pagina, 1);
+  assert.deepEqual(paginaDe(r.pgs, "clientes:"), [1], "grade na mesma página do bloco (cabe inteira embaixo dele)");
+  const w = (t: string) => r.pgs[1].find((x) => x.t === t)!;
+  assert.ok(w("Validade").y0 < w("Recrutamento,").y0 && w("Recrutamento,").y0 < w("clientes:").y0, "ordem: validade, assinatura, grade");
+  assert.ok(w("Recrutamento,").y0 - w("Validade").y1 > 40, "o respiro entre validade e assinatura se mantém (~44pt)");
+});
+await caso("paginação v2 (c): 10 cláusulas de 600 caracteres → 3 páginas, bloco e grade juntos na última", async () => {
+  if (!TEM_PDFTOTEXT) return;
+  const r = await conferirLayoutV2(await gerarV2(snapEmail({ clausulas_adicionais: Array(10).fill(clausulaDe(600)) }), true, CLIENTES_REAL), "c");
+  assert.equal(r.paginas, 3);
+  assert.equal(r.pagina, 2);
+  assert.deepEqual(paginaDe(r.pgs, "clientes:"), [2]);
+});
+await caso("paginação v2 (d): varredura até a validade cair exatamente no fim da página → o bloco inteiro migra, nunca separa nem deixa a assinatura órfã", async () => {
+  if (!TEM_PDFTOTEXT) return;
+  let anterior: { L: number; pagina: number } | null = null, transicoes = 0, bloco_no_topo = 0;
+  for (const k of [2, 8]) for (let L = 20; L <= 600; L += 40) {
+    const bytes = await gerarV2(snapEmail({ texto_introdutorio: INTRO_MAX, clausulas_adicionais: Array.from({ length: k }, () => clausulaDe(L)) }));
+    const r = await conferirLayoutV2(bytes, `k=${k} L=${L}`);
+    const val = r.pgs[r.pagina].find((x) => x.t === "Validade")!;
+    const sig = r.pgs[r.pagina].find((x) => x.t === "vendedor@salmazos.com.br")!;
+    const acima = r.pgs[r.pagina].filter((w) => w.y0 > 40 && w.y0 < 770 && w.y1 < val.y0 - 1);
+    if (r.pagina > 0 && acima.length === 0) {
+      bloco_no_topo++;
+      assert.ok(val.y0 < 70, `k=${k} L=${L}: bloco no topo da página nova sem espaço somado acima (validade em y=${val.y0.toFixed(1)})`);
+      // Bloco sozinho no topo: só vale se NÃO coubesse no resto da página anterior.
+      const ant = r.pgs[r.pagina - 1].filter((w) => w.y0 > 40 && w.y0 < 770);
+      const livre = TOPO_RODAPE - Math.max(...ant.map((w) => w.y1));
+      assert.ok(livre < sig.y1 - val.y0 + 10, `k=${k} L=${L}: bloco poderia ter ficado na página anterior (livre=${livre.toFixed(1)})`);
+    }
+    if (k === 8 && anterior && anterior.pagina !== r.pagina) transicoes++;
+    if (k === 8) anterior = { L, pagina: r.pagina };
+  }
+  assert.ok(bloco_no_topo >= 1, "a varredura incluiu blocos que migraram para o topo de uma página nova");
+  assert.ok(transicoes >= 1, "a varredura atravessou um limite de página (validade passou da página N para a N+1)");
+});
+await caso("paginação v2 (e): poucos logos cabem na mesma página, abaixo da assinatura e acima do rodapé; v1 continua começando a grade em página nova", async () => {
+  const pasta = path.join(tmp, "quatro"); fs.mkdirSync(pasta);
+  for (const n of fs.readdirSync(CLIENTES_REAL).slice(0, 4)) fs.copyFileSync(path.join(CLIENTES_REAL, n), path.join(pasta, n));
+  const curto = snapEmail({ texto_introdutorio: "Olá, seguem as condições." });
+  const bytes = await gerarV2(curto, true, pasta);
+  assert.equal((await contarPaginasEImagens(bytes)).paginas, 1, "v2: grade na página 1");
+  const ops = await operacoesPorPagina(bytes);
+  const logos = ops[0].imagens.filter((im) => im.y < 700 && im.w < 200);
+  assert.equal(logos.length, 4);
+  assert.ok(logos.every((im) => im.y >= 66), "logos acima do rodapé");
+  if (TEM_PDFTOTEXT) {
+    const r = await conferirLayoutV2(bytes, "e");
+    const w = (t: string) => r.pgs[0].find((x) => x.t === t)!;
+    assert.ok(w("vendedor@salmazos.com.br").y1 < w("clientes:").y0, "grade abaixo da assinatura");
+  }
+  const v1 = await gerarV2({ ...curto, template_versao: 1 }, true, pasta);
+  assert.equal((await contarPaginasEImagens(v1)).paginas, 2, "v1: grade sempre em página nova (layout das revisões já emitidas)");
+});
+await caso("paginação v2: grade grande (60 logos) não cabe embaixo da assinatura → começa em página nova, como no v1", async () => {
+  const pasta = path.join(tmp, "sessenta"); fs.mkdirSync(pasta);
+  const um = await png(120, 40, "#334455");
+  for (let i = 0; i < 60; i++) fs.writeFileSync(path.join(pasta, `l${String(i).padStart(2, "0")}.png`), um);
+  const bytes = await gerarV2(snapEmail({ texto_introdutorio: "Olá." }), true, pasta);
+  const { paginas } = await contarPaginasEImagens(bytes);
+  assert.ok(paginas >= 3, `paginas=${paginas}`);
+  if (TEM_PDFTOTEXT) {
+    const pgs = palavrasPorPagina(bytes);
+    const pGrade = paginaDe(pgs, "clientes:")[0], pBloco = paginaDe(pgs, "Validade")[0];
+    assert.ok(pGrade > pBloco, "grade depois da página do bloco");
+    const topoGrade = pgs[pGrade].find((w) => w.t === "clientes:")!;
+    assert.ok(topoGrade.y0 < 80, "título da grade no topo da página nova");
+  }
 });
 await caso("PDF v2: a frase de efeito cabe numa linha na largura útil (sem reduzir abaixo de 8pt) e a assinatura ganha respiro (v2 > v1)", async () => {
   const doc = await PDFDocument.create();

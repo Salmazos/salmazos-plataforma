@@ -27,7 +27,7 @@ const ALTURA_LOGO_CABECALHO_V2 = 70;
 const ALTURA_CABECALHO_CHEIO_V2 = 110;
 // Marca d'água: logo grande e pálido, centralizado, atrás do texto em todas as páginas.
 const LARGURA_MARCA_DAGUA = CW * 0.9;
-const OPACIDADE_MARCA_DAGUA = 0.08;
+const OPACIDADE_MARCA_DAGUA = 0.14;
 const LARGURA_MAX_LOGO_CABECALHO_PX = 800;
 const LADO_MAXIMO_ENTRADA_PX = 1200;
 
@@ -222,6 +222,11 @@ class Escritor {
     this.page.drawImage(logo, { x: (PW - largura) / 2, y: base + (topo - base - altura) / 2, width: largura, height: altura, opacity: OPACIDADE_MARCA_DAGUA });
   }
 
+  // Cabe `necessario` pt a partir do y atual sem invadir o rodapé?
+  cabe(necessario: number): boolean {
+    return this.y - necessario >= this.reservadoRodape;
+  }
+
   garantirEspaco(necessario: number) {
     if (this.y - necessario < this.reservadoRodape) this.novaPagina(false);
   }
@@ -296,15 +301,25 @@ class Escritor {
     this.y -= size * 1.4 + 8;
   }
 
-  // Linhas que ficam juntas na mesma página: se o bloco inteiro não cabe, vai todo para a página seguinte.
-  blocoIndivisivel(linhas: { texto: string; font: PDFFont }[], size = 10.5) {
-    const medidas = linhas.map((l) => ({ ...l, partes: quebrar(l.texto, l.font, size, CW) }));
-    const altura = medidas.reduce((soma, l) => soma + l.partes.length * size * 1.45, 0);
-    this.garantirEspaco(altura + 4);
-    for (const l of medidas) {
+  // Validade + assinatura são UM bloco: se não cabe inteiro, vai inteiro para a página seguinte (nunca a validade numa página
+  // e a assinatura em outra). O respiro entre os dois fica dentro do bloco; no topo de página nova não se soma espaço acima.
+  blocoValidadeEAssinatura(validade: string, linhas: { texto: string; font: PDFFont }[], folga: number, size = 10.5) {
+    const passo = size * 1.45;
+    const partesValidade = quebrar(validade, this.regular, size, CW);
+    const assinatura = linhas.map((l) => ({ ...l, partes: quebrar(l.texto, l.font, size, CW) }));
+    const alturaAssinatura = assinatura.reduce((soma, l) => soma + l.partes.length * passo, 0);
+    const antes = 6;
+    if (this.cabe(antes + partesValidade.length * passo + folga + alturaAssinatura + 4)) this.y -= antes;
+    else this.novaPagina(false);
+    for (const parte of partesValidade) {
+      this.page.drawText(parte, { x: ML, y: this.y, size, font: this.regular, color: DARK });
+      this.y -= passo;
+    }
+    this.y -= folga;
+    for (const l of assinatura) {
       for (const parte of l.partes) {
         this.page.drawText(parte, { x: ML, y: this.y, size, font: l.font, color: DARK });
-        this.y -= size * 1.45;
+        this.y -= passo;
       }
     }
   }
@@ -330,11 +345,18 @@ export function calcularGrade(quantidade: number) {
   return { celulaW, celulaH, ptPorPx: celulaW / CAIXA_LOGO_W, linhas };
 }
 
-async function desenharGradeClientes(e: Escritor, logos: LogoCliente[]) {
+const ALTURA_FAIXA_TITULO = 36;
+const ESPACO_ANTES_DA_GRADE = 24;
+
+// Template v2: a grade entra logo depois da assinatura, na mesma página, se couber INTEIRA (faixa + todas as linhas);
+// senão começa em página nova, como no v1. No v1 sempre começa em página nova.
+async function desenharGradeClientes(e: Escritor, logos: LogoCliente[], mesmaPaginaSeCouber = false) {
   if (logos.length === 0) return;
-  e.novaPagina(false);
-  e.faixaTitulo("Alguns de nossos clientes:");
   const grade = calcularGrade(logos.length);
+  const alturaTotal = ALTURA_FAIXA_TITULO + grade.linhas.length * (grade.celulaH + ESPACO_ENTRE_LOGOS);
+  if (mesmaPaginaSeCouber && e.cabe(ESPACO_ANTES_DA_GRADE + alturaTotal)) e.espaco(ESPACO_ANTES_DA_GRADE);
+  else e.novaPagina(false);
+  e.faixaTitulo("Alguns de nossos clientes:");
   let indice = 0;
   for (const linha of grade.linhas) {
     e.garantirEspaco(grade.celulaH + ESPACO_ENTRE_LOGOS);
@@ -384,24 +406,24 @@ export async function gerarPdfProposta(snap: SnapshotProposta, opcoes: OpcoesPdf
   for (const item of itensRs(snap.condicoes)) e.item(item.numero, item.texto);
   if (v2) for (const item of itensAdicionais(snap.clausulas_adicionais ?? [])) e.item(item.numero, item.texto);
 
-  e.espaco(6);
-  e.paragrafo(`Validade da proposta: ${snap.validade_dias} dias corridos, até ${formatarDataBr(snap.validade_ate)}.`);
-
-  // v2: cerca de 2 linhas em branco a mais antes da assinatura, e o bloco da assinatura nunca se parte entre páginas.
-  e.espaco(v2 ? 44 : 14);
+  const validade = `Validade da proposta: ${snap.validade_dias} dias corridos, até ${formatarDataBr(snap.validade_ate)}.`;
   const assinatura = [
     { texto: ASSINATURA_RS, font: bold },
     { texto: snap.vendedor_nome, font: regular },
     ...(snap.vendedor_telefone ? [{ texto: snap.vendedor_telefone, font: regular }] : []),
     ...(v2 && snap.vendedor_email ? [{ texto: snap.vendedor_email, font: regular }] : []),
   ];
-  if (v2) e.blocoIndivisivel(assinatura);
+  // v2: validade + assinatura num bloco só, com cerca de 2 linhas em branco entre os dois. v1 (revisões já emitidas): layout antigo.
+  if (v2) e.blocoValidadeEAssinatura(validade, assinatura, 44);
   else {
+    e.espaco(6);
+    e.paragrafo(validade);
+    e.espaco(14);
     e.garantirEspaco(70);
     for (const l of assinatura) e.paragrafo(l.texto, l.font);
   }
 
-  await desenharGradeClientes(e, await carregarLogosClientes(opcoes.pastaClientes ?? PASTA_CLIENTES_PROPOSTA));
+  await desenharGradeClientes(e, await carregarLogosClientes(opcoes.pastaClientes ?? PASTA_CLIENTES_PROPOSTA), v2);
 
   return doc.save();
 }
