@@ -6,6 +6,22 @@ import ModalContaReceberHortolandia from "./ModalContaReceberHortolandia";
 import ModalContaPagarHortolandia from "./ModalContaPagarHortolandia";
 import SeletorUnidade from "./SeletorUnidade";
 import ImpostoLinhaCelula from "./ImpostoLinhaCelula";
+import {
+  FILTROS_INICIAIS,
+  calcularCards,
+  entradasDosCards,
+  filtrarEntradas,
+  filtrarSaidas,
+  haFiltroAtivo,
+  intervaloAtivo,
+  intervaloInvalido,
+  percentualEfetivo,
+  periodoDosCards,
+  periodoEscolhido,
+  rotuloMes,
+  saidasDosCards,
+  type FiltrosFaturamento,
+} from "@/lib/faturamentoUnidadesFiltros";
 
 export interface ContaReceberRow {
   id: string;
@@ -107,7 +123,9 @@ export default function FaturamentoHortolandiaPageClient({
   const [saidas, setSaidas] = useState(saidasIniciais);
   const [visao, setVisao] = useState<Visao>("entradas");
   const [tab, setTab] = useState<FiltroTab>("pendente");
-  const [responsavelFiltro, setResponsavelFiltro] = useState<string>("todos");
+  // Abre SEMPRE sem filtro (regra de abertura do Olver, ver faturamentoUnidadesFiltros.ts) e
+  // nunca persiste: só estado local — trocar de unidade remonta o componente (key={unidadeId}).
+  const [filtros, setFiltros] = useState<FiltrosFaturamento>(FILTROS_INICIAIS);
   const [contaAberta, setContaAberta] = useState<ContaReceberRow | null | "novo">(null);
   const [contaPagarAberta, setContaPagarAberta] = useState<ContaPagarRow | null | "novo">(null);
 
@@ -146,9 +164,7 @@ export default function FaturamentoHortolandiaPageClient({
   // mude depois (é uma trava por lançamento, não um valor calculado). Null (o padrão) volta
   // a seguir o mês normalmente.
   function percentualEfetivoRow(row: ContaReceberRow): number | null {
-    if (row.impostoPercentualManual != null) return row.impostoPercentualManual;
-    if (!row.dataEmissaoNf) return null;
-    return impostosPorMes[row.dataEmissaoNf.slice(0, 7)] ?? null;
+    return percentualEfetivo(row, impostosPorMes);
   }
 
   function valorLiquidoRow(row: ContaReceberRow): number | null {
@@ -156,74 +172,97 @@ export default function FaturamentoHortolandiaPageClient({
     return percentual != null ? row.valor - (row.valor * percentual) / 100 : null;
   }
 
-  const rowsFiltradas = useMemo(() => {
-    if (tab === "todas") return rows;
-    return rows.filter((r) => r.status === tab);
-  }, [rows, tab]);
+  // A tabela só é filtrada por data quando o usuário escolhe um mês ou um período; sem escolha,
+  // lista todos os meses como sempre (o mês corrente vale só para os cards, mais abaixo).
+  const periodoTabela = periodoEscolhido(filtros);
 
-  // Lista de responsáveis pro filtro da aba Saídas, derivada dos lançamentos já carregados
-  // (mesmo padrão do resto da tela: sem chamada extra à API só pra popular um <select>).
+  const rowsFiltradas = useMemo(() => {
+    const porFiltros = filtrarEntradas(rows, {
+      busca: filtros.buscaEntradas,
+      clienteId: filtros.clienteId,
+      periodo: periodoTabela,
+    });
+    return tab === "todas" ? porFiltros : porFiltros.filter((r) => r.status === tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, tab, filtros]);
+
+  // Opções dos selects derivadas dos lançamentos já carregados (mesmo padrão do resto da tela:
+  // sem chamada extra à API só pra popular um <select>).
   const responsaveisDisponiveis = useMemo(
     () => Array.from(new Set(saidas.map((s) => s.responsavel))).sort((a, b) => a.localeCompare(b, "pt-BR")),
     [saidas]
   );
+  const clientesDisponiveis = useMemo(() => {
+    const porId = new Map<string, string>();
+    for (const r of rows) porId.set(r.clienteId, r.clienteNome);
+    return Array.from(porId, ([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  }, [rows]);
 
-  // Se a última saída do responsável filtrado for editada/apagada, ele some das opções — volta
-  // pra "Todos" em vez de deixar a tabela vazia com um filtro que não aparece mais no <select>.
-  // Reset no estado (não só derivado na renderização) pra que o filtro não se reaplique sozinho
-  // se uma saída nova desse mesmo responsável for lançada depois.
+  // Se o último lançamento do responsável/cliente filtrado for editado/apagado, ele some das
+  // opções — volta pra "Todos" em vez de deixar a tabela vazia com um filtro que não aparece mais
+  // no <select>. Reset no estado (não só derivado na renderização) pra que o filtro não se
+  // reaplique sozinho se um lançamento novo desse mesmo responsável/cliente for criado depois.
   useEffect(() => {
-    if (responsavelFiltro !== "todos" && !responsaveisDisponiveis.includes(responsavelFiltro)) {
-      setResponsavelFiltro("todos");
+    if (filtros.responsavel !== "todos" && !responsaveisDisponiveis.includes(filtros.responsavel)) {
+      setFiltros((f) => ({ ...f, responsavel: "todos" }));
     }
-  }, [responsaveisDisponiveis, responsavelFiltro]);
+    if (filtros.clienteId !== "todos" && !clientesDisponiveis.some((c) => c.id === filtros.clienteId)) {
+      setFiltros((f) => ({ ...f, clienteId: "todos" }));
+    }
+  }, [responsaveisDisponiveis, clientesDisponiveis, filtros.responsavel, filtros.clienteId]);
 
-  // Filtro por responsável é só da tabela de Saídas — os cards de totais do topo (Total
-  // Saída, Saldo Líquido) continuam somando TODAS as saídas do mês, igual o filtro por
-  // status de Entradas já não afeta o Total Entrada/Líquido lá em cima.
   const saidasFiltradas = useMemo(
-    () => (responsavelFiltro === "todos" ? saidas : saidas.filter((s) => s.responsavel === responsavelFiltro)),
-    [saidas, responsavelFiltro]
+    () =>
+      filtrarSaidas(saidas, { busca: filtros.buscaSaidas, responsavel: filtros.responsavel, periodo: periodoTabela }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [saidas, filtros]
   );
 
   const totalFiltrado = rowsFiltradas.reduce((soma, r) => soma + r.valor, 0);
 
-  // Soma só dos lançamentos cujo mês de vencimento já tem imposto informado — quando nenhum
-  // tem, mostra "—" em vez de R$ 0,00 (que passaria a falsa impressão de líquido zerado).
+  // Soma só dos lançamentos cujo percentual de imposto é conhecido — quando nenhum tem, mostra
+  // "—" em vez de R$ 0,00 (que passaria a falsa impressão de líquido zerado).
   const totalLiquidoFiltrado = rowsFiltradas.reduce((soma, r) => {
     const liquido = valorLiquidoRow(r);
     return liquido != null ? soma + liquido : soma;
   }, 0);
   const existeLiquidoConhecido = rowsFiltradas.some((r) => valorLiquidoRow(r) != null);
 
-  // Total do mês selecionado — pelo vencimento, independente de status/aba, pra bater com o
-  // que a planilha manual do Olver já mostrava (ele mesmo apura o líquido informando o
-  // imposto do mês, igual já funciona em Faturamento R&S).
+  // Cards: mesmos filtros da tabela (busca, cliente, responsável, mês/período) menos a aba de
+  // status, que é só navegação (Total Entrada sempre foi independente de status). Sem mês nem
+  // período escolhidos, o mês corrente vale SÓ aqui (comportamento de abertura). Cancelados não
+  // entram: ver entradasDosCards. O Líquido é somado por lançamento (percentual manual ou do mês
+  // de emissão), porque o período pode cruzar meses — e passa a bater com a coluna Valor
+  // Líquido da tabela.
+  const chaveMesCorrente = `${anoInicial}-${pad2(mesInicial)}`;
+  const periodoCards = periodoDosCards(filtros, chaveMesCorrente);
+  const cards = useMemo(
+    () =>
+      calcularCards(
+        entradasDosCards(rows, filtros, chaveMesCorrente),
+        saidasDosCards(saidas, filtros, chaveMesCorrente),
+        impostosPorMes
+      ),
+    [rows, saidas, filtros, chaveMesCorrente, impostosPorMes]
+  );
+  const totalMes = cards.totalEntrada;
+  const totalSaidaMes = cards.totalSaida;
+  const liquido = cards.liquido;
+  const saldoLiquidoMes = cards.saldoLiquido;
+  const rotuloPeriodoCards =
+    periodoCards.tipo === "mes"
+      ? `mês ${rotuloMes(periodoCards.chave)}`
+      : `período ${periodoCards.de ? formatarData(periodoCards.de) : "início"} a ${
+          periodoCards.ate ? formatarData(periodoCards.ate) : "sem fim"
+        }`;
+  const intervaloComErro = intervaloInvalido(filtros.de, filtros.ate);
+  const periodoEmUso = intervaloAtivo(filtros);
+
+  // Imposto do mês (%) e chaveMes: continuam seguindo o seletor interno ano/mes (mês corrente
+  // na abertura; o mês escolhido depois), usado só pra editar o percentual do mês.
   const chaveMes = `${ano}-${pad2(mes)}`;
-  const totalMes = useMemo(
-    () => rows.filter((r) => r.dataVencimento.startsWith(chaveMes)).reduce((soma, r) => soma + r.valor, 0),
-    [rows, chaveMes]
-  );
-  const liquidoMes = percentualImposto != null ? totalMes - (totalMes * percentualImposto) / 100 : null;
 
-  // Total Saída (mês) — mesma lógica de totalMes, mas por data_pagamento (a saída só tem
-  // essa data, já nasce paga) em vez de data_vencimento.
-  const totalSaidaMes = useMemo(
-    () => saidas.filter((s) => s.dataPagamento.startsWith(chaveMes)).reduce((soma, s) => soma + s.valor, 0),
-    [saidas, chaveMes]
-  );
-  // Saldo Líquido = o número que realmente importa pro CEO: quanto sobrou da unidade depois
-  // do imposto E das despesas do mês. Só existe quando liquidoMes existe (precisa do imposto
-  // do mês informado) — sem imposto, mostrar um saldo enganaria o Olver com um valor que
-  // ainda não é o líquido de verdade.
-  const saldoLiquidoMes = liquidoMes != null ? liquidoMes - totalSaidaMes : null;
-
-  async function handleMesChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const valor = e.target.value; // "YYYY-MM"
-    if (!valor) return;
-    const [novoAnoStr, novoMesStr] = valor.split("-");
-    const novoAno = Number(novoAnoStr);
-    const novoMes = Number(novoMesStr);
+  async function carregarImpostoDoMes(novoAno: number, novoMes: number) {
     setAno(novoAno);
     setMes(novoMes);
     setErroImposto("");
@@ -239,6 +278,26 @@ export default function FaturamentoHortolandiaPageClient({
     } catch {
       setErroImposto("Erro ao carregar imposto do mês.");
     }
+  }
+
+  async function handleMesChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const valor = e.target.value; // "YYYY-MM", ou "" quando o usuário apaga o campo
+    if (!valor) {
+      // Apagar o mês = voltar a "sem escolha": tabela sem filtro de data, cards no mês corrente.
+      setFiltros((f) => ({ ...f, mes: null }));
+      await carregarImpostoDoMes(anoInicial, mesInicial);
+      return;
+    }
+    setFiltros((f) => ({ ...f, mes: valor }));
+    const [novoAnoStr, novoMesStr] = valor.split("-");
+    await carregarImpostoDoMes(Number(novoAnoStr), Number(novoMesStr));
+  }
+
+  // Volta ao estado de abertura (sem filtro na tabela, cards no mês corrente). A aba de status
+  // fica como está: é navegação, não filtro.
+  async function handleLimparFiltros() {
+    setFiltros(FILTROS_INICIAIS);
+    if (ano !== anoInicial || mes !== mesInicial) await carregarImpostoDoMes(anoInicial, mesInicial);
   }
 
   async function handleSalvarImposto() {
@@ -345,13 +404,17 @@ export default function FaturamentoHortolandiaPageClient({
         <div style={{ background: "#D1FAE5", border: "2px solid #166534", borderRadius: 12, padding: "14px 16px" }}>
           <p style={{ fontSize: 22, fontWeight: 800, color: "#166534", margin: 0 }}>{formatarMoeda(totalMes)}</p>
           <p style={{ fontSize: 12, fontWeight: 600, color: "#166534", margin: "2px 0 0" }}>
-            Total Entrada — valor do mês (por vencimento)
+            Total Entrada — {rotuloPeriodoCards} (por vencimento, sem cancelados)
           </p>
         </div>
 
         <div style={{ background: "#F3F4F6", border: "2px solid transparent", borderRadius: 12, padding: "14px 16px" }}>
           <p style={{ fontSize: 12, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>Imposto do mês (%)</p>
-          {somenteLeitura ? (
+          {periodoEmUso ? (
+            <p style={{ fontSize: 12, color: "#6B7280", margin: 0 }}>
+              Imposto é por mês — limpe o período para editar.
+            </p>
+          ) : somenteLeitura ? (
             <p style={{ fontSize: 20, fontWeight: 800, color: "#374151", margin: 0 }}>
               {percentualImposto != null ? `${percentualImposto}%` : "—"}
             </p>
@@ -384,21 +447,31 @@ export default function FaturamentoHortolandiaPageClient({
         <div style={{ background: "#FEE2E2", border: "2px solid #991B1B", borderRadius: 12, padding: "14px 16px" }}>
           <p style={{ fontSize: 22, fontWeight: 800, color: "#991B1B", margin: 0 }}>{formatarMoeda(totalSaidaMes)}</p>
           <p style={{ fontSize: 12, fontWeight: 600, color: "#991B1B", margin: "2px 0 0" }}>
-            Total Saída — valor do mês (por pagamento)
+            Total Saída — {rotuloPeriodoCards} (por pagamento)
           </p>
         </div>
 
-        {liquidoMes != null ? (
+        {liquido.valor != null ? (
           <div style={{ background: "#DBEAFE", border: "2px solid #1D4ED8", borderRadius: 12, padding: "14px 16px" }}>
-            <p style={{ fontSize: 22, fontWeight: 800, color: "#1D4ED8", margin: 0 }}>{formatarMoeda(liquidoMes)}</p>
+            <p style={{ fontSize: 22, fontWeight: 800, color: "#1D4ED8", margin: 0 }}>{formatarMoeda(liquido.valor)}</p>
             <p style={{ fontSize: 12, fontWeight: 600, color: "#1D4ED8", margin: "2px 0 0" }}>
-              Total Líquido — entrada do mês ({percentualImposto}% de imposto)
+              Total Líquido{liquido.parcial ? " (parcial)" : ""} — {rotuloPeriodoCards}, imposto de cada lançamento
             </p>
+            {liquido.parcial && (
+              <p style={{ fontSize: 12, color: "#92400E", margin: "4px 0 0" }}>
+                ⚠ Faltam impostos
+                {liquido.mesesSemImposto.length > 0 ? ` de ${liquido.mesesSemImposto.join(", ")}` : ""}
+                {liquido.semDataEmissao > 0 ? ` (${liquido.semDataEmissao} lançamento(s) sem data de emissão)` : ""}; saldo
+                não calculado.
+              </p>
+            )}
           </div>
         ) : (
           <div style={{ background: "#FEF3C7", border: "2px solid transparent", borderRadius: 12, padding: "14px 16px" }}>
             <p style={{ fontSize: 13, fontWeight: 600, color: "#92400E", margin: 0 }}>
-              ⚠ Informe o imposto do mês para calcular o líquido.
+              ⚠ Informe o imposto
+              {liquido.mesesSemImposto.length > 0 ? ` de ${liquido.mesesSemImposto.join(", ")}` : " dos lançamentos"} para
+              calcular o líquido.
             </p>
           </div>
         )}
@@ -431,7 +504,7 @@ export default function FaturamentoHortolandiaPageClient({
               margin: "2px 0 0",
             }}
           >
-            Saldo Líquido — entrada líquida menos saída do mês
+            Saldo Líquido — entrada líquida menos saída ({rotuloPeriodoCards})
           </p>
         </div>
       </div>
@@ -465,33 +538,113 @@ export default function FaturamentoHortolandiaPageClient({
         ))}
       </div>
 
-      {/* Mês fica aqui (não no topo) pra ficar junto do filtro de Responsável em Saídas — mas
-          continua valendo pra página inteira: cards de totais e as duas visões. Em Entradas
-          aparece sozinho na mesma posição, pra não mudar de lugar ao trocar de aba. */}
-      <div className="mb-4 flex justify-end gap-3">
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Mês</label>
-          <input type="month" value={chaveMes} onChange={handleMesChange} className="input-field" />
-        </div>
-        {visao === "saidas" && (
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-              Responsável
-            </label>
-            <select
-              value={responsavelFiltro}
-              onChange={(e) => setResponsavelFiltro(e.target.value)}
+      {/* Filtros: a tela abre SEM nenhum ativo. Mês e De/Até só filtram a tabela depois de
+          escolhidos (até lá o mês corrente vale só para os cards, ver faturamentoUnidadesFiltros.ts);
+          escolhidos, filtram tabela e cards. De/Até vale no lugar do mês. Busca é por visão; Cliente
+          só em Entradas; Responsável só em Saídas. */}
+      <div className="card p-4 mb-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
+          <div className="col-span-2 md:col-span-2">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Buscar</label>
+            <input
+              type="search"
+              value={visao === "entradas" ? filtros.buscaEntradas : filtros.buscaSaidas}
+              onChange={(e) => {
+                const valor = e.target.value;
+                setFiltros((f) => (visao === "entradas" ? { ...f, buscaEntradas: valor } : { ...f, buscaSaidas: valor }));
+              }}
+              placeholder={
+                visao === "entradas" ? "Cliente, nº NF ou observação…" : "Descrição ou responsável…"
+              }
               className="input-field"
-            >
-              <option value="todos">Todos</option>
-              {responsaveisDisponiveis.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
+            />
           </div>
-        )}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Mês</label>
+            <input
+              type="month"
+              value={filtros.mes ?? ""}
+              onChange={handleMesChange}
+              disabled={periodoEmUso}
+              title={periodoEmUso ? "Substituído pelo período De/Até" : undefined}
+              className="input-field disabled:opacity-50"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">De</label>
+            <input
+              type="date"
+              value={filtros.de}
+              onChange={(e) => setFiltros((f) => ({ ...f, de: e.target.value }))}
+              className="input-field"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Até</label>
+            <input
+              type="date"
+              value={filtros.ate}
+              onChange={(e) => setFiltros((f) => ({ ...f, ate: e.target.value }))}
+              className="input-field"
+            />
+          </div>
+          {visao === "entradas" ? (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cliente</label>
+              <select
+                value={filtros.clienteId}
+                onChange={(e) => setFiltros((f) => ({ ...f, clienteId: e.target.value }))}
+                className="input-field"
+              >
+                <option value="todos">Todos</option>
+                {clientesDisponiveis.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                Responsável
+              </label>
+              <select
+                value={filtros.responsavel}
+                onChange={(e) => setFiltros((f) => ({ ...f, responsavel: e.target.value }))}
+                className="input-field"
+              >
+                <option value="todos">Todos</option>
+                {responsaveisDisponiveis.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-3 mt-3">
+          <button
+            type="button"
+            onClick={handleLimparFiltros}
+            disabled={!haFiltroAtivo(filtros)}
+            className="btn-outline disabled:opacity-50"
+            style={{ padding: "6px 12px", fontSize: 12 }}
+          >
+            Limpar filtros
+          </button>
+          <p className="text-xs text-gray-500">
+            Cards: {rotuloPeriodoCards}.{" "}
+            {periodoEscolhido(filtros)
+              ? "Tabela filtrada pelo mesmo período."
+              : "Tabela sem filtro de período (todos os meses)."}
+            {periodoEmUso && filtros.mes ? " O período De/Até vale no lugar do mês." : ""}
+          </p>
+          {intervaloComErro && (
+            <p className="text-xs text-red-600">&quot;De&quot; é depois de &quot;Até&quot; — período ignorado.</p>
+          )}
+        </div>
       </div>
 
       {visao === "entradas" ? (
@@ -572,7 +725,9 @@ export default function FaturamentoHortolandiaPageClient({
                 {rowsFiltradas.length === 0 && (
                   <tr>
                     <td colSpan={10} className="py-8 text-center text-gray-400">
-                      Nenhum lançamento nessa visão.
+                      {haFiltroAtivo(filtros)
+                        ? "Nenhum lançamento para os filtros aplicados."
+                        : "Nenhum lançamento nessa visão."}
                     </td>
                   </tr>
                 )}
@@ -623,7 +778,7 @@ export default function FaturamentoHortolandiaPageClient({
                 {saidasFiltradas.length === 0 && (
                   <tr>
                     <td colSpan={4} className="py-8 text-center text-gray-400">
-                      Nenhuma saída lançada {responsavelFiltro === "todos" ? "ainda" : "para esse responsável"}.
+                      {haFiltroAtivo(filtros) ? "Nenhuma saída para os filtros aplicados." : "Nenhuma saída lançada ainda."}
                     </td>
                   </tr>
                 )}
