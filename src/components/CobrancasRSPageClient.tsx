@@ -24,6 +24,9 @@ export interface CobrancaRSRow {
   enviadoEm: string | null;
   pagoEm: string | null;
   dataVencimento: string | null;
+  // Nome de quem gerou a cobrança (analistas_perfil). null = sem autor registrado (cobranças
+  // anteriores a 01/09/2026) ou sem perfil — a tela mostra "não registrado".
+  geradoPorNome: string | null;
 }
 
 interface Props {
@@ -170,7 +173,7 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-              {["Cliente", "Candidato", "Vaga", "Tipo", "Fee %", "Status", "Criada em"].map((h) => (
+              {["Cliente", "Candidato", "Vaga", "Tipo", "Fee %", "Status", "Criada em", "Gerada por"].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>
                   {h}
                 </th>
@@ -180,7 +183,7 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess
           <tbody>
             {filtradas.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: "24px 12px", textAlign: "center", color: "#9CA3AF" }}>
+                <td colSpan={8} style={{ padding: "24px 12px", textAlign: "center", color: "#9CA3AF" }}>
                   Nenhuma cobrança nessa categoria.
                 </td>
               </tr>
@@ -214,6 +217,9 @@ export default function CobrancasRSPageClient({ rows: rowsIniciais, isFullAccess
                       )}
                     </td>
                     <td style={{ padding: "10px 12px", color: "#6B7280" }}>{formatarData(r.createdAt)}</td>
+                    <td style={{ padding: "10px 12px", color: r.geradoPorNome ? "#374151" : "#9CA3AF" }}>
+                      {r.geradoPorNome ?? "não registrado"}
+                    </td>
                   </tr>
                 );
               })

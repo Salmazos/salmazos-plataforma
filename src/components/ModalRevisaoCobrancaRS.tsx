@@ -27,6 +27,7 @@ interface CobrancaDetalhe {
   pago_em: string | null;
   data_vencimento: string | null;
   created_at: string;
+  gerado_por_nome?: string | null;
   cancelado_por: string | null;
   cancelado_em: string | null;
   justificativa_cancelamento: string | null;
@@ -50,7 +51,9 @@ function formatarMoeda(v: number | null): string {
   return v != null ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—";
 }
 
-function paraLinha(c: CobrancaDetalhe): CobrancaRSRow {
+// geradoPorNome vem do carregamento inicial (GET): as rotas que devolvem a cobrança atualizada
+// (aprovar, marcar-paga, cancelar...) não trazem o nome, e a linha da lista não pode perdê-lo.
+function paraLinha(c: CobrancaDetalhe, geradoPorNome: string | null): CobrancaRSRow {
   return {
     id: c.id,
     tipo: c.tipo,
@@ -71,12 +74,14 @@ function paraLinha(c: CobrancaDetalhe): CobrancaRSRow {
     enviadoEm: c.enviado_em,
     pagoEm: c.pago_em,
     dataVencimento: c.data_vencimento,
+    geradoPorNome,
   };
 }
 
 export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualizada, isFullAccess, acessoAmplo }: Props) {
   const [carregando, setCarregando] = useState(true);
   const [cobranca, setCobranca] = useState<CobrancaDetalhe | null>(null);
+  const [geradoPorNome, setGeradoPorNome] = useState<string | null>(null);
   const [erro, setErro] = useState("");
 
   const [cargo, setCargo] = useState("");
@@ -108,6 +113,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
       .then((json) => {
         const c = json.data as CobrancaDetalhe;
         setCobranca(c);
+        setGeradoPorNome(c.gerado_por_nome ?? null);
         setCargo(c.tipo === "cancelamento" ? "" : c.cargo ?? c.vagas?.titulo ?? "");
         setSalario(c.salario ?? 0);
         setDataInicio(c.data_inicio ?? "");
@@ -192,7 +198,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
       } else if ((json.destinatariosCount ?? 0) === 0) {
         setErro("Cobrança aprovada, mas nenhum destinatário de e-mail está configurado em Avisos de Cobrança R&S — ninguém recebeu o e-mail.");
       }
-      onAtualizada(paraLinha(json.data));
+      onAtualizada(paraLinha(json.data, geradoPorNome));
     } catch {
       setErro("Erro de conexão. Tente novamente.");
     } finally {
@@ -248,7 +254,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
       const res = await fetch(`/api/cobrancas-rs/${cobrancaId}/marcar-paga`, { method: "POST" });
       const json = await res.json();
       if (!res.ok) { setErro(json.error || "Erro ao marcar como paga."); return; }
-      onAtualizada(paraLinha(json.data));
+      onAtualizada(paraLinha(json.data, geradoPorNome));
     } catch {
       setErro("Erro de conexão. Tente novamente.");
     } finally {
@@ -271,7 +277,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
       });
       const json = await res.json();
       if (!res.ok) { setErroCancelamento(json.error || "Erro ao cancelar cobrança."); return; }
-      onAtualizada(paraLinha(json.data));
+      onAtualizada(paraLinha(json.data, geradoPorNome));
     } catch {
       setErroCancelamento("Erro de conexão. Tente novamente.");
     } finally {
@@ -337,6 +343,10 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                 </p>
                 {!ehCancelamento && <p className="text-sm"><strong>{cobranca.candidato_nome_snapshot}</strong></p>}
                 <p className="text-sm text-gray-500">{cobranca.vagas?.titulo ?? "—"}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Gerada por: <strong className="text-gray-700">{geradoPorNome ?? "não registrado"}</strong> em{" "}
+                  {new Date(cobranca.created_at).toLocaleDateString("pt-BR")}
+                </p>
               </div>
 
               <div className="border-t pt-4 space-y-3">
