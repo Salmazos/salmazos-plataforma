@@ -30,6 +30,8 @@ export interface CandidatoElegivel {
   vagas: {
     id: string;
     titulo: string;
+    // Só a lista "Aguardando início" traz (o botão "Candidato desistiu" mostra a reabertura quando a vaga está fechada).
+    status?: string;
     tipo_servico: string;
     cliente_id: string | null;
     clientes: { nome: string; entidade_contratante: string | null } | null;

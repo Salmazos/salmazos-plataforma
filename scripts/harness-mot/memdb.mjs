@@ -10,6 +10,8 @@ const RELACOES = {
   solicitacoes_indicacao_candidato: { vagas: { alvo: "vagas", local: "vaga_id" } },
   // Local da entrevista (scripts/verificar-local-entrevista.mts): rotas de encaminhamentos e o cron "entrevista hoje".
   encaminhamentos: { clientes: { alvo: "clientes", local: "cliente_id" }, candidatos: { alvo: "candidatos", local: "candidato_id" } },
+  // Desistência antes da admissão (scripts/verificar-candidato-desistiu.mts): escopo de unidade via vagas!candidatos_vagas_vaga_id_fkey.
+  candidatos_vagas: { vagas: { alvo: "vagas", local: "vaga_id" }, candidatos: { alvo: "candidatos", local: "candidato_id" } },
 };
 
 export function criarDb(seed = {}) {
@@ -51,7 +53,8 @@ function interpretarSelect(cols) {
   const colunas = [];
   const embeds = [];
   for (const parte of dividirTopo(cols ?? "*")) {
-    const m = parte.match(/^(?:(\w+):)?(\w+)(!inner)?\(([\s\S]*)\)$/);
+    // "vagas!candidatos_vagas_vaga_id_fkey(...)": o hint de FK existe só pro PostgREST real; aqui a relação é a do mapa acima.
+    const m = parte.match(/^(?:(\w+):)?(\w+)(?:!(?!inner\b)\w+)?(!inner)?\(([\s\S]*)\)$/);
     if (m) embeds.push({ alias: m[1] ?? m[2], nome: m[2], inner: !!m[3], cols: m[4] });
     else colunas.push(parte);
   }
@@ -125,7 +128,9 @@ class Consulta {
     this.modo = null;
     this.opcoesUpsert = null;
   }
-  select(cols) {
+  select(cols, opcoes) {
+    // select("id", { count: "exact", head: true }): devolve só a contagem (como o PostgREST).
+    if (opcoes?.count) { this.contar = true; this.somenteContagem = opcoes.head === true; }
     if (this.op === "select") this.cols = cols ?? "*";
     else {
       this.retorna = true;
@@ -232,7 +237,11 @@ class Consulta {
     const falha = this.db.falhas[`${this.tabela}.${this.op}`];
     if (falha) return { data: null, error: typeof falha === "object" ? falha : { message: falha } };
 
-    if (this.op === "select") return this.finalizar(this.montarSelect());
+    if (this.op === "select") {
+      const linhas = this.montarSelect();
+      if (this.contar) return { data: this.somenteContagem ? null : linhas, count: linhas.length, error: null };
+      return this.finalizar(linhas);
+    }
 
     const tabela = this.linhasDaTabela();
     if (this.op === "insert" || this.op === "upsert") {

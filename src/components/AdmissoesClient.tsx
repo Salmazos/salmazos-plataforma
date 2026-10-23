@@ -8,6 +8,7 @@ import { ADMISSAO_STATUS_BADGE, MODALIDADE_LABEL } from "@/lib/admissaoStatus";
 import { linkAdmissaoWhatsapp } from "@/lib/waLinks";
 import ModalIniciarAdmissao, { type CandidatoElegivel } from "./ModalIniciarAdmissao";
 import ModalAdmissaoRapida from "./ModalAdmissaoRapida";
+import ModalCandidatoDesistiu, { type ResultadoDesistencia } from "./ModalCandidatoDesistiu";
 
 export interface AdmissaoRow {
   id: string;
@@ -62,6 +63,7 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
   const [preSelecionado, setPreSelecionado] = useState<CandidatoElegivel | null>(null);
   const [toast, setToast] = useState("");
   const [gerandoFormularios, setGerandoFormularios] = useState(false);
+  const [desistindo, setDesistindo] = useState<DisponivelAdmissao | null>(null);
 
   useEffect(() => setAdmissoes(admissoesIniciais), [admissoesIniciais]);
   useEffect(() => setDisponiveis(disponiveisIniciais), [disponiveisIniciais]);
@@ -118,6 +120,19 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(""), 3000);
+  };
+
+  // Sai da lista na hora (a candidatura já não está mais em Contratado) e o refresh traz o estado real do servidor.
+  const handleDesistenciaConcluida = (resultado: ResultadoDesistencia) => {
+    if (desistindo) setDisponiveis((atual) => atual.filter((d) => d.id !== desistindo.id));
+    const nome = desistindo?.candidatos?.nome_completo ?? "Candidato";
+    setDesistindo(null);
+    showToast(
+      resultado.avisos.length > 0
+        ? `${nome}: desistência registrada, mas houve falha em: ${resultado.avisos.join(", ")}. Confira a candidatura.`
+        : `${nome}: desistência registrada${resultado.vagaReaberta ? " e vaga reaberta" : ""}.`
+    );
+    router.refresh();
   };
 
   const handleCopiarLink = (token: string) => {
@@ -189,9 +204,12 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
               const tipoServico = c.vagas?.tipo_servico ?? "";
               const modalidadeLabel = MODALIDADE_TIPO_SERVICO_LABEL[tipoServico] ?? tipoServico;
               return (
-                <button
+                <div
                   key={c.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => abrirModalParaCandidato(c)}
+                  onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); abrirModalParaCandidato(c); } }}
                   className="w-full text-left"
                   style={{
                     display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
@@ -213,10 +231,17 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
                   <span style={{ fontSize: 12, color: "#9CA3AF", whiteSpace: "nowrap" }}>
                     {formatarData(c.data_contratado)}
                   </span>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setDesistindo(c); }}
+                    style={{ fontSize: 12, fontWeight: 700, color: "#B91C1C", background: "#fff", border: "1px solid #FCA5A5", borderRadius: 6, padding: "3px 10px", cursor: "pointer", whiteSpace: "nowrap" }}
+                  >
+                    Candidato desistiu
+                  </button>
                   <span style={{ fontSize: 12, fontWeight: 700, color: "#92400E", whiteSpace: "nowrap" }}>
                     + Iniciar admissão
                   </span>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -343,6 +368,8 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
         onClose={() => setModalRapidoAberto(false)}
         onCriado={handleAdmissaoRapidaCriada}
       />
+
+      <ModalCandidatoDesistiu item={desistindo} onClose={() => setDesistindo(null)} onConcluido={handleDesistenciaConcluida} />
     </div>
   );
 }
