@@ -586,10 +586,10 @@ export default function SidebarMenu({
                                   style={{
                                     padding: "6px 10px",
                                     fontSize: 12,
-                                    fontWeight: 500,
-                                    background: subActive ? "#FFD700" : "transparent",
-                                    color: subActive ? "#000" : "rgba(255,255,255,0.7)",
-                                    border: "none",
+                                    fontWeight: subActive ? 600 : 500,
+                                    background: "transparent",
+                                    color: subActive ? "#fff" : "rgba(255,255,255,0.7)",
+                                    border: subActive ? "1.5px solid #FFD700" : "1.5px solid transparent",
                                     cursor: "pointer",
                                     justifyContent: "space-between",
                                     gap: 6,
@@ -627,9 +627,10 @@ export default function SidebarMenu({
                                           style={{
                                             padding: "4px 8px",
                                             fontSize: 11,
-                                            fontWeight: 500,
-                                            background: itemActive ? "#FFD700" : "transparent",
-                                            color: itemActive ? "#000" : "rgba(255,255,255,0.6)",
+                                            fontWeight: itemActive ? 600 : 500,
+                                            background: "transparent",
+                                            color: itemActive ? "#fff" : "rgba(255,255,255,0.6)",
+                                            border: itemActive ? "1.5px solid #FFD700" : "1.5px solid transparent",
                                             textDecoration: "none",
                                           }}
                                           onMouseEnter={(e) => {
@@ -659,9 +660,10 @@ export default function SidebarMenu({
                               style={{
                                 padding: "6px 10px",
                                 fontSize: 12,
-                                fontWeight: 500,
-                                background: subActive ? "#FFD700" : "transparent",
-                                color: subActive ? "#000" : "rgba(255,255,255,0.7)",
+                                fontWeight: subActive ? 600 : 500,
+                                background: "transparent",
+                                color: subActive ? "#fff" : "rgba(255,255,255,0.7)",
+                                border: subActive ? "1.5px solid #FFD700" : "1.5px solid transparent",
                                 textDecoration: "none",
                               }}
                               onMouseEnter={(e) => {
