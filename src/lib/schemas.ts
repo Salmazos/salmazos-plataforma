@@ -426,6 +426,13 @@ export const candidatoVagaFinalizarSchema = z.object({
   gerar_cobranca_rs: z.boolean().optional().nullable(),
 });
 
+// Candidato que desistiu depois de "contratado" e antes de ter admissão (POST candidatos-vagas/[id]/desistencia).
+// O motivo é obrigatório e fica no histórico do candidato; reabrir_vaga só vale se a vaga estiver fechada.
+export const candidatoVagaDesistenciaSchema = z.object({
+  motivo: z.string().trim().min(5, "Informe o motivo da desistência (mínimo de 5 caracteres).").max(500, "O motivo vai até 500 caracteres."),
+  reabrir_vaga: z.boolean().optional(),
+});
+
 // ── Admissão Digital ─────────────────────────────────────────────────────────
 
 export const admissaoAutorizacaoSindicalCreateSchema = z.object({
