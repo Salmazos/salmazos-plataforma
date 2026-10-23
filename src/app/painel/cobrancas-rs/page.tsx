@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import CobrancasRSPageClient, { type CobrancaRSRow } from "@/components/CobrancasRSPageClient";
 import { checarAcessoCobrancaRS, PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
+import { carregarNomesGeradoresCobrancaRS } from "@/lib/cobrancaRSAutor";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ export default async function CobrancasRSPage() {
   let query = svc.from("cobrancas_rs").select("*, vagas(titulo)").order("created_at", { ascending: false });
   if (!acessoAmplo) query = query.eq("gerado_por_user_id", user.id);
   const { data } = await query;
+  const nomesGeradores = await carregarNomesGeradoresCobrancaRS(svc, (data ?? []).map((c) => c.gerado_por_user_id));
 
   const rows: CobrancaRSRow[] = (data ?? []).map((c) => ({
     id: c.id,
@@ -57,6 +59,7 @@ export default async function CobrancasRSPage() {
     enviadoEm: c.enviado_em,
     pagoEm: c.pago_em,
     dataVencimento: c.data_vencimento,
+    geradoPorNome: c.gerado_por_user_id ? nomesGeradores.get(c.gerado_por_user_id) ?? null : null,
   }));
 
   return <CobrancasRSPageClient rows={rows} isFullAccess={isFullAccess} acessoAmplo={acessoAmplo} />;

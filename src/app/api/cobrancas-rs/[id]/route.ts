@@ -4,6 +4,7 @@ import { parseBody, cobrancaRsRascunhoSchema } from "@/lib/schemas";
 import { podeRevisarCobranca } from "@/lib/fullAccessAuth";
 import { existeCnpjEmOutroCliente } from "@/lib/clienteDuplicidade";
 import { carregarIdentidadesClientes } from "@/lib/clienteDuplicidadeRota";
+import { carregarNomesGeradoresCobrancaRS } from "@/lib/cobrancaRSAutor";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -29,7 +30,11 @@ export async function GET(_request: NextRequest, { params }: Params) {
   const pode = await podeRevisarCobranca(user, data);
   if (!pode) return NextResponse.json({ error: "Acesso restrito." }, { status: 403 });
 
-  return NextResponse.json({ data });
+  // Só o nome de quem gerou (mesmo gate de acesso acima) — o modal mostra "Gerada por".
+  const nomes = await carregarNomesGeradoresCobrancaRS(svc, [data.gerado_por_user_id]);
+  const geradoPorNome = data.gerado_por_user_id ? nomes.get(data.gerado_por_user_id) ?? null : null;
+
+  return NextResponse.json({ data: { ...data, gerado_por_nome: geradoPorNome } });
 }
 
 // "Salvar rascunho" — sem validação obrigatória, salva parcial. Só edita cobranças ainda
