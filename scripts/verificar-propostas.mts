@@ -1090,7 +1090,7 @@ await caso("enviar: oportunidade aberta de OUTRO vendedor → 409 com a mensagem
   const db = novoDb({ oportunidades: [SEMENTE_OPP({ vendedor_id: V2, etapa: "reuniao_visita" })] });
   const { id, r } = await enviar(db);
   assert.equal(r.status, 409);
-  assert.match(r.body.error, /Já existe uma oportunidade aberta para esta empresa \(vendedor: Outro, fase: Reunião\/Visita\)/);
+  assert.match(r.body.error, /Já existe uma oportunidade aberta para esta empresa \(vendedor: Outro, fase: Reunião\/Visita\/Enviar proposta\)/);
   assert.equal(proposta(db, id).situacao, "rascunho");
   assert.equal(proposta(db, id).enviada_em, null);
   assert.equal(opps(db).length, 1);

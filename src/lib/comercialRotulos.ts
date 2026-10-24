@@ -5,7 +5,7 @@
 export const ROTULO_ETAPA: Record<string, string> = {
   prospeccao: "Prospecção",
   contato_feito: "Contato feito",
-  reuniao_visita: "Reunião/Visita",
+  reuniao_visita: "Reunião/Visita/Enviar proposta",
   proposta_enviada: "Proposta enviada",
   negociacao: "Proposta enviada",
   ganho: "Venda fechada",
