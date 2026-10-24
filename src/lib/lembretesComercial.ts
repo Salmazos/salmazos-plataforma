@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
+import { ETAPAS_ABERTAS } from "@/lib/comercial";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -40,5 +41,41 @@ export async function buscarLembretesVencidos(svc: ServiceClient, vendedorId: st
     data_lembrete: l.data_lembrete as string,
     texto: (l.texto as string | null) ?? null,
     empresa_nome: l.empresa_visitada_id ? nomePorId.get(l.empresa_visitada_id as string) ?? null : null,
+  }));
+}
+
+export interface OportunidadeVencida {
+  id: string;
+  vendedor_id: string;
+  empresa: string;
+  empresa_visitada_id: string | null;
+  proxima_acao_em: string;
+}
+
+// Oportunidades ABERTAS do funil com a próxima ação de hoje ou vencida — a mesma regra do "Meu dia" (comercial/meu-dia).
+// O service client ignora RLS: no popup o filtro por vendedor_id é obrigatório e fica aqui, em código; sem vendedorId
+// (cron) devolve as de todos. O limite é explícito porque o padrão do Supabase corta em 1000 linhas sem avisar.
+export async function buscarOportunidadesAbertasVencidas(
+  svc: ServiceClient,
+  hoje: string,
+  opcoes: { vendedorId?: string; limite?: number } = {}
+): Promise<OportunidadeVencida[]> {
+  let query = svc
+    .from("oportunidades")
+    .select("id, vendedor_id, empresa, empresa_visitada_id, proxima_acao_em")
+    .in("etapa", ETAPAS_ABERTAS)
+    .not("proxima_acao_em", "is", null)
+    .lte("proxima_acao_em", hoje)
+    .order("proxima_acao_em", { ascending: true })
+    .limit(opcoes.limite ?? 5000);
+  if (opcoes.vendedorId) query = query.eq("vendedor_id", opcoes.vendedorId);
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((o) => ({
+    id: o.id as string,
+    vendedor_id: o.vendedor_id as string,
+    empresa: o.empresa as string,
+    empresa_visitada_id: (o.empresa_visitada_id as string | null) ?? null,
+    proxima_acao_em: o.proxima_acao_em as string,
   }));
 }

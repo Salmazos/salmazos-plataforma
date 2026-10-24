@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { hojeSaoPaulo } from "@/lib/comercial";
+import { buscarOportunidadesAbertasVencidas } from "@/lib/lembretesComercial";
+import { agruparEmpresasPorVendedor, type ItemParaContar } from "@/lib/lembretesComercialContagem";
 import { resolverDestinatarios } from "@/lib/avisos";
 import {
   EVENTO_LEMBRETE_COMERCIAL,
@@ -12,8 +14,9 @@ import {
 
 export const dynamic = "force-dynamic";
 
-// Aviso diário (sino, sem e-mail) para quem tem lembrete do Comercial vencido ou de hoje. Repete todo
-// dia enquanto houver pendente — some quando o vendedor conclui, adia ou cancela.
+// Aviso diário (sino, sem e-mail) para quem tem lembrete do Comercial vencido ou de hoje, ou oportunidade aberta do
+// funil com a próxima ação de hoje ou vencida (antes só aparecia na tela "Meu dia"). Repete todo dia enquanto houver
+// pendente — some quando o vendedor conclui, adia ou cancela o lembrete, ou define uma nova próxima ação.
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
@@ -27,7 +30,7 @@ export async function GET(request: Request) {
 
     const { data: pendentes, error } = await supabase
       .from("lembretes")
-      .select("vendedor_id, empresa_visitada_id")
+      .select("id, vendedor_id, empresa_visitada_id")
       .eq("status", "pendente")
       .lte("data_lembrete", hoje);
     if (error) {
@@ -35,14 +38,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Empresas distintas por vendedor (dois lembretes da mesma empresa contam uma vez).
-    const empresasPorVendedor = new Map<string, Set<string>>();
-    let semEmpresa = 0;
-    for (const l of pendentes ?? []) {
-      const set = empresasPorVendedor.get(l.vendedor_id as string) ?? new Set<string>();
-      set.add((l.empresa_visitada_id as string | null) ?? `sem-empresa-${semEmpresa++}`);
-      empresasPorVendedor.set(l.vendedor_id as string, set);
-    }
+    // Vendedor que só tem oportunidade vencida (sem lembrete) também entra.
+    const oportunidades = await buscarOportunidadesAbertasVencidas(supabase, hoje);
+
+    // Empresas distintas por vendedor (lembretes e oportunidades da mesma empresa contam uma vez).
+    const empresasPorVendedor = agruparEmpresasPorVendedor((pendentes ?? []) as ItemParaContar[], oportunidades);
     const vendedorIds = [...empresasPorVendedor.keys()];
     if (vendedorIds.length === 0) return NextResponse.json({ vendedores: 0, avisos_enviados: 0, ja_avisados: 0 });
 
