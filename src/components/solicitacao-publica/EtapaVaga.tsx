@@ -147,7 +147,7 @@ export default function EtapaVaga({ form, atualizar, erros }: PropsEtapa) {
         onChange={(v) => atualizar("local_trabalho", v)}
         placeholder="Endereço ou bairro onde a pessoa vai trabalhar"
         maxLength={300}
-        ajuda="Opcional. Fica só para a nossa equipe, não é publicado."
+        ajuda="Fica só para a nossa equipe, não é publicado."
         erro={erros.local_trabalho}
       />
       <CampoTexto
