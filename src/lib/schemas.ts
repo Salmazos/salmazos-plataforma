@@ -1,4 +1,9 @@
 import { z } from "zod";
+import { conteudoRsSchema } from "@/lib/propostaModelos";
+import { validarCnpj, validarCpf } from "@/lib/documentoBr";
+import { ESTADOS, CATEGORIAS_HABILITACAO } from "@/lib/solicitacaoVagaCampos";
+import { VALIDADES_LINK_DIAS, VALIDADE_LINK_PADRAO_DIAS } from "@/lib/solicitacaoVagaLink";
+import { salarioPublicoValido } from "@/lib/solicitacaoVagaPublicaForm";
 import { TURNOS_FUNCIONARIO } from "@/lib/constants";
 import { nomeArquivoCurriculoValido } from "@/lib/indicacaoEdicao";
 import { validarSenhaPortal, mensagemSenhaPortalInvalida } from "@/lib/senhaPortal";
@@ -878,6 +883,92 @@ export const portalSolicitarVagaSchema = z.object({
   horario_padrao: horarioPadraoSchema.optional().nullable(),
   confidencial: z.boolean().optional().default(false),
 });
+
+// ── Link público de solicitação de vaga (R&S) ──────────────────────────────────────────────────────────────────────────
+
+// Geração do link pelo analista. As condições comerciais são as da proposta R&S (propostaModelos.ts é a fonte única):
+// omitidas = padrões da proposta (PADROES_RS); taxa de cancelamento em branco ou 0 = não cobra e a cláusula some.
+export const solicitacaoLinkCreateSchema = z.object({
+  nome_empresa: z.string().trim().max(150, "Use no máximo 150 caracteres.").optional().nullable(),
+  validade_dias: z
+    .number()
+    .int()
+    .refine((d) => (VALIDADES_LINK_DIAS as readonly number[]).includes(d), "Escolha a validade de 7, 15 ou 30 dias.")
+    .default(VALIDADE_LINK_PADRAO_DIAS),
+  condicoes: conteudoRsSchema.shape.condicoes,
+  clausulas_adicionais: conteudoRsSchema.shape.clausulas_adicionais,
+});
+
+export const solicitacaoLinkRevogarSchema = z.object({ id: z.string().uuid("Link inválido.") });
+
+const textoOpcionalPublico = (max: number) =>
+  z.string().trim().max(max, `Use no máximo ${max} caracteres.`).optional().nullable().transform((v) => v || null);
+
+// Corpo do formulário público (sem login). Limite em TODOS os textos. Campos que o cliente não deve decidir (tipo de serviço,
+// unidade, condições comerciais) não existem aqui: o servidor os fixa ou lê do link, e chaves desconhecidas são descartadas.
+export const publicoSolicitarVagaSchema = z
+  .object({
+    website: z.string().max(200).optional().nullable(), // honeypot (tratado na rota antes desta validação)
+    tipo_pessoa: z.enum(["pj", "pf"], "Informe se é pessoa física ou jurídica."),
+    nome: z.string().trim().min(2, "Informe o nome.").max(150, "Use no máximo 150 caracteres."),
+    documento: z.string().trim().max(30, "Documento inválido."),
+    contato_nome: textoOpcionalPublico(120),
+    telefone: z
+      .string()
+      .trim()
+      .max(30, "Telefone inválido.")
+      .refine((v) => {
+        const digitos = v.replace(/\D/g, "");
+        return digitos.length >= 10 && digitos.length <= 11;
+      }, "Informe um telefone com DDD."),
+    endereco: textoOpcionalPublico(300),
+    email: z.string().trim().email("E-mail inválido.").max(150, "Use no máximo 150 caracteres."),
+    email_nf: z.string().trim().email("E-mail para nota fiscal inválido.").max(150, "Use no máximo 150 caracteres."),
+    cargo: z.string().trim().min(1, "Informe o cargo.").max(120, "Use no máximo 120 caracteres."),
+    num_posicoes: z.coerce.number().int("Informe um número inteiro.").min(1, "Informe ao menos 1 vaga.").max(99, "Use até 99 vagas."),
+    cidade: z.string().trim().min(1, "Informe a cidade.").max(100, "Use no máximo 100 caracteres."),
+    estado: z.enum(ESTADOS, "Estado inválido."),
+    local_trabalho: textoOpcionalPublico(300),
+    previsao_inicio: z
+      .union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida."), z.literal("")])
+      .optional()
+      .nullable()
+      .transform((v) => v || null),
+    // Só o que o seletor de salário do formulário gera (ver salarioPublicoValido): texto livre é recusado.
+    salario: textoOpcionalPublico(100).refine((v) => v === null || salarioPublicoValido(v), "Informe o salário pelas opções do formulário."),
+    adicionais_salariais: textoOpcionalPublico(300),
+    horario_tipo: textoOpcionalPublico(40),
+    horario_texto: textoOpcionalPublico(300),
+    requisitos: textoOpcionalPublico(3000),
+    requisitos_chips: z.array(z.string().trim().min(1).max(200)).max(60, "Muitos requisitos.").optional().nullable(),
+    beneficios: textoOpcionalPublico(2000),
+    beneficios_chips: z
+      .record(z.string().max(100), z.boolean())
+      .optional()
+      .nullable()
+      .refine((r) => !r || Object.keys(r).length <= 60, "Muitos benefícios."),
+    principais_atividades: textoOpcionalPublico(3000),
+    observacoes: textoOpcionalPublico(2000),
+    sexo: z.enum(["masc", "fem", "indiferente"]).default("indiferente"),
+    idade: textoOpcionalPublico(60),
+    pcd: z.enum(["sim", "nao"]).default("nao"),
+    habilitacao_categoria: z
+      .union([z.enum(CATEGORIAS_HABILITACAO), z.literal("")])
+      .optional()
+      .nullable()
+      .transform((v) => v || null),
+    veiculo_proprio: z.enum(["sim", "nao"]).default("nao"),
+    aceite_condicoes: z.literal(true, "Para enviar, é preciso concordar com as condições comerciais."),
+  })
+  .superRefine((d, ctx) => {
+    const documentoValido = d.tipo_pessoa === "pj" ? validarCnpj(d.documento) : validarCpf(d.documento);
+    if (!documentoValido) {
+      ctx.addIssue({ code: "custom", path: ["documento"], message: d.tipo_pessoa === "pj" ? "CNPJ inválido." : "CPF inválido." });
+    }
+    if (d.tipo_pessoa === "pj" && !d.contato_nome) {
+      ctx.addIssue({ code: "custom", path: ["contato_nome"], message: "Informe o nome do contato." });
+    }
+  });
 
 // admissao_salario/admissao_salario_hora são numeric no banco (candidatos_vagas) e
 // admissao_vt é boolean — o schema antigo pedia string pros três, e nenhum campo

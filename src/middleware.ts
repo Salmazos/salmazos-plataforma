@@ -15,6 +15,9 @@ const PUBLIC_API_PREFIXES = [
   // usuário logado. A segurança vem da validação HMAC feita dentro de cada rota, não
   // de sessão (ver validarAssinaturaWebhook em lib/clicksign.ts).
   "/api/webhooks/",
+  // Link público de solicitação de vaga (cliente novo, sem login) — autenticado só pelo token do link, que cada rota valida
+  // (existência, expiração, revogação e teto de usos) com o cliente service role.
+  "/api/solicitacao-vaga-publica/",
 ];
 
 const PUBLIC_API_POST_ONLY = [
@@ -51,6 +54,17 @@ const RATE_LIMIT_RULES: RateLimitRule[] = [
     match: (p, m) => p === "/api/auth/login" && m === "POST",
     maxRequests: 5,
     windowMs: 15 * 60 * 1000,
+  },
+  // Link público de solicitação de vaga: enviar é caro (grava e dispara e-mail), consultar é barato.
+  {
+    match: (p, m) => /^\/api\/solicitacao-vaga-publica\/[^/]+$/.test(p) && m === "POST",
+    maxRequests: 8,
+    windowMs: 60 * 60 * 1000,
+  },
+  {
+    match: (p, m) => /^\/api\/solicitacao-vaga-publica\/[^/]+$/.test(p) && m === "GET",
+    maxRequests: 60,
+    windowMs: 60 * 60 * 1000,
   },
   // AI/email cost routes — moderate
   {

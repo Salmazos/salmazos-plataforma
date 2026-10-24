@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
 import { ROTULO_CAMPO_SOLICITACAO, valorLegivelCampo, type Alteracoes } from "@/lib/solicitacaoAlteracaoRotulos";
 import { ROTULO_MOTIVO_ENCERRAMENTO, type MotivoTipoEncerramento } from "@/lib/vagaPausaReativacao";
+import BlocosSolicitacaoLink, { SeloViaLink, type SolicitacaoDeLink } from "@/components/BlocosSolicitacaoLink";
 import FormularioEdicaoSolicitacao, {
   corpoDoForm,
   formDeSolicitacao,
@@ -16,7 +17,7 @@ const TIPO_LABEL: Record<string, { label: string; bg: string; color: string }> =
   terceirizacao:        { label: "Terceirização", bg: "#1D9E75", color: "#fff" },
 };
 
-interface Solicitacao {
+interface Solicitacao extends SolicitacaoDeLink {
   id: string;
   cliente_nome: string;
   cargo: string;
@@ -339,10 +340,13 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                           🔴 CONFIDENCIAL
                         </span>
                       )}
+                      {s.origem === "link_publico" && <SeloViaLink />}
                       <span className="text-[10px] text-gray-400 ml-auto">
                         {new Date(s.created_at).toLocaleDateString("pt-BR")}
                       </span>
                     </div>
+
+                    {s.origem === "link_publico" && <BlocosSolicitacaoLink s={s} />}
 
                     {/* Details */}
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
