@@ -124,11 +124,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: MSG_FALHA_SALVAR }, { status: 500 });
     }
 
+    // A tabela clientes não tem coluna de autor: sem este registro, descobrir quem criou um cliente (ex.: na unidade errada)
+    // exigia rastrear pelos logs do Supabase. Só o id e o nome da empresa — nenhum dado de contato.
+    const usuarioNome = await resolverNomeUsuario(user.id, user.email ?? null, supabase);
+    registrarAuditoria({
+      usuario_id: user.id,
+      usuario_nome: usuarioNome,
+      acao: "cliente_criado",
+      entidade: "clientes",
+      entidade_id: data.id,
+      detalhes: { nome: data.nome, unidade_id: unidadeId },
+    });
+
     if (decisao.tipo === "confirmada" || decisao.tipo === "liberada") {
       // Auditoria só com ids e motivos.
       registrarAuditoria({
         usuario_id: user.id,
-        usuario_nome: await resolverNomeUsuario(user.id, user.email ?? null, supabase),
+        usuario_nome: usuarioNome,
         acao: decisao.tipo === "liberada" ? "cliente_bloqueio_liberado" : "cliente_duplicidade_confirmada",
         entidade: "clientes",
         entidade_id: data.id,
