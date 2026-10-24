@@ -659,7 +659,9 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
   const [salvando, setSalvando] = useState(false);
   const [c, setC] = useState({ tipo: "ligacao", resultado: "", descricao: "", proxima_acao: "", proxima_acao_em: "", contato_id: op.contato_id ?? "" });
   const [contatos, setContatos] = useState<Contato[]>([]);
-  const [e, setE] = useState({ etapa: op.etapa === "negociacao" ? "proposta_enviada" : op.etapa, motivo_perda_categoria: "", motivo_perda: "", reconectar_em: somarDiasStr(hojeSP(), 90), valor_estimado: op.valor_estimado != null ? String(op.valor_estimado).replace(".", ",") : "", servico_interesse: op.servico_interesse ?? "", proxima_acao: op.proxima_acao ?? "", proxima_acao_em: op.proxima_acao_em ?? "" });
+  // Próxima ação e data abrem VAZIAS de propósito: ao mudar de fase o vendedor define a ação da nova fase, em vez de herdar (e manter
+  // sem perceber) a ação e a data antigas da oportunidade.
+  const [e, setE] = useState({ etapa: op.etapa === "negociacao" ? "proposta_enviada" : op.etapa, motivo_perda_categoria: "", motivo_perda: "", reconectar_em: somarDiasStr(hojeSP(), 90), valor_estimado: op.valor_estimado != null ? String(op.valor_estimado).replace(".", ",") : "", servico_interesse: op.servico_interesse ?? "", proxima_acao: "", proxima_acao_em: "" });
   const aberta = ehAberta(op.etapa);
 
   const carregarHist = useCallback(async () => {
@@ -709,6 +711,19 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
 
   const novaAberta = ehAberta(e.etapa);
   const exigeValor = e.etapa === "proposta_enviada" || e.etapa === "ganho";
+
+  // Fase aberta exige próxima ação e data: valida aqui para o vendedor ver uma mensagem clara, em vez do erro técnico do servidor.
+  // Fase fechada (ganho/perdido) nem mostra esses campos.
+  function salvarFase() {
+    if (novaAberta && (!e.proxima_acao.trim() || !e.proxima_acao_em)) { setErro("Informe a próxima ação e a data."); return; }
+    setErro("");
+    enviar(`/api/comercial/oportunidades/${op.id}`, "PATCH", {
+      etapa: e.etapa,
+      ...(exigeValor ? { valor_estimado: e.valor_estimado.trim() === "" ? null : Number(e.valor_estimado.replace(",", ".")), servico_interesse: e.servico_interesse } : {}),
+      ...(e.etapa === "perdido" ? { motivo_perda_categoria: e.motivo_perda_categoria || undefined, reconectar_em: e.reconectar_em || undefined, ...(e.motivo_perda_categoria === "outro" ? { motivo_perda: e.motivo_perda } : {}) } : {}),
+      ...(novaAberta ? { proxima_acao: e.proxima_acao, proxima_acao_em: e.proxima_acao_em } : {}),
+    });
+  }
 
   return (
     <Modal titulo={op.empresa} onClose={onClose} largo>
@@ -824,18 +839,13 @@ function ModalDetalhe({ op, podeEditar, onClose, onMudou }: { op: Oportunidade; 
           )}
           {novaAberta && (
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
-              <div><label style={labelStyle}>Próxima ação *</label><input style={inputStyle} value={e.proxima_acao} onChange={(x) => setE({ ...e, proxima_acao: x.target.value })} /></div>
+              <div><label style={labelStyle}>Próxima ação *</label><input style={inputStyle} value={e.proxima_acao} onChange={(x) => setE({ ...e, proxima_acao: x.target.value })} placeholder="Ex.: ligar para o RH" /></div>
               <div><label style={labelStyle}>Quando vamos retomar? *</label><input type="date" style={inputStyle} value={e.proxima_acao_em} onChange={(x) => setE({ ...e, proxima_acao_em: x.target.value })} /></div>
             </div>
           )}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <button style={btnSecundario} onClick={() => setModo("")}>Cancelar</button>
-            <button style={btnPrimario} disabled={salvando} onClick={() => enviar(`/api/comercial/oportunidades/${op.id}`, "PATCH", {
-              etapa: e.etapa,
-              ...(exigeValor ? { valor_estimado: e.valor_estimado.trim() === "" ? null : Number(e.valor_estimado.replace(",", ".")), servico_interesse: e.servico_interesse } : {}),
-              ...(e.etapa === "perdido" ? { motivo_perda_categoria: e.motivo_perda_categoria || undefined, reconectar_em: e.reconectar_em || undefined, ...(e.motivo_perda_categoria === "outro" ? { motivo_perda: e.motivo_perda } : {}) } : {}),
-              ...(novaAberta ? { proxima_acao: e.proxima_acao, proxima_acao_em: e.proxima_acao_em } : {}),
-            })}>{salvando ? "Salvando..." : "Salvar fase"}</button>
+            <button style={btnPrimario} disabled={salvando} onClick={salvarFase}>{salvando ? "Salvando..." : "Salvar fase"}</button>
           </div>
         </div>
       )}
