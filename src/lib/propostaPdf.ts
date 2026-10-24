@@ -3,7 +3,7 @@ import path from "path";
 import sharp from "sharp";
 import { PDFDocument, PDFFont, PDFImage, PDFPage, PageSizes, StandardFonts } from "pdf-lib";
 import { BLACK, CW, DARK, GRAY, ML, PH, PW, YELLOW } from "@/lib/pdfWriter";
-import { ASSINATURA_RS, FRASE_EFEITO_RS, TEMPLATE_VERSAO_COM_INTRODUCAO, TITULO_RS, itensAdicionais, itensRs, type SnapshotProposta } from "@/lib/propostaModelos";
+import { ASSINATURA_RS, FRASE_EFEITO_RS, TEMPLATE_VERSAO_COM_INTRODUCAO, TITULO_RS, itensAdicionais, itensRs, quantidadeItensFixosRs, type SnapshotProposta } from "@/lib/propostaModelos";
 import { paragrafosDesenhaveis, textoDesenhavel } from "@/lib/propostaTexto";
 import { numeroComRevisao } from "@/lib/propostas";
 import { ENDERECOS_RODAPE_PROPOSTA, PASTA_CABECALHO_PROPOSTA, PASTA_CLIENTES_PROPOSTA } from "@/lib/propostaAssets";
@@ -414,7 +414,8 @@ export async function gerarPdfProposta(snap: SnapshotProposta, opcoes: OpcoesPdf
   }
 
   for (const item of itensRs(snap.condicoes)) e.item(item.numero, item.texto);
-  if (v2) for (const item of itensAdicionais(snap.clausulas_adicionais ?? [])) e.item(item.numero, item.texto);
+  // As adicionais seguem a última fixa: 1.8 com a taxa de cancelamento, 1.7 sem ela (taxa 0 não gera a cláusula).
+  if (v2) for (const item of itensAdicionais(snap.clausulas_adicionais ?? [], quantidadeItensFixosRs(snap.condicoes.taxa_cancelamento_pct) + 1)) e.item(item.numero, item.texto);
 
   const validade = `Validade da proposta: ${snap.validade_dias} dias corridos, até ${formatarDataBr(snap.validade_ate)}.`;
   const assinatura = [

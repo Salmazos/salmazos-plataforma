@@ -56,7 +56,7 @@ export default function ModalMarcarEnviada({ numero, clienteNome, condicoes, val
         {linha("Cliente", clienteNome)}
         {linha("Taxa sem reposição", formatarPct(condicoes.taxa_sem_reposicao_pct))}
         {linha("Taxa com reposição", formatarPct(condicoes.taxa_com_reposicao_pct))}
-        {linha("Taxa de cancelamento", formatarPct(condicoes.taxa_cancelamento_pct))}
+        {linha("Taxa de cancelamento", condicoes.taxa_cancelamento_pct > 0 ? formatarPct(condicoes.taxa_cancelamento_pct) : "Sem taxa")}
         {linha("Currículos em até", `${condicoes.prazo_envio_curriculos_dias_uteis} dias úteis`)}
         {linha("Faturamento", `até ${condicoes.prazo_faturamento_dias} dias de vencimento`)}
         {linha("Validade", `${validadeDias} dias, até ${fmtData(calcularValidadeAte(hoje, validadeDias))}`)}

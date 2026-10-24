@@ -12,7 +12,7 @@ import {
   SITUACOES_ESCOLHIDAS_PELO_VENDEDOR, type SituacaoProposta,
 } from "@/lib/propostas";
 import {
-  condicoesRsSchema, conteudoRsSchema, PADROES_RS, validarConteudo, itensRs, montarSnapshot, snapshotPropostaSchema,
+  condicoesRsSchema, conteudoRsSchema, PADROES_RS, validarConteudo, itensRs, quantidadeItensFixosRs, montarSnapshot, snapshotPropostaSchema,
   MENSAGEM_MODELO_INDISPONIVEL, TEMPLATE_VERSAO_ATUAL, TEXTO_INTRODUTORIO_PADRAO_RS, FRASE_EFEITO_RS, ASSINATURA_RS, itensAdicionais,
   MAX_CLAUSULAS_ADICIONAIS, MAX_CLAUSULA_ADICIONAL, MAX_TEXTO_INTRODUTORIO,
 } from "@/lib/propostaModelos";
@@ -158,9 +158,11 @@ await caso("R&S: padrões 45 / 55 / 8 / 25 / 14", () => {
   assert.deepEqual(conteudoRsSchema.parse({ condicoes: { taxa_sem_reposicao_pct: 40 } }).condicoes, { ...PADROES_RS, taxa_sem_reposicao_pct: 40 });
 });
 const CAMPOS_PCT = ["taxa_sem_reposicao_pct", "taxa_com_reposicao_pct", "taxa_cancelamento_pct"];
+// A taxa de cancelamento é a única que pode ficar sem cobrança (vazio/0 viram 0); as outras duas exigem percentual > 0.
+const CAMPOS_PCT_OBRIGATORIOS = CAMPOS_PCT.filter((c) => c !== "taxa_cancelamento_pct");
 const CAMPOS_DIAS = ["prazo_envio_curriculos_dias_uteis", "prazo_faturamento_dias"];
-await caso("R&S: percentuais > 0 e <= 100 (bordas aceitas; 0, 0%, fora da faixa e texto recusados)", () => {
-  for (const campo of CAMPOS_PCT) {
+await caso("R&S: percentuais de reposição > 0 e <= 100 (bordas aceitas; 0, 0%, fora da faixa e texto recusados)", () => {
+  for (const campo of CAMPOS_PCT_OBRIGATORIOS) {
     for (const ok of [0.01, 100, 37.5, "45", " 45 "]) assert.ok(condicoesRsSchema.safeParse({ [campo]: ok }).success, `${campo}=${JSON.stringify(ok)}`);
     for (const ruim of [0, "0", -1, 100.01, 101, "abc", true, [], {}]) assert.ok(!condicoesRsSchema.safeParse({ [campo]: ruim }).success, `${campo}=${JSON.stringify(ruim)}`);
   }
@@ -171,8 +173,8 @@ await caso("R&S: prazos inteiros positivos (0, negativo, fracionado, acima de 36
     for (const ruim of [0, "0", -3, 2.5, 366, "x"]) assert.ok(!condicoesRsSchema.safeParse({ [campo]: ruim }).success, `${campo}=${JSON.stringify(ruim)}`);
   }
 });
-await caso("R&S: campo apagado ('', só espaços, null) é ERRO nos 5 campos, nunca 0 nem o padrão silencioso", () => {
-  for (const campo of [...CAMPOS_PCT, ...CAMPOS_DIAS]) {
+await caso("R&S: campo apagado ('', só espaços, null) é ERRO nos outros 4 campos (taxas de reposição e prazos), nunca 0 nem o padrão silencioso", () => {
+  for (const campo of [...CAMPOS_PCT_OBRIGATORIOS, ...CAMPOS_DIAS]) {
     for (const vazio of ["", "  ", "\t\n", null]) {
       const r = condicoesRsSchema.safeParse({ [campo]: vazio });
       assert.ok(!r.success, `${campo}=${JSON.stringify(vazio)} deveria falhar`);
@@ -188,16 +190,49 @@ await caso("R&S: campo ausente (undefined) usa o padrão; objeto vazio e condico
   assert.deepEqual(condicoesRsSchema.parse({}), PADROES_RS);
   assert.deepEqual(conteudoRsSchema.parse({}).condicoes, PADROES_RS);
 });
-await caso("R&S: percentual apagado no conteúdo da proposta falha com mensagem legível (não vira 0%)", () => {
-  const r = validarConteudo("RS", { condicoes: { taxa_cancelamento_pct: "" } });
-  assert.ok(!r.ok && r.error.includes("condicoes.taxa_cancelamento_pct: Informe o percentual."), JSON.stringify(r));
-  assert.ok(!validarConteudo("RS", { condicoes: { taxa_cancelamento_pct: 0 } }).ok);
+await caso("R&S: percentual de reposição apagado ou 0 no conteúdo da proposta falha com mensagem legível (não vira 0%)", () => {
+  const r = validarConteudo("RS", { condicoes: { taxa_sem_reposicao_pct: "" } });
+  assert.ok(!r.ok && r.error.includes("condicoes.taxa_sem_reposicao_pct: Informe o percentual."), JSON.stringify(r));
+  assert.ok(!validarConteudo("RS", { condicoes: { taxa_com_reposicao_pct: 0 } }).ok);
+});
+await caso("taxa de cancelamento: vazio, null, só espaços, 0 e \"0\" viram o número 0 e são aceitos (cláusula sai do PDF)", () => {
+  for (const sem of ["", "  ", "\t\n", null, 0, "0", " 0 ", "0,0".replace(",", ".")]) {
+    const r = condicoesRsSchema.safeParse({ taxa_cancelamento_pct: sem });
+    assert.ok(r.success, `taxa=${JSON.stringify(sem)}`);
+    assert.strictEqual(r.data.taxa_cancelamento_pct, 0, `taxa=${JSON.stringify(sem)}`);
+    assert.equal(typeof r.data.taxa_cancelamento_pct, "number");
+  }
+  const v = validarConteudo("RS", { condicoes: { taxa_cancelamento_pct: "" } });
+  assert.ok(v.ok && v.data.condicoes.taxa_cancelamento_pct === 0);
+  const snap = montarSnapshot({
+    modelo: "RS", numero: "RS-0053/26", revisao: 0, templateVersao: 2, dataEmissao: "2026-10-20", validadeDias: 15, validadeAte: "2026-11-04",
+    clienteNome: "Empresa X", aosCuidados: null, conteudo: { condicoes: { taxa_cancelamento_pct: null } }, vendedorNome: "V", vendedorTelefone: null,
+  });
+  assert.strictEqual(snap.condicoes.taxa_cancelamento_pct, 0, "snapshot guarda o número 0");
+  assert.ok(snapshotPropostaSchema.safeParse(snap).success, "e o snapshot com taxa 0 passa no próprio schema");
+  assert.equal(condicoesRsSchema.parse({}).taxa_cancelamento_pct, 25, "campo ausente continua com o padrão 25");
+  assert.equal(condicoesRsSchema.parse({ taxa_cancelamento_pct: undefined }).taxa_cancelamento_pct, 25);
+  for (const ok of [0.01, 25, 100, "30", " 12,5 ".replace(",", ".")]) assert.ok(condicoesRsSchema.safeParse({ taxa_cancelamento_pct: ok }).success, String(ok));
+});
+await caso("taxa de cancelamento: -1, 100.01, 101, texto e tipos estranhos continuam recusados, com a mensagem de intervalo", () => {
+  for (const ruim of [-1, -0.01, 100.01, 101, "101", "-1", "abc", true, [], {}]) {
+    const r = condicoesRsSchema.safeParse({ taxa_cancelamento_pct: ruim });
+    assert.ok(!r.success, `taxa=${JSON.stringify(ruim)}`);
+  }
+  for (const fora of [101, -1]) {
+    const r = condicoesRsSchema.safeParse({ taxa_cancelamento_pct: fora });
+    assert.ok(!r.success && r.error.issues.some((i) => i.message === "Use um percentual de 0 a 100. Deixe em branco ou 0 para não cobrar."), JSON.stringify(r));
+  }
+  const nao = condicoesRsSchema.safeParse({ taxa_cancelamento_pct: "abc" });
+  assert.ok(!nao.success && nao.error.issues.some((i) => i.message === "Informe um número válido."));
 });
 await caso("validarConteudo RS: aceita CNPJ/endereço opcionais e devolve erro legível", () => {
   const ok = validarConteudo("RS", { cliente_cnpj: "00.000.000/0001-00", condicoes: { prazo_faturamento_dias: 21 } });
   assert.ok(ok.ok && ok.data.condicoes.prazo_faturamento_dias === 21 && ok.data.condicoes.taxa_sem_reposicao_pct === 45);
   const ruim = validarConteudo("RS", { condicoes: { taxa_cancelamento_pct: 150 } });
-  assert.ok(!ruim.ok && ruim.error.includes("condicoes.taxa_cancelamento_pct: Use um percentual maior que 0 e até 100."));
+  assert.ok(!ruim.ok && ruim.error.includes("condicoes.taxa_cancelamento_pct: Use um percentual de 0 a 100. Deixe em branco ou 0 para não cobrar."));
+  const ruimReposicao = validarConteudo("RS", { condicoes: { taxa_sem_reposicao_pct: 150 } });
+  assert.ok(!ruimReposicao.ok && ruimReposicao.error.includes("condicoes.taxa_sem_reposicao_pct: Use um percentual maior que 0 e até 100."));
 });
 
 // ── Texto fixo ───────────────────────────────────────────────────────────────
@@ -212,6 +247,28 @@ await caso("texto R&S: itens 1.1 a 1.7 em ordem, com os valores configurados (nu
   const padrao = itensRs(PADROES_RS);
   assert.ok(padrao[0].texto.includes("45%") && padrao[0].texto.includes("55%"));
   assert.ok(padrao[1].texto.includes("8 dias úteis") && padrao[2].texto.includes("25%") && padrao[3].texto.includes("14 dias"));
+});
+const LIMPAS = { taxa_sem_reposicao_pct: 40, taxa_com_reposicao_pct: 50, prazo_envio_curriculos_dias_uteis: 5, prazo_faturamento_dias: 30 };
+await caso("texto R&S: com taxa de cancelamento 0 a cláusula de cancelamento some e a numeração é sequencial 1.1 a 1.6", () => {
+  const itens = itensRs({ ...LIMPAS, taxa_cancelamento_pct: 0 });
+  assert.deepEqual(itens.map((i) => i.numero), ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6"]);
+  assert.ok(!itens.some((i) => /cancelado ou congelado|taxa de \d/.test(i.texto)), "sem texto de cancelamento");
+  assert.ok(itens[2].texto.includes("faturados com Nota Fiscal com até 30 dias"), "1.3 = faturamento");
+  assert.ok(itens[3].texto.startsWith("A Salmazos RH disponibiliza espaço"), "1.4 = espaço");
+  assert.ok(itens[4].texto.startsWith("Utilizamos para captação"), "1.5 = plataformas");
+  assert.ok(itens[5].texto.startsWith("INSTRUMENTOS DE AVALIAÇÃO PSICOLÓGICA"), "1.6 = psicológica");
+  assert.equal(quantidadeItensFixosRs(0), 6);
+});
+await caso("texto R&S: com taxa > 0 a saída é IDÊNTICA à de antes (1.1 a 1.7, mesmos textos)", () => {
+  const itens = itensRs({ ...LIMPAS, taxa_cancelamento_pct: 20 });
+  assert.deepEqual(itens.map((i) => i.numero), ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]);
+  assert.equal(itens[2].texto, "Caso o processo seletivo tenha sido feito com eficiência, currículos enviados, e o mesmo seja cancelado ou congelado, será cobrada uma taxa de 20% sobre o 1º salário da vaga em questão;");
+  assert.equal(itens[3].texto, "Os candidatos aprovados após exames admissionais serão faturados com Nota Fiscal com até 30 dias de vencimento;");
+  assert.equal(itens[4].texto, "A Salmazos RH disponibiliza espaço para entrevistas e dinâmicas de grupo, caso necessário;");
+  assert.equal(itens[5].texto, "Utilizamos para captação as plataformas SALMAZOS, CATHO, LINKEDIN, INDEED, além de outras mídias;");
+  assert.equal(itens[6].texto, "INSTRUMENTOS DE AVALIAÇÃO PSICOLÓGICA (Adicionais, se necessário): AC – Atenção Concentrada; Palográfico – Ritmo/Personalidade; Teste de Estilo de Liderança; PPA | DISC – Comportamental; R-1 – Teste não Verbal de Inteligência; G-38 – Teste não Verbal de Inteligência; Entrevista por Competência.");
+  assert.equal(quantidadeItensFixosRs(0.01), 7);
+  assert.equal(quantidadeItensFixosRs(25), 7);
 });
 await caso("texto R&S: percentual fracionado usa vírgula", () => {
   assert.ok(itensRs({ ...PADROES_RS, taxa_sem_reposicao_pct: 37.5 })[0].texto.startsWith("Taxa de 37,5% sobre"));
@@ -473,6 +530,14 @@ await caso("itens adicionais: numeração em sequência depois da 1.7 (1.8, 1.9,
   assert.deepEqual(itensAdicionais([]), []);
   assert.equal(itensRs(PADROES_RS).at(-1)!.numero, "1.7");
 });
+await caso("itens adicionais: começam em 1.7 sem a taxa de cancelamento e em 1.8 com ela", () => {
+  const nums = (taxa: number) => itensAdicionais(["a", "b", "c"], quantidadeItensFixosRs(taxa) + 1).map((i) => i.numero);
+  assert.deepEqual(nums(0), ["1.7", "1.8", "1.9"]);
+  assert.deepEqual(nums(25), ["1.8", "1.9", "1.10"]);
+  assert.deepEqual(itensAdicionais(["a"], 7).map((i) => i.numero), ["1.7"]);
+  assert.deepEqual(itensAdicionais([]), []);
+  assert.equal(itensAdicionais(Array(10).fill("x"), 7)[9].numero, "1.16");
+});
 await caso("Zod: introdução ≤1000, até 10 cláusulas de ≤600, cláusula vazia/só emoji recusada, campos ausentes têm padrão", () => {
   const ok = (c: unknown) => conteudoRsSchema.safeParse(c);
   assert.deepEqual(ok({}).data?.clausulas_adicionais, []);
@@ -544,6 +609,20 @@ await caso("PDF v2 (texto): introdução própria e cláusulas 1.8…1.10 aparec
   assert.ok(idx("Validade da proposta") > idx("1.10"));
   const padrao = textoPdfPorPagina(await gerarV2(snapV2({})))[0];
   assert.ok(padrao.includes("Prezados,") && padrao.includes("Ficamos à disposição para qualquer esclarecimento."));
+});
+await caso("PDF v2 (texto): sem taxa de cancelamento o PDF não traz a cláusula e as adicionais começam em 1.7; com taxa 25 sai como sempre (1.8 em diante)", async () => {
+  if (!TEM_PDFTOTEXT) return;
+  const semTaxa = (await textoPdfPorPagina(await gerarV2(snapV2({ condicoes: { taxa_cancelamento_pct: "" }, clausulas_adicionais: ["Alfa extra", "Beta extra"] }))))[0];
+  const ls = semTaxa.split("\n");
+  const i = (t: string) => ls.findIndex((l) => l.includes(t));
+  assert.ok(!semTaxa.includes("cancelado ou congelado") && !semTaxa.includes("1.7 INSTRUMENTOS"), "cláusula de cancelamento fora do PDF");
+  assert.ok(i("1.6") >= 0 && ls[i("1.6")].includes("INSTRUMENTOS"), "psicológica virou 1.6");
+  assert.ok(ls[i("1.7")].includes("Alfa extra") && ls[i("1.8")].includes("Beta extra"), "adicionais em 1.7 e 1.8");
+  assert.ok(i("1.3") >= 0 && ls[i("1.3")].includes("Nota Fiscal") === true, "faturamento virou 1.3");
+  const comTaxa = (await textoPdfPorPagina(await gerarV2(snapV2({ clausulas_adicionais: ["Alfa extra"] }))))[0];
+  const lc = comTaxa.split("\n");
+  assert.ok(comTaxa.includes("cancelado ou congelado") && comTaxa.includes("taxa de 25%"));
+  assert.ok(lc.find((l) => l.includes("1.7"))!.includes("INSTRUMENTOS") && lc.find((l) => l.includes("1.8"))!.includes("Alfa extra"));
 });
 await caso("PDF v2 (segurança): emoji, aspas curvas, travessão e símbolos em introdução, cláusulas e campos não derrubam; texto desenhável é preservado", async () => {
   const especial = "Reunião às 9h 😀 — “confirmada” ‘ok’ • 5% ✓ → ★ ñ ő 日本 \u200d é ç ã";
@@ -1181,7 +1260,9 @@ await caso("editar rascunho: no lugar (sem revisão), com validação de percent
   assert.equal(proposta(db, id).conteudo.condicoes.taxa_sem_reposicao_pct, 40);
   assert.equal(proposta(db, id).aos_cuidados, "Ana Contato");
   assert.equal(db.tabelas.proposta_revisoes.length, 0);
-  assert.equal((await upd({ updated_at: proposta(db, id).updated_at, conteudo: { condicoes: { taxa_cancelamento_pct: "" } } })).status, 400);
+  assert.equal((await upd({ updated_at: proposta(db, id).updated_at, conteudo: { condicoes: { taxa_sem_reposicao_pct: "" } } })).status, 400);
+  assert.equal((await upd({ updated_at: proposta(db, id).updated_at, conteudo: { condicoes: { taxa_cancelamento_pct: "" } } })).status, 200, "taxa de cancelamento em branco é aceita (sem a cláusula)");
+  assert.equal(proposta(db, id).conteudo.condicoes.taxa_cancelamento_pct, 0);
   assert.equal((await upd({ updated_at: proposta(db, id).updated_at, contato_id: CT_FORA })).status, 400);
   assert.equal((await upd({ updated_at: "2000-01-01T00:00:00.000Z", validade_dias: 20 })).status, 409, "versão velha");
   assert.equal(proposta(db, id).validade_dias, 30);

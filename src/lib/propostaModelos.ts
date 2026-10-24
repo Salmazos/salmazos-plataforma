@@ -15,9 +15,10 @@ export const MAX_CLAUSULA_ADICIONAL = 600;
 
 // Campo apagado de propósito ("", só espaços, null) é erro: z.coerce.number() o transformaria em 0 e o PDF do cliente
 // sairia com "Taxa de 0%". Só `undefined` (campo ausente) usa o padrão.
-function numeroInformado(msgVazio: string) {
+function numeroInformado(msgVazio: string, valorSeVazio?: number) {
   return z.unknown().transform((v, ctx) => {
     if (v === null || (typeof v === "string" && v.trim() === "")) {
+      if (valorSeVazio !== undefined) return valorSeVazio;
       ctx.addIssue({ code: "custom", message: msgVazio });
       return z.NEVER;
     }
@@ -31,6 +32,11 @@ function numeroInformado(msgVazio: string) {
 }
 const pct = (padrao: number) =>
   numeroInformado("Informe o percentual.").pipe(z.number().gt(0, "Use um percentual maior que 0 e até 100.").max(100, "Use um percentual maior que 0 e até 100.")).default(padrao);
+// Taxa de cancelamento/congelamento é a única que pode ficar sem cobrança: em branco ou 0 vira 0 (guardado como número) e a
+// cláusula sai do PDF (ver itensRs). Os demais percentuais seguem recusando vazio e 0.
+const MSG_TAXA_CANCELAMENTO = "Use um percentual de 0 a 100. Deixe em branco ou 0 para não cobrar.";
+const pctCancelamento = (padrao: number) =>
+  numeroInformado("", 0).pipe(z.number().min(0, MSG_TAXA_CANCELAMENTO).max(100, MSG_TAXA_CANCELAMENTO)).default(padrao);
 const diasPositivos = (padrao: number) =>
   numeroInformado("Informe o prazo em dias.").pipe(z.number().int("Use um número inteiro.").positive("Use um número maior que zero.").max(365, "Use no máximo 365 dias.")).default(padrao);
 
@@ -38,7 +44,7 @@ export const condicoesRsSchema = z.object({
   taxa_sem_reposicao_pct: pct(45),
   taxa_com_reposicao_pct: pct(55),
   prazo_envio_curriculos_dias_uteis: diasPositivos(8),
-  taxa_cancelamento_pct: pct(25),
+  taxa_cancelamento_pct: pctCancelamento(25),
   prazo_faturamento_dias: diasPositivos(14),
 });
 export type CondicoesRs = z.infer<typeof condicoesRsSchema>;
@@ -110,30 +116,32 @@ export interface ItemProposta {
   texto: string;
 }
 
-export function itensRs(c: CondicoesRs): ItemProposta[] {
-  return [
-    {
-      numero: "1.1",
-      texto: `Taxa de ${formatarPct(c.taxa_sem_reposicao_pct)} sobre 1º salário – Vagas sem reposição; Taxa de ${formatarPct(c.taxa_com_reposicao_pct)} sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;`,
-    },
-    { numero: "1.2", texto: `Os currículos serão enviados em até ${c.prazo_envio_curriculos_dias_uteis} dias úteis;` },
-    {
-      numero: "1.3",
-      texto: `Caso o processo seletivo tenha sido feito com eficiência, currículos enviados, e o mesmo seja cancelado ou congelado, será cobrada uma taxa de ${formatarPct(c.taxa_cancelamento_pct)} sobre o 1º salário da vaga em questão;`,
-    },
-    { numero: "1.4", texto: `Os candidatos aprovados após exames admissionais serão faturados com Nota Fiscal com até ${c.prazo_faturamento_dias} dias de vencimento;` },
-    { numero: "1.5", texto: "A Salmazos RH disponibiliza espaço para entrevistas e dinâmicas de grupo, caso necessário;" },
-    { numero: "1.6", texto: "Utilizamos para captação as plataformas SALMAZOS, CATHO, LINKEDIN, INDEED, além de outras mídias;" },
-    {
-      numero: "1.7",
-      texto: "INSTRUMENTOS DE AVALIAÇÃO PSICOLÓGICA (Adicionais, se necessário): AC – Atenção Concentrada; Palográfico – Ritmo/Personalidade; Teste de Estilo de Liderança; PPA | DISC – Comportamental; R-1 – Teste não Verbal de Inteligência; G-38 – Teste não Verbal de Inteligência; Entrevista por Competência.",
-    },
-  ];
+// Sem taxa de cancelamento (0) a cláusula não existe e as seguintes sobem de número.
+export function cobraTaxaCancelamento(taxaCancelamentoPct: number): boolean {
+  return taxaCancelamentoPct > 0;
+}
+export function quantidadeItensFixosRs(taxaCancelamentoPct: number): number {
+  return cobraTaxaCancelamento(taxaCancelamentoPct) ? 7 : 6;
 }
 
-// Cláusulas livres do vendedor seguem a numeração das fixas (1.1 a 1.7): 1.8, 1.9, 1.10...
-export function itensAdicionais(clausulas: string[]): ItemProposta[] {
-  return clausulas.map((texto, i) => ({ numero: `1.${8 + i}`, texto }));
+export function itensRs(c: CondicoesRs): ItemProposta[] {
+  const textos = [
+    `Taxa de ${formatarPct(c.taxa_sem_reposicao_pct)} sobre 1º salário – Vagas sem reposição; Taxa de ${formatarPct(c.taxa_com_reposicao_pct)} sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;`,
+    `Os currículos serão enviados em até ${c.prazo_envio_curriculos_dias_uteis} dias úteis;`,
+    ...(cobraTaxaCancelamento(c.taxa_cancelamento_pct)
+      ? [`Caso o processo seletivo tenha sido feito com eficiência, currículos enviados, e o mesmo seja cancelado ou congelado, será cobrada uma taxa de ${formatarPct(c.taxa_cancelamento_pct)} sobre o 1º salário da vaga em questão;`]
+      : []),
+    `Os candidatos aprovados após exames admissionais serão faturados com Nota Fiscal com até ${c.prazo_faturamento_dias} dias de vencimento;`,
+    "A Salmazos RH disponibiliza espaço para entrevistas e dinâmicas de grupo, caso necessário;",
+    "Utilizamos para captação as plataformas SALMAZOS, CATHO, LINKEDIN, INDEED, além de outras mídias;",
+    "INSTRUMENTOS DE AVALIAÇÃO PSICOLÓGICA (Adicionais, se necessário): AC – Atenção Concentrada; Palográfico – Ritmo/Personalidade; Teste de Estilo de Liderança; PPA | DISC – Comportamental; R-1 – Teste não Verbal de Inteligência; G-38 – Teste não Verbal de Inteligência; Entrevista por Competência.",
+  ];
+  return textos.map((texto, i) => ({ numero: `1.${i + 1}`, texto }));
+}
+
+// Cláusulas livres do vendedor seguem a numeração das fixas: 1.8, 1.9... (com a taxa de cancelamento) ou 1.7, 1.8... (sem ela).
+export function itensAdicionais(clausulas: string[], primeiroNumero = 8): ItemProposta[] {
+  return clausulas.map((texto, i) => ({ numero: `1.${primeiroNumero + i}`, texto }));
 }
 
 // ── Snapshot: tudo o que o PDF usa ──────────────────────────────────────────
