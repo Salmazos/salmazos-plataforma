@@ -80,7 +80,6 @@ export default function EtapaContratante({ form, atualizar, erros }: PropsEtapa)
         placeholder="Rua, número, bairro e cidade"
         autoComplete="street-address"
         maxLength={300}
-        ajuda="Opcional."
         erro={erros.endereco}
       />
 

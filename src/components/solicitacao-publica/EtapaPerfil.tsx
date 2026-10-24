@@ -48,7 +48,6 @@ export default function EtapaPerfil({ form, atualizar, erros }: PropsEtapa) {
           onChange={(v) => atualizar("idade", v)}
           placeholder="Ex.: a partir de 21 anos"
           maxLength={60}
-          ajuda="Opcional."
           erro={erros.idade}
         />
         <Segmentado id="campo-pcd" rotulo="Vaga para pessoa com deficiência (PCD)?" opcoes={SIM_NAO} valor={form.pcd} onChange={(v) => atualizar("pcd", v)} />

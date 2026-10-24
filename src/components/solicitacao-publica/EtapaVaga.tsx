@@ -156,7 +156,7 @@ export default function EtapaVaga({ form, atualizar, erros }: PropsEtapa) {
         tipo="date"
         valor={form.previsao_inicio}
         onChange={(v) => atualizar("previsao_inicio", v)}
-        ajuda="Opcional. Quando você gostaria que a pessoa começasse?"
+        ajuda="Quando você gostaria que a pessoa começasse?"
         erro={erros.previsao_inicio}
       />
 
@@ -195,7 +195,6 @@ export default function EtapaVaga({ form, atualizar, erros }: PropsEtapa) {
           onChange={(v) => atualizar("adicionais_salariais", v)}
           placeholder="Ex.: comissão, adicional noturno, insalubridade"
           maxLength={300}
-          ajuda="Opcional."
           erro={erros.adicionais_salariais}
         />
       )}
