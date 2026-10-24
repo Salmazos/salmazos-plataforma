@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ROTULO_MODELO, ROTULO_SITUACAO, numeroComRevisao, type SituacaoProposta } from "@/lib/propostas";
-import { formatarPct, PADROES_RS, type CondicoesRs } from "@/lib/propostaModelos";
+import { formatarPct, PADROES_RS, quantidadeItensFixosRs, type CondicoesRs } from "@/lib/propostaModelos";
 import CamposProposta, { camposDeProposta, conteudoDoForm, validadeDoForm, type CamposForm } from "@/components/propostas/CamposProposta";
 import ModalMarcarEnviada from "@/components/propostas/ModalMarcarEnviada";
 import ModalSituacaoProposta, { type AcaoSituacao } from "@/components/propostas/ModalSituacaoProposta";
@@ -209,7 +209,7 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
               {par("Taxa sem reposição", formatarPct(condicoes.taxa_sem_reposicao_pct))}
               {par("Taxa com 01 reposição", formatarPct(condicoes.taxa_com_reposicao_pct))}
-              {par("Taxa de cancelamento", formatarPct(condicoes.taxa_cancelamento_pct))}
+              {par("Taxa de cancelamento", condicoes.taxa_cancelamento_pct > 0 ? formatarPct(condicoes.taxa_cancelamento_pct) : "Sem taxa")}
               {par("Currículos em até", `${condicoes.prazo_envio_curriculos_dias_uteis} dias úteis`)}
               {par("Faturamento", `até ${condicoes.prazo_faturamento_dias} dias`)}
             </div>
@@ -218,7 +218,7 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
             <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 14, paddingTop: 14 }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Cláusulas adicionais</div>
               {d.conteudo?.clausulas_adicionais?.map((c, i) => (
-                <div key={i} style={{ fontSize: 14, color: "#111827", marginBottom: 6 }}><strong>1.{8 + i}</strong> {c}</div>
+                <div key={i} style={{ fontSize: 14, color: "#111827", marginBottom: 6 }}><strong>1.{quantidadeItensFixosRs(condicoes.taxa_cancelamento_pct) + 1 + i}</strong> {c}</div>
               ))}
             </div>
           )}

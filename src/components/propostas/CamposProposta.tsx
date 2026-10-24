@@ -2,7 +2,7 @@
 
 import React from "react";
 import {
-  MAX_CLAUSULAS_ADICIONAIS, MAX_CLAUSULA_ADICIONAL, MAX_TEXTO_INTRODUTORIO, PADROES_RS, TEXTO_INTRODUTORIO_PADRAO_RS, type ConteudoRs,
+  MAX_CLAUSULAS_ADICIONAIS, MAX_CLAUSULA_ADICIONAL, MAX_TEXTO_INTRODUTORIO, PADROES_RS, TEXTO_INTRODUTORIO_PADRAO_RS, quantidadeItensFixosRs, type ConteudoRs,
 } from "@/lib/propostaModelos";
 import { caracteresOmitidos } from "@/lib/propostaTexto";
 import { VALIDADE_MAX_DIAS, VALIDADE_MIN_DIAS, VALIDADE_PADRAO_DIAS } from "@/lib/propostas";
@@ -82,6 +82,14 @@ export function conteudoDoForm(f: CamposForm) {
   };
 }
 
+// Primeiro número das cláusulas adicionais conforme a taxa de cancelamento digitada: em branco ou 0 = sem a cláusula (1.7);
+// com taxa (ou valor ainda inválido, que o servidor recusa) = 1.8.
+export function primeiroNumeroAdicionalDoForm(f: CamposForm): number {
+  const texto = numero(f.taxa_cancelamento_pct);
+  const taxa = texto === "" ? 0 : Number(texto);
+  return quantidadeItensFixosRs(Number.isFinite(taxa) ? taxa : PADROES_RS.taxa_cancelamento_pct) + 1;
+}
+
 export const validadeDoForm = (f: CamposForm) => numero(f.validade_dias);
 
 interface Props {
@@ -95,13 +103,15 @@ interface Props {
 
 export default function CamposProposta({ valor, onChange, contatos = [], contatoId = "", onContato, desabilitado }: Props) {
   const set = (k: Exclude<keyof CamposForm, "clausulas_adicionais">) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange({ ...valor, [k]: e.target.value });
-  const numerico = (k: Exclude<keyof CamposForm, "clausulas_adicionais" | "texto_introdutorio">, rotulo: string, sufixo: string) => (
+  const primeiroAdicional = primeiroNumeroAdicionalDoForm(valor);
+  const numerico = (k: Exclude<keyof CamposForm, "clausulas_adicionais" | "texto_introdutorio">, rotulo: string, sufixo: string, ajuda?: string) => (
     <div>
       <label style={labelStyle}>{rotulo}</label>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <input style={inputStyle} inputMode="decimal" value={valor[k]} onChange={set(k)} disabled={desabilitado} />
         <span style={{ fontSize: 13, color: "#6B7280", whiteSpace: "nowrap" }}>{sufixo}</span>
       </div>
+      {ajuda && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{ajuda}</div>}
     </div>
   );
   return (
@@ -161,18 +171,18 @@ export default function CamposProposta({ valor, onChange, contatos = [], contato
           {numerico("taxa_sem_reposicao_pct", "Taxa sobre o 1º salário — vagas sem reposição", "%")}
           {numerico("taxa_com_reposicao_pct", "Taxa sobre o 1º salário — vagas com 01 reposição em 30 dias", "%")}
           {numerico("prazo_envio_curriculos_dias_uteis", "Envio dos currículos em até", "dias úteis")}
-          {numerico("taxa_cancelamento_pct", "Taxa em caso de cancelamento/congelamento", "%")}
+          {numerico("taxa_cancelamento_pct", "Taxa em caso de cancelamento/congelamento", "%", "Deixe em branco ou 0 se não cobrar taxa de cancelamento (a cláusula sai do PDF).")}
           {numerico("prazo_faturamento_dias", "Faturamento com vencimento em até", "dias")}
         </div>
       </div>
       <div>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Cláusulas adicionais (opcional)</div>
         <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 8 }}>
-          Entram no PDF depois da cláusula 1.7, numeradas em sequência (1.8, 1.9…). Até {MAX_CLAUSULAS_ADICIONAIS} cláusulas de {MAX_CLAUSULA_ADICIONAL} caracteres.
+          Entram no PDF depois da cláusula 1.{primeiroAdicional - 1}, numeradas em sequência (1.{primeiroAdicional}, 1.{primeiroAdicional + 1}…). Até {MAX_CLAUSULAS_ADICIONAIS} cláusulas de {MAX_CLAUSULA_ADICIONAL} caracteres.
         </div>
         {valor.clausulas_adicionais.map((texto, i) => (
           <div key={i} data-clausula={i} style={{ display: "grid", gridTemplateColumns: "44px 1fr auto", gap: 8, alignItems: "start", marginBottom: 8 }}>
-            <strong style={{ fontSize: 14, paddingTop: 9 }}>{`1.${8 + i}`}</strong>
+            <strong style={{ fontSize: 14, paddingTop: 9 }}>{`1.${primeiroAdicional + i}`}</strong>
             <div>
               <textarea style={{ ...inputStyle, minHeight: 64, resize: "vertical", fontFamily: "inherit" }} value={texto} maxLength={MAX_CLAUSULA_ADICIONAL} disabled={desabilitado}
                 onChange={(e) => onChange({ ...valor, clausulas_adicionais: valor.clausulas_adicionais.map((c, k) => (k === i ? e.target.value : c)) })} />
@@ -181,11 +191,11 @@ export default function CamposProposta({ valor, onChange, contatos = [], contato
             </div>
             {!desabilitado && (
               <div style={{ display: "flex", gap: 4 }}>
-                <button type="button" title="Subir" aria-label={`Subir cláusula 1.${8 + i}`} style={btnMini} disabled={i === 0}
+                <button type="button" title="Subir" aria-label={`Subir cláusula 1.${primeiroAdicional + i}`} style={btnMini} disabled={i === 0}
                   onClick={() => onChange({ ...valor, clausulas_adicionais: moverClausula(valor.clausulas_adicionais, i, i - 1) })}>↑</button>
-                <button type="button" title="Descer" aria-label={`Descer cláusula 1.${8 + i}`} style={btnMini} disabled={i === valor.clausulas_adicionais.length - 1}
+                <button type="button" title="Descer" aria-label={`Descer cláusula 1.${primeiroAdicional + i}`} style={btnMini} disabled={i === valor.clausulas_adicionais.length - 1}
                   onClick={() => onChange({ ...valor, clausulas_adicionais: moverClausula(valor.clausulas_adicionais, i, i + 1) })}>↓</button>
-                <button type="button" title="Remover" aria-label={`Remover cláusula 1.${8 + i}`} style={{ ...btnMini, color: "#B91C1C" }}
+                <button type="button" title="Remover" aria-label={`Remover cláusula 1.${primeiroAdicional + i}`} style={{ ...btnMini, color: "#B91C1C" }}
                   onClick={() => onChange({ ...valor, clausulas_adicionais: valor.clausulas_adicionais.filter((_, k) => k !== i) })}>✕</button>
               </div>
             )}
