@@ -29,6 +29,29 @@ export interface ResultadoCobranca {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CandidatoVagaComRelacoes = any;
 
+export const TITULO_AVISO_VAGA_SEM_CLIENTE = "Cobrança R&S não gerada: vaga sem cliente cadastrado";
+
+// Aviso interno (mesmo mecanismo e mesma configuração do "taxa de R&S não configurada") de que a cobrança não saiu porque a vaga não tem
+// cliente: sem cliente_id e sem cliente_nome. É o caso da vaga criada pelo link público de solicitação enquanto o cliente não é
+// cadastrado. Só o título da vaga na mensagem (nenhum dado de candidato nem de cliente). Isolado: nunca lança e não altera o retorno.
+async function avisarVagaSemClienteParaCobranca(
+  svc: ServiceClient,
+  o: { tituloVaga: string; vagaId: string; unidadeId: string | null; candidatoId: string | null; cancelamento: boolean }
+): Promise<void> {
+  try {
+    await avisarFeeRSNaoConfigurado(svc, {
+      titulo: TITULO_AVISO_VAGA_SEM_CLIENTE,
+      mensagem: `A vaga "${o.tituloVaga}" ${o.cancelamento ? "foi cancelada" : "fechou com candidato contratado"}, mas não tem cliente cadastrado — a cobrança R&S ${o.cancelamento ? "de cancelamento " : ""}não pôde ser gerada. Cadastre ou vincule o cliente à vaga para a cobrança ser gerada.`,
+      candidatoId: o.candidatoId,
+      vagaId: o.vagaId,
+      unidadeId: o.unidadeId,
+      semRepetirHoras: 24,
+    });
+  } catch (err) {
+    console.error("[cobrancaRS] Erro ao notificar vaga sem cliente:", err instanceof Error ? err.name : "erro");
+  }
+}
+
 /**
  * Gera o rascunho de cobrança R&S (status 'pendente_revisao') para um candidato_vaga
  * específico, se aplicável — chamado direto no momento da finalização da contratação
@@ -102,6 +125,9 @@ export async function gerarCobrancaRSSeAplicavel(
     console.error(
       `[gerarCobrancaRSSeAplicavel] Vaga ${vaga.id} ("${vaga.titulo}") sem cliente vinculado e sem cliente_nome — cobrança R&S não gerada para candidato_vaga ${candidatoVagaId}.`
     );
+    await avisarVagaSemClienteParaCobranca(svc, {
+      tituloVaga: vaga.titulo, vagaId: vaga.id, unidadeId: vaga.unidade_id, candidatoId: row.candidato_id, cancelamento: false,
+    });
     return { criada: false, motivo: "sem_cliente_vinculado" };
   }
 
@@ -276,6 +302,9 @@ export async function gerarCobrancaCancelamentoRSSeAplicavel(
     console.error(
       `[gerarCobrancaCancelamentoRSSeAplicavel] Vaga ${vagaId} ("${vaga.titulo}") sem cliente vinculado e sem cliente_nome — cobrança de cancelamento não gerada.`
     );
+    await avisarVagaSemClienteParaCobranca(svc, {
+      tituloVaga: vaga.titulo, vagaId: vaga.id, unidadeId: vaga.unidade_id, candidatoId: null, cancelamento: true,
+    });
     return { criada: false, motivo: "sem_cliente_vinculado" };
   }
 
