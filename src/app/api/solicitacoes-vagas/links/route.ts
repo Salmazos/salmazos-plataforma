@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
@@ -7,6 +6,7 @@ import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { urlSite } from "@/lib/siteUrl";
 import { MAX_USOS_LINK, calcularExpiraEm, statusDoLink } from "@/lib/solicitacaoVagaLink";
 import { lerCondicoesDoLink } from "@/lib/solicitacaoVagaCondicoes";
+import { inserirComTokenNovo } from "@/lib/solicitacaoVagaToken";
 import type { LinkSolicitacao } from "@/lib/solicitacaoVagaLinkServidor";
 
 // Links públicos de solicitação de vaga (cliente novo, sem acesso ao portal). Mesmo guard de /api/solicitacoes-vagas: sessão do
@@ -61,24 +61,28 @@ export async function POST(request: NextRequest) {
 
   const service = createServiceClient();
   const criadoPorNome = (await resolverNomeUsuario(user.id, user.email ?? null, service)) ?? null;
-  const token = randomBytes(24).toString("base64url");
+  const nomeEmpresa = nome_empresa?.trim() || null;
 
-  const { data, error } = await service
-    .from("solicitacao_vaga_links")
-    .insert({
-      token,
-      unidade_id: ctx.unidadeId,
-      nome_empresa: nome_empresa?.trim() || null,
-      criado_por_user_id: user.id,
-      criado_por_nome: criadoPorNome,
-      expira_em: calcularExpiraEm(new Date(), validade_dias),
-      condicoes,
-      clausulas_adicionais,
-    })
-    .select("*")
-    .single();
+  // Token novo a cada tentativa: colisão no índice único gera outra tentativa (no máximo 3).
+  const { data, error } = await inserirComTokenNovo<LinkSolicitacao>(nomeEmpresa, (token) =>
+    service
+      .from("solicitacao_vaga_links")
+      .insert({
+        token,
+        unidade_id: ctx.unidadeId,
+        nome_empresa: nomeEmpresa,
+        criado_por_user_id: user.id,
+        criado_por_nome: criadoPorNome,
+        expira_em: calcularExpiraEm(new Date(), validade_dias),
+        condicoes,
+        clausulas_adicionais,
+      })
+      .select("*")
+      .single()
+  );
   if (error || !data) {
-    console.error("[POST /api/solicitacoes-vagas/links]", error?.code ?? error?.message);
+    // Só o código do erro: nada que possa carregar o token ou dados do link.
+    console.error("[POST /api/solicitacoes-vagas/links]", error?.code ?? "sem código");
     return NextResponse.json({ error: "Não foi possível gerar o link." }, { status: 500 });
   }
 
