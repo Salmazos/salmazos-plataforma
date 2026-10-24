@@ -26,6 +26,9 @@ import * as rotaLinks from "../src/app/api/solicitacoes-vagas/links/route";
 import {
   ALFABETO_BASE62, aleatorioBase62, formatoTokenValido, gerarTokenLink, inserirComTokenNovo, slugDaEmpresa, TAMANHO_MAX_SLUG,
 } from "../src/lib/solicitacaoVagaToken";
+import { CONDICOES_VAGA_VAZIAS, condicoesParaVaga } from "../src/lib/solicitacaoVagaCondicoesVaga";
+import * as rotaFromSolicitacao from "../src/app/api/vagas/from-solicitacao/route";
+import { TITULO_AVISO_VAGA_SEM_CLIENTE, gerarCobrancaCancelamentoRSSeAplicavel, gerarCobrancaRSSeAplicavel } from "../src/lib/cobrancaRS";
 import { criarDb } from "./harness-mot/memdb.mjs";
 
 let total = 0;
@@ -782,6 +785,306 @@ await casoRota("colisão de token: nova tentativa com outro token, no máximo 3;
   const ok = await chamarRota(novoBanco([]), rotaLinks.POST, { metodo: "POST", usuario: "user-1", corpo: { nome_empresa: "Acme Indústria" } });
   assert.equal(ok.status, 201);
   assert.match(ok.body.data.url, /\/solicitar-vaga\/acme-industria-[A-Za-z0-9]{12}$/);
+});
+
+// ── Condições aceitas no link -> campos da vaga (Fase 2A) ────────────────────
+const snap = (condicoes: Record<string, unknown>) => ({ link_id: "link-1", condicoes, clausulas_adicionais: [], itens: [] });
+const COND_PADRAO = { taxa_sem_reposicao_pct: 45, taxa_com_reposicao_pct: 55, prazo_envio_curriculos_dias_uteis: 8, taxa_cancelamento_pct: 25, prazo_faturamento_dias: 14 };
+caso("condicoesParaVaga: padrão da proposta (45 / 14 dias / cancelamento 25) e a taxa com reposição (55) fica só no snapshot", () => {
+  assert.deepEqual(condicoesParaVaga(snap(COND_PADRAO)), {
+    fee_rs_percentual: 45, fee_rs_prazo_cobranca: "14 dias", taxa_cancelamento: true, taxa_cancelamento_percentual: 25,
+  });
+  const diferente = condicoesParaVaga(snap({ ...COND_PADRAO, taxa_sem_reposicao_pct: 40, taxa_com_reposicao_pct: 60 }));
+  assert.equal(diferente.fee_rs_percentual, 40, "usa a taxa SEM reposição, não a com reposição");
+  assert.ok(!JSON.stringify(diferente).includes("60"));
+  assert.equal(condicoesParaVaga(snap({ ...COND_PADRAO, taxa_sem_reposicao_pct: 45.5 })).fee_rs_percentual, 45.5, "percentual de percentual (45,5), nunca 0,45");
+  assert.equal(condicoesParaVaga(snap({ ...COND_PADRAO, prazo_faturamento_dias: 30 })).fee_rs_prazo_cobranca, "30 dias");
+  assert.equal(condicoesParaVaga(snap({ ...COND_PADRAO, taxa_sem_reposicao_pct: 100 })).fee_rs_percentual, 100);
+});
+caso("condicoesParaVaga: taxa de cancelamento 0 = false e percentual nulo; maior que 0 = true e o próprio valor", () => {
+  assert.deepEqual(condicoesParaVaga(snap({ ...COND_PADRAO, taxa_cancelamento_pct: 0 })), {
+    fee_rs_percentual: 45, fee_rs_prazo_cobranca: "14 dias", taxa_cancelamento: false, taxa_cancelamento_percentual: null,
+  });
+  const vinteCinco = condicoesParaVaga(snap({ ...COND_PADRAO, taxa_cancelamento_pct: 25 }));
+  assert.equal(vinteCinco.taxa_cancelamento, true);
+  assert.strictEqual(vinteCinco.taxa_cancelamento_percentual, 25);
+  const meio = condicoesParaVaga(snap({ ...COND_PADRAO, taxa_cancelamento_pct: 0.5 }));
+  assert.equal(meio.taxa_cancelamento, true);
+  assert.strictEqual(meio.taxa_cancelamento_percentual, 0.5);
+  assert.strictEqual(condicoesParaVaga(snap({ ...COND_PADRAO, taxa_cancelamento_pct: 100 })).taxa_cancelamento_percentual, 100);
+});
+caso("condicoesParaVaga: snapshot ausente, nulo, de outro tipo ou incompleto devolve tudo nulo/false, sem completar com padrões", () => {
+  const invalidos: unknown[] = [
+    undefined, null, "texto", "{}", 42, true, [], [COND_PADRAO], {}, { condicoes: null }, { condicoes: "x" }, { condicoes: [] }, { condicoes: {} },
+    { itens: [{ numero: "1.1", texto: "x" }], link_id: "l" },
+    { condicoes: { taxa_sem_reposicao_pct: 45 } },
+    { condicoes: { taxa_sem_reposicao_pct: 45, prazo_faturamento_dias: 14 } },
+    { condicoes: { taxa_sem_reposicao_pct: 45, taxa_cancelamento_pct: 25 } },
+    { condicoes: { prazo_faturamento_dias: 14, taxa_cancelamento_pct: 25 } },
+    snap({ ...COND_PADRAO, taxa_sem_reposicao_pct: undefined }),
+    snap({ ...COND_PADRAO, taxa_sem_reposicao_pct: null }),
+    snap({ ...COND_PADRAO, prazo_faturamento_dias: null }),
+    snap({ ...COND_PADRAO, taxa_cancelamento_pct: null }),
+  ];
+  for (const ruim of invalidos) assert.deepEqual(condicoesParaVaga(ruim), CONDICOES_VAGA_VAZIAS, JSON.stringify(ruim));
+  assert.deepEqual(CONDICOES_VAGA_VAZIAS, { fee_rs_percentual: null, fee_rs_prazo_cobranca: null, taxa_cancelamento: false, taxa_cancelamento_percentual: null });
+});
+caso("condicoesParaVaga: valores fora de faixa, de outro tipo ou não finitos são recusados por inteiro (nada parcial)", () => {
+  const fora: Record<string, unknown>[] = [
+    { taxa_sem_reposicao_pct: 0 }, { taxa_sem_reposicao_pct: -45 }, { taxa_sem_reposicao_pct: 100.01 }, { taxa_sem_reposicao_pct: 101 }, { taxa_sem_reposicao_pct: 4500 },
+    { taxa_sem_reposicao_pct: "45" }, { taxa_sem_reposicao_pct: "45,5" }, { taxa_sem_reposicao_pct: NaN }, { taxa_sem_reposicao_pct: Infinity }, { taxa_sem_reposicao_pct: [45] }, { taxa_sem_reposicao_pct: {} },
+    { prazo_faturamento_dias: 0 }, { prazo_faturamento_dias: -1 }, { prazo_faturamento_dias: 1.5 }, { prazo_faturamento_dias: 366 }, { prazo_faturamento_dias: "14" }, { prazo_faturamento_dias: "14 dias" }, { prazo_faturamento_dias: NaN },
+    { taxa_cancelamento_pct: -1 }, { taxa_cancelamento_pct: 100.5 }, { taxa_cancelamento_pct: 101 }, { taxa_cancelamento_pct: "25" }, { taxa_cancelamento_pct: NaN }, { taxa_cancelamento_pct: -Infinity }, { taxa_cancelamento_pct: true },
+  ];
+  for (const f of fora) assert.deepEqual(condicoesParaVaga(snap({ ...COND_PADRAO, ...f })), CONDICOES_VAGA_VAZIAS, JSON.stringify(f));
+  assert.equal(condicoesParaVaga(snap({ ...COND_PADRAO, prazo_faturamento_dias: 365 })).fee_rs_prazo_cobranca, "365 dias", "limites válidos passam");
+  assert.equal(condicoesParaVaga(snap({ ...COND_PADRAO, prazo_faturamento_dias: 1 })).fee_rs_prazo_cobranca, "1 dia", "singular só para 1");
+  for (const n of [2, 7, 14, 30, 365]) assert.equal(condicoesParaVaga(snap({ ...COND_PADRAO, prazo_faturamento_dias: n })).fee_rs_prazo_cobranca, `${n} dias`);
+});
+caso("condicoesParaVaga: nunca lança (acesso que explode) nem altera a entrada", () => {
+  const explosivo = new Proxy({}, { get() { throw new Error("boom"); } });
+  assert.deepEqual(condicoesParaVaga(explosivo), CONDICOES_VAGA_VAZIAS);
+  assert.deepEqual(condicoesParaVaga({ get condicoes(): unknown { throw new Error("boom"); } }), CONDICOES_VAGA_VAZIAS);
+  const entrada = snap({ ...COND_PADRAO });
+  const copia = structuredClone(entrada);
+  condicoesParaVaga(entrada);
+  assert.deepEqual(entrada, copia);
+  const a = condicoesParaVaga(null);
+  a.fee_rs_percentual = 99;
+  assert.equal(CONDICOES_VAGA_VAZIAS.fee_rs_percentual, null, "devolve cópia: mexer no resultado não contamina a constante");
+});
+
+const SOL_PEND = "00000000-0000-4000-8000-0000000000aa";
+function solicitacaoLinha(extra: Record<string, unknown> = {}) {
+  return {
+    id: SOL_PEND, status: "pendente", origem: "link_publico", tipo_servico: "recrutamento_selecao", unidade_id: U1, cliente_id: null,
+    cliente_nome: "Cliente Digitado SA", cargo: "Auxiliar administrativo", num_posicoes: 1, cidade: "Hortolândia", estado: "SP", salario: "2500",
+    dados_empresa: { tipo_pessoa: "pj", nome: "Cliente Digitado SA", cnpj_cpf: CNPJ_OK, contato_nome: "Maria Souza", telefone: "(19) 99999-8888", email: "maria@cliente.com.br", email_nf: "fin@cliente.com.br" },
+    perfil_extra: { sexo: "fem", idade: "até 35", veiculo_proprio: "nao" },
+    condicoes_aceitas: snap({ ...COND_PADRAO, taxa_sem_reposicao_pct: 40, taxa_com_reposicao_pct: 55, prazo_faturamento_dias: 15, taxa_cancelamento_pct: 20 }),
+    aceite_ip: "203.0.113.7", confidencial: false, created_at: new Date().toISOString(), ...extra,
+  };
+}
+function bancoDeAprovacao(solicitacao: Record<string, unknown>) {
+  return criarDb({
+    solicitacoes_vagas: [solicitacao],
+    vagas: [],
+    analistas_perfil: [{ id: "a1", user_id: "user-1", unidade_id: U1, acesso_todas_unidades: false, nome_completo: "Ana Analista", ativo: true, nivel_acesso: "analista" }],
+    audit_logs: [],
+  });
+}
+const aprovar = (db: any, id = SOL_PEND) => chamarRota(db, rotaFromSolicitacao.POST, { metodo: "POST", usuario: "user-1", corpo: { solicitacao_id: id } });
+const CAMPOS_DA_TAXA = ["fee_rs_percentual", "fee_rs_prazo_cobranca", "taxa_cancelamento", "taxa_cancelamento_percentual"];
+
+await casoRota("Criar Vaga de solicitação do LINK (R&S): a vaga nasce com a taxa, o prazo e a taxa de cancelamento do snapshot", async () => {
+  const db = bancoDeAprovacao(solicitacaoLinha());
+  const r = await aprovar(db);
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  const vaga = db.tabelas.vagas[0];
+  assert.equal(vaga.fee_rs_percentual, 40, "taxa SEM reposição do snapshot");
+  assert.equal(vaga.fee_rs_prazo_cobranca, "15 dias");
+  assert.equal(vaga.taxa_cancelamento, true);
+  assert.equal(vaga.taxa_cancelamento_percentual, 20);
+  assert.equal(db.tabelas.solicitacoes_vagas[0].status, "aprovada");
+  assert.equal(db.tabelas.solicitacoes_vagas[0].vaga_id, vaga.id);
+  // sem taxa de cancelamento no snapshot: false e nulo
+  const semTaxa = bancoDeAprovacao(solicitacaoLinha({ condicoes_aceitas: snap({ ...COND_PADRAO, taxa_cancelamento_pct: 0 }) }));
+  assert.equal((await aprovar(semTaxa)).status, 201);
+  const v2 = semTaxa.tabelas.vagas[0];
+  assert.deepEqual([v2.fee_rs_percentual, v2.fee_rs_prazo_cobranca, v2.taxa_cancelamento, v2.taxa_cancelamento_percentual], [45, "14 dias", false, null]);
+});
+await casoRota("Criar Vaga de solicitação do PORTAL: nenhum dos 4 campos é enviado ao banco, mesmo com condicoes_aceitas presente", async () => {
+  for (const extra of [{ origem: "portal", condicoes_aceitas: null }, { origem: "portal" }, { origem: undefined }]) {
+    const sol: Record<string, unknown> = solicitacaoLinha({ cliente_id: "cliente-1", dados_empresa: null, ...extra });
+    if (extra.origem === undefined) delete sol.origem;
+    const db = bancoDeAprovacao(sol);
+    const r = await aprovar(db);
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const vaga = db.tabelas.vagas[0];
+    for (const campo of CAMPOS_DA_TAXA) assert.ok(!(campo in vaga), `${campo} não deve ser enviado para vaga do portal`);
+    await esperarPendentes();
+    assert.equal(db.tabelas.audit_logs.filter((a: any) => a.acao === "vaga_condicoes_copiadas_do_link").length, 0, "portal não gera auditoria de condições");
+  }
+});
+await casoRota("Criar Vaga do link: só copia em R&S; outro tipo de serviço não recebe nada", async () => {
+  const db = bancoDeAprovacao(solicitacaoLinha({ tipo_servico: "terceirizacao" }));
+  assert.equal((await aprovar(db)).status, 201);
+  for (const campo of CAMPOS_DA_TAXA) assert.ok(!(campo in db.tabelas.vagas[0]), campo);
+  await esperarPendentes();
+  assert.equal(db.tabelas.audit_logs.length, 0);
+});
+await casoRota("Criar Vaga do link com snapshot ausente ou inválido: a vaga é criada normalmente, sem taxa (nada inventado) e a auditoria registra que nada foi copiado", async () => {
+  const invalidos: unknown[] = [null, {}, "lixo", { condicoes: { taxa_sem_reposicao_pct: "45" } }, snap({ ...COND_PADRAO, prazo_faturamento_dias: 0 }), { itens: [], link_id: "l" }];
+  for (const condicoes_aceitas of invalidos) {
+    const db = bancoDeAprovacao(solicitacaoLinha({ condicoes_aceitas }));
+    const r = await aprovar(db);
+    assert.equal(r.status, 201, JSON.stringify(condicoes_aceitas));
+    const vaga = db.tabelas.vagas[0];
+    assert.equal(vaga.titulo, "Auxiliar administrativo");
+    assert.deepEqual([vaga.fee_rs_percentual, vaga.fee_rs_prazo_cobranca, vaga.taxa_cancelamento, vaga.taxa_cancelamento_percentual], [null, null, false, null]);
+    assert.equal(db.tabelas.solicitacoes_vagas[0].status, "aprovada");
+    await esperarPendentes();
+    const [aud] = db.tabelas.audit_logs.filter((a: any) => a.acao === "vaga_condicoes_copiadas_do_link");
+    assert.equal(aud.detalhes.copiadas, false);
+    assert.equal(aud.detalhes.fee_rs_percentual, null);
+  }
+});
+await casoRota("auditoria da cópia: só ids, números e o texto do prazo — nenhum dado do cliente, do contato, do IP nem o token", async () => {
+  const db = bancoDeAprovacao(solicitacaoLinha());
+  const r = await aprovar(db);
+  assert.equal(r.status, 201);
+  await esperarPendentes();
+  const [aud] = db.tabelas.audit_logs.filter((a: any) => a.acao === "vaga_condicoes_copiadas_do_link");
+  assert.ok(aud, "auditoria gravada");
+  assert.equal(aud.entidade, "vagas");
+  assert.equal(aud.entidade_id, db.tabelas.vagas[0].id);
+  assert.deepEqual(aud.detalhes, {
+    solicitacao_id: SOL_PEND, copiadas: true, fee_rs_percentual: 40, fee_rs_prazo_cobranca: "15 dias", taxa_cancelamento: true, taxa_cancelamento_percentual: 20,
+  });
+  const texto = JSON.stringify(aud);
+  for (const proibido of ["11.222", "11222333", "@", "(19)", "99999", "Maria", "Cliente Digitado", "203.0.113", TOKEN, TOKEN_LEGADO, "token", "cnpj", "telefone", "email"]) {
+    assert.ok(!texto.includes(proibido), `auditoria não pode conter "${proibido}"`);
+  }
+  assert.equal(aud.usuario_id, "user-1");
+});
+await casoRota("falha na auditoria ou na leitura do snapshot nunca impede a criação da vaga", async () => {
+  const db = bancoDeAprovacao(solicitacaoLinha());
+  db.falhas["audit_logs.insert"] = "falha simulada na auditoria";
+  const r = await aprovar(db);
+  assert.equal(r.status, 201);
+  assert.equal(db.tabelas.vagas.length, 1);
+  assert.equal(db.tabelas.vagas[0].fee_rs_percentual, 40);
+  // condicoes_aceitas fora do formato esperado (texto) também não derruba nada
+  const lixo = bancoDeAprovacao(solicitacaoLinha({ condicoes_aceitas: "isto não é um snapshot" }));
+  assert.equal((await aprovar(lixo)).status, 201);
+  assert.equal(lixo.tabelas.vagas.length, 1);
+});
+
+
+// ── O select da aprovação traz as colunas que a cópia das condições usa ──────
+caso("from-solicitacao lê solicitacoes_vagas com select que traz origem, tipo_servico e condicoes_aceitas (se o select for reduzido, este teste quebra)", () => {
+  const fonte = fs.readFileSync("src/app/api/vagas/from-solicitacao/route.ts", "utf8");
+  const achado = fonte.match(/\.from\("solicitacoes_vagas"\)\s*\.select\(("[^"]*")\)/);
+  assert.ok(achado, "select de solicitacoes_vagas não encontrado");
+  const colunas = achado![1].slice(1, -1);
+  if (colunas.trim() !== "*") {
+    for (const c of ["origem", "tipo_servico", "condicoes_aceitas", "cliente_id", "unidade_id"]) assert.ok(colunas.split(",").map((x) => x.trim()).includes(c), `select sem a coluna ${c}`);
+  }
+  // E o uso das três colunas continua no código (não só o select).
+  for (const uso of ["sol.origem", "sol.tipo_servico", "sol.condicoes_aceitas"]) assert.ok(fonte.includes(uso), `a rota não usa mais ${uso}`);
+});
+
+// ── Cobrança R&S sem cliente: aviso interno (aditivo), retorno e demais caminhos iguais ──
+function bancoDeCobranca(vagaExtra: Record<string, unknown> = {}) {
+  return criarDb({
+    vagas: [{
+      id: "vaga-1", titulo: "Auxiliar administrativo", tipo_servico: "recrutamento_selecao", fee_rs_percentual: 40, fee_rs_prazo_cobranca: "15 dias",
+      cliente_id: null, cliente_nome: null, cliente_nome_temp: "Cliente Digitado SA", unidade_id: U1, taxa_cancelamento: true, taxa_cancelamento_percentual: 20,
+      salario: "2500", ...vagaExtra,
+    }],
+    candidatos_vagas: [{ id: "cv-1", candidato_id: "cand-1", vaga_id: "vaga-1" }],
+    candidatos: [{ id: "cand-1", nome_completo: "Fulano de Tal" }],
+    clientes: [],
+    cobrancas_rs: [],
+    notificacoes_analista: [],
+    analistas_perfil: [{ id: "a1", user_id: "user-1", unidade_id: U1, acesso_todas_unidades: false, nome_completo: "Ana Analista", ativo: true, nivel_acesso: "analista" }],
+  });
+}
+const avisosSemCliente = (db: any) => db.tabelas.notificacoes_analista.filter((n: any) => n.titulo === TITULO_AVISO_VAGA_SEM_CLIENTE);
+// O memdb grava criado_em, não created_at (o Postgres grava created_at por padrão): copia, para a janela de 24h enxergar a linha.
+const comoNoBanco = (db: any) => { for (const n of db.tabelas.notificacoes_analista) n.created_at ??= new Date().toISOString(); };
+
+await casoRota("cobrança de contratação: vaga com taxa e SEM cliente (cliente_id e cliente_nome nulos) avisa o analista, não cria cobrança e o retorno é o de sempre", async () => {
+  const db = bancoDeCobranca();
+  (globalThis as any).__DB__ = db;
+  const r = await gerarCobrancaRSSeAplicavel("vaga-1", "cv-1");
+  assert.deepEqual(r, { criada: false, motivo: "sem_cliente_vinculado" });
+  assert.equal(db.tabelas.cobrancas_rs.length, 0);
+  const avisos = avisosSemCliente(db);
+  assert.ok(avisos.length >= 1, "aviso gravado");
+  for (const a of avisos) {
+    assert.equal(a.tipo, "fee_rs_nao_configurado", "mesmo tipo de notificação do aviso de taxa");
+    assert.equal(a.vaga_id, "vaga-1");
+    assert.equal(a.unidade_id, U1);
+    assert.equal(a.candidato_id, "cand-1");
+    assert.ok(a.mensagem.includes('"Auxiliar administrativo"'), "cita o título da vaga");
+    assert.match(a.mensagem, /cadastre ou vincule o cliente à vaga para a cobrança ser gerada/i);
+    assert.match(a.mensagem, /contratado/);
+    const texto = JSON.stringify(a);
+    for (const proibido of ["Fulano", "Cliente Digitado", "@", "11.222", "(19)", "cnpj", "telefone"]) assert.ok(!texto.includes(proibido), `aviso não pode conter "${proibido}"`);
+  }
+});
+await casoRota("cobrança sem cliente: o aviso não repete em 24h (mesma vaga e candidato) e volta a valer depois da janela", async () => {
+  const db = bancoDeCobranca();
+  (globalThis as any).__DB__ = db;
+  await gerarCobrancaRSSeAplicavel("vaga-1", "cv-1");
+  comoNoBanco(db);
+  const primeiros = avisosSemCliente(db).length;
+  assert.ok(primeiros >= 1);
+  for (let i = 0; i < 3; i++) assert.deepEqual(await gerarCobrancaRSSeAplicavel("vaga-1", "cv-1"), { criada: false, motivo: "sem_cliente_vinculado" });
+  assert.equal(avisosSemCliente(db).length, primeiros, "não repetiu dentro de 24h");
+  for (const n of db.tabelas.notificacoes_analista) n.created_at = new Date(Date.now() - 25 * 3600 * 1000).toISOString();
+  await gerarCobrancaRSSeAplicavel("vaga-1", "cv-1");
+  assert.ok(avisosSemCliente(db).length > primeiros, "passadas 24h, avisa de novo");
+});
+await casoRota("cobrança: vaga com cliente_nome legado preenchido continua gerando a cobrança normalmente, sem o aviso novo", async () => {
+  const db = bancoDeCobranca({ cliente_nome: "Cliente Legado SA" });
+  (globalThis as any).__DB__ = db;
+  const r = await gerarCobrancaRSSeAplicavel("vaga-1", "cv-1");
+  assert.equal(r.criada, true);
+  assert.equal(db.tabelas.cobrancas_rs.length, 1);
+  assert.equal(db.tabelas.cobrancas_rs[0].cliente_nome_snapshot, "Cliente Legado SA");
+  assert.equal(db.tabelas.cobrancas_rs[0].fee_percentual, 40);
+  assert.equal(avisosSemCliente(db).length, 0);
+});
+await casoRota("cobrança sem cliente: falha ao notificar não impede o retorno (nem lança)", async () => {
+  const db = bancoDeCobranca();
+  db.falhas["notificacoes_analista.insert"] = "falha simulada";
+  (globalThis as any).__DB__ = db;
+  assert.deepEqual(await gerarCobrancaRSSeAplicavel("vaga-1", "cv-1"), { criada: false, motivo: "sem_cliente_vinculado" });
+  const db2 = bancoDeCobranca();
+  db2.falhas["notificacoes_analista.select"] = "falha simulada na checagem de repetição";
+  (globalThis as any).__DB__ = db2;
+  assert.deepEqual(await gerarCobrancaRSSeAplicavel("vaga-1", "cv-1"), { criada: false, motivo: "sem_cliente_vinculado" });
+  assert.equal(db2.tabelas.cobrancas_rs.length, 0);
+});
+await casoRota("demais caminhos da cobrança não mudam: sem taxa continua 'sem_fee_configurado' (com o aviso de sempre, sem o novo); não-R&S e 'já existe' idem", async () => {
+  const semTaxa = bancoDeCobranca({ fee_rs_percentual: null });
+  (globalThis as any).__DB__ = semTaxa;
+  assert.deepEqual(await gerarCobrancaRSSeAplicavel("vaga-1", "cv-1"), { criada: false, motivo: "sem_fee_configurado" });
+  assert.equal(avisosSemCliente(semTaxa).length, 0, "ramo da taxa ausente não usa o aviso novo");
+  assert.ok(semTaxa.tabelas.notificacoes_analista.some((n: any) => n.titulo === "Taxa de R&S não configurada"), "aviso de taxa ausente, como antes");
+  const terc = bancoDeCobranca({ tipo_servico: "terceirizacao" });
+  (globalThis as any).__DB__ = terc;
+  assert.deepEqual(await gerarCobrancaRSSeAplicavel("vaga-1", "cv-1"), { criada: false, motivo: "nao_e_rs" });
+  assert.equal(terc.tabelas.notificacoes_analista.length, 0);
+  const jaExiste = bancoDeCobranca();
+  jaExiste.tabelas.cobrancas_rs.push({ id: "c1", candidato_vaga_id: "cv-1", vaga_id: "vaga-1", tipo: "contratacao" });
+  (globalThis as any).__DB__ = jaExiste;
+  assert.deepEqual(await gerarCobrancaRSSeAplicavel("vaga-1", "cv-1"), { criada: false, motivo: "ja_existe" });
+  assert.equal(jaExiste.tabelas.notificacoes_analista.length, 0);
+});
+await casoRota("cobrança de cancelamento: vaga sem cliente avisa e não cria; com cliente_nome legado cria como antes; sem taxa de cancelamento segue 'sem_taxa_cancelamento_configurada'", async () => {
+  const sem = bancoDeCobranca();
+  (globalThis as any).__DB__ = sem;
+  assert.deepEqual(await gerarCobrancaCancelamentoRSSeAplicavel("vaga-1"), { criada: false, motivo: "sem_cliente_vinculado" });
+  assert.equal(sem.tabelas.cobrancas_rs.length, 0);
+  const [aviso] = avisosSemCliente(sem);
+  assert.ok(aviso, "aviso gravado");
+  assert.equal(aviso.candidato_id, null);
+  assert.equal(aviso.vaga_id, "vaga-1");
+  assert.ok(aviso.mensagem.includes('"Auxiliar administrativo"') && /foi cancelada/.test(aviso.mensagem) && /cadastre ou vincule o cliente/i.test(aviso.mensagem));
+  const legado = bancoDeCobranca({ cliente_nome: "Cliente Legado SA" });
+  (globalThis as any).__DB__ = legado;
+  const r = await gerarCobrancaCancelamentoRSSeAplicavel("vaga-1");
+  assert.equal(r.criada, true);
+  assert.equal(legado.tabelas.cobrancas_rs[0].tipo, "cancelamento");
+  assert.equal(legado.tabelas.cobrancas_rs[0].cliente_nome_snapshot, "Cliente Legado SA");
+  assert.equal(avisosSemCliente(legado).length, 0);
+  const semTaxa = bancoDeCobranca({ taxa_cancelamento: false, taxa_cancelamento_percentual: null });
+  (globalThis as any).__DB__ = semTaxa;
+  assert.deepEqual(await gerarCobrancaCancelamentoRSSeAplicavel("vaga-1"), { criada: false, motivo: "sem_taxa_cancelamento_configurada" });
+  assert.equal(avisosSemCliente(semTaxa).length, 0);
 });
 
 // ── Salário: mesmo formato gravado do portal + o servidor só aceita o que o seletor gera ───────────────────────────────────

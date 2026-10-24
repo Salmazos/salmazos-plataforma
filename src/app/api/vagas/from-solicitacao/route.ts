@@ -11,6 +11,8 @@ import { emailClienteLigado } from "@/lib/avisoCliente";
 import { destinatariosEmailCliente } from "@/lib/destinatariosEmailCliente";
 import { enviarEmailAoCliente } from "@/lib/enviarEmailAoCliente";
 import { requisitosPublicaveis } from "@/lib/solicitacaoVagaCampos";
+import { condicoesParaVaga } from "@/lib/solicitacaoVagaCondicoesVaga";
+import { registrarAuditoria } from "@/lib/audit";
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,6 +59,11 @@ export async function POST(request: NextRequest) {
     const slug = await generateUniqueSlug(sol.cargo, service);
     const numPosicoes = sol.num_posicoes ?? 1;
 
+    // Só a solicitação do link público (R&S): o cliente aceitou condições comerciais, e elas viram a taxa da vaga. Solicitação do
+    // portal NÃO entra aqui: o insert dela continua sem esses campos, como sempre foi (a taxa é configurada à mão na vaga).
+    const copiaCondicoes = sol.origem === "link_publico" && sol.tipo_servico === "recrutamento_selecao";
+    const condicoesVaga = copiaCondicoes ? condicoesParaVaga(sol.condicoes_aceitas) : null;
+
     const { data: vaga, error: vagaErr } = await service
       .from("vagas")
       .insert({
@@ -91,6 +98,7 @@ export async function POST(request: NextRequest) {
         // clientes.unidade_id no portal), não a de quem aprova no painel — um sócio com
         // acesso a todas as unidades aprovando pedido de cliente SBC cria vaga de SBC.
         unidade_id: sol.unidade_id,
+        ...(condicoesVaga ?? {}),
       })
       .select("id")
       .single();
@@ -107,6 +115,28 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", solicitacao_id);
+
+    // Auditoria do que foi copiado do link para a vaga: só números e o texto do prazo, nunca dados do cliente nem o token. Isolada: a
+    // vaga já foi criada e nada aqui pode derrubar a resposta.
+    if (condicoesVaga) {
+      try {
+        registrarAuditoria({
+          usuario_id: user.id,
+          usuario_nome: analistaNome,
+          acao: "vaga_condicoes_copiadas_do_link",
+          entidade: "vagas",
+          entidade_id: vaga.id,
+          detalhes: {
+            solicitacao_id: solicitacao_id,
+            // false = snapshot ausente ou fora do formato: nada foi copiado e a taxa segue "não configurada" na vaga.
+            copiadas: condicoesVaga.fee_rs_percentual !== null,
+            ...condicoesVaga,
+          },
+        });
+      } catch (err) {
+        console.error("[POST /api/vagas/from-solicitacao] Erro ao auditar as condições copiadas:", err instanceof Error ? err.name : "erro");
+      }
+    }
 
     // Interruptor "E-mail" (Configurações > Avisos; padrão desligado: o sino do portal já avisa) e
     // destinatários = login de cada usuário do portal (sem usuário, contato_email). cliente_id vem da solicitação.

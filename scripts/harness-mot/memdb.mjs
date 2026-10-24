@@ -12,6 +12,8 @@ const RELACOES = {
   encaminhamentos: { clientes: { alvo: "clientes", local: "cliente_id" }, candidatos: { alvo: "candidatos", local: "candidato_id" } },
   // Desistência antes da admissão (scripts/verificar-candidato-desistiu.mts): escopo de unidade via vagas!candidatos_vagas_vaga_id_fkey.
   candidatos_vagas: { vagas: { alvo: "vagas", local: "vaga_id" }, candidatos: { alvo: "candidatos", local: "candidato_id" } },
+  // Cobrança R&S de cancelamento (scripts/verificar-solicitacao-link.mts): a vaga traz o cliente cadastrado.
+  vagas: { clientes: { alvo: "clientes", local: "cliente_id" } },
 };
 
 export function criarDb(seed = {}) {
