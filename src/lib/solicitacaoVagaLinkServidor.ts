@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { MAX_USOS_LINK } from "@/lib/solicitacaoVagaLink";
+import { formatoTokenValido } from "@/lib/solicitacaoVagaToken";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -18,14 +19,13 @@ export interface LinkSolicitacao {
   clausulas_adicionais: unknown;
 }
 
-// Token gerado por crypto.randomBytes(24).toString("base64url") = 32 caracteres; o formato é checado antes de consultar o banco.
-const FORMATO_TOKEN = /^[A-Za-z0-9_-]{20,64}$/;
-
 export async function resolverLinkPorToken(svc: ServiceClient, token: string): Promise<LinkSolicitacao | null> {
-  if (!FORMATO_TOKEN.test(token)) return null;
+  // Formato novo (slug + 12 aleatórios) ou legado (32 caracteres): o que não bate nem consulta o banco.
+  if (!formatoTokenValido(token)) return null;
   const { data, error } = await svc.from("solicitacao_vaga_links").select("*").eq("token", token).maybeSingle();
   if (error) {
-    console.error("[solicitacaoVagaLink] Erro ao ler o link:", error.code ?? error.message);
+    // Só o código do erro: a mensagem de um erro da consulta poderia ecoar o token pesquisado.
+    console.error("[solicitacaoVagaLink] Erro ao ler o link:", error.code ?? "sem código");
     return null;
   }
   return (data as LinkSolicitacao | null) ?? null;
@@ -66,6 +66,6 @@ export async function devolverUsoDoLink(svc: ServiceClient, linkId: string): Pro
       if (data && data.length > 0) return;
     }
   } catch (err) {
-    console.error("[solicitacaoVagaLink] Erro ao devolver o envio do link:", err instanceof Error ? err.message : err);
+    console.error("[solicitacaoVagaLink] Erro ao devolver o envio do link:", err instanceof Error ? err.name : "erro");
   }
 }

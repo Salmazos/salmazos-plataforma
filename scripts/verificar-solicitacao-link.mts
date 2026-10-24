@@ -23,6 +23,9 @@ import { PADROES_RS } from "../src/lib/propostaModelos";
 import { publicoSolicitarVagaSchema, solicitacaoLinkCreateSchema } from "../src/lib/schemas";
 import * as rotaPublica from "../src/app/api/solicitacao-vaga-publica/[token]/route";
 import * as rotaLinks from "../src/app/api/solicitacoes-vagas/links/route";
+import {
+  ALFABETO_BASE62, aleatorioBase62, formatoTokenValido, gerarTokenLink, inserirComTokenNovo, slugDaEmpresa, TAMANHO_MAX_SLUG,
+} from "../src/lib/solicitacaoVagaToken";
 import { criarDb } from "./harness-mot/memdb.mjs";
 
 let total = 0;
@@ -43,6 +46,9 @@ const AMANHA = "2026-10-27T12:00:00.000Z";
 const ONTEM = "2026-10-25T12:00:00.000Z";
 const CNPJ_OK = "11.222.333/0001-81";
 const CPF_OK = "529.982.247-25";
+const TOKEN = "acme-industria-7kQ2mXp9RbTw"; // formato novo: slug + 12 aleatórios
+const TOKEN_B = "outra-empresa-Bq3Zr8LmN5Tc";
+const TOKEN_LEGADO = "AbCdEfGhIjKlMnOpQrStUvWxYz012345"; // formato antigo: 32 caracteres (base64url de 24 bytes)
 
 // ── Link: validade ───────────────────────────────────────────────────────────
 caso("validarLink: link válido", () => {
@@ -489,11 +495,71 @@ caso("schema público: limite em TODOS os textos, e-mail/CNPJ/telefone/UF invál
   assert.ok(falha({ beneficios_chips: Object.fromEntries(Array.from({ length: 61 }, (_, i) => [`b${i}`, true])) }));
 });
 
+// ── Token do link: formato, slug, aleatoriedade e retentativas ───────────────
+caso("slug da empresa: sem acento, minúsculo, só letras/números/hífen, até 30 caracteres, sem hífen nas pontas", () => {
+  assert.equal(slugDaEmpresa("Acme Indústria"), "acme-industria");
+  assert.equal(slugDaEmpresa("Açaí & Café — São João Ltda."), "acai-cafe-sao-joao-ltda");
+  assert.equal(slugDaEmpresa("  --Padaria   do   Zé!!  "), "padaria-do-ze");
+  assert.equal(slugDaEmpresa("<script>alert(1)</script>"), "script-alert-1-script");
+  assert.equal(slugDaEmpresa("../../etc/passwd"), "etc-passwd");
+  assert.equal(slugDaEmpresa("Ünïcödé Çomércio"), "unicode-comercio");
+  const longo = slugDaEmpresa("Indústria e Comércio de Máquinas e Equipamentos Industriais do Brasil Ltda");
+  assert.ok(longo.length <= TAMANHO_MAX_SLUG && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(longo), longo);
+  assert.equal(longo, "industria-e-comercio-de-maquin", "corta em 30 caracteres");
+  assert.equal(slugDaEmpresa("a".repeat(29) + " bcd"), "a".repeat(29), "se o corte cai num hífen, ele não sobra");
+  assert.equal(slugDaEmpresa("Empresa de Teste Muito Extensa Ltda"), "empresa-de-teste-muito-extensa", "corte em 30 caracteres");
+  for (const vazio of ["", "   ", "!!!", "😀😀", null, undefined]) assert.equal(slugDaEmpresa(vazio as string | null), "", String(vazio));
+});
+caso("token novo: com nome = slug-12aleatórios; sem nome = só os 12; comprimento máximo 43; todo token gerado é válido", () => {
+  const comNome = gerarTokenLink("Acme Indústria");
+  assert.match(comNome, /^acme-industria-[A-Za-z0-9]{12}$/);
+  assert.match(gerarTokenLink(null), /^[A-Za-z0-9]{12}$/);
+  assert.match(gerarTokenLink(""), /^[A-Za-z0-9]{12}$/);
+  assert.match(gerarTokenLink("!!!"), /^[A-Za-z0-9]{12}$/, "só símbolos = sem slug");
+  const maximo = gerarTokenLink("a".repeat(200));
+  assert.equal(maximo.length, TAMANHO_MAX_SLUG + 1 + 12);
+  for (const nome of ["Acme", "Açaí & Café", "x", "", null, "Empresa Muito Longa ".repeat(10), "<b>x</b>"]) {
+    const t = gerarTokenLink(nome as string | null);
+    assert.ok(formatoTokenValido(t), t);
+    assert.ok(!t.includes("_") && !t.includes("."), "nada de caracteres que quebrem a URL");
+  }
+});
+caso("aleatoriedade: vem de crypto.randomBytes (nunca Math.random), sem viés (descarta bytes >= 248) e é única em 10.000 gerações", () => {
+  const fonte = fs.readFileSync("src/lib/solicitacaoVagaToken.ts", "utf8");
+  assert.ok(fonte.includes('from "node:crypto"') && fonte.includes("randomBytes"), "usa crypto.randomBytes");
+  assert.ok(!fonte.includes("Math.random"), "sem Math.random");
+  assert.equal(ALFABETO_BASE62.length, 62);
+  assert.equal(new Set(ALFABETO_BASE62).size, 62);
+  // Bytes controlados: 255, 254 e 248 (a partir do limite) são descartados; 247 % 62 = 61; 0 e 61 são aproveitados; 62 % 62 = 0.
+  const entrada = [255, 254, 248, 247, 0, 61, 62, 123, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+  const sorteado = aleatorioBase62(12, () => Uint8Array.from(entrada));
+  assert.equal(sorteado, [247, 0, 61, 62, 123, 1, 2, 3, 4, 5, 6, 7].map((b) => ALFABETO_BASE62[b % 62]).join(""));
+  // Sem viés na prática: distribuição quase uniforme em 310.000 caracteres (5.000 por símbolo esperados).
+  const contagem = new Map<string, number>();
+  for (let i = 0; i < 25_000; i++) for (const c of aleatorioBase62(12)) contagem.set(c, (contagem.get(c) ?? 0) + 1);
+  assert.equal(contagem.size, 62);
+  const valores = [...contagem.values()];
+  assert.ok(Math.max(...valores) / Math.min(...valores) < 1.15, `distribuição ${Math.min(...valores)}..${Math.max(...valores)}`);
+  const unicos = new Set<string>();
+  for (let i = 0; i < 10_000; i++) unicos.add(gerarTokenLink("Acme Indústria"));
+  assert.equal(unicos.size, 10_000);
+  const semNome = new Set<string>();
+  for (let i = 0; i < 10_000; i++) semNome.add(gerarTokenLink(null));
+  assert.equal(semNome.size, 10_000);
+});
+caso("formato do token: aceita o novo e o legado de 32 caracteres; rejeita lixo", () => {
+  for (const ok of [TOKEN, TOKEN_B, TOKEN_LEGADO, "7kQ2mXp9RbTw", "a-b-c-7kQ2mXp9RbTw", "x".repeat(19) + "-7kQ2mXp9RbTw", "A_b-C_d-E_f-G_h-I_j-K_l-M_n-O_p-"]) assert.ok(formatoTokenValido(ok), ok);
+  const lixo = [
+    "", "curto", "7kQ2mXp9Rb", "7kQ2mXp9RbTwX", "tok_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345", "acme-industria-7kQ2mXp9Rb", "acme industria-7kQ2mXp9RbTw",
+    "ACME-7kQ2mXp9RbTw", "acme--7kQ2mXp9RbTw", "-acme-7kQ2mXp9RbTw", "acme-7kQ2mXp9RbT!", "../../etc/passwd", "acme/7kQ2mXp9RbTw", "a".repeat(31) + "-7kQ2mXp9RbTw",
+    "%00", "<script>", "a".repeat(100), TOKEN_LEGADO + "x", TOKEN_LEGADO.slice(1),
+  ];
+  for (const ruim of lixo) assert.ok(!formatoTokenValido(ruim), JSON.stringify(ruim));
+  for (const naoTexto of [null, undefined, 12, {}, []]) assert.ok(!formatoTokenValido(naoTexto));
+});
 // ── Rotas (banco em memória) ─────────────────────────────────────────────────
 const U1 = "unid-1";
 const U2 = "unid-2";
-const TOKEN = "tok_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
-const TOKEN_B = "tok_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
 const FUTURO = new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString();
 const PASSADO = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
 function linhaLink(extra: Record<string, unknown> = {}) {
@@ -540,13 +606,28 @@ await casoRota("GET público: link válido devolve nome e o texto numerado já r
   assert.ok(!("token" in r.body.data) && !("unidade_id" in r.body.data) && !("id" in r.body.data), "só o necessário");
 });
 await casoRota("GET público: inexistente (404), expirado, revogado e no limite (410), todos com a mesma mensagem amigável", async () => {
-  assert.equal((await chamarRota(novoBanco(), rotaPublica.GET, { token: "tok_ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ" })).status, 404);
+  assert.equal((await chamarRota(novoBanco(), rotaPublica.GET, { token: "naoexiste-Zz9Yy8Xx7Ww6" })).status, 404);
   assert.equal((await chamarRota(novoBanco(), rotaPublica.GET, { token: "curto" })).status, 404, "formato inválido nem consulta o banco");
   for (const extra of [{ expira_em: PASSADO }, { revogado_em: PASSADO }, { usos: MAX_USOS_LINK }]) {
     const r = await chamarRota(novoBanco([linhaLink(extra)]), rotaPublica.GET);
     assert.equal(r.status, 410);
     assert.equal(r.body.error, MENSAGEM_LINK_INDISPONIVEL);
   }
+});
+await casoRota("link antigo de 32 caracteres continua funcionando (GET e POST) e token malformado dá 404 sem consultar o banco", async () => {
+  const db = novoBanco([linhaLink({ token: TOKEN_LEGADO })]);
+  const get = await chamarRota(db, rotaPublica.GET, { token: TOKEN_LEGADO });
+  assert.equal(get.status, 200);
+  assert.equal(get.body.data.nome_empresa, "Acme Indústria");
+  assert.equal((await postPublico(db, corpoValido(), { token: TOKEN_LEGADO })).status, 201);
+  assert.equal(db.tabelas.solicitacao_vaga_links[0].usos, 1);
+  const semBanco = novoBanco();
+  for (const ruim of ["curto", "tok_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345", "../etc/passwd", "ACME-7kQ2mXp9RbTw", "a".repeat(80), "acme--7kQ2mXp9RbTw"]) {
+    assert.equal((await chamarRota(semBanco, rotaPublica.GET, { token: ruim })).status, 404, `GET ${ruim}`);
+    assert.equal((await postPublico(semBanco, corpoValido(), { token: ruim })).status, 404, `POST ${ruim}`);
+  }
+  assert.equal(semBanco.consultas.length, 0, "nenhuma consulta ao banco para token fora do formato");
+  assert.equal(semBanco.tabelas.solicitacoes_vagas.length, 0);
 });
 await casoRota("POST público: grava na fila (cliente_id nulo, R&S fixo, origem link, snapshot do LINK, IP do 1º x-forwarded-for) e conta o uso", async () => {
   const db = novoBanco();
@@ -626,7 +707,7 @@ await casoRota("rota do analista: gera link na unidade de quem gera, com condiç
   const criado = db.tabelas.solicitacao_vaga_links[0];
   assert.equal(criado.unidade_id, U1);
   assert.equal(criado.criado_por_user_id, "user-1");
-  assert.match(criado.token, /^[A-Za-z0-9_-]{32}$/);
+  assert.match(criado.token, /^[A-Za-z0-9]{12}$/, "sem nome de empresa: só os 12 aleatórios");
   assert.deepEqual(criado.condicoes, PADROES_RS);
   assert.ok(sem.body.data.url.endsWith(`/solicitar-vaga/${criado.token}`));
   assert.ok(new Date(criado.expira_em).getTime() > Date.now() + 14 * 24 * 3600 * 1000, "15 dias por padrão");
@@ -663,6 +744,44 @@ await casoRota("rota do analista: lista só os links da própria unidade; revoga
   assert.equal(via.status, 200, "revogar de novo é idempotente");
   await esperarPendentes();
   assert.equal(db.tabelas.audit_logs.filter((a: any) => a.acao === "solicitacao_link_revogado").length, 1, "audita só a primeira revogação");
+});
+
+await casoRota("colisão de token: nova tentativa com outro token, no máximo 3; outro erro não repete; o token não vai a log nem a auditoria", async () => {
+  const tentados: string[] = [];
+  const colisao = { code: "23505", message: "duplicate key value violates unique constraint" };
+  const duasColisoes = await inserirComTokenNovo<{ id: string }>("Acme", async (t) => {
+    tentados.push(t);
+    return tentados.length < 3 ? { data: null, error: colisao } : { data: { id: "ok" }, error: null };
+  });
+  assert.equal(duasColisoes.tentativas, 3);
+  assert.deepEqual(duasColisoes.data, { id: "ok" });
+  assert.equal(new Set(tentados).size, 3, "cada tentativa usa um token novo");
+  tentados.length = 0;
+  const sempreColide = await inserirComTokenNovo<{ id: string }>("Acme", async (t) => { tentados.push(t); return { data: null, error: colisao }; });
+  assert.equal(tentados.length, 3, "no máximo 3 tentativas");
+  assert.equal(sempreColide.error?.code, "23505");
+  tentados.length = 0;
+  const outroErro = await inserirComTokenNovo<{ id: string }>("Acme", async (t) => { tentados.push(t); return { data: null, error: { code: "42501", message: "x" } }; });
+  assert.equal(tentados.length, 1, "erro que não é colisão não repete");
+  assert.equal(outroErro.error?.code, "42501");
+  // Na rota: três colisões seguidas → 500 com mensagem genérica, exatamente 3 inserts, log só com o código.
+  const db = novoBanco([]);
+  db.falhas["solicitacao_vaga_links.insert"] = colisao;
+  const logs: unknown[][] = [];
+  console.error = (...args: unknown[]) => { logs.push(args); };
+  const r = await chamarRota(db, rotaLinks.POST, { metodo: "POST", usuario: "user-1", corpo: { nome_empresa: "Acme Indústria" } });
+  console.error = () => undefined;
+  assert.equal(r.status, 500);
+  assert.equal(r.body.error, "Não foi possível gerar o link.");
+  assert.equal(db.consultas.filter((c: any) => c.tabela === "solicitacao_vaga_links" && c.op === "insert").length, 3);
+  assert.deepEqual(logs, [["[POST /api/solicitacoes-vagas/links]", "23505"]]);
+  assert.equal(db.tabelas.solicitacao_vaga_links.length, 0);
+  await esperarPendentes();
+  assert.equal((db.tabelas.audit_logs ?? []).filter((a: any) => a.acao === "solicitacao_link_criado").length, 0, "falhou: nada auditado");
+  // Rota gerando o link: token no formato novo com o slug do nome e fora da auditoria.
+  const ok = await chamarRota(novoBanco([]), rotaLinks.POST, { metodo: "POST", usuario: "user-1", corpo: { nome_empresa: "Acme Indústria" } });
+  assert.equal(ok.status, 201);
+  assert.match(ok.body.data.url, /\/solicitar-vaga\/acme-industria-[A-Za-z0-9]{12}$/);
 });
 
 // ── Salário: mesmo formato gravado do portal + o servidor só aceita o que o seletor gera ───────────────────────────────────
