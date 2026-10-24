@@ -10,6 +10,7 @@ import { avisarSolicitacaoDecidida } from "@/lib/avisoClienteDecisao";
 import { emailClienteLigado } from "@/lib/avisoCliente";
 import { destinatariosEmailCliente } from "@/lib/destinatariosEmailCliente";
 import { enviarEmailAoCliente } from "@/lib/enviarEmailAoCliente";
+import { requisitosPublicaveis } from "@/lib/solicitacaoVagaCampos";
 
 export async function POST(request: NextRequest) {
   try {
@@ -70,7 +71,9 @@ export async function POST(request: NextRequest) {
         salario: sol.salario ?? null,
         adicionais_salariais: sol.adicionais_salariais ?? null,
         horario: sol.horario_texto ?? null,
-        requisitos: sol.requisitos ?? null,
+        // Solicitação do link público: além do que o cliente pediu, só habilitação e veículo próprio (ligados à função) entram nos
+        // requisitos. Sexo, idade e PCD ficam em perfil_extra, uso interno, e NUNCA são publicados.
+        requisitos: sol.origem === "link_publico" ? requisitosPublicaveis(sol.requisitos, sol.perfil_extra) : sol.requisitos ?? null,
         beneficios: sol.beneficios ?? null,
         principais_atividades: sol.principais_atividades ?? null,
         habilidades_desejadas: [],

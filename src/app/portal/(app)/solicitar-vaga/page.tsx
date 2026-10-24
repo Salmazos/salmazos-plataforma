@@ -4,40 +4,17 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import { SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, detectarModoSalario, extrairSalarioHora, formatarSalarioHora, type SalarioModo } from "@/lib/constants";
-
-const ESTADOS = [
-  "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG",
-  "PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO",
-];
+// Listas de chips, estados e horários vêm de UM só lugar, compartilhado com o link público de solicitação de vaga.
+import {
+  BEN_ALIMENTACAO, BEN_QUALIDADE, BEN_SAUDE, BEN_TRANSPORTE, CONDICOES_SIMPLES, CONDICOES_SUPERIOR, CONDICOES_TECNICO, ESTADOS,
+  HORARIO_TIPOS, REQ_CNH, REQ_COM_CONDICAO_SIMPLES, REQ_COM_CURSO, REQ_CONHECIMENTOS, REQ_ESCOLARIDADE, REQ_EXPERIENCIA, REQ_NR,
+} from "@/lib/solicitacaoVagaCampos";
 
 const TIPOS = [
   { id: "recrutamento_selecao", icon: "🎯", label: "Recrutamento e Seleção", desc: "Contratação direta pelo cliente" },
   { id: "mao_obra_temporaria", icon: "⏱", label: "Mão de Obra Temporária", desc: "Funcionário Salmazos, contrato temporário" },
   { id: "terceirizacao", icon: "🏢", label: "Terceirização", desc: "Funcionário Salmazos, prazo indeterminado" },
 ] as const;
-
-const HORARIO_TIPOS = [
-  { id: "seg_sex", label: "Segunda a Sexta" },
-  { id: "6x1", label: "Escala 6x1" },
-  { id: "6x2", label: "Escala 6x2" },
-  { id: "12x36", label: "Escala 12x36" },
-  { id: "turno_fixo", label: "Turno Fixo" },
-  { id: "a_combinar", label: "A combinar" },
-  { id: "personalizado", label: "Personalizado" },
-] as const;
-
-const REQ_ESCOLARIDADE = ["Ensino Fundamental", "Ensino Médio", "Ensino Técnico", "Ensino Superior"];
-const REQ_COM_CURSO = new Set(["Ensino Técnico", "Ensino Superior"]);
-const REQ_COM_CONDICAO_SIMPLES = new Set(["Ensino Fundamental", "Ensino Médio"]);
-const REQ_EXPERIENCIA = ["Experiência na função", "Experiência em atendimento ao público", "Experiência em liderança/gestão", "Experiência em vendas"];
-const REQ_CNH = ["CNH B", "CNH C", "CNH D", "CNH E"];
-const REQ_NR = ["NR-6", "NR-10", "NR-11", "NR-12", "NR-35"];
-const REQ_CONHECIMENTOS = ["Pacote Office", "Informática básica", "Excel avançado"];
-
-const BEN_TRANSPORTE = ["Vale Transporte", "Fretado", "Auxílio Combustível", "Estacionamento"];
-const BEN_ALIMENTACAO = ["Vale Alimentação", "Vale Refeição", "Refeição no Local", "Cesta Básica"];
-const BEN_SAUDE = ["Convênio Médico", "Convênio Odontológico", "Convênio Farmácia", "Seguro de Vida"];
-const BEN_QUALIDADE = ["Gympass / Totalpass", "Day Off", "PLR", "Bonificação Anual"];
 
 type HorarioTipo = typeof HORARIO_TIPOS[number]["id"];
 
@@ -925,10 +902,6 @@ export default function SolicitarVagaPage() {
     </div>
   );
 }
-
-const CONDICOES_TECNICO = ["Completo", "Cursando", "Completo ou Cursando"];
-const CONDICOES_SUPERIOR = ["Completo", "Cursando", "Completo ou Cursando", "A partir do 6º semestre", "A partir do 3º semestre"];
-const CONDICOES_SIMPLES = ["Completo", "Cursando"];
 
 function IntervaloField({
   value,

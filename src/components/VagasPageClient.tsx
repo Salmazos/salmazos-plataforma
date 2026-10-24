@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import ModalNovaVaga from "./ModalNovaVaga";
 import ModalSolicitacoesVagas from "./ModalSolicitacoesVagas";
+import ModalLinkSolicitacaoVaga from "./ModalLinkSolicitacaoVaga";
 import ModalIndicacoesCandidato from "./ModalIndicacoesCandidato";
 import PainelVagasView from "./painel/PainelVagasView";
 import { TIPOS_SERVICO } from "@/lib/constants";
@@ -46,6 +47,7 @@ export default function VagasPageClient({ vagas: inicial, pendingCount, indicaco
   const [vagas, setVagas] = useState<Vaga[]>(inicial);
   const [modalAberto, setModalAberto] = useState(false);
   const [modalSolicitacoes, setModalSolicitacoes] = useState(false);
+  const [modalLinkSolicitacao, setModalLinkSolicitacao] = useState(false);
   const [modalIndicacoes, setModalIndicacoes] = useState(false);
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>("todas");
   const [busca, setBusca] = useState("");
@@ -181,6 +183,9 @@ export default function VagasPageClient({ vagas: inicial, pendingCount, indicaco
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setModalLinkSolicitacao(true)} className="btn-outline flex items-center gap-2">
+            {"🔗"} Link para cliente novo
+          </button>
           <button
             onClick={() => setModalSolicitacoes(true)}
             className="btn-outline flex items-center gap-2"
@@ -456,6 +461,7 @@ export default function VagasPageClient({ vagas: inicial, pendingCount, indicaco
         focoId={solicitacaoFocoId}
         onVerTodas={limparFocoSolicitacao}
       />
+      <ModalLinkSolicitacaoVaga isOpen={modalLinkSolicitacao} onClose={() => setModalLinkSolicitacao(false)} />
       <ModalIndicacoesCandidato
         isOpen={modalIndicacoes}
         onClose={handleCloseModalIndicacoes}
