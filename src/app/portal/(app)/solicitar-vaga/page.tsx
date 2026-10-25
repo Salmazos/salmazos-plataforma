@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import PortalSolicitacaoEnviada from "@/components/PortalSolicitacaoEnviada";
+import ResumoSolicitacao from "@/components/solicitacao-publica/ResumoSolicitacao";
+import { montarCorpoSolicitacaoPortal, resumoDaSolicitacaoPortal } from "@/lib/resumoDaSolicitacaoPortal";
 import { SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, detectarModoSalario, extrairSalarioHora, formatarSalarioHora, type SalarioModo } from "@/lib/constants";
 // Listas de chips, estados e horários vêm de UM só lugar, compartilhado com o link público de solicitação de vaga.
 import {
@@ -109,6 +112,12 @@ export default function SolicitarVagaPage() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+  // Conferência antes de enviar: o estado do formulário continua todo aqui, só a tela muda.
+  const [revisando, setRevisando] = useState(false);
+  const tituloResumoRef = useRef<HTMLHeadingElement>(null);
+  const botaoRevisarRef = useRef<HTMLButtonElement>(null);
+  const scrollDoFormulario = useRef(0);
+  const voltouDoResumo = useRef(false);
 
   const applyDefaults = (json: { beneficios_padrao?: Record<string, boolean>; horario_padrao?: Record<string, string> }) => {
     if (json.beneficios_padrao && typeof json.beneficios_padrao === "object") {
@@ -350,51 +359,85 @@ export default function SolicitarVagaPage() {
   const requisitosTexto = useMemo(gerarRequisitosTexto, [reqChips, reqCursos, reqCondicoes, reqCustom]);
   const beneficiosTexto = useMemo(gerarBeneficiosTexto, [benChips, benCustom]);
 
-  const handleSubmit = async () => {
+  const montarReqChipsList = (): string[] => {
+    const reqChipsList: string[] = [];
+    for (const chip of [...REQ_ESCOLARIDADE, ...REQ_EXPERIENCIA, ...REQ_CNH, ...REQ_NR, ...REQ_CONHECIMENTOS]) {
+      if (reqChips[chip]) {
+        const curso = reqCursos[chip]?.trim();
+        const condicao = reqCondicoes[chip]?.trim();
+        let text = chip;
+        if (curso) text += ` em ${curso}`;
+        if (condicao) text += ` — ${condicao}`;
+        reqChipsList.push(text);
+      }
+    }
+    reqChipsList.push(...reqCustom);
+    return reqChipsList;
+  };
+
+  // "Revisar solicitação": as mesmas validações de sempre; passando, abre o resumo em vez de enviar.
+  const revisar = () => {
     setError("");
     if (!cargo.trim()) { setError("Cargo é obrigatório."); return; }
     if (!tipoServico) { setError("Tipo de serviço é obrigatório."); return; }
     if (!cidade.trim()) { setError("Cidade é obrigatória."); return; }
     if (!estado) { setError("Estado é obrigatório."); return; }
+    scrollDoFormulario.current = window.scrollY;
+    setRevisando(true);
+  };
+
+  const voltarParaEditar = () => {
+    setError("");
+    voltouDoResumo.current = true;
+    setRevisando(false);
+  };
+
+  // Abrir o resumo leva ao topo e põe o foco no título; voltar devolve a rolagem e o foco ao botão "Revisar solicitação".
+  useEffect(() => {
+    if (revisando) {
+      window.scrollTo(0, 0);
+      tituloResumoRef.current?.focus({ preventScroll: true });
+    } else if (voltouDoResumo.current) {
+      voltouDoResumo.current = false;
+      window.scrollTo(0, scrollDoFormulario.current);
+      botaoRevisarRef.current?.focus({ preventScroll: true });
+    }
+  }, [revisando]);
+
+  // "Confirmar e enviar": o envio de sempre (mesmo corpo, mesmo template, mesma tela de enviado).
+  const confirmarEnvio = async () => {
+    if (submitting) return;
+    setError("");
 
     setSubmitting(true);
     try {
-      const reqChipsList: string[] = [];
-      for (const chip of [...REQ_ESCOLARIDADE, ...REQ_EXPERIENCIA, ...REQ_CNH, ...REQ_NR, ...REQ_CONHECIMENTOS]) {
-        if (reqChips[chip]) {
-          const curso = reqCursos[chip]?.trim();
-          const condicao = reqCondicoes[chip]?.trim();
-          let text = chip;
-          if (curso) text += ` em ${curso}`;
-          if (condicao) text += ` — ${condicao}`;
-          reqChipsList.push(text);
-        }
-      }
-      reqChipsList.push(...reqCustom);
+      const reqChipsList = montarReqChipsList();
 
       const res = await fetch("/api/portal/solicitar-vaga", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          cargo: cargo.trim(),
-          tipo_servico: tipoServico,
-          num_posicoes: Number(numPosicoes) || 1,
-          cidade: cidade.trim(),
-          estado,
-          salario: salarioParaEnvio(),
-          adicionais_salariais: adicionaisSalariais.trim() || null,
-          horario_tipo: horarioTipo || null,
-          horario_texto: horarioTexto || null,
-          previsao_inicio: previsaoInicio || null,
-          requisitos: requisitosTexto || null,
-          requisitos_chips: reqChipsList.length > 0 ? reqChipsList : null,
-          beneficios: beneficiosTexto || null,
-          beneficios_chips: gerarBeneficiosChips(),
-          principais_atividades: principaisAtividades.trim() || null,
-          observacoes: observacoes.trim() || null,
-          horario_padrao: montarHorarioPadrao(),
-          confidencial,
-        }),
+        body: JSON.stringify(
+          montarCorpoSolicitacaoPortal({
+            cargo,
+            tipoServico,
+            numPosicoes,
+            cidade,
+            estado,
+            salarioParaEnvio: salarioParaEnvio(),
+            adicionaisSalariais,
+            horarioTipo,
+            horarioTexto,
+            previsaoInicio,
+            requisitosTexto,
+            reqChipsList,
+            beneficiosTexto,
+            beneficiosChips: gerarBeneficiosChips(),
+            principaisAtividades,
+            observacoes,
+            horarioPadrao: montarHorarioPadrao(),
+            confidencial,
+          })
+        ),
       });
       const json = await res.json();
       if (!res.ok) { setError(json.error ?? "Erro ao enviar."); return; }
@@ -432,26 +475,7 @@ export default function SolicitarVagaPage() {
     }
   };
 
-  if (success) {
-    return (
-      <div className="max-w-xl mx-auto mt-12">
-        <div className="bg-white rounded-2xl shadow-sm p-8 text-center">
-          <div className="text-5xl mb-4">{"✅"}</div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Solicitação enviada!</h2>
-          <p className="text-sm text-gray-500 mb-6">
-            Sua solicitação foi recebida e será analisada pela equipe Salmazos.
-            Você receberá uma notificação quando a vaga for criada.
-          </p>
-          <Link
-            href="/portal"
-            className="inline-block px-6 py-2.5 bg-black text-[#FFD700] rounded-xl font-semibold text-sm"
-          >
-            Voltar ao painel
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  if (success) return <PortalSolicitacaoEnviada />;
 
   if (view === "loading") {
     return (
@@ -512,6 +536,57 @@ export default function SolicitarVagaPage() {
         >
           + Criar nova solicitação do zero
         </button>
+      </div>
+    );
+  }
+
+  if (revisando) {
+    const secoes = resumoDaSolicitacaoPortal({
+      tipoServico,
+      cargo,
+      numPosicoes,
+      cidade,
+      estado,
+      salario,
+      salarioModo,
+      salarioPeriodo,
+      adicionaisSalariais,
+      previsaoInicio,
+      horarioTexto,
+      beneficios: Object.keys(gerarBeneficiosChips()),
+      requisitos: montarReqChipsList(),
+      principaisAtividades,
+      observacoes,
+      confidencial,
+    });
+    return (
+      <div className="max-w-2xl mx-auto">
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">Solicitar Nova Vaga</h1>
+        <ResumoSolicitacao secoes={secoes} tituloRef={tituloResumoRef} nota="Algo errado? Use o botão “Voltar” para corrigir antes de enviar." />
+        {error && (
+          <div role="alert" className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3 mt-4">
+            {error}
+          </div>
+        )}
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row">
+          <button
+            type="button"
+            onClick={voltarParaEditar}
+            disabled={submitting}
+            className="py-3.5 px-6 rounded-xl font-bold text-base border-2 border-gray-300 text-gray-800 bg-white disabled:opacity-60"
+          >
+            Voltar
+          </button>
+          <button
+            type="button"
+            onClick={confirmarEnvio}
+            disabled={submitting}
+            className="flex-1 py-3.5 rounded-xl font-bold text-base transition-all disabled:opacity-60"
+            style={{ backgroundColor: "#000", color: "#FFD700" }}
+          >
+            {submitting ? "Enviando..." : "Confirmar e enviar"}
+          </button>
+        </div>
       </div>
     );
   }
@@ -891,12 +966,13 @@ export default function SolicitarVagaPage() {
 
         {/* ── Submit ── */}
         <button
-          onClick={handleSubmit}
+          ref={botaoRevisarRef}
+          onClick={revisar}
           disabled={submitting || (salvarComoTemplate && !nomeTemplate.trim())}
           className="w-full py-3.5 rounded-xl font-bold text-base transition-all disabled:opacity-60"
           style={{ backgroundColor: "#000", color: "#FFD700" }}
         >
-          {submitting ? "Enviando..." : "Enviar Solicitação →"}
+          Revisar solicitação →
         </button>
       </div>
     </div>

@@ -24,6 +24,8 @@ import EtapaEnvio from "../src/components/solicitacao-publica/EtapaEnvio";
 import TelaSucesso from "../src/components/solicitacao-publica/TelaSucesso";
 import ResumoSolicitacao from "../src/components/solicitacao-publica/ResumoSolicitacao";
 import ConteudoEnviado from "../src/components/solicitacao-publica/ConteudoEnviado";
+import PortalSolicitacaoEnviada from "../src/components/PortalSolicitacaoEnviada";
+import { ESTILOS as ESTILOS_ENVIADO } from "../src/components/solicitacao-publica/estilos";
 import { readFileSync, writeFileSync } from "node:fs";
 import { itensDasCondicoes, condicoesPersonalizadas, lerCondicoesDoLink, montarSnapshotCondicoes } from "../src/lib/solicitacaoVagaCondicoes";
 import { SALARIO_A_COMBINAR as CONST_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO as CONST_PRETENSAO, formatarSalarioHora } from "../src/lib/constants";
@@ -1221,6 +1223,51 @@ caso("componentes extraídos: o resumo funciona só com as seções (sem formul�
   assert.ok(conteudo.includes("Recebemos sua solicitação!") && conteudo.includes("Currículos em até 7 dias úteis") && conteudo.includes("Voltar ao painel."));
   for (const so_do_site of ["bg-black\"><main", "min-h-screen", "<picture", "Obrigado por escolher"]) assert.ok(!conteudo.includes(so_do_site), `sem ${so_do_site}`);
   assert.ok(renderToStaticMarkup(createElement(TelaSucesso, { prazoDiasUteis: 8 })).includes("min-h-screen"), "o invólucro continua na TelaSucesso");
+});
+
+// ── Portal: tela de enviado no mesmo padrão do link (Fase 3) ──
+// Cópia congelada do literal que morava em FormularioSolicitacaoPublica.tsx: o link continua com exatamente estes estilos.
+const ESTILOS_DO_LINK_ANTES = `
+@keyframes sp-pop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
+@keyframes sp-draw{to{stroke-dashoffset:0}}
+@keyframes sp-subir{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.sp-pop{animation:sp-pop .5s ease-out both}
+.sp-draw{stroke-dasharray:48;stroke-dashoffset:48;animation:sp-draw .5s .35s ease-out forwards}
+.sp-subir{animation:sp-subir .5s ease-out both}
+@media (prefers-reduced-motion:reduce){.sp-pop,.sp-subir{animation:none!important}.sp-draw{animation:none!important;stroke-dashoffset:0}}
+`;
+// Percorre a árvore de elementos devolvida pelo componente (o <Link> do Next vira stub no harness e não renderiza).
+type No = { type?: unknown; props?: { children?: unknown; href?: string } } | string | number | null | undefined | boolean | No[];
+function nos(n: No, acc: { type?: unknown; props?: { children?: unknown; href?: string } }[] = []) {
+  if (Array.isArray(n)) n.forEach((x) => nos(x, acc));
+  else if (n && typeof n === "object") {
+    acc.push(n);
+    nos(n.props?.children as No, acc);
+  }
+  return acc;
+}
+const textoDe = (n: No): string => (Array.isArray(n) ? n.map(textoDe).join("") : typeof n === "string" || typeof n === "number" ? String(n) : n && typeof n === "object" ? textoDe(n.props?.children as No) : "");
+caso("estilos da tela de enviado: o texto extraído é idêntico ao que o link tinha antes", () => {
+  assert.strictEqual(ESTILOS_ENVIADO, ESTILOS_DO_LINK_ANTES);
+});
+caso("portal, tela de enviado: mesmo conteúdo do link (3 passos, prazo da proposta), frase final do portal, botão 'Voltar ao painel' para /portal, sem o invólucro do site", () => {
+  const arvore = PortalSolicitacaoEnviada() as unknown as No;
+  const todos = nos(arvore);
+  const conteudo = todos.find((n) => n.type === ConteudoEnviado);
+  assert.ok(conteudo, "usa ConteudoEnviado");
+  assert.equal((conteudo!.props as { prazoDiasUteis?: number }).prazoDiasUteis, PADROES_RS.prazo_envio_curriculos_dias_uteis, "prazo vem da constante compartilhada");
+  assert.equal((conteudo!.props as { textoFinal?: string }).textoFinal, "Você pode acompanhar o andamento no painel.");
+  const botao = todos.find((n) => n.props?.href === "/portal");
+  assert.ok(botao && textoDe(botao.props!.children as No).trim() === "Voltar ao painel", "botão Voltar ao painel -> /portal");
+  const html = renderToStaticMarkup(createElement(ConteudoEnviado, { prazoDiasUteis: PADROES_RS.prazo_envio_curriculos_dias_uteis, textoFinal: "Você pode acompanhar o andamento no painel." }));
+  assert.ok(html.includes("Recebemos sua solicitação!") && html.includes(`Currículos em até ${PADROES_RS.prazo_envio_curriculos_dias_uteis} dias úteis`) && html.includes("Você pode acompanhar o andamento no painel."));
+  const fonte = readFileSync(new URL("../src/components/PortalSolicitacaoEnviada.tsx", import.meta.url), "utf8");
+  for (const proibido of ["RodapePublico", "ImagemMarca", "TelaSucesso", "bg-black\"", "MARCA"]) assert.ok(!fonte.includes(proibido), `sem ${proibido}`);
+  assert.ok(fonte.includes("<style>{ESTILOS}</style>"), "inclui os estilos das animações");
+});
+caso("portal: o prazo e o texto não dependem do tipo de serviço (a tela não recebe nada da solicitação)", () => {
+  assert.equal(PortalSolicitacaoEnviada.length, 0, "componente sem props");
+  assert.equal(PADROES_RS.prazo_envio_curriculos_dias_uteis, 8);
 });
 
 console.error = silencio;

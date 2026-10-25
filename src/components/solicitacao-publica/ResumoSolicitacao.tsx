@@ -1,11 +1,23 @@
+import type { Ref } from "react";
 import type { SecaoResumo } from "@/lib/solicitacaoVagaPublicaForm";
 
 // Resumo "Confira a sua solicitação": recebe as seções já prontas (resumoDaSolicitacao) e só as desenha. Não conhece o formulário, o contratante,
 // as condições nem o aceite, então serve ao link público e ao portal. `nota` é a frase de rodapé do cartão (opcional).
-export default function ResumoSolicitacao({ secoes, nota, titulo = "Confira a sua solicitação" }: { secoes: SecaoResumo[]; nota?: string; titulo?: string }) {
+// `tituloRef` torna o título focável por código (tabIndex -1), para quem leva o foco até ele ao abrir o resumo; sem essa prop o HTML é o de sempre.
+export default function ResumoSolicitacao({
+  secoes,
+  nota,
+  titulo = "Confira a sua solicitação",
+  tituloRef,
+}: {
+  secoes: SecaoResumo[];
+  nota?: string;
+  titulo?: string;
+  tituloRef?: Ref<HTMLHeadingElement>;
+}) {
   return (
     <section aria-labelledby="resumo-titulo" className="space-y-4">
-      <h3 id="resumo-titulo" className="text-lg font-bold text-gray-900">{titulo}</h3>
+      <h3 id="resumo-titulo" ref={tituloRef} tabIndex={tituloRef ? -1 : undefined} className="text-lg font-bold text-gray-900">{titulo}</h3>
       <div className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
         {secoes.map((secao) => (
           <div key={secao.titulo}>
