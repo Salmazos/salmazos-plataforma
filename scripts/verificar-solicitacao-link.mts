@@ -15,8 +15,11 @@ import {
   REQ_CNH, REQ_CONHECIMENTOS, REQ_ESCOLARIDADE, REQ_EXPERIENCIA, REQ_NR, BEN_ALIMENTACAO, BEN_QUALIDADE, BEN_SAUDE, BEN_TRANSPORTE,
 } from "../src/lib/solicitacaoVagaCampos";
 import {
-  formularioInicial, formularioPreenchido, montarCorpoEnvio, validarEtapa, validarTudo, type FormPublico,
+  formularioInicial, formularioPreenchido, montarCorpoEnvio, resumoDaSolicitacao, validarEtapa, validarTudo, type FormPublico,
 } from "../src/lib/solicitacaoVagaPublicaForm";
+import { renderToStaticMarkup } from "react-dom/server";
+import { createElement } from "react";
+import EtapaPerfil from "../src/components/solicitacao-publica/EtapaPerfil";
 import { itensDasCondicoes, condicoesPersonalizadas, lerCondicoesDoLink, montarSnapshotCondicoes } from "../src/lib/solicitacaoVagaCondicoes";
 import { SALARIO_A_COMBINAR as CONST_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO as CONST_PRETENSAO, formatarSalarioHora } from "../src/lib/constants";
 import { PADROES_RS } from "../src/lib/propostaModelos";
@@ -1126,6 +1129,42 @@ caso("salário no servidor: aceita só número positivo, R$ x,xx/hora, as duas s
   const r = publicoSolicitarVagaSchema.safeParse({ ...corpo, salario: "uns 3 mil" });
   assert.ok(!r.success && r.error.issues.some((i) => i.message === "Informe o salário pelas opções do formulário."));
   assert.equal(salarioPublicoValido("2500"), true);
+});
+
+// ── CNH uma só vez no link (Fase 1): só a pergunta "Precisa de habilitação (CNH)?" com categoria; os chips CNH B/C/D/E saíram da tela ──
+caso("link, etapa de perfil: há UMA pergunta de habilitação e nenhum chip 'CNH B/C/D/E'; o portal segue com a lista de chips", () => {
+  const tela = (habilitacao: "sim" | "nao") =>
+    renderToStaticMarkup(createElement(EtapaPerfil, { form: { ...formularioInicial(null), habilitacao, habilitacao_categoria: habilitacao === "sim" ? "B" : "" }, atualizar: () => undefined, erros: {} }));
+  for (const h of ["nao", "sim"] as const) {
+    const html = tela(h);
+    assert.equal((html.match(/Precisa de habilitação \(CNH\)\?/g) ?? []).length, 1, `${h}: uma pergunta`);
+    for (const chip of REQ_CNH) assert.ok(!html.includes(chip), `${h}: sem o chip ${chip}`);
+    assert.ok(!html.includes(">Habilitação<"), `${h}: sem o grupo de chips 'Habilitação'`);
+  }
+  assert.ok(tela("sim").includes("Qual categoria?"));
+  assert.deepEqual([...REQ_CNH], ["CNH B", "CNH C", "CNH D", "CNH E"], "a lista compartilhada com o portal não mudou");
+});
+caso("resumo do link: habilitação aparece uma vez, em 'Habilitação'; 'Qualificações' não repete CNH (qualquer categoria)", () => {
+  for (const cat of campos.CATEGORIAS_HABILITACAO) {
+    const f = baseForm({ habilitacao: "sim", habilitacao_categoria: cat, requisitos: { ...formularioInicial(null).requisitos, chips: { "Ensino Médio": true }, custom: ["Boa comunicação"] } });
+    const linhas = resumoDaSolicitacao(f).flatMap((sec) => sec.linhas);
+    const comCnh = linhas.filter((l) => /CNH|habilita/i.test(`${l.rotulo} ${l.valor}`));
+    assert.equal(comCnh.length, 1, `categoria ${cat}`);
+    assert.deepEqual(comCnh[0], { rotulo: "Habilitação", valor: `Categoria ${cat}` });
+  }
+  const sem = resumoDaSolicitacao(baseForm()).flatMap((sec) => sec.linhas).find((l) => l.rotulo === "Habilitação");
+  assert.deepEqual(sem, { rotulo: "Habilitação", valor: "Não" });
+});
+caso("vaga criada do link: 'Habilitação categoria X' sai UMA vez para qualquer categoria, com ou sem outros requisitos", () => {
+  for (const cat of campos.CATEGORIAS_HABILITACAO) {
+    for (const base of [null, "• Ensino Médio — Completo\n• Boa comunicação"]) {
+      const texto = requisitosPublicaveis(base, { habilitacao_categoria: cat, veiculo_proprio: "sim" })!;
+      assert.equal((texto.match(new RegExp(`Habilitação categoria ${cat}\\b`, "g")) ?? []).length, 1, `${cat} / ${base}`);
+      assert.equal(texto.split("\n").filter((l) => /CNH|habilita/i.test(l)).length, 1, `${cat} / ${base}: uma só linha de habilitação`);
+    }
+  }
+  // sem chip de CNH no link, o fluxo novo nunca chega a ter "CNH B" + categoria; a trava do texto livre continua valendo
+  assert.equal(requisitosPublicaveis("• Possuir CNH B", { habilitacao_categoria: "B" }), "• Possuir CNH B");
 });
 
 console.error = silencio;
