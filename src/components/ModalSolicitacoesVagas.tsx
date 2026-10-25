@@ -10,7 +10,7 @@ import ModalNovoCliente from "@/components/ModalNovoCliente";
 import ConfirmarCriarVagaSemCliente from "@/components/ConfirmarCriarVagaSemCliente";
 import ModalVincularClienteSolicitacao, { type ResultadoVinculo } from "@/components/ModalVincularClienteSolicitacao";
 import { apelidoDoNomeCompleto } from "@/lib/responsaveis";
-import { aprovadasSemCliente as aprovadasSemClienteDaLista, explicarSituacaoDaVaga, montarPrefillCliente, semClienteVinculado, rotularCampos, type SituacaoDaVaga } from "@/lib/clienteDaSolicitacao";
+import { aprovadasSemCliente as aprovadasSemClienteDaLista, avisoAposDecisaoDaSolicitacao, explicarSituacaoDaVaga, montarPrefillCliente, semClienteVinculado, rotularCampos, type AvisoDoCliente, type SituacaoDaVaga } from "@/lib/clienteDaSolicitacao";
 import FormularioEdicaoSolicitacao, {
   corpoDoForm,
   formDeSolicitacao,
@@ -100,10 +100,14 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
   const [cadastrandoCliente, setCadastrandoCliente] = useState<{ s: Solicitacao; prefill: ReturnType<typeof montarPrefillCliente>; origem: HTMLElement | null } | null>(null);
   const [vinculandoCliente, setVinculandoCliente] = useState<{ s: Solicitacao; clienteIdInicial: string | null; origem: HTMLElement | null } | null>(null);
   // Resultado do último cadastro/vínculo de cliente: fica no topo da lista mesmo se o cartão sair dela (solicitação aprovada não é "pendente").
-  const [avisoCliente, setAvisoCliente] = useState<{ tipo: "ok" | "atencao"; titulo: string; linhas: string[] } | null>(null);
+  const [avisoCliente, setAvisoCliente] = useState<AvisoDoCliente | null>(null);
 
   useEffect(() => {
-    if (!isOpen) setAba("pendentes");
+    if (!isOpen) {
+      setAba("pendentes");
+      // A faixa do cliente vinculado vale para esta sessão do modal; reabrir mais tarde não traz de volta um texto que pode já estar desatualizado.
+      setAvisoCliente(null);
+    }
   }, [isOpen]);
 
   useEffect(() => {
@@ -145,6 +149,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
       });
       if (res.ok) {
         setItems((prev) => prev.filter((s) => s.id !== id));
+        setAvisoCliente((a) => avisoAposDecisaoDaSolicitacao(a, id, "vaga_criada"));
         showToast("Vaga criada com sucesso!");
         onVagaCriada();
         if (focoId) onVerTodas?.();
@@ -167,6 +172,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
         setItems((prev) => prev.filter((s) => s.id !== id));
         setRecusandoId(null);
         setMotivoRecusa("");
+        setAvisoCliente((a) => avisoAposDecisaoDaSolicitacao(a, id, "recusada"));
         showToast("Solicitação recusada.");
         if (focoId) onVerTodas?.();
       }
@@ -291,7 +297,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
     }
   };
 
-  const mostrarResultadoCliente = (nome: string, vaga: SituacaoDaVaga, extras: { completados?: string[]; divergentes?: string[]; completarConflito?: boolean } = {}) => {
+  const mostrarResultadoCliente = (solicitacaoId: string, nome: string, vaga: SituacaoDaVaga, extras: { completados?: string[]; divergentes?: string[]; completarConflito?: boolean } = {}) => {
     const linhas = [explicarSituacaoDaVaga(vaga)];
     if (extras.completados && extras.completados.length > 0) linhas.push(`Campos completados no cadastro: ${rotularCampos(extras.completados)}.`);
     if (extras.divergentes && extras.divergentes.length > 0) linhas.push(`Já preenchidos com outro valor (mantidos): ${rotularCampos(extras.divergentes)}.`);
@@ -300,6 +306,8 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
       tipo: vaga === "vaga_nao_alterada" || extras.completarConflito ? "atencao" : "ok",
       titulo: `Cliente "${nome}" vinculado à solicitação.`,
       linhas,
+      solicitacaoId,
+      vagaPendente: vaga === "sem_vaga",
     });
     setRecarga((n) => n + 1);
     if (vaga === "vinculada") onVagaCriada();
@@ -794,7 +802,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
             preenchidos: prefill.preenchidos,
             sugeridos: prefill.sugeridos,
             faltando: prefill.faltando,
-            onCriado: (r) => mostrarResultadoCliente(r.clienteNome, r.vaga),
+            onCriado: (r) => mostrarResultadoCliente(s.id, r.clienteNome, r.vaga),
             onVincularExistente: (clienteId) => {
               setCadastrandoCliente(null);
               setVinculandoCliente({ s, clienteIdInicial: clienteId, origem });
@@ -832,8 +840,9 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
         elementoDeOrigem={vinculandoCliente.origem}
         onClose={() => setVinculandoCliente(null)}
         onVinculado={(r: ResultadoVinculo) => {
+          const solicitacaoId = vinculandoCliente.s.id;
           setVinculandoCliente(null);
-          mostrarResultadoCliente(r.clienteNome, r.vaga, { completados: r.completados, divergentes: r.divergentes, completarConflito: r.completarConflito });
+          mostrarResultadoCliente(solicitacaoId, r.clienteNome, r.vaga, { completados: r.completados, divergentes: r.divergentes, completarConflito: r.completarConflito });
         }}
         onJaVinculada={aoJaVinculada}
       />

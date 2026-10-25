@@ -11,7 +11,7 @@ import * as rotaVincular from "../src/app/api/solicitacoes-vagas/[id]/vincular-c
 import { gerarCobrancaCancelamentoRSSeAplicavel, gerarCobrancaRSSeAplicavel } from "../src/lib/cobrancaRS";
 import { getEmailTemplate } from "../src/lib/emailTemplates";
 import { getEmailTemplate as getEmailTemplateAntes } from "./fixtures/emailTemplates.antes-do-escape.mts";
-import { aprovadasSemCliente, campoParaFocoInicial, devolverFocoAoFechar, escapeDeveFecharModal, explicarSituacaoDaVaga, rotularCampos, semClienteVinculado, solicitacaoFicouIndisponivel } from "../src/lib/clienteDaSolicitacao";
+import { TEXTO_SOLICITACAO_RECUSADA_SEM_VAGA, TEXTO_VAGA_CRIADA_COM_O_CLIENTE, avisoAposDecisaoDaSolicitacao, type AvisoDoCliente, aprovadasSemCliente, campoParaFocoInicial, devolverFocoAoFechar, escapeDeveFecharModal, explicarSituacaoDaVaga, rotularCampos, semClienteVinculado, solicitacaoFicouIndisponivel } from "../src/lib/clienteDaSolicitacao";
 import { criarDb, criarClienteServico } from "./harness-mot/memdb.mjs";
 import { validarCnpj, validarCpf } from "../src/lib/documentoBr";
 import {
@@ -1259,6 +1259,45 @@ caso("equivalência com quebra de linha nos campos do assunto: o html é idênti
     assert.strictEqual(novo.subject, semQuebra(antes.subject), `${nome}: assunto`);
     assert.strictEqual(novo.descricao, semQuebra(antes.descricao), `${nome}: descrição`);
   }
+});
+// ── Faixa "Cliente X vinculado": o texto "a vaga ainda não foi criada" some quando a solicitação é decidida ──
+const faixaSemVaga = (extra: Partial<AvisoDoCliente> = {}): AvisoDoCliente => ({
+  tipo: "ok", titulo: 'Cliente "Acme" vinculado à solicitação.', solicitacaoId: "sol-1", vagaPendente: true,
+  linhas: [explicarSituacaoDaVaga("sem_vaga"), "Campos completados no cadastro: Endereço."], ...extra,
+});
+caso("faixa do cliente: criar a vaga troca a linha 'ainda não foi criada' pelo que aconteceu e mantém as outras linhas e o título", () => {
+  const depois = avisoAposDecisaoDaSolicitacao(faixaSemVaga(), "sol-1", "vaga_criada")!;
+  assert.deepEqual(depois.linhas, [TEXTO_VAGA_CRIADA_COM_O_CLIENTE, "Campos completados no cadastro: Endereço."]);
+  assert.equal(depois.titulo, 'Cliente "Acme" vinculado à solicitação.');
+  assert.equal(depois.vagaPendente, false);
+  assert.ok(!depois.linhas.join(" ").includes("ainda não foi criada") && !depois.linhas.join(" ").includes("Ao aprovar"));
+});
+caso("faixa do cliente: recusar a solicitação também tira o 'ao aprovar' e diz que nenhuma vaga será criada", () => {
+  const depois = avisoAposDecisaoDaSolicitacao(faixaSemVaga(), "sol-1", "recusada")!;
+  assert.equal(depois.linhas[0], TEXTO_SOLICITACAO_RECUSADA_SEM_VAGA);
+  assert.ok(!depois.linhas.join(" ").includes("Ao aprovar"));
+});
+caso("faixa do cliente: de outra solicitação, sem a marca de vaga pendente, ou nula, fica exatamente como está (mesma referência)", () => {
+  const outra = faixaSemVaga();
+  assert.strictEqual(avisoAposDecisaoDaSolicitacao(outra, "sol-2", "vaga_criada"), outra);
+  const jaComVaga = faixaSemVaga({ vagaPendente: false, linhas: [explicarSituacaoDaVaga("vinculada")] });
+  assert.strictEqual(avisoAposDecisaoDaSolicitacao(jaComVaga, "sol-1", "vaga_criada"), jaComVaga);
+  const semMarca = faixaSemVaga({ vagaPendente: undefined, solicitacaoId: undefined });
+  assert.strictEqual(avisoAposDecisaoDaSolicitacao(semMarca, "sol-1", "recusada"), semMarca);
+  assert.equal(avisoAposDecisaoDaSolicitacao(null, "sol-1", "vaga_criada"), null);
+});
+caso("faixa do cliente: decidir duas vezes não troca de novo; a linha da vaga alterada (vaga_nao_alterada) não é tocada", () => {
+  const uma = avisoAposDecisaoDaSolicitacao(faixaSemVaga(), "sol-1", "vaga_criada")!;
+  assert.strictEqual(avisoAposDecisaoDaSolicitacao(uma, "sol-1", "recusada"), uma);
+  const naoAlterada = faixaSemVaga({ vagaPendente: false, linhas: [explicarSituacaoDaVaga("vaga_nao_alterada")] });
+  assert.strictEqual(avisoAposDecisaoDaSolicitacao(naoAlterada, "sol-1", "vaga_criada"), naoAlterada);
+});
+caso("modal: a faixa guarda a solicitação e se a vaga está pendente; criar vaga e recusar atualizam a faixa; fechar o modal a limpa", () => {
+  const fonte = fs.readFileSync(new URL("../src/components/ModalSolicitacoesVagas.tsx", import.meta.url), "utf8");
+  assert.ok(fonte.includes('vagaPendente: vaga === "sem_vaga"') && fonte.includes("solicitacaoId,"));
+  assert.ok(fonte.includes('mostrarResultadoCliente(s.id, r.clienteNome, r.vaga)') && fonte.includes("mostrarResultadoCliente(solicitacaoId, r.clienteNome, r.vaga"));
+  assert.ok(fonte.includes('avisoAposDecisaoDaSolicitacao(a, id, "vaga_criada")') && fonte.includes('avisoAposDecisaoDaSolicitacao(a, id, "recusada")'));
+  assert.ok(/if \(!isOpen\) \{\s+setAba\("pendentes"\);[\s\S]*?setAvisoCliente\(null\);/.test(fonte));
 });
 console.error = silencio;
 
