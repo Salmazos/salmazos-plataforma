@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  CATEGORIAS_HABILITACAO, REQ_CNH, REQ_COM_CONDICAO_SIMPLES, REQ_COM_CURSO, REQ_CONHECIMENTOS, REQ_ESCOLARIDADE, REQ_EXPERIENCIA, REQ_NR,
+  CATEGORIAS_HABILITACAO, REQ_COM_CONDICAO_SIMPLES, REQ_COM_CURSO, REQ_CONHECIMENTOS, REQ_ESCOLARIDADE, REQ_EXPERIENCIA, REQ_NR,
   gerarRequisitosTexto,
 } from "@/lib/solicitacaoVagaCampos";
 import ChipGroupPublico from "./ChipGroupPublico";
@@ -97,7 +97,6 @@ export default function EtapaPerfil({ form, atualizar, erros }: PropsEtapa) {
           comCondicaoSimples={REQ_COM_CONDICAO_SIMPLES}
         />
         {grupo("Experiência", REQ_EXPERIENCIA)}
-        {grupo("Habilitação", REQ_CNH)}
         {grupo("Normas Regulamentadoras", REQ_NR)}
         {grupo("Conhecimentos", REQ_CONHECIMENTOS)}
 
