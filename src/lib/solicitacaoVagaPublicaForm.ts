@@ -318,7 +318,12 @@ export function montarCorpoEnvio(form: FormPublico) {
 const ROTULO_SEXO: Record<Sexo, string> = { masc: "Masculino", fem: "Feminino", indiferente: "Indiferente" };
 
 // Linhas do cartão "Confira a sua solicitação" (só texto; o React escapa na hora de exibir).
-export function resumoDaSolicitacao(form: FormPublico): { titulo: string; linhas: { rotulo: string; valor: string }[] }[] {
+export interface SecaoResumo {
+  titulo: string;
+  linhas: { rotulo: string; valor: string }[];
+}
+
+export function resumoDaSolicitacao(form: FormPublico): SecaoResumo[] {
   const pj = form.tipo_pessoa === "pj";
   const preenchidas = (linhas: { rotulo: string; valor: string | null | undefined }[]) =>
     linhas.filter((l) => l.valor && l.valor.trim()).map((l) => ({ rotulo: l.rotulo, valor: l.valor!.trim() }));

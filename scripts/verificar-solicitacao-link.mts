@@ -20,6 +20,11 @@ import {
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import EtapaPerfil from "../src/components/solicitacao-publica/EtapaPerfil";
+import EtapaEnvio from "../src/components/solicitacao-publica/EtapaEnvio";
+import TelaSucesso from "../src/components/solicitacao-publica/TelaSucesso";
+import ResumoSolicitacao from "../src/components/solicitacao-publica/ResumoSolicitacao";
+import ConteudoEnviado from "../src/components/solicitacao-publica/ConteudoEnviado";
+import { readFileSync, writeFileSync } from "node:fs";
 import { itensDasCondicoes, condicoesPersonalizadas, lerCondicoesDoLink, montarSnapshotCondicoes } from "../src/lib/solicitacaoVagaCondicoes";
 import { SALARIO_A_COMBINAR as CONST_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO as CONST_PRETENSAO, formatarSalarioHora } from "../src/lib/constants";
 import { PADROES_RS } from "../src/lib/propostaModelos";
@@ -1165,6 +1170,57 @@ caso("vaga criada do link: 'Habilitação categoria X' sai UMA vez para qualquer
   }
   // sem chip de CNH no link, o fluxo novo nunca chega a ter "CNH B" + categoria; a trava do texto livre continua valendo
   assert.equal(requisitosPublicaveis("• Possuir CNH B", { habilitacao_categoria: "B" }), "• Possuir CNH B");
+});
+
+// ── Equivalência do HTML do resumo e da tela de enviado (Fase 2: extração para componentes reutilizáveis) ──
+// scripts/fixtures/solicitacaoPublica.antes-da-extracao.json é o HTML capturado ANTES da extração (renderToStaticMarkup); depois dela o HTML tem
+// de ser byte a byte o mesmo. GRAVAR_SNAPSHOT=1 regrava o arquivo (só para recapturar de propósito).
+const ARQUIVO_SNAPSHOT = new URL("./fixtures/solicitacaoPublica.antes-da-extracao.json", import.meta.url);
+const ITENS_EXEMPLO = [
+  { numero: "1.", texto: "O fee de Recrutamento & Seleção é de 45% do salário." },
+  { numero: "2.", texto: "Prazo de cobrança: 14 dias.\nSegunda linha <com> \"aspas\"." },
+  { numero: "3.", texto: "Taxa de cancelamento de 25%." },
+];
+const FORM_COMPLETO_PJ: Partial<FormPublico> = {
+  num_posicoes: "3", local_trabalho: "Rua das Flores, 100", previsao_inicio: "2026-11-15", sexo: "fem", idade: "21 a 35 anos", pcd: "sim", habilitacao: "sim",
+  habilitacao_categoria: "AB", veiculo_proprio: "sim", principais_atividades: "Atender clientes\nLançar notas", observacoes: "Só a equipe vê & <b>isto</b>",
+  endereco: "Av. Brasil, 10 - Campinas/SP", requisitos: { chips: { "Ensino Médio": true, "Experiência na função": true }, cursos: {}, condicoes: { "Ensino Médio": "Completo" }, custom: ["Boa comunicação"] },
+};
+const CASOS_SNAPSHOT: Record<string, () => ReturnType<typeof renderToStaticMarkup>> = {
+  "envio PJ simples, com condições, aceite marcado": () => renderToStaticMarkup(createElement(EtapaEnvio, { form: baseForm(), itens: ITENS_EXEMPLO, aceite: true, onAceite: () => undefined })),
+  "envio PJ completo, com condições, aceite desmarcado e erro": () =>
+    renderToStaticMarkup(createElement(EtapaEnvio, { form: baseForm(FORM_COMPLETO_PJ), itens: ITENS_EXEMPLO, aceite: false, onAceite: () => undefined, erroAceite: "Para enviar, é preciso concordar com as condições comerciais." })),
+  "envio PF completo, com condições, aceite marcado": () =>
+    renderToStaticMarkup(createElement(EtapaEnvio, { form: baseForm({ ...FORM_COMPLETO_PJ, tipo_pessoa: "pf", nome: "João da Silva", documento: CPF_OK, contato_nome: "" }), itens: ITENS_EXEMPLO, aceite: true, onAceite: () => undefined })),
+  "envio PF simples, sem condições, aceite desmarcado": () =>
+    renderToStaticMarkup(createElement(EtapaEnvio, { form: baseForm({ tipo_pessoa: "pf", nome: "Maria Souza", documento: CPF_OK, contato_nome: "" }), itens: [], aceite: false, onAceite: () => undefined })),
+  "envio PJ completo, sem condições, com erro": () =>
+    renderToStaticMarkup(createElement(EtapaEnvio, { form: baseForm(FORM_COMPLETO_PJ), itens: [], aceite: false, onAceite: () => undefined, erroAceite: "Marque para continuar." })),
+  "enviado, prazo de 8 dias úteis": () => renderToStaticMarkup(createElement(TelaSucesso, { prazoDiasUteis: 8 })),
+  "enviado, prazo de 5 dias úteis": () => renderToStaticMarkup(createElement(TelaSucesso, { prazoDiasUteis: 5 })),
+};
+if (process.env.GRAVAR_SNAPSHOT === "1") {
+  writeFileSync(ARQUIVO_SNAPSHOT, JSON.stringify(Object.fromEntries(Object.entries(CASOS_SNAPSHOT).map(([k, f]) => [k, f()])), null, 1) + "\n");
+  console.log(`snapshot regravado: ${Object.keys(CASOS_SNAPSHOT).length} casos`);
+}
+const SNAPSHOT_ANTES = JSON.parse(readFileSync(ARQUIVO_SNAPSHOT, "utf8")) as Record<string, string>;
+for (const [nome, gerar] of Object.entries(CASOS_SNAPSHOT)) {
+  caso(`HTML idêntico ao de antes da extração: ${nome}`, () => {
+    assert.ok(nome in SNAPSHOT_ANTES, "caso sem snapshot");
+    assert.strictEqual(gerar(), SNAPSHOT_ANTES[nome]);
+  });
+}
+
+caso("componentes extraídos: o resumo funciona só com as seções (sem formulário, contratante, condições nem aceite) e o conteúdo do enviado sem o invólucro do site", () => {
+  const secoes = [{ titulo: "A vaga", linhas: [{ rotulo: "Cargo", valor: "Motorista" }] }];
+  const resumo = renderToStaticMarkup(createElement(ResumoSolicitacao, { secoes }));
+  assert.ok(resumo.includes("Confira a sua solicitação") && resumo.includes("Motorista") && resumo.includes(">A vaga<"));
+  assert.ok(!resumo.includes("Algo errado?") && !resumo.includes("Condições") && !resumo.includes("campo-aceite"), "sem nota, condições nem aceite");
+  assert.ok(renderToStaticMarkup(createElement(ResumoSolicitacao, { secoes, nota: "Revise." })).includes("Revise."));
+  const conteudo = renderToStaticMarkup(createElement(ConteudoEnviado, { prazoDiasUteis: 7, textoFinal: "Voltar ao painel." }));
+  assert.ok(conteudo.includes("Recebemos sua solicitação!") && conteudo.includes("Currículos em até 7 dias úteis") && conteudo.includes("Voltar ao painel."));
+  for (const so_do_site of ["bg-black\"><main", "min-h-screen", "<picture", "Obrigado por escolher"]) assert.ok(!conteudo.includes(so_do_site), `sem ${so_do_site}`);
+  assert.ok(renderToStaticMarkup(createElement(TelaSucesso, { prazoDiasUteis: 8 })).includes("min-h-screen"), "o invólucro continua na TelaSucesso");
 });
 
 console.error = silencio;
