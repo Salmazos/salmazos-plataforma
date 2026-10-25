@@ -4,7 +4,12 @@ import { useState, useEffect } from "react";
 import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
 import { ROTULO_CAMPO_SOLICITACAO, valorLegivelCampo, type Alteracoes } from "@/lib/solicitacaoAlteracaoRotulos";
 import { ROTULO_MOTIVO_ENCERRAMENTO, type MotivoTipoEncerramento } from "@/lib/vagaPausaReativacao";
-import BlocosSolicitacaoLink, { SeloViaLink, type SolicitacaoDeLink } from "@/components/BlocosSolicitacaoLink";
+import BlocosSolicitacaoLink, { BlocoClienteDaSolicitacao, SeloViaLink, type SolicitacaoDeLink } from "@/components/BlocosSolicitacaoLink";
+import ModalNovoCliente from "@/components/ModalNovoCliente";
+import ConfirmarCriarVagaSemCliente from "@/components/ConfirmarCriarVagaSemCliente";
+import ModalVincularClienteSolicitacao, { type ResultadoVinculo } from "@/components/ModalVincularClienteSolicitacao";
+import { apelidoDoNomeCompleto } from "@/lib/responsaveis";
+import { aprovadasSemCliente as aprovadasSemClienteDaLista, explicarSituacaoDaVaga, montarPrefillCliente, semClienteVinculado, rotularCampos, type SituacaoDaVaga } from "@/lib/clienteDaSolicitacao";
 import FormularioEdicaoSolicitacao, {
   corpoDoForm,
   formDeSolicitacao,
@@ -41,6 +46,11 @@ interface Solicitacao extends SolicitacaoDeLink {
   aprovada_em: string | null;
   motivo_recusa: string | null;
   vaga_id: string | null;
+  unidade_id: string;
+  // Cliente já vinculado (cadastrado a partir desta solicitação ou escolhido) e quem gerou o link (sugestão de responsável comercial).
+  cliente_id?: string | null;
+  cliente_vinculado?: { id: string; nome: string } | null;
+  link_criado_por_nome?: string | null;
   // Pedido de alteração que o cliente fez pelo portal, aguardando decisão da Salmazos.
   alteracao_pendente?: { id: string; alteracoes: Alteracoes; criado_em: string } | null;
   // Pedido de pausa ("encerramento") ou reabertura da vaga, aguardando decisão da Salmazos
@@ -81,6 +91,19 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
   const [recusandoStatusId, setRecusandoStatusId] = useState<string | null>(null);
   const [motivoRecusaStatus, setMotivoRecusaStatus] = useState("");
   const [erroStatus, setErroStatus] = useState<{ id: string; msg: string } | null>(null);
+  const [recarga, setRecarga] = useState(0);
+  // "pendentes" = a lista de sempre; "aprovadas_sem_cliente" = solicitações do link já aprovadas (vaga criada) que ainda estão sem cliente.
+  const [aba, setAba] = useState<"pendentes" | "aprovadas_sem_cliente">("pendentes");
+  const [confirmandoVagaSemCliente, setConfirmandoVagaSemCliente] = useState<Solicitacao | null>(null);
+  // O prefill é calculado uma vez, ao abrir: um valor novo a cada render reiniciaria o formulário do modal enquanto o analista digita.
+  const [cadastrandoCliente, setCadastrandoCliente] = useState<{ s: Solicitacao; prefill: ReturnType<typeof montarPrefillCliente> } | null>(null);
+  const [vinculandoCliente, setVinculandoCliente] = useState<{ s: Solicitacao; clienteIdInicial: string | null } | null>(null);
+  // Resultado do último cadastro/vínculo de cliente: fica no topo da lista mesmo se o cartão sair dela (solicitação aprovada não é "pendente").
+  const [avisoCliente, setAvisoCliente] = useState<{ tipo: "ok" | "atencao"; titulo: string; linhas: string[] } | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) setAba("pendentes");
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -93,12 +116,16 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
         .finally(() => setLoading(false));
       return;
     }
-    fetch("/api/solicitacoes-vagas")
+    const aprovadasSemCliente = aba === "aprovadas_sem_cliente";
+    fetch(aprovadasSemCliente ? "/api/solicitacoes-vagas?status=aprovada" : "/api/solicitacoes-vagas")
       .then((r) => r.json())
-      .then((json) => setItems(json.data ?? []))
+      .then((json) => {
+        const lista = (json.data ?? []) as Solicitacao[];
+        setItems(aprovadasSemCliente ? aprovadasSemClienteDaLista(lista) : lista);
+      })
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
-  }, [isOpen, focoId]);
+  }, [isOpen, focoId, recarga, aba]);
 
   if (!isOpen) return null;
 
@@ -208,7 +235,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
       setItems((prev) =>
         prev
           .map((it) => (it.id === s.id ? { ...it, ...(json.data ?? {}), alteracao_pendente: null } : it))
-          .filter((it) => focoId || it.status === "pendente" || it.alteracao_pendente || it.status_pendente)
+          .filter((it) => focoId || aba === "aprovadas_sem_cliente" || it.status === "pendente" || it.alteracao_pendente || it.status_pendente)
       );
       setRecusandoAlteracaoId(null);
       setMotivoRecusaAlteracao("");
@@ -247,7 +274,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
       setItems((prev) =>
         prev
           .map((it) => (it.id === s.id ? { ...it, status_pendente: null } : it))
-          .filter((it) => focoId || it.status === "pendente" || it.alteracao_pendente || it.status_pendente)
+          .filter((it) => focoId || aba === "aprovadas_sem_cliente" || it.status === "pendente" || it.alteracao_pendente || it.status_pendente)
       );
       setRecusandoStatusId(null);
       setMotivoRecusaStatus("");
@@ -263,12 +290,40 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
     }
   };
 
+  const mostrarResultadoCliente = (nome: string, vaga: SituacaoDaVaga, extras: { completados?: string[]; divergentes?: string[]; completarConflito?: boolean } = {}) => {
+    const linhas = [explicarSituacaoDaVaga(vaga)];
+    if (extras.completados && extras.completados.length > 0) linhas.push(`Campos completados no cadastro: ${rotularCampos(extras.completados)}.`);
+    if (extras.divergentes && extras.divergentes.length > 0) linhas.push(`Já preenchidos com outro valor (mantidos): ${rotularCampos(extras.divergentes)}.`);
+    if (extras.completarConflito) linhas.push("O cadastro foi alterado por outra pessoa enquanto você vinculava: o vínculo foi feito, mas nenhum campo foi completado.");
+    setAvisoCliente({
+      tipo: vaga === "vaga_nao_alterada" || extras.completarConflito ? "atencao" : "ok",
+      titulo: `Cliente "${nome}" vinculado à solicitação.`,
+      linhas,
+    });
+    setRecarga((n) => n + 1);
+    if (vaga === "vinculada") onVagaCriada();
+  };
+
+  // Responsável comercial sugerido = quem gerou o link (nome curto do time quando bate; senão o nome como veio). O analista pode trocar.
+  const prefillDoCliente = (s: Solicitacao) => {
+    const criador = s.link_criado_por_nome ?? null;
+    return montarPrefillCliente(s, { responsavelComercial: criador ? apelidoDoNomeCompleto(criador) ?? criador : null });
+  };
+
+  const aoJaVinculada = (mensagem: string) => {
+    setCadastrandoCliente(null);
+    setVinculandoCliente(null);
+    setAvisoCliente({ tipo: "atencao", titulo: mensagem || "A solicitação já foi vinculada ou decidida. Recarregue a lista.", linhas: [] });
+    setRecarga((n) => n + 1);
+  };
+
   const benChipsList = (chips: Record<string, boolean> | null) => {
     if (!chips) return [];
     return Object.entries(chips).filter(([, v]) => v).map(([k]) => k);
   };
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
@@ -277,7 +332,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
         {/* Header */}
         <div className="bg-black text-white px-6 py-4 rounded-t-2xl flex items-center justify-between shrink-0">
           <h2 className="font-bold text-lg">
-            {"📬"} {focoId ? "Solicitação de Vaga" : "Solicitações de Vagas Pendentes"}
+            {"📬"} {focoId ? "Solicitação de Vaga" : aba === "aprovadas_sem_cliente" ? "Solicitações de Vagas" : "Solicitações de Vagas Pendentes"}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -288,6 +343,44 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6">
+          {avisoCliente && (
+            <div
+              role={avisoCliente.tipo === "ok" ? "status" : "alert"}
+              className="mb-4 rounded-lg border px-4 py-3 text-sm"
+              style={
+                avisoCliente.tipo === "ok"
+                  ? { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0", color: "#166534" }
+                  : { backgroundColor: "#FFFBEB", borderColor: "#FCD34D", color: "#92400E" }
+              }
+            >
+              <div className="flex items-start justify-between gap-3">
+                <p className="font-bold">{avisoCliente.titulo}</p>
+                <button type="button" onClick={() => setAvisoCliente(null)} aria-label="Fechar aviso" className="shrink-0 text-xs underline">
+                  Fechar
+                </button>
+              </div>
+              {avisoCliente.linhas.map((l) => (
+                <p key={l} className="mt-1">{l}</p>
+              ))}
+            </div>
+          )}
+
+          {!focoId && (
+            <div role="group" aria-label="Filtro de solicitações" className="mb-4 flex flex-wrap gap-2">
+              {([["pendentes", "Pendentes"], ["aprovadas_sem_cliente", "Aprovadas sem cliente"]] as const).map(([valor, rotulo]) => (
+                <button
+                  key={valor}
+                  type="button"
+                  aria-pressed={aba === valor}
+                  onClick={() => setAba(valor)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${aba === valor ? "border-black bg-black text-white" : "border-gray-300 text-gray-700 hover:bg-gray-50"}`}
+                >
+                  {rotulo}
+                </button>
+              ))}
+            </div>
+          )}
+
           {focoId && (
             <button
               onClick={() => onVerTodas?.()}
@@ -305,7 +398,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
             <div className="text-center py-12">
               <p className="text-3xl mb-3">{focoId ? "🔍" : "🎉"}</p>
               <p className="text-gray-500 text-sm font-medium">
-                {focoId ? "Solicitação não encontrada." : "Nenhuma solicitação pendente!"}
+                {focoId ? "Solicitação não encontrada." : aba === "aprovadas_sem_cliente" ? "Nenhuma solicitação aprovada está sem cliente." : "Nenhuma solicitação pendente!"}
               </p>
             </div>
           ) : (
@@ -347,6 +440,12 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                     </div>
 
                     {s.origem === "link_publico" && <BlocosSolicitacaoLink s={s} />}
+                    <BlocoClienteDaSolicitacao
+                      s={s}
+                      ocupado={isLoading}
+                      onCadastrar={() => setCadastrandoCliente({ s, prefill: prefillDoCliente(s) })}
+                      onVincular={() => setVinculandoCliente({ s, clienteIdInicial: null })}
+                    />
 
                     {/* Details */}
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
@@ -648,7 +747,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                           {"✏️"} Editar
                         </button>
                         <button
-                          onClick={() => handleCriarVaga(s.id)}
+                          onClick={() => (semClienteVinculado(s) ? setConfirmandoVagaSemCliente(s) : handleCriarVaga(s.id))}
                           disabled={isLoading}
                           className="text-xs px-4 py-1.5 rounded-lg font-bold transition-colors disabled:opacity-50"
                           style={{ backgroundColor: "#16a34a", color: "#fff" }}
@@ -675,5 +774,60 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
         )}
       </div>
     </div>
+
+    {cadastrandoCliente && (() => {
+      const { s, prefill } = cadastrandoCliente;
+      return (
+        <ModalNovoCliente
+          isOpen
+          valoresIniciais={prefill.valores}
+          solicitacao={{
+            id: s.id,
+            unidadeId: s.unidade_id,
+            avisos: prefill.avisos,
+            preenchidos: prefill.preenchidos,
+            faltando: prefill.faltando,
+            onCriado: (r) => mostrarResultadoCliente(r.clienteNome, r.vaga),
+            onVincularExistente: (clienteId) => {
+              setCadastrandoCliente(null);
+              setVinculandoCliente({ s, clienteIdInicial: clienteId });
+            },
+            onJaVinculada: aoJaVinculada,
+          }}
+          onClose={() => setCadastrandoCliente(null)}
+          onSalvo={() => undefined}
+        />
+      );
+    })()}
+
+    {confirmandoVagaSemCliente && (
+      <ConfirmarCriarVagaSemCliente
+        onCadastrarPrimeiro={() => {
+          const s = confirmandoVagaSemCliente;
+          setConfirmandoVagaSemCliente(null);
+          setCadastrandoCliente({ s, prefill: prefillDoCliente(s) });
+        }}
+        onCriarMesmoAssim={() => {
+          const s = confirmandoVagaSemCliente;
+          setConfirmandoVagaSemCliente(null);
+          handleCriarVaga(s.id);
+        }}
+        onCancelar={() => setConfirmandoVagaSemCliente(null)}
+      />
+    )}
+
+    {vinculandoCliente && (
+      <ModalVincularClienteSolicitacao
+        solicitacao={vinculandoCliente.s}
+        clienteIdInicial={vinculandoCliente.clienteIdInicial}
+        onClose={() => setVinculandoCliente(null)}
+        onVinculado={(r: ResultadoVinculo) => {
+          setVinculandoCliente(null);
+          mostrarResultadoCliente(r.clienteNome, r.vaga, { completados: r.completados, divergentes: r.divergentes, completarConflito: r.completarConflito });
+        }}
+        onJaVinculada={aoJaVinculada}
+      />
+    )}
+    </>
   );
 }

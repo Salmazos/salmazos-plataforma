@@ -298,6 +298,10 @@ export interface Cliente {
   responsavel_comercial?: string;
   entidade_contratante?: string | null;
   cnpj?: string | null;
+  // Pessoa física (migration_clientes_pessoa_fisica.sql): ausentes até a migração rodar; sem tipo_pessoa vale "pj".
+  tipo_pessoa?: "pj" | "pf";
+  cpf?: string | null;
+  email_nota_fiscal?: string | null;
   endereco?: string | null;
   processo_simplificado?: boolean;
   logo_url?: string | null;

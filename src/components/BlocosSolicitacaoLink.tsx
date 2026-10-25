@@ -169,3 +169,59 @@ export default function BlocosSolicitacaoLink({ s }: { s: SolicitacaoDeLink }) {
     </div>
   );
 }
+
+export interface SolicitacaoComCliente extends SolicitacaoDeLink {
+  status: string;
+  cliente_id?: string | null;
+  cliente_vinculado?: { id: string; nome: string } | null;
+}
+
+// Cliente da solicitação do link: quem veio pelo link não tem cadastro, e sem cliente a cobrança R&S da vaga não sai. Recusada não oferece nada
+// (nem vincular); já vinculada só mostra o cliente.
+export function BlocoClienteDaSolicitacao({
+  s,
+  ocupado,
+  onCadastrar,
+  onVincular,
+}: {
+  s: SolicitacaoComCliente;
+  ocupado: boolean;
+  onCadastrar: () => void;
+  onVincular: () => void;
+}) {
+  if (s.origem !== "link_publico") return null;
+  if (s.cliente_id) {
+    return (
+      <p className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-900">
+        <span className="font-bold">Cliente:</span> {s.cliente_vinculado?.nome ?? "cadastro vinculado"}
+      </p>
+    );
+  }
+  if (s.status !== "pendente" && s.status !== "aprovada") return null;
+  return (
+    <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 space-y-2">
+      <p className="text-xs font-bold text-indigo-900">Cliente ainda sem cadastro</p>
+      <p className="text-xs text-indigo-800">
+        Sem um cliente vinculado, a cobrança de R&amp;S desta vaga não é gerada. Cadastre um cliente novo com os dados da solicitação ou vincule a um cliente que já existe.
+      </p>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button
+          type="button"
+          onClick={onCadastrar}
+          disabled={ocupado}
+          className="rounded-lg bg-indigo-700 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-800 disabled:opacity-50"
+        >
+          Cadastrar cliente a partir desta solicitação
+        </button>
+        <button
+          type="button"
+          onClick={onVincular}
+          disabled={ocupado}
+          className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
+        >
+          Vincular a cliente existente
+        </button>
+      </div>
+    </div>
+  );
+}

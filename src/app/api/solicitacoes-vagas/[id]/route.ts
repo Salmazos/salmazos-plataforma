@@ -4,6 +4,7 @@ import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 import { parseBody, solicitacaoVagaUpdateSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
+import { anexarClienteVinculado } from "@/lib/solicitacaoClienteVinculado";
 import { aplicarAlteracoesSolicitacao, calcularAlteracoes } from "@/lib/solicitacaoAlteracao";
 
 interface Params {
@@ -55,7 +56,8 @@ export async function GET(request: NextRequest, { params }: Params) {
     pedidoStatus = ps;
   }
 
-  return NextResponse.json({ data: { ...data, alteracao_pendente: pedido ?? null, status_pendente: pedidoStatus ?? null } });
+  const [comCliente] = await anexarClienteVinculado(service, [data]);
+  return NextResponse.json({ data: { ...comCliente, alteracao_pendente: pedido ?? null, status_pendente: pedidoStatus ?? null } });
 }
 
 // Ajustes da equipe numa solicitação do portal, sem precisar pedir pro cliente reenviar

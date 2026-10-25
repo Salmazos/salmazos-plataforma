@@ -8,9 +8,15 @@ import { type ClienteIdentidade, type ResultadoDuplicidade } from "@/lib/cliente
 // roda em memória, são dezenas de linhas). null = a leitura falhou: quem chama decide (cadastro/edição
 // recusam com frase genérica; a cobrança R&S só deixa de copiar o CNPJ pro cadastro).
 export async function carregarIdentidadesClientes(svc: SupabaseClient): Promise<ClienteIdentidade[] | null> {
-  const { data, error } = await svc
+  let { data, error } = await svc
     .from("clientes")
-    .select("id, nome, cidade, ativo, cnpj, contato_telefone, contato_email, endereco, unidade_id");
+    .select("id, nome, cidade, ativo, cnpj, cpf, contato_telefone, contato_email, endereco, unidade_id");
+  // Coluna cpf ainda não criada (migration_clientes_pessoa_fisica.sql não rodou): a checagem segue sem CPF em vez de travar todo cadastro.
+  if (error && (error.code === "42703" || /\bcpf\b/i.test(error.message ?? ""))) {
+    ({ data, error } = await svc
+      .from("clientes")
+      .select("id, nome, cidade, ativo, cnpj, contato_telefone, contato_email, endereco, unidade_id"));
+  }
   if (error) {
     console.error("[clienteDuplicidade] Erro ao carregar clientes para a checagem:", error.message);
     return null;
@@ -21,24 +27,45 @@ export async function carregarIdentidadesClientes(svc: SupabaseClient): Promise<
 export const MSG_FALHA_CHECAGEM = "Não foi possível verificar se este cliente já está cadastrado. Tente novamente.";
 export const MSG_FALHA_SALVAR = "Não foi possível salvar o cliente. Tente novamente.";
 export const MSG_CNPJ_JA_ATIVO = "Já existe um cliente ativo com este CNPJ.";
+export const MSG_CPF_JA_ATIVO = "Já existe um cliente ativo com este CPF.";
+export const MSG_DOCUMENTO_JA_CADASTRADO = "Já existe um cliente cadastrado com este documento.";
+export const MSG_DOCUMENTO_OUTRA_UNIDADE = "Este documento já está cadastrado em outra unidade. Fale com a diretoria.";
 
-function mensagem(r: ResultadoDuplicidade, reativacao: boolean): string {
+// 23505 nos índices únicos de documento entre ativos: a mensagem do Postgres traz o nome do índice.
+export function mensagemUnicidadeDocumento(erro: { message?: string | null }): string {
+  return /clientes_cpf_ativo_unico/.test(erro.message ?? "") ? MSG_CPF_JA_ATIVO : MSG_CNPJ_JA_ATIVO;
+}
+
+export interface OpcoesRespostaDuplicidade {
+  // Cadastro a partir da solicitação do link: o documento pode ser CNPJ ou CPF e o texto não precisa dizer qual.
+  documentoGenerico?: boolean;
+}
+
+function mensagem(r: ResultadoDuplicidade, reativacao: boolean, opcoes: OpcoesRespostaDuplicidade = {}): string {
+  const doc = r.bloqueio === "cpf" ? "CPF" : "CNPJ";
+  if (opcoes.documentoGenerico && (r.bloqueio === "cnpj" || r.bloqueio === "cpf")) {
+    if (r.outraUnidade) return MSG_DOCUMENTO_OUTRA_UNIDADE;
+    const inativoGenerico = r.existente && !r.existente.ativo;
+    return inativoGenerico
+      ? "Já existe um cliente com este documento, mas ele está inativo. Reative o cadastro antigo em vez de criar outro."
+      : MSG_DOCUMENTO_JA_CADASTRADO;
+  }
   if (reativacao && !r.outraUnidade) {
     // Reativar o cadastro X esbarrou em OUTRO cliente: "reative o antigo" não faz sentido aqui.
-    return r.bloqueio === "cnpj"
-      ? "Não é possível reativar: já existe outro cliente com este CNPJ."
+    return r.bloqueio === "cnpj" || r.bloqueio === "cpf"
+      ? `Não é possível reativar: já existe outro cliente com este ${doc}.`
       : `Não é possível reativar: já existe outro cliente com o mesmo telefone e e-mail.${r.podeLiberar ? " A liberação cabe à diretoria." : ""}`;
   }
   if (r.outraUnidade) {
-    return r.bloqueio === "cnpj"
-      ? "Este CNPJ já está cadastrado em outra unidade. Fale com a diretoria."
+    return r.bloqueio === "cnpj" || r.bloqueio === "cpf"
+      ? `Este ${doc} já está cadastrado em outra unidade. Fale com a diretoria.`
       : "Já existe um cadastro parecido em outra unidade. Fale com a diretoria.";
   }
   const inativo = r.existente && !r.existente.ativo;
-  if (r.bloqueio === "cnpj") {
+  if (r.bloqueio === "cnpj" || r.bloqueio === "cpf") {
     return inativo
-      ? "Já existe um cliente com este CNPJ, mas ele está inativo. Reative o cadastro antigo em vez de criar outro."
-      : "Já existe um cliente cadastrado com este CNPJ.";
+      ? `Já existe um cliente com este ${doc}, mas ele está inativo. Reative o cadastro antigo em vez de criar outro.`
+      : `Já existe um cliente cadastrado com este ${doc}.`;
   }
   if (r.bloqueio === "contato") {
     return inativo
@@ -52,10 +79,10 @@ function mensagem(r: ResultadoDuplicidade, reativacao: boolean): string {
 
 // Mesmo formato da Admissão Rápida (409 + jaExiste). Lista branca: nunca telefone, e-mail, CNPJ ou id
 // interno do existente além do que a tela precisa (id/nome/cidade/ativo, e só se a pessoa enxerga a unidade).
-export function respostaDuplicidade(r: ResultadoDuplicidade, reativacao = false): NextResponse {
+export function respostaDuplicidade(r: ResultadoDuplicidade, reativacao = false, opcoes: OpcoesRespostaDuplicidade = {}): NextResponse {
   return NextResponse.json(
     {
-      error: mensagem(r, reativacao),
+      error: mensagem(r, reativacao, opcoes),
       jaExiste: true,
       duplicidade: {
         nivel: r.nivel,
@@ -86,12 +113,13 @@ export function decidirDuplicidade(
   resultado: ResultadoDuplicidade | null,
   flags: { confirmar: boolean; liberar: boolean },
   papelFull: boolean,
-  reativacao = false
+  reativacao = false,
+  opcoes: OpcoesRespostaDuplicidade = {}
 ): DecisaoDuplicidade {
   if (!resultado) return { tipo: "livre" };
   if (reativacao && resultado.nivel === "aviso") return { tipo: "livre" };
   if (resultado.nivel === "aviso") {
-    return flags.confirmar ? { tipo: "confirmada", resultado } : { tipo: "responder", resposta: respostaDuplicidade(resultado) };
+    return flags.confirmar ? { tipo: "confirmada", resultado } : { tipo: "responder", resposta: respostaDuplicidade(resultado, false, opcoes) };
   }
   if (resultado.bloqueio === "contato" && flags.liberar) {
     if (!papelFull) {
@@ -99,5 +127,5 @@ export function decidirDuplicidade(
     }
     return { tipo: "liberada", resultado };
   }
-  return { tipo: "responder", resposta: respostaDuplicidade(resultado, reativacao) };
+  return { tipo: "responder", resposta: respostaDuplicidade(resultado, reativacao, opcoes) };
 }

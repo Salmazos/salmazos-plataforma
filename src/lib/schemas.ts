@@ -4,7 +4,7 @@ import { validarCnpj, validarCpf } from "@/lib/documentoBr";
 import { ESTADOS, CATEGORIAS_HABILITACAO } from "@/lib/solicitacaoVagaCampos";
 import { VALIDADES_LINK_DIAS, VALIDADE_LINK_PADRAO_DIAS } from "@/lib/solicitacaoVagaLink";
 import { salarioPublicoValido } from "@/lib/solicitacaoVagaPublicaForm";
-import { TURNOS_FUNCIONARIO } from "@/lib/constants";
+import { TURNOS_FUNCIONARIO, SEGMENTOS_CLIENTE, TIPOS_SERVICO } from "@/lib/constants";
 import { nomeArquivoCurriculoValido } from "@/lib/indicacaoEdicao";
 import { validarSenhaPortal, mensagemSenhaPortalInvalida } from "@/lib/senhaPortal";
 import { normalizarLocalEntrevista, LOCAL_ENTREVISTA_MAX } from "@/lib/localEntrevista";
@@ -147,6 +147,10 @@ export const clienteCreateSchema = z.object({
   responsavel_comercial: z.string().optional(),
   entidade_contratante: z.string().optional().nullable(),
   cnpj: z.string().optional().nullable(),
+  // Pessoa física (migration_clientes_pessoa_fisica.sql). Omitidos = cadastro PJ de sempre.
+  tipo_pessoa: z.enum(["pj", "pf"]).optional(),
+  cpf: z.string().optional().nullable(),
+  email_nota_fiscal: z.string().trim().email().max(150).optional().nullable().or(z.literal("")),
   endereco: z.string().optional().nullable(),
   processo_simplificado: z.boolean().optional(),
   // Só é respeitado pra quem tem acesso a todas as unidades; os demais criam sempre na
@@ -170,12 +174,46 @@ export const clienteUpdateSchema = z.object({
   responsavel_comercial: z.string().optional().nullable(),
   entidade_contratante: z.string().optional().nullable(),
   cnpj: z.string().optional().nullable(),
+  tipo_pessoa: z.enum(["pj", "pf"]).optional(),
+  cpf: z.string().optional().nullable(),
+  email_nota_fiscal: z.string().trim().email().max(150).optional().nullable().or(z.literal("")),
   endereco: z.string().optional().nullable(),
   processo_simplificado: z.boolean().optional(),
   unidade_id: z.string().uuid().optional(),
   confirmar_duplicidade: z.boolean().optional(),
   liberar_bloqueio: z.boolean().optional(),
 });
+
+// Cadastro de cliente a partir de uma solicitação do link público (POST /api/solicitacoes-vagas/[id]/vincular-cliente). A unidade NÃO vem
+// do corpo (é a da solicitação): qualquer unidade_id enviado é descartado pelo schema.
+const textoDoCliente = (max: number) => z.string().trim().max(max);
+export const solicitacaoVincularClienteSchema = z.discriminatedUnion("modo", [
+  z.object({
+    modo: z.literal("criar"),
+    cliente: z.object({
+      tipo_pessoa: z.enum(["pj", "pf"]),
+      nome: textoDoCliente(150).min(2, "Informe o nome do cliente."),
+      contato_nome: textoDoCliente(120).min(1, "Informe o nome do contato."),
+      contato_telefone: textoDoCliente(30).min(1, "Informe o telefone."),
+      contato_email: textoDoCliente(150).email("E-mail inválido."),
+      cidade: textoDoCliente(100).min(1, "Informe a cidade."),
+      segmento: textoDoCliente(60).refine((v) => SEGMENTOS_CLIENTE.includes(v), "Escolha o segmento da lista."),
+      servicos: z.array(z.string().refine((v) => TIPOS_SERVICO.some((t) => t.id === v), "Serviço desconhecido.")).max(10).default([]),
+      responsavel_comercial: textoDoCliente(120).optional().nullable(),
+      cnpj: textoDoCliente(30).optional().nullable(),
+      cpf: textoDoCliente(30).optional().nullable(),
+      email_nota_fiscal: textoDoCliente(150).email("E-mail da nota fiscal inválido.").optional().nullable().or(z.literal("")),
+      endereco: textoDoCliente(300).optional().nullable(),
+    }),
+    confirmar_duplicidade: z.boolean().optional(),
+    liberar_bloqueio: z.boolean().optional(),
+  }),
+  z.object({
+    modo: z.literal("vincular"),
+    cliente_id: z.string().uuid(),
+    completar_vazios: z.boolean().optional(),
+  }),
+]);
 
 export const clienteAtencaoEspecialSchema = z.object({
   atencao_especial: z.boolean(),

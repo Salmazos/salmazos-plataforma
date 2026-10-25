@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { obterContextoUnidade } from "@/lib/unidadeAuth";
+import { anexarClienteVinculado } from "@/lib/solicitacaoClienteVinculado";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -65,7 +66,8 @@ export async function GET(request: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const comPedido = (data ?? []).map((s) => ({
+  const comCliente = await anexarClienteVinculado(service, data ?? []);
+  const comPedido = comCliente.map((s) => ({
     ...s,
     alteracao_pendente: pedidoPorSolicitacao.get(s.id) ?? null,
     status_pendente: s.vaga_id ? pedidoStatusPorVaga.get(s.vaga_id) ?? null : null,

@@ -4,6 +4,10 @@
 // aqui (CHECKs e imutabilidade de funcionario_mot_eventos). NÃO é um banco real — a prova final contra o
 // Postgres de verdade continua sendo a migration + o uso na tela.
 
+// ON DELETE CASCADE das chaves estrangeiras que os testes precisam respeitar sempre (os testes ainda podem somar as suas em db.cascatas).
+// solicitacoes_vagas.cliente_id: apagar o cliente apaga a solicitação (scripts/verificar-cliente-da-solicitacao.mts).
+const CASCATAS_FIXAS = { clientes: [{ tabela: "solicitacoes_vagas", col: "cliente_id" }] };
+
 const RELACOES = {
   rescisoes: { funcionarios: { alvo: "funcionarios", local: "funcionario_id" } },
   funcionarios: { clientes: { alvo: "clientes", local: "cliente_id" } },
@@ -197,7 +201,21 @@ class Consulta {
             .map((f) => ({ ...f, col: f.col.slice(e.nome.length + 1) }));
           if (alvo && !filtrosDoEmbed.every((f) => passa(alvo, f))) alvo = null;
           if (e.inner && !alvo) return null;
-          saida[e.alias] = alvo ? projetar(alvo, interpretarSelect(e.cols).colunas) : null;
+          if (!alvo) {
+            saida[e.alias] = null;
+            continue;
+          }
+          const interno = interpretarSelect(e.cols);
+          const projetado = projetar(alvo, interno.colunas);
+          // Um nível de embed dentro de embed (ex.: candidatos_vagas -> vagas -> clientes), só quando a relação está mapeada; as demais seguem
+          // ignoradas como antes.
+          for (const e2 of interno.embeds) {
+            const rel2 = RELACOES[rel.alvo]?.[e2.nome];
+            if (!rel2) continue;
+            const alvo2 = (this.db.tabelas[rel2.alvo] ?? []).find((x) => x.id === alvo[rel2.local]) ?? null;
+            projetado[e2.alias] = alvo2 ? projetar(alvo2, interpretarSelect(e2.cols).colunas) : null;
+          }
+          saida[e.alias] = projetado;
         }
         return saida;
       })
@@ -227,7 +245,20 @@ class Consulta {
     return { data: linhas, error: null };
   }
 
+  // db.falhasAposGravar["tabela.op"] = mensagem (uso único): a operação GRAVA e mesmo assim devolve erro — a resposta perdida em que o
+  // banco aplicou o UPDATE/INSERT e o cliente não ficou sabendo.
   async executar() {
+    const resultado = await this.executarInterno();
+    const chave = `${this.tabela}.${this.op}`;
+    const aposGravar = this.db.falhasAposGravar?.[chave];
+    if (aposGravar && !resultado.error) {
+      delete this.db.falhasAposGravar[chave];
+      return { data: null, error: typeof aposGravar === "object" ? aposGravar : { message: aposGravar } };
+    }
+    return resultado;
+  }
+
+  async executarInterno() {
     this.db.consultas.push({ tabela: this.tabela, op: this.op });
     // Gancho de uso único (db.ganchos["tabela.op"] = fn): roda ANTES da operação — simula outra pessoa mexendo
     // na linha entre a leitura e a escrita da rota (corrida entre cliente e analista).
@@ -293,7 +324,7 @@ class Consulta {
     if (this.op === "delete") {
       this.db.tabelas[this.tabela] = tabela.filter((l) => !alvos.includes(l));
       // db.cascatas = { tabela: [{ tabela, col }] }: imita ON DELETE CASCADE das chaves estrangeiras.
-      for (const c of this.db.cascatas?.[this.tabela] ?? []) {
+      for (const c of [...(CASCATAS_FIXAS[this.tabela] ?? []), ...(this.db.cascatas?.[this.tabela] ?? [])]) {
         const ids = alvos.map((l) => l.id);
         this.db.tabelas[c.tabela] = (this.db.tabelas[c.tabela] ?? []).filter((x) => !ids.includes(x[c.col]));
       }
