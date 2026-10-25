@@ -8,8 +8,16 @@ import {
   type DestinatarioCobranca,
 } from "@/lib/cobrancaRSRegras";
 import { avisarCobrancaRSSinoPendenteRevisao } from "@/lib/avisarCobrancaRS";
+import { documentoDoCliente, emailDaCobranca } from "@/lib/cobrancaRSDocumento";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
+
+// Tipo do cliente da cobrança (pj/pf), para escolher CPF ou CNPJ. Consulta própria (sem embed). null = sem cadastro vinculado ou leitura falhou.
+export async function tipoPessoaDoClienteDaCobranca(svc: ServiceClient, clienteId: string | null | undefined): Promise<string | null> {
+  if (!clienteId) return null;
+  const { data } = await svc.from("clientes").select("tipo_pessoa").eq("id", clienteId).maybeSingle();
+  return (data as { tipo_pessoa?: string | null } | null)?.tipo_pessoa ?? null;
+}
 
 export interface ResultadoCobranca {
   criada: boolean;
@@ -79,7 +87,7 @@ export async function gerarCobrancaRSSeAplicavel(
   const { data: cv } = await svc
     .from("candidatos_vagas")
     .select(
-      "id, candidato_id, vaga_id, candidatos(nome_completo), vagas!candidatos_vagas_vaga_id_fkey(id, titulo, tipo_servico, fee_rs_percentual, fee_rs_prazo_cobranca, cliente_id, cliente_nome, unidade_id, clientes(nome, cnpj, endereco, contato_telefone, contato_email))"
+      "id, candidato_id, vaga_id, candidatos(nome_completo), vagas!candidatos_vagas_vaga_id_fkey(id, titulo, tipo_servico, fee_rs_percentual, fee_rs_prazo_cobranca, cliente_id, cliente_nome, unidade_id, clientes(nome, cnpj, cpf, tipo_pessoa, email_nota_fiscal, endereco, contato_telefone, contato_email))"
     )
     .eq("id", candidatoVagaId)
     .single();
@@ -91,7 +99,7 @@ export async function gerarCobrancaRSSeAplicavel(
     id: string; titulo: string; tipo_servico: string; fee_rs_percentual: number | null;
     fee_rs_prazo_cobranca: string | null;
     cliente_id: string | null; cliente_nome: string | null; unidade_id: string;
-    clientes: { nome: string; cnpj: string | null; endereco: string | null; contato_telefone: string | null; contato_email: string | null } | null;
+    clientes: { nome: string; cnpj: string | null; cpf: string | null; tipo_pessoa: string | null; email_nota_fiscal: string | null; endereco: string | null; contato_telefone: string | null; contato_email: string | null } | null;
   } | null;
 
   if (!vaga || vaga.id !== vagaId || vaga.tipo_servico !== "recrutamento_selecao") {
@@ -142,10 +150,11 @@ export async function gerarCobrancaRSSeAplicavel(
       cliente_id: vaga.cliente_id,
 
       cliente_nome_snapshot: clienteNome,
-      cliente_cnpj_snapshot: vaga.clientes?.cnpj ?? null,
+      // cliente_cnpj_snapshot guarda o documento do cliente: CNPJ (PJ, como sempre) ou CPF (PF).
+      cliente_cnpj_snapshot: documentoDoCliente(vaga.clientes),
       cliente_endereco_snapshot: vaga.clientes?.endereco ?? null,
       cliente_telefone_snapshot: vaga.clientes?.contato_telefone ?? null,
-      cliente_email_snapshot: vaga.clientes?.contato_email ?? null,
+      cliente_email_snapshot: emailDaCobranca(vaga.clientes),
 
       candidato_nome_snapshot: candidatoNome,
 
@@ -250,7 +259,7 @@ export async function gerarCobrancaCancelamentoRSSeAplicavel(
   const { data: vaga } = await svc
     .from("vagas")
     .select(
-      "id, titulo, tipo_servico, taxa_cancelamento, taxa_cancelamento_percentual, salario, fee_rs_prazo_cobranca, cliente_id, cliente_nome, unidade_id, clientes(nome, cnpj, endereco, contato_telefone, contato_email)"
+      "id, titulo, tipo_servico, taxa_cancelamento, taxa_cancelamento_percentual, salario, fee_rs_prazo_cobranca, cliente_id, cliente_nome, unidade_id, clientes(nome, cnpj, cpf, tipo_pessoa, email_nota_fiscal, endereco, contato_telefone, contato_email)"
     )
     .eq("id", vagaId)
     .single();
@@ -320,10 +329,10 @@ export async function gerarCobrancaCancelamentoRSSeAplicavel(
     cliente_id: vaga.cliente_id,
 
     cliente_nome_snapshot: clienteNome,
-    cliente_cnpj_snapshot: clienteRel?.cnpj ?? null,
+    cliente_cnpj_snapshot: documentoDoCliente(clienteRel),
     cliente_endereco_snapshot: clienteRel?.endereco ?? null,
     cliente_telefone_snapshot: clienteRel?.contato_telefone ?? null,
-    cliente_email_snapshot: clienteRel?.contato_email ?? null,
+    cliente_email_snapshot: emailDaCobranca(clienteRel),
 
     candidato_nome_snapshot: null,
 

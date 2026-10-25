@@ -1175,6 +1175,11 @@ caso("assunto e descrição: quebra de linha (\\r \\n) vinda do formulário nunc
 });
 // ── Equivalência do escape global: a implementação nova contra a anterior (cópia congelada do commit base) ─────────────────────────────────────
 const TODOS_OS_TEMPLATES = ["entrevista_salmazos", "entrevista_cliente", "aprovado_cliente", "reprovado", "solicitar_documentos", "vaga_aprovada_cliente", "solicitacao_recusada", "candidato_entrevista_cliente", "nova_vaga_criada", "vaga_encerrada", "admissao_link", "cobranca_rs_gerada", "cobranca_rs_atrasada", "cobranca_rs_aguardando_validacao", "cobranca_rs_paga", "cobranca_rs_cancelada", "cobranca_rs_validada_diretoria", "supervisao_cliente_atrasada", "alteracao_solicitacao_pedida", "alteracao_solicitacao_aprovada", "alteracao_solicitacao_recusada", "vaga_status_solicitado", "vaga_status_decidido"] as const;
+// Única mudança INTENCIONAL de texto desde a cópia congelada (Fase 3, cobrança R&S): nos e-mails de cobrança (gerada, atrasada, aguardando validação, paga e
+// cancelada) o rótulo "Empresa:" virou "Cliente:" (serve para pessoa física). A equivalência compara o resto byte a byte, desfazendo só essa troca.
+const TEMPLATES_DE_COBRANCA_COM_ROTULO_CLIENTE = ["cobranca_rs_gerada", "cobranca_rs_atrasada", "cobranca_rs_aguardando_validacao", "cobranca_rs_paga", "cobranca_rs_cancelada"];
+const comoAntes = (nome: string, html: string) =>
+  TEMPLATES_DE_COBRANCA_COM_ROTULO_CLIENTE.includes(nome) ? html.split("<strong>Cliente:</strong>").join("<strong>Empresa:</strong>") : html;
 const desescapar = (t: string) => t.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
 // Campos de texto livre (a lista do wrapper) mais os que NÃO são: HTML pronto e URLs.
 const CAMPOS_TEXTO = ["nome", "cargo", "nomeCliente", "nomeCandidato", "cidade", "empresa", "estado", "responsavel", "salario", "horario", "requisitos", "beneficios", "observacoes", "motivoRecusa", "clienteCnpj", "clienteEndereco", "clienteTelefone", "clienteEmail", "justificativaCancelamento", "motivoTextoEncerramento", "feeRsPrazoCobranca"];
@@ -1202,7 +1207,7 @@ caso("equivalência (dados normais: acentos, números, quebras de linha em campo
   for (const nome of TODOS_OS_TEMPLATES) {
     const novo = getEmailTemplate(nome, dados);
     const antes = getEmailTemplateAntes(nome, dados);
-    assert.strictEqual(novo.html, antes.html, `${nome}: html`);
+    assert.strictEqual(comoAntes(nome, novo.html), antes.html, `${nome}: html`);
     assert.strictEqual(novo.subject, antes.subject, `${nome}: assunto`);
     assert.strictEqual(novo.descricao, antes.descricao, `${nome}: descrição`);
   }
@@ -1213,7 +1218,7 @@ caso("equivalência (campos ausentes ou vazios, como os chamadores reais passam)
     for (const dados of [minimo, { nome: "Maria", cargo: "Auxiliar" }]) {
       const novo = getEmailTemplate(nome, dados);
       const antes = getEmailTemplateAntes(nome, dados);
-      assert.deepEqual(novo, antes, nome);
+      assert.deepEqual({ ...novo, html: comoAntes(nome, novo.html) }, antes, nome);
     }
   }
 });
@@ -1223,7 +1228,7 @@ caso("equivalência com <, >, \", ' e &: a única diferença é a troca pela ent
   for (const nome of TODOS_OS_TEMPLATES) {
     const novo = getEmailTemplate(nome, dados);
     const antes = getEmailTemplateAntes(nome, dados);
-    assert.strictEqual(desescapar(novo.html), desescapar(antes.html), `${nome}: fora das entidades o html é o mesmo`);
+    assert.strictEqual(desescapar(comoAntes(nome, novo.html)), desescapar(antes.html), `${nome}: fora das entidades o html é o mesmo`);
     assert.strictEqual(novo.subject, antes.subject, `${nome}: assunto igual`);
     assert.strictEqual(novo.descricao, antes.descricao, `${nome}: descrição igual`);
     assert.ok(!novo.html.includes('<b>"x"</b>'), `${nome}: nenhuma tag do dado sai crua`);
@@ -1239,7 +1244,7 @@ caso("equivalência só com '&' (nome de empresa comum): a diferença é só & �
   for (const nome of TODOS_OS_TEMPLATES) {
     const novo = getEmailTemplate(nome, dados);
     const antes = getEmailTemplateAntes(nome, dados);
-    assert.strictEqual(desescapar(novo.html), desescapar(antes.html), nome);
+    assert.strictEqual(desescapar(comoAntes(nome, novo.html)), desescapar(antes.html), nome);
     assert.strictEqual(novo.subject, antes.subject, `${nome}: assunto`);
   }
   assert.ok(getEmailTemplate("vaga_aprovada_cliente", dados).html.includes("Silva &amp; Filhos Ltda"));
@@ -1250,7 +1255,7 @@ caso("equivalência com quebra de linha nos campos do assunto: o html é idênti
   for (const nome of TODOS_OS_TEMPLATES) {
     const novo = getEmailTemplate(nome, dados);
     const antes = getEmailTemplateAntes(nome, dados);
-    assert.strictEqual(novo.html, antes.html, `${nome}: html`);
+    assert.strictEqual(comoAntes(nome, novo.html), antes.html, `${nome}: html`);
     assert.strictEqual(novo.subject, semQuebra(antes.subject), `${nome}: assunto`);
     assert.strictEqual(novo.descricao, semQuebra(antes.descricao), `${nome}: descrição`);
   }

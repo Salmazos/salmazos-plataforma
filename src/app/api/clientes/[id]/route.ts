@@ -15,6 +15,7 @@ import {
   type DecisaoDuplicidade,
 } from "@/lib/clienteDuplicidadeRota";
 import { validarDocumentoDoCliente, vazioParaNulo } from "@/lib/clienteDaSolicitacao";
+import { emailDaCobranca } from "@/lib/cobrancaRSDocumento";
 
 export async function PATCH(
   request: NextRequest,
@@ -212,10 +213,11 @@ export async function PATCH(
     // e-mail aqui deve corrigir o snapshot de TODAS as cobranças desse cliente (independente
     // do status — não reenvia nada, só corrige o dado exibido/usado numa ação futura, como
     // "Reenviar notificação").
-    if (campos.contato_email !== undefined) {
+    // O e-mail da cobrança é o da nota fiscal quando preenchido, senão o de contato: mexer em qualquer um dos dois recalcula o snapshot.
+    if (campos.contato_email !== undefined || campos.email_nota_fiscal !== undefined) {
       await supabase
         .from("cobrancas_rs")
-        .update({ cliente_email_snapshot: campos.contato_email })
+        .update({ cliente_email_snapshot: emailDaCobranca(data) })
         .eq("cliente_id", id);
     }
 

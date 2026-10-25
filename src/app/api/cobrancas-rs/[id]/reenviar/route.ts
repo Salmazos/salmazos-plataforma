@@ -3,7 +3,8 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelFullAccess } from "@/lib/fullAccessAuth";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
-import { obterDestinatariosCobrancaRS } from "@/lib/cobrancaRS";
+import { obterDestinatariosCobrancaRS, tipoPessoaDoClienteDaCobranca } from "@/lib/cobrancaRS";
+import { rotuloDocumento, tipoDocumentoDaCobranca } from "@/lib/cobrancaRSDocumento";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { avisarCobrancaRSEmail } from "@/lib/avisarCobrancaRS";
 import { EVENTO_COBRANCA_RS_GERADA, TIPO_EMAIL_COBRANCA_GERADA } from "@/lib/cobrancaRSRegras";
@@ -51,6 +52,8 @@ export async function POST(_request: NextRequest, { params }: Params) {
   const ehCancelamento = cobranca.tipo === "cancelamento";
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vagaTitulo = (cobranca.vagas as any)?.titulo ?? "—";
+  // O e-mail diz CPF ou CNPJ conforme o tipo do cliente (lido antes do after(): a resposta não espera por ele).
+  const rotuloDoc = rotuloDocumento(tipoDocumentoDaCobranca(await tipoPessoaDoClienteDaCobranca(svc, cobranca.cliente_id)));
 
   after(async () => {
     try {
@@ -75,6 +78,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
             nomeCliente: cobranca.cliente_nome_snapshot,
             nomeCandidato: ehCancelamento ? undefined : cobranca.candidato_nome_snapshot,
             clienteCnpj: cobranca.cliente_cnpj_snapshot,
+            clienteDocumentoRotulo: rotuloDoc,
             clienteEndereco: cobranca.cliente_endereco_snapshot,
             clienteTelefone: cobranca.cliente_telefone_snapshot,
             clienteEmail: cobranca.cliente_email_snapshot,

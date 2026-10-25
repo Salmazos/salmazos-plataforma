@@ -19,6 +19,7 @@ const MOCKS = {
   "@/lib/sendEmail": "send-email.mjs",
   "next/server": "next-server.mjs",
   "next/navigation": "next-navigation.mjs",
+  "next/cache": "next-cache.mjs",
   "next/link": "stub-component.mjs",
 };
 

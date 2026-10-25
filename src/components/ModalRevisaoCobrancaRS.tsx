@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import { rotuloDocumento, tipoDocumentoDaCobranca } from "@/lib/cobrancaRSDocumento";
 import type { CobrancaRSRow } from "./CobrancasRSPageClient";
 
 interface CobrancaDetalhe {
@@ -10,6 +11,8 @@ interface CobrancaDetalhe {
   vaga_id: string;
   candidato_id: string | null;
   cliente_id: string | null;
+  // Cadastro do cliente (embed do GET /api/cobrancas-rs/[id]): tipo_pessoa decide CPF ou CNPJ nos textos. null = sem cadastro vinculado.
+  clientes?: { tipo_pessoa?: string | null; cpf?: string | null; email_nota_fiscal?: string | null } | null;
   cliente_nome_snapshot: string;
   cliente_cnpj_snapshot: string | null;
   cliente_endereco_snapshot: string | null;
@@ -83,6 +86,8 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
   const [cobranca, setCobranca] = useState<CobrancaDetalhe | null>(null);
   const [geradoPorNome, setGeradoPorNome] = useState<string | null>(null);
   const [erro, setErro] = useState("");
+  // Avisos do servidor depois de salvar: a cobrança foi salva, mas algo não pôde ir para o cadastro do cliente.
+  const [avisosCadastro, setAvisosCadastro] = useState<string[]>([]);
 
   const [cargo, setCargo] = useState("");
   const [salario, setSalario] = useState<number>(0);
@@ -130,6 +135,10 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
     salario > 0 && cobranca?.fee_percentual != null ? (salario * cobranca.fee_percentual) / 100 : null;
 
   const ehCancelamento = cobranca?.tipo === "cancelamento";
+  // CPF para cliente pessoa física, CNPJ para pessoa jurídica ou cobrança sem cadastro (como sempre foi).
+  const rotuloDoc = rotuloDocumento(tipoDocumentoDaCobranca(cobranca?.clientes?.tipo_pessoa));
+  // O "será salvo no cadastro" só vale com cadastro vinculado.
+  const temCadastro = !!cobranca?.cliente_id;
 
   // Mesma lista de "faltando" validada em /api/cobrancas-rs/[id]/aprovar (fonte de verdade,
   // continua sendo quem decide de fato) — replicada aqui só pra desabilitar o botão
@@ -142,7 +151,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
     if (!dataInicio) camposFaltando.push("Data de início");
   }
   if (salario <= 0) camposFaltando.push(ehCancelamento ? "Salário-base" : "Salário");
-  if (!clienteCnpj.trim()) camposFaltando.push("CNPJ do cliente");
+  if (!clienteCnpj.trim()) camposFaltando.push(`${rotuloDoc} do cliente`);
   if (!clienteEndereco.trim()) camposFaltando.push("Endereço do cliente");
   const camposCompletos = camposFaltando.length === 0;
 
@@ -165,7 +174,9 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
       });
       const json = await res.json();
       if (!res.ok) { setErro(json.error || "Erro ao salvar rascunho."); return false; }
-      setCobranca(json.data);
+      // A resposta do PATCH é só a linha da cobrança: o cadastro do cliente (que veio do GET) é preservado.
+      setCobranca({ ...json.data, clientes: cobranca?.clientes ?? null });
+      setAvisosCadastro(Array.isArray(json.avisos) ? json.avisos : []);
       return true;
     } catch {
       setErro("Erro de conexão. Tente novamente.");
@@ -319,19 +330,19 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
 
               {cobranca.status === "pendente_revisao" && !cobranca.cliente_cnpj_snapshot ? (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">CNPJ do cliente *</label>
-                  <input value={clienteCnpj} onChange={(e) => setClienteCnpj(e.target.value)} placeholder="00.000.000/0000-00" className="input-field" />
-                  <p className="text-xs text-gray-400 mt-1">Ausente no cadastro do cliente — será salvo aqui e no cadastro.</p>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{rotuloDoc} do cliente *</label>
+                  <input value={clienteCnpj} onChange={(e) => setClienteCnpj(e.target.value)} placeholder={rotuloDoc === "CPF" ? "000.000.000-00" : "00.000.000/0000-00"} className="input-field" />
+                  <p className="text-xs text-gray-400 mt-1">{temCadastro ? "Ausente no cadastro do cliente — será salvo aqui e no cadastro." : "Cliente sem cadastro vinculado — será salvo só nesta cobrança."}</p>
                 </div>
               ) : (
-                <p className="text-sm"><span className="text-gray-500">CNPJ:</span> {cobranca.cliente_cnpj_snapshot ?? "—"}</p>
+                <p className="text-sm"><span className="text-gray-500">{rotuloDoc}:</span> {cobranca.cliente_cnpj_snapshot ?? "—"}</p>
               )}
 
               {cobranca.status === "pendente_revisao" && !cobranca.cliente_endereco_snapshot ? (
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Endereço do cliente *</label>
                   <input value={clienteEndereco} onChange={(e) => setClienteEndereco(e.target.value)} placeholder="Rua, número, bairro, cidade/UF" className="input-field" />
-                  <p className="text-xs text-gray-400 mt-1">Ausente no cadastro do cliente — será salvo aqui e no cadastro.</p>
+                  <p className="text-xs text-gray-400 mt-1">{temCadastro ? "Ausente no cadastro do cliente — será salvo aqui e no cadastro." : "Cliente sem cadastro vinculado — será salvo só nesta cobrança."}</p>
                 </div>
               ) : (
                 <p className="text-sm"><span className="text-gray-500">Endereço:</span> {cobranca.cliente_endereco_snapshot ?? "—"}</p>
@@ -408,6 +419,13 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
               </div>
 
               {erro && <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">{erro}</p>}
+              {avisosCadastro.length > 0 && (
+                <div role="status" className="text-amber-900 text-sm bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 space-y-1">
+                  {avisosCadastro.map((a) => (
+                    <p key={a}>{a}</p>
+                  ))}
+                </div>
+              )}
               {salvo && !erro && <p className="text-green-700 text-sm">Rascunho salvo!</p>}
 
               {cobranca.status === "cancelada" && (

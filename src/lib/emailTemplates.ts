@@ -59,6 +59,8 @@ interface TemplateData {
   // Cobrança R&S (case "cobranca_rs_gerada") — cliente vem do snapshot da cobrança, não
   // do cadastro atual (ver cobrancas_rs.cliente_*_snapshot).
   clienteCnpj?: string | null;
+  // "CPF" para cliente pessoa física, "CNPJ" (padrão) para pessoa jurídica: o rótulo da linha do documento na cobrança gerada.
+  clienteDocumentoRotulo?: "CPF" | "CNPJ";
   clienteEndereco?: string | null;
   clienteTelefone?: string | null;
   clienteEmail?: string | null;
@@ -148,7 +150,7 @@ const BANNER_CONFIDENCIAL = `<div style="background:#fef2f2;border:2px solid #fc
 
 function montarTemplate(
   name: EmailTemplateName,
-  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor, tipoCobrancaRS, cobrancaUrl, dataVencimento, diasAtraso, diasParado, dataPagamento, justificativaCancelamento, diasSemSupervisao, frequenciaDiasSupervisao, supervisaoUrl, resumoAlteracoesHtml, solicitacaoUrl, acaoSolicitada, decisaoStatus, motivoTipoEncerramentoLabel, motivoTextoEncerramento }: TemplateData
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteDocumentoRotulo, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor, tipoCobrancaRS, cobrancaUrl, dataVencimento, diasAtraso, diasParado, dataPagamento, justificativaCancelamento, diasSemSupervisao, frequenciaDiasSupervisao, supervisaoUrl, resumoAlteracoesHtml, solicitacaoUrl, acaoSolicitada, decisaoStatus, motivoTipoEncerramentoLabel, motivoTextoEncerramento }: TemplateData
 ): EmailTemplate {
   switch (name) {
     case "entrevista_salmazos":
@@ -564,8 +566,8 @@ function montarTemplate(
           <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
             <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados do cliente:</p>
             <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
-              <li><strong>Empresa:</strong> ${nomeCliente ?? "—"}</li>
-              <li><strong>CNPJ:</strong> ${clienteCnpj ?? "—"}</li>
+              <li><strong>Cliente:</strong> ${nomeCliente ?? "—"}</li>
+              <li><strong>${clienteDocumentoRotulo ?? "CNPJ"}:</strong> ${clienteCnpj ?? "—"}</li>
               <li><strong>Endereço:</strong> ${clienteEndereco ?? "—"}</li>
               <li><strong>Telefone:</strong> ${clienteTelefone ?? "—"}</li>
               <li><strong>E-mail:</strong> ${clienteEmail ?? "—"}</li>
@@ -609,7 +611,7 @@ function montarTemplate(
           <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
             <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados da cobrança:</p>
             <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
-              <li><strong>Empresa:</strong> ${nomeCliente ?? "—"}</li>
+              <li><strong>Cliente:</strong> ${nomeCliente ?? "—"}</li>
               ${!ehCancelamento ? `<li><strong>Candidato:</strong> ${nomeCandidato ?? "—"}</li>` : ""}
               <li><strong>Vaga:</strong> ${cargo ?? "—"}</li>
               <li><strong>Vencimento:</strong> ${dataVencimentoFmt}</li>
@@ -638,7 +640,7 @@ function montarTemplate(
           <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
             <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados da cobrança:</p>
             <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
-              <li><strong>Empresa:</strong> ${esc(nomeCliente)}</li>
+              <li><strong>Cliente:</strong> ${esc(nomeCliente)}</li>
               ${!ehCancelamento ? `<li><strong>Candidato:</strong> ${esc(nomeCandidato)}</li>` : ""}
               <li><strong>Vaga:</strong> ${esc(cargo)}</li>
               <li><strong>Tipo:</strong> ${ehCancelamento ? "Taxa de cancelamento" : "Contratação"}</li>
@@ -675,7 +677,7 @@ function montarTemplate(
           <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
             <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados da cobrança:</p>
             <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
-              <li><strong>Empresa:</strong> ${nomeCliente ?? "—"}</li>
+              <li><strong>Cliente:</strong> ${nomeCliente ?? "—"}</li>
               ${!ehCancelamento ? `<li><strong>Candidato:</strong> ${nomeCandidato ?? "—"}</li>` : ""}
               <li><strong>Vaga:</strong> ${cargo ?? "—"}</li>
               <li><strong>Valor:</strong> ${feeValorFmt}</li>
@@ -703,7 +705,7 @@ function montarTemplate(
           <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
             <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados da cobrança:</p>
             <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
-              <li><strong>Empresa:</strong> ${nomeCliente ?? "—"}</li>
+              <li><strong>Cliente:</strong> ${nomeCliente ?? "—"}</li>
               ${!ehCancelamento ? `<li><strong>Candidato:</strong> ${nomeCandidato ?? "—"}</li>` : ""}
               <li><strong>Vaga:</strong> ${cargo ?? "—"}</li>
               <li><strong>Valor:</strong> ${feeValorFmt}</li>
