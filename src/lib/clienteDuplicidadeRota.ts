@@ -80,14 +80,18 @@ function mensagem(r: ResultadoDuplicidade, reativacao: boolean, opcoes: OpcoesRe
 // Mesmo formato da Admissão Rápida (409 + jaExiste). Lista branca: nunca telefone, e-mail, CNPJ ou id
 // interno do existente além do que a tela precisa (id/nome/cidade/ativo, e só se a pessoa enxerga a unidade).
 export function respostaDuplicidade(r: ResultadoDuplicidade, reativacao = false, opcoes: OpcoesRespostaDuplicidade = {}): NextResponse {
+  // Cadastro de OUTRA unidade: só o documento (cnpj/cpf) pode aparecer como motivo. Telefone, e-mail, nome e endereço coincidentes são dado do outro
+  // cliente, e o bloqueio por contato (telefone + e-mail) revelaria os dois; a mensagem já diz que existe um cadastro parecido em outra unidade.
+  const motivos = r.outraUnidade ? r.motivos.filter((m) => m === "cnpj" || m === "cpf") : r.motivos;
+  const bloqueio = r.outraUnidade && r.bloqueio === "contato" ? null : r.bloqueio;
   return NextResponse.json(
     {
       error: mensagem(r, reativacao, opcoes),
       jaExiste: true,
       duplicidade: {
         nivel: r.nivel,
-        bloqueio: r.bloqueio,
-        motivos: r.motivos,
+        bloqueio,
+        motivos,
         existente: r.existente,
         outros: r.outros,
         podeConfirmar: r.podeConfirmar,

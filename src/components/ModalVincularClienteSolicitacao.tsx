@@ -7,6 +7,7 @@ import {
   completarSomenteVazios,
   montarPrefillCliente,
   escapeDeveFecharModal,
+  mensagemVinculoAposReativacao,
   rotularCampos,
   solicitacaoFicouIndisponivel,
   type SituacaoDaVaga,
@@ -89,6 +90,8 @@ export default function ModalVincularClienteSolicitacao({ solicitacao, clienteId
     if (!escolhido) return;
     setSalvando(true);
     setErro("");
+    // true quando ESTA chamada já reativou o cadastro: daí em diante qualquer falha precisa dizer que o cliente foi reativado.
+    let reativouAgora = false;
     try {
       if (!escolhido.ativo) {
         // Reativação pelo fluxo que já existe (com a checagem de duplicidade dele) e só depois o vínculo.
@@ -99,6 +102,7 @@ export default function ModalVincularClienteSolicitacao({ solicitacao, clienteId
         });
         const jr = await rr.json();
         if (!rr.ok) { setErro(typeof jr.error === "string" ? jr.error : "Não foi possível reativar o cadastro."); return; }
+        reativouAgora = true;
         setClientes((prev) => prev.map((c) => (c.id === escolhido.id ? { ...c, ativo: true } : c)));
       }
       const res = await fetch(`/api/solicitacoes-vagas/${solicitacao.id}/vincular-cliente`, {
@@ -117,13 +121,17 @@ export default function ModalVincularClienteSolicitacao({ solicitacao, clienteId
         });
         return;
       }
-      if (solicitacaoFicouIndisponivel(res.status, json)) { onJaVinculada(json.error); return; }
+      if (solicitacaoFicouIndisponivel(res.status, json)) {
+        onJaVinculada(reativouAgora ? mensagemVinculoAposReativacao(escolhido.nome, json.error, { tentarDeNovo: false }) : json.error);
+        return;
+      }
       if (res.status === 409 && json.precisaReativar) {
         setClientes((prev) => prev.map((c) => (c.id === escolhido.id ? { ...c, ativo: false } : c)));
       }
-      setErro(typeof json.error === "string" ? json.error : "Não foi possível vincular.");
+      const motivo = typeof json.error === "string" ? json.error : null;
+      setErro(reativouAgora ? mensagemVinculoAposReativacao(escolhido.nome, motivo) : motivo ?? "Não foi possível vincular.");
     } catch {
-      setErro("Erro de conexão. Tente novamente.");
+      setErro(reativouAgora ? mensagemVinculoAposReativacao(escolhido.nome, "Houve um erro de conexão.") : "Erro de conexão. Tente novamente.");
     } finally {
       setSalvando(false);
     }

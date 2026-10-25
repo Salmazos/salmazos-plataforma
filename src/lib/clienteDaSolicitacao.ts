@@ -355,6 +355,15 @@ export function avisoAposDecisaoDaSolicitacao(aviso: AvisoDoCliente | null, soli
   return { ...aviso, vagaPendente: false, linhas: aviso.linhas.map((l) => (l === antes ? depois : l)) };
 }
 
+// "Reativar e vincular" são dois passos: o cadastro é reativado e só depois a solicitação é vinculada. Se o vínculo falha com o cadastro já reativado, a mensagem
+// tem de dizer isso (senão parece que nada aconteceu, e a reativação não se desfaz sozinha). `tentarDeNovo` é false quando repetir não resolve (solicitação já decidida).
+export function mensagemVinculoAposReativacao(clienteNome: string, motivo?: string | null, opcoes: { tentarDeNovo?: boolean } = {}): string {
+  const m = (motivo ?? "").trim();
+  const detalhe = m ? ` ${/[.!?]$/.test(m) ? m : `${m}.`}` : "";
+  const retomada = opcoes.tentarDeNovo === false ? "" : " Tente vincular de novo.";
+  return `O cliente "${clienteNome}" foi reativado, mas o vínculo com a solicitação não foi concluído.${detalhe}${retomada}`;
+}
+
 // Resposta de vincular-cliente em que a SOLICITAÇÃO mudou (já vinculada, decidida, recusada): a tela fecha o formulário e recarrega a lista.
 // Qualquer outro 409 (duplicidade, reativação, índice único sem cadastro visível) fica no formulário, sem perder o que foi digitado.
 export function solicitacaoFicouIndisponivel(status: number, corpo: unknown): boolean {
