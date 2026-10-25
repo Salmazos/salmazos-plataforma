@@ -186,8 +186,9 @@ export function BlocoClienteDaSolicitacao({
 }: {
   s: SolicitacaoComCliente;
   ocupado: boolean;
-  onCadastrar: () => void;
-  onVincular: () => void;
+  // Recebem o botão clicado: é a origem do foco quando o modal que abre for fechado.
+  onCadastrar: (origem: HTMLElement) => void;
+  onVincular: (origem: HTMLElement) => void;
 }) {
   if (s.origem !== "link_publico") return null;
   if (s.cliente_id) {
@@ -207,7 +208,7 @@ export function BlocoClienteDaSolicitacao({
       <div className="flex flex-col gap-2 sm:flex-row">
         <button
           type="button"
-          onClick={onCadastrar}
+          onClick={(e) => onCadastrar(e.currentTarget)}
           disabled={ocupado}
           className="rounded-lg bg-indigo-700 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-800 disabled:opacity-50"
         >
@@ -215,7 +216,7 @@ export function BlocoClienteDaSolicitacao({
         </button>
         <button
           type="button"
-          onClick={onVincular}
+          onClick={(e) => onVincular(e.currentTarget)}
           disabled={ocupado}
           className="rounded-lg border border-indigo-300 bg-white px-3 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
         >

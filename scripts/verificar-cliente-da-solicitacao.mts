@@ -11,7 +11,7 @@ import * as rotaVincular from "../src/app/api/solicitacoes-vagas/[id]/vincular-c
 import { gerarCobrancaCancelamentoRSSeAplicavel, gerarCobrancaRSSeAplicavel } from "../src/lib/cobrancaRS";
 import { getEmailTemplate } from "../src/lib/emailTemplates";
 import { getEmailTemplate as getEmailTemplateAntes } from "./fixtures/emailTemplates.antes-do-escape.mts";
-import { aprovadasSemCliente, explicarSituacaoDaVaga, rotularCampos, semClienteVinculado, solicitacaoFicouIndisponivel } from "../src/lib/clienteDaSolicitacao";
+import { aprovadasSemCliente, campoParaFocoInicial, devolverFocoAoFechar, escapeDeveFecharModal, explicarSituacaoDaVaga, rotularCampos, semClienteVinculado, solicitacaoFicouIndisponivel } from "../src/lib/clienteDaSolicitacao";
 import { criarDb, criarClienteServico } from "./harness-mot/memdb.mjs";
 import { validarCnpj, validarCpf } from "../src/lib/documentoBr";
 import {
@@ -1055,6 +1055,76 @@ caso("criar vaga pede confirmação só para solicitação do link SEM cliente; 
   ];
   assert.deepEqual(aprovadasSemCliente(lista).map((x) => x.id), ["1", "6"]);
   assert.deepEqual(aprovadasSemCliente([]), []);
+});
+caso("foco dos modais: só cancelar e 'criar mesmo assim' devolvem o foco ao botão de origem, e só se ele ainda existe; abrir outro modal nunca devolve", () => {
+  assert.equal(devolverFocoAoFechar("cancelar", true), true);
+  assert.equal(devolverFocoAoFechar("confirmar", true), true);
+  assert.equal(devolverFocoAoFechar("abrir_outro_modal", true), false, "o foco é do modal que abre: devolver acionaria o botão escondido atrás");
+  assert.equal(devolverFocoAoFechar("desconhecido", true), false, "fechamento sem motivo registrado não devolve");
+  for (const motivo of ["cancelar", "confirmar", "abrir_outro_modal", "desconhecido"] as const) {
+    assert.equal(devolverFocoAoFechar(motivo, false), false, `${motivo}: origem fora da página, não faz nada`);
+  }
+});
+caso("foco inicial do cadastro: primeiro obrigatório vazio na ordem da tela (a partir da solicitação); senão o nome", () => {
+  const cheio = { nome: "Ana", cidade: "Campinas", segmento: "Indústria", contato_nome: "Ana", contato_telefone: "(19) 99999-8888", contato_email: "a@x.com" };
+  assert.equal(campoParaFocoInicial(cheio, true), "nome", "tudo preenchido: primeiro campo");
+  assert.equal(campoParaFocoInicial({ ...cheio, segmento: "" }, true), "segmento");
+  assert.equal(campoParaFocoInicial({ ...cheio, segmento: null, contato_nome: null }, true), "segmento", "segmento aparece antes do contato");
+  assert.equal(campoParaFocoInicial({ ...cheio, contato_nome: "  " }, true), "contato_nome", "só espaços é vazio");
+  assert.equal(campoParaFocoInicial({ ...cheio, contato_email: undefined }, true), "contato_email");
+  assert.equal(campoParaFocoInicial({ ...cheio, nome: "", cidade: "" }, true), "nome", "nome vem antes de cidade");
+  assert.equal(campoParaFocoInicial(undefined, true), "nome");
+  assert.equal(campoParaFocoInicial({ ...cheio, segmento: "" }, false), "nome", "fora da solicitação: sempre o primeiro campo de texto");
+});
+caso("faixa 'Veio da solicitação': TODA chave que o prefill pode devolver tem rótulo legível (sem underscore, sem camelCase, diferente da chave crua)", () => {
+  const base = { cliente_nome: "Indústria Exemplo", cidade: "Hortolândia", unidade_id: "unid-1", tipo_servico: "recrutamento_selecao" };
+  const dadosPj = { tipo_pessoa: "pj", nome: "Indústria Exemplo", cnpj_cpf: CNPJ, contato_nome: "Maria", telefone: "(19) 99999-8888", email: "m@x.com.br", email_nf: "nf@x.com.br", endereco: "Rua A, 10" };
+  const dadosPf = { tipo_pessoa: "pf", nome: "João da Silva", cnpj_cpf: CPF, telefone: "(19) 99999-8888", email: "j@x.com.br", email_nf: "nf@x.com.br", endereco: "Rua B, 5" };
+  const variantes = [
+    montarPrefillCliente({ ...base, dados_empresa: dadosPj }, { responsavelComercial: "Lucas" }),
+    montarPrefillCliente({ ...base, dados_empresa: dadosPf }, { responsavelComercial: "Lucas" }),
+    montarPrefillCliente({ ...base, dados_empresa: { ...dadosPj, endereco: null } }),
+    montarPrefillCliente({ ...base, cidade: null, dados_empresa: dadosPf }),
+    montarPrefillCliente({ ...base, cidade: null, dados_empresa: { ...dadosPj, endereco: "" } }, { responsavelComercial: "  " }),
+    montarPrefillCliente({ cliente_nome: "Só o nome" }),
+    montarPrefillCliente(null),
+  ];
+  const chaves = new Set<string>();
+  for (const v of variantes) {
+    for (const k of Object.keys(v.valores)) chaves.add(k);
+    for (const k of [...v.preenchidos, ...v.sugeridos, ...v.faltando]) chaves.add(k);
+  }
+  assert.ok(chaves.size >= 14, `esperava todas as chaves do prefill, vieram ${chaves.size}`);
+  for (const chave of chaves) {
+    const rotulo = rotularCampos([chave]);
+    assert.notEqual(rotulo, chave, `${chave}: sem rótulo`);
+    assert.ok(!/_/.test(rotulo), `${chave}: rótulo com underscore ("${rotulo}")`);
+    assert.ok(!/[a-z][A-Z]/.test(rotulo), `${chave}: rótulo em camelCase ("${rotulo}")`);
+    assert.ok(rotulo.trim().length > 0 && /^[A-ZÁÉÍÓÚÂÊÔÃÕÇ]/.test(rotulo), `${chave}: rótulo precisa começar com maiúscula ("${rotulo}")`);
+  }
+  assert.equal(rotularCampos(["servicos"]), "Tipos de serviço");
+  assert.equal(rotularCampos(["responsavel_comercial"]), "Responsável comercial");
+  assert.equal(rotularCampos(["unidade_id"]), "Unidade");
+});
+caso("faixa 'Veio da solicitação' só diz o que o cliente informou: unidade (do servidor) e responsável comercial (sugerido) saem; o sugerido vai em lista própria", () => {
+  const r = montarPrefillCliente({ cliente_nome: "X Ltda", cidade: "Campinas", unidade_id: "unid-1", tipo_servico: "recrutamento_selecao", dados_empresa: { tipo_pessoa: "pj", nome: "X Ltda", telefone: "(19) 99999-8888" } }, { responsavelComercial: "Lucas" });
+  assert.ok(!r.preenchidos.includes("unidade_id") && !r.preenchidos.includes("responsavel_comercial"));
+  assert.deepEqual(r.sugeridos, ["responsavel_comercial"]);
+  assert.ok(r.preenchidos.includes("servicos") && r.preenchidos.includes("nome") && r.preenchidos.includes("cidade"));
+  assert.equal(r.valores.unidade_id, "unid-1", "o valor continua no prefill (a unidade é a da solicitação)");
+  assert.equal(r.valores.responsavel_comercial, "Lucas");
+  assert.deepEqual(montarPrefillCliente({ cliente_nome: "X" }).sugeridos, [], "sem quem gerou o link, nada é sugerido");
+});
+caso("Esc nos modais de cadastro: o Esc de um <select> ou de elemento com popup aberto nunca fecha o modal; Esc no resto fecha; outras teclas não", () => {
+  const el = (tagName: string, expandido = false) => ({ tagName, closest: (seletor: string) => (expandido && seletor === '[aria-expanded="true"]' ? {} : null) });
+  assert.equal(escapeDeveFecharModal({ key: "Escape", alvo: el("INPUT") }), true);
+  assert.equal(escapeDeveFecharModal({ key: "Escape", alvo: el("BUTTON") }), true);
+  assert.equal(escapeDeveFecharModal({ key: "Escape", alvo: el("SELECT") }), false);
+  assert.equal(escapeDeveFecharModal({ key: "Escape", alvo: el("select") }), false, "tagName em minúsculas");
+  assert.equal(escapeDeveFecharModal({ key: "Escape", alvo: el("DIV", true) }), false, "popup aberto (aria-expanded)");
+  assert.equal(escapeDeveFecharModal({ key: "Escape", alvo: null }), true);
+  assert.equal(escapeDeveFecharModal({ key: "Enter", alvo: el("INPUT") }), false);
+  assert.equal(escapeDeveFecharModal({ key: "Tab", alvo: el("SELECT") }), false);
 });
 const PERIGOSO = `<script>alert("x")</script> & 'Cia' <img src=x onerror=alert(1)>`;
 const PERIGOSO_ESCAPADO = "&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#39;Cia&#39; &lt;img src=x onerror=alert(1)&gt;";

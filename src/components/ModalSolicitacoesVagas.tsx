@@ -94,10 +94,10 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
   const [recarga, setRecarga] = useState(0);
   // "pendentes" = a lista de sempre; "aprovadas_sem_cliente" = solicitações do link já aprovadas (vaga criada) que ainda estão sem cliente.
   const [aba, setAba] = useState<"pendentes" | "aprovadas_sem_cliente">("pendentes");
-  const [confirmandoVagaSemCliente, setConfirmandoVagaSemCliente] = useState<Solicitacao | null>(null);
+  const [confirmandoVagaSemCliente, setConfirmandoVagaSemCliente] = useState<{ s: Solicitacao; origem: HTMLElement | null } | null>(null);
   // O prefill é calculado uma vez, ao abrir: um valor novo a cada render reiniciaria o formulário do modal enquanto o analista digita.
-  const [cadastrandoCliente, setCadastrandoCliente] = useState<{ s: Solicitacao; prefill: ReturnType<typeof montarPrefillCliente> } | null>(null);
-  const [vinculandoCliente, setVinculandoCliente] = useState<{ s: Solicitacao; clienteIdInicial: string | null } | null>(null);
+  const [cadastrandoCliente, setCadastrandoCliente] = useState<{ s: Solicitacao; prefill: ReturnType<typeof montarPrefillCliente>; origem: HTMLElement | null } | null>(null);
+  const [vinculandoCliente, setVinculandoCliente] = useState<{ s: Solicitacao; clienteIdInicial: string | null; origem: HTMLElement | null } | null>(null);
   // Resultado do último cadastro/vínculo de cliente: fica no topo da lista mesmo se o cartão sair dela (solicitação aprovada não é "pendente").
   const [avisoCliente, setAvisoCliente] = useState<{ tipo: "ok" | "atencao"; titulo: string; linhas: string[] } | null>(null);
 
@@ -327,6 +327,8 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      // Com o cadastro, o vincular ou a confirmação abertos, nada deste modal recebe foco nem clique: Enter/Espaço nunca acionam um botão escondido atrás.
+      inert={cadastrandoCliente !== null || vinculandoCliente !== null || confirmandoVagaSemCliente !== null}
     >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
         {/* Header */}
@@ -443,8 +445,8 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                     <BlocoClienteDaSolicitacao
                       s={s}
                       ocupado={isLoading}
-                      onCadastrar={() => setCadastrandoCliente({ s, prefill: prefillDoCliente(s) })}
-                      onVincular={() => setVinculandoCliente({ s, clienteIdInicial: null })}
+                      onCadastrar={(origem) => setCadastrandoCliente({ s, prefill: prefillDoCliente(s), origem })}
+                      onVincular={(origem) => setVinculandoCliente({ s, clienteIdInicial: null, origem })}
                     />
 
                     {/* Details */}
@@ -747,7 +749,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                           {"✏️"} Editar
                         </button>
                         <button
-                          onClick={() => (semClienteVinculado(s) ? setConfirmandoVagaSemCliente(s) : handleCriarVaga(s.id))}
+                          onClick={(e) => (semClienteVinculado(s) ? setConfirmandoVagaSemCliente({ s, origem: e.currentTarget }) : handleCriarVaga(s.id))}
                           disabled={isLoading}
                           className="text-xs px-4 py-1.5 rounded-lg font-bold transition-colors disabled:opacity-50"
                           style={{ backgroundColor: "#16a34a", color: "#fff" }}
@@ -776,21 +778,23 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
     </div>
 
     {cadastrandoCliente && (() => {
-      const { s, prefill } = cadastrandoCliente;
+      const { s, prefill, origem } = cadastrandoCliente;
       return (
         <ModalNovoCliente
           isOpen
+          elementoDeOrigem={origem}
           valoresIniciais={prefill.valores}
           solicitacao={{
             id: s.id,
             unidadeId: s.unidade_id,
             avisos: prefill.avisos,
             preenchidos: prefill.preenchidos,
+            sugeridos: prefill.sugeridos,
             faltando: prefill.faltando,
             onCriado: (r) => mostrarResultadoCliente(r.clienteNome, r.vaga),
             onVincularExistente: (clienteId) => {
               setCadastrandoCliente(null);
-              setVinculandoCliente({ s, clienteIdInicial: clienteId });
+              setVinculandoCliente({ s, clienteIdInicial: clienteId, origem });
             },
             onJaVinculada: aoJaVinculada,
           }}
@@ -802,13 +806,15 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
 
     {confirmandoVagaSemCliente && (
       <ConfirmarCriarVagaSemCliente
-        onCadastrarPrimeiro={() => {
-          const s = confirmandoVagaSemCliente;
+        origem={confirmandoVagaSemCliente.origem}
+        onCadastrarPrimeiro={(origem) => {
+          const { s } = confirmandoVagaSemCliente;
           setConfirmandoVagaSemCliente(null);
-          setCadastrandoCliente({ s, prefill: prefillDoCliente(s) });
+          // A origem do foco do cadastro é o "Criar Vaga" do cartão, não o botão do diálogo que acabou de sumir.
+          setCadastrandoCliente({ s, prefill: prefillDoCliente(s), origem });
         }}
         onCriarMesmoAssim={() => {
-          const s = confirmandoVagaSemCliente;
+          const { s } = confirmandoVagaSemCliente;
           setConfirmandoVagaSemCliente(null);
           handleCriarVaga(s.id);
         }}
@@ -820,6 +826,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
       <ModalVincularClienteSolicitacao
         solicitacao={vinculandoCliente.s}
         clienteIdInicial={vinculandoCliente.clienteIdInicial}
+        elementoDeOrigem={vinculandoCliente.origem}
         onClose={() => setVinculandoCliente(null)}
         onVinculado={(r: ResultadoVinculo) => {
           setVinculandoCliente(null);

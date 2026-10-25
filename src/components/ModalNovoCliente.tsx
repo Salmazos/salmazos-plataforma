@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Eye, EyeOff, Upload } from "lucide-react";
 import { SEGMENTOS_CLIENTE, TIPOS_SERVICO, ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import { useUsuarioLogado } from "@/components/UsuarioLogadoProvider";
 import { responsaveisDaUnidade, responsavelPadrao, opcoesResponsavel } from "@/lib/responsaveis";
 import type { Cliente } from "@/types";
 import CampoTelefone from "@/components/ui/CampoTelefone";
-import { MENSAGEM_AVISO_PREFILL, rotularCampos, solicitacaoFicouIndisponivel, type AvisoPrefill, type PrefillCliente, type SituacaoDaVaga } from "@/lib/clienteDaSolicitacao";
+import { MENSAGEM_AVISO_PREFILL, campoParaFocoInicial, escapeDeveFecharModal, rotularCampos, solicitacaoFicouIndisponivel, type AvisoPrefill, type PrefillCliente, type SituacaoDaVaga } from "@/lib/clienteDaSolicitacao";
+import { devolverFocoSeExistir, prenderTabNoModal } from "@/components/focoDosModais";
 import { validarSenhaPortal, PLACEHOLDER_SENHA_PORTAL, ITENS_CHECKLIST_SENHA_PORTAL } from "@/lib/senhaPortal";
 
 // Cadastro a partir de uma solicitação do link público (POST /api/solicitacoes-vagas/[id]/vincular-cliente): a unidade é a da solicitação
@@ -18,6 +19,7 @@ export interface ContextoSolicitacaoCliente {
   avisos: AvisoPrefill[];
   // Nomes dos campos (nunca valores) que vieram da solicitação / dos obrigatórios que ficaram vazios.
   preenchidos: string[];
+  sugeridos: string[];
   faltando: string[];
   onCriado: (r: { clienteId: string; clienteNome: string; vaga: SituacaoDaVaga }) => void;
   onVincularExistente: (clienteId: string) => void;
@@ -31,6 +33,8 @@ interface Props {
   // Valores iniciais de um cadastro NOVO (hoje: o prefill da solicitação). Ignorado na edição.
   valoresIniciais?: Partial<PrefillCliente>;
   solicitacao?: ContextoSolicitacaoCliente;
+  // Botão que abriu o modal: ao fechar o foco volta para ele, se ainda estiver na página. Sem ele, vale quem tinha o foco ao abrir.
+  elementoDeOrigem?: HTMLElement | null;
   // Só vem pra quem tem acesso a todas as unidades (sócios): mostra o campo Unidade. Os
   // demais não escolhem — o cliente vai pra unidade de quem cadastra (ver POST /api/clientes).
   unidades?: { id: string; nome: string; ativa: boolean }[];
@@ -76,7 +80,7 @@ const FORM_VAZIO = {
   email_nota_fiscal: "",
 };
 
-export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, solicitacao, unidades, onClose, onSalvo }: Props) {
+export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, solicitacao, elementoDeOrigem, unidades, onClose, onSalvo }: Props) {
   const usuario = useUsuarioLogado();
   const [form, setForm] = useState(FORM_VAZIO);
   const [unidadeId, setUnidadeId] = useState("");
@@ -191,7 +195,38 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
     );
   }, [isOpen, cliente, unidadeSlugCliente, usuario.apelido, valoresIniciais]);
 
+  // Foco: ao abrir vai para dentro do modal (a partir da solicitação, o primeiro obrigatório ainda vazio; senão o nome) e, ao fechar, volta ao
+  // botão que o abriu, se ele ainda estiver na página.
+  const caixaRef = useRef<HTMLDivElement>(null);
+  const origemDoFoco = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!isOpen) return;
+    origemDoFoco.current = elementoDeOrigem ?? (document.activeElement as HTMLElement | null);
+    const seletor: Record<string, string> = {
+      nome: "#cliente-nome",
+      cidade: "#cliente-cidade",
+      segmento: "#cliente-segmento",
+      contato_nome: "#cliente-contato-nome",
+      contato_telefone: 'input[name="contato_telefone_cliente"]',
+      contato_email: "#cliente-contato-email",
+    };
+    const campo = cliente ? "nome" : campoParaFocoInicial(valoresIniciais, !!solicitacao);
+    caixaRef.current?.querySelector<HTMLElement>(seletor[campo])?.focus();
+    return () => devolverFocoSeExistir(origemDoFoco.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
   if (!isOpen) return null;
+
+  const aoTeclar = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      // Em Clientes (tela em produção, sem solicitação) o Esc continua não fazendo nada; no cadastro por solicitação fecha, menos o Esc que fecha a
+      // lista de um <select>.
+      if (solicitacao && !salvando && escapeDeveFecharModal({ key: e.key, alvo: e.target as Element })) { e.stopPropagation(); onClose(); }
+      return;
+    }
+    prenderTabNoModal(e, caixaRef.current);
+  };
 
   const recarregarUsuariosPortal = () => {
     if (!cliente) return;
@@ -459,11 +494,11 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onKeyDown={aoTeclar}>
+      <div ref={caixaRef} role="dialog" aria-modal="true" aria-labelledby="titulo-novo-cliente" className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="bg-black text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
-          <h2 className="font-bold text-lg">
+          <h2 id="titulo-novo-cliente" className="font-bold text-lg">
             {editando ? "Editar cliente" : solicitacao ? "Cadastrar cliente a partir da solicitação" : "Novo cliente"}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
@@ -491,6 +526,11 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
                   <span className="font-semibold text-green-800">Veio da solicitação:</span>{" "}
                   {solicitacao.preenchidos.length > 0 ? rotularCampos(solicitacao.preenchidos) : "nada"}
                 </p>
+                {solicitacao.sugeridos.length > 0 && (
+                  <p>
+                    <span className="font-semibold text-indigo-800">Sugerido pelo sistema (confira):</span> {rotularCampos(solicitacao.sugeridos)}
+                  </p>
+                )}
                 <p>
                   <span className="font-semibold text-red-700">Falta preencher (obrigatório):</span>{" "}
                   {solicitacao.faltando.length > 0 ? rotularCampos(solicitacao.faltando) : "nada"}
@@ -581,6 +621,7 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
                 value={form.cidade}
                 onChange={(e) => set("cidade", e.target.value)}
                 placeholder="Ex: São Paulo"
+                id="cliente-cidade"
                 className="input-field"
                 {...marcaFalta("cidade")}
               />
@@ -592,6 +633,7 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
               <select
                 value={form.segmento}
                 onChange={(e) => set("segmento", e.target.value)}
+                id="cliente-segmento"
                 className="input-field"
                 {...marcaFalta("segmento")}
               >
@@ -809,6 +851,7 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
                   <label className="block text-xs text-gray-500 mb-1">E-mail (comunicação) *</label>
                   <input
                     type="email"
+                    id="cliente-contato-email"
                     {...marcaFalta("contato_email")}
                     value={form.contato_email}
                     onChange={(e) => set("contato_email", e.target.value)}

@@ -61,7 +61,11 @@ export interface ResultadoPrefill {
   valores: PrefillCliente;
   avisos: AvisoPrefill[];
   // Nomes dos campos (nunca valores) que vieram preenchidos da solicitação e dos obrigatórios que ficaram vazios para o analista.
+  // `preenchidos` é só o que o cliente informou no link: a unidade (forçada pelo servidor) e o responsável comercial (sugerido por quem gerou o
+  // link) NÃO entram aqui, para a tela não dizer que vieram da solicitação.
   preenchidos: string[];
+  // Campos que o sistema SUGERE, não vindos da solicitação: o analista confere e pode trocar.
+  sugeridos: string[];
   faltando: CampoObrigatorioCliente[];
 }
 
@@ -156,6 +160,7 @@ export function montarPrefillCliente(solicitacao: SolicitacaoParaCliente | null 
   };
 
   const preenchidos = (Object.keys(valores) as (keyof PrefillCliente)[]).filter((campo) => {
+    if (campo === "unidade_id" || campo === "responsavel_comercial") return false;
     if (campo === "tipo_pessoa") return doc.tipoInformado;
     const v = valores[campo];
     return Array.isArray(v) ? v.length > 0 : !vazio(v);
@@ -163,7 +168,8 @@ export function montarPrefillCliente(solicitacao: SolicitacaoParaCliente | null 
   const faltando = CAMPOS_OBRIGATORIOS_CLIENTE.filter((campo) => vazio(valores[campo]));
   // A cidade da solicitação é a do local de trabalho da vaga, que nem sempre é a sede do cliente.
   const avisos: AvisoPrefill[] = valores.cidade ? [...doc.avisos, "cidade_do_local_de_trabalho"] : doc.avisos;
-  return { valores, avisos, preenchidos, faltando };
+  const sugeridos = valores.responsavel_comercial ? ["responsavel_comercial"] : [];
+  return { valores, avisos, preenchidos, sugeridos, faltando };
 }
 
 // ── Documento do cadastro que o analista confirmou no modal ──────────────────
@@ -305,6 +311,9 @@ export const ROTULO_CAMPO_CLIENTE: Record<string, string> = {
   cidade: "Cidade",
   segmento: "Segmento",
   tipo_pessoa: "Tipo de pessoa",
+  servicos: "Tipos de serviço",
+  responsavel_comercial: "Responsável comercial",
+  unidade_id: "Unidade",
 };
 
 export function rotularCampos(nomes: readonly string[]): string {
@@ -343,4 +352,43 @@ export function semClienteVinculado(s: SolicitacaoParaAvisoDeCliente): boolean {
 // Aba "Aprovadas sem cliente": das solicitações aprovadas, só as do link que ainda não têm cliente.
 export function aprovadasSemCliente<T extends SolicitacaoParaAvisoDeCliente & { status?: string | null }>(lista: T[]): T[] {
   return lista.filter((s) => s.status === "aprovada" && semClienteVinculado(s));
+}
+
+// ── Foco dos modais ──────────────────────────────────────────────────────────
+// Por que o diálogo/modal fechou. Só "cancelar" e "confirmar" (criar a vaga mesmo assim) devolvem o foco ao botão de origem; "abrir_outro_modal" não,
+// porque o foco vai para dentro do modal que abre (devolvê-lo ao botão de trás deixaria Enter/Espaço acionando um botão escondido atrás do formulário).
+export type MotivoDeFechamento = "cancelar" | "confirmar" | "abrir_outro_modal" | "desconhecido";
+
+export function devolverFocoAoFechar(motivo: MotivoDeFechamento, origemAindaNoDom: boolean): boolean {
+  if (!origemAindaNoDom) return false;
+  return motivo === "cancelar" || motivo === "confirmar";
+}
+
+export type CampoDoFocoInicial = "nome" | "cidade" | "segmento" | "contato_nome" | "contato_telefone" | "contato_email";
+
+// Na ordem em que os campos aparecem no formulário.
+const ORDEM_VISUAL_OBRIGATORIOS: CampoDoFocoInicial[] = ["nome", "cidade", "segmento", "contato_nome", "contato_telefone", "contato_email"];
+
+// Primeiro campo a receber o foco ao abrir o cadastro: a partir da solicitação, o primeiro obrigatório ainda vazio; senão (ou fora da solicitação) o
+// primeiro campo de texto, o nome. Recebe os valores iniciais (e não o estado do formulário, que ainda é preenchido no mesmo ciclo da abertura).
+export function campoParaFocoInicial(
+  valoresIniciais: Partial<Record<CampoDoFocoInicial, string | null>> | undefined,
+  aPartirDaSolicitacao: boolean
+): CampoDoFocoInicial {
+  if (aPartirDaSolicitacao) {
+    const vazioAinda = ORDEM_VISUAL_OBRIGATORIOS.find((c) => vazio(valoresIniciais?.[c]));
+    if (vazioAinda) return vazioAinda;
+  }
+  return "nome";
+}
+
+// Esc dentro de um modal de cadastro: um <select> (ou qualquer elemento com popup aberto, aria-expanded="true") usa o Esc para fechar a própria lista,
+// então o Esc dele nunca fecha o modal. Recebe só o necessário do evento para rodar fora do navegador (nos testes).
+export function escapeDeveFecharModal(evento: { key: string; alvo: { tagName?: string; closest?: (seletor: string) => unknown } | null }): boolean {
+  if (evento.key !== "Escape") return false;
+  const alvo = evento.alvo;
+  if (!alvo) return true;
+  if (typeof alvo.tagName === "string" && alvo.tagName.toUpperCase() === "SELECT") return false;
+  if (typeof alvo.closest === "function" && alvo.closest('[aria-expanded="true"]')) return false;
+  return true;
 }

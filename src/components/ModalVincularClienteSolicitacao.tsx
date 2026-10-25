@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { devolverFocoSeExistir, prenderTabNoModal } from "@/components/focoDosModais";
 import type { Cliente } from "@/types";
 import {
   completarSomenteVazios,
   montarPrefillCliente,
+  escapeDeveFecharModal,
   rotularCampos,
   solicitacaoFicouIndisponivel,
   type SituacaoDaVaga,
@@ -23,6 +25,8 @@ interface Props {
   solicitacao: SolicitacaoParaCliente & { id: string; unidade_id: string };
   // Cliente já escolhido (vindo do aviso de duplicidade do cadastro). Pode estar inativo: então o botão vira "Reativar e vincular".
   clienteIdInicial?: string | null;
+  // Botão que abriu o modal: ao fechar o foco volta para ele, se ainda estiver na página.
+  elementoDeOrigem?: HTMLElement | null;
   onClose: () => void;
   onVinculado: (r: ResultadoVinculo) => void;
   // 409 "já vinculada ou decidida": quem chamou recarrega a lista.
@@ -31,7 +35,7 @@ interface Props {
 
 const semAcento = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-export default function ModalVincularClienteSolicitacao({ solicitacao, clienteIdInicial, onClose, onVinculado, onJaVinculada }: Props) {
+export default function ModalVincularClienteSolicitacao({ solicitacao, clienteIdInicial, elementoDeOrigem, onClose, onVinculado, onJaVinculada }: Props) {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erroLista, setErroLista] = useState("");
@@ -40,6 +44,14 @@ export default function ModalVincularClienteSolicitacao({ solicitacao, clienteId
   const [completar, setCompletar] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+
+  // Foco: entra no campo de busca e, ao fechar, volta ao botão que abriu o modal (se ainda existir). Esc fecha só este modal.
+  const caixaRef = useRef<HTMLDivElement>(null);
+  const origemDoFoco = useRef<HTMLElement | null>(elementoDeOrigem ?? (typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null));
+  useEffect(() => {
+    document.getElementById("busca-cliente-vinculo")?.focus();
+    return () => devolverFocoSeExistir(origemDoFoco.current);
+  }, []);
 
   useEffect(() => {
     let ativo = true;
@@ -118,8 +130,17 @@ export default function ModalVincularClienteSolicitacao({ solicitacao, clienteId
   };
 
   return (
-    <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/60 p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="titulo-vincular-cliente" className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 z-[55] flex items-center justify-center bg-black/60 p-4"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          if (!salvando && escapeDeveFecharModal({ key: e.key, alvo: e.target as Element })) { e.stopPropagation(); onClose(); }
+          return;
+        }
+        prenderTabNoModal(e, caixaRef.current);
+      }}
+    >
+      <div ref={caixaRef} role="dialog" aria-modal="true" aria-labelledby="titulo-vincular-cliente" className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="bg-black text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
           <h2 id="titulo-vincular-cliente" className="font-bold text-lg">Vincular a cliente existente</h2>
           <button type="button" onClick={onClose} aria-label="Fechar" className="text-gray-400 hover:text-white transition-colors">
