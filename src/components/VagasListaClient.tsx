@@ -15,6 +15,7 @@ interface VagaItem {
   tipoServico: string | null;
   tipoLabel: string | null;
   salarioFormatado: string;
+  pcd?: boolean;
 }
 
 interface Props {
@@ -105,6 +106,7 @@ export default function VagasListaClient({ vagas }: Props) {
               tipoServico={v.tipoServico}
               tipoLabel={v.tipoLabel}
               salarioFormatado={v.salarioFormatado}
+              pcd={v.pcd === true}
             />
           ))}
         </div>

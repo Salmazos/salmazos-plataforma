@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import SeloPcd from "./SeloPcd";
 
 interface Props {
   id: string;
@@ -14,9 +15,10 @@ interface Props {
   tipoServico: string | null;
   tipoLabel: string | null;
   salarioFormatado: string;
+  pcd?: boolean;
 }
 
-export default function VagaCard({ slug, titulo, cidade, estado, salarioFormatado, adicionaisSalariais }: Props) {
+export default function VagaCard({ slug, titulo, cidade, estado, salarioFormatado, adicionaisSalariais, pcd }: Props) {
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -32,6 +34,7 @@ export default function VagaCard({ slug, titulo, cidade, estado, salarioFormatad
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
+      {pcd && <SeloPcd />}
       <h2 style={{ fontWeight: 700, fontSize: "19px", lineHeight: 1.35, color: "#111827" }}>
         {titulo}
       </h2>

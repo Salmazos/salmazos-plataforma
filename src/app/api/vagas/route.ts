@@ -106,6 +106,7 @@ export async function POST(request: NextRequest) {
         fee_rs_percentual: body.fee_rs_percentual ? Number(body.fee_rs_percentual) : null,
         fee_rs_prazo_cobranca: body.fee_rs_prazo_cobranca || null,
         confidencial: body.confidencial === true,
+        pcd: body.pcd === true,
         taxa_cancelamento: body.taxa_cancelamento === true,
         taxa_cancelamento_percentual: body.taxa_cancelamento_percentual !== "" && body.taxa_cancelamento_percentual != null ? Number(body.taxa_cancelamento_percentual) : null,
         visivel_publicamente: body.visivel_publicamente !== false,
@@ -122,7 +123,7 @@ export async function POST(request: NextRequest) {
       acao: "vaga_criada",
       entidade: "vagas",
       entidade_id: data.id,
-      detalhes: { titulo: data.titulo, tipo_servico: data.tipo_servico, status: data.status },
+      detalhes: { titulo: data.titulo, tipo_servico: data.tipo_servico, status: data.status, pcd: data.pcd === true },
     });
 
     const vagaId = data.id;

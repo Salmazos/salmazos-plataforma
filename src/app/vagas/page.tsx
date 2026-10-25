@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { TIPOS_SERVICO } from "@/lib/constants";
 import BotaoVoltarSite from "@/components/BotaoVoltarSite";
 import VagasListaClient from "@/components/VagasListaClient";
+import { selecionarComPcd, vagaEhPcd } from "@/lib/vagaPcdPublica";
 
 export const dynamic = "force-dynamic";
 
@@ -20,12 +21,17 @@ function formatarSalario(valor: string | number | null | undefined): string {
 
 export default async function VagasPublicaPage() {
   const supabase = createServiceClient();
-  const { data: vagas } = await supabase
-    .from("vagas")
-    .select("id, titulo, cidade, estado, salario, adicionais_salariais, tipo_servico, slug")
-    .eq("status", "aberta")
-    .eq("visivel_publicamente", true)
-    .order("titulo", { ascending: true });
+  // pcd entra na leitura só para o selo "Vaga PCD"; se a coluna ainda não existir, a lista sai igual, sem o selo.
+  const { data: vagas } = await selecionarComPcd<unknown[]>(
+    (colunas) =>
+      supabase
+        .from("vagas")
+        .select(colunas)
+        .eq("status", "aberta")
+        .eq("visivel_publicamente", true)
+        .order("titulo", { ascending: true }) as unknown as PromiseLike<{ data: unknown[] | null; error: unknown }>,
+    "id, titulo, cidade, estado, salario, adicionais_salariais, tipo_servico, slug"
+  );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vagasFormatadas = (vagas ?? []).map((v: any) => {
@@ -41,6 +47,7 @@ export default async function VagasPublicaPage() {
       tipoServico: v.tipo_servico ?? null,
       tipoLabel: tipo?.label ?? null,
       salarioFormatado: formatarSalario(v.salario),
+      pcd: vagaEhPcd(v),
     };
   });
 

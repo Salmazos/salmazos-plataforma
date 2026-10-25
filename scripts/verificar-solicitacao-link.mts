@@ -916,6 +916,24 @@ await casoRota("Criar Vaga de solicitação do PORTAL: nenhum dos 4 campos é en
     assert.equal(db.tabelas.audit_logs.filter((a: any) => a.acao === "vaga_condicoes_copiadas_do_link").length, 0, "portal não gera auditoria de condições");
   }
 });
+await casoRota("Criar Vaga: pcd da vaga = perfil_extra.pcd === 'sim' (link e portal); 'nao', ausente ou perfil nulo = false; 'PCD' nunca entra nos requisitos", async () => {
+  for (const origem of ["link_publico", "portal"]) {
+    for (const [pcd, esperado] of [["sim", true], ["nao", false], [undefined, false], [null, false]] as const) {
+      const sol = solicitacaoLinha({ origem, cliente_id: origem === "portal" ? "cliente-1" : null, requisitos: "• Ensino Médio", perfil_extra: { sexo: "fem", veiculo_proprio: "nao", ...(pcd === undefined ? {} : { pcd }) } });
+      const db = bancoDeAprovacao(sol);
+      const r = await aprovar(db);
+      assert.equal(r.status, 201, `${origem}/${pcd}: ${JSON.stringify(r.body)}`);
+      const vaga = db.tabelas.vagas[0];
+      assert.strictEqual(vaga.pcd, esperado, `${origem}/${String(pcd)}`);
+      assert.ok(!/pcd|defici/i.test(String(vaga.requisitos ?? "")), "a marca PCD não é repetida nos requisitos");
+      assert.equal(vaga.requisitos, "• Ensino Médio", "requisitos iguais aos de antes");
+    }
+    const semPerfil = solicitacaoLinha({ origem, cliente_id: origem === "portal" ? "cliente-1" : null, perfil_extra: null });
+    const db2 = bancoDeAprovacao(semPerfil);
+    assert.equal((await aprovar(db2)).status, 201);
+    assert.strictEqual(db2.tabelas.vagas[0].pcd, false, `${origem}: sem perfil_extra`);
+  }
+});
 await casoRota("Criar Vaga do link: só copia em R&S; outro tipo de serviço não recebe nada", async () => {
   const db = bancoDeAprovacao(solicitacaoLinha({ tipo_servico: "terceirizacao" }));
   assert.equal((await aprovar(db)).status, 201);

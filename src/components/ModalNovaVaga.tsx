@@ -87,6 +87,7 @@ const FORM_VAZIO = {
   salario: "", adicionais_salariais: "", principais_atividades: "", observacoes: "", responsavel: "",
   fee_rs_percentual: "", fee_rs_prazo_cobranca: "",
   confidencial: false,
+  pcd: false,
   taxa_cancelamento: false, taxa_cancelamento_percentual: "",
   visivel_publicamente: true,
 };
@@ -184,6 +185,7 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades
         fee_rs_percentual: vaga.fee_rs_percentual != null ? String(vaga.fee_rs_percentual) : "",
         fee_rs_prazo_cobranca: vaga.fee_rs_prazo_cobranca ?? "",
         confidencial: vaga.confidencial ?? false,
+        pcd: vaga.pcd ?? false,
         taxa_cancelamento: vaga.taxa_cancelamento ?? false,
         taxa_cancelamento_percentual: vaga.taxa_cancelamento_percentual != null ? String(vaga.taxa_cancelamento_percentual) : "",
         visivel_publicamente: vaga.visivel_publicamente ?? true,
@@ -468,6 +470,22 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades
                 <p style={{ fontSize: 12, color: "#7F1D1D", marginTop: 2 }}>
                   Vagas confidenciais possuem dados sensíveis do cliente e devem ser tratadas com cuidado na divulgação.
                 </p>
+              </span>
+            </label>
+          </div>
+
+          {/* Vaga PCD: na página pública aparece só o selo "Vaga PCD" */}
+          <div className="border-t pt-4">
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.pcd}
+                onChange={(e) => setForm((f) => ({ ...f, pcd: e.target.checked }))}
+                className="accent-black mt-0.5"
+              />
+              <span>
+                <span className="text-sm text-gray-700 font-medium">Vaga PCD</span>
+                <p className="text-xs text-gray-500 mt-0.5">Mostra o selo &quot;Vaga PCD&quot; na página pública, para evitar currículos fora do perfil.</p>
               </span>
             </label>
           </div>
