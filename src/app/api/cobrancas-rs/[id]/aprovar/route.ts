@@ -5,7 +5,8 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { podeRevisarCobranca } from "@/lib/fullAccessAuth";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { getEmailTemplate } from "@/lib/emailTemplates";
-import { obterDestinatariosCobrancaRS } from "@/lib/cobrancaRS";
+import { obterDestinatariosCobrancaRS, tipoPessoaDoClienteDaCobranca } from "@/lib/cobrancaRS";
+import { rotuloDocumento, tipoDocumentoDaCobranca } from "@/lib/cobrancaRSDocumento";
 import { avisarCobrancaRSEmail } from "@/lib/avisarCobrancaRS";
 import { EVENTO_COBRANCA_RS_GERADA, TIPO_EMAIL_COBRANCA_GERADA } from "@/lib/cobrancaRSRegras";
 
@@ -50,13 +51,16 @@ export async function POST(_request: NextRequest, { params }: Params) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const vagaTitulo = (cobranca.vagas as any)?.titulo ?? "—";
 
+  // PF exige CPF, PJ exige CNPJ (o texto da mensagem e do e-mail acompanha o tipo do cliente).
+  const rotuloDoc = rotuloDocumento(tipoDocumentoDaCobranca(await tipoPessoaDoClienteDaCobranca(svc, cobranca.cliente_id)));
+
   const faltando: string[] = [];
   if (!ehCancelamento) {
     if (!cobranca.cargo?.trim()) faltando.push("Cargo");
     if (!cobranca.data_inicio) faltando.push("Data de início");
   }
   if (cobranca.salario == null || cobranca.salario <= 0) faltando.push(ehCancelamento ? "Salário-base" : "Salário");
-  if (!cobranca.cliente_cnpj_snapshot?.trim()) faltando.push("CNPJ do cliente");
+  if (!cobranca.cliente_cnpj_snapshot?.trim()) faltando.push(`${rotuloDoc} do cliente`);
   if (!cobranca.cliente_endereco_snapshot?.trim()) faltando.push("Endereço do cliente");
 
   if (faltando.length > 0) {
@@ -88,6 +92,7 @@ export async function POST(_request: NextRequest, { params }: Params) {
         nomeCliente: cobranca.cliente_nome_snapshot,
         nomeCandidato: ehCancelamento ? undefined : cobranca.candidato_nome_snapshot,
         clienteCnpj: cobranca.cliente_cnpj_snapshot,
+        clienteDocumentoRotulo: rotuloDoc,
         clienteEndereco: cobranca.cliente_endereco_snapshot,
         clienteTelefone: cobranca.cliente_telefone_snapshot,
         clienteEmail: cobranca.cliente_email_snapshot,

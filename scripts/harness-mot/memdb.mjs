@@ -18,6 +18,8 @@ const RELACOES = {
   candidatos_vagas: { vagas: { alvo: "vagas", local: "vaga_id" }, candidatos: { alvo: "candidatos", local: "candidato_id" } },
   // Cobrança R&S de cancelamento (scripts/verificar-solicitacao-link.mts): a vaga traz o cliente cadastrado.
   vagas: { clientes: { alvo: "clientes", local: "cliente_id" } },
+  // Cobrança R&S (scripts/verificar-cobranca-rs-pf.mts): GET /api/cobrancas-rs/[id] e aprovar leem a cobrança com vaga e cliente.
+  cobrancas_rs: { vagas: { alvo: "vagas", local: "vaga_id" }, clientes: { alvo: "clientes", local: "cliente_id" } },
 };
 
 export function criarDb(seed = {}) {
@@ -318,6 +320,15 @@ class Consulta {
       return { data: null, error: { code: "42501", message: `registro imutável: ${this.op.toUpperCase()} em ${this.tabela} não é permitido` } };
     }
     if (this.op === "update") {
+      // db.checks = { tabela: (linhaDepoisDoUpdate) => mensagem | null }: imita um CHECK do banco (ex.: clientes_documento_coerente). Recusa o UPDATE inteiro
+      // (nenhuma coluna é gravada), como o Postgres faz.
+      const check = this.db.checks?.[this.tabela];
+      if (check) {
+        for (const l of alvos) {
+          const mensagem = check({ ...l, ...this.payload });
+          if (mensagem) return { data: null, error: { code: "23514", message: mensagem } };
+        }
+      }
       for (const l of alvos) Object.assign(l, this.payload);
       return this.retorna ? this.finalizar(alvos.map((l) => projetar(l, interpretarSelect(this.cols).colunas))) : { data: null, error: null };
     }
