@@ -122,6 +122,7 @@ export const vagaCreateSchema = z.object({
   fee_rs_percentual: coerceNumberNullable,
   fee_rs_prazo_cobranca: z.string().optional().nullable(),
   confidencial: z.boolean().default(false),
+  pcd: z.boolean().default(false),
   taxa_cancelamento: z.boolean().default(false),
   taxa_cancelamento_percentual: coerceNumberOptional.pipe(z.number().min(0).max(100).optional()),
   visivel_publicamente: z.boolean().default(true),

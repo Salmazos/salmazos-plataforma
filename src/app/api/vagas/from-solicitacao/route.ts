@@ -94,6 +94,9 @@ export async function POST(request: NextRequest) {
         // solicitação (ver portal/solicitar-vaga) — sem isso, ela cairia no
         // DEFAULT false da coluna e perderia a marcação do cliente na conversão.
         confidencial: sol.confidencial === true,
+        // Vaga PCD: o cliente marcou PCD no perfil da solicitação (link ou portal). A página pública mostra só o selo "Vaga PCD"; os demais itens do
+        // perfil (sexo, idade, local de trabalho) continuam internos.
+        pcd: sol.perfil_extra?.pcd === "sim",
         // Vaga herda a unidade do cliente que pediu (gravada na solicitação a partir de
         // clientes.unidade_id no portal), não a de quem aprova no painel — um sócio com
         // acesso a todas as unidades aprovando pedido de cliente SBC cria vaga de SBC.

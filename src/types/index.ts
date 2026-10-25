@@ -350,6 +350,7 @@ export interface Vaga {
   fee_rs_percentual?: number | null;
   fee_rs_prazo_cobranca?: string | null;
   confidencial?: boolean;
+  pcd?: boolean;
   taxa_cancelamento?: boolean;
   taxa_cancelamento_percentual?: number | null;
   visivel_publicamente?: boolean;

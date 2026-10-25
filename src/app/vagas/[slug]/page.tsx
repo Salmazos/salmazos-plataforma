@@ -1,9 +1,13 @@
+import { cache } from "react";
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createServiceClient } from "@/lib/supabase/server";
 import BotaoVoltarSite from "@/components/BotaoVoltarSite";
 import CurriculoMotivacional from "@/components/CurriculoMotivacional";
 import FormCandidaturaVagaPublica from "@/components/FormCandidaturaVagaPublica";
+import SeloPcd from "@/components/SeloPcd";
+import { selecionarComPcd, tituloPublicoDaVaga, vagaEhPcd } from "@/lib/vagaPcdPublica";
 
 export const dynamic = "force-dynamic";
 
@@ -38,27 +42,59 @@ function InfoItem({ label, value, sub }: { label: string; value: string; sub?: s
   );
 }
 
+const COLUNAS_VAGA = "id, titulo, cidade, estado, salario, adicionais_salariais, requisitos, beneficios, principais_atividades, horario, observacoes, status";
+
+interface VagaPublica {
+  id: string;
+  titulo: string;
+  cidade: string | null;
+  estado: string | null;
+  salario: string | number | null;
+  adicionais_salariais: string | null;
+  requisitos: string | null;
+  beneficios: string | null;
+  principais_atividades: string | null;
+  horario: string | null;
+  observacoes: string | null;
+  status: string;
+  slug?: string | null;
+  pcd?: boolean | null;
+}
+
+// pcd entra na leitura só para o selo "Vaga PCD"; se a coluna ainda não existir, a vaga sai igual, sem o selo. A leitura é compartilhada entre
+// generateMetadata e a página (cache por requisição).
+const carregarVaga = cache(async (slug: string): Promise<{ vaga: VagaPublica | null; slugCanonico: string | null }> => {
+  const supabase = createServiceClient();
+  type Resposta = PromiseLike<{ data: VagaPublica | null; error: unknown }>;
+  const { data: porSlug } = await selecionarComPcd<VagaPublica>(
+    (colunas) => supabase.from("vagas").select(colunas).eq("slug", slug).maybeSingle() as unknown as Resposta,
+    COLUNAS_VAGA
+  );
+  if (porSlug) return { vaga: porSlug, slugCanonico: null };
+  const { data: porId } = await selecionarComPcd<VagaPublica>(
+    (colunas) => supabase.from("vagas").select(colunas).eq("id", slug).maybeSingle() as unknown as Resposta,
+    `${COLUNAS_VAGA}, slug`
+  );
+  return { vaga: porId, slugCanonico: porId?.slug ?? null };
+});
+
+// Só a vaga PCD ganha título próprio (com a sigla "PCD", nunca por extenso); as demais seguem com o título do site, como sempre.
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const { vaga } = await carregarVaga(slug);
+  if (!vaga || !vagaEhPcd(vaga)) return {};
+  const titulo = tituloPublicoDaVaga(vaga.titulo, true);
+  return { title: titulo, openGraph: { title: titulo } };
+}
+
 export default async function VagaPublicaPage({ params }: Props) {
   const { slug } = await params;
-  const supabase = createServiceClient();
 
-  let { data: vaga } = await supabase
-    .from("vagas")
-    .select("id, titulo, cidade, estado, salario, adicionais_salariais, requisitos, beneficios, principais_atividades, horario, observacoes, status")
-    .eq("slug", slug)
-    .maybeSingle();
-
-  if (!vaga) {
-    const { data: vagaById } = await supabase
-      .from("vagas")
-      .select("id, titulo, cidade, estado, salario, adicionais_salariais, requisitos, beneficios, principais_atividades, horario, observacoes, status, slug")
-      .eq("id", slug)
-      .maybeSingle();
-    if (vagaById?.slug) {
-      redirect(`/vagas/${vagaById.slug}`);
-    }
-    vaga = vagaById;
+  const resultado = await carregarVaga(slug);
+  if (resultado.slugCanonico) {
+    redirect(`/vagas/${resultado.slugCanonico}`);
   }
+  const vaga = resultado.vaga;
 
   if (!vaga) notFound();
 
@@ -95,6 +131,7 @@ export default async function VagaPublicaPage({ params }: Props) {
             <h1 style={{ fontSize: "24px", fontWeight: 700, color: "#FFD700", margin: 0 }}>
               {vaga.titulo}
             </h1>
+            {vagaEhPcd(vaga) && <SeloPcd sobreFundoEscuro />}
           </div>
 
           <div style={{ padding: "24px" }}>
