@@ -333,6 +333,28 @@ export function explicarSituacaoDaVaga(vaga: SituacaoDaVaga): string {
   }
 }
 
+// Faixa "Cliente X vinculado à solicitação" no topo do modal. `vagaPendente` marca a que diz "a vaga ainda não foi criada": esse texto só vale até o
+// analista decidir a solicitação (criar a vaga ou recusar). `solicitacaoId` diz de qual solicitação a faixa fala.
+export interface AvisoDoCliente {
+  tipo: "ok" | "atencao";
+  titulo: string;
+  linhas: string[];
+  solicitacaoId?: string;
+  vagaPendente?: boolean;
+}
+
+export const TEXTO_VAGA_CRIADA_COM_O_CLIENTE = "A vaga desta solicitação foi criada já com este cliente: a cobrança de R&S poderá ser gerada.";
+export const TEXTO_SOLICITACAO_RECUSADA_SEM_VAGA = "A solicitação foi recusada: nenhuma vaga será criada a partir dela.";
+
+// Depois de criar a vaga ou recusar a solicitação, a linha "A vaga ainda não foi criada. Ao aprovar…" deixou de ser verdade: troca só ela pelo que
+// aconteceu de fato. Faixa de outra solicitação, ou que nunca disse isso, fica como está (mesma referência).
+export function avisoAposDecisaoDaSolicitacao(aviso: AvisoDoCliente | null, solicitacaoId: string, decisao: "vaga_criada" | "recusada"): AvisoDoCliente | null {
+  if (!aviso || !aviso.vagaPendente || aviso.solicitacaoId !== solicitacaoId) return aviso;
+  const antes = explicarSituacaoDaVaga("sem_vaga");
+  const depois = decisao === "vaga_criada" ? TEXTO_VAGA_CRIADA_COM_O_CLIENTE : TEXTO_SOLICITACAO_RECUSADA_SEM_VAGA;
+  return { ...aviso, vagaPendente: false, linhas: aviso.linhas.map((l) => (l === antes ? depois : l)) };
+}
+
 // Resposta de vincular-cliente em que a SOLICITAÇÃO mudou (já vinculada, decidida, recusada): a tela fecha o formulário e recarrega a lista.
 // Qualquer outro 409 (duplicidade, reativação, índice único sem cadastro visível) fica no formulário, sem perder o que foi digitado.
 export function solicitacaoFicouIndisponivel(status: number, corpo: unknown): boolean {
