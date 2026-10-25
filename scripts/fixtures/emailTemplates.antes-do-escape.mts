@@ -1,0 +1,877 @@
+// CÓPIA CONGELADA de src/lib/emailTemplates.ts como estava ANTES do escape global (commit base da feat/cliente-da-solicitacao). Só serve de referência
+// para scripts/verificar-cliente-da-solicitacao.mts provar que o escape novo não muda a saída com dados normais. NÃO editar e NÃO importar no app.
+export type EmailTemplateName =
+  | "entrevista_salmazos"
+  | "entrevista_cliente"
+  | "aprovado_cliente"
+  | "reprovado"
+  | "solicitar_documentos"
+  | "vaga_aprovada_cliente"
+  | "solicitacao_recusada"
+  | "candidato_entrevista_cliente"
+  | "nova_vaga_criada"
+  | "vaga_encerrada"
+  | "admissao_link"
+  | "cobranca_rs_gerada"
+  | "cobranca_rs_atrasada"
+  | "cobranca_rs_aguardando_validacao"
+  | "cobranca_rs_paga"
+  | "cobranca_rs_cancelada"
+  | "cobranca_rs_validada_diretoria"
+  | "supervisao_cliente_atrasada"
+  | "alteracao_solicitacao_pedida"
+  | "alteracao_solicitacao_aprovada"
+  | "alteracao_solicitacao_recusada"
+  | "vaga_status_solicitado"
+  | "vaga_status_decidido";
+
+interface TemplateData {
+  nome: string;
+  cargo: string;
+  nomeCliente?: string;
+  nomeCandidato?: string;
+  numPosicoes?: number;
+  cidade?: string;
+  empresa?: string;
+  // Valor bruto (ex.: "recrutamento_selecao"), distinto de tipoServicoLabel (rótulo pra
+  // exibição, ex.: "Recrutamento e Seleção") — usado pra decidir se o bloco de condições
+  // negociadas de R&S deve aparecer, sem depender do texto do label.
+  tipoServico?: string;
+  tipoServicoLabel?: string;
+  estado?: string;
+  responsavel?: string;
+  salario?: string;
+  horario?: string;
+  requisitos?: string;
+  beneficios?: string;
+  observacoes?: string;
+  vagaUrl?: string;
+  statusEncerramento?: string;
+  admissaoUrl?: string;
+  motivoRecusa?: string;
+  confidencial?: boolean;
+  // Condições negociadas de R&S — só usadas (e só renderizadas) quando tipoServico ===
+  // "recrutamento_selecao". Ver nova_vaga_criada abaixo.
+  feeRsPercentual?: number | null;
+  feeRsPrazoCobranca?: string | null;
+  taxaCancelamento?: boolean;
+  taxaCancelamentoPercentual?: number | null;
+  // Cobrança R&S (case "cobranca_rs_gerada") — cliente vem do snapshot da cobrança, não
+  // do cadastro atual (ver cobrancas_rs.cliente_*_snapshot).
+  clienteCnpj?: string | null;
+  clienteEndereco?: string | null;
+  clienteTelefone?: string | null;
+  clienteEmail?: string | null;
+  dataInicio?: string;
+  feeValor?: number | null;
+  tipoCobrancaRS?: "contratacao" | "cancelamento";
+  // Link direto pra essa cobrança específica no painel (/painel/cobrancas-rs?abrir={id}) —
+  // usado em "cobranca_rs_gerada" pra levar a diretoria direto pro modal de revisão, sem
+  // precisar procurar a cobrança na lista.
+  cobrancaUrl?: string | null;
+  // Cobrança R&S atrasada (case "cobranca_rs_atrasada").
+  dataVencimento?: string;
+  diasAtraso?: number;
+  // Cobrança R&S parada em "Aguardando validação" (case "cobranca_rs_aguardando_validacao"): dias desde o envio, em Brasília.
+  diasParado?: number;
+  // Cobrança R&S marcada como paga (case "cobranca_rs_paga").
+  dataPagamento?: string;
+  // Cobrança R&S cancelada via justificativa (case "cobranca_rs_cancelada").
+  justificativaCancelamento?: string;
+  // Supervisão de posto atrasada/nunca supervisionada (case "supervisao_cliente_atrasada").
+  // diasSemSupervisao null/undefined = nunca teve nenhuma supervisão registrada.
+  diasSemSupervisao?: number | null;
+  frequenciaDiasSupervisao?: number;
+  supervisaoUrl?: string;
+  // Pedido de alteração de solicitação de vaga pelo portal (cases "alteracao_solicitacao_*"):
+  // tabela Campo/Antes/Depois já montada e escapada (resumoAlteracoesHtml em
+  // lib/solicitacaoAlteracao.ts) + link pro painel.
+  resumoAlteracoesHtml?: string;
+  solicitacaoUrl?: string;
+  // Pedido de pausa/reabertura de vaga pelo portal (cases "vaga_status_*") — ver
+  // vagaPausaReativacao.ts. acaoSolicitada decide o texto ("pausar"/"reabrir");
+  // decisaoStatus só é usado no e-mail de decisão pro cliente.
+  acaoSolicitada?: "pausar" | "reabrir";
+  decisaoStatus?: "aprovada" | "recusada";
+  motivoTipoEncerramentoLabel?: string | null;
+  motivoTextoEncerramento?: string | null;
+}
+
+export interface EmailTemplate {
+  subject: string;
+  html: string;
+  descricao: string;
+}
+
+export const TEMPLATE_OPTIONS: { value: EmailTemplateName; label: string }[] = [
+  { value: "entrevista_salmazos", label: "Convite para Entrevista (Salmazos)" },
+  { value: "entrevista_cliente", label: "Avanço para Entrevista com Cliente" },
+  { value: "aprovado_cliente", label: "Aprovação no Processo Seletivo" },
+  { value: "reprovado", label: "Reprovação no Processo Seletivo" },
+  { value: "solicitar_documentos", label: "Solicitar Documentos" },
+  { value: "vaga_aprovada_cliente", label: "Vaga Aprovada (para Cliente)" },
+  { value: "solicitacao_recusada", label: "Solicitação de Vaga Recusada (para Cliente)" },
+  { value: "candidato_entrevista_cliente", label: "Candidato Agendado para Entrevista (para Cliente)" },
+  { value: "nova_vaga_criada", label: "Nova Vaga Cadastrada (notificação equipe)" },
+  { value: "vaga_encerrada", label: "Vaga Encerrada (notificação equipe)" },
+];
+
+function layout(subtitle: string, body: string): string {
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif;">
+  <div style="max-width:600px;margin:40px auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+    <div style="background:#000000;padding:32px;text-align:center;">
+      <h1 style="color:#FFD700;margin:0;font-size:26px;font-weight:700;letter-spacing:3px;">SALMAZOS RH</h1>
+      <p style="color:rgba(255,255,255,0.7);margin:8px 0 0;font-size:14px;">${subtitle}</p>
+    </div>
+    <div style="padding:36px 32px;">
+      ${body}
+      <div style="border-top:1px solid #e5e7eb;margin-top:28px;padding-top:20px;">
+        <p style="font-size:13px;color:#9ca3af;margin:0;">Atenciosamente,</p>
+        <p style="font-size:14px;color:#111827;font-weight:700;margin:4px 0 0;">Equipe Salmazos RH &amp; Serviços</p>
+        <p style="font-size:12px;color:#9ca3af;margin:4px 0 0;">Recrutamento e Seleção · Mão de Obra Temporária · Terceirização</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+const BANNER_CONFIDENCIAL = `<div style="background:#fef2f2;border:2px solid #fca5a5;border-radius:6px;padding:14px 18px;margin:0 0 20px;text-align:center;">
+  <p style="margin:0;color:#dc2626;font-weight:700;font-size:14px;">🔴 ESTA VAGA É CONFIDENCIAL — trate a divulgação com cuidado</p>
+</div>`;
+
+export function getEmailTemplate(
+  name: EmailTemplateName,
+  { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor, tipoCobrancaRS, cobrancaUrl, dataVencimento, diasAtraso, diasParado, dataPagamento, justificativaCancelamento, diasSemSupervisao, frequenciaDiasSupervisao, supervisaoUrl, resumoAlteracoesHtml, solicitacaoUrl, acaoSolicitada, decisaoStatus, motivoTipoEncerramentoLabel, motivoTextoEncerramento }: TemplateData
+): EmailTemplate {
+  switch (name) {
+    case "entrevista_salmazos":
+      return {
+        subject: "Salmazos RH - Convite para Entrevista",
+        descricao: `Convite para entrevista presencial na Salmazos RH para a vaga de ${cargo}.`,
+        html: layout(
+          "Convite para Entrevista",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Olá, <strong>${nome}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Temos o prazer de convidá-lo(a) para uma <strong>entrevista presencial na Salmazos RH</strong>
+            para a vaga de <strong style="color:#d97706;">${cargo}</strong>.
+          </p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Seu perfil chamou nossa atenção e gostaríamos de conhecê-lo(a) melhor.
+            Por favor, responda este e-mail ou entre em contato conosco para confirmar sua disponibilidade
+            e agendarmos a entrevista.
+          </p>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Próximos passos:</p>
+            <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              <li>Responda este e-mail ou nos contate para confirmar presença</li>
+              <li>Traga documento de identidade com foto</li>
+              <li>Chegue com 10 minutos de antecedência</li>
+            </ul>
+          </div>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+            Ficamos no aguardo da sua confirmação. Será um prazer recebê-lo(a)! 😊
+          </p>`
+        ),
+      };
+
+    case "entrevista_cliente":
+      return {
+        subject: "Salmazos RH - Próxima Etapa do Processo Seletivo",
+        descricao: `Informativo de avanço para entrevista com a empresa contratante para a vaga de ${cargo}.`,
+        html: layout(
+          "Próxima Etapa do Processo Seletivo",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Olá, <strong>${nome}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Temos uma ótima notícia! Você foi <strong>aprovado(a) na entrevista com a Salmazos RH</strong>
+            para a vaga de <strong style="color:#d97706;">${cargo}</strong> e avançou para a próxima fase do processo seletivo.
+          </p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            A próxima etapa consiste em uma <strong>entrevista diretamente com a empresa contratante</strong>.
+            Nossa equipe entrará em contato em breve com todos os detalhes sobre data, horário e local.
+          </p>
+          <div style="background:#f0fdf4;border-left:4px solid #16a34a;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#166534;font-weight:700;font-size:14px;">Dicas para essa etapa:</p>
+            <ul style="margin:0;padding-left:18px;color:#15803d;line-height:2;font-size:14px;">
+              <li>Pesquise sobre a empresa antes da entrevista</li>
+              <li>Vista-se de forma adequada e profissional</li>
+              <li>Seja pontual e demonstre entusiasmo pela oportunidade</li>
+            </ul>
+          </div>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+            Parabéns pela conquista! Continue assim e muito sucesso! 🚀
+          </p>`
+        ),
+      };
+
+    case "aprovado_cliente":
+      return {
+        subject: "Salmazos RH - Parabéns! Você foi aprovado(a)",
+        descricao: `Confirmação de aprovação pelo cliente para a vaga de ${cargo}.`,
+        html: layout(
+          "🎉 Parabéns! Você foi aprovado(a)!",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Olá, <strong>${nome}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            É com muito prazer que comunicamos sua <strong>aprovação</strong> no processo seletivo
+            para a vaga de <strong style="color:#d97706;">${cargo}</strong>! 🎉
+          </p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Você se destacou em todas as etapas do processo e a empresa contratante confirmou seu ingresso.
+            Nossa equipe entrará em contato o mais breve possível com todas as informações sobre admissão,
+            documentação necessária e data de início.
+          </p>
+          <div style="background:#f0fdf4;border-left:4px solid #16a34a;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#166534;font-weight:700;font-size:14px;">Próximos passos:</p>
+            <ul style="margin:0;padding-left:18px;color:#15803d;line-height:2;font-size:14px;">
+              <li>Aguarde nosso contato com detalhes da admissão</li>
+              <li>Separe seus documentos pessoais</li>
+              <li>Em caso de dúvidas, entre em contato conosco</li>
+            </ul>
+          </div>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+            Parabéns e seja muito bem-vindo(a)! Desejamos muito sucesso nessa nova jornada! 🌟
+          </p>`
+        ),
+      };
+
+    case "reprovado":
+      return {
+        subject: "Salmazos RH - Atualização do seu Processo Seletivo",
+        descricao: `Comunicado de encerramento do processo seletivo para a vaga de ${cargo}.`,
+        html: layout(
+          "Atualização do Processo Seletivo",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Olá, <strong>${nome}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Agradecemos imensamente sua participação e dedicação no processo seletivo da Salmazos RH
+            para a vaga de <strong>${cargo}</strong>.
+          </p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Após análise cuidadosa de todos os candidatos, seguimos com outro perfil neste momento.
+            Gostaríamos de ressaltar que sua participação foi muito valorosa e que você demonstrou
+            qualidades importantes ao longo do processo.
+          </p>
+          <div style="background:#f9fafb;border-left:4px solid #d1d5db;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0;color:#374151;font-size:14px;line-height:1.8;">
+              Seu currículo ficará em nosso <strong>banco de talentos</strong> e poderemos
+              contatá-lo(a) para futuras oportunidades que se encaixem em seu perfil.
+              Não hesite em nos enviar atualizações do seu currículo.
+            </p>
+          </div>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+            Desejamos muito sucesso na sua jornada profissional! Obrigado pela confiança na Salmazos RH. 😊
+          </p>`
+        ),
+      };
+
+    case "solicitar_documentos":
+      return {
+        subject: "Salmazos RH - Documentos Necessários para Contratação",
+        descricao: `Solicitação de documentos para continuidade do processo de ${cargo}.`,
+        html: layout(
+          "Documentos Necessários para Contratação",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Olá, <strong>${nome}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Para darmos continuidade ao seu processo de contratação para a vaga de
+            <strong style="color:#d97706;">${cargo}</strong>, precisamos que você nos envie os seguintes documentos:
+          </p>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Documentos necessários:</p>
+            <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              <li>RG (Registro Geral)</li>
+              <li>CPF (Cadastro de Pessoa Física)</li>
+              <li>Carteira de Trabalho (física ou digital)</li>
+              <li>Comprovante de Residência (últimos 3 meses)</li>
+              <li>Foto 3x4 recente</li>
+            </ul>
+          </div>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Por favor, envie os documentos o mais breve possível para não atrasar seu processo de admissão.
+            Você pode enviá-los respondendo este e-mail ou trazê-los pessoalmente à nossa unidade.
+          </p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+            Em caso de dúvidas, não hesite em nos contatar. Estamos à disposição! 😊
+          </p>`
+        ),
+      };
+
+    case "vaga_aprovada_cliente":
+      return {
+        subject: "Salmazos RH - Sua vaga foi aceita!",
+        descricao: `Confirmação de aprovação da vaga de ${cargo} para o cliente.`,
+        html: layout(
+          "Sua Solicitação de Vaga foi Aprovada!",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Prezado(a), <strong>${nomeCliente}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Temos o prazer de informar que sua solicitação de vaga foi <strong>aprovada</strong>
+            pela equipe Salmazos RH e já está em andamento!
+          </p>
+          <div style="background:#f0fdf4;border-left:4px solid #16a34a;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#166534;font-weight:700;font-size:14px;">Detalhes da vaga:</p>
+            <ul style="margin:0;padding-left:18px;color:#15803d;line-height:2;font-size:14px;">
+              <li><strong>Cargo:</strong> ${cargo}</li>
+              <li><strong>Nº de posições:</strong> ${numPosicoes ?? 1}</li>
+              <li><strong>Localidade:</strong> ${cidade ?? "A definir"}</li>
+            </ul>
+          </div>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Nossa equipe de recrutamento já iniciou a busca por candidatos qualificados
+            para atender ao perfil solicitado. Manteremos você informado(a) sobre o andamento
+            do processo seletivo e enviaremos os perfis mais aderentes para sua avaliação.
+          </p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+            Em caso de dúvidas ou necessidade de ajustes, estamos à disposição. Conte com a Salmazos RH! 😊
+          </p>`
+        ),
+      };
+
+    case "solicitacao_recusada":
+      return {
+        subject: `Atualização sobre sua solicitação de vaga — ${cargo}`,
+        descricao: `Comunicado de recusa da solicitação de vaga de ${cargo} para o cliente.`,
+        html: layout(
+          "Atualização sobre sua Solicitação de Vaga",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Prezado(a), <strong>${nomeCliente}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Agradecemos o contato e o interesse em abrir uma nova vaga de <strong>${cargo}</strong> conosco.
+            Após análise da nossa equipe, no momento não conseguimos dar seguimento a essa solicitação
+            da forma como foi enviada.
+          </p>
+          ${motivoRecusa ? `<div style="background:#f9fafb;border-left:4px solid #d1d5db;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 8px;color:#374151;font-weight:700;font-size:14px;">Motivo:</p>
+            <p style="margin:0;color:#374151;font-size:14px;line-height:1.7;">${motivoRecusa}</p>
+          </div>` : ""}
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+            Ficamos à disposição para esclarecer qualquer dúvida ou para reenviar a solicitação com os
+            ajustes necessários — é só entrar em contato ou acessar o portal novamente. Contamos com você! 😊
+          </p>`
+        ),
+      };
+
+    case "candidato_entrevista_cliente":
+      return {
+        subject: "Salmazos RH - Candidato agendado para entrevista",
+        descricao: `Informativo de candidato agendado para entrevista na empresa para a vaga de ${cargo}.`,
+        html: layout(
+          "Candidato Agendado para Entrevista",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Prezado(a), <strong>${nomeCliente}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Gostaríamos de informar que temos um candidato aprovado em nosso processo de triagem
+            e pronto para a próxima etapa: a <strong>entrevista com a ${empresa ?? "sua empresa"}</strong>.
+          </p>
+          <div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#1e40af;font-weight:700;font-size:14px;">Dados do candidato:</p>
+            <ul style="margin:0;padding-left:18px;color:#1d4ed8;line-height:2;font-size:14px;">
+              <li><strong>Nome:</strong> ${nomeCandidato}</li>
+              <li><strong>Vaga:</strong> ${cargo}</li>
+            </ul>
+          </div>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Este candidato foi avaliado e aprovado pela equipe Salmazos RH, demonstrando
+            perfil compatível com os requisitos da posição. Solicitamos que nos informe
+            a melhor data e horário para agendarmos a entrevista.
+          </p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+            Estamos à disposição para quaisquer esclarecimentos. Agradecemos a parceria! 🤝
+          </p>`
+        ),
+      };
+
+    case "nova_vaga_criada": {
+      const local = [cidade, estado].filter(Boolean).join(" / ") || "Não informado";
+      const reqItems = requisitos
+        ? requisitos.split(" * ").map((r) => `<li>${r.trim()}</li>`).join("")
+        : "";
+      const benItems = beneficios
+        ? beneficios.split(" * ").map((b) => `<li>${b.trim()}</li>`).join("")
+        : "";
+
+      // Só pra R&S — MOT/Terceirização não têm fee/taxa de cancelamento negociados
+      // desse jeito, então o bloco nem aparece pra elas (tipoServico decide, não o label).
+      const condicoesItems =
+        tipoServico === "recrutamento_selecao"
+          ? [
+              feeRsPercentual != null ? `<li><strong>Taxa de R&S:</strong> ${feeRsPercentual}%</li>` : "",
+              feeRsPrazoCobranca ? `<li><strong>Prazo de cobrança:</strong> ${feeRsPrazoCobranca}</li>` : "",
+              taxaCancelamento
+                ? `<li><strong>Taxa de cancelamento:</strong> ${taxaCancelamentoPercentual != null ? `${taxaCancelamentoPercentual}%` : "Sim (percentual não informado)"}</li>`
+                : "",
+            ].join("")
+          : "";
+
+      return {
+        subject: `🆕 Nova Vaga Cadastrada: ${cargo}`,
+        descricao: `Notificação de nova vaga cadastrada: ${cargo}.`,
+        html: layout(
+          "Nova Vaga Disponível",
+          `${confidencial ? BANNER_CONFIDENCIAL : ""}
+          <p style="font-size:16px;color:#111827;margin:0 0 16px;">Uma nova vaga foi cadastrada na plataforma!</p>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Detalhes da vaga:</p>
+            <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              ${nomeCliente ? `<li><strong>Cliente:</strong> ${nomeCliente}</li>` : ""}
+              <li><strong>Cargo:</strong> ${cargo}</li>
+              <li><strong>Tipo:</strong> ${tipoServicoLabel ?? "—"}</li>
+              <li><strong>Local:</strong> ${local}</li>
+              <li><strong>Posições:</strong> ${numPosicoes ?? 1}</li>
+              <li><strong>Salário:</strong> ${salario ?? "Não informado"}</li>
+              <li><strong>Responsável:</strong> ${responsavel ?? "—"}</li>
+            </ul>
+          </div>
+          ${condicoesItems ? `<div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:4px;padding:14px 18px;margin:0 0 20px;">
+            <p style="font-size:13px;font-weight:700;color:#1e40af;margin:0 0 8px;">Condições Negociadas (R&S):</p>
+            <ul style="margin:0;padding-left:18px;color:#1d4ed8;line-height:2;font-size:14px;">${condicoesItems}</ul>
+          </div>` : ""}
+          ${horario ? `<div style="margin:0 0 16px;">
+            <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 6px;">Horário:</p>
+            <p style="font-size:14px;color:#374151;margin:0;">${horario}</p>
+          </div>` : ""}
+          ${reqItems ? `<div style="margin:0 0 16px;">
+            <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 6px;">Requisitos:</p>
+            <ul style="margin:0;padding-left:18px;color:#374151;line-height:2;font-size:14px;">${reqItems}</ul>
+          </div>` : ""}
+          ${benItems ? `<div style="margin:0 0 16px;">
+            <p style="font-size:14px;font-weight:700;color:#111827;margin:0 0 6px;">Benefícios:</p>
+            <ul style="margin:0;padding-left:18px;color:#374151;line-height:2;font-size:14px;">${benItems}</ul>
+          </div>` : ""}
+          ${observacoes ? `<div style="background:#f9fafb;border-left:4px solid #d1d5db;border-radius:4px;padding:14px 18px;margin:0 0 20px;">
+            <p style="font-size:13px;font-weight:700;color:#6b7280;margin:0 0 4px;">Observações internas:</p>
+            <p style="font-size:14px;color:#374151;margin:0;">${observacoes}</p>
+          </div>` : ""}
+          <div style="text-align:center;margin-top:24px;">
+            <a href="${vagaUrl ?? "#"}" style="display:inline-block;background:#000000;color:#FFD700;font-weight:700;font-size:15px;padding:14px 32px;border-radius:8px;text-decoration:none;">
+              Ver Vaga no Painel
+            </a>
+          </div>`
+        ),
+      };
+    }
+
+    case "vaga_encerrada": {
+      const isCancelada = statusEncerramento === "cancelada";
+      const subjectText = isCancelada ? `❌ Vaga Cancelada: ${cargo}` : `🔴 Vaga Fechada: ${cargo}`;
+      const headerText = isCancelada ? "Vaga Cancelada pelo Cliente" : "Vaga Encerrada com Sucesso";
+      const badgeBg = isCancelada ? "#ef4444" : "#6b7280";
+      const badgeLabel = isCancelada ? "Cancelada" : "Fechada";
+      const localEnc = [cidade, estado].filter(Boolean).join(" / ") || "Não informado";
+
+      return {
+        subject: subjectText,
+        descricao: `Notificação de vaga ${badgeLabel.toLowerCase()}: ${cargo}.`,
+        html: layout(
+          headerText,
+          `${confidencial ? BANNER_CONFIDENCIAL : ""}
+          <p style="font-size:16px;color:#111827;margin:0 0 16px;">
+            A seguinte vaga foi encerrada na plataforma:
+          </p>
+          <div style="text-align:center;margin:0 0 20px;">
+            <span style="display:inline-block;background:${badgeBg};color:#ffffff;font-weight:700;font-size:14px;padding:6px 18px;border-radius:20px;">
+              ${badgeLabel}
+            </span>
+          </div>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Detalhes da vaga:</p>
+            <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              ${nomeCliente ? `<li><strong>Cliente:</strong> ${nomeCliente}</li>` : ""}
+              <li><strong>Cargo:</strong> ${cargo}</li>
+              <li><strong>Tipo:</strong> ${tipoServicoLabel ?? "—"}</li>
+              <li><strong>Local:</strong> ${localEnc}</li>
+              <li><strong>Responsável:</strong> ${responsavel ?? "—"}</li>
+            </ul>
+          </div>
+          <div style="text-align:center;margin-top:24px;">
+            <a href="${vagaUrl ?? "#"}" style="display:inline-block;background:#000000;color:#FFD700;font-weight:700;font-size:15px;padding:14px 32px;border-radius:8px;text-decoration:none;">
+              Ver Vaga no Painel
+            </a>
+          </div>`
+        ),
+      };
+    }
+
+    case "admissao_link":
+      return {
+        subject: "Salmazos RH - Complete seus dados de admissão",
+        descricao: `Link de admissão digital enviado para ${nome} referente à vaga de ${cargo}.`,
+        html: layout(
+          "Complete seus Dados de Admissão",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Olá, <strong>${nome}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Parabéns novamente pela aprovação para a vaga de <strong style="color:#d97706;">${cargo}</strong>!
+            Para darmos continuidade à sua contratação, precisamos que você preencha seus dados
+            e envie alguns documentos pelo link abaixo.
+          </p>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0;color:#92400e;font-size:14px;line-height:1.8;">
+              Você pode preencher pelo celular, em qualquer lugar. O link é válido por
+              <strong>5 dias</strong> e você pode fechar e voltar a qualquer momento — seu
+              progresso fica salvo automaticamente.
+            </p>
+          </div>
+          <div style="text-align:center;margin-top:24px;">
+            <a href="${admissaoUrl ?? "#"}" style="display:inline-block;background:#000000;color:#FFD700;font-weight:700;font-size:15px;padding:14px 32px;border-radius:8px;text-decoration:none;">
+              Preencher meus dados
+            </a>
+          </div>`
+        ),
+      };
+
+    case "cobranca_rs_gerada": {
+      const ehCancelamento = tipoCobrancaRS === "cancelamento";
+      const salarioFmt = salario ?? "—";
+      const feeValorFmt =
+        feeValor != null
+          ? feeValor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+          : "—";
+
+      const blocoDetalhes = ehCancelamento
+        ? `<div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#1e40af;font-weight:700;font-size:14px;">Dados do cancelamento:</p>
+            <ul style="margin:0;padding-left:18px;color:#1d4ed8;line-height:2;font-size:14px;">
+              <li><strong>Vaga:</strong> ${cargo || "—"}</li>
+              <li><strong>Salário-base:</strong> ${salarioFmt}</li>
+            </ul>
+          </div>`
+        : `<div style="background:#eff6ff;border-left:4px solid #3b82f6;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#1e40af;font-weight:700;font-size:14px;">Dados da contratação:</p>
+            <ul style="margin:0;padding-left:18px;color:#1d4ed8;line-height:2;font-size:14px;">
+              <li><strong>Candidato:</strong> ${nomeCandidato ?? "—"}</li>
+              <li><strong>Função:</strong> ${cargo}</li>
+              <li><strong>Salário:</strong> ${salarioFmt}</li>
+              <li><strong>Data de início:</strong> ${dataInicio ?? "—"}</li>
+            </ul>
+          </div>`;
+
+      return {
+        subject: ehCancelamento
+          ? `💰 Cobrança de Cancelamento R&S — ${nomeCliente ?? "Cliente"}`
+          : `💰 Cobrança R&S: ${nomeCandidato ?? cargo} — ${nomeCliente ?? "Cliente"}`,
+        descricao: ehCancelamento
+          ? `Cobrança de multa de cancelamento de vaga R&S para ${nomeCliente ?? "cliente"}.`
+          : `Cobrança de R&S referente à contratação de ${nomeCandidato ?? cargo} para ${nomeCliente ?? "cliente"}.`,
+        html: layout(
+          ehCancelamento ? "Cobrança de Cancelamento de Vaga (R&S)" : "Cobrança de Recrutamento e Seleção",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">
+            ${ehCancelamento ? "Segue a cobrança referente ao cancelamento da vaga abaixo:" : "Segue a cobrança referente à contratação abaixo:"}
+          </p>
+          <div style="background:#FEF9C3;border-left:4px solid #CA8A04;border-radius:4px;padding:14px 16px;margin:0 0 20px;">
+            <p style="margin:0;color:#854D0E;font-size:14px;font-weight:700;">⚠️ Aguardando validação da diretoria antes do envio ao cliente</p>
+          </div>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados do cliente:</p>
+            <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              <li><strong>Empresa:</strong> ${nomeCliente ?? "—"}</li>
+              <li><strong>CNPJ:</strong> ${clienteCnpj ?? "—"}</li>
+              <li><strong>Endereço:</strong> ${clienteEndereco ?? "—"}</li>
+              <li><strong>Telefone:</strong> ${clienteTelefone ?? "—"}</li>
+              <li><strong>E-mail:</strong> ${clienteEmail ?? "—"}</li>
+            </ul>
+          </div>
+          ${blocoDetalhes}
+          <div style="background:#f0fdf4;border-left:4px solid #22c55e;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#166534;font-weight:700;font-size:14px;">Cobrança:</p>
+            <ul style="margin:0;padding-left:18px;color:#15803d;line-height:2;font-size:14px;">
+              <li><strong>Taxa:</strong> ${feeRsPercentual != null ? `${feeRsPercentual}%` : "—"}</li>
+              <li><strong>Valor total:</strong> ${feeValorFmt}</li>
+              ${feeRsPrazoCobranca ? `<li><strong>Prazo de cobrança:</strong> ${feeRsPrazoCobranca}</li>` : ""}
+            </ul>
+          </div>
+          <div style="text-align:center;margin-top:24px;">
+            <a href="${cobrancaUrl ?? "#"}" style="display:inline-block;background:#000000;color:#FFD700;font-weight:700;font-size:15px;padding:14px 32px;border-radius:8px;text-decoration:none;">
+              Revisar e Validar Cobrança
+            </a>
+          </div>`
+        ),
+      };
+    }
+
+    case "cobranca_rs_atrasada": {
+      const ehCancelamento = tipoCobrancaRS === "cancelamento";
+      const feeValorFmt =
+        feeValor != null
+          ? feeValor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+          : "—";
+      const dataVencimentoFmt = dataVencimento ? dataVencimento.split("-").reverse().join("/") : "—";
+      const diasLabel = `${diasAtraso ?? 0} dia${(diasAtraso ?? 0) !== 1 ? "s" : ""}`;
+
+      return {
+        subject: `🔴 Cobrança R&S atrasada há ${diasLabel} — ${nomeCliente ?? "Cliente"}`,
+        descricao: `Lembrete de cobrança R&S vencida e ainda não paga (${nomeCliente ?? "cliente"}).`,
+        html: layout(
+          "Cobrança R&S em Atraso",
+          `<div style="background:#FEF2F2;border-left:4px solid #DC2626;border-radius:4px;padding:14px 16px;margin:0 0 20px;">
+            <p style="margin:0;color:#991B1B;font-size:14px;font-weight:700">Vencida há ${diasLabel} — ainda não marcada como paga</p>
+          </div>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados da cobrança:</p>
+            <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              <li><strong>Empresa:</strong> ${nomeCliente ?? "—"}</li>
+              ${!ehCancelamento ? `<li><strong>Candidato:</strong> ${nomeCandidato ?? "—"}</li>` : ""}
+              <li><strong>Vaga:</strong> ${cargo ?? "—"}</li>
+              <li><strong>Vencimento:</strong> ${dataVencimentoFmt}</li>
+              <li><strong>Valor:</strong> ${feeValorFmt}</li>
+            </ul>
+          </div>`
+        ),
+      };
+    }
+
+    case "cobranca_rs_aguardando_validacao": {
+      const ehCancelamento = tipoCobrancaRS === "cancelamento";
+      const dias = diasParado ?? 0;
+      const diasLabel = `${dias} dia${dias !== 1 ? "s" : ""}`;
+      // Nomes vêm do snapshot da cobrança (texto livre): escapados. Sem valor, fee, CNPJ, endereço, telefone nem e-mail do cliente.
+      const esc = (v: string | null | undefined) =>
+        (v ?? "—").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+      return {
+        subject: `🟠 Cobrança R&S aguardando validação há ${diasLabel} — ${nomeCliente ?? "Cliente"}`,
+        descricao: `Lembrete interno de cobrança R&S enviada para validação da diretoria e ainda sem vencimento definido (${nomeCliente ?? "cliente"}).`,
+        html: layout(
+          "Cobrança R&S aguardando validação",
+          `<div style="background:#FFF7ED;border-left:4px solid #EA580C;border-radius:4px;padding:14px 16px;margin:0 0 20px;">
+            <p style="margin:0;color:#9A3412;font-size:14px;font-weight:700">Aguardando validação há ${diasLabel} — vencimento ainda não definido</p>
+          </div>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados da cobrança:</p>
+            <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              <li><strong>Empresa:</strong> ${esc(nomeCliente)}</li>
+              ${!ehCancelamento ? `<li><strong>Candidato:</strong> ${esc(nomeCandidato)}</li>` : ""}
+              <li><strong>Vaga:</strong> ${esc(cargo)}</li>
+              <li><strong>Tipo:</strong> ${ehCancelamento ? "Taxa de cancelamento" : "Contratação"}</li>
+            </ul>
+          </div>
+          <p style="font-size:14px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Defina a data de vencimento para validar a cobrança. Este lembrete se repete a cada 2 dias até a validação ou o cancelamento.
+          </p>
+          <div style="text-align:center;margin-top:24px;">
+            <a href="${cobrancaUrl ?? "#"}" style="display:inline-block;background:#000000;color:#FFD700;font-weight:700;font-size:15px;padding:14px 32px;border-radius:8px;text-decoration:none;">
+              Abrir cobrança
+            </a>
+          </div>`
+        ),
+      };
+    }
+
+    case "cobranca_rs_paga": {
+      const ehCancelamento = tipoCobrancaRS === "cancelamento";
+      const feeValorFmt =
+        feeValor != null
+          ? feeValor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+          : "—";
+      const dataPagamentoFmt = dataPagamento ? dataPagamento.split("-").reverse().join("/") : "—";
+
+      return {
+        subject: `✅ Cobrança R&S paga — ${nomeCliente ?? "Cliente"}`,
+        descricao: `Confirmação de pagamento de cobrança R&S (${nomeCliente ?? "cliente"}).`,
+        html: layout(
+          "Cobrança R&S Paga",
+          `<div style="background:#F0FDF4;border-left:4px solid #22c55e;border-radius:4px;padding:14px 16px;margin:0 0 20px;">
+            <p style="margin:0;color:#166534;font-size:14px;font-weight:700">Pagamento confirmado em ${dataPagamentoFmt}</p>
+          </div>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados da cobrança:</p>
+            <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              <li><strong>Empresa:</strong> ${nomeCliente ?? "—"}</li>
+              ${!ehCancelamento ? `<li><strong>Candidato:</strong> ${nomeCandidato ?? "—"}</li>` : ""}
+              <li><strong>Vaga:</strong> ${cargo ?? "—"}</li>
+              <li><strong>Valor:</strong> ${feeValorFmt}</li>
+            </ul>
+          </div>`
+        ),
+      };
+    }
+
+    case "cobranca_rs_cancelada": {
+      const ehCancelamento = tipoCobrancaRS === "cancelamento";
+      const feeValorFmt =
+        feeValor != null
+          ? feeValor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+          : "—";
+
+      return {
+        subject: `🚫 Cobrança R&S cancelada — ${nomeCliente ?? "Cliente"}`,
+        descricao: `Cobrança R&S cancelada via justificativa (${nomeCliente ?? "cliente"}).`,
+        html: layout(
+          "Cobrança R&S Cancelada",
+          `<div style="background:#F3F4F6;border-left:4px solid #6B7280;border-radius:4px;padding:14px 16px;margin:0 0 20px;">
+            <p style="margin:0;color:#374151;font-size:14px;font-weight:700">Esta cobrança foi cancelada e não será mais enviada/cobrada do cliente.</p>
+          </div>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados da cobrança:</p>
+            <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              <li><strong>Empresa:</strong> ${nomeCliente ?? "—"}</li>
+              ${!ehCancelamento ? `<li><strong>Candidato:</strong> ${nomeCandidato ?? "—"}</li>` : ""}
+              <li><strong>Vaga:</strong> ${cargo ?? "—"}</li>
+              <li><strong>Valor:</strong> ${feeValorFmt}</li>
+            </ul>
+          </div>
+          <div style="background:#FEF2F2;border-left:4px solid #DC2626;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 8px;color:#991B1B;font-weight:700;font-size:14px;">Justificativa do cancelamento:</p>
+            <p style="margin:0;color:#7F1D1D;font-size:14px;line-height:1.7;white-space:pre-wrap;">${justificativaCancelamento ?? "—"}</p>
+          </div>`
+        ),
+      };
+    }
+
+    case "cobranca_rs_validada_diretoria": {
+      const ehCancelamento = tipoCobrancaRS === "cancelamento";
+      const feeValorFmt =
+        feeValor != null
+          ? feeValor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+          : "—";
+
+      return {
+        subject: `✅ Sua cobrança R&S foi validada — ${nomeCliente ?? "Cliente"}`,
+        descricao: `Confirmação para o analista de que a revisão da cobrança R&S foi validada pela diretoria e enviada ao cliente (${nomeCliente ?? "cliente"}).`,
+        html: layout(
+          "Cobrança R&S Validada pela Diretoria",
+          `<div style="background:#F0FDF4;border-left:4px solid #22c55e;border-radius:4px;padding:14px 16px;margin:0 0 20px;">
+            <p style="margin:0;color:#166534;font-size:14px;font-weight:700">Sua revisão foi aprovada e a cobrança já foi enviada ao cliente.</p>
+          </div>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Sua revisão referente à cobrança do cliente <strong>${nomeCliente ?? "—"}</strong>${!ehCancelamento && nomeCandidato ? `, candidato <strong>${nomeCandidato}</strong>,` : ","}
+            taxa <strong>${feeRsPercentual != null ? `${feeRsPercentual}%` : "—"}</strong>, no valor de <strong>${feeValorFmt}</strong>,
+            foi aprovada e a cobrança foi enviada ao cliente.
+          </p>`
+        ),
+      };
+    }
+
+    case "supervisao_cliente_atrasada": {
+      const ultimaSupervisaoLabel =
+        diasSemSupervisao == null
+          ? "aguardando primeiro registro"
+          : `há ${diasSemSupervisao} dia${diasSemSupervisao !== 1 ? "s" : ""}`;
+      const freqLabel = frequenciaDiasSupervisao != null ? `a cada ${frequenciaDiasSupervisao} dias` : "—";
+
+      return {
+        subject: `🔴 Supervisão pendente — ${nomeCliente ?? "Cliente"}`,
+        descricao: `Aviso de posto sem supervisão dentro do prazo (${nomeCliente ?? "cliente"}).`,
+        html: layout(
+          "Supervisão de Posto Pendente",
+          `<div style="background:#FEF2F2;border-left:4px solid #DC2626;border-radius:4px;padding:14px 16px;margin:0 0 20px;">
+            <p style="margin:0;color:#991B1B;font-size:14px;font-weight:700">A supervisão do posto ${nomeCliente ?? "do cliente"} está em atraso.</p>
+          </div>
+          <div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 10px;color:#92400e;font-weight:700;font-size:14px;">Dados do cliente:</p>
+            <ul style="margin:0;padding-left:18px;color:#78350f;line-height:2;font-size:14px;">
+              <li><strong>Cliente:</strong> ${nomeCliente ?? "—"}</li>
+              <li><strong>Última supervisão:</strong> ${ultimaSupervisaoLabel}</li>
+              <li><strong>Frequência configurada:</strong> ${freqLabel}</li>
+            </ul>
+          </div>
+          ${supervisaoUrl ? `<div style="text-align:center;margin:0 0 8px;"><a href="${supervisaoUrl}" style="display:inline-block;background:#000;color:#FFD700;font-weight:700;font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">Ver Painel de Supervisão</a></div>` : ""}`
+        ),
+      };
+    }
+
+    case "alteracao_solicitacao_pedida":
+      return {
+        subject: `✏️ ${nomeCliente ?? "Cliente"} pediu alteração na solicitação — ${cargo}`,
+        descricao: `Aviso à equipe de pedido de alteração do cliente na solicitação de vaga de ${cargo}.`,
+        html: layout(
+          "Pedido de Alteração de Solicitação",
+          `<p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 16px;">
+            <strong>${nomeCliente ?? "O cliente"}</strong> pediu alterações na solicitação de vaga de
+            <strong>${cargo}</strong>. Elas só passam a valer (inclusive na vaga, se já aberta) depois que a
+            Salmazos aprovar.
+          </p>
+          ${resumoAlteracoesHtml ?? ""}
+          ${solicitacaoUrl ? `<div style="text-align:center;margin:0 0 8px;"><a href="${solicitacaoUrl}" style="display:inline-block;background:#000;color:#FFD700;font-weight:700;font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">Revisar e aprovar</a></div>` : ""}`
+        ),
+      };
+
+    case "alteracao_solicitacao_aprovada":
+      return {
+        subject: `Alterações aprovadas — ${cargo}`,
+        descricao: `Confirmação ao cliente de que as alterações na solicitação de ${cargo} foram aprovadas.`,
+        html: layout(
+          "Alterações Aprovadas",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Prezado(a), <strong>${nomeCliente ?? ""}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            As alterações que você pediu na solicitação de vaga de <strong>${cargo}</strong> foram aprovadas
+            pela nossa equipe e já estão valendo.
+          </p>
+          ${resumoAlteracoesHtml ?? ""}`
+        ),
+      };
+
+    case "alteracao_solicitacao_recusada":
+      return {
+        subject: `Atualização sobre as alterações da sua solicitação — ${cargo}`,
+        descricao: `Comunicado ao cliente de que as alterações na solicitação de ${cargo} não foram aprovadas.`,
+        html: layout(
+          "Alterações não Aprovadas",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Prezado(a), <strong>${nomeCliente ?? ""}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            Analisamos as alterações que você pediu na solicitação de vaga de <strong>${cargo}</strong> e, no
+            momento, não conseguimos aplicá-las. A solicitação continua como estava.
+          </p>
+          ${motivoRecusa ? `<div style="background:#f9fafb;border-left:4px solid #d1d5db;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 8px;color:#374151;font-weight:700;font-size:14px;">Motivo:</p>
+            <p style="margin:0;color:#374151;font-size:14px;line-height:1.7;">${motivoRecusa}</p>
+          </div>` : ""}
+          ${resumoAlteracoesHtml ?? ""}
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+            Ficamos à disposição para conversar sobre os ajustes — é só entrar em contato ou acessar o portal. 😊
+          </p>`
+        ),
+      };
+
+    case "vaga_status_solicitado": {
+      const pausando = acaoSolicitada !== "reabrir";
+      return {
+        subject: `${pausando ? "⏸️" : "▶️"} ${nomeCliente ?? "Cliente"} pediu ${pausando ? "encerramento" : "reativação"} da vaga — ${cargo}`,
+        descricao: `Aviso à equipe de pedido de ${pausando ? "encerramento" : "reativação"} da vaga de ${cargo}.`,
+        html: layout(
+          pausando ? "Pedido de Encerramento de Vaga" : "Pedido de Reativação de Vaga",
+          `<p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 16px;">
+            <strong>${nomeCliente ?? "O cliente"}</strong> pediu ${pausando ? "o encerramento" : "a reativação"} da vaga de
+            <strong>${cargo}</strong> pelo portal. Ela só ${pausando ? "sai da página pública" : "volta a aparecer"} depois
+            que a Salmazos aprovar.
+          </p>
+          ${pausando && motivoTipoEncerramentoLabel ? `<div style="background:#fffbeb;border-left:4px solid #FFD700;border-radius:4px;padding:14px 16px;margin:0 0 16px;">
+            <p style="margin:0;color:#92400e;font-weight:700;font-size:14px;">Motivo informado: ${motivoTipoEncerramentoLabel}</p>
+            ${motivoTextoEncerramento ? `<p style="margin:6px 0 0;color:#78350f;font-size:13px;">${motivoTextoEncerramento}</p>` : ""}
+          </div>` : ""}
+          ${solicitacaoUrl ? `<div style="text-align:center;margin:0 0 8px;"><a href="${solicitacaoUrl}" style="display:inline-block;background:#000;color:#FFD700;font-weight:700;font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">Revisar pedido</a></div>` : ""}`
+        ),
+      };
+    }
+
+    case "vaga_status_decidido": {
+      const pausando = acaoSolicitada !== "reabrir";
+      const aprovada = decisaoStatus === "aprovada";
+      return {
+        subject: aprovada
+          ? `Vaga ${pausando ? "encerrada" : "reativada"} — ${cargo}`
+          : `Atualização sobre o pedido de ${pausando ? "encerramento" : "reativação"} — ${cargo}`,
+        descricao: aprovada
+          ? `Confirmação ao cliente de que a vaga de ${cargo} foi ${pausando ? "encerrada" : "reativada"}.`
+          : `Comunicado ao cliente de que o pedido de ${pausando ? "encerramento" : "reativação"} da vaga de ${cargo} não foi aprovado.`,
+        html: layout(
+          aprovada ? (pausando ? "Vaga Encerrada" : "Vaga Reativada") : "Pedido não Aprovado",
+          `<p style="font-size:16px;color:#111827;margin:0 0 16px;">Prezado(a), <strong>${nomeCliente ?? ""}</strong>!</p>
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0 0 20px;">
+            ${aprovada
+              ? `Confirmamos que a vaga de <strong>${cargo}</strong> foi ${pausando ? "encerrada e não aparece mais na página pública" : "reativada e já está de volta na página pública"}.`
+              : `Analisamos o pedido de ${pausando ? "encerramento" : "reativação"} da vaga de <strong>${cargo}</strong> e, no momento, não conseguimos aplicá-lo. A vaga continua como estava.`
+            }
+          </p>
+          ${!aprovada && motivoRecusa ? `<div style="background:#f9fafb;border-left:4px solid #d1d5db;border-radius:4px;padding:18px 20px;margin:0 0 20px;">
+            <p style="margin:0 0 8px;color:#374151;font-weight:700;font-size:14px;">Motivo:</p>
+            <p style="margin:0;color:#374151;font-size:14px;line-height:1.7;">${motivoRecusa}</p>
+          </div>` : ""}
+          <p style="font-size:15px;color:#374151;line-height:1.7;margin:0;">
+            Qualquer dúvida, é só entrar em contato ou acessar o portal. 😊
+          </p>`
+        ),
+      };
+    }
+  }
+}

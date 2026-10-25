@@ -2,7 +2,7 @@
 // POST /api/clientes, PATCH /api/clientes/[id], PATCH /api/cobrancas-rs/[id] e no script de verificação.
 //
 // REGRAS (decisão do Olver):
-//  1) CNPJ igual (só dígitos) a QUALQUER cliente, ativo ou inativo = bloqueio, sem liberação.
+//  1) CNPJ ou CPF igual (só dígitos) a QUALQUER cliente, ativo ou inativo = bloqueio, sem liberação.
 //  2) Telefone E e-mail iguais ao MESMO cliente = bloqueio; só PAPEIS_FULL_ACCESS libera (liberar_bloqueio).
 //  3) Qualquer outra coincidência (só um sinal, ou dois que não sejam telefone+e-mail) = aviso, com
 //     "cadastrar mesmo assim" (confirmar_duplicidade). Nome parecido e endereço só contam como aviso.
@@ -10,7 +10,7 @@
 // A comparação é sempre GLOBAL (todas as unidades, ativos e inativos). Quem não enxerga a unidade do
 // cliente que coincidiu recebe existente:null e outraUnidade:true — nunca nome, telefone, e-mail nem CNPJ.
 
-export type CampoIdentidade = "nome" | "cnpj" | "telefone" | "email" | "endereco";
+export type CampoIdentidade = "nome" | "cnpj" | "cpf" | "telefone" | "email" | "endereco";
 
 export interface ClienteIdentidade {
   id: string;
@@ -18,6 +18,7 @@ export interface ClienteIdentidade {
   cidade?: string | null;
   ativo: boolean;
   cnpj?: string | null;
+  cpf?: string | null;
   contato_telefone?: string | null;
   contato_email?: string | null;
   endereco?: string | null;
@@ -27,6 +28,7 @@ export interface ClienteIdentidade {
 export interface CandidatoCliente {
   nome?: string | null;
   cnpj?: string | null;
+  cpf?: string | null;
   contato_telefone?: string | null;
   contato_email?: string | null;
   endereco?: string | null;
@@ -51,8 +53,8 @@ export interface ExistenteResumo {
 
 export interface ResultadoDuplicidade {
   nivel: "bloqueio" | "aviso";
-  // "cnpj" = bloqueio sem liberação; "contato" = telefone+e-mail (liberável); null = só aviso.
-  bloqueio: "cnpj" | "contato" | null;
+  // "cnpj" e "cpf" = bloqueio sem liberação; "contato" = telefone+e-mail (liberável); null = só aviso.
+  bloqueio: "cnpj" | "cpf" | "contato" | null;
   motivos: CampoIdentidade[];
   existente: ExistenteResumo | null;
   outros: (ExistenteResumo & { motivos: CampoIdentidade[] })[];
@@ -74,6 +76,12 @@ const soDigitos = (v: string | null | undefined): string => (v ?? "").replace(/\
 export function normalizarCnpj(v: string | null | undefined): string | null {
   const d = soDigitos(v);
   return d.length === 14 ? d : null;
+}
+
+// CPF (cliente pessoa física): 11 dígitos, só para comparar. A validade dos dígitos verificadores é de validarCpf (documentoBr.ts).
+export function normalizarCpf(v: string | null | undefined): string | null {
+  const d = soDigitos(v);
+  return d.length === 11 ? d : null;
 }
 
 // Telefone: 10 ou 11 dígitos, sem o 55 do país e sem o 0 do DDD. "1999" e afins não participam.
@@ -128,13 +136,14 @@ export function chaveEndereco(v: string | null | undefined): string | null {
 // (ativo false→true) devolve todos: o cadastro volta a valer e precisa passar pela checagem inteira.
 export function camposIdentidadeAlterados(
   atual: ClienteIdentidade,
-  mudancas: { nome?: string | null; cnpj?: string | null; contato_telefone?: string | null; contato_email?: string | null; ativo?: boolean },
+  mudancas: { nome?: string | null; cnpj?: string | null; cpf?: string | null; contato_telefone?: string | null; contato_email?: string | null; ativo?: boolean },
   reativando: boolean
 ): Set<CampoIdentidade> {
-  if (reativando) return new Set<CampoIdentidade>(["nome", "cnpj", "telefone", "email", "endereco"]);
+  if (reativando) return new Set<CampoIdentidade>(["nome", "cnpj", "cpf", "telefone", "email", "endereco"]);
   const campos = new Set<CampoIdentidade>();
   if (mudancas.nome !== undefined && tokensNome(mudancas.nome).join(" ") !== tokensNome(atual.nome).join(" ")) campos.add("nome");
   if (mudancas.cnpj !== undefined && normalizarCnpj(mudancas.cnpj) !== normalizarCnpj(atual.cnpj)) campos.add("cnpj");
+  if (mudancas.cpf !== undefined && normalizarCpf(mudancas.cpf) !== normalizarCpf(atual.cpf)) campos.add("cpf");
   if (mudancas.contato_telefone !== undefined && normalizarTelefone(mudancas.contato_telefone) !== normalizarTelefone(atual.contato_telefone)) campos.add("telefone");
   if (mudancas.contato_email !== undefined && normalizarEmail(mudancas.contato_email) !== normalizarEmail(atual.contato_email)) campos.add("email");
   return campos;
@@ -162,6 +171,7 @@ export function avaliarDuplicidade(
   const conta = (campo: CampoIdentidade) => !considerados || considerados.has(campo);
 
   const cnpj = normalizarCnpj(candidato.cnpj);
+  const cpf = normalizarCpf(candidato.cpf);
   const telefone = normalizarTelefone(candidato.contato_telefone);
   const email = normalizarEmail(candidato.contato_email);
   const endereco = chaveEndereco(candidato.endereco);
@@ -170,6 +180,7 @@ export function avaliarDuplicidade(
   for (const c of clientes) {
     if (opcoes.ignorarId && c.id === opcoes.ignorarId) continue;
     const cnpjIgual = !!cnpj && cnpj === normalizarCnpj(c.cnpj);
+    const cpfIgual = !!cpf && cpf === normalizarCpf(c.cpf);
     const telefoneIgual = !!telefone && telefone === normalizarTelefone(c.contato_telefone);
     const emailIgual = !!email && email === normalizarEmail(c.contato_email);
     // Telefone+e-mail só bloqueia se um dos dois foi alterado (editar outro campo de um cadastro que já
@@ -178,13 +189,14 @@ export function avaliarDuplicidade(
 
     const motivos: CampoIdentidade[] = [];
     if (cnpjIgual && conta("cnpj")) motivos.push("cnpj");
+    if (cpfIgual && conta("cpf")) motivos.push("cpf");
     if (telefoneIgual && (contatoBloqueia || conta("telefone"))) motivos.push("telefone");
     if (emailIgual && (contatoBloqueia || conta("email"))) motivos.push("email");
     if (conta("nome") && nomeParecido(candidato.nome, c.nome)) motivos.push("nome");
     if (conta("endereco") && !!endereco && endereco === chaveEndereco(c.endereco)) motivos.push("endereco");
     if (motivos.length === 0) continue;
 
-    coincidencias.push({ cliente: c, motivos, rank: motivos.includes("cnpj") ? 3 : contatoBloqueia ? 2 : 1 });
+    coincidencias.push({ cliente: c, motivos, rank: motivos.includes("cnpj") || motivos.includes("cpf") ? 3 : contatoBloqueia ? 2 : 1 });
   }
   if (coincidencias.length === 0) return null;
 
@@ -198,7 +210,7 @@ export function avaliarDuplicidade(
     opcoes.unidadesPermitidas === "todas" || (!!c.unidade_id && opcoes.unidadesPermitidas.includes(c.unidade_id));
   const resumo = (c: ClienteIdentidade): ExistenteResumo => ({ id: c.id, nome: c.nome, cidade: c.cidade ?? null, ativo: c.ativo });
 
-  const bloqueio: ResultadoDuplicidade["bloqueio"] = melhor.rank === 3 ? "cnpj" : melhor.rank === 2 ? "contato" : null;
+  const bloqueio: ResultadoDuplicidade["bloqueio"] = melhor.rank === 3 ? (melhor.motivos.includes("cpf") ? "cpf" : "cnpj") : melhor.rank === 2 ? "contato" : null;
   const existenteVisivel = visivel(melhor.cliente);
   // Reativar só faz sentido se NÃO houver cadastro ativo coincidindo (senão seria reativar um duplicado).
   const haAtivoCoincidindo = coincidencias.some((c) => c.cliente.ativo);

@@ -9,11 +9,12 @@ import { avaliarDuplicidade, camposIdentidadeAlterados, type CandidatoCliente } 
 import {
   carregarIdentidadesClientes,
   decidirDuplicidade,
-  MSG_CNPJ_JA_ATIVO,
+  mensagemUnicidadeDocumento,
   MSG_FALHA_CHECAGEM,
   MSG_FALHA_SALVAR,
   type DecisaoDuplicidade,
 } from "@/lib/clienteDuplicidadeRota";
+import { validarDocumentoDoCliente, vazioParaNulo } from "@/lib/clienteDaSolicitacao";
 
 export async function PATCH(
   request: NextRequest,
@@ -40,6 +41,37 @@ export async function PATCH(
     }
 
     const supabase = createServiceClient();
+
+    // Par cpf/cnpj: conferido sempre que o corpo mexe em tipo_pessoa, cpf OU cnpj, para a edição que o banco recusaria (cadastro PF com CPF e
+    // CNPJ digitado, ou PJ com CPF) voltar como 400 claro e não como erro do check clientes_documento_coerente. O CNPJ segue texto livre.
+    let documentoNovo: { cpf: string | null } | null = null;
+    if (body.cpf !== undefined || body.tipo_pessoa !== undefined || body.cnpj !== undefined) {
+      let { data: atualDoc, error: erroDoc } = await supabase.from("clientes").select("tipo_pessoa, cnpj, cpf").eq("id", id).maybeSingle();
+      // Colunas de pessoa física ainda não criadas (migração não rodou): edição de CNPJ de PJ segue como sempre foi; pedir CPF/tipo não dá.
+      if (erroDoc && (erroDoc.code === "42703" || /\b(cpf|tipo_pessoa)\b/i.test(erroDoc.message ?? ""))) {
+        if (body.cpf !== undefined || body.tipo_pessoa !== undefined) return NextResponse.json({ error: MSG_FALHA_SALVAR }, { status: 500 });
+        const { data: so, error: erroSo } = await supabase.from("clientes").select("cnpj").eq("id", id).maybeSingle();
+        atualDoc = so ? { tipo_pessoa: "pj", cnpj: so.cnpj, cpf: null } : null;
+        erroDoc = erroSo;
+      }
+      if (erroDoc) {
+        console.error("[PATCH /api/clientes/[id]] Erro ao ler o documento atual:", erroDoc.code ?? "sem código");
+        return NextResponse.json({ error: MSG_FALHA_SALVAR }, { status: 500 });
+      }
+      // Cliente sumido entre o acesso e a leitura: segue para o fluxo normal, que responde pelo update.
+      if (atualDoc) {
+        const doc = validarDocumentoDoCliente(
+          {
+            tipo_pessoa: body.tipo_pessoa ?? (atualDoc.tipo_pessoa === "pf" ? "pf" : "pj"),
+            cnpj: body.cnpj !== undefined ? body.cnpj : atualDoc.cnpj,
+            cpf: body.cpf !== undefined ? body.cpf : atualDoc.cpf,
+          },
+          { modoLegado: true }
+        );
+        if (!doc.ok) return NextResponse.json({ error: doc.erro, campo: doc.campo }, { status: 400 });
+        documentoNovo = { cpf: doc.cpf };
+      }
+    }
 
     // Troca de unidade: só quem tem acesso a todas as unidades, e só enquanto o cliente não
     // tem vaga nem encaminhamento — senão vagas/processos ficariam numa unidade e o cliente
@@ -73,7 +105,7 @@ export async function PATCH(
     let decisaoDuplicidade: DecisaoDuplicidade = { tipo: "livre" };
     let reativando = false;
     const gatilho =
-      body.nome !== undefined || body.cnpj !== undefined || body.contato_telefone !== undefined ||
+      body.nome !== undefined || body.cnpj !== undefined || body.cpf !== undefined || body.contato_telefone !== undefined ||
       body.contato_email !== undefined || body.ativo === true;
     if (gatilho) {
       const identidades = await carregarIdentidadesClientes(supabase);
@@ -81,7 +113,7 @@ export async function PATCH(
       const atual = identidades.find((c) => c.id === id);
       if (atual) {
         reativando = body.ativo === true && !atual.ativo;
-        const mudancas = { nome: body.nome, cnpj: body.cnpj, contato_telefone: body.contato_telefone, contato_email: body.contato_email };
+        const mudancas = { nome: body.nome, cnpj: body.cnpj, cpf: body.cpf, contato_telefone: body.contato_telefone, contato_email: body.contato_email };
         const alterados = camposIdentidadeAlterados(atual, mudancas, reativando);
         // Reativação "pura" (nenhum campo de identidade mudou junto): só valem os BLOQUEIOS (CNPJ igual a outro
         // cliente; telefone E e-mail iguais ao mesmo cliente, liberável só por full access). Aviso de sinal único
@@ -92,6 +124,7 @@ export async function PATCH(
           const efetivo: CandidatoCliente = {
             nome: body.nome !== undefined ? body.nome : atual.nome,
             cnpj: body.cnpj !== undefined ? body.cnpj : atual.cnpj,
+            cpf: body.cpf !== undefined ? body.cpf : atual.cpf,
             contato_telefone: body.contato_telefone !== undefined ? body.contato_telefone : atual.contato_telefone,
             contato_email: body.contato_email !== undefined ? body.contato_email : atual.contato_email,
             endereco: body.endereco !== undefined ? body.endereco : atual.endereco,
@@ -126,6 +159,10 @@ export async function PATCH(
     if (body.responsavel_comercial !== undefined) campos.responsavel_comercial = body.responsavel_comercial || null;
     if (body.entidade_contratante !== undefined) campos.entidade_contratante = body.entidade_contratante || null;
     if (body.cnpj !== undefined) campos.cnpj = body.cnpj || null;
+    // Só grava o CPF quando o corpo o trouxe: editar o CNPJ não reescreve (nem depende da coluna) cpf.
+    if (documentoNovo && body.cpf !== undefined) campos.cpf = documentoNovo.cpf;
+    if (body.tipo_pessoa !== undefined) campos.tipo_pessoa = body.tipo_pessoa;
+    if (body.email_nota_fiscal !== undefined) campos.email_nota_fiscal = vazioParaNulo(body.email_nota_fiscal);
     if (body.endereco !== undefined) campos.endereco = body.endereco || null;
     if (body.processo_simplificado !== undefined) campos.processo_simplificado = body.processo_simplificado;
     if (novaUnidadeId !== undefined) campos.unidade_id = novaUnidadeId;
@@ -138,8 +175,8 @@ export async function PATCH(
       .single();
 
     if (error) {
-      // 23505 = índice único de CNPJ entre ativos (migration_clientes_cnpj_ativo_unico.sql).
-      if (error.code === "23505") return NextResponse.json({ error: MSG_CNPJ_JA_ATIVO }, { status: 409 });
+      // 23505 = índice único de CNPJ ou de CPF entre ativos (migration_clientes_cnpj_ativo_unico.sql, migration_clientes_pessoa_fisica.sql).
+      if (error.code === "23505") return NextResponse.json({ error: mensagemUnicidadeDocumento(error) }, { status: 409 });
       console.error("[PATCH /api/clientes/[id]] Erro ao atualizar cliente:", error.message);
       return NextResponse.json({ error: MSG_FALHA_SALVAR }, { status: 500 });
     }

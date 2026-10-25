@@ -1,3 +1,5 @@
+import { escaparHtml } from "@/lib/escaparHtml";
+
 export type EmailTemplateName =
   | "entrevista_salmazos"
   | "entrevista_cliente"
@@ -144,7 +146,7 @@ const BANNER_CONFIDENCIAL = `<div style="background:#fef2f2;border:2px solid #fc
   <p style="margin:0;color:#dc2626;font-weight:700;font-size:14px;">🔴 ESTA VAGA É CONFIDENCIAL — trate a divulgação com cuidado</p>
 </div>`;
 
-export function getEmailTemplate(
+function montarTemplate(
   name: EmailTemplateName,
   { nome, cargo, nomeCliente, nomeCandidato, numPosicoes, cidade, empresa, tipoServico, tipoServicoLabel, estado, responsavel, salario, horario, requisitos, beneficios, observacoes, vagaUrl, statusEncerramento, admissaoUrl, motivoRecusa, confidencial, feeRsPercentual, feeRsPrazoCobranca, taxaCancelamento, taxaCancelamentoPercentual, clienteCnpj, clienteEndereco, clienteTelefone, clienteEmail, dataInicio, feeValor, tipoCobrancaRS, cobrancaUrl, dataVencimento, diasAtraso, diasParado, dataPagamento, justificativaCancelamento, diasSemSupervisao, frequenciaDiasSupervisao, supervisaoUrl, resumoAlteracoesHtml, solicitacaoUrl, acaoSolicitada, decisaoStatus, motivoTipoEncerramentoLabel, motivoTextoEncerramento }: TemplateData
 ): EmailTemplate {
@@ -622,9 +624,8 @@ export function getEmailTemplate(
       const ehCancelamento = tipoCobrancaRS === "cancelamento";
       const dias = diasParado ?? 0;
       const diasLabel = `${dias} dia${dias !== 1 ? "s" : ""}`;
-      // Nomes vêm do snapshot da cobrança (texto livre): escapados. Sem valor, fee, CNPJ, endereço, telefone nem e-mail do cliente.
-      const esc = (v: string | null | undefined) =>
-        (v ?? "—").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      // Nomes vêm do snapshot da cobrança (texto livre): já chegam escapados de getEmailTemplate. Sem valor, fee, CNPJ, endereço, telefone nem e-mail do cliente.
+      const esc = (v: string | null | undefined) => v ?? "—";
 
       return {
         subject: `🟠 Cobrança R&S aguardando validação há ${diasLabel} — ${nomeCliente ?? "Cliente"}`,
@@ -872,4 +873,30 @@ export function getEmailTemplate(
       };
     }
   }
+}
+
+// Campos de texto livre: nomes, cargo, cidade etc. podem nascer em formulário público (solicitação pelo link, cliente cadastrado a partir dela) ou
+// em edição de qualquer usuário. resumoAlteracoesHtml já vem escapado/montado de lib/solicitacaoAlteracao.ts e as URLs são do sistema: ficam de fora.
+const CAMPOS_TEXTO_LIVRE = [
+  "nome", "cargo", "nomeCliente", "nomeCandidato", "cidade", "empresa", "estado", "responsavel", "salario", "horario", "requisitos",
+  "beneficios", "observacoes", "motivoRecusa", "clienteCnpj", "clienteEndereco", "clienteTelefone", "clienteEmail",
+  "justificativaCancelamento", "motivoTextoEncerramento", "feeRsPrazoCobranca",
+] as const satisfies readonly (keyof TemplateData)[];
+
+function mapearTextoLivre(dados: TemplateData, transformar: (v: string) => string): TemplateData {
+  const saida: TemplateData = { ...dados };
+  for (const campo of CAMPOS_TEXTO_LIVRE) {
+    const valor = saida[campo];
+    if (typeof valor === "string") (saida as unknown as Record<string, unknown>)[campo] = transformar(valor);
+  }
+  return saida;
+}
+
+// Assunto e descrição são texto puro: sem HTML escapado, mas sem quebra de linha (um \r\n vindo de formulário não pode abrir cabeçalho novo no e-mail).
+const semQuebraDeLinha = (v: string): string => v.replace(/[\r\n\u2028\u2029]+/g, " ").trim();
+
+export function getEmailTemplate(name: EmailTemplateName, dados: TemplateData): EmailTemplate {
+  const html = montarTemplate(name, mapearTextoLivre(dados, escaparHtml)).html;
+  const { subject, descricao } = montarTemplate(name, mapearTextoLivre(dados, semQuebraDeLinha));
+  return { subject, descricao, html };
 }

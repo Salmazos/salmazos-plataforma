@@ -9,10 +9,11 @@ import { avaliarDuplicidade } from "@/lib/clienteDuplicidade";
 import {
   carregarIdentidadesClientes,
   decidirDuplicidade,
-  MSG_CNPJ_JA_ATIVO,
+  mensagemUnicidadeDocumento,
   MSG_FALHA_CHECAGEM,
   MSG_FALHA_SALVAR,
 } from "@/lib/clienteDuplicidadeRota";
+import { validarDocumentoDoCliente, vazioParaNulo } from "@/lib/clienteDaSolicitacao";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -73,6 +74,13 @@ export async function POST(request: NextRequest) {
     // SBC estando com perfil de Monte Mor/Hortolândia.
     const unidadeId = ctx.todasUnidades && parsed.data.unidade_id ? parsed.data.unidade_id : ctx.unidadeId;
 
+    // Pessoa física (CPF no lugar do CNPJ). Cadastro sem tipo_pessoa é PJ, como sempre foi: o CNPJ continua texto livre (sem conferir dígitos,
+    // porque os cadastros antigos aceitam qualquer texto); "" vira null, e o par cpf/cnpj nunca sai com os dois preenchidos (check do banco).
+    const tipoPessoa = parsed.data.tipo_pessoa ?? "pj";
+    const documento = validarDocumentoDoCliente({ tipo_pessoa: tipoPessoa, cnpj: parsed.data.cnpj, cpf: parsed.data.cpf }, { modoLegado: true });
+    if (!documento.ok) return NextResponse.json({ error: documento.erro, campo: documento.campo }, { status: 400 });
+    const emailNotaFiscal = vazioParaNulo(parsed.data.email_nota_fiscal);
+
     const supabase = createServiceClient();
 
     // Trava de duplicidade (global: todas as unidades, ativos e inativos; uma consulta, comparação em memória).
@@ -82,7 +90,8 @@ export async function POST(request: NextRequest) {
     const duplicidade = avaliarDuplicidade(
       {
         nome: parsed.data.nome,
-        cnpj: parsed.data.cnpj,
+        cnpj: documento.cnpj,
+        cpf: documento.cpf,
         contato_telefone: parsed.data.contato_telefone,
         contato_email: parsed.data.contato_email,
         endereco: parsed.data.endereco,
@@ -110,16 +119,20 @@ export async function POST(request: NextRequest) {
         ativo: true,
         responsavel_comercial: body.responsavel_comercial ?? null,
         entidade_contratante: body.entidade_contratante || null,
-        cnpj: body.cnpj || null,
+        cnpj: documento.cnpj,
         endereco: body.endereco || null,
         processo_simplificado: body.processo_simplificado ?? false,
         unidade_id: unidadeId,
+        // Colunas novas só vão quando há o que gravar: cadastro PJ comum segue idêntico mesmo antes da migração rodar.
+        ...(tipoPessoa === "pf" ? { tipo_pessoa: "pf" } : {}),
+        ...(documento.cpf ? { cpf: documento.cpf } : {}),
+        ...(emailNotaFiscal ? { email_nota_fiscal: emailNotaFiscal } : {}),
       })
       .select()
       .single();
     if (error) {
-      // 23505 = índice único de CNPJ entre ativos (migration_clientes_cnpj_ativo_unico.sql): corrida entre duas requisições.
-      if (error.code === "23505") return NextResponse.json({ error: MSG_CNPJ_JA_ATIVO }, { status: 409 });
+      // 23505 = índice único de CNPJ ou de CPF entre ativos (migration_clientes_cnpj_ativo_unico.sql, migration_clientes_pessoa_fisica.sql): corrida entre duas requisições.
+      if (error.code === "23505") return NextResponse.json({ error: mensagemUnicidadeDocumento(error) }, { status: 409 });
       console.error("[POST /api/clientes] Erro ao gravar cliente:", error.message);
       return NextResponse.json({ error: MSG_FALHA_SALVAR }, { status: 500 });
     }
