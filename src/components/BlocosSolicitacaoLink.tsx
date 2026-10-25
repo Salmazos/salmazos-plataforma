@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { condicoesPersonalizadas } from "@/lib/solicitacaoVagaCondicoes";
+import { linhasDoPerfilExtra } from "@/lib/perfilCandidatoPortal";
 
 // Blocos extras do cartão da solicitação que veio do link público (cliente sem cadastro): dados do contratante, perfil de uso
 // interno e as condições comerciais que o cliente aceitou. Só leitura; Aprovar/Recusar/Editar continuam no modal.
@@ -20,6 +21,8 @@ export interface DadosEmpresaLink {
 export interface PerfilExtraLink {
   sexo?: string | null;
   idade?: string | null;
+  idade_min?: number | null;
+  idade_max?: number | null;
   pcd?: string | null;
   habilitacao_categoria?: string | null;
   veiculo_proprio?: string | null;
@@ -76,6 +79,24 @@ export function SeloViaLink() {
   );
 }
 
+// Perfil informado (uso interno, não publicado): o mesmo bloco para a solicitação do link e para a do portal.
+export function BlocoPerfilInformado({ perfil }: { perfil: { rotulo: string; valor: string | null | undefined }[] }) {
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-1">
+      <p className="text-xs font-bold text-amber-900">Perfil informado (uso interno — NÃO é publicado)</p>
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-2">
+        {perfil.filter((l) => l.valor).map((l) => (
+          <div key={l.rotulo} className="flex gap-2 text-xs">
+            <dt className="font-semibold text-gray-600">{l.rotulo}:</dt>
+            <dd className="break-words text-gray-900">{l.valor}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="text-[11px] text-amber-800">Ao criar a vaga, só habilitação e veículo próprio entram nos requisitos. Sexo e idade nunca são publicados.</p>
+    </div>
+  );
+}
+
 export default function BlocosSolicitacaoLink({ s }: { s: SolicitacaoDeLink }) {
   const e = s.dados_empresa ?? {};
   const p = s.perfil_extra ?? {};
@@ -94,14 +115,7 @@ export default function BlocosSolicitacaoLink({ s }: { s: SolicitacaoDeLink }) {
   ];
   const dadosPreenchidos = dados.filter((d): d is { rotulo: string; valor: string } => !!d.valor);
 
-  const perfil: { rotulo: string; valor: string | null | undefined }[] = [
-    { rotulo: "Sexo", valor: p.sexo ? SEXO[p.sexo] ?? p.sexo : null },
-    { rotulo: "Idade", valor: p.idade },
-    { rotulo: "PCD", valor: sim(p.pcd) },
-    { rotulo: "Habilitação", valor: p.habilitacao_categoria ? `Categoria ${p.habilitacao_categoria}` : null },
-    { rotulo: "Veículo próprio", valor: sim(p.veiculo_proprio) },
-    { rotulo: "Local de trabalho", valor: p.local_trabalho },
-  ];
+  const perfil = linhasDoPerfilExtra(p);
 
   const aceiteEm = s.aceite_taxa_cancelamento_em
     ? new Date(s.aceite_taxa_cancelamento_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
@@ -127,18 +141,7 @@ export default function BlocosSolicitacaoLink({ s }: { s: SolicitacaoDeLink }) {
         </div>
       )}
 
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-1">
-        <p className="text-xs font-bold text-amber-900">Perfil informado (uso interno — NÃO é publicado)</p>
-        <dl className="grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-2">
-          {perfil.filter((l) => l.valor).map((l) => (
-            <div key={l.rotulo} className="flex gap-2 text-xs">
-              <dt className="font-semibold text-gray-600">{l.rotulo}:</dt>
-              <dd className="break-words text-gray-900">{l.valor}</dd>
-            </div>
-          ))}
-        </dl>
-        <p className="text-[11px] text-amber-800">Ao criar a vaga, só habilitação e veículo próprio entram nos requisitos. Sexo e idade nunca são publicados.</p>
-      </div>
+      <BlocoPerfilInformado perfil={perfil} />
 
       {aceitas && (
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">

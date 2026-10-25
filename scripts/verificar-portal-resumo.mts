@@ -7,6 +7,7 @@ import { createElement, createRef } from "react";
 import { SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, formatarSalarioHora } from "../src/lib/constants";
 import { montarCorpoSolicitacaoPortal, resumoDaSolicitacaoPortal, type EntradaCorpoPortal, type EntradaResumoPortal } from "../src/lib/resumoDaSolicitacaoPortal";
 import ResumoSolicitacao from "../src/components/solicitacao-publica/ResumoSolicitacao";
+import { PERFIL_VAZIO, perfilExtraDoFormulario, type PerfilPortal } from "../src/lib/perfilCandidatoPortal";
 
 let total = 0;
 function caso(nome: string, fn: () => void) {
@@ -16,7 +17,7 @@ function caso(nome: string, fn: () => void) {
 }
 
 // ── Corpo do POST: igual ao de antes (cópia congelada do trecho que morava em handleSubmit) ──
-interface EstadoPagina extends Omit<EntradaCorpoPortal, "salarioParaEnvio"> {
+interface EstadoPagina extends Omit<EntradaCorpoPortal, "salarioParaEnvio" | "perfil"> {
   salario: string;
   salarioModo: "fixo" | "a_combinar" | "pretensao";
   salarioPeriodo: "mes" | "hora";
@@ -53,7 +54,7 @@ function corpoDeAntes(e: EstadoPagina) {
     confidencial,
   };
 }
-const corpoNovo = (e: EstadoPagina) => montarCorpoSolicitacaoPortal({ ...e, salarioParaEnvio: salarioParaEnvioDaPagina(e) });
+const corpoNovo = (e: EstadoPagina, perfil: PerfilPortal = PERFIL_VAZIO) => montarCorpoSolicitacaoPortal({ ...e, salarioParaEnvio: salarioParaEnvioDaPagina(e), perfil });
 
 let semente = 12345;
 const aleatorio = () => ((semente = (semente * 1664525 + 1013904223) % 4294967296) / 4294967296);
@@ -68,7 +69,7 @@ function estadoBase(extra: Partial<EstadoPagina> = {}): EstadoPagina {
     confidencial: false, ...extra,
   };
 }
-caso("corpo do POST ao confirmar é IGUAL ao de antes (mesmas chaves, ordem e valores) em 400 combinações sorteadas, R&S, MOT e Terceirização", () => {
+caso("corpo do POST: todas as chaves de antes IGUAIS (mesma ordem e valores) em 400 combinações sorteadas, R&S, MOT e Terceirização; perfil_extra é a única chave a mais, no fim", () => {
   const tipos = ["recrutamento_selecao", "mao_obra_temporaria", "terceirizacao"] as const;
   for (let i = 0; i < 400; i++) {
     const modo = sorteia(["fixo", "a_combinar", "pretensao"] as const);
@@ -81,7 +82,12 @@ caso("corpo do POST ao confirmar é IGUAL ao de antes (mesmas chaves, ordem e va
       beneficiosChips: sorteia([{}, { PLR: true }]), principaisAtividades: sorteia(["", "  ", "Vender\nCobrar"]), observacoes: sorteia(["", " obs "]), horarioPadrao: sorteia([null, { modelo: "6x1", entrada: null }]),
       confidencial: aleatorio() < 0.5,
     });
-    assert.strictEqual(JSON.stringify(corpoNovo(e)), JSON.stringify(corpoDeAntes(e)), `combinação ${i}`);
+    const perfil: PerfilPortal = { ...PERFIL_VAZIO, sexo: sorteia(["indiferente", "masc", "fem"] as const), idadeMin: sorteia(["", "18", "21"]), idadeMax: sorteia(["", "45", "60"]), habilitacao: sorteia(["nao", "sim"] as const), habilitacaoCategoria: sorteia(["", "B", "AB"]), localTrabalho: sorteia(["", " Rua A, 10 "]) };
+    const novo = corpoNovo(e, perfil) as Record<string, unknown>;
+    const { perfil_extra, ...semPerfil } = novo;
+    assert.strictEqual(JSON.stringify(semPerfil), JSON.stringify(corpoDeAntes(e)), `combinação ${i}`);
+    assert.deepEqual(Object.keys(novo), [...Object.keys(corpoDeAntes(e)), "perfil_extra"], "perfil_extra por último");
+    assert.deepEqual(perfil_extra, perfilExtraDoFormulario(perfil));
   }
 });
 
@@ -90,7 +96,7 @@ function entradaResumo(extra: Partial<EntradaResumoPortal> = {}): EntradaResumoP
   return {
     tipoServico: "recrutamento_selecao", cargo: "Auxiliar administrativo", numPosicoes: "2", cidade: "Hortolândia", estado: "SP", salario: "2500", salarioModo: "fixo", salarioPeriodo: "mes",
     adicionaisSalariais: "+ Insalubridade 20%", previsaoInicio: "2026-11-15", horarioTexto: "Segunda a Sexta, 08h00 às 17h00", beneficios: ["Vale Transporte", "Vale Refeição"],
-    requisitos: ["Ensino Médio — Completo", "Boa comunicação"], principaisAtividades: "Atender clientes", observacoes: "Só a equipe vê", confidencial: false, ...extra,
+    requisitos: ["Ensino Médio — Completo", "Boa comunicação"], principaisAtividades: "Atender clientes", observacoes: "Só a equipe vê", confidencial: false, perfil: PERFIL_VAZIO, ...extra,
   };
 }
 const linhasDe = (e: EntradaResumoPortal) => resumoDaSolicitacaoPortal(e).flatMap((s) => s.linhas);
@@ -110,6 +116,15 @@ caso("resumo completo: seções, rótulos, ordem e formatos", () => {
         { rotulo: "Adicionais", valor: "+ Insalubridade 20%" },
         { rotulo: "Horário", valor: "Segunda a Sexta, 08h00 às 17h00" },
         { rotulo: "Benefícios", valor: "Vale Transporte, Vale Refeição" },
+      ],
+    },
+    {
+      titulo: "Perfil do candidato",
+      linhas: [
+        { rotulo: "Sexo", valor: "Indiferente" },
+        { rotulo: "PCD", valor: "Não" },
+        { rotulo: "Habilitação", valor: "Não" },
+        { rotulo: "Veículo próprio", valor: "Não" },
       ],
     },
     {
@@ -145,7 +160,8 @@ caso("linhas vazias são omitidas e seção sem linhas some", () => {
   const minimo = resumoDaSolicitacaoPortal(entradaResumo({
     cidade: "", estado: "", previsaoInicio: "", salario: "", adicionaisSalariais: " ", horarioTexto: "", beneficios: [], requisitos: [], principaisAtividades: "  ", observacoes: "", numPosicoes: "",
   }));
-  assert.deepEqual(minimo, [{ titulo: "A vaga", linhas: [{ rotulo: "Tipo de serviço", valor: "Recrutamento e Seleção" }, { rotulo: "Cargo", valor: "Auxiliar administrativo" }, { rotulo: "Vagas", valor: "1" }] }]);
+  assert.deepEqual(minimo.map((x) => x.titulo), ["A vaga", "Perfil do candidato"]);
+  assert.deepEqual(minimo[0], { titulo: "A vaga", linhas: [{ rotulo: "Tipo de serviço", valor: "Recrutamento e Seleção" }, { rotulo: "Cargo", valor: "Auxiliar administrativo" }, { rotulo: "Vagas", valor: "1" }] });
   assert.ok(!minimo.some((s) => s.titulo === "Requisitos e atividades"), "seção vazia some");
 });
 caso("confidencial: a linha só existe quando marcado", () => {

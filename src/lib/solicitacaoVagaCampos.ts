@@ -159,7 +159,10 @@ export function gerarBeneficiosChips(sel: BeneficiosSel): Record<string, boolean
 
 export interface PerfilExtra {
   sexo?: string | null;
+  // "idade" é o texto livre do link; idade_min e idade_max são a faixa numérica do portal.
   idade?: string | null;
+  idade_min?: number | null;
+  idade_max?: number | null;
   pcd?: string | null;
   habilitacao_categoria?: string | null;
   veiculo_proprio?: string | null;

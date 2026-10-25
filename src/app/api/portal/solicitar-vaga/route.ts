@@ -97,6 +97,8 @@ export async function POST(request: NextRequest) {
         principais_atividades: body.principais_atividades || null,
         observacoes: body.observacoes || null,
         confidencial: body.confidencial === true,
+        // Perfil do candidato (opcional): sem ele a linha é gravada como sempre foi. Vem do corpo já validado.
+        ...(parsed.data.perfil_extra ? { perfil_extra: parsed.data.perfil_extra } : {}),
       })
       .select("id")
       .single();
