@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { mensagemDecisaoSolicitacao } from "@/lib/solicitacaoVagaStatus";
 import { ROTULO_CAMPO_SOLICITACAO, valorLegivelCampo, type Alteracoes } from "@/lib/solicitacaoAlteracaoRotulos";
 import { ROTULO_MOTIVO_ENCERRAMENTO, type MotivoTipoEncerramento } from "@/lib/vagaPausaReativacao";
-import BlocosSolicitacaoLink, { BlocoClienteDaSolicitacao, SeloViaLink, type SolicitacaoDeLink } from "@/components/BlocosSolicitacaoLink";
+import BlocosSolicitacaoLink, { BlocoClienteDaSolicitacao, BlocoPerfilInformado, SeloViaLink, type SolicitacaoDeLink } from "@/components/BlocosSolicitacaoLink";
+import { linhasDoPerfilExtra } from "@/lib/perfilCandidatoPortal";
 import ModalNovoCliente from "@/components/ModalNovoCliente";
 import ConfirmarCriarVagaSemCliente from "@/components/ConfirmarCriarVagaSemCliente";
 import ModalVincularClienteSolicitacao, { type ResultadoVinculo } from "@/components/ModalVincularClienteSolicitacao";
@@ -442,6 +443,8 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                     </div>
 
                     {s.origem === "link_publico" && <BlocosSolicitacaoLink s={s} />}
+                    {/* Solicitação do portal: só o perfil do candidato (o contratante já é cliente cadastrado). */}
+                    {s.origem !== "link_publico" && s.perfil_extra && <BlocoPerfilInformado perfil={linhasDoPerfilExtra(s.perfil_extra)} />}
                     <BlocoClienteDaSolicitacao
                       s={s}
                       ocupado={isLoading}

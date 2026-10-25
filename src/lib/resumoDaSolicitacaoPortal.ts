@@ -1,4 +1,5 @@
 import type { SalarioModo } from "./constants";
+import { idadeLegivel, perfilExtraDoFormulario, ROTULO_SEXO, type PerfilPortal } from "./perfilCandidatoPortal";
 import { salarioLegivel, type SecaoResumo } from "./solicitacaoVagaPublicaForm";
 
 // Solicitação de vaga do portal: o corpo do POST e o resumo de conferência, em funções puras (sem I/O) para a página e os scripts usarem as mesmas.
@@ -31,9 +32,10 @@ export interface EntradaCorpoPortal {
   observacoes: string;
   horarioPadrao: unknown;
   confidencial: boolean;
+  perfil: PerfilPortal;
 }
 
-// Corpo exato que a página sempre enviou para /api/portal/solicitar-vaga (mesmas chaves, mesma ordem, mesmos valores).
+// Corpo do POST para /api/portal/solicitar-vaga: as chaves de sempre, na mesma ordem e com os mesmos valores, mais perfil_extra no fim.
 export function montarCorpoSolicitacaoPortal(e: EntradaCorpoPortal) {
   return {
     cargo: e.cargo.trim(),
@@ -54,6 +56,7 @@ export function montarCorpoSolicitacaoPortal(e: EntradaCorpoPortal) {
     observacoes: e.observacoes.trim() || null,
     horario_padrao: e.horarioPadrao,
     confidencial: e.confidencial,
+    perfil_extra: perfilExtraDoFormulario(e.perfil),
   };
 }
 
@@ -74,6 +77,7 @@ export interface EntradaResumoPortal {
   principaisAtividades: string;
   observacoes: string;
   confidencial: boolean;
+  perfil: PerfilPortal;
 }
 
 // Seções do cartão "Confira a sua solicitação" do portal. Linhas vazias não aparecem e uma seção sem linhas some; "Confidencial" só aparece marcado.
@@ -95,6 +99,18 @@ export function resumoDaSolicitacaoPortal(e: EntradaResumoPortal): SecaoResumo[]
         { rotulo: "Horário", valor: e.horarioTexto },
         { rotulo: "Benefícios", valor: e.beneficios.join(", ") },
         { rotulo: "Confidencial", valor: e.confidencial ? "Sim" : null },
+      ]),
+    },
+    {
+      // Mesmos rótulos e valores do resumo do link (Sexo "Indiferente", PCD e Veículo "Sim" ou "Não", Habilitação "Categoria X" ou "Não").
+      titulo: "Perfil do candidato",
+      linhas: preenchidas([
+        { rotulo: "Sexo", valor: ROTULO_SEXO[e.perfil.sexo] },
+        { rotulo: "Idade", valor: idadeLegivel(perfilExtraDoFormulario(e.perfil)) },
+        { rotulo: "PCD", valor: e.perfil.pcd === "sim" ? "Sim" : "Não" },
+        { rotulo: "Habilitação", valor: e.perfil.habilitacao === "sim" ? `Categoria ${e.perfil.habilitacaoCategoria}` : "Não" },
+        { rotulo: "Veículo próprio", valor: e.perfil.veiculoProprio === "sim" ? "Sim" : "Não" },
+        { rotulo: "Local de trabalho", valor: e.perfil.localTrabalho },
       ]),
     },
     {

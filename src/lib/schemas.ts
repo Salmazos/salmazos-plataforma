@@ -901,6 +901,28 @@ const horarioPadraoSchema = z.object({
   texto: z.string().optional().nullable(),
 });
 
+// Perfil do candidato da solicitação do portal (solicitacoes_vagas.perfil_extra). As mesmas chaves e validações do link para sexo, PCD, veículo e
+// categoria; idade_min e idade_max são inteiros de 14 a 90 (mín. <= máx.). Chaves desconhecidas são descartadas.
+export const perfilExtraPortalSchema = z
+  .object({
+    sexo: z.enum(["masc", "fem", "indiferente"]).default("indiferente"),
+    pcd: z.enum(["sim", "nao"]).default("nao"),
+    habilitacao_categoria: z
+      .union([z.enum(CATEGORIAS_HABILITACAO), z.literal("")])
+      .optional()
+      .nullable()
+      .transform((v) => v || null),
+    veiculo_proprio: z.enum(["sim", "nao"]).default("nao"),
+    idade_min: z.number("Idade mínima inválida.").int("Idade mínima inválida.").min(14, "A idade mínima é 14 anos.").max(90, "A idade máxima permitida é 90 anos.").optional().nullable(),
+    idade_max: z.number("Idade máxima inválida.").int("Idade máxima inválida.").min(14, "A idade mínima é 14 anos.").max(90, "A idade máxima permitida é 90 anos.").optional().nullable(),
+    local_trabalho: z.string().trim().max(300, "Use no máximo 300 caracteres.").optional().nullable().transform((v) => v || null),
+  })
+  .superRefine((d, ctx) => {
+    if (typeof d.idade_min === "number" && typeof d.idade_max === "number" && d.idade_min > d.idade_max) {
+      ctx.addIssue({ code: "custom", path: ["idade_max"], message: "A idade máxima não pode ser menor que a mínima." });
+    }
+  });
+
 export const portalSolicitarVagaSchema = z.object({
   cargo: z.string().min(1),
   tipo_servico: z.string().min(1),
@@ -920,6 +942,7 @@ export const portalSolicitarVagaSchema = z.object({
   observacoes: z.string().optional().nullable(),
   horario_padrao: horarioPadraoSchema.optional().nullable(),
   confidencial: z.boolean().optional().default(false),
+  perfil_extra: perfilExtraPortalSchema.optional().nullable(),
 });
 
 // ── Link público de solicitação de vaga (R&S) ──────────────────────────────────────────────────────────────────────────

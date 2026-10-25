@@ -4,7 +4,9 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import PortalSolicitacaoEnviada from "@/components/PortalSolicitacaoEnviada";
+import PerfilCandidatoPortal from "@/components/PerfilCandidatoPortal";
 import ResumoSolicitacao from "@/components/solicitacao-publica/ResumoSolicitacao";
+import { PERFIL_VAZIO, converterChipsDeTemplate, validarPerfilPortal, type PerfilPortal } from "@/lib/perfilCandidatoPortal";
 import { montarCorpoSolicitacaoPortal, resumoDaSolicitacaoPortal } from "@/lib/resumoDaSolicitacaoPortal";
 import { SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, detectarModoSalario, extrairSalarioHora, formatarSalarioHora, type SalarioModo } from "@/lib/constants";
 // Listas de chips, estados e horários vêm de UM só lugar, compartilhado com o link público de solicitação de vaga.
@@ -114,6 +116,8 @@ export default function SolicitarVagaPage() {
   const [error, setError] = useState("");
   // Conferência antes de enviar: o estado do formulário continua todo aqui, só a tela muda.
   const [revisando, setRevisando] = useState(false);
+  const [perfil, setPerfil] = useState<PerfilPortal>(PERFIL_VAZIO);
+  const [errosPerfil, setErrosPerfil] = useState<Record<string, string>>({});
   const tituloResumoRef = useRef<HTMLHeadingElement>(null);
   const botaoRevisarRef = useRef<HTMLButtonElement>(null);
   const scrollDoFormulario = useRef(0);
@@ -173,11 +177,15 @@ export default function SolicitarVagaPage() {
       setHorarioTipo(tpl.horario_tipo as HorarioTipo);
     }
     if (tpl.beneficios_chips) setBenChips(tpl.beneficios_chips);
+    // Templates antigos podem trazer o chip "CNH B/C/D/E": ele vira Habilitação = Sim com a categoria (o grupo de chips não existe mais).
+    const convertido = converterChipsDeTemplate(tpl.requisitos_chips);
+    setPerfil({ ...PERFIL_VAZIO, habilitacao: convertido.habilitacao, habilitacaoCategoria: convertido.habilitacaoCategoria });
+    setErrosPerfil({});
     if (tpl.requisitos_chips) {
       const rc: Record<string, boolean> = {};
       const cursos: Record<string, string> = {};
       const conds: Record<string, string> = {};
-      for (const chip of tpl.requisitos_chips) {
+      for (const chip of convertido.chips) {
         const fullMatch = chip.match(/^(.+?) em (.+?) — (.+)$/);
         if (fullMatch) {
           rc[fullMatch[1]] = true;
@@ -382,6 +390,14 @@ export default function SolicitarVagaPage() {
     if (!tipoServico) { setError("Tipo de serviço é obrigatório."); return; }
     if (!cidade.trim()) { setError("Cidade é obrigatória."); return; }
     if (!estado) { setError("Estado é obrigatório."); return; }
+    const errosDoPerfil = validarPerfilPortal(perfil);
+    const primeiroErro = Object.keys(errosDoPerfil)[0];
+    if (primeiroErro) {
+      setErrosPerfil(errosDoPerfil);
+      setError("Corrija os campos do perfil do candidato.");
+      document.getElementById(`campo-${primeiroErro}`)?.focus();
+      return;
+    }
     scrollDoFormulario.current = window.scrollY;
     setRevisando(true);
   };
@@ -436,6 +452,7 @@ export default function SolicitarVagaPage() {
             observacoes,
             horarioPadrao: montarHorarioPadrao(),
             confidencial,
+            perfil,
           })
         ),
       });
@@ -558,6 +575,7 @@ export default function SolicitarVagaPage() {
       principaisAtividades,
       observacoes,
       confidencial,
+      perfil,
     });
     return (
       <div className="max-w-2xl mx-auto">
@@ -843,6 +861,9 @@ export default function SolicitarVagaPage() {
           )}
         </div>}
 
+        {/* ── Perfil do candidato (opcional, uso interno) ── */}
+        <PerfilCandidatoPortal valor={perfil} onChange={(v) => { setPerfil(v); setErrosPerfil({}); }} erros={errosPerfil} />
+
         {/* ── SECTION 3: Requisitos ── */}
         <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Requisitos</p>
@@ -850,7 +871,6 @@ export default function SolicitarVagaPage() {
 
           <ChipGroup label="Escolaridade" chips={REQ_ESCOLARIDADE} selected={reqChips} onToggle={toggleReq} cursos={reqCursos} onCursoChange={(k, v) => setReqCursos((p) => ({ ...p, [k]: v }))} condicoes={reqCondicoes} onCondicaoChange={(k, v) => setReqCondicoes((p) => ({ ...p, [k]: v }))} comCurso={REQ_COM_CURSO} comCondicaoSimples={REQ_COM_CONDICAO_SIMPLES} />
           <ChipGroup label="Experiência" chips={REQ_EXPERIENCIA} selected={reqChips} onToggle={toggleReq} />
-          <ChipGroup label="Habilitação" chips={REQ_CNH} selected={reqChips} onToggle={toggleReq} />
           <ChipGroup label="Normas Regulamentadoras" chips={REQ_NR} selected={reqChips} onToggle={toggleReq} />
           <ChipGroup label="Conhecimentos" chips={REQ_CONHECIMENTOS} selected={reqChips} onToggle={toggleReq} />
 
