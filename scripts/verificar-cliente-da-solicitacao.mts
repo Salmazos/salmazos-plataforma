@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { avaliarDuplicidade, camposIdentidadeAlterados, normalizarCnpj, normalizarCpf } from "../src/lib/clienteDuplicidade";
-import { respostaDuplicidade, MSG_DOCUMENTO_OUTRA_UNIDADE, MSG_DOCUMENTO_JA_CADASTRADO } from "../src/lib/clienteDuplicidadeRota";
+import { respostaDuplicidade, mensagemUnicidadeDocumento, MSG_DOCUMENTO_OUTRA_UNIDADE, MSG_DOCUMENTO_JA_CADASTRADO } from "../src/lib/clienteDuplicidadeRota";
 import { solicitacaoVincularClienteSchema } from "../src/lib/schemas";
 import * as rotaClientes from "../src/app/api/clientes/route";
 import * as rotaClienteId from "../src/app/api/clientes/[id]/route";
@@ -11,7 +11,7 @@ import * as rotaVincular from "../src/app/api/solicitacoes-vagas/[id]/vincular-c
 import { gerarCobrancaCancelamentoRSSeAplicavel, gerarCobrancaRSSeAplicavel } from "../src/lib/cobrancaRS";
 import { getEmailTemplate } from "../src/lib/emailTemplates";
 import { getEmailTemplate as getEmailTemplateAntes } from "./fixtures/emailTemplates.antes-do-escape.mts";
-import { TEXTO_SOLICITACAO_RECUSADA_SEM_VAGA, TEXTO_VAGA_CRIADA_COM_O_CLIENTE, avisoAposDecisaoDaSolicitacao, type AvisoDoCliente, aprovadasSemCliente, campoParaFocoInicial, devolverFocoAoFechar, escapeDeveFecharModal, explicarSituacaoDaVaga, rotularCampos, semClienteVinculado, solicitacaoFicouIndisponivel } from "../src/lib/clienteDaSolicitacao";
+import { mensagemVinculoAposReativacao, TEXTO_SOLICITACAO_RECUSADA_SEM_VAGA, TEXTO_VAGA_CRIADA_COM_O_CLIENTE, avisoAposDecisaoDaSolicitacao, type AvisoDoCliente, aprovadasSemCliente, campoParaFocoInicial, devolverFocoAoFechar, escapeDeveFecharModal, explicarSituacaoDaVaga, rotularCampos, semClienteVinculado, solicitacaoFicouIndisponivel } from "../src/lib/clienteDaSolicitacao";
 import { criarDb, criarClienteServico } from "./harness-mot/memdb.mjs";
 import { validarCnpj, validarCpf } from "../src/lib/documentoBr";
 import {
@@ -1298,6 +1298,70 @@ caso("modal: a faixa guarda a solicitação e se a vaga está pendente; criar va
   assert.ok(fonte.includes('mostrarResultadoCliente(s.id, r.clienteNome, r.vaga)') && fonte.includes("mostrarResultadoCliente(solicitacaoId, r.clienteNome, r.vaga"));
   assert.ok(fonte.includes('avisoAposDecisaoDaSolicitacao(a, id, "vaga_criada")') && fonte.includes('avisoAposDecisaoDaSolicitacao(a, id, "recusada")'));
   assert.ok(/if \(!isOpen\) \{\s+setAba\("pendentes"\);[\s\S]*?setAvisoCliente\(null\);/.test(fonte));
+});
+// ── Duplicidade de OUTRA unidade: a resposta 409 só carrega o documento como motivo ──
+const U_OUTRA = "00000000-0000-4000-8000-0000000000aa";
+const U_MINHA = "00000000-0000-4000-8000-0000000000bb";
+const avaliarComo = (candidato: Record<string, string>, existente: Record<string, unknown>, unidadesPermitidas: string[] | "todas" = [U_MINHA]) =>
+  avaliarDuplicidade(candidato, [{ id: idCli(7), nome: "Segredo S.A.", cidade: "Monte Mor", ativo: true, ...existente } as never], { papelFull: false, unidadesPermitidas })!;
+await casoRota("resposta de duplicidade de outra unidade: motivos só com o documento (cnpj ou cpf); telefone, e-mail, nome e endereço do outro cadastro não aparecem", async () => {
+  const todos = { cnpj: CNPJ, contato_telefone: "(19) 93333-4444", contato_email: "secreto@concorrente.com", endereco: "Rua Secreta, 1", unidade_id: U_OUTRA };
+  const candidato = { nome: "Segredo S.A.", cnpj: CNPJ, contato_telefone: "(19) 93333-4444", contato_email: "secreto@concorrente.com", endereco: "Rua Secreta, 1" };
+  const r = avaliarComo(candidato, todos);
+  assert.equal(r.outraUnidade, true);
+  assert.ok(r.motivos.includes("telefone") && r.motivos.includes("email") && r.motivos.includes("nome"), "o resultado interno continua completo (a auditoria usa)");
+  const corpo = await respostaDuplicidade(r).json();
+  assert.deepEqual(corpo.duplicidade.motivos, ["cnpj"]);
+  assert.equal(corpo.duplicidade.bloqueio, "cnpj");
+  assert.equal(corpo.duplicidade.existente, null);
+  const texto = JSON.stringify(corpo);
+  for (const proibido of ["telefone", "email", "nome", "endereco", "Segredo", "Monte Mor", "3333", "secreto@", "Rua Secreta", idCli(7)]) assert.ok(!texto.includes(proibido), `não pode conter "${proibido}"`);
+  const cpf = await respostaDuplicidade(avaliarComo({ nome: "X Y", cpf: CPF, contato_telefone: "(19) 93333-4444" }, { cpf: CPF, contato_telefone: "(19) 93333-4444", unidade_id: U_OUTRA })).json();
+  assert.deepEqual(cpf.duplicidade.motivos, ["cpf"]);
+});
+await casoRota("resposta de duplicidade de outra unidade SEM documento (telefone+e-mail ou só nome): nenhum motivo e o bloqueio por contato não é revelado; continua bloqueando/avisando", async () => {
+  const contato = await respostaDuplicidade(avaliarComo({ nome: "Outro Nome", contato_telefone: "(19) 93333-4444", contato_email: "a@b.com" }, { contato_telefone: "(19) 93333-4444", contato_email: "a@b.com", unidade_id: U_OUTRA })).json();
+  assert.deepEqual([contato.duplicidade.nivel, contato.duplicidade.bloqueio, contato.duplicidade.motivos, contato.duplicidade.outraUnidade], ["bloqueio", null, [], true]);
+  assert.match(contato.error, /outra unidade/);
+  const nome = await respostaDuplicidade(avaliarComo({ nome: "Segredo S.A." }, { unidade_id: U_OUTRA })).json();
+  assert.deepEqual([nome.duplicidade.nivel, nome.duplicidade.bloqueio, nome.duplicidade.motivos], ["aviso", null, []]);
+});
+await casoRota("resposta de duplicidade da MESMA unidade (ou de quem vê todas): motivos e bloqueio completos, como antes", async () => {
+  const todos = { cnpj: CNPJ, contato_telefone: "(19) 93333-4444", contato_email: "a@b.com", unidade_id: U_MINHA };
+  const candidato = { nome: "Segredo S.A.", cnpj: CNPJ, contato_telefone: "(19) 93333-4444", contato_email: "a@b.com" };
+  const propria = await respostaDuplicidade(avaliarComo(candidato, todos)).json();
+  assert.deepEqual(propria.duplicidade.motivos, ["cnpj", "telefone", "email", "nome"]);
+  assert.equal(propria.duplicidade.outraUnidade, false);
+  const contatoProprio = await respostaDuplicidade(avaliarComo({ nome: "Outro", contato_telefone: "(19) 93333-4444", contato_email: "a@b.com" }, todos)).json();
+  assert.deepEqual([contatoProprio.duplicidade.bloqueio, contatoProprio.duplicidade.motivos], ["contato", ["telefone", "email"]]);
+  const sociaTodas = await respostaDuplicidade(avaliarComo(candidato, { ...todos, unidade_id: U_OUTRA }, "todas")).json();
+  assert.equal(sociaTodas.duplicidade.outraUnidade, false);
+  assert.deepEqual(sociaTodas.duplicidade.motivos, ["cnpj", "telefone", "email", "nome"]);
+});
+caso("23505: o índice único de CPF dá a mensagem de CPF e o de CNPJ a de CNPJ (os dois únicos índices de documento do banco; a chave primária não se repete)", () => {
+  assert.match(mensagemUnicidadeDocumento({ message: 'duplicate key value violates unique constraint "clientes_cpf_ativo_unico"' }), /CPF/);
+  assert.match(mensagemUnicidadeDocumento({ message: 'duplicate key value violates unique constraint "clientes_cnpj_ativo_unico"' }), /CNPJ/);
+});
+
+// ── "Reativar e vincular": falha no vínculo com o cadastro já reativado ──
+caso("mensagem quando o cliente foi reativado mas o vínculo falhou: diz o nome, que foi reativado, que o vínculo não foi concluído, o motivo e que dá para tentar de novo", () => {
+  const m = mensagemVinculoAposReativacao("Acme Ltda", "Erro ao gravar o vínculo");
+  assert.equal(m, 'O cliente "Acme Ltda" foi reativado, mas o vínculo com a solicitação não foi concluído. Erro ao gravar o vínculo. Tente vincular de novo.');
+  assert.equal(mensagemVinculoAposReativacao("Acme", "Houve um erro de conexão."), 'O cliente "Acme" foi reativado, mas o vínculo com a solicitação não foi concluído. Houve um erro de conexão. Tente vincular de novo.');
+  assert.equal(mensagemVinculoAposReativacao("Acme", null), 'O cliente "Acme" foi reativado, mas o vínculo com a solicitação não foi concluído. Tente vincular de novo.');
+  assert.equal(mensagemVinculoAposReativacao("Acme", "   "), mensagemVinculoAposReativacao("Acme"));
+  const jaDecidida = mensagemVinculoAposReativacao("Acme", "A solicitação já foi vinculada ou decidida. Recarregue a lista.", { tentarDeNovo: false });
+  assert.ok(jaDecidida.includes("foi reativado") && jaDecidida.endsWith("Recarregue a lista.") && !jaDecidida.includes("Tente vincular de novo"));
+});
+caso("modal de vínculo: só avisa da reativação quando ESTA chamada reativou; cobre erro do servidor, solicitação já decidida e queda de conexão", () => {
+  const f = fs.readFileSync(new URL("../src/components/ModalVincularClienteSolicitacao.tsx", import.meta.url), "utf8");
+  assert.ok(f.includes("let reativouAgora = false;") && f.includes("reativouAgora = true;"));
+  assert.ok(f.indexOf("reativouAgora = true;") > f.indexOf("if (!rr.ok)"), "só depois de a reativação dar certo");
+  assert.ok(f.indexOf("reativouAgora = true;") < f.indexOf("/vincular-cliente"), "antes do vínculo");
+  assert.ok(f.includes("onJaVinculada(reativouAgora ? mensagemVinculoAposReativacao(escolhido.nome, json.error, { tentarDeNovo: false }) : json.error)"));
+  assert.ok(f.includes("setErro(reativouAgora ? mensagemVinculoAposReativacao(escolhido.nome, motivo) : motivo ?? \"Não foi possível vincular.\")"));
+  assert.ok(f.includes("mensagemVinculoAposReativacao(escolhido.nome, \"Houve um erro de conexão.\") : \"Erro de conexão. Tente novamente.\""));
+  assert.ok(f.includes("setClientes((prev) => prev.map((c) => (c.id === escolhido.id ? { ...c, ativo: true } : c)));"), "o cadastro fica ativo na lista: tentar de novo vincula direto");
 });
 console.error = silencio;
 
