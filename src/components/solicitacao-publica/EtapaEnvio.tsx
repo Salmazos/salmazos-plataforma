@@ -2,6 +2,7 @@
 
 import { resumoDaSolicitacao, type FormPublico } from "@/lib/solicitacaoVagaPublicaForm";
 import type { ItemProposta } from "@/lib/propostaModelos";
+import ResumoSolicitacao from "./ResumoSolicitacao";
 
 interface Props {
   form: FormPublico;
@@ -16,25 +17,7 @@ export default function EtapaEnvio({ form, itens, aceite, onAceite, erroAceite }
   const secoes = resumoDaSolicitacao(form);
   return (
     <div className="space-y-8">
-      <section aria-labelledby="resumo-titulo" className="space-y-4">
-        <h3 id="resumo-titulo" className="text-lg font-bold text-gray-900">Confira a sua solicitação</h3>
-        <div className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          {secoes.map((secao) => (
-            <div key={secao.titulo}>
-              <h4 className="mb-2 text-xs font-bold uppercase tracking-widest text-gray-700">{secao.titulo}</h4>
-              <dl className="space-y-2">
-                {secao.linhas.map((linha) => (
-                  <div key={linha.rotulo} className="grid grid-cols-1 gap-0.5 sm:grid-cols-3 sm:gap-3">
-                    <dt className="text-sm font-semibold text-gray-600">{linha.rotulo}</dt>
-                    <dd className="whitespace-pre-wrap break-words text-sm text-gray-900 sm:col-span-2">{linha.valor}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          ))}
-          <p className="text-sm text-gray-600">Algo errado? Use o botão “Voltar” para corrigir antes de enviar.</p>
-        </div>
-      </section>
+      <ResumoSolicitacao secoes={secoes} nota="Algo errado? Use o botão “Voltar” para corrigir antes de enviar." />
 
       <section aria-labelledby="condicoes-titulo" className="space-y-4">
         <h3 id="condicoes-titulo" className="text-lg font-bold text-gray-900">Condições da prestação do serviço de Recrutamento &amp; Seleção</h3>
