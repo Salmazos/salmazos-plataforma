@@ -14,6 +14,7 @@ import EtapaVaga from "./EtapaVaga";
 import Hero from "./Hero";
 import TelaLinkIndisponivel from "./TelaLinkIndisponivel";
 import TelaSucesso from "./TelaSucesso";
+import { ESTILOS } from "./estilos";
 
 interface DadosLink {
   nome_empresa: string | null;
@@ -24,17 +25,6 @@ interface DadosLink {
 type Fase = "carregando" | "indisponivel" | "formulario" | "enviado";
 
 const ETAPAS: Etapa[] = [1, 2, 3, 4];
-
-// Animações curtas da tela de sucesso; desligadas para quem pede menos movimento.
-const ESTILOS = `
-@keyframes sp-pop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
-@keyframes sp-draw{to{stroke-dashoffset:0}}
-@keyframes sp-subir{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
-.sp-pop{animation:sp-pop .5s ease-out both}
-.sp-draw{stroke-dasharray:48;stroke-dashoffset:48;animation:sp-draw .5s .35s ease-out forwards}
-.sp-subir{animation:sp-subir .5s ease-out both}
-@media (prefers-reduced-motion:reduce){.sp-pop,.sp-subir{animation:none!important}.sp-draw{animation:none!important;stroke-dashoffset:0}}
-`;
 
 function reduzMovimento(): boolean {
   return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;

@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import PortalSolicitacaoEnviada from "@/components/PortalSolicitacaoEnviada";
 import { SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, detectarModoSalario, extrairSalarioHora, formatarSalarioHora, type SalarioModo } from "@/lib/constants";
 // Listas de chips, estados e horários vêm de UM só lugar, compartilhado com o link público de solicitação de vaga.
 import {
@@ -432,26 +433,7 @@ export default function SolicitarVagaPage() {
     }
   };
 
-  if (success) {
-    return (
-      <div className="max-w-xl mx-auto mt-12">
-        <div className="bg-white rounded-2xl shadow-sm p-8 text-center">
-          <div className="text-5xl mb-4">{"✅"}</div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Solicitação enviada!</h2>
-          <p className="text-sm text-gray-500 mb-6">
-            Sua solicitação foi recebida e será analisada pela equipe Salmazos.
-            Você receberá uma notificação quando a vaga for criada.
-          </p>
-          <Link
-            href="/portal"
-            className="inline-block px-6 py-2.5 bg-black text-[#FFD700] rounded-xl font-semibold text-sm"
-          >
-            Voltar ao painel
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  if (success) return <PortalSolicitacaoEnviada />;
 
   if (view === "loading") {
     return (
