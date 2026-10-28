@@ -1705,6 +1705,18 @@ export const contatoEmpresaCreateSchema = z.object({
   email: emailContatoOpcional,
 });
 
+// Empresa nova criada direto na tela de proposta (prospect, só para registro). O contato é opcional, mas se
+// vier precisa de nome; CNPJ não entra aqui porque empresas_visitadas não tem a coluna (ele vai no conteúdo da proposta).
+export const empresaPropostaCreateSchema = z.object({
+  nome: z.string().trim().min(2, "Informe o nome da empresa.").max(200),
+  contato_nome: textoContatoOpcional,
+  contato_telefone: textoContatoOpcional,
+  contato_email: emailContatoOpcional,
+}).refine((d) => !(d.contato_telefone || d.contato_email) || !!d.contato_nome, {
+  message: "Informe o nome do contato para salvar telefone ou e-mail.",
+  path: ["contato_nome"],
+});
+
 export const contatoEmpresaUpdateSchema = z.object({
   nome: z.string().trim().min(1, "Informe o nome do contato.").max(200).optional(),
   cargo: textoContatoOpcional,

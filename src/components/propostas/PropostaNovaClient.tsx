@@ -23,6 +23,10 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erroBusca, setErroBusca] = useState("");
+  const [novaAberta, setNovaAberta] = useState(false);
+  const [nova, setNova] = useState({ nome: "", contato_nome: "", contato_telefone: "", contato_email: "" });
+  const [criandoEmpresa, setCriandoEmpresa] = useState(false);
+  const [erroNova, setErroNova] = useState("");
   const emAndamento = useRef(false);
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -55,6 +59,41 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
     // Recomeça do zero: A/C, CNPJ, endereço e condições da empresa anterior não podem vazar para esta.
     setCampos({ ...camposPadrao(), aos_cuidados: principal?.nome ?? "" });
   }
+
+  // Empresa que ainda não é cliente: entra na Carteira só como registro (prospect) e é escolhida como qualquer outra.
+  async function cadastrarEmpresa() {
+    if (criandoEmpresa) return;
+    if (nova.nome.trim().length < 2) { setErroNova("Informe o nome da empresa."); return; }
+    setCriandoEmpresa(true);
+    setErroNova("");
+    try {
+      const r = await lerResposta<{ data: EmpresaOpc }>(await fetch("/api/comercial/propostas/empresas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: nova.nome,
+          contato_nome: nova.contato_nome.trim() || null,
+          contato_telefone: nova.contato_telefone.trim() || null,
+          contato_email: nova.contato_email.trim() || null,
+        }),
+      }));
+      if (!r.ok) { setErroNova(r.json.error ?? "Não foi possível cadastrar a empresa."); return; }
+      escolher(r.json.data);
+      setNovaAberta(false);
+      setNova({ nome: "", contato_nome: "", contato_telefone: "", contato_email: "" });
+    } catch {
+      setErroNova("Não foi possível cadastrar a empresa.");
+    } finally {
+      setCriandoEmpresa(false);
+    }
+  }
+
+  const atalhoNova = (
+    <button type="button" onClick={() => { setNova((n) => ({ ...n, nome: n.nome || busca.trim() })); setNovaAberta(true); }}
+      style={{ background: "none", border: "none", padding: 0, color: "#B45309", fontSize: 13, fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}>
+      Não achou? Cadastrar nova empresa (apenas registro)
+    </button>
+  );
 
   // A lista da Carteira só traz o NOME do vendedor da oportunidade aberta: é o que dá para comparar aqui.
   // O servidor confere de novo (id) e devolve o mesmo aviso ao criar.
@@ -129,12 +168,34 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
             <input style={inputStyle} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Digite parte do nome da empresa" />
             {erroBusca && <div style={{ marginTop: 8 }}><Aviso tipo="erro">{erroBusca}</Aviso></div>}
             <div style={{ marginTop: 8, maxHeight: 220, overflowY: "auto", border: "1px solid #E5E7EB", borderRadius: 8 }}>
-              {empresas.length === 0 ? <div style={{ padding: 12, color: "#6B7280", fontSize: 13 }}>Nenhuma empresa da Carteira da sua unidade encontrada.</div> : empresas.map((e) => (
+              {empresas.length === 0 ? <div style={{ padding: 12, color: "#6B7280", fontSize: 13 }}>Nenhuma empresa da Carteira da sua unidade encontrada. {atalhoNova}</div> : empresas.map((e) => (
                 <button key={e.id} type="button" onClick={() => escolher(e)} style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 12px", border: "none", borderBottom: "1px solid #F3F4F6", background: "#fff", cursor: "pointer", fontSize: 14 }}>
                   {e.nome}
                 </button>
               ))}
             </div>
+            {!novaAberta && empresas.length > 0 && <div style={{ marginTop: 8 }}>{atalhoNova}</div>}
+            {novaAberta && (
+              <div style={{ marginTop: 12, padding: 12, border: "1px solid #E5E7EB", borderRadius: 8, background: "#FAFAFA" }}>
+                <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 10 }}>
+                  Empresa ainda não é cliente — cadastro só para registro. Cadastre como cliente quando fecharem negócio.
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <label style={labelStyle}>Nome da empresa</label>
+                    <input style={inputStyle} value={nova.nome} maxLength={200} onChange={(e) => setNova({ ...nova, nome: e.target.value })} />
+                  </div>
+                  <div><label style={labelStyle}>Contato (opcional)</label><input style={inputStyle} value={nova.contato_nome} maxLength={200} onChange={(e) => setNova({ ...nova, contato_nome: e.target.value })} /></div>
+                  <div><label style={labelStyle}>Telefone (opcional)</label><input style={inputStyle} value={nova.contato_telefone} maxLength={200} onChange={(e) => setNova({ ...nova, contato_telefone: e.target.value })} /></div>
+                  <div><label style={labelStyle}>E-mail (opcional)</label><input style={inputStyle} type="email" value={nova.contato_email} maxLength={200} onChange={(e) => setNova({ ...nova, contato_email: e.target.value })} /></div>
+                </div>
+                {erroNova && <div style={{ marginTop: 8 }}><Aviso tipo="erro">{erroNova}</Aviso></div>}
+                <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                  <button type="button" style={{ ...btnPrimario, opacity: criandoEmpresa ? 0.6 : 1 }} disabled={criandoEmpresa} onClick={cadastrarEmpresa}>{criandoEmpresa ? "Cadastrando…" : "Cadastrar e usar"}</button>
+                  <button type="button" style={btnSecundario} disabled={criandoEmpresa} onClick={() => { setNovaAberta(false); setErroNova(""); }}>Cancelar</button>
+                </div>
+              </div>
+            )}
           </>
         )}
         {abertaDeOutro && (
