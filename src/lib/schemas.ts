@@ -1717,6 +1717,10 @@ export const empresaPropostaCreateSchema = z.object({
   path: ["contato_nome"],
 });
 
+export const empresaVincularClienteSchema = z.object({
+  cliente_id: z.string().uuid("Cliente inválido."),
+});
+
 export const contatoEmpresaUpdateSchema = z.object({
   nome: z.string().trim().min(1, "Informe o nome do contato.").max(200).optional(),
   cargo: textoContatoOpcional,

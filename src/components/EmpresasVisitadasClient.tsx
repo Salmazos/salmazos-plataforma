@@ -1,5 +1,6 @@
 "use client";
 
+import { VincularEmpresaACliente } from "@/components/VinculoCarteiraCliente";
 import React, { useState, useEffect, useCallback } from "react";
 import { ROTULO_RESULTADO_CONTATO, rotuloEtapa } from "@/lib/comercialRotulos";
 import CampoTelefone from "@/components/ui/CampoTelefone";
@@ -18,6 +19,7 @@ interface EmpresaVisitada {
   contato_email: string | null;
   cidade: string | null;
   cliente_id: string | null;
+  unidade_id?: string | null;
   primeira_visita_em: string;
   ultima_visita_em: string;
   total_visitas: number;
@@ -98,6 +100,7 @@ export default function EmpresasVisitadasClient({ analistas: _analistas, podeEsc
   const [erroContato, setErroContato] = useState("");
   const [formContato, setFormContato] = useState<null | { empresaId: string; contatoId: string | null; nome: string; cargo: string; telefone: string; email: string }>(null);
   const [registroDe, setRegistroDe] = useState<EmpresaVisitada | null>(null);
+  const [vinculoDe, setVinculoDe] = useState<EmpresaVisitada | null>(null);
 
   const loadEmpresas = useCallback(async () => {
     setLoading(true);
@@ -312,6 +315,7 @@ export default function EmpresasVisitadasClient({ analistas: _analistas, podeEsc
                                     ) : (
                                       <button style={{ ...btnMini, padding: "8px 14px", fontSize: 13 }} onClick={() => { window.location.href = `/painel/comercial?empresa=${e.id}`; }}>Criar oportunidade</button>
                                     )}
+                                    {!e.cliente_id && <button style={{ ...btnMini, padding: "8px 14px", fontSize: 13 }} onClick={() => setVinculoDe(e)}>Vincular a cliente</button>}
                                   </div>
                                 )}
 
@@ -399,6 +403,15 @@ export default function EmpresasVisitadasClient({ analistas: _analistas, podeEsc
             </tbody>
           </table>
         </div>
+      )}
+
+      {vinculoDe && (
+        <VincularEmpresaACliente
+          empresa={vinculoDe}
+          unidadeId={vinculoDe.unidade_id ?? null}
+          onFechar={() => setVinculoDe(null)}
+          onVinculado={async () => { setVinculoDe(null); await loadEmpresas(); }}
+        />
       )}
 
       {registroDe && (

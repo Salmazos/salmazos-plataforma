@@ -171,7 +171,7 @@ export async function GET(request: NextRequest) {
   // ── Autocomplete / list ──
   let query = svc
     .from("empresas_visitadas")
-    .select("id, nome, contato_nome, contato_telefone, contato_email, cidade, cliente_id, primeira_visita_em, ultima_visita_em, total_visitas, ultimo_visitante_nome")
+    .select("id, nome, unidade_id, contato_nome, contato_telefone, contato_email, cidade, cliente_id, primeira_visita_em, ultima_visita_em, total_visitas, ultimo_visitante_nome")
     .order("ultima_visita_em", { ascending: false })
     .limit(limit);
 

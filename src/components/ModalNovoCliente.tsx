@@ -8,6 +8,8 @@ import { responsaveisDaUnidade, responsavelPadrao, opcoesResponsavel } from "@/l
 import type { Cliente } from "@/types";
 import CampoTelefone from "@/components/ui/CampoTelefone";
 import { MENSAGEM_AVISO_PREFILL, campoParaFocoInicial, escapeDeveFecharModal, rotularCampos, solicitacaoFicouIndisponivel, type AvisoPrefill, type PrefillCliente, type SituacaoDaVaga } from "@/lib/clienteDaSolicitacao";
+import { PerguntaVincularEmpresa } from "@/components/VinculoCarteiraCliente";
+import type { EmpresaCandidata } from "@/lib/carteiraVinculo";
 import { devolverFocoSeExistir, prenderTabNoModal } from "@/components/focoDosModais";
 import { validarSenhaPortal, PLACEHOLDER_SENHA_PORTAL, ITENS_CHECKLIST_SENHA_PORTAL } from "@/lib/senhaPortal";
 
@@ -87,6 +89,7 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
   const [servicos, setServicos] = useState<string[]>([]);
   const [processoSimplificado, setProcessoSimplificado] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [posCriacao, setPosCriacao] = useState<{ cliente: { id: string; nome: string }; candidatas: EmpresaCandidata[] } | null>(null);
   const [erro, setErro] = useState("");
   const [duplicidade, setDuplicidade] = useState<{ mensagem: string; dados: DuplicidadeCliente } | null>(null);
   const [confirmandoInativar, setConfirmandoInativar] = useState(false);
@@ -217,6 +220,7 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
   }, [isOpen]);
 
   if (!isOpen) return null;
+  if (posCriacao) return <PerguntaVincularEmpresa cliente={posCriacao.cliente} candidatas={posCriacao.candidatas} onFechar={() => { setPosCriacao(null); onClose(); }} />;
 
   const aoTeclar = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
@@ -367,6 +371,14 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
       }
       if (!res.ok) { setErro(json.error ?? "Erro ao salvar."); return; }
       onSalvo(json.data);
+      if (!editando) {
+        // Cliente novo: se a Carteira tem empresa (prospect) de nome parecido, pergunta antes de fechar. Falha na consulta não atrapalha o cadastro.
+        const candidatas = await fetch(`/api/clientes/${json.data.id}/empresas-candidatas`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((j) => (Array.isArray(j?.data) ? (j.data as EmpresaCandidata[]) : []))
+          .catch(() => [] as EmpresaCandidata[]);
+        if (candidatas.length > 0) { setPosCriacao({ cliente: { id: json.data.id, nome: json.data.nome }, candidatas }); return; }
+      }
       onClose();
     } catch {
       setErro("Erro de conexão. Tente novamente.");
