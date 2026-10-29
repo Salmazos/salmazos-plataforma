@@ -6,6 +6,9 @@ import { carregarIdentidadesClientes, MSG_DOCUMENTO_OUTRA_UNIDADE } from "@/lib/
 import { documentoJaCadastradoEmOutroCliente, tipoDocumentoDaCobranca, validarDocumentoDaCobranca } from "@/lib/cobrancaRSDocumento";
 import { carregarNomesGeradoresCobrancaRS } from "@/lib/cobrancaRSAutor";
 import { tipoPessoaDoClienteDaCobranca } from "@/lib/cobrancaRS";
+import { podeAcessarFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaAuth";
+import { resolverUnidadeUsuario } from "@/lib/unidadeAuth";
+import { marcadorCobrancaNaObservacao } from "@/lib/cobrancaRSFaturamento";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -23,7 +26,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
   const { data, error } = await svc
     .from("cobrancas_rs")
     // clientes(...) traz o tipo do cliente (PF/PJ) para o modal escolher CPF ou CNPJ; cobrancas_rs tem uma só FK para clientes (sem ambiguidade).
-    .select("*, vagas(titulo), clientes(tipo_pessoa, cpf, email_nota_fiscal)")
+    .select("*, vagas(titulo), clientes(tipo_pessoa, cpf, email_nota_fiscal, unidade_id)")
     .eq("id", id)
     .single();
 
@@ -36,7 +39,26 @@ export async function GET(_request: NextRequest, { params }: Params) {
   const nomes = await carregarNomesGeradoresCobrancaRS(svc, [data.gerado_por_user_id]);
   const geradoPorNome = data.gerado_por_user_id ? nomes.get(data.gerado_por_user_id) ?? null : null;
 
-  return NextResponse.json({ data: { ...data, gerado_por_nome: geradoPorNome } });
+  // Botão "Lançar em Faturamento Unidades" no modal: mesmo gate da página/API de contas a receber
+  // (acesso à aba + escrita, que é só de quem vê todas as unidades). A unidade é a do cliente,
+  // que é a que a API de contas a receber exige.
+  const lancamentoFaturamento = { pode: false, unidade_id: null as string | null, ja_lancada: false };
+  const unidadeCliente = (data.clientes as { unidade_id?: string | null } | null)?.unidade_id ?? null;
+  if (data.cliente_id && unidadeCliente && (await podeAcessarFaturamentoHortolandia(user))) {
+    const ctx = await resolverUnidadeUsuario(user);
+    if (ctx?.todasUnidades) {
+      lancamentoFaturamento.pode = true;
+      lancamentoFaturamento.unidade_id = unidadeCliente;
+      // O marcador nas observações é o único vínculo com o lançamento (sem coluna nova); só avisa, não bloqueia.
+      const { count } = await svc
+        .from("contas_receber_hortolandia")
+        .select("id", { count: "exact", head: true })
+        .ilike("observacoes", `%${marcadorCobrancaNaObservacao(id)}%`);
+      lancamentoFaturamento.ja_lancada = (count ?? 0) > 0;
+    }
+  }
+
+  return NextResponse.json({ data: { ...data, gerado_por_nome: geradoPorNome, lancamento_faturamento: lancamentoFaturamento } });
 }
 
 // "Salvar rascunho" — sem validação obrigatória, salva parcial. Só edita cobranças ainda

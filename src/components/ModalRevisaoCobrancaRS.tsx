@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import { rotuloDocumento, tipoDocumentoDaCobranca } from "@/lib/cobrancaRSDocumento";
+import { observacaoLancamentoCobranca } from "@/lib/cobrancaRSFaturamento";
+import ModalContaReceberHortolandia from "./ModalContaReceberHortolandia";
 import type { CobrancaRSRow } from "./CobrancasRSPageClient";
 
 interface CobrancaDetalhe {
@@ -31,6 +33,8 @@ interface CobrancaDetalhe {
   data_vencimento: string | null;
   created_at: string;
   gerado_por_nome?: string | null;
+  // Só vem preenchido para quem pode lançar em Faturamento Unidades (ver GET /api/cobrancas-rs/[id]).
+  lancamento_faturamento?: { pode: boolean; unidade_id: string | null; ja_lancada: boolean };
   cancelado_por: string | null;
   cancelado_em: string | null;
   justificativa_cancelamento: string | null;
@@ -106,6 +110,10 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
   const [reenviando, setReenviando] = useState(false);
   const [reenviado, setReenviado] = useState(false);
 
+  const [lancando, setLancando] = useState(false);
+  const [avisoJaLancada, setAvisoJaLancada] = useState(false);
+  const [lancamentoCriado, setLancamentoCriado] = useState(false);
+
   const [cancelando, setCancelando] = useState(false);
   const [justificativaCancelamento, setJustificativaCancelamento] = useState("");
   const [enviandoCancelamento, setEnviandoCancelamento] = useState(false);
@@ -175,7 +183,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
       const json = await res.json();
       if (!res.ok) { setErro(json.error || "Erro ao salvar rascunho."); return false; }
       // A resposta do PATCH é só a linha da cobrança: o cadastro do cliente (que veio do GET) é preservado.
-      setCobranca({ ...json.data, clientes: cobranca?.clientes ?? null });
+      setCobranca({ ...json.data, clientes: cobranca?.clientes ?? null, lancamento_faturamento: cobranca?.lancamento_faturamento });
       setAvisosCadastro(Array.isArray(json.avisos) ? json.avisos : []);
       return true;
     } catch {
@@ -229,7 +237,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
       });
       const json = await res.json();
       if (!res.ok) { setErro(json.error || "Erro ao salvar vencimento."); return; }
-      setCobranca(json.data);
+      setCobranca({ ...json.data, clientes: cobranca?.clientes ?? null, lancamento_faturamento: cobranca?.lancamento_faturamento });
       // Persiste até o usuário editar o campo de novo ou fechar o modal — diferente dos
       // outros banners "some sozinho" desta tela (salvo/reenviado), este já passou
       // despercebido por ser pequeno e efêmero.
@@ -296,11 +304,26 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
     }
   };
 
+  // Valor: o já calculado da cobrança, ou o preview (salário × fee%) enquanto pendente de revisão.
+  const valorLancamento = cobranca?.status === "pendente_revisao" ? feeValorPreview : cobranca?.fee_valor ?? null;
+  const lf = cobranca?.lancamento_faturamento;
+  const podeLancar = !!lf?.pode && !!lf.unidade_id && !!cobranca?.cliente_id && cobranca.status !== "cancelada" && valorLancamento != null;
+
+  const handleLancar = () => {
+    setLancamentoCriado(false);
+    if (lf?.ja_lancada) {
+      setAvisoJaLancada(true);
+      return;
+    }
+    setLancando(true);
+  };
+
   const podeCancelar =
     cobranca != null &&
     (cobranca.status === "pendente_revisao" || cobranca.status === "aprovada_enviada" || cobranca.status === "validada");
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="bg-black text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
@@ -437,6 +460,26 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                   <p className="text-xs text-gray-600 mt-2">
                     <span className="font-semibold">Justificativa:</span> {cobranca.justificativa_cancelamento ?? "—"}
                   </p>
+                </div>
+              )}
+
+              {podeLancar && (
+                <div className="pt-2 border-t space-y-2">
+                  <button onClick={handleLancar} className="btn-outline w-full">
+                    Lançar em Faturamento Unidades
+                  </button>
+                  {avisoJaLancada && (
+                    <div role="status" className="text-amber-900 text-sm bg-amber-50 border border-amber-300 rounded-lg px-3 py-2">
+                      <p>Esta cobrança já foi lançada em Faturamento Unidades.</p>
+                      <button
+                        onClick={() => { setAvisoJaLancada(false); setLancando(true); }}
+                        className="text-xs font-semibold underline mt-1"
+                      >
+                        Abrir mesmo assim
+                      </button>
+                    </div>
+                  )}
+                  {lancamentoCriado && <p className="text-green-700 text-sm">Lançamento criado em Faturamento Unidades.</p>}
                 </div>
               )}
 
@@ -581,5 +624,29 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
         </div>
       </div>
     </div>
+    {lancando && podeLancar && cobranca && lf?.unidade_id && (
+      <ModalContaReceberHortolandia
+        unidadeId={lf.unidade_id}
+        conta={null}
+        inicial={{
+          cliente_id: cobranca.cliente_id ?? "",
+          valor: valorLancamento ?? 0,
+          data_vencimento: cobranca.data_vencimento ?? "",
+          observacoes: observacaoLancamentoCobranca({
+            id: cobranca.id,
+            candidato: cobranca.candidato_nome_snapshot,
+            vaga: cobranca.cargo ?? cobranca.vagas?.titulo ?? null,
+          }),
+        }}
+        onClose={() => setLancando(false)}
+        onSalva={() => {
+          setLancando(false);
+          setLancamentoCriado(true);
+          setCobranca((c) => (c?.lancamento_faturamento ? { ...c, lancamento_faturamento: { ...c.lancamento_faturamento, ja_lancada: true } } : c));
+        }}
+        onExcluida={() => setLancando(false)}
+      />
+    )}
+    </>
   );
 }

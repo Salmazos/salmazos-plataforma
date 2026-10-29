@@ -11,9 +11,13 @@ interface ClienteOpcao {
   unidade_id?: string;
 }
 
+// Pré-preenchimento do modo criação (ex.: lançamento vindo de uma Cobrança R&S). Ignorado na edição.
+export type LancamentoInicial = Partial<Pick<FormState, "cliente_id" | "valor" | "data_vencimento" | "observacoes">>;
+
 interface Props {
   unidadeId: string;
   conta: ContaReceberRow | null;
+  inicial?: LancamentoInicial;
   onClose: () => void;
   onSalva: (row: ContaReceberRow) => void;
   onExcluida: (id: string) => void;
@@ -30,7 +34,10 @@ interface FormState {
   observacoes: string;
 }
 
-function estadoInicial(conta: ContaReceberRow | null): FormState {
+function estadoInicial(conta: ContaReceberRow | null, inicial?: LancamentoInicial): FormState {
+  if (!conta && inicial) {
+    return { ...estadoInicial(null), ...inicial };
+  }
   return {
     cliente_id: conta?.clienteId ?? "",
     numero_nf: conta?.numeroNf ?? "",
@@ -43,9 +50,9 @@ function estadoInicial(conta: ContaReceberRow | null): FormState {
   };
 }
 
-export default function ModalContaReceberHortolandia({ unidadeId, conta, onClose, onSalva, onExcluida }: Props) {
+export default function ModalContaReceberHortolandia({ unidadeId, conta, inicial, onClose, onSalva, onExcluida }: Props) {
   const [clientes, setClientes] = useState<ClienteOpcao[]>([]);
-  const [form, setForm] = useState<FormState>(estadoInicial(conta));
+  const [form, setForm] = useState<FormState>(estadoInicial(conta, inicial));
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
