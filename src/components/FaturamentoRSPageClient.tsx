@@ -94,6 +94,8 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+import { ROTULO_BUCKET_FATURAMENTO, type BucketFaturamento } from "@/lib/unidadeFaturamento";
+
 export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosIniciais, unidadeId, nomeUnidade }: Props) {
   const filtroUnidade = unidadeId ? `&unidade=${unidadeId}` : "";
   const [ano, setAno] = useState(anoInicial);
@@ -111,16 +113,21 @@ export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosI
   const [salvandoAjuste, setSalvandoAjuste] = useState(false);
   const [erroAjuste, setErroAjuste] = useState("");
 
+  // Recorte pela unidade de faturamento das cobranças. null = todas (padrão: total da empresa, com ajustes manuais); "A definir" lista
+  // as cobranças pagas ainda sem Hortolândia/Monte Mor, que continuam somadas em "Todas".
+  const [filtroFat, setFiltroFat] = useState<BucketFaturamento | null>(null);
+  const paramFat = (f: BucketFaturamento | null) => (f ? `&faturamento=${f}` : "");
+
   const [aba, setAba] = useState<"mes" | "historico">("mes");
   const [historico, setHistorico] = useState<HistoricoItem[] | null>(null);
   const [carregandoHistorico, setCarregandoHistorico] = useState(false);
   const [erroHistorico, setErroHistorico] = useState("");
 
-  const carregarMes = async (novoAno: number, novoMes: number) => {
+  const carregarMes = async (novoAno: number, novoMes: number, fat: BucketFaturamento | null = filtroFat) => {
     setCarregando(true);
     setErro("");
     try {
-      const res = await fetch(`/api/faturamento-rs?ano=${novoAno}&mes=${novoMes}${filtroUnidade}`);
+      const res = await fetch(`/api/faturamento-rs?ano=${novoAno}&mes=${novoMes}${filtroUnidade}${paramFat(fat)}`);
       const json = await res.json();
       if (!res.ok) { setErro(json.error || "Erro ao carregar faturamento do mês."); return; }
       setDados(json);
@@ -201,12 +208,12 @@ export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosI
     }
   };
 
-  const carregarHistorico = async () => {
-    if (historico !== null) return;
+  const carregarHistorico = async (fat: BucketFaturamento | null = filtroFat, forcar = false) => {
+    if (historico !== null && !forcar) return;
     setCarregandoHistorico(true);
     setErroHistorico("");
     try {
-      const res = await fetch(`/api/faturamento-rs/historico?meses=12${filtroUnidade}`);
+      const res = await fetch(`/api/faturamento-rs/historico?meses=12${filtroUnidade}${paramFat(fat)}`);
       const json = await res.json();
       if (!res.ok) { setErroHistorico(json.error || "Erro ao carregar histórico."); return; }
       setHistorico(json.data ?? []);
@@ -215,6 +222,13 @@ export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosI
     } finally {
       setCarregandoHistorico(false);
     }
+  };
+
+  const trocarFiltroFat = (fat: BucketFaturamento | null) => {
+    setFiltroFat(fat);
+    setHistorico(null);
+    carregarMes(ano, mes, fat);
+    if (aba === "historico") carregarHistorico(fat, true);
   };
 
   const handleAbaHistorico = () => {
@@ -281,6 +295,29 @@ export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosI
         </div>
       </div>
 
+      <div className="flex flex-wrap gap-2 mb-4" role="tablist" aria-label="Unidade de faturamento">
+        {([null, "hortolandia", "monte_mor", "a_definir"] as const).map((f) => {
+          const ativa = filtroFat === f;
+          return (
+            <button
+              key={f ?? "todas"}
+              type="button"
+              role="tab"
+              aria-selected={ativa}
+              onClick={() => trocarFiltroFat(f)}
+              className={`px-4 py-2 text-sm rounded-lg border ${ativa ? "bg-black text-[#FFD700] font-semibold border-[#FFD700]" : "bg-white text-gray-600 border-gray-200"}`}
+            >
+              {f ? ROTULO_BUCKET_FATURAMENTO[f] : "Todas"}
+            </button>
+          );
+        })}
+        {filtroFat && (
+          <p className="basis-full text-xs text-gray-500">
+            Só cobranças desta unidade de faturamento. Imposto e ajustes manuais são da empresa inteira e só entram em &quot;Todas&quot;.
+          </p>
+        )}
+      </div>
+
       <div className="flex gap-1 border-b-2 border-gray-100 mb-5">
         {(
           [
@@ -337,7 +374,7 @@ export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosI
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div style={{ background: "#F3F4F6", border: "2px solid transparent", borderRadius: 12, padding: "14px 16px" }}>
               <p style={{ fontSize: 12, fontWeight: 600, color: "#374151", margin: "0 0 6px" }}>Imposto do mês (%)</p>
-              {unidadeId ? (
+              {unidadeId || filtroFat ? (
                 <p style={{ fontSize: 20, fontWeight: 800, color: "#374151", margin: 0 }}>
                   {dados.imposto != null ? `${dados.imposto.percentual}%` : "—"}
                 </p>
@@ -381,7 +418,7 @@ export default function FaturamentoRSPageClient({ anoInicial, mesInicial, dadosI
             )}
           </div>
 
-          {!unidadeId && (
+          {!unidadeId && !filtroFat && (
           <div className="card mb-6">
             <p className="section-title mb-3">Ajustes manuais do mês</p>
 

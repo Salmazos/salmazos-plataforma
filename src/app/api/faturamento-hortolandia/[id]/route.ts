@@ -3,7 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaAuth";
 import { parseBody, contaReceberHortolandiaUpdateSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
-import { checarUnidadeLancamento, checarClienteDaUnidade, checarEscritaFaturamento } from "@/lib/faturamentoUnidades";
+import { checarUnidadeLancamento, checarClienteDaUnidade, checarEscritaFaturamento, resolverUnidadeFaturamentoDoLancamento } from "@/lib/faturamentoUnidades";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -34,9 +34,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (clienteErrado) return clienteErrado;
   }
 
+  // Edição: ausente mantém; null volta o lançamento para "a definir".
+  const faturamento = await resolverUnidadeFaturamentoDoLancamento(lancamento!.unidade_id, parsed.data.unidade_faturamento, false);
+  if (faturamento.erro) return faturamento.erro;
+  const { unidade_faturamento: _ignorada, ...campos } = parsed.data;
+  void _ignorada;
+
   const { data, error } = await svc
     .from("contas_receber_hortolandia")
-    .update({ ...parsed.data, atualizado_em: new Date().toISOString() })
+    .update({ ...campos, ...faturamento.campo, atualizado_em: new Date().toISOString() })
     .eq("id", id)
     .select("*, clientes(id, nome)")
     .single();
@@ -48,7 +54,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     acao: "conta_receber_hortolandia_editada",
     entidade: "contas_receber_hortolandia",
     entidade_id: id,
-    detalhes: { campos: Object.keys(parsed.data) },
+    detalhes: { campos: Object.keys({ ...campos, ...faturamento.campo }) },
   });
 
   return NextResponse.json({ data });

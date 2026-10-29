@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { resolverUnidadeUsuario, podeVerUnidade } from "@/lib/unidadeAuth";
 
+export * from "@/lib/unidadeFaturamento";
+import { decidirUnidadeFaturamento, type UnidadeFaturamento } from "@/lib/unidadeFaturamento";
+
 // Faturamento Unidades (ex-"Faturamento Hortolândia") — contas a receber/pagar e imposto do
 // mês, sempre de UMA unidade por vez (decisão do Olver, 24/09: sem visão consolidada). As
 // tabelas continuam com o nome "_hortolandia" (ver migration_faturamento_unidades_imposto_
@@ -71,4 +74,18 @@ export async function checarClienteDaUnidade(clienteId: string, unidadeId: strin
     return NextResponse.json({ error: "O cliente escolhido não é desta unidade." }, { status: 400 });
   }
   return null;
+}
+
+// Resolve o que gravar em unidade_faturamento para a unidade (de visibilidade) do lançamento.
+// Devolve a resposta de erro pronta quando o valor falta na criação ou é inválido.
+export async function resolverUnidadeFaturamentoDoLancamento(
+  unidadeId: string,
+  enviada: string | null | undefined,
+  obrigatoria: boolean
+): Promise<{ campo: { unidade_faturamento?: UnidadeFaturamento | null }; erro: null } | { campo: null; erro: NextResponse }> {
+  const svc = createServiceClient();
+  const { data } = await svc.from("unidades").select("slug").eq("id", unidadeId).maybeSingle();
+  const d = decidirUnidadeFaturamento(data?.slug, enviada, obrigatoria);
+  if (!d.ok) return { campo: null, erro: NextResponse.json({ error: d.erro }, { status: 400 }) };
+  return { campo: d.campo, erro: null };
 }

@@ -306,6 +306,8 @@ export interface Cliente {
   processo_simplificado?: boolean;
   logo_url?: string | null;
   unidade_id?: string;
+  // Unidade de faturamento (monte_mor | hortolandia); null/ausente = "a definir" (migration_unidade_faturamento.sql).
+  unidade_faturamento?: string | null;
   created_at: string;
 }
 

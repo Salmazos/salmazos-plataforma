@@ -3,7 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaAuth";
 import { parseBody, contaReceberHortolandiaCreateSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
-import { resolverUnidadeFaturamento, checarClienteDaUnidade, checarEscritaFaturamento } from "@/lib/faturamentoUnidades";
+import { resolverUnidadeFaturamento, resolverUnidadeFaturamentoDoLancamento, checarClienteDaUnidade, checarEscritaFaturamento } from "@/lib/faturamentoUnidades";
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
@@ -45,11 +45,16 @@ export async function POST(request: NextRequest) {
   if (erro) return erro;
   const clienteErrado = await checarClienteDaUnidade(parsed.data.cliente_id, unidadeId);
   if (clienteErrado) return clienteErrado;
+  // Snapshot da unidade de faturamento na criação (obrigatório na unidade Monte Mor/Hortolândia; o botão da cobrança e a tela pedem para escolher).
+  const faturamento = await resolverUnidadeFaturamentoDoLancamento(unidadeId, parsed.data.unidade_faturamento, true);
+  if (faturamento.erro) return faturamento.erro;
+  const { unidade_faturamento: _ignorada, ...campos } = parsed.data;
+  void _ignorada;
 
   const svc = createServiceClient();
   const { data, error } = await svc
     .from("contas_receber_hortolandia")
-    .insert({ ...parsed.data, unidade_id: unidadeId, criado_por: user.id })
+    .insert({ ...campos, ...faturamento.campo, unidade_id: unidadeId, criado_por: user.id })
     .select("*, clientes(id, nome)")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

@@ -3,7 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { podeAcessarFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaAuth";
 import { obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
 import { resolverUnidadeUsuario, podeVerUnidade } from "@/lib/unidadeAuth";
-import { nomeUnidadeFaturamento } from "@/lib/faturamentoUnidades";
+import { nomeUnidadeFaturamento, usaUnidadeFaturamento } from "@/lib/faturamentoUnidades";
 import SemAcessoPainel from "@/components/SemAcessoPainel";
 import FaturamentoHortolandiaPageClient, {
   type ContaReceberRow,
@@ -86,6 +86,7 @@ export default async function FaturamentoHortolandiaPage({
     status: r.status,
     observacoes: r.observacoes,
     impostoPercentualManual: r.imposto_percentual_manual,
+    unidadeFaturamento: r.unidade_faturamento ?? null,
   }));
 
   const saidasRows: ContaPagarRow[] = (saidas ?? []).map((s) => ({
@@ -94,6 +95,7 @@ export default async function FaturamentoHortolandiaPage({
     descricao: s.descricao,
     valor: s.valor,
     responsavel: s.responsavel,
+    unidadeFaturamento: s.unidade_faturamento ?? null,
   }));
 
   return (
@@ -102,6 +104,7 @@ export default async function FaturamentoHortolandiaPage({
       unidadeId={unidadeId}
       nomeUnidade={nomeUnidadeFaturamento(unidadeAtual)}
       unidadesOpcoes={unidades.map((u) => ({ id: u.id, nome: nomeUnidadeFaturamento(u) }))}
+      usaUnidadeFaturamento={usaUnidadeFaturamento(unidadeAtual?.slug)}
       somenteLeitura={!ctx.todasUnidades}
       rowsIniciais={rows}
       saidasIniciais={saidasRows}

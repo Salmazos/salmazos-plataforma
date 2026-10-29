@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import { rotuloDocumento, tipoDocumentoDaCobranca } from "@/lib/cobrancaRSDocumento";
 import { observacaoLancamentoCobranca } from "@/lib/cobrancaRSFaturamento";
+import { ROTULO_BUCKET_FATURAMENTO, bucketFaturamento } from "@/lib/unidadeFaturamento";
+import CampoUnidadeFaturamento from "@/components/ui/CampoUnidadeFaturamento";
 import ModalContaReceberHortolandia from "./ModalContaReceberHortolandia";
 import type { CobrancaRSRow } from "./CobrancasRSPageClient";
 
@@ -33,8 +35,11 @@ interface CobrancaDetalhe {
   data_vencimento: string | null;
   created_at: string;
   gerado_por_nome?: string | null;
+  // Snapshot editável (monte_mor | hortolandia); null = "a definir". O campo só aparece quando usa_unidade_faturamento.
+  unidade_faturamento?: string | null;
+  usa_unidade_faturamento?: boolean;
   // Só vem preenchido para quem pode lançar em Faturamento Unidades (ver GET /api/cobrancas-rs/[id]).
-  lancamento_faturamento?: { pode: boolean; unidade_id: string | null; ja_lancada: boolean };
+  lancamento_faturamento?: { pode: boolean; unidade_id: string | null; ja_lancada: boolean; usa_unidade_faturamento: boolean };
   cancelado_por: string | null;
   cancelado_em: string | null;
   justificativa_cancelamento: string | null;
@@ -100,6 +105,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
   const [clienteEndereco, setClienteEndereco] = useState("");
   const [prazoCobranca, setPrazoCobranca] = useState("");
   const [dataVencimento, setDataVencimento] = useState("");
+  const [unidadeFaturamento, setUnidadeFaturamento] = useState("");
 
   const [salvando, setSalvando] = useState(false);
   const [salvo, setSalvo] = useState(false);
@@ -134,6 +140,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
         setClienteEndereco(c.cliente_endereco_snapshot ?? "");
         setPrazoCobranca(c.prazo_cobranca ?? "");
         setDataVencimento(c.data_vencimento ?? "");
+        setUnidadeFaturamento(c.unidade_faturamento ?? "");
       })
       .catch(() => setErro("Erro ao carregar cobrança."))
       .finally(() => setCarregando(false));
@@ -161,6 +168,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
   if (salario <= 0) camposFaltando.push(ehCancelamento ? "Salário-base" : "Salário");
   if (!clienteCnpj.trim()) camposFaltando.push(`${rotuloDoc} do cliente`);
   if (!clienteEndereco.trim()) camposFaltando.push("Endereço do cliente");
+  if (cobranca?.usa_unidade_faturamento && !unidadeFaturamento) camposFaltando.push("Unidade de faturamento");
   const camposCompletos = camposFaltando.length === 0;
 
   const salvarRascunho = async (): Promise<boolean> => {
@@ -178,12 +186,13 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
           cliente_cnpj: clienteCnpj || undefined,
           cliente_endereco: clienteEndereco || undefined,
           prazo_cobranca: prazoCobranca || null,
+          ...(cobranca?.usa_unidade_faturamento ? { unidade_faturamento: unidadeFaturamento || null } : {}),
         }),
       });
       const json = await res.json();
       if (!res.ok) { setErro(json.error || "Erro ao salvar rascunho."); return false; }
       // A resposta do PATCH é só a linha da cobrança: o cadastro do cliente (que veio do GET) é preservado.
-      setCobranca({ ...json.data, clientes: cobranca?.clientes ?? null, lancamento_faturamento: cobranca?.lancamento_faturamento });
+      setCobranca({ ...json.data, clientes: cobranca?.clientes ?? null, lancamento_faturamento: cobranca?.lancamento_faturamento, usa_unidade_faturamento: cobranca?.usa_unidade_faturamento });
       setAvisosCadastro(Array.isArray(json.avisos) ? json.avisos : []);
       return true;
     } catch {
@@ -237,7 +246,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
       });
       const json = await res.json();
       if (!res.ok) { setErro(json.error || "Erro ao salvar vencimento."); return; }
-      setCobranca({ ...json.data, clientes: cobranca?.clientes ?? null, lancamento_faturamento: cobranca?.lancamento_faturamento });
+      setCobranca({ ...json.data, clientes: cobranca?.clientes ?? null, lancamento_faturamento: cobranca?.lancamento_faturamento, usa_unidade_faturamento: cobranca?.usa_unidade_faturamento });
       // Persiste até o usuário editar o campo de novo ou fechar o modal — diferente dos
       // outros banners "some sozinho" desta tela (salvo/reenviado), este já passou
       // despercebido por ser pequeno e efêmero.
@@ -430,6 +439,16 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                   />
                   <p className="text-gray-400 text-xs mt-1">Copiado da vaga — texto livre, informativo (não define a data de vencimento abaixo).</p>
                 </div>
+                {cobranca.usa_unidade_faturamento && (
+                  cobranca.status === "pendente_revisao" ? (
+                    <div>
+                      <CampoUnidadeFaturamento value={unidadeFaturamento} onChange={setUnidadeFaturamento} obrigatorio />
+                      <p className="text-gray-400 text-xs mt-1">Copiada do cadastro do cliente. Escolha para seguir para validação (cliente &quot;a definir&quot;).</p>
+                    </div>
+                  ) : (
+                    <p className="text-sm"><span className="text-gray-500">Unidade de faturamento:</span> {ROTULO_BUCKET_FATURAMENTO[bucketFaturamento(cobranca.unidade_faturamento)]}</p>
+                  )
+                )}
               </div>
 
               <div className="rounded-lg p-3" style={{ background: "#F0FDF4", border: "1px solid #BBF7D0" }}>
@@ -627,11 +646,14 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
     {lancando && podeLancar && cobranca && lf?.unidade_id && (
       <ModalContaReceberHortolandia
         unidadeId={lf.unidade_id}
+        usaUnidadeFaturamento={lf.usa_unidade_faturamento}
+        unidadeFaturamentoPadrao=""
         conta={null}
         inicial={{
           cliente_id: cobranca.cliente_id ?? "",
           valor: valorLancamento ?? 0,
           data_vencimento: cobranca.data_vencimento ?? "",
+          unidade_faturamento: unidadeFaturamento,
           observacoes: observacaoLancamentoCobranca({
             id: cobranca.id,
             candidato: cobranca.candidato_nome_snapshot,

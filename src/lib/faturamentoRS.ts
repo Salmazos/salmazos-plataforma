@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
+import type { BucketFaturamento } from "@/lib/unidadeFaturamento";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -12,6 +13,12 @@ export function limitesMesBrasil(ano: number, mes: number): { inicio: string; fi
   const anoProx = mes === 12 ? ano + 1 : ano;
   const fim = new Date(`${anoProx}-${String(proxMes).padStart(2, "0")}-01T00:00:00-03:00`).toISOString();
   return { inicio, fim };
+}
+
+// NULL em unidade_faturamento = "a definir": tem filtro próprio e nunca some do recorte "todas".
+export function filtrarCobrancasPorBucket<Q extends { eq: (c: string, v: string) => Q; is: (c: string, v: null) => Q }>(query: Q, faturamento: BucketFaturamento | null): Q {
+  if (!faturamento) return query;
+  return faturamento === "a_definir" ? query.is("unidade_faturamento", null) : query.eq("unidade_faturamento", faturamento);
 }
 
 export interface ReceitaMes {
@@ -30,7 +37,16 @@ export interface ReceitaMes {
 // as cobranças (que herdam a unidade da vaga). Imposto e ajustes são da empresa inteira: o
 // percentual do mês vale igual pra qualquer recorte, e os ajustes manuais (sem unidade) só
 // entram na visão "Todas".
-export async function obterReceitaMes(svc: ServiceClient, ano: number, mes: number, unidadeId: string | null = null): Promise<ReceitaMes> {
+//
+// faturamento (Hortolândia | Monte Mor | A definir): recorte pela unidade de faturamento da cobrança (snapshot). Null = todas, que
+// continua sendo o padrão e o único recorte em que entram os ajustes manuais (também da empresa inteira).
+export async function obterReceitaMes(
+  svc: ServiceClient,
+  ano: number,
+  mes: number,
+  unidadeId: string | null = null,
+  faturamento: BucketFaturamento | null = null
+): Promise<ReceitaMes> {
   const { inicio, fim } = limitesMesBrasil(ano, mes);
 
   let cobrancasQuery = svc
@@ -41,10 +57,11 @@ export async function obterReceitaMes(svc: ServiceClient, ano: number, mes: numb
     .lt("pago_em", fim)
     .order("pago_em", { ascending: false });
   if (unidadeId) cobrancasQuery = cobrancasQuery.eq("unidade_id", unidadeId);
+  cobrancasQuery = filtrarCobrancasPorBucket(cobrancasQuery, faturamento);
 
   const [{ data: cobrancas }, { data: ajustesRaw }, { data: imposto }] = await Promise.all([
     cobrancasQuery,
-    unidadeId
+    unidadeId || faturamento
       ? Promise.resolve({ data: [] as { id: string; valor: number; descricao: string; criado_por: string | null; criado_em: string }[] })
       : svc
           .from("faturamento_rs_ajustes_manuais")

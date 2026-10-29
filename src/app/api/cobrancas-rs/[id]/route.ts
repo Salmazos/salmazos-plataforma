@@ -9,6 +9,9 @@ import { tipoPessoaDoClienteDaCobranca } from "@/lib/cobrancaRS";
 import { podeAcessarFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaAuth";
 import { resolverUnidadeUsuario } from "@/lib/unidadeAuth";
 import { marcadorCobrancaNaObservacao } from "@/lib/cobrancaRSFaturamento";
+import { resolverUnidadeFaturamentoDoLancamento } from "@/lib/faturamentoUnidades";
+import { usaUnidadeFaturamento } from "@/lib/unidadeFaturamento";
+import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -39,16 +42,22 @@ export async function GET(_request: NextRequest, { params }: Params) {
   const nomes = await carregarNomesGeradoresCobrancaRS(svc, [data.gerado_por_user_id]);
   const geradoPorNome = data.gerado_por_user_id ? nomes.get(data.gerado_por_user_id) ?? null : null;
 
+  // Cobrança na unidade Monte Mor/Hortolândia pede a unidade de faturamento (o modal mostra o campo para quem revisa, com ou sem acesso ao financeiro).
+  const { data: unidadeDaCobranca } = await svc.from("unidades").select("slug").eq("id", data.unidade_id).maybeSingle();
+  const usaUnidadeFaturamentoDaCobranca = usaUnidadeFaturamento(unidadeDaCobranca?.slug);
+
   // Botão "Lançar em Faturamento Unidades" no modal: mesmo gate da página/API de contas a receber
   // (acesso à aba + escrita, que é só de quem vê todas as unidades). A unidade é a do cliente,
   // que é a que a API de contas a receber exige.
-  const lancamentoFaturamento = { pode: false, unidade_id: null as string | null, ja_lancada: false };
+  const lancamentoFaturamento = { pode: false, unidade_id: null as string | null, ja_lancada: false, usa_unidade_faturamento: false };
   const unidadeCliente = (data.clientes as { unidade_id?: string | null } | null)?.unidade_id ?? null;
   if (data.cliente_id && unidadeCliente && (await podeAcessarFaturamentoHortolandia(user))) {
     const ctx = await resolverUnidadeUsuario(user);
     if (ctx?.todasUnidades) {
       lancamentoFaturamento.pode = true;
       lancamentoFaturamento.unidade_id = unidadeCliente;
+      const { data: unidadeRow } = await svc.from("unidades").select("slug").eq("id", unidadeCliente).maybeSingle();
+      lancamentoFaturamento.usa_unidade_faturamento = usaUnidadeFaturamento(unidadeRow?.slug);
       // O marcador nas observações é o único vínculo com o lançamento (sem coluna nova); só avisa, não bloqueia.
       const { count } = await svc
         .from("contas_receber_hortolandia")
@@ -58,7 +67,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
     }
   }
 
-  return NextResponse.json({ data: { ...data, gerado_por_nome: geradoPorNome, lancamento_faturamento: lancamentoFaturamento } });
+  return NextResponse.json({ data: { ...data, gerado_por_nome: geradoPorNome, usa_unidade_faturamento: usaUnidadeFaturamentoDaCobranca, lancamento_faturamento: lancamentoFaturamento } });
 }
 
 // "Salvar rascunho" — sem validação obrigatória, salva parcial. Só edita cobranças ainda
@@ -106,7 +115,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     documentoNovo = v.valor;
   }
 
-  const campos: Record<string, unknown> = {};
+  // Unidade de faturamento da cobrança (snapshot editável): ausente mantém, null volta para "a definir". Só vale na unidade Monte Mor/Hortolândia.
+  const faturamento = await resolverUnidadeFaturamentoDoLancamento(atual.unidade_id, parsed.data.unidade_faturamento, false);
+  if (faturamento.erro) return faturamento.erro;
+
+  const campos: Record<string, unknown> = { ...faturamento.campo };
   if (cargo !== undefined) campos.cargo = cargo || null;
   if (salario !== undefined) campos.salario = salario;
   if (data_inicio !== undefined) campos.data_inicio = data_inicio || null;
@@ -131,6 +144,28 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   // vêm com o dado). Endereço e documento são updates SEPARADOS: um falhar não derruba o outro. A cobrança já está salva; o que não for possível
   // gravar no cadastro volta em `avisos` para o modal mostrar.
   const avisos: string[] = [];
+  // Cliente ainda "a definir": a escolha feita aqui também completa o cadastro dele, para a próxima cobrança já vir preenchida (não sobrescreve valor existente).
+  const unidadeFaturamentoEscolhida = faturamento.campo?.unidade_faturamento;
+  if (atual.cliente_id && unidadeFaturamentoEscolhida) {
+    const { data: clienteAtualizado, error: erroCliente } = await svc
+      .from("clientes")
+      .update({ unidade_faturamento: unidadeFaturamentoEscolhida })
+      .eq("id", atual.cliente_id)
+      .is("unidade_faturamento", null)
+      .select("id");
+    if (erroCliente) avisos.push("A unidade de faturamento não pôde ser salva no cadastro do cliente (a cobrança foi salva). Atualize o cadastro do cliente.");
+    // Só audita quando o cadastro realmente mudou (cliente que já tinha valor não é tocado): a alteração do cliente veio de uma cobrança, não da tela de clientes.
+    else if ((clienteAtualizado ?? []).length > 0) {
+      registrarAuditoria({
+        usuario_id: user.id,
+        usuario_nome: await resolverNomeUsuario(user.id, user.email ?? null, svc),
+        acao: "cliente_unidade_faturamento_definida",
+        entidade: "clientes",
+        entidade_id: atual.cliente_id,
+        detalhes: { unidade_faturamento: unidadeFaturamentoEscolhida, origem: "cobranca_rs", cobranca_id: id },
+      });
+    }
+  }
   if (atual.cliente_id && (documentoNovo || campos.cliente_endereco_snapshot)) {
     if (campos.cliente_endereco_snapshot) {
       const { error: erroEndereco } = await svc.from("clientes").update({ endereco: campos.cliente_endereco_snapshot }).eq("id", atual.cliente_id);

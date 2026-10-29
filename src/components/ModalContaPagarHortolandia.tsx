@@ -2,10 +2,16 @@
 
 import { useState } from "react";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import CampoUnidadeFaturamento from "@/components/ui/CampoUnidadeFaturamento";
+import { MSG_UNIDADE_FATURAMENTO_OBRIGATORIA } from "@/lib/unidadeFaturamento";
 import type { ContaPagarRow } from "./FaturamentoHortolandiaPageClient";
 
 interface Props {
   unidadeId: string;
+  // Só a unidade Monte Mor/Hortolândia usa o campo; SBC não mostra nem envia.
+  usaUnidadeFaturamento: boolean;
+  // Aba aberta na tela — sugestão na criação (editável).
+  unidadeFaturamentoPadrao: string;
   conta: ContaPagarRow | null;
   onClose: () => void;
   onSalva: (row: ContaPagarRow) => void;
@@ -17,19 +23,21 @@ interface FormState {
   descricao: string;
   valor: number;
   responsavel: string;
+  unidade_faturamento: string;
 }
 
-function estadoInicial(conta: ContaPagarRow | null): FormState {
+function estadoInicial(conta: ContaPagarRow | null, padrao: string): FormState {
   return {
     data_pagamento: conta?.dataPagamento ?? "",
     descricao: conta?.descricao ?? "",
     valor: conta?.valor ?? 0,
     responsavel: conta?.responsavel ?? "",
+    unidade_faturamento: conta ? conta.unidadeFaturamento ?? "" : padrao,
   };
 }
 
-export default function ModalContaPagarHortolandia({ unidadeId, conta, onClose, onSalva, onExcluida }: Props) {
-  const [form, setForm] = useState<FormState>(estadoInicial(conta));
+export default function ModalContaPagarHortolandia({ unidadeId, usaUnidadeFaturamento, unidadeFaturamentoPadrao, conta, onClose, onSalva, onExcluida }: Props) {
+  const [form, setForm] = useState<FormState>(estadoInicial(conta, unidadeFaturamentoPadrao));
   const [salvando, setSalvando] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -42,6 +50,7 @@ export default function ModalContaPagarHortolandia({ unidadeId, conta, onClose, 
     if (!form.data_pagamento) return setErro("Informe a data de pagamento.");
     if (!form.descricao.trim()) return setErro("Informe a descrição do pagamento.");
     if (!form.responsavel.trim()) return setErro("Informe o responsável.");
+    if (usaUnidadeFaturamento && !conta && !form.unidade_faturamento) return setErro(MSG_UNIDADE_FATURAMENTO_OBRIGATORIA);
     setSalvando(true);
     setErro(null);
     try {
@@ -50,6 +59,8 @@ export default function ModalContaPagarHortolandia({ unidadeId, conta, onClose, 
         descricao: form.descricao.trim(),
         valor: form.valor,
         responsavel: form.responsavel.trim(),
+        // Na edição, vazio volta para "a definir"; SBC não envia o campo.
+        ...(usaUnidadeFaturamento ? { unidade_faturamento: form.unidade_faturamento || null } : {}),
       };
       const res = await fetch(
         conta ? `/api/faturamento-hortolandia/saidas/${conta.id}` : "/api/faturamento-hortolandia/saidas",
@@ -72,6 +83,7 @@ export default function ModalContaPagarHortolandia({ unidadeId, conta, onClose, 
         descricao: s.descricao,
         valor: s.valor,
         responsavel: s.responsavel,
+        unidadeFaturamento: s.unidade_faturamento ?? null,
       });
     } finally {
       setSalvando(false);
@@ -152,6 +164,14 @@ export default function ModalContaPagarHortolandia({ unidadeId, conta, onClose, 
               placeholder="Quem autorizou/efetuou o pagamento"
             />
           </div>
+
+          {usaUnidadeFaturamento && (
+            <CampoUnidadeFaturamento
+              value={form.unidade_faturamento}
+              onChange={(v) => set("unidade_faturamento", v)}
+              obrigatorio={!conta}
+            />
+          )}
 
           <div className="flex items-center justify-between pt-2">
             {conta ? (

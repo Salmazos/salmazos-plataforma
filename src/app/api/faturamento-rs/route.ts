@@ -1,3 +1,4 @@
+import { lerBucketFaturamento } from "@/lib/unidadeFaturamento";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoFaturamentoRs } from "@/lib/faturamentoRsAuth";
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
 
   const svc = createServiceClient();
   const unidadeId = await resolverFiltroUnidade(ctx, searchParams.get("unidade"));
-  const dados = await obterReceitaMes(svc, ano, mes, unidadeId);
+  const dados = await obterReceitaMes(svc, ano, mes, unidadeId, lerBucketFaturamento(searchParams.get("faturamento")));
 
   return NextResponse.json(dados);
 }
