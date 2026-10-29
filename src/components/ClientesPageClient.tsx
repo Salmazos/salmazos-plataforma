@@ -3,6 +3,8 @@
 import { useState } from "react";
 import ModalNovoCliente from "./ModalNovoCliente";
 import { TIPOS_SERVICO } from "@/lib/constants";
+import { useUsuarioLogado } from "@/components/UsuarioLogadoProvider";
+import { bucketFaturamento, ROTULO_BUCKET_FATURAMENTO, usaUnidadeFaturamento, type BucketFaturamento } from "@/lib/unidadeFaturamento";
 
 const CORES_SERVICO: Record<string, { bg: string; color: string }> = {
   recrutamento_selecao:  { bg: "#1D6FA4", color: "#ffffff" },
@@ -35,6 +37,11 @@ export default function ClientesPageClient({ clientes: inicial, unidades }: Prop
   const [clienteEditando, setClienteEditando] = useState<Cliente | null>(null);
   const [filtroAtivos, setFiltroAtivos] = useState<"todos" | "ativos" | "inativos">("ativos");
   const [busca, setBusca] = useState("");
+  const [filtroFaturamento, setFiltroFaturamento] = useState<"todas" | BucketFaturamento>("todas");
+  const usuario = useUsuarioLogado();
+  // SBC não usa unidade de faturamento: só os clientes da unidade compartilhada entram no filtro/badge.
+  const usaFaturamento = (c: Cliente) =>
+    usaUnidadeFaturamento(usuario.todasUnidades ? (c.unidade_id ? usuario.unidadeSlugPorId[c.unidade_id] : null) : usuario.unidadeSlug);
 
   const handleSalvo = (clienteAtualizado: Cliente) => {
     setClientes((prev) => {
@@ -70,7 +77,9 @@ export default function ClientesPageClient({ clientes: inicial, unidades }: Prop
       c.nome.toLowerCase().includes(busca.toLowerCase()) ||
       c.cidade.toLowerCase().includes(busca.toLowerCase()) ||
       c.segmento.toLowerCase().includes(busca.toLowerCase());
-    return matchFiltro && matchBusca;
+    const matchFaturamento =
+      filtroFaturamento === "todas" || (usaFaturamento(c) && bucketFaturamento(c.unidade_faturamento) === filtroFaturamento);
+    return matchFiltro && matchBusca && matchFaturamento;
   });
 
   const totais = {
@@ -130,6 +139,18 @@ export default function ClientesPageClient({ clientes: inicial, unidades }: Prop
           />
         </div>
 
+        <select
+          value={filtroFaturamento}
+          onChange={(e) => setFiltroFaturamento(e.target.value as "todas" | BucketFaturamento)}
+          className="input-field w-auto"
+          aria-label="Filtrar por unidade de faturamento"
+        >
+          <option value="todas">Todas as unidades de faturamento</option>
+          <option value="hortolandia">{ROTULO_BUCKET_FATURAMENTO.hortolandia}</option>
+          <option value="monte_mor">{ROTULO_BUCKET_FATURAMENTO.monte_mor}</option>
+          <option value="a_definir">{ROTULO_BUCKET_FATURAMENTO.a_definir}</option>
+        </select>
+
         <div className="flex rounded-lg border border-gray-200 overflow-hidden">
           {(["ativos", "todos", "inativos"] as const).map((f) => (
             <button
@@ -166,6 +187,7 @@ export default function ClientesPageClient({ clientes: inicial, unidades }: Prop
               key={c.id}
               cliente={c}
               nomeUnidade={unidades?.find((u) => u.id === c.unidade_id)?.nome}
+              bucketFaturamento={usaFaturamento(c) ? bucketFaturamento(c.unidade_faturamento) : undefined}
               onEditar={() => abrirEdicao(c)}
             />
           ))}
@@ -186,10 +208,12 @@ export default function ClientesPageClient({ clientes: inicial, unidades }: Prop
 function ClienteRow({
   cliente,
   nomeUnidade,
+  bucketFaturamento: bucket,
   onEditar,
 }: {
   cliente: ClienteComCount;
   nomeUnidade?: string;
+  bucketFaturamento?: BucketFaturamento;
   onEditar: () => void;
 }) {
   return (
@@ -213,6 +237,13 @@ function ClienteRow({
           </span>
           {nomeUnidade && (
             <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{nomeUnidade}</span>
+          )}
+          {bucket && (
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full ${bucket === "a_definir" ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-700"}`}
+              title="Unidade de faturamento"
+            >
+              {ROTULO_BUCKET_FATURAMENTO[bucket]}</span>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 mt-1 text-xs text-gray-500">

@@ -3,7 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaAuth";
 import { parseBody, contaPagarHortolandiaCreateSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
-import { resolverUnidadeFaturamento, checarEscritaFaturamento } from "@/lib/faturamentoUnidades";
+import { resolverUnidadeFaturamento, resolverUnidadeFaturamentoDoLancamento, checarEscritaFaturamento } from "@/lib/faturamentoUnidades";
 
 // Mesmo gate de acesso de /api/faturamento-hortolandia (contas a receber) — saída é dado
 // financeiro da mesma unidade, sem motivo pra ter um nível de acesso diferente.
@@ -45,11 +45,15 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
   const { unidadeId, erro } = await resolverUnidadeFaturamento(user, parsed.data.unidade_id);
   if (erro) return erro;
+  const faturamento = await resolverUnidadeFaturamentoDoLancamento(unidadeId, parsed.data.unidade_faturamento, true);
+  if (faturamento.erro) return faturamento.erro;
+  const { unidade_faturamento: _ignorada, ...campos } = parsed.data;
+  void _ignorada;
 
   const svc = createServiceClient();
   const { data, error } = await svc
     .from("contas_pagar_hortolandia")
-    .insert({ ...parsed.data, unidade_id: unidadeId, criado_por: user.id })
+    .insert({ ...campos, ...faturamento.campo, unidade_id: unidadeId, criado_por: user.id })
     .select("*")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

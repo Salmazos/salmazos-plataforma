@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import CampoMoeda from "@/components/ui/CampoMoeda";
+import CampoUnidadeFaturamento from "@/components/ui/CampoUnidadeFaturamento";
+import { ehUnidadeFaturamento, MSG_UNIDADE_FATURAMENTO_OBRIGATORIA } from "@/lib/unidadeFaturamento";
 import type { ContaReceberRow } from "./FaturamentoHortolandiaPageClient";
 
 interface ClienteOpcao {
@@ -9,13 +11,18 @@ interface ClienteOpcao {
   nome: string;
   ativo?: boolean;
   unidade_id?: string;
+  unidade_faturamento?: string | null;
 }
 
 // Pré-preenchimento do modo criação (ex.: lançamento vindo de uma Cobrança R&S). Ignorado na edição.
-export type LancamentoInicial = Partial<Pick<FormState, "cliente_id" | "valor" | "data_vencimento" | "observacoes">>;
+export type LancamentoInicial = Partial<Pick<FormState, "cliente_id" | "valor" | "data_vencimento" | "observacoes" | "unidade_faturamento">>;
 
 interface Props {
   unidadeId: string;
+  // Só a unidade Monte Mor/Hortolândia usa o campo; SBC não mostra nem envia.
+  usaUnidadeFaturamento: boolean;
+  // Aba aberta na tela — sugestão na criação quando o cliente ainda não tem unidade de faturamento (editável).
+  unidadeFaturamentoPadrao: string;
   conta: ContaReceberRow | null;
   inicial?: LancamentoInicial;
   onClose: () => void;
@@ -32,6 +39,7 @@ interface FormState {
   data_emissao_nf: string;
   status: "pendente" | "pago" | "cancelado";
   observacoes: string;
+  unidade_faturamento: string;
 }
 
 function estadoInicial(conta: ContaReceberRow | null, inicial?: LancamentoInicial): FormState {
@@ -47,10 +55,11 @@ function estadoInicial(conta: ContaReceberRow | null, inicial?: LancamentoInicia
     data_emissao_nf: conta?.dataEmissaoNf ?? "",
     status: (conta?.status as FormState["status"]) ?? "pendente",
     observacoes: conta?.observacoes ?? "",
+    unidade_faturamento: conta?.unidadeFaturamento ?? "",
   };
 }
 
-export default function ModalContaReceberHortolandia({ unidadeId, conta, inicial, onClose, onSalva, onExcluida }: Props) {
+export default function ModalContaReceberHortolandia({ unidadeId, usaUnidadeFaturamento, unidadeFaturamentoPadrao, conta, inicial, onClose, onSalva, onExcluida }: Props) {
   const [clientes, setClientes] = useState<ClienteOpcao[]>([]);
   const [form, setForm] = useState<FormState>(estadoInicial(conta, inicial));
   const [salvando, setSalvando] = useState(false);
@@ -65,6 +74,18 @@ export default function ModalContaReceberHortolandia({ unidadeId, conta, inicial
       .catch(() => setClientes([]));
   }, [unidadeId]);
 
+  // Criação: o lançamento guarda a unidade de faturamento do cliente no momento (snapshot, editável aqui). Cliente sem unidade definida
+  // cai na aba aberta; se a aba for "A definir" fica em branco e o campo obrigatório pede para escolher.
+  useEffect(() => {
+    if (conta || !usaUnidadeFaturamento) return;
+    setForm((f) => {
+      if (f.unidade_faturamento) return f;
+      const doCliente = clientes.find((c) => c.id === f.cliente_id)?.unidade_faturamento;
+      const valor = ehUnidadeFaturamento(doCliente) ? doCliente : unidadeFaturamentoPadrao;
+      return valor ? { ...f, unidade_faturamento: valor } : f;
+    });
+  }, [clientes, conta, usaUnidadeFaturamento, unidadeFaturamentoPadrao]);
+
   function set<K extends keyof FormState>(campo: K, valor: FormState[K]) {
     setForm((f) => ({ ...f, [campo]: valor }));
   }
@@ -72,6 +93,7 @@ export default function ModalContaReceberHortolandia({ unidadeId, conta, inicial
   async function salvar() {
     if (!form.cliente_id) return setErro("Selecione um cliente.");
     if (!form.data_vencimento) return setErro("Informe o vencimento.");
+    if (usaUnidadeFaturamento && !conta && !form.unidade_faturamento) return setErro(MSG_UNIDADE_FATURAMENTO_OBRIGATORIA);
     setSalvando(true);
     setErro(null);
     try {
@@ -84,6 +106,8 @@ export default function ModalContaReceberHortolandia({ unidadeId, conta, inicial
         data_emissao_nf: form.data_emissao_nf || null,
         status: form.status,
         observacoes: form.observacoes || null,
+        // Na edição, vazio volta para "a definir"; SBC não envia o campo.
+        ...(usaUnidadeFaturamento ? { unidade_faturamento: form.unidade_faturamento || null } : {}),
       };
       const res = await fetch(conta ? `/api/faturamento-hortolandia/${conta.id}` : "/api/faturamento-hortolandia", {
         method: conta ? "PATCH" : "POST",
@@ -109,6 +133,7 @@ export default function ModalContaReceberHortolandia({ unidadeId, conta, inicial
         status: c.status,
         observacoes: c.observacoes,
         impostoPercentualManual: c.imposto_percentual_manual,
+        unidadeFaturamento: c.unidade_faturamento ?? null,
       });
     } finally {
       setSalvando(false);
@@ -153,7 +178,13 @@ export default function ModalContaReceberHortolandia({ unidadeId, conta, inicial
             <select
               className="input-field"
               value={form.cliente_id}
-              onChange={(e) => set("cliente_id", e.target.value)}
+              onChange={(e) => {
+                const id = e.target.value;
+                set("cliente_id", id);
+                // Troca de cliente na criação: acompanha a unidade de faturamento do novo cliente, se ela estiver definida.
+                const doCliente = clientes.find((c) => c.id === id)?.unidade_faturamento;
+                if (!conta && usaUnidadeFaturamento && ehUnidadeFaturamento(doCliente)) set("unidade_faturamento", doCliente);
+              }}
             >
               <option value="">Selecione...</option>
               {clientes.map((c) => (
@@ -228,6 +259,14 @@ export default function ModalContaReceberHortolandia({ unidadeId, conta, inicial
               onChange={(e) => set("data_pagamento", e.target.value)}
             />
           </div>
+
+          {usaUnidadeFaturamento && (
+            <CampoUnidadeFaturamento
+              value={form.unidade_faturamento}
+              onChange={(v) => set("unidade_faturamento", v)}
+              obrigatorio={!conta}
+            />
+          )}
 
           <div>
             <label className="label">Observações</label>

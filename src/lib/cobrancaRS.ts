@@ -9,6 +9,7 @@ import {
 } from "@/lib/cobrancaRSRegras";
 import { avisarCobrancaRSSinoPendenteRevisao } from "@/lib/avisarCobrancaRS";
 import { documentoDoCliente, emailDaCobranca } from "@/lib/cobrancaRSDocumento";
+import { ehUnidadeFaturamento, type UnidadeFaturamento } from "@/lib/unidadeFaturamento";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -36,6 +37,19 @@ export interface ResultadoCobranca {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CandidatoVagaComRelacoes = any;
+
+// Snapshot da unidade de faturamento do cliente no momento em que a cobrança nasce (editável depois no modal). Consulta separada de propósito:
+// não mexe nas consultas existentes de geração e, se a coluna ainda não existir ou o cliente estiver "a definir", simplesmente não grava nada.
+// A geração é automática na contratação e nunca é bloqueada por isto — a escolha é exigida ao enviar para validação e ao lançar.
+async function snapshotUnidadeFaturamento(
+  svc: ServiceClient,
+  clienteId: string | null
+): Promise<{ unidade_faturamento?: UnidadeFaturamento }> {
+  if (!clienteId) return {};
+  const { data } = await svc.from("clientes").select("unidade_faturamento").eq("id", clienteId).maybeSingle();
+  const valor = (data as { unidade_faturamento?: string | null } | null)?.unidade_faturamento;
+  return ehUnidadeFaturamento(valor) ? { unidade_faturamento: valor } : {};
+}
 
 export const TITULO_AVISO_VAGA_SEM_CLIENTE = "Cobrança R&S não gerada: vaga sem cliente cadastrado";
 
@@ -165,6 +179,7 @@ export async function gerarCobrancaRSSeAplicavel(
       gerado_por_user_id: geradoPorUserId ?? null,
       // Cobrança herda a unidade da vaga (explícito, não o DEFAULT do banco).
       unidade_id: vaga.unidade_id,
+      ...(await snapshotUnidadeFaturamento(svc, vaga.cliente_id)),
     })
     .select("id")
     .single();
@@ -344,6 +359,7 @@ export async function gerarCobrancaCancelamentoRSSeAplicavel(
     status: "pendente_revisao",
     // Cobrança herda a unidade da vaga (explícito, não o DEFAULT do banco).
     unidade_id: vaga.unidade_id,
+    ...(await snapshotUnidadeFaturamento(svc, vaga.cliente_id)),
   });
 
   if (error) {

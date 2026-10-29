@@ -11,6 +11,7 @@ import { MENSAGEM_AVISO_PREFILL, campoParaFocoInicial, escapeDeveFecharModal, ro
 import { PerguntaVincularEmpresa } from "@/components/VinculoCarteiraCliente";
 import type { EmpresaCandidata } from "@/lib/carteiraVinculo";
 import { devolverFocoSeExistir, prenderTabNoModal } from "@/components/focoDosModais";
+import { ROTULO_BUCKET_FATURAMENTO, UNIDADES_FATURAMENTO, MSG_UNIDADE_FATURAMENTO_OBRIGATORIA, usaUnidadeFaturamento } from "@/lib/unidadeFaturamento";
 import { validarSenhaPortal, PLACEHOLDER_SENHA_PORTAL, ITENS_CHECKLIST_SENHA_PORTAL } from "@/lib/senhaPortal";
 
 // Cadastro a partir de uma solicitação do link público (POST /api/solicitacoes-vagas/[id]/vincular-cliente): a unidade é a da solicitação
@@ -86,6 +87,7 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
   const usuario = useUsuarioLogado();
   const [form, setForm] = useState(FORM_VAZIO);
   const [unidadeId, setUnidadeId] = useState("");
+  const [unidadeFaturamento, setUnidadeFaturamento] = useState("");
   const [servicos, setServicos] = useState<string[]>([]);
   const [processoSimplificado, setProcessoSimplificado] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -152,6 +154,7 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
       setServicos(cliente?.servicos ?? valoresIniciais?.servicos ?? []);
       setProcessoSimplificado(cliente?.processo_simplificado ?? false);
       setUnidadeId(cliente?.unidade_id ?? (unidades?.find((u) => u.ativa) ?? unidades?.[0])?.id ?? "");
+      setUnidadeFaturamento(cliente?.unidade_faturamento ?? "");
       setLogoUrl(cliente?.logo_url ?? null);
       setErroLogo("");
       setErro("");
@@ -185,6 +188,9 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
     ? usuario.unidadeSlugPorId[unidadeIdCliente] ?? null
     : usuario.todasUnidades ? null : usuario.unidadeSlug;
   const timeComercial = responsaveisDaUnidade(unidadeSlugCliente);
+  // Unidade de faturamento (divisão de lucro Monte Mor / Hortolândia): SBC não usa; no cadastro vindo de solicitação o campo fica OCULTO e o cliente nasce "a definir" (NULL).
+  const mostrarUnidadeFaturamento = usaUnidadeFaturamento(unidadeSlugCliente);
+  const unidadeFaturamentoObrigatoria = mostrarUnidadeFaturamento && !cliente && !solicitacao;
 
   useEffect(() => {
     if (!isOpen || cliente) return;
@@ -297,6 +303,7 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
   };
 
   const handleSalvar = async (extra?: { confirmar_duplicidade?: boolean; liberar_bloqueio?: boolean }) => {
+    if (unidadeFaturamentoObrigatoria && !unidadeFaturamento) { setErro(MSG_UNIDADE_FATURAMENTO_OBRIGATORIA); return; }
     setSalvando(true);
     setErro("");
     setDuplicidade(null);
@@ -361,6 +368,8 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
           servicos,
           processo_simplificado: processoSimplificado,
           ...(unidades && unidadeId ? { unidade_id: unidadeId } : {}),
+          // Na edição, vazio volta o cliente para "a definir"; no cadastro novo o campo é obrigatório (checado acima).
+          ...(mostrarUnidadeFaturamento && (unidadeFaturamento || editando) ? { unidade_faturamento: unidadeFaturamento || null } : {}),
           ...extra,
         }),
       });
@@ -715,6 +724,22 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
                   ? "Só pode ser alterada enquanto o cliente não tiver vagas nem encaminhamentos."
                   : "Só a equipe desta unidade vai enxergar o cliente."}
               </p>
+            </div>
+          )}
+
+          {/* Unidade de faturamento — define em qual unidade o lucro do cliente entra (Monte Mor ou Hortolândia) */}
+          {mostrarUnidadeFaturamento && !solicitacao && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                Unidade de faturamento{unidadeFaturamentoObrigatoria ? " *" : ""}
+              </label>
+              <select value={unidadeFaturamento} onChange={(e) => setUnidadeFaturamento(e.target.value)} className="input-field">
+                <option value="">{unidadeFaturamentoObrigatoria ? "Selecione..." : ROTULO_BUCKET_FATURAMENTO.a_definir}</option>
+                {UNIDADES_FATURAMENTO.map((u) => (
+                  <option key={u} value={u}>{ROTULO_BUCKET_FATURAMENTO[u]}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">Define a unidade que fatura as cobranças e lançamentos deste cliente (não muda quem enxerga o cliente).</p>
             </div>
           )}
 

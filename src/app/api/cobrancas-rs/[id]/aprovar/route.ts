@@ -1,3 +1,4 @@
+import { decidirUnidadeFaturamento } from "@/lib/unidadeFaturamento";
 import { SITE_URL } from "@/lib/siteUrl";
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
@@ -62,6 +63,9 @@ export async function POST(_request: NextRequest, { params }: Params) {
   if (cobranca.salario == null || cobranca.salario <= 0) faltando.push(ehCancelamento ? "Salário-base" : "Salário");
   if (!cobranca.cliente_cnpj_snapshot?.trim()) faltando.push(`${rotuloDoc} do cliente`);
   if (!cobranca.cliente_endereco_snapshot?.trim()) faltando.push("Endereço do cliente");
+  // Cobrança de cliente "a definir" (ex.: veio de solicitação/portal) só segue depois de escolher Hortolândia ou Monte Mor; SBC não usa o campo.
+  const { data: unidadeRow } = await svc.from("unidades").select("slug").eq("id", cobranca.unidade_id).maybeSingle();
+  if (!decidirUnidadeFaturamento(unidadeRow?.slug, cobranca.unidade_faturamento, true).ok) faltando.push("Unidade de faturamento");
 
   if (faltando.length > 0) {
     return NextResponse.json(

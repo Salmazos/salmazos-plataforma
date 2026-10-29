@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { conteudoRsSchema } from "@/lib/propostaModelos";
 import { validarCnpj, validarCpf } from "@/lib/documentoBr";
+import { UNIDADES_FATURAMENTO } from "@/lib/unidadeFaturamento";
 import { ESTADOS, CATEGORIAS_HABILITACAO } from "@/lib/solicitacaoVagaCampos";
 import { VALIDADES_LINK_DIAS, VALIDADE_LINK_PADRAO_DIAS } from "@/lib/solicitacaoVagaLink";
 import { salarioPublicoValido } from "@/lib/solicitacaoVagaPublicaForm";
@@ -135,6 +136,10 @@ export const vagaUpdateSchema = vagaCreateSchema.partial().extend({
   motivo_alteracao: z.string().optional(),
 });
 
+// Unidade de faturamento (Monte Mor | Hortolândia). null = "a definir". Quando é obrigatória (cadastro manual de cliente, criação de
+// lançamento) quem exige é a rota, porque depende da unidade de visibilidade (SBC não usa o campo).
+const unidadeFaturamentoSchema = z.enum(UNIDADES_FATURAMENTO).nullable().optional();
+
 // ── Cliente ──────────────────────────────────────────────────────────────────
 
 export const clienteCreateSchema = z.object({
@@ -157,6 +162,7 @@ export const clienteCreateSchema = z.object({
   // Só é respeitado pra quem tem acesso a todas as unidades; os demais criam sempre na
   // própria unidade (ver POST /api/clientes).
   unidade_id: z.string().uuid().optional(),
+  unidade_faturamento: unidadeFaturamentoSchema,
   // Trava de duplicidade (lib/clienteDuplicidade.ts): "cadastrar mesmo assim" num aviso, e liberação de um
   // bloqueio por telefone+e-mail (só PAPEIS_FULL_ACCESS; a rota responde 403 pra quem não pode).
   confirmar_duplicidade: z.boolean().optional(),
@@ -181,6 +187,7 @@ export const clienteUpdateSchema = z.object({
   endereco: z.string().optional().nullable(),
   processo_simplificado: z.boolean().optional(),
   unidade_id: z.string().uuid().optional(),
+  unidade_faturamento: unidadeFaturamentoSchema,
   confirmar_duplicidade: z.boolean().optional(),
   liberar_bloqueio: z.boolean().optional(),
 });
@@ -1486,6 +1493,7 @@ export const cobrancaRsRascunhoSchema = z.object({
   cliente_cnpj: z.string().optional().nullable(),
   cliente_endereco: z.string().optional().nullable(),
   prazo_cobranca: z.string().optional().nullable(),
+  unidade_faturamento: unidadeFaturamentoSchema,
 });
 
 // ── Cobrança R&S — data de vencimento (rota dedicada, editável fora de
@@ -1535,6 +1543,7 @@ const contaReceberHortolandiaBase = z.object({
   data_emissao_nf: z.string().optional().nullable(),
   status: z.enum(["pendente", "pago", "cancelado"]).optional(),
   observacoes: z.string().trim().optional().nullable(),
+  unidade_faturamento: unidadeFaturamentoSchema,
 });
 
 export const contaReceberHortolandiaCreateSchema = contaReceberHortolandiaBase.extend({
@@ -1570,6 +1579,7 @@ const contaPagarHortolandiaBase = z.object({
   descricao: z.string().trim().min(1, "Descrição é obrigatória"),
   valor: coerceNumber,
   responsavel: z.string().trim().min(1, "Responsável é obrigatório"),
+  unidade_faturamento: unidadeFaturamentoSchema,
 });
 
 // Mesma regra da entrada: unidade só na criação, a edição nunca troca.

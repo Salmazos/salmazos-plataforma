@@ -22,6 +22,13 @@ import {
   saidasDosCards,
   type FiltrosFaturamento,
 } from "@/lib/faturamentoUnidadesFiltros";
+import {
+  bucketFaturamento,
+  ROTULO_BUCKET_FATURAMENTO,
+  contarPorBucket,
+  filtrarPorBucket,
+  type BucketFaturamento,
+} from "@/lib/unidadeFaturamento";
 
 export interface ContaReceberRow {
   id: string;
@@ -37,6 +44,8 @@ export interface ContaReceberRow {
   // Exceção por lançamento ao imposto do mês — null segue o imposto do mês normalmente
   // (ver valorLiquidoRow); preenchido, trava esse lançamento nessa alíquota própria.
   impostoPercentualManual: number | null;
+  // Snapshot da unidade de faturamento no lançamento (monte_mor | hortolandia); null = "a definir".
+  unidadeFaturamento: string | null;
 }
 
 // Contas a pagar (saída) — contraparte de ContaReceberRow. Sem cliente/status/vencimento:
@@ -47,6 +56,7 @@ export interface ContaPagarRow {
   descricao: string;
   valor: number;
   responsavel: string;
+  unidadeFaturamento: string | null;
 }
 
 interface Props {
@@ -54,6 +64,8 @@ interface Props {
   unidadeId: string;
   nomeUnidade: string;
   unidadesOpcoes: { id: string; nome: string }[];
+  // Só a unidade Monte Mor/Hortolândia divide em abas Hortolândia | Monte Mor | A definir; SBC segue só por unidade_id.
+  usaUnidadeFaturamento: boolean;
   // Não-sócio liberado pelo acesso customizado (ex: supervisor de SBC) só visualiza — a API
   // recusa qualquer escrita (checarEscritaFaturamento); aqui só some com os controles.
   somenteLeitura: boolean;
@@ -110,6 +122,7 @@ export default function FaturamentoHortolandiaPageClient({
   unidadeId,
   nomeUnidade,
   unidadesOpcoes,
+  usaUnidadeFaturamento,
   somenteLeitura,
   rowsIniciais,
   saidasIniciais,
@@ -119,8 +132,16 @@ export default function FaturamentoHortolandiaPageClient({
   impostosPorMesInicial,
 }: Props) {
   const searchParams = useSearchParams();
-  const [rows, setRows] = useState(rowsIniciais);
-  const [saidas, setSaidas] = useState(saidasIniciais);
+  const [rowsTodas, setRows] = useState(rowsIniciais);
+  const [saidasTodas, setSaidas] = useState(saidasIniciais);
+  // Aba de unidade de faturamento. Tudo abaixo (tabela, filtros, cards) trabalha em cima dos itens da aba; o imposto do mês
+  // é por lançamento (percentualEfetivo), então a soma das abas fecha com o total da unidade, e o carregamento da página
+  // continua trazendo TODOS os lançamentos da unidade_id.
+  const [aba, setAba] = useState<BucketFaturamento>("hortolandia");
+  const rows = useMemo(() => (usaUnidadeFaturamento ? filtrarPorBucket(rowsTodas, aba) : rowsTodas), [rowsTodas, aba, usaUnidadeFaturamento]);
+  const saidas = useMemo(() => (usaUnidadeFaturamento ? filtrarPorBucket(saidasTodas, aba) : saidasTodas), [saidasTodas, aba, usaUnidadeFaturamento]);
+  const contagemEntradas = useMemo(() => contarPorBucket(rowsTodas), [rowsTodas]);
+  const contagemSaidas = useMemo(() => contarPorBucket(saidasTodas), [saidasTodas]);
   const [visao, setVisao] = useState<Visao>("entradas");
   const [tab, setTab] = useState<FiltroTab>("pendente");
   // Abre SEMPRE sem filtro (regra de abertura do Olver, ver faturamentoUnidadesFiltros.ts) e
@@ -136,8 +157,9 @@ export default function FaturamentoHortolandiaPageClient({
   useEffect(() => {
     const abrirId = searchParams.get("abrir");
     if (!abrirId) return;
-    const row = rows.find((r) => r.id === abrirId);
+    const row = rowsTodas.find((r) => r.id === abrirId);
     if (row) {
+      setAba(bucketFaturamento(row.unidadeFaturamento));
       // Só visualização: mostra na lista (aba Todas), sem abrir o modal de edição.
       if (!somenteLeitura) setContaAberta(row);
       setTab("todas");
@@ -336,6 +358,8 @@ export default function FaturamentoHortolandiaPageClient({
       const existe = prev.some((r) => r.id === row.id);
       return existe ? prev.map((r) => (r.id === row.id ? row : r)) : [row, ...prev];
     });
+    // Segue o lançamento para a aba da unidade escolhida, senão ele "sumiria" da aba aberta.
+    if (usaUnidadeFaturamento) setAba(bucketFaturamento(row.unidadeFaturamento));
     setContaAberta(null);
   }
 
@@ -349,6 +373,7 @@ export default function FaturamentoHortolandiaPageClient({
       const existe = prev.some((s) => s.id === row.id);
       return existe ? prev.map((s) => (s.id === row.id ? row : s)) : [row, ...prev];
     });
+    if (usaUnidadeFaturamento) setAba(bucketFaturamento(row.unidadeFaturamento));
     setContaPagarAberta(null);
   }
 
@@ -508,6 +533,35 @@ export default function FaturamentoHortolandiaPageClient({
           </p>
         </div>
       </div>
+
+      {usaUnidadeFaturamento && (
+        <div className="flex flex-wrap gap-2 mb-4" role="tablist" aria-label="Unidade de faturamento">
+          {(["hortolandia", "monte_mor", "a_definir"] as const).map((b) => {
+            const n = contagemEntradas[b] + contagemSaidas[b];
+            const ativa = aba === b;
+            return (
+              <button
+                key={b}
+                type="button"
+                role="tab"
+                aria-selected={ativa}
+                onClick={() => setAba(b)}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  border: ativa ? "1px solid #FFD700" : "1px solid #E5E7EB",
+                  background: ativa ? "#000" : "#fff",
+                  color: ativa ? "#FFD700" : b === "a_definir" && n > 0 ? "#92400E" : "#374151",
+                }}
+              >
+                {ROTULO_BUCKET_FATURAMENTO[b]} ({n})
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Visão Entradas/Saídas — troca a tabela abaixo, os totais acima sempre mostram os
           dois lados juntos independente da aba selecionada. */}
@@ -804,6 +858,8 @@ export default function FaturamentoHortolandiaPageClient({
       {contaAberta && (
         <ModalContaReceberHortolandia
           unidadeId={unidadeId}
+          usaUnidadeFaturamento={usaUnidadeFaturamento}
+          unidadeFaturamentoPadrao={aba === "a_definir" ? "" : aba}
           conta={contaAberta === "novo" ? null : contaAberta}
           onClose={() => setContaAberta(null)}
           onSalva={handleSalva}
@@ -814,6 +870,8 @@ export default function FaturamentoHortolandiaPageClient({
       {contaPagarAberta && (
         <ModalContaPagarHortolandia
           unidadeId={unidadeId}
+          usaUnidadeFaturamento={usaUnidadeFaturamento}
+          unidadeFaturamentoPadrao={aba === "a_definir" ? "" : aba}
           conta={contaPagarAberta === "novo" ? null : contaPagarAberta}
           onClose={() => setContaPagarAberta(null)}
           onSalva={handleSalvaSaida}

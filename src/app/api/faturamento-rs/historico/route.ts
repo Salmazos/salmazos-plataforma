@@ -1,7 +1,8 @@
+import { lerBucketFaturamento } from "@/lib/unidadeFaturamento";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoFaturamentoRs } from "@/lib/faturamentoRsAuth";
-import { limitesMesBrasil } from "@/lib/faturamentoRS";
+import { filtrarCobrancasPorBucket, limitesMesBrasil } from "@/lib/faturamentoRS";
 import { obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
 import { obterContextoUnidade, resolverFiltroUnidade } from "@/lib/unidadeAuth";
 
@@ -56,10 +57,12 @@ export async function GET(request: NextRequest) {
     .gte("pago_em", primeiro.inicio)
     .lt("pago_em", ultimo.fim);
   if (unidadeId) cobrancasQuery = cobrancasQuery.eq("unidade_id", unidadeId);
+  const faturamento = lerBucketFaturamento(searchParams.get("faturamento"));
+  cobrancasQuery = filtrarCobrancasPorBucket(cobrancasQuery, faturamento);
 
   const [{ data: cobrancas }, { data: ajustes }, { data: impostos }] = await Promise.all([
     cobrancasQuery,
-    unidadeId
+    unidadeId || faturamento
       ? Promise.resolve({ data: [] as { ano: number; mes: number; valor: number }[] })
       : svc
           .from("faturamento_rs_ajustes_manuais")

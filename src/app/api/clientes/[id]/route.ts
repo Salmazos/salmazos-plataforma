@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, clienteUpdateSchema } from "@/lib/schemas";
 import { checarAcessoClientes } from "@/lib/comercialAuth";
 import { checarAcessoCliente, resolverUnidadeUsuario } from "@/lib/unidadeAuth";
+import { resolverUnidadeFaturamentoDoLancamento } from "@/lib/faturamentoUnidades";
 import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { avaliarDuplicidade, camposIdentidadeAlterados, type CandidatoCliente } from "@/lib/clienteDuplicidade";
@@ -148,6 +149,21 @@ export async function PATCH(
       }
     }
 
+    // Unidade de faturamento na edição: ausente mantém, null volta para "a definir" (não é obrigatória aqui para não travar a edição de cadastros antigos).
+    let faturamentoCampo: Record<string, unknown> = {};
+    if (parsed.data.unidade_faturamento !== undefined) {
+      let unidadeFinal = novaUnidadeId;
+      if (!unidadeFinal) {
+        const { data: atualUnidade } = await supabase.from("clientes").select("unidade_id").eq("id", id).maybeSingle();
+        unidadeFinal = atualUnidade?.unidade_id;
+      }
+      if (unidadeFinal) {
+        const faturamento = await resolverUnidadeFaturamentoDoLancamento(unidadeFinal, parsed.data.unidade_faturamento, false);
+        if (faturamento.erro) return faturamento.erro;
+        faturamentoCampo = faturamento.campo;
+      }
+    }
+
     const campos: Record<string, unknown> = {};
     if (body.nome !== undefined) campos.nome = body.nome;
     if (body.contato_nome !== undefined) campos.contato_nome = body.contato_nome;
@@ -167,6 +183,7 @@ export async function PATCH(
     if (body.endereco !== undefined) campos.endereco = body.endereco || null;
     if (body.processo_simplificado !== undefined) campos.processo_simplificado = body.processo_simplificado;
     if (novaUnidadeId !== undefined) campos.unidade_id = novaUnidadeId;
+    Object.assign(campos, faturamentoCampo);
 
     const { data, error } = await supabase
       .from("clientes")

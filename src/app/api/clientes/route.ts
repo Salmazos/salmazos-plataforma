@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, clienteCreateSchema } from "@/lib/schemas";
 import { checarAcessoClientes } from "@/lib/comercialAuth";
 import { obterContextoUnidade } from "@/lib/unidadeAuth";
+import { resolverUnidadeFaturamentoDoLancamento } from "@/lib/faturamentoUnidades";
 import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { avaliarDuplicidade } from "@/lib/clienteDuplicidade";
@@ -74,6 +75,11 @@ export async function POST(request: NextRequest) {
     // SBC estando com perfil de Monte Mor/Hortolândia.
     const unidadeId = ctx.todasUnidades && parsed.data.unidade_id ? parsed.data.unidade_id : ctx.unidadeId;
 
+    // Cadastro manual pelo painel: unidade de faturamento obrigatória (menos em SBC, que não usa o campo). Os cadastros vindos de portal/link/solicitação
+    // não passam por aqui (vincular-cliente) e ficam "a definir" até a cobrança ou o lançamento.
+    const faturamento = await resolverUnidadeFaturamentoDoLancamento(unidadeId, parsed.data.unidade_faturamento, true);
+    if (faturamento.erro) return faturamento.erro;
+
     // Pessoa física (CPF no lugar do CNPJ). Cadastro sem tipo_pessoa é PJ, como sempre foi: o CNPJ continua texto livre (sem conferir dígitos,
     // porque os cadastros antigos aceitam qualquer texto); "" vira null, e o par cpf/cnpj nunca sai com os dois preenchidos (check do banco).
     const tipoPessoa = parsed.data.tipo_pessoa ?? "pj";
@@ -123,6 +129,7 @@ export async function POST(request: NextRequest) {
         endereco: body.endereco || null,
         processo_simplificado: body.processo_simplificado ?? false,
         unidade_id: unidadeId,
+        ...faturamento.campo,
         // Colunas novas só vão quando há o que gravar: cadastro PJ comum segue idêntico mesmo antes da migração rodar.
         ...(tipoPessoa === "pf" ? { tipo_pessoa: "pf" } : {}),
         ...(documento.cpf ? { cpf: documento.cpf } : {}),
