@@ -11,6 +11,7 @@ import { sendEmail } from "@/lib/sendEmail";
 import { defaultsCandidatoNovo } from "@/lib/candidatoDefaults";
 import { criarAvisoCliente } from "@/lib/avisoCliente";
 import { chaveDedupAviso, textoAvisoIndicacaoDecidida } from "@/lib/avisoClienteRegras";
+import { avaliarDuplicidade, buscarDuplicadosPorTelefone } from "@/lib/indicacaoDuplicados";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -77,6 +78,21 @@ async function reverterCriados(
 async function motivoDoConflito(service: ReturnType<typeof createServiceClient>, id: string): Promise<"alterada" | "decidida"> {
   const { data } = await service.from("solicitacoes_indicacao_candidato").select("status").eq("id", id).maybeSingle();
   return data?.status === "pendente" ? "alterada" : "decidida";
+}
+
+// Decisão já gravada: o sino da indicação some para todos os analistas (a notificação é broadcast, então vale
+// para a linha inteira). Falha aqui não pode derrubar a decisão — só loga.
+async function marcarNotificacoesComoLidas(service: ReturnType<typeof createServiceClient>, solicitacaoId: string) {
+  try {
+    const { error } = await service
+      .from("notificacoes_analista")
+      .update({ lida: true })
+      .eq("solicitacao_indicacao_id", solicitacaoId)
+      .eq("lida", false);
+    if (error) console.error("[decisao indicacao] Erro ao marcar notificações como lidas:", error);
+  } catch (e) {
+    console.error("[decisao indicacao] Exceção ao marcar notificações como lidas:", e);
+  }
 }
 
 const MSG_ALTERADA = "Esta indicação foi alterada enquanto era analisada. Recarregue e confira os dados antes de decidir.";
@@ -182,6 +198,8 @@ export async function POST(request: NextRequest, { params }: Params) {
         );
       }
 
+      await marcarNotificacoesComoLidas(service, id);
+
       registrarAuditoria({
         usuario_id: user.id,
         usuario_nome: usuarioNome,
@@ -208,6 +226,24 @@ export async function POST(request: NextRequest, { params }: Params) {
     // ── Aprovar ──────────────────────────────────────────────────────────────────────
     if (!vaga || vaga.status !== "aberta") {
       return NextResponse.json({ error: "A vaga desta indicação não está mais aberta." }, { status: 409 });
+    }
+
+    if (parsed.data.candidato_existente_id && parsed.data.confirmar_criar_novo) {
+      return NextResponse.json({ error: "Escolha vincular a um candidato existente OU criar novo, não os dois.", codigo: "escolha_conflitante" }, { status: 400 });
+    }
+
+    // Validação no servidor (não só na UI): sem escolha explícita da analista, telefone repetido não segue.
+    let duplicadosEncontrados: Awaited<ReturnType<typeof buscarDuplicadosPorTelefone>>["duplicados"] = [];
+    if (!parsed.data.candidato_existente_id) {
+      const busca = await buscarDuplicadosPorTelefone(service, sol.candidato_telefone);
+      if (busca.erro) {
+        return NextResponse.json({ error: "Não foi possível verificar candidatos duplicados. Tente novamente." }, { status: 500 });
+      }
+      duplicadosEncontrados = busca.duplicados;
+      const avaliacao = avaliarDuplicidade({ duplicados: duplicadosEncontrados, confirmarCriarNovo: parsed.data.confirmar_criar_novo });
+      if (!avaliacao.ok) {
+        return NextResponse.json({ error: avaliacao.error, codigo: avaliacao.codigo, duplicados: duplicadosEncontrados }, { status: avaliacao.status });
+      }
     }
 
     const nowIso = new Date().toISOString();
@@ -340,6 +376,10 @@ export async function POST(request: NextRequest, { params }: Params) {
         entidade_id: id,
         detalhes: { erro: msgErro(cvErr), cliente: sol.cliente_nome, vaga_id: vaga.id },
       });
+      // UNIQUE (vaga_id, candidato_id): corrida com outra candidatura do mesmo candidato na mesma vaga.
+      if ((cvErr as { code?: string }).code === "23505") {
+        return NextResponse.json({ error: "Este candidato já possui uma candidatura nesta mesma vaga." }, { status: 409 });
+      }
       return NextResponse.json({ error: "Não foi possível vincular o candidato à vaga." }, { status: 400 });
     }
 
@@ -498,6 +538,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       );
     }
 
+    await marcarNotificacoesComoLidas(service, id);
+
     await registrarHistorico({
       candidato_id: candidato.id,
       tipo: vinculadoAoCandidatoExistente ? "encaminhamento" : "cadastro",
@@ -520,6 +562,9 @@ export async function POST(request: NextRequest, { params }: Params) {
         candidatos_vaga_id: candidatoVaga.id,
         vaga_id: vaga.id,
         vinculado_candidato_existente: vinculadoAoCandidatoExistente,
+        // Criação de novo candidato mesmo com telefone repetido, confirmada pela analista: rastro para auditar duplicidade.
+        criado_novo_apesar_de_duplicado: !vinculadoAoCandidatoExistente && duplicadosEncontrados.length > 0,
+        duplicados_ignorados: !vinculadoAoCandidatoExistente ? duplicadosEncontrados.map((d) => d.candidato_id) : undefined,
       },
     });
 

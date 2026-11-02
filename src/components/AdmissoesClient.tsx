@@ -15,6 +15,8 @@ export interface AdmissaoRow {
   token: string;
   modalidade: string;
   status: string;
+  // Função da admissão (admissoes.funcao), exibida junto do título da vaga.
+  funcao?: string | null;
   criado_em: string;
   token_expira_em: string;
   candidatos: { id: string; nome_completo: string; cargo_pretendido: string; telefone: string | null } | null;
@@ -222,7 +224,7 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
                       {c.candidatos?.nome_completo ?? "—"}
                     </p>
                     <p style={{ fontSize: 12, color: "#6B7280", margin: "1px 0 0" }}>
-                      {c.vagas?.titulo ?? "—"} · {c.vagas?.clientes?.nome ?? "—"}
+                      {c.vagas?.titulo ?? "—"}{c.admissao_funcao ? ` (${c.admissao_funcao})` : ""} · {c.vagas?.clientes?.nome ?? "—"}
                     </p>
                   </div>
                   <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#EFF6FF", color: "#1D4ED8", whiteSpace: "nowrap" }}>
@@ -311,7 +313,7 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
                 return (
                   <tr key={row.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
                     <td style={{ padding: "10px 12px", fontWeight: 600, color: "#111827" }}>{row.candidatos?.nome_completo ?? "—"}</td>
-                    <td style={{ padding: "10px 12px", color: "#374151" }}>{row.vagas?.titulo ?? "—"}</td>
+                    <td style={{ padding: "10px 12px", color: "#374151" }}>{row.vagas?.titulo ?? "—"}{row.funcao ? ` (${row.funcao})` : ""}</td>
                     <td style={{ padding: "10px 12px" }}>
                       <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#EFF6FF", color: "#1D4ED8" }}>
                         {MODALIDADE_LABEL[row.modalidade] ?? row.modalidade}
