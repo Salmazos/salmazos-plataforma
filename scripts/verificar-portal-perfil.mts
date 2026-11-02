@@ -68,7 +68,7 @@ caso("idade legível: faixa nova; só mínima; só máxima; e a chave antiga 'id
 });
 
 // ── Schema da rota ───────────────────────────────────────────────────────────
-const corpoBase = { cargo: "Auxiliar", tipo_servico: "recrutamento_selecao", cidade: "Campinas", estado: "SP" };
+const corpoBase = { cargo: "Auxiliar", tipo_servico: "recrutamento_selecao", cidade: "Campinas", estado: "SP", principais_atividades: "Atender clientes" };
 const valida = (perfil_extra: unknown) => parseBody(portalSolicitarVagaSchema, { ...corpoBase, perfil_extra });
 caso("rota: sem perfil_extra o corpo continua válido e sem a chave (comportamento de antes)", () => {
   const r = parseBody(portalSolicitarVagaSchema, corpoBase);

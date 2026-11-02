@@ -390,6 +390,11 @@ export default function SolicitarVagaPage() {
     if (!tipoServico) { setError("Tipo de serviço é obrigatório."); return; }
     if (!cidade.trim()) { setError("Cidade é obrigatória."); return; }
     if (!estado) { setError("Estado é obrigatório."); return; }
+    if (!principaisAtividades.trim()) {
+      setError("Informe as principais atividades do cargo.");
+      document.getElementById("campo-principais_atividades")?.focus();
+      return;
+    }
     const errosDoPerfil = validarPerfilPortal(perfil);
     const primeiroErro = Object.keys(errosDoPerfil)[0];
     if (primeiroErro) {
@@ -942,8 +947,8 @@ export default function SolicitarVagaPage() {
         {/* Vai pra vaga pública logo abaixo de Benefícios — Observações não (na vaga ela vira
             observação interna da Salmazos). */}
         <div className="bg-white rounded-2xl shadow-sm p-6">
-          <label style={labelStyle}>Principais Atividades (opcional)</label>
-          <textarea value={principaisAtividades} onChange={(e) => setPrincipaisAtividades(e.target.value)}
+          <label style={labelStyle}>Principais Atividades *</label>
+          <textarea id="campo-principais_atividades" value={principaisAtividades} onChange={(e) => setPrincipaisAtividades(e.target.value)}
             placeholder="Descreva as principais atividades do cargo (uma por linha)..."
             rows={5} style={{ ...inputStyle, resize: "vertical" }} />
           <p className="text-xs text-gray-400 mt-1">Aparece na vaga publicada para os candidatos.</p>

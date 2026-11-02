@@ -363,7 +363,7 @@ caso("snapshot das condições sai SÓ do link (corpo da requisição não entra
   assert.deepEqual(snap.clausulas_adicionais, ["Extra"]);
   assert.equal(snap.itens.at(-1)!.numero, "1.7");
   // O schema público descarta qualquer tentativa de mandar condições no corpo.
-  const form = baseForm();
+  const form = baseForm({ principais_atividades: "Atender clientes" });
   const corpo = { ...montarCorpoEnvio(form), condicoes: { taxa_sem_reposicao_pct: 1 }, condicoes_aceitas: { x: 1 }, tipo_servico: "terceirizacao", unidade_id: "outra", link_id: "outro" };
   const r = publicoSolicitarVagaSchema.safeParse(corpo);
   assert.ok(r.success);
@@ -440,9 +440,9 @@ caso("etapas 2 a 4: obrigatórios, limites e aceite", () => {
   assert.ok("estado" in validarEtapa(2, baseForm({ estado: "" })));
   assert.deepEqual(validarEtapa(2, baseForm()), {});
   assert.ok("habilitacao_categoria" in validarEtapa(3, baseForm({ habilitacao: "sim", habilitacao_categoria: "" })));
-  assert.deepEqual(validarEtapa(3, baseForm({ habilitacao: "sim", habilitacao_categoria: "B" })), {});
+  assert.deepEqual(validarEtapa(3, baseForm({ habilitacao: "sim", habilitacao_categoria: "B", principais_atividades: "Atender clientes" })), {});
   assert.ok("aceite" in validarEtapa(4, baseForm({ aceite: false })));
-  assert.equal(validarTudo(baseForm()), null);
+  assert.equal(validarTudo(baseForm({ principais_atividades: "Atender clientes" })), null);
   assert.equal(validarTudo(baseForm({ cidade: "" }))?.etapa, 2);
 });
 caso("formularioPreenchido: vazio não avisa; digitar algo avisa; nome vindo do link não conta", () => {
@@ -455,6 +455,7 @@ caso("formularioPreenchido: vazio não avisa; digitar algo avisa; nome vindo do 
 // ── Corpo de envio × schema do servidor ──────────────────────────────────────
 caso("corpo de envio completo passa no schema público e leva só o permitido", () => {
   const form = baseForm({
+    principais_atividades: "Atender clientes",
     local_trabalho: "Rua A, 10", previsao_inicio: "2026-11-10", salario: "2500", sexo: "fem", idade: "até 35", pcd: "sim",
     habilitacao: "sim", habilitacao_categoria: "B", veiculo_proprio: "sim",
     horario: { ...HORARIO_VAZIO, tipo: "seg_sex", entrada: "08:00", saida: "17:00" },
@@ -471,20 +472,20 @@ caso("corpo de envio completo passa no schema público e leva só o permitido", 
   }
 });
 caso("schema público: aceite obrigatório, honeypot aceito (a rota é que descarta), PJ sem contato falha, PF sem contato passa", () => {
-  const corpo = montarCorpoEnvio(baseForm());
+  const corpo = montarCorpoEnvio(baseForm({ principais_atividades: "Atender clientes" }));
   assert.ok(!publicoSolicitarVagaSchema.safeParse({ ...corpo, aceite_condicoes: false }).success);
   const semAceite: Record<string, unknown> = { ...corpo };
   delete semAceite.aceite_condicoes;
   assert.ok(!publicoSolicitarVagaSchema.safeParse(semAceite).success);
   assert.ok(publicoSolicitarVagaSchema.safeParse({ ...corpo, website: "http://spam" }).success);
   assert.ok(!publicoSolicitarVagaSchema.safeParse({ ...corpo, contato_nome: null }).success, "PJ sem contato");
-  const pf = montarCorpoEnvio(baseForm({ tipo_pessoa: "pf", nome: "João", documento: CPF_OK }));
+  const pf = montarCorpoEnvio(baseForm({ tipo_pessoa: "pf", nome: "João", documento: CPF_OK, principais_atividades: "Atender clientes" }));
   assert.equal(pf.contato_nome, null);
   assert.ok(publicoSolicitarVagaSchema.safeParse(pf).success, "PF sem contato");
   assert.ok(!publicoSolicitarVagaSchema.safeParse({ ...pf, documento: CNPJ_OK.replace(/\D/g, "") }).success, "CNPJ em PF");
 });
 caso("schema público: limite em TODOS os textos, e-mail/CNPJ/telefone/UF inválidos, valores fora da lista", () => {
-  const corpo = montarCorpoEnvio(baseForm());
+  const corpo = montarCorpoEnvio(baseForm({ principais_atividades: "Atender clientes" }));
   const falha = (parcial: Record<string, unknown>) => !publicoSolicitarVagaSchema.safeParse({ ...corpo, ...parcial }).success;
   const longo = (n: number) => "x".repeat(n + 1);
   const limites: [string, number][] = [
@@ -603,7 +604,7 @@ async function chamarRota(db: any, fn: (...a: any[]) => Promise<Response>, { met
   return { status: r.status, body: await r.json() };
 }
 const postPublico = (db: any, corpo: unknown, opcoes: { token?: string; ip?: string } = {}) => chamarRota(db, rotaPublica.POST, { metodo: "POST", corpo, ...opcoes });
-const corpoValido = (extra: Record<string, unknown> = {}) => ({ ...montarCorpoEnvio(baseForm({ nome: "Cliente Digitado SA", requisitos: { chips: { "CNH B": true }, cursos: {}, condicoes: {}, custom: [] }, sexo: "masc", idade: "até 40" })), ...extra });
+const corpoValido = (extra: Record<string, unknown> = {}) => ({ ...montarCorpoEnvio(baseForm({ principais_atividades: "Atender clientes", nome: "Cliente Digitado SA", requisitos: { chips: { "CNH B": true }, cursos: {}, condicoes: {}, custom: [] }, sexo: "masc", idade: "até 40" })), ...extra });
 
 const esperarPendentes = async () => { await Promise.all((globalThis as any).__PENDENTES__ ?? []); };
 const silencio = console.error;
@@ -671,7 +672,7 @@ await casoRota("POST público: grava na fila (cliente_id nulo, R&S fixo, origem 
 });
 await casoRota("POST público: PF sem contato grava; honeypot responde 201 mas NÃO grava nem conta uso", async () => {
   const db = novoBanco();
-  const pf = await postPublico(db, montarCorpoEnvio(baseForm({ tipo_pessoa: "pf", nome: "João da Silva", documento: CPF_OK, contato_nome: "" })));
+  const pf = await postPublico(db, montarCorpoEnvio(baseForm({ tipo_pessoa: "pf", nome: "João da Silva", documento: CPF_OK, contato_nome: "", principais_atividades: "Atender clientes" })));
   assert.equal(pf.status, 201);
   assert.equal(db.tabelas.solicitacoes_vagas[0].dados_empresa.tipo_pessoa, "pf");
   assert.equal(db.tabelas.solicitacoes_vagas[0].dados_empresa.cnpj_cpf, CPF_OK);
@@ -1147,7 +1148,7 @@ caso("salário: o corpo de envio leva o formato do portal e Adicionais só no va
   assert.equal(comb.adicionais_salariais, null);
 });
 caso("salário no servidor: aceita só número positivo, R$ x,xx/hora, as duas sentinelas ou vazio", () => {
-  const corpo = montarCorpoEnvio(baseForm());
+  const corpo = montarCorpoEnvio(baseForm({ principais_atividades: "Atender clientes" }));
   const ok = (v: unknown) => publicoSolicitarVagaSchema.safeParse({ ...corpo, salario: v }).success;
   for (const v of ["2500", "2500.5", "R$ 9,50/hora", "R$ 1.234,56/hora", CONST_A_COMBINAR, CONST_PRETENSAO, "", null]) assert.ok(ok(v), String(v));
   for (const v of ["R$ 2.500,00", "uns 3 mil", "0", "-5", "R$ 0,00/hora", "R$ 9,5/hora", "2500,00", "1e3", "Salário a combinar"]) assert.ok(!ok(v), String(v));
