@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { MOTIVOS_REPROVACAO_CLIENTE, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import CampoTelefone from "@/components/ui/CampoTelefone";
+import { MOSTRAR_DIA_TESTE_NO_PORTAL } from "@/lib/diaTestePortal";
 
 interface Props {
   encaminhamentoId: string;
@@ -308,7 +309,7 @@ export default function PortalAvaliacaoBtn({
             admissao_vt: admVt,
             admissao_exame_responsavel: admExameResp || null,
             admissao_local_integracao: integracaoComposta || null,
-            admissao_dia_teste: admDiaTeste.trim() || null,
+            ...(MOSTRAR_DIA_TESTE_NO_PORTAL ? { admissao_dia_teste: admDiaTeste.trim() || null } : {}),
             admissao_telefone_candidato: admTelefone || null,
           } : {}),
         }),
@@ -608,10 +609,12 @@ export default function PortalAvaliacaoBtn({
                         </div>
                         <p className="text-[11px] text-gray-400 mt-1">Preencha os três campos, ou deixe todos em branco.</p>
                       </Field>
-                      <Field label="Dia(s) de teste (se houver)">
-                        <input value={admDiaTeste} onChange={(e) => setAdmDiaTeste(e.target.value)}
-                          placeholder="Ex.: 05/11 e 06/11" className="input-field" />
-                      </Field>
+                      {MOSTRAR_DIA_TESTE_NO_PORTAL && (
+                        <Field label="Dia(s) de teste (se houver)">
+                          <input value={admDiaTeste} onChange={(e) => setAdmDiaTeste(e.target.value)}
+                            placeholder="Ex.: 05/11 e 06/11" className="input-field" />
+                        </Field>
+                      )}
                     </>
                   )}
 
@@ -703,10 +706,12 @@ export default function PortalAvaliacaoBtn({
                         </div>
                         <p className="text-[11px] text-gray-400 mt-1">Preencha os três campos, ou deixe todos em branco.</p>
                       </Field>
-                      <Field label="Dia(s) de teste (se houver)">
-                        <input value={admDiaTeste} onChange={(e) => setAdmDiaTeste(e.target.value)}
-                          placeholder="Ex.: 05/11 e 06/11" className="input-field" />
-                      </Field>
+                      {MOSTRAR_DIA_TESTE_NO_PORTAL && (
+                        <Field label="Dia(s) de teste (se houver)">
+                          <input value={admDiaTeste} onChange={(e) => setAdmDiaTeste(e.target.value)}
+                            placeholder="Ex.: 05/11 e 06/11" className="input-field" />
+                        </Field>
+                      )}
                     </>
                   )}
 
