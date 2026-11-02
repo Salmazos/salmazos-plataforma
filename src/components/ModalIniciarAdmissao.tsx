@@ -40,6 +40,13 @@ export interface CandidatoElegivel {
   // vagas.tipo_servico) — ver src/lib/tipoServicoVigente.ts. Usar em vez de
   // vagas.tipo_servico direto, que pode divergir do que foi combinado com o cliente.
   tipo_servico_vigente: string | null;
+  // Dados de admissão já combinados (candidatos_vagas.admissao_*; vêm da indicação direta aprovada ou do portal).
+  // Só pré-preenchem o formulário — todos os campos seguem editáveis.
+  admissao_funcao?: string | null;
+  admissao_salario?: number | null;
+  admissao_salario_hora?: number | null;
+  admissao_horario?: string | null;
+  admissao_data_inicio?: string | null;
 }
 
 interface Props {
@@ -109,6 +116,17 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
   const [autorizaAssistencial, setAutorizaAssistencial] = useState<"" | "sim" | "nao">("");
   const [autorizaSindical, setAutorizaSindical] = useState<"" | "sim" | "nao">("");
 
+  const preencherDadosDaAdmissao = (c: CandidatoElegivel) => {
+    setFuncao(c.admissao_funcao?.trim() ?? "");
+    // Horista tem prioridade: a indicação grava só um dos dois valores.
+    const horista = c.admissao_salario_hora != null && Number(c.admissao_salario_hora) > 0;
+    const valor = horista ? c.admissao_salario_hora : c.admissao_salario;
+    setTipoSalario(horista ? "hora" : "mensal");
+    setSalario(valor != null && Number(valor) > 0 ? String(Number(valor)) : "");
+    setHorarioTrabalho(c.admissao_horario?.trim() ?? "");
+    setDataAdmissao(c.admissao_data_inicio ?? "");
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     setResultado(null);
@@ -125,6 +143,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
     setAutorizaSindical("");
 
     if (preSelecionado) {
+      preencherDadosDaAdmissao(preSelecionado);
       // Já sabemos exatamente quem é — pula a tela de busca/seleção e vai direto pros
       // dados da admissão. Continua buscando candidatos-elegiveis em background (não
       // bloqueia nada) só pra "Voltar" ainda funcionar caso o usuário queira trocar de
@@ -153,6 +172,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
   );
 
   const handleSelecionar = (c: CandidatoElegivel) => {
+    preencherDadosDaAdmissao(c);
     setSelecionado(c);
     setModalidade(modalidadeDefault(c.tipo_servico_vigente));
     setEntidadeContratante(c.vagas?.clientes?.entidade_contratante ?? "");

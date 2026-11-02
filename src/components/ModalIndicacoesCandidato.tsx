@@ -33,6 +33,8 @@ interface Indicacao {
   curriculo_url: string | null;
   status: string;
   motivo_recusa: string | null;
+  decidido_por: string | null;
+  decidido_em: string | null;
   created_at: string;
   vagas: { titulo: string; tipo_servico: string } | null;
   admissao_data_inicio: string | null;
@@ -78,6 +80,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
   const [carregandoDuplicados, setCarregandoDuplicados] = useState<Set<string>>(new Set());
   const [vincularPara, setVincularPara] = useState<{ indicacaoId: string; candidatoId: string } | null>(null);
   const [confirmarCriarNovo, setConfirmarCriarNovo] = useState<string | null>(null);
+  const [riscoEntendido, setRiscoEntendido] = useState(false);
 
   const buscarDuplicados = async (indicacaoId: string) => {
     setCarregandoDuplicados((prev) => new Set(prev).add(indicacaoId));
@@ -107,7 +110,8 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
         .then((json) => {
           if (json.data) {
             setItems([json.data]);
-            buscarDuplicados(json.data.id);
+            // Indicação já decidida (sino antigo) abre só como informação: sem busca de duplicado.
+            if (json.data.status === "pendente") buscarDuplicados(json.data.id);
           } else {
             setItems([]);
           }
@@ -121,7 +125,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
       .then((json) => {
         const data = json.data ?? [];
         setItems(data);
-        data.forEach((item: Indicacao) => buscarDuplicados(item.id));
+        data.filter((item: Indicacao) => item.status === "pendente").forEach((item: Indicacao) => buscarDuplicados(item.id));
       })
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
@@ -134,13 +138,17 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
     setTimeout(() => setToast(""), 4000);
   };
 
-  const handleDecidir = async (id: string, acao: "aprovar" | "recusar", candidatoExistenteId?: string) => {
+  const handleDecidir = async (id: string, acao: "aprovar" | "recusar", candidatoExistenteId?: string, confirmarCriarNovoMesmoAssim?: boolean) => {
     if (acao === "recusar" && !motivoRecusa.trim()) return;
     setActionLoading(id);
     setErro(null);
     try {
       const body = acao === "aprovar"
-        ? { acao, ...(candidatoExistenteId && { candidato_existente_id: candidatoExistenteId }) }
+        ? {
+            acao,
+            ...(candidatoExistenteId && { candidato_existente_id: candidatoExistenteId }),
+            ...(confirmarCriarNovoMesmoAssim && { confirmar_criar_novo: true }),
+          }
         : { acao, motivo: motivoRecusa.trim() };
 
       const res = await fetch(`/api/solicitacoes-indicacao-candidato/${id}/decisao`, {
@@ -150,6 +158,12 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
       });
       const json = await res.json();
       if (!res.ok) {
+        // O servidor é a barreira final: se achou duplicado que a tela não mostrava, passa a mostrar.
+        if (res.status === 409 && json.codigo === "duplicado_exige_decisao" && Array.isArray(json.duplicados)) {
+          setDuplicados((prev) => ({ ...prev, [id]: json.duplicados }));
+          setConfirmarCriarNovo(null);
+          setRiscoEntendido(false);
+        }
         setErro({ id, msg: typeof json.error === "string" ? json.error : "Erro ao registrar a decisão." });
         return;
       }
@@ -158,6 +172,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
       setMotivoRecusa("");
       setVincularPara(null);
       setConfirmarCriarNovo(null);
+      setRiscoEntendido(false);
       showToast(
         acao === "aprovar"
           ? candidatoExistenteId
@@ -216,6 +231,9 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                 const isRecusando = recusandoId === it.id;
                 const isLoading = actionLoading === it.id;
                 const admPreenchidos = ADM_CAMPOS.filter((c) => valorAdmissao(it, c.key));
+                const pendente = it.status === "pendente";
+                const temDuplicado = (duplicados[it.id]?.length ?? 0) > 0;
+                const buscandoDuplicado = carregandoDuplicados.has(it.id);
 
                 return (
                   <div key={it.id} className="border border-gray-200 rounded-xl p-5 space-y-3">
@@ -259,14 +277,28 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                       </div>
                     )}
 
+                    {!pendente && (
+                      <div className={`rounded-lg px-3 py-2 text-xs border ${it.status === "aprovada" ? "bg-green-50 border-green-200 text-green-800" : "bg-red-50 border-red-200 text-red-800"}`}>
+                        <p className="font-semibold">
+                          Decidida{it.decidido_por ? ` por ${it.decidido_por}` : ""}
+                          {it.decidido_em ? ` em ${new Date(it.decidido_em).toLocaleDateString("pt-BR")}` : ""}
+                          {" — "}{it.status === "aprovada" ? "Aprovada" : it.status === "recusada" ? "Recusada" : it.status}
+                        </p>
+                        {it.status === "recusada" && it.motivo_recusa && <p className="mt-1">Motivo: {it.motivo_recusa}</p>}
+                      </div>
+                    )}
+
                     {erro?.id === it.id && (
                       <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{erro.msg}</p>
                     )}
 
-                    {(duplicados[it.id]?.length ?? 0) > 0 && !vincularPara && !confirmarCriarNovo && (
+                    {pendente && temDuplicado && !vincularPara && !confirmarCriarNovo && (
                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
                         <p className="text-xs font-semibold text-amber-900">
                           ⚠️ Candidato(s) duplicado(s) encontrado(s)
+                        </p>
+                        <p className="text-xs text-amber-800">
+                          Escolha vincular a um destes ou criar um novo — a aprovação não segue sem essa escolha.
                         </p>
                         {duplicados[it.id].map((dup) => (
                           <div key={dup.candidato_id} className="text-xs text-amber-800 bg-white rounded px-2 py-1.5">
@@ -294,7 +326,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                       </div>
                     )}
 
-                    {vincularPara?.indicacaoId === it.id && (
+                    {pendente && vincularPara?.indicacaoId === it.id && (
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex gap-2 items-center">
                         <p className="text-xs text-blue-900 flex-1">
                           ✓ Vinculando a: <strong>{duplicados[it.id]?.find((d) => d.candidato_id === vincularPara.candidatoId)?.candidato_nome || "..."}</strong>
@@ -308,21 +340,30 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                       </div>
                     )}
 
-                    {confirmarCriarNovo === it.id && (
+                    {pendente && confirmarCriarNovo === it.id && (
                       <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 space-y-2">
                         <p className="text-xs font-semibold text-orange-900">
-                          Tem certeza que deseja criar um novo candidato?
+                          Criar novo candidato mesmo com telefone já cadastrado?
                         </p>
+                        <p className="text-xs text-orange-800">
+                          Risco de duplicidade: a mesma pessoa ficará com dois cadastros, com histórico, documentos e admissões separados.
+                          Só continue se tiver certeza de que não é a mesma pessoa.
+                        </p>
+                        <label className="flex items-start gap-2 text-xs text-orange-900 cursor-pointer">
+                          <input type="checkbox" checked={riscoEntendido} onChange={(e) => setRiscoEntendido(e.target.checked)} className="mt-0.5" />
+                          <span>Confirmo que não é a mesma pessoa e entendo o risco de duplicidade.</span>
+                        </label>
                         <div className="flex gap-2 justify-end">
                           <button
-                            onClick={() => setConfirmarCriarNovo(null)}
+                            onClick={() => { setConfirmarCriarNovo(null); setRiscoEntendido(false); }}
                             className="text-xs text-gray-600 px-2 py-1"
                           >
                             Cancelar
                           </button>
                           <button
-                            onClick={() => { setConfirmarCriarNovo(null); handleDecidir(it.id, "aprovar"); }}
-                            className="text-xs font-semibold text-white bg-orange-600 rounded px-3 py-1 hover:bg-orange-700"
+                            disabled={!riscoEntendido || actionLoading === it.id}
+                            onClick={() => { setConfirmarCriarNovo(null); setRiscoEntendido(false); handleDecidir(it.id, "aprovar", undefined, true); }}
+                            className="text-xs font-semibold text-white bg-orange-600 rounded px-3 py-1 hover:bg-orange-700 disabled:opacity-50"
                           >
                             Sim, criar novo
                           </button>
@@ -330,7 +371,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                       </div>
                     )}
 
-                    {it.status === "pendente" && (
+                    {pendente && (
                       isRecusando ? (
                         <div className="space-y-2">
                           <textarea
@@ -373,10 +414,10 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                             >
                               {isLoading ? "Vinculando..." : "Confirmar vínculo"}
                             </button>
-                          ) : (
+                          ) : temDuplicado ? null : (
                             <button
                               onClick={() => handleDecidir(it.id, "aprovar")}
-                              disabled={isLoading}
+                              disabled={isLoading || buscandoDuplicado}
                               className="text-xs font-semibold text-black bg-[#FFD700] rounded-lg px-3 py-1.5 hover:brightness-95 disabled:opacity-50"
                             >
                               {isLoading ? "Aprovando..." : "Aprovar e registrar candidato"}

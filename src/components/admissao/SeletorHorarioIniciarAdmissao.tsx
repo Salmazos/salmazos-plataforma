@@ -51,7 +51,9 @@ const CHIP_OFF: React.CSSProperties = { backgroundColor: "#fff", color: "#374151
 const labelStyle = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1";
 
 export default function SeletorHorarioIniciarAdmissao({ value, onChange }: Props) {
-  const [tipo, setTipo] = useState<JornadaTipo | "">("");
+  // Horário pré-preenchido (texto livre vindo da indicação do cliente) não tem como virar campos estruturados
+  // sem adivinhar; entra como "Personalizado" e continua editável.
+  const [tipo, setTipo] = useState<JornadaTipo | "">(value.trim() ? "Personalizado" : "");
   const [entrada, setEntrada] = useState("");
   const [saida, setSaida] = useState("");
   const [intervalo, setIntervalo] = useState("");
@@ -60,7 +62,7 @@ export default function SeletorHorarioIniciarAdmissao({ value, onChange }: Props
   const [excecaoDia, setExcecaoDia] = useState("");
   const [excecaoEntrada, setExcecaoEntrada] = useState("");
   const [excecaoSaida, setExcecaoSaida] = useState("");
-  const [personalizado, setPersonalizado] = useState("");
+  const [personalizado, setPersonalizado] = useState(value.trim());
 
   const ehDiaRegular = tipo !== "" && DIAS_REGULARES.has(tipo as JornadaTipo);
   const ehEscala = tipo !== "" && ESCALAS.has(tipo as JornadaTipo);

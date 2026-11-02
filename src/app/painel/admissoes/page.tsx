@@ -58,7 +58,7 @@ export default async function AdmissoesPage() {
   // 'contratado' — é uma lista de "ação pendente", não de elegibilidade ampla.
   const { data: contratadosSemAdmissao } = await svc
     .from("candidatos_vagas")
-    .select("id, candidato_id, vaga_id, updated_at, candidatos(id, nome_completo, cargo_pretendido, telefone), vagas!candidatos_vagas_vaga_id_fkey(id, titulo, status, tipo_servico, cliente_id, unidade_id, clientes(nome, entidade_contratante))")
+    .select("id, candidato_id, vaga_id, updated_at, admissao_funcao, admissao_salario, admissao_salario_hora, admissao_horario, admissao_data_inicio, candidatos(id, nome_completo, cargo_pretendido, telefone), vagas!candidatos_vagas_vaga_id_fkey(id, titulo, status, tipo_servico, cliente_id, unidade_id, clientes(nome, entidade_contratante))")
     .eq("etapa", "contratado")
     .order("updated_at", { ascending: false });
 
@@ -104,6 +104,11 @@ export default async function AdmissoesPage() {
     vaga_id: cv.vaga_id,
     candidatos: cv.candidatos,
     vagas: cv.vagas,
+    admissao_funcao: cv.admissao_funcao,
+    admissao_salario: cv.admissao_salario,
+    admissao_salario_hora: cv.admissao_salario_hora,
+    admissao_horario: cv.admissao_horario,
+    admissao_data_inicio: cv.admissao_data_inicio,
     // Não há "vigente" separado aqui — a regra dessa lista já usa vagas.tipo_servico
     // como fonte única, então o mesmo valor serve pro default de modalidade do modal.
     tipo_servico_vigente: cv.vagas?.tipo_servico ?? null,
