@@ -20,7 +20,7 @@ export async function GET() {
     // daquela unidade (sócios veem todas); sem unidade_id, pra todos.
     .or(filtroNotificacoesVisiveis(user.id, ctx, user.created_at))
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(100);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
