@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import CampoTelefone from "@/components/ui/CampoTelefone";
+import { MOSTRAR_DIA_TESTE_NO_PORTAL } from "@/lib/diaTestePortal";
 
 // Edição de uma indicação já enviada (portal > Minhas Indicações). Pré-preenche com o que foi enviado e
 // manda ao servidor SÓ os campos que mudaram; o servidor refaz o diff e revalida tudo (quem pode editar,
@@ -228,7 +229,7 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
               )}
               {!isRS && campoTexto("admissao_exame_responsavel", "Responsável pelo exame admissional")}
               {!isRS && campoTexto("admissao_local_integracao", "Local e data da integração")}
-              {!isRS && campoTexto("admissao_dia_teste", "Dia(s) de teste (se houver)")}
+              {MOSTRAR_DIA_TESTE_NO_PORTAL && !isRS && campoTexto("admissao_dia_teste", "Dia(s) de teste (se houver)")}
             </div>
 
             <Campo label="Observações">
