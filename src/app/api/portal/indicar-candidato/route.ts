@@ -116,6 +116,7 @@ export async function POST(request: NextRequest) {
         admissao_vt: dados.admissao_vt ?? null,
         admissao_exame_responsavel: dados.admissao_exame_responsavel || null,
         admissao_local_integracao: dados.admissao_local_integracao || null,
+        admissao_dia_teste: dados.admissao_dia_teste?.trim() || null,
         admissao_observacoes: dados.admissao_observacoes || null,
       })
       .select("id")

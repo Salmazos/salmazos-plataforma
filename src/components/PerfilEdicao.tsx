@@ -1009,6 +1009,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
           ["Vale Transporte", admissaoInfo.vt == null ? null : admissaoInfo.vt ? "Sim" : "Não"],
           ["Exame Admissional", admissaoInfo.exame_responsavel],
           ["Local/Data Integração", admissaoInfo.local_integracao],
+          ["Dia(s) de teste", admissaoInfo.dia_teste],
           ["Telefone do Candidato", admissaoInfo.telefone_candidato],
           ["Observações", admissaoInfo.observacoes],
         ];

@@ -20,6 +20,7 @@ export const CAMPOS_ADMISSAO = [
   "admissao_vt",
   "admissao_exame_responsavel",
   "admissao_local_integracao",
+  "admissao_dia_teste",
   "admissao_observacoes",
 ] as const;
 
@@ -47,6 +48,7 @@ export const ROTULO_CAMPO: Record<CampoEditavel, string> = {
   admissao_vt: "Vale transporte",
   admissao_exame_responsavel: "Responsável pelo exame admissional",
   admissao_local_integracao: "Local de integração",
+  admissao_dia_teste: "Dia(s) de teste",
   admissao_observacoes: "Observações",
 };
 

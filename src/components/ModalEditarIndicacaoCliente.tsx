@@ -228,6 +228,7 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
               )}
               {!isRS && campoTexto("admissao_exame_responsavel", "Responsável pelo exame admissional")}
               {!isRS && campoTexto("admissao_local_integracao", "Local e data da integração")}
+              {!isRS && campoTexto("admissao_dia_teste", "Dia(s) de teste (se houver)")}
             </div>
 
             <Campo label="Observações">

@@ -83,6 +83,7 @@ export default function IndicarCandidatoPage() {
   const [admIntegracaoLocal, setAdmIntegracaoLocal] = useState("");
   const [admIntegracaoData, setAdmIntegracaoData] = useState("");
   const [admIntegracaoHora, setAdmIntegracaoHora] = useState("");
+  const [admDiaTeste, setAdmDiaTeste] = useState("");
 
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
@@ -214,6 +215,7 @@ export default function IndicarCandidatoPage() {
           admissao_vt: admVt,
           admissao_exame_responsavel: admExameResp || null,
           admissao_local_integracao: integracaoComposta || null,
+          admissao_dia_teste: admDiaTeste.trim() || null,
           admissao_observacoes: admObservacoes || null,
         }),
       });
@@ -502,6 +504,9 @@ export default function IndicarCandidatoPage() {
                     </div>
                     <p className="text-[11px] text-gray-400 mt-1">Preencha os três campos, ou deixe todos em branco.</p>
                   </Field>
+                  <Field label="Dia(s) de teste (se houver)">
+                    <input value={admDiaTeste} onChange={(e) => setAdmDiaTeste(e.target.value)} placeholder="Ex.: 05/11 e 06/11" style={inputStyle} />
+                  </Field>
                 </>
               )}
 
@@ -576,6 +581,9 @@ export default function IndicarCandidatoPage() {
                       <input type="time" value={admIntegracaoHora} onChange={(e) => setAdmIntegracaoHora(e.target.value)} style={inputStyle} />
                     </div>
                     <p className="text-[11px] text-gray-400 mt-1">Preencha os três campos, ou deixe todos em branco.</p>
+                  </Field>
+                  <Field label="Dia(s) de teste (se houver)">
+                    <input value={admDiaTeste} onChange={(e) => setAdmDiaTeste(e.target.value)} placeholder="Ex.: 05/11 e 06/11" style={inputStyle} />
                   </Field>
                 </>
               )}

@@ -101,7 +101,7 @@ export async function PATCH(request: NextRequest) {
           "admissao_gestor", "admissao_periodo_experiencia", "admissao_observacoes",
           "admissao_funcao", "admissao_salario_hora", "admissao_turno", "admissao_escala",
           "admissao_tempo_contrato", "admissao_vt", "admissao_exame_responsavel",
-          "admissao_local_integracao", "admissao_telefone_candidato",
+          "admissao_local_integracao", "admissao_dia_teste", "admissao_telefone_candidato",
         ];
         for (const key of admKeys) {
           if (body[key] !== undefined) admFields[key] = body[key];
@@ -287,6 +287,7 @@ export async function PATCH(request: NextRequest) {
           admissao_vt: "Vale Transporte",
           admissao_exame_responsavel: "Exame Admissional",
           admissao_local_integracao: "Local/Data Integração",
+          admissao_dia_teste: "Dia(s) de teste",
           admissao_telefone_candidato: "Telefone do Candidato",
           admissao_observacoes: "Observações",
         };

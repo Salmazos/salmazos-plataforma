@@ -22,6 +22,7 @@ const ADM_CAMPOS: { key: string; label: string }[] = [
   { key: "admissao_tempo_contrato", label: "Tempo de Contrato" },
   { key: "admissao_exame_responsavel", label: "Exame Admissional" },
   { key: "admissao_local_integracao", label: "Local/Data Integração" },
+  { key: "admissao_dia_teste", label: "Dia(s) de teste" },
   { key: "admissao_observacoes", label: "Observações" },
 ];
 
