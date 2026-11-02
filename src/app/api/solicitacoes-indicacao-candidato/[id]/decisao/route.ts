@@ -128,6 +128,7 @@ const ADM_LABELS: Record<string, string> = {
   admissao_vt: "Vale Transporte",
   admissao_exame_responsavel: "Exame Admissional",
   admissao_local_integracao: "Local/Data Integração",
+  admissao_dia_teste: "Dia(s) de teste",
   admissao_observacoes: "Observações",
 };
 
@@ -345,6 +346,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         admissao_vt: sol.admissao_vt,
         admissao_exame_responsavel: sol.admissao_exame_responsavel,
         admissao_local_integracao: sol.admissao_local_integracao,
+        admissao_dia_teste: sol.admissao_dia_teste,
         admissao_observacoes: sol.admissao_observacoes,
       })
       .select("id")

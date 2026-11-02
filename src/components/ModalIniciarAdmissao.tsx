@@ -47,6 +47,8 @@ export interface CandidatoElegivel {
   admissao_salario_hora?: number | null;
   admissao_horario?: string | null;
   admissao_data_inicio?: string | null;
+  // Informativo para o RH avisar o candidato (texto livre do cliente); não vira campo da admissão.
+  admissao_dia_teste?: string | null;
 }
 
 interface Props {
@@ -409,6 +411,12 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
                 className="input-field"
               />
             </div>
+
+            {selecionado?.admissao_dia_teste?.trim() && (
+              <p className="mb-4 text-sm rounded-lg px-3 py-2" style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#374151" }}>
+                <span className="font-semibold">Dia(s) de teste:</span> {selecionado.admissao_dia_teste.trim()}
+              </p>
+            )}
 
             <div className="mb-4">
               <div className="flex items-center justify-between mb-1">

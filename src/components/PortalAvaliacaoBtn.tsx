@@ -113,6 +113,7 @@ export default function PortalAvaliacaoBtn({
   const [admIntegracaoLocal, setAdmIntegracaoLocal] = useState("");
   const [admIntegracaoData, setAdmIntegracaoData] = useState("");
   const [admIntegracaoHora, setAdmIntegracaoHora] = useState("");
+  const [admDiaTeste, setAdmDiaTeste] = useState("");
 
   if (statusAtual === "aprovado" || statusAtual === "reprovado") {
     return (
@@ -307,6 +308,7 @@ export default function PortalAvaliacaoBtn({
             admissao_vt: admVt,
             admissao_exame_responsavel: admExameResp || null,
             admissao_local_integracao: integracaoComposta || null,
+            admissao_dia_teste: admDiaTeste.trim() || null,
             admissao_telefone_candidato: admTelefone || null,
           } : {}),
         }),
@@ -606,6 +608,10 @@ export default function PortalAvaliacaoBtn({
                         </div>
                         <p className="text-[11px] text-gray-400 mt-1">Preencha os três campos, ou deixe todos em branco.</p>
                       </Field>
+                      <Field label="Dia(s) de teste (se houver)">
+                        <input value={admDiaTeste} onChange={(e) => setAdmDiaTeste(e.target.value)}
+                          placeholder="Ex.: 05/11 e 06/11" className="input-field" />
+                      </Field>
                     </>
                   )}
 
@@ -696,6 +702,10 @@ export default function PortalAvaliacaoBtn({
                             className="input-field" />
                         </div>
                         <p className="text-[11px] text-gray-400 mt-1">Preencha os três campos, ou deixe todos em branco.</p>
+                      </Field>
+                      <Field label="Dia(s) de teste (se houver)">
+                        <input value={admDiaTeste} onChange={(e) => setAdmDiaTeste(e.target.value)}
+                          placeholder="Ex.: 05/11 e 06/11" className="input-field" />
                       </Field>
                     </>
                   )}

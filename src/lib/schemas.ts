@@ -1072,6 +1072,7 @@ export const portalAvaliarSchema = z.object({
   admissao_vt: z.boolean().optional().nullable(),
   admissao_exame_responsavel: z.string().optional().nullable(),
   admissao_local_integracao: z.string().optional().nullable(),
+  admissao_dia_teste: z.string().optional().nullable(),
   admissao_telefone_candidato: z.string().optional().nullable(),
 });
 
@@ -1110,6 +1111,7 @@ export const portalIndicarCandidatoSchema = z.object({
   admissao_vt: z.boolean().optional().nullable(),
   admissao_exame_responsavel: z.string().optional().nullable(),
   admissao_local_integracao: z.string().optional().nullable(),
+  admissao_dia_teste: z.string().optional().nullable(),
   admissao_observacoes: z.string().optional().nullable(),
 });
 

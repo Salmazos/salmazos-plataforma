@@ -58,6 +58,7 @@ export interface AdmissaoInfo {
   vt: boolean | null;
   exame_responsavel: string | null;
   local_integracao: string | null;
+  dia_teste: string | null;
   telefone_candidato: string | null;
   observacoes: string | null;
 }
