@@ -946,7 +946,8 @@ export const portalSolicitarVagaSchema = z.object({
   requisitos_chips: z.array(z.string()).optional().nullable(),
   beneficios: z.string().optional().nullable(),
   beneficios_chips: z.record(z.string(), z.boolean()).optional().nullable(),
-  principais_atividades: z.string().optional().nullable(),
+  // Obrigatório só na criação pelo cliente (vai para a vaga publicada); a edição e as vagas do RH seguem opcionais.
+  principais_atividades: z.string("Informe as principais atividades do cargo.").trim().min(1, "Informe as principais atividades do cargo."),
   observacoes: z.string().optional().nullable(),
   horario_padrao: horarioPadraoSchema.optional().nullable(),
   confidencial: z.boolean().optional().default(false),
@@ -1016,7 +1017,7 @@ export const publicoSolicitarVagaSchema = z
       .optional()
       .nullable()
       .refine((r) => !r || Object.keys(r).length <= 60, "Muitos benefícios."),
-    principais_atividades: textoOpcionalPublico(3000),
+    principais_atividades: z.string("Informe as principais atividades do cargo.").trim().min(1, "Informe as principais atividades do cargo.").max(3000, "Use no máximo 3000 caracteres."),
     observacoes: textoOpcionalPublico(2000),
     sexo: z.enum(["masc", "fem", "indiferente"]).default("indiferente"),
     idade: textoOpcionalPublico(60),

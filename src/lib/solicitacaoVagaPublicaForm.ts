@@ -255,7 +255,8 @@ export function validarEtapa(etapa: Etapa, form: FormPublico): ErrosForm {
   if (etapa === 3) {
     if (excede(form.idade, 60)) erros.idade = "Use no máximo 60 caracteres.";
     if (form.habilitacao === "sim" && !form.habilitacao_categoria) erros.habilitacao_categoria = "Escolha a categoria da habilitação.";
-    if (excede(form.principais_atividades, 3000)) erros.principais_atividades = "Use no máximo 3000 caracteres.";
+    if (!form.principais_atividades.trim()) erros.principais_atividades = "Informe as principais atividades do cargo.";
+    else if (excede(form.principais_atividades, 3000)) erros.principais_atividades = "Use no máximo 3000 caracteres.";
     if (excede(form.observacoes, 2000)) erros.observacoes = "Use no máximo 2000 caracteres.";
   }
 

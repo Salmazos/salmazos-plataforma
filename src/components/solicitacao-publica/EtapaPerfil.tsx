@@ -113,7 +113,8 @@ export default function EtapaPerfil({ form, atualizar, erros }: PropsEtapa) {
         <div className="space-y-2">
           <CampoTexto
             id="campo-principais_atividades"
-            rotulo="Principais Atividades (opcional)"
+            rotulo="Principais Atividades"
+            obrigatorio
             multilinha
             linhas={5}
             valor={form.principais_atividades}
