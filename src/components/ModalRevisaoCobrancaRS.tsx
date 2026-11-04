@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import { rotuloDocumento, tipoDocumentoDaCobranca } from "@/lib/cobrancaRSDocumento";
 import { observacaoLancamentoCobranca } from "@/lib/cobrancaRSFaturamento";
+import { calcularFeeValor } from "@/lib/cobrancaRSCorrecao";
 import { ROTULO_BUCKET_FATURAMENTO, bucketFaturamento } from "@/lib/unidadeFaturamento";
 import CampoUnidadeFaturamento from "@/components/ui/CampoUnidadeFaturamento";
 import ModalContaReceberHortolandia from "./ModalContaReceberHortolandia";
@@ -115,6 +116,15 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
   const [vencimentoSalvo, setVencimentoSalvo] = useState(false);
   const [reenviando, setReenviando] = useState(false);
   const [reenviado, setReenviado] = useState(false);
+
+  // Correção da taxa (%) depois de aprovada — rota própria (corrigir-taxa); o formulário de revisão continua congelado.
+  const [corrigindoTaxa, setCorrigindoTaxa] = useState(false);
+  const [taxaNova, setTaxaNova] = useState("");
+  const [salvandoTaxa, setSalvandoTaxa] = useState(false);
+  const [taxaSalva, setTaxaSalva] = useState(false);
+  // Avisos devolvidos pelas rotas (ex.: lançamento em Faturamento Unidades já pago, que não é alterado).
+  const [avisosTaxa, setAvisosTaxa] = useState<string[]>([]);
+  const [avisosVencimento, setAvisosVencimento] = useState<string[]>([]);
 
   const [lancando, setLancando] = useState(false);
   const [avisoJaLancada, setAvisoJaLancada] = useState(false);
@@ -238,6 +248,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
     setSalvandoVencimento(true);
     setErro("");
     setVencimentoSalvo(false);
+    setAvisosVencimento([]);
     try {
       const res = await fetch(`/api/cobrancas-rs/${cobrancaId}/vencimento`, {
         method: "PATCH",
@@ -246,6 +257,7 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
       });
       const json = await res.json();
       if (!res.ok) { setErro(json.error || "Erro ao salvar vencimento."); return; }
+      setAvisosVencimento(Array.isArray(json.avisos) ? json.avisos : []);
       setCobranca({ ...json.data, clientes: cobranca?.clientes ?? null, lancamento_faturamento: cobranca?.lancamento_faturamento, usa_unidade_faturamento: cobranca?.usa_unidade_faturamento });
       // Persiste até o usuário editar o campo de novo ou fechar o modal — diferente dos
       // outros banners "some sozinho" desta tela (salvo/reenviado), este já passou
@@ -255,6 +267,47 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
       setErro("Erro de conexão. Tente novamente.");
     } finally {
       setSalvandoVencimento(false);
+    }
+  };
+
+  const taxaNovaNumero = Number(taxaNova.replace(",", "."));
+  const taxaNovaValida = taxaNova.trim() !== "" && Number.isFinite(taxaNovaNumero) && taxaNovaNumero > 0 && taxaNovaNumero <= 100;
+  const salarioDaCobranca = Number(cobranca?.salario ?? 0);
+  // Prévia na hora: mesma conta do servidor (calcularFeeValor), sem chamada de rede.
+  const feeValorNovoPreview = taxaNovaValida && salarioDaCobranca > 0 ? calcularFeeValor(salarioDaCobranca, taxaNovaNumero) : null;
+  const taxaMudou = taxaNovaValida && taxaNovaNumero !== Number(cobranca?.fee_percentual);
+
+  const abrirCorrecaoTaxa = () => {
+    setTaxaNova(cobranca?.fee_percentual != null ? String(cobranca.fee_percentual) : "");
+    setTaxaSalva(false);
+    setAvisosTaxa([]);
+    setErro("");
+    setCorrigindoTaxa(true);
+  };
+
+  const handleSalvarTaxa = async () => {
+    if (!taxaNovaValida) return;
+    setSalvandoTaxa(true);
+    setErro("");
+    setTaxaSalva(false);
+    setAvisosTaxa([]);
+    try {
+      const res = await fetch(`/api/cobrancas-rs/${cobrancaId}/corrigir-taxa`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fee_percentual: taxaNovaNumero }),
+      });
+      const json = await res.json();
+      if (!res.ok) { setErro(json.error || "Erro ao corrigir a taxa."); return; }
+      setCobranca((c) => (c ? { ...c, ...json.data, clientes: c.clientes ?? null, vagas: c.vagas } : c));
+      onAtualizada(paraLinha({ ...cobranca!, ...json.data }, geradoPorNome));
+      setAvisosTaxa(Array.isArray(json.avisos) ? json.avisos : []);
+      setTaxaSalva(true);
+      setCorrigindoTaxa(false);
+    } catch {
+      setErro("Erro de conexão. Tente novamente.");
+    } finally {
+      setSalvandoTaxa(false);
     }
   };
 
@@ -458,6 +511,64 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                 <p className="text-lg font-bold" style={{ color: "#166534" }}>
                   {cobranca.status === "pendente_revisao" ? formatarMoeda(feeValorPreview) : formatarMoeda(cobranca.fee_valor)}
                 </p>
+
+                {(cobranca.status === "aprovada_enviada" || cobranca.status === "validada") && (
+                  <div className="mt-2">
+                    {!corrigindoTaxa ? (
+                      <button type="button" onClick={abrirCorrecaoTaxa} className="btn-outline text-xs" style={{ whiteSpace: "nowrap" }}>
+                        Corrigir taxa
+                      </button>
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nova taxa (%)</label>
+                        <div className="flex gap-2 items-center">
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min={0}
+                            max={100}
+                            step="0.01"
+                            value={taxaNova}
+                            onChange={(e) => setTaxaNova(e.target.value)}
+                            className="input-field"
+                            style={{ maxWidth: 140 }}
+                            aria-label="Nova taxa em porcentagem"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSalvarTaxa}
+                            disabled={salvandoTaxa || !taxaMudou}
+                            className="btn-outline disabled:opacity-50"
+                            style={{ whiteSpace: "nowrap" }}
+                          >
+                            {salvandoTaxa ? "Salvando..." : "Salvar"}
+                          </button>
+                          <button type="button" onClick={() => setCorrigindoTaxa(false)} disabled={salvandoTaxa} className="text-xs text-gray-500 px-2 py-1">
+                            Cancelar
+                          </button>
+                        </div>
+                        <p className="text-sm mt-1">
+                          <span className="text-gray-500">Novo valor:</span>{" "}
+                          <strong>{feeValorNovoPreview != null ? formatarMoeda(feeValorNovoPreview) : "—"}</strong>
+                        </p>
+                        {taxaNova.trim() !== "" && !taxaNovaValida && (
+                          <p className="text-xs text-red-600 mt-1">Informe uma taxa maior que 0 e até 100.</p>
+                        )}
+                        <p className="text-gray-400 text-xs mt-1">Atualiza o valor da cobrança, a contratação e o lançamento em Faturamento Unidades.</p>
+                      </div>
+                    )}
+                    {taxaSalva && !corrigindoTaxa && (
+                      <p className="text-green-700 text-sm mt-2">✅ Taxa corrigida para {cobranca.fee_percentual}%.</p>
+                    )}
+                    {avisosTaxa.length > 0 && (
+                      <div role="status" className="text-amber-900 text-sm bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 mt-2 space-y-1">
+                        {avisosTaxa.map((a) => (
+                          <p key={a}>{a}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {erro && <p className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">{erro}</p>}
@@ -600,6 +711,13 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                         {salvandoVencimento ? "Salvando..." : "Salvar"}
                       </button>
                     </div>
+                    {avisosVencimento.length > 0 && (
+                      <div role="status" className="text-amber-900 text-sm bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 mt-2 space-y-1">
+                        {avisosVencimento.map((a) => (
+                          <p key={a}>{a}</p>
+                        ))}
+                      </div>
+                    )}
                     {vencimentoSalvo && (
                       <div className="mt-2 flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm font-medium text-green-800">
                         <span>✅</span>

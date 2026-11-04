@@ -7,6 +7,7 @@ import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { avisarCobrancaRSEmail } from "@/lib/avisarCobrancaRS";
 import { EVENTO_COBRANCA_RS_VALIDADA, TIPO_EMAIL_COBRANCA_VALIDADA } from "@/lib/cobrancaRSRegras";
+import { avisoLancamentoPago, buscarLancamentosDaCobranca, separarLancamentos } from "@/lib/cobrancaRSCorrecao";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -65,6 +66,40 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
+  // O lançamento correspondente em Faturamento Unidades (vínculo pelo marcador nas observações) acompanha a nova data, desde
+  // que ainda não esteja pago. Só quando a data realmente mudou. A coluna do lançamento não aceita vazio: se a data da cobrança
+  // foi apagada, o lançamento mantém a anterior e a tela é avisada. Se o lançamento não puder ser atualizado, a cobrança volta ao
+  // que era (data e status) e nada é enviado — sem meio caminho.
+  const avisos: string[] = [];
+  const dataMudou = (atual.data_vencimento ?? null) !== novaData;
+  let lancamentosAtualizados: { id: string; de: string; para: string }[] = [];
+  if (dataMudou) {
+    const reverter = () => svc.from("cobrancas_rs").update({ data_vencimento: atual.data_vencimento ?? null, status: atual.status }).eq("id", id);
+    const busca = await buscarLancamentosDaCobranca(svc, id);
+    if (busca.erro) {
+      await reverter();
+      return NextResponse.json({ error: "Não foi possível conferir o lançamento em Faturamento Unidades. O vencimento não foi alterado." }, { status: 500 });
+    }
+    const { pendentes, pagos } = separarLancamentos(busca.lancamentos);
+    if (novaData) {
+      if (pendentes.length > 0) {
+        const { error: lancErr } = await svc
+          .from("contas_receber_hortolandia")
+          .update({ data_vencimento: novaData, atualizado_em: new Date().toISOString() })
+          .in("id", pendentes.map((l) => l.id));
+        if (lancErr) {
+          await reverter();
+          return NextResponse.json({ error: "Não foi possível atualizar o lançamento em Faturamento Unidades. O vencimento não foi alterado." }, { status: 500 });
+        }
+        lancamentosAtualizados = pendentes.map((l) => ({ id: l.id, de: l.data_vencimento, para: novaData }));
+      }
+      const avisoPago = avisoLancamentoPago(pagos, { campo: "vencimento" });
+      if (avisoPago) avisos.push(avisoPago);
+    } else if (pendentes.length > 0) {
+      avisos.push("O vencimento da cobrança foi removido, mas o lançamento em Faturamento Unidades exige data e manteve a anterior. Ajuste lá se necessário.");
+    }
+  }
+
   // Invalida o Router Cache do lado do cliente pra /painel/cobrancas-rs — data de
   // vencimento aparece na listagem, mesma lógica de aprovar/route.ts (ver comentário lá).
   revalidatePath("/painel/cobrancas-rs");
@@ -75,7 +110,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     acao: "cobranca_rs_vencimento_definido",
     entidade: "cobrancas_rs",
     entidade_id: id,
-    detalhes: { data_vencimento: data_vencimento || null },
+    detalhes: { data_vencimento: data_vencimento || null, lancamentos_atualizados: lancamentosAtualizados },
   });
 
   // E-mail de confirmação pro analista que revisou a cobrança original (revisado_por —
@@ -120,5 +155,5 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     });
   }
 
-  return NextResponse.json({ data });
+  return NextResponse.json({ data, avisos });
 }
