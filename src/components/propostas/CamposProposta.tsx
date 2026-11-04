@@ -169,7 +169,7 @@ export default function CamposProposta({ valor, onChange, contatos = [], contato
         <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginBottom: 8 }}>Condições da proposta</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
           {numerico("taxa_sem_reposicao_pct", "Taxa sobre o 1º salário — vagas sem reposição", "%")}
-          {numerico("taxa_com_reposicao_pct", "Taxa sobre o 1º salário — vagas com 01 reposição em 30 dias", "%")}
+          {numerico("taxa_com_reposicao_pct", "Taxa sobre o 1º salário — vagas com 01 reposição em 30 dias", "%", "Deixe em branco ou 0 se não oferecer reposição (o trecho sai do PDF).")}
           {numerico("prazo_envio_curriculos_dias_uteis", "Envio dos currículos em até", "dias úteis")}
           {numerico("taxa_cancelamento_pct", "Taxa em caso de cancelamento/congelamento", "%", "Deixe em branco ou 0 se não cobrar taxa de cancelamento (a cláusula sai do PDF).")}
           {numerico("prazo_faturamento_dias", "Faturamento com vencimento em até", "dias")}
