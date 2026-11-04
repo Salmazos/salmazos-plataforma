@@ -1505,6 +1505,14 @@ export const cobrancaRsVencimentoSchema = z.object({
   data_vencimento: z.string().nullable(),
 });
 
+// ── Cobrança R&S — correção da taxa (%) depois de aprovada (rota dedicada, ver POST
+// /api/cobrancas-rs/[id]/corrigir-taxa). O PATCH genérico segue congelado fora de pendente_revisao.
+export const cobrancaRsCorrigirTaxaSchema = z.object({
+  fee_percentual: z
+    .number("Informe uma taxa maior que 0 e até 100.")
+    .refine((v) => Number.isFinite(v) && v > 0 && v <= 100, "Informe uma taxa maior que 0 e até 100."),
+});
+
 // ── Cobrança R&S — cancelamento via justificativa (rota dedicada, ver POST
 // /api/cobrancas-rs/[id]/cancelar). Caso de negociação com a diretoria em que a cobrança
 // deixa de ser cobrada — sempre exige justificativa registrada, nunca cancelamento silencioso.
