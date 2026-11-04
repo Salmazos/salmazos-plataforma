@@ -43,7 +43,12 @@ interface CondicoesForm {
 
 const CAMPOS: { chave: keyof CondicoesForm; rotulo: string; sufixo: string; ajuda?: string }[] = [
   { chave: "taxa_sem_reposicao_pct", rotulo: "Taxa sobre o 1º salário — vagas sem reposição", sufixo: "%" },
-  { chave: "taxa_com_reposicao_pct", rotulo: "Taxa sobre o 1º salário — vagas com 01 reposição em 30 dias", sufixo: "%" },
+  {
+    chave: "taxa_com_reposicao_pct",
+    rotulo: "Taxa sobre o 1º salário — vagas com 01 reposição em 30 dias",
+    sufixo: "%",
+    ajuda: "Deixe em branco ou 0 se não oferecer reposição (o trecho sai do texto que o cliente vê).",
+  },
   { chave: "prazo_envio_curriculos_dias_uteis", rotulo: "Envio dos currículos em até", sufixo: "dias úteis" },
   {
     chave: "taxa_cancelamento_pct",

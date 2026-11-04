@@ -1289,6 +1289,79 @@ caso("portal: o prazo e o texto não dependem do tipo de serviço (a tela não r
   assert.equal(PADROES_RS.prazo_envio_curriculos_dias_uteis, 8);
 });
 
+// ── Taxa "com reposição" opcional (vazio/0 = não oferecemos reposição): o texto de reposição não aparece para o cliente ──
+const TRECHO_REPOSICAO = /reposição dentro dos primeiros 30 dias|Vagas c\/ 01 reposição|Taxa de 55%/;
+const TEXTO_11_SEM_REPOSICAO = "Taxa de 40% sobre 1º salário – Vagas sem reposição;";
+caso("link, schema do analista: taxa com reposição em branco ou 0 vira 0; ausente continua 55; sem reposição segue obrigatória", () => {
+  for (const vazio of ["", "  ", null, 0, "0"]) {
+    const r = solicitacaoLinkCreateSchema.parse({ condicoes: { taxa_com_reposicao_pct: vazio } });
+    assert.strictEqual(r.condicoes.taxa_com_reposicao_pct, 0, JSON.stringify(vazio));
+    assert.strictEqual(r.condicoes.taxa_sem_reposicao_pct, 45);
+  }
+  assert.strictEqual(solicitacaoLinkCreateSchema.parse({}).condicoes.taxa_com_reposicao_pct, 55);
+  assert.ok(!solicitacaoLinkCreateSchema.safeParse({ condicoes: { taxa_com_reposicao_pct: 101 } }).success);
+  assert.ok(!solicitacaoLinkCreateSchema.safeParse({ condicoes: { taxa_sem_reposicao_pct: 0 } }).success);
+});
+caso("link, texto que o cliente vê: com reposição 0 sai só o trecho da 1.1 e a numeração (inclusive das adicionais) não muda; com 55 é igual a hoje", () => {
+  const com = itensDasCondicoes(PADROES_RS, ["Extra A"]);
+  const sem = itensDasCondicoes({ ...PADROES_RS, taxa_com_reposicao_pct: 0 }, ["Extra A"]);
+  assert.deepEqual(sem.map((i) => i.numero), com.map((i) => i.numero));
+  assert.deepEqual(sem.slice(1), com.slice(1));
+  assert.equal(com[0].texto, "Taxa de 45% sobre 1º salário – Vagas sem reposição; Taxa de 55% sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;");
+  assert.equal(sem[0].texto, "Taxa de 45% sobre 1º salário – Vagas sem reposição;");
+  assert.ok(!TRECHO_REPOSICAO.test(sem.map((i) => i.texto).join(" ")));
+  assert.equal(sem.at(-1)!.numero, "1.8");
+  const semAmbas = itensDasCondicoes({ ...PADROES_RS, taxa_com_reposicao_pct: 0, taxa_cancelamento_pct: 0 }, ["Extra A"]);
+  assert.equal(semAmbas.at(-1)!.numero, "1.7");
+});
+caso("link, snapshot condicoes_aceitas: com reposição 0 grava 0 (número, nunca NaN/null) e itens sem o trecho; link com 55 continua igual", () => {
+  const link0 = { id: "L0", condicoes: { ...PADROES_RS, taxa_sem_reposicao_pct: 40, taxa_com_reposicao_pct: 0 }, clausulas_adicionais: [] };
+  const s0 = montarSnapshotCondicoes(link0);
+  assert.strictEqual(s0.condicoes.taxa_com_reposicao_pct, 0);
+  assert.equal(s0.itens[0].texto, TEXTO_11_SEM_REPOSICAO);
+  assert.ok(!TRECHO_REPOSICAO.test(JSON.stringify(s0.itens)));
+  const link55 = { id: "L55", condicoes: { ...PADROES_RS, taxa_sem_reposicao_pct: 40, taxa_com_reposicao_pct: 55 }, clausulas_adicionais: [] };
+  assert.equal(montarSnapshotCondicoes(link55).itens[0].texto, "Taxa de 40% sobre 1º salário – Vagas sem reposição; Taxa de 55% sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;");
+  // Link gravado antes (JSON cru com 55, ou sem a chave) lê igual a hoje: 55.
+  assert.strictEqual(lerCondicoesDoLink({ condicoes: { ...PADROES_RS }, clausulas_adicionais: [] }).condicoes.taxa_com_reposicao_pct, 55);
+  const { taxa_com_reposicao_pct: _fora, ...semChave } = PADROES_RS;
+  assert.strictEqual(lerCondicoesDoLink({ condicoes: semChave, clausulas_adicionais: [] }).condicoes.taxa_com_reposicao_pct, 55);
+  assert.equal(condicoesPersonalizadas({ condicoes: link0.condicoes, clausulas_adicionais: [] }), true, "0 é diferente do padrão: condições personalizadas");
+});
+caso("condicoesParaVaga com reposição 0: a taxa sem reposição segue sendo o fee da vaga e nada vira NaN", () => {
+  const v = condicoesParaVaga(snap({ ...COND_PADRAO, taxa_sem_reposicao_pct: 40, taxa_com_reposicao_pct: 0 }));
+  assert.deepEqual(v, condicoesParaVaga(snap({ ...COND_PADRAO, taxa_sem_reposicao_pct: 40, taxa_com_reposicao_pct: 55 })), "idêntico ao de 55: a reposição nunca entra na vaga");
+  assert.deepEqual(v, { fee_rs_percentual: 40, fee_rs_prazo_cobranca: "14 dias", taxa_cancelamento: true, taxa_cancelamento_percentual: 25 });
+  for (const valor of [v.fee_rs_percentual, v.taxa_cancelamento_percentual]) assert.ok(Number.isFinite(valor));
+  assert.ok(!JSON.stringify(v).includes("NaN"));
+});
+await casoRota("rota do analista + link público: link criado com reposição em branco guarda 0; o cliente vê o texto sem o trecho e a solicitação grava o snapshot com 0", async () => {
+  const db = novoBanco([]);
+  const criado = await chamarRota(db, rotaLinks.POST, { metodo: "POST", usuario: "user-1", corpo: { validade_dias: 7, condicoes: { taxa_com_reposicao_pct: "" } } });
+  assert.equal(criado.status, 201);
+  const link = db.tabelas.solicitacao_vaga_links[0];
+  assert.strictEqual(link.condicoes.taxa_com_reposicao_pct, 0);
+  const get = await chamarRota(db, rotaPublica.GET, { token: link.token });
+  assert.equal(get.status, 200);
+  const textos = JSON.stringify(get.body);
+  assert.ok(!TRECHO_REPOSICAO.test(textos), "a página pública não mostra o trecho");
+  assert.ok(textos.includes("Taxa de 45% sobre 1º salário – Vagas sem reposição;"));
+  const envio = await postPublico(db, corpoValido(), { token: link.token });
+  assert.equal(envio.status, 201);
+  const aceitas = db.tabelas.solicitacoes_vagas[0].condicoes_aceitas;
+  assert.strictEqual(aceitas.condicoes.taxa_com_reposicao_pct, 0);
+  assert.ok(!TRECHO_REPOSICAO.test(JSON.stringify(aceitas.itens)));
+  assert.equal(aceitas.itens[0].texto, "Taxa de 45% sobre 1º salário – Vagas sem reposição;");
+  const vaga = condicoesParaVaga(aceitas);
+  assert.equal(vaga.fee_rs_percentual, 45);
+});
+await casoRota("link já existente (gravado com 55) continua igual: o cliente vê o trecho da reposição como sempre", async () => {
+  const db = novoBanco([linhaLink({ condicoes: { ...PADROES_RS, taxa_sem_reposicao_pct: 40, taxa_com_reposicao_pct: 55, taxa_cancelamento_pct: 0 } })]);
+  const get = await chamarRota(db, rotaPublica.GET);
+  assert.equal(get.status, 200);
+  assert.ok(JSON.stringify(get.body).includes("Taxa de 40% sobre 1º salário – Vagas sem reposição; Taxa de 55% sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;"));
+});
+
 console.error = silencio;
 
 console.log(`\n${total} casos OK`);

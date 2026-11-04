@@ -32,17 +32,21 @@ function numeroInformado(msgVazio: string, valorSeVazio?: number) {
 }
 const pct = (padrao: number) =>
   numeroInformado("Informe o percentual.").pipe(z.number().gt(0, "Use um percentual maior que 0 e até 100.").max(100, "Use um percentual maior que 0 e até 100.")).default(padrao);
-// Taxa de cancelamento/congelamento é a única que pode ficar sem cobrança: em branco ou 0 vira 0 (guardado como número) e a
-// cláusula sai do PDF (ver itensRs). Os demais percentuais seguem recusando vazio e 0.
+// Duas taxas podem ficar sem cobrança: cancelamento/congelamento e "com reposição". Em branco ou 0 vira 0 (guardado como número)
+// e o trecho/cláusula sai do PDF (ver itensRs). Os demais percentuais (inclusive a taxa sem reposição) seguem recusando vazio e 0.
+// O padrão só vale para campo AUSENTE (proposta/link novo); dado já gravado traz o valor e não muda.
+const pctOpcional = (padrao: number, mensagem: string) =>
+  numeroInformado("", 0).pipe(z.number().min(0, mensagem).max(100, mensagem)).default(padrao);
 const MSG_TAXA_CANCELAMENTO = "Use um percentual de 0 a 100. Deixe em branco ou 0 para não cobrar.";
-const pctCancelamento = (padrao: number) =>
-  numeroInformado("", 0).pipe(z.number().min(0, MSG_TAXA_CANCELAMENTO).max(100, MSG_TAXA_CANCELAMENTO)).default(padrao);
+const pctCancelamento = (padrao: number) => pctOpcional(padrao, MSG_TAXA_CANCELAMENTO);
+const MSG_TAXA_REPOSICAO = "Use um percentual de 0 a 100. Deixe em branco ou 0 se não oferecer reposição.";
+const pctReposicao = (padrao: number) => pctOpcional(padrao, MSG_TAXA_REPOSICAO);
 const diasPositivos = (padrao: number) =>
   numeroInformado("Informe o prazo em dias.").pipe(z.number().int("Use um número inteiro.").positive("Use um número maior que zero.").max(365, "Use no máximo 365 dias.")).default(padrao);
 
 export const condicoesRsSchema = z.object({
   taxa_sem_reposicao_pct: pct(45),
-  taxa_com_reposicao_pct: pct(55),
+  taxa_com_reposicao_pct: pctReposicao(55),
   prazo_envio_curriculos_dias_uteis: diasPositivos(8),
   taxa_cancelamento_pct: pctCancelamento(25),
   prazo_faturamento_dias: diasPositivos(14),
@@ -120,13 +124,20 @@ export interface ItemProposta {
 export function cobraTaxaCancelamento(taxaCancelamentoPct: number): boolean {
   return taxaCancelamentoPct > 0;
 }
+// Sem taxa "com reposição" (0) não se oferece reposição: só o trecho da cláusula 1.1 some, a numeração das demais não muda.
+export function oferecaReposicao(taxaComReposicaoPct: number): boolean {
+  return taxaComReposicaoPct > 0;
+}
 export function quantidadeItensFixosRs(taxaCancelamentoPct: number): number {
   return cobraTaxaCancelamento(taxaCancelamentoPct) ? 7 : 6;
 }
 
 export function itensRs(c: CondicoesRs): ItemProposta[] {
   const textos = [
-    `Taxa de ${formatarPct(c.taxa_sem_reposicao_pct)} sobre 1º salário – Vagas sem reposição; Taxa de ${formatarPct(c.taxa_com_reposicao_pct)} sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;`,
+    `Taxa de ${formatarPct(c.taxa_sem_reposicao_pct)} sobre 1º salário – Vagas sem reposição;` +
+      (oferecaReposicao(c.taxa_com_reposicao_pct)
+        ? ` Taxa de ${formatarPct(c.taxa_com_reposicao_pct)} sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;`
+        : ""),
     `Os currículos serão enviados em até ${c.prazo_envio_curriculos_dias_uteis} dias úteis;`,
     ...(cobraTaxaCancelamento(c.taxa_cancelamento_pct)
       ? [`Caso o processo seletivo tenha sido feito com eficiência, currículos enviados, e o mesmo seja cancelado ou congelado, será cobrada uma taxa de ${formatarPct(c.taxa_cancelamento_pct)} sobre o 1º salário da vaga em questão;`]

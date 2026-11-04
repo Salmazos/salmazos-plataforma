@@ -14,7 +14,7 @@ import {
 import {
   condicoesRsSchema, conteudoRsSchema, PADROES_RS, validarConteudo, itensRs, quantidadeItensFixosRs, montarSnapshot, snapshotPropostaSchema,
   MENSAGEM_MODELO_INDISPONIVEL, TEMPLATE_VERSAO_ATUAL, TEXTO_INTRODUTORIO_PADRAO_RS, FRASE_EFEITO_RS, ASSINATURA_RS, itensAdicionais,
-  MAX_CLAUSULAS_ADICIONAIS, MAX_CLAUSULA_ADICIONAL, MAX_TEXTO_INTRODUTORIO,
+  MAX_CLAUSULAS_ADICIONAIS, MAX_CLAUSULA_ADICIONAL, MAX_TEXTO_INTRODUTORIO, oferecaReposicao,
 } from "@/lib/propostaModelos";
 import { textoDesenhavel, caracteresOmitidos, paragrafosDesenhaveis } from "@/lib/propostaTexto";
 import { execFileSync } from "node:child_process";
@@ -158,10 +158,11 @@ await caso("R&S: padrões 45 / 55 / 8 / 25 / 14", () => {
   assert.deepEqual(conteudoRsSchema.parse({ condicoes: { taxa_sem_reposicao_pct: 40 } }).condicoes, { ...PADROES_RS, taxa_sem_reposicao_pct: 40 });
 });
 const CAMPOS_PCT = ["taxa_sem_reposicao_pct", "taxa_com_reposicao_pct", "taxa_cancelamento_pct"];
-// A taxa de cancelamento é a única que pode ficar sem cobrança (vazio/0 viram 0); as outras duas exigem percentual > 0.
-const CAMPOS_PCT_OBRIGATORIOS = CAMPOS_PCT.filter((c) => c !== "taxa_cancelamento_pct");
+// Cancelamento e "com reposição" podem ficar sem cobrança (vazio/0 viram 0); só a taxa sem reposição exige percentual > 0.
+const CAMPOS_PCT_OPCIONAIS = ["taxa_com_reposicao_pct", "taxa_cancelamento_pct"];
+const CAMPOS_PCT_OBRIGATORIOS = CAMPOS_PCT.filter((c) => !CAMPOS_PCT_OPCIONAIS.includes(c));
 const CAMPOS_DIAS = ["prazo_envio_curriculos_dias_uteis", "prazo_faturamento_dias"];
-await caso("R&S: percentuais de reposição > 0 e <= 100 (bordas aceitas; 0, 0%, fora da faixa e texto recusados)", () => {
+await caso("R&S: taxa sem reposição > 0 e <= 100 (bordas aceitas; 0, 0%, fora da faixa e texto recusados)", () => {
   for (const campo of CAMPOS_PCT_OBRIGATORIOS) {
     for (const ok of [0.01, 100, 37.5, "45", " 45 "]) assert.ok(condicoesRsSchema.safeParse({ [campo]: ok }).success, `${campo}=${JSON.stringify(ok)}`);
     for (const ruim of [0, "0", -1, 100.01, 101, "abc", true, [], {}]) assert.ok(!condicoesRsSchema.safeParse({ [campo]: ruim }).success, `${campo}=${JSON.stringify(ruim)}`);
@@ -173,7 +174,7 @@ await caso("R&S: prazos inteiros positivos (0, negativo, fracionado, acima de 36
     for (const ruim of [0, "0", -3, 2.5, 366, "x"]) assert.ok(!condicoesRsSchema.safeParse({ [campo]: ruim }).success, `${campo}=${JSON.stringify(ruim)}`);
   }
 });
-await caso("R&S: campo apagado ('', só espaços, null) é ERRO nos outros 4 campos (taxas de reposição e prazos), nunca 0 nem o padrão silencioso", () => {
+await caso("R&S: campo apagado ('', só espaços, null) é ERRO na taxa sem reposição e nos prazos, nunca 0 nem o padrão silencioso", () => {
   for (const campo of [...CAMPOS_PCT_OBRIGATORIOS, ...CAMPOS_DIAS]) {
     for (const vazio of ["", "  ", "\t\n", null]) {
       const r = condicoesRsSchema.safeParse({ [campo]: vazio });
@@ -190,10 +191,28 @@ await caso("R&S: campo ausente (undefined) usa o padrão; objeto vazio e condico
   assert.deepEqual(condicoesRsSchema.parse({}), PADROES_RS);
   assert.deepEqual(conteudoRsSchema.parse({}).condicoes, PADROES_RS);
 });
-await caso("R&S: percentual de reposição apagado ou 0 no conteúdo da proposta falha com mensagem legível (não vira 0%)", () => {
+await caso("R&S: taxa SEM reposição apagada falha com mensagem legível (não vira 0%); taxa COM reposição 0 agora é válida", () => {
   const r = validarConteudo("RS", { condicoes: { taxa_sem_reposicao_pct: "" } });
   assert.ok(!r.ok && r.error.includes("condicoes.taxa_sem_reposicao_pct: Informe o percentual."), JSON.stringify(r));
-  assert.ok(!validarConteudo("RS", { condicoes: { taxa_com_reposicao_pct: 0 } }).ok);
+  assert.ok(!validarConteudo("RS", { condicoes: { taxa_sem_reposicao_pct: 0 } }).ok, "sem reposição continua obrigatória (> 0)");
+  const ok = validarConteudo("RS", { condicoes: { taxa_com_reposicao_pct: 0 } });
+  assert.ok(ok.ok && ok.data.condicoes.taxa_com_reposicao_pct === 0, JSON.stringify(ok));
+});
+await caso("taxa COM reposição: vazio, null, só espaços, 0 e \"0\" viram o número 0 e são aceitos; 0,01 a 100 aceitos; fora da faixa e texto recusados com a mensagem da reposição", () => {
+  for (const sem of ["", "  ", "\t\n", null, 0, "0", " 0 "]) {
+    const r = condicoesRsSchema.safeParse({ taxa_com_reposicao_pct: sem });
+    assert.ok(r.success, `taxa=${JSON.stringify(sem)}`);
+    assert.strictEqual(r.data.taxa_com_reposicao_pct, 0, `taxa=${JSON.stringify(sem)}`);
+    assert.equal(typeof r.data.taxa_com_reposicao_pct, "number");
+    assert.equal(r.data.taxa_sem_reposicao_pct, 45, "a outra taxa não é afetada");
+  }
+  for (const ok of [0.01, 55, 100, "55", " 37,5 ".replace(",", ".")]) assert.ok(condicoesRsSchema.safeParse({ taxa_com_reposicao_pct: ok }).success, String(ok));
+  for (const ruim of [-1, 100.01, 101, "abc", true, [], {}]) assert.ok(!condicoesRsSchema.safeParse({ taxa_com_reposicao_pct: ruim }).success, JSON.stringify(ruim));
+  const e = condicoesRsSchema.safeParse({ taxa_com_reposicao_pct: 101 });
+  assert.ok(!e.success && e.error.issues[0].message === "Use um percentual de 0 a 100. Deixe em branco ou 0 se não oferecer reposição.");
+  assert.equal(condicoesRsSchema.parse({}).taxa_com_reposicao_pct, 55, "campo ausente (proposta/link novo) continua com o padrão 55");
+  assert.equal(condicoesRsSchema.parse({ taxa_com_reposicao_pct: undefined }).taxa_com_reposicao_pct, 55);
+  assert.equal(oferecaReposicao(0), false); assert.equal(oferecaReposicao(0.01), true); assert.equal(oferecaReposicao(55), true);
 });
 await caso("taxa de cancelamento: vazio, null, só espaços, 0 e \"0\" viram o número 0 e são aceitos (cláusula sai do PDF)", () => {
   for (const sem of ["", "  ", "\t\n", null, 0, "0", " 0 ", "0,0".replace(",", ".")]) {
@@ -269,6 +288,30 @@ await caso("texto R&S: com taxa > 0 a saída é IDÊNTICA à de antes (1.1 a 1.7
   assert.equal(itens[6].texto, "INSTRUMENTOS DE AVALIAÇÃO PSICOLÓGICA (Adicionais, se necessário): AC – Atenção Concentrada; Palográfico – Ritmo/Personalidade; Teste de Estilo de Liderança; PPA | DISC – Comportamental; R-1 – Teste não Verbal de Inteligência; G-38 – Teste não Verbal de Inteligência; Entrevista por Competência.");
   assert.equal(quantidadeItensFixosRs(0.01), 7);
   assert.equal(quantidadeItensFixosRs(25), 7);
+});
+const TEXTO_11_COM = "Taxa de 45% sobre 1º salário – Vagas sem reposição; Taxa de 55% sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;";
+const TEXTO_11_SEM = "Taxa de 45% sobre 1º salário – Vagas sem reposição;";
+await caso("texto R&S: com taxa com reposição 55 (padrão) o item 1.1 é IDÊNTICO ao de sempre; com 0 ou vazio sai só o trecho da reposição", () => {
+  assert.equal(itensRs(PADROES_RS)[0].texto, TEXTO_11_COM);
+  for (const vazio of [0, "", "  ", null]) {
+    const c = condicoesRsSchema.parse({ taxa_com_reposicao_pct: vazio });
+    const t = itensRs(c)[0].texto;
+    assert.equal(t, TEXTO_11_SEM, JSON.stringify(vazio));
+    assert.ok(!/reposição dentro|c\/ 01|55%|0%/.test(t), "nada do trecho nem 'Taxa de 0%'");
+  }
+  assert.equal(itensRs({ ...PADROES_RS, taxa_com_reposicao_pct: 60 })[0].texto, "Taxa de 45% sobre 1º salário – Vagas sem reposição; Taxa de 60% sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;");
+});
+await caso("texto R&S: sem reposição a numeração NÃO muda (1.1 a 1.7; 1.1 a 1.6 sem cancelamento) e os demais textos são idênticos; adicionais seguem 1.8/1.7", () => {
+  const com = itensRs(PADROES_RS);
+  const sem = itensRs({ ...PADROES_RS, taxa_com_reposicao_pct: 0 });
+  assert.deepEqual(sem.map((i) => i.numero), com.map((i) => i.numero));
+  assert.deepEqual(sem.slice(1), com.slice(1), "só o 1.1 muda");
+  const semAmbas = itensRs({ ...PADROES_RS, taxa_com_reposicao_pct: 0, taxa_cancelamento_pct: 0 });
+  assert.deepEqual(semAmbas.map((i) => i.numero), ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6"]);
+  assert.equal(semAmbas[0].texto, TEXTO_11_SEM);
+  assert.deepEqual(itensAdicionais(["A", "B"], quantidadeItensFixosRs(25) + 1).map((i) => i.numero), ["1.8", "1.9"]);
+  assert.deepEqual(itensAdicionais(["A"], quantidadeItensFixosRs(0) + 1).map((i) => i.numero), ["1.7"]);
+  assert.equal(quantidadeItensFixosRs(25), 7, "a quantidade de itens não depende da reposição");
 });
 await caso("texto R&S: percentual fracionado usa vírgula", () => {
   assert.ok(itensRs({ ...PADROES_RS, taxa_sem_reposicao_pct: 37.5 })[0].texto.startsWith("Taxa de 37,5% sobre"));
@@ -473,6 +516,28 @@ function textoPdfPorPagina(bytes: Uint8Array): string[] {
   return execFileSync("pdftotext", ["-layout", f, "-"], { encoding: "utf8" }).split("\f").slice(0, -1);
 }
 const TEM_PDFTOTEXT = (() => { try { execFileSync("pdftotext", ["-v"], { stdio: "ignore" }); return true; } catch { return false; } })();
+await caso("PDF: com taxa com reposição 0 o trecho não aparece e a 1.1 sai só com a taxa sem reposição; com 55 o PDF continua com o trecho", async () => {
+  if (!TEM_PDFTOTEXT) return;
+  const normal = (t: string) => t.replace(/\s+/g, " ");
+  const sem = normal(textoPdfPorPagina(await gerarV2(snapV2({ condicoes: { taxa_com_reposicao_pct: 0 } }))).join(" "));
+  assert.ok(sem.includes("Taxa de 45% sobre 1º salário – Vagas sem reposição;"), sem.slice(0, 300));
+  assert.ok(!/reposição dentro dos primeiros 30 dias|Vagas c\/ 01 reposição|Taxa de 55%/.test(sem), "trecho da reposição ausente");
+  assert.ok(sem.includes("Os currículos serão enviados em até 8 dias úteis;"), "1.2 continua");
+  const com = normal(textoPdfPorPagina(await gerarV2(snapV2({}))).join(" "));
+  assert.ok(com.includes("Taxa de 55% sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;"));
+  const vazio = normal(textoPdfPorPagina(await gerarV2(snapV2({ condicoes: { taxa_com_reposicao_pct: "" } }))).join(" "));
+  assert.ok(!/reposição dentro dos primeiros 30 dias/.test(vazio), "campo apagado também tira o trecho");
+});
+await caso("snapshots já emitidos não mudam: snapshot antigo com 55 (e o parse do schema do snapshot) mantém o texto de hoje; snapshot novo com 0 passa no schema", () => {
+  const antigo = snapV2({ condicoes: { taxa_com_reposicao_pct: 55 } });
+  assert.equal(snapshotPropostaSchema.parse(antigo).condicoes.taxa_com_reposicao_pct, 55);
+  assert.equal(itensRs(snapshotPropostaSchema.parse(antigo).condicoes)[0].texto, TEXTO_11_COM);
+  const novo = snapV2({ condicoes: { taxa_com_reposicao_pct: 0 } });
+  assert.equal(snapshotPropostaSchema.parse(novo).condicoes.taxa_com_reposicao_pct, 0);
+  // Snapshot gravado na época (JSON cru, sem passar pelo montarSnapshot de hoje).
+  const cru = JSON.parse(JSON.stringify(antigo));
+  assert.equal(itensRs(snapshotPropostaSchema.parse(cru).condicoes)[0].texto, TEXTO_11_COM);
+});
 // Conta quantas vezes cada página desenha uma imagem (operador Do) e se há transparência (ExtGState com ca).
 async function operacoesPorPagina(bytes: Uint8Array) {
   const doc = await PDFDocument.load(bytes);

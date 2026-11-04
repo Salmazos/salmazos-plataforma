@@ -3,7 +3,7 @@
 import React, { useRef, useState } from "react";
 import Link from "next/link";
 import { calcularValidadeAte } from "@/lib/propostas";
-import { formatarPct, type CondicoesRs } from "@/lib/propostaModelos";
+import { formatarPct, oferecaReposicao, type CondicoesRs } from "@/lib/propostaModelos";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import { Aviso, btnPrimario, btnSecundario, fmtData, labelStyle, Modal } from "@/components/propostas/propostasUi";
 
@@ -55,7 +55,7 @@ export default function ModalMarcarEnviada({ numero, clienteNome, condicoes, val
         {linha("Número", numero)}
         {linha("Cliente", clienteNome)}
         {linha("Taxa sem reposição", formatarPct(condicoes.taxa_sem_reposicao_pct))}
-        {linha("Taxa com reposição", formatarPct(condicoes.taxa_com_reposicao_pct))}
+        {linha("Taxa com reposição", oferecaReposicao(condicoes.taxa_com_reposicao_pct) ? formatarPct(condicoes.taxa_com_reposicao_pct) : "Não oferecida")}
         {linha("Taxa de cancelamento", condicoes.taxa_cancelamento_pct > 0 ? formatarPct(condicoes.taxa_cancelamento_pct) : "Sem taxa")}
         {linha("Currículos em até", `${condicoes.prazo_envio_curriculos_dias_uteis} dias úteis`)}
         {linha("Faturamento", `até ${condicoes.prazo_faturamento_dias} dias de vencimento`)}
