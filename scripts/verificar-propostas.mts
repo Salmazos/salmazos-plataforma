@@ -290,7 +290,7 @@ await caso("texto R&S: com taxa > 0 a saída é IDÊNTICA à de antes (1.1 a 1.7
   assert.equal(quantidadeItensFixosRs(25), 7);
 });
 const TEXTO_11_COM = "Taxa de 45% sobre 1º salário – Vagas sem reposição; Taxa de 55% sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;";
-const TEXTO_11_SEM = "Taxa de 45% sobre 1º salário – Vagas sem reposição;";
+const TEXTO_11_SEM = "Taxa de 45% sobre 1º salário;";
 await caso("texto R&S: com taxa com reposição 55 (padrão) o item 1.1 é IDÊNTICO ao de sempre; com 0 ou vazio sai só o trecho da reposição", () => {
   assert.equal(itensRs(PADROES_RS)[0].texto, TEXTO_11_COM);
   for (const vazio of [0, "", "  ", null]) {
@@ -298,6 +298,7 @@ await caso("texto R&S: com taxa com reposição 55 (padrão) o item 1.1 é IDÊN
     const t = itensRs(c)[0].texto;
     assert.equal(t, TEXTO_11_SEM, JSON.stringify(vazio));
     assert.ok(!/reposição dentro|c\/ 01|55%|0%/.test(t), "nada do trecho nem 'Taxa de 0%'");
+    assert.ok(!t.includes("Vagas sem reposição"), "sem a outra faixa o rótulo 'Vagas sem reposição' não aparece");
   }
   assert.equal(itensRs({ ...PADROES_RS, taxa_com_reposicao_pct: 60 })[0].texto, "Taxa de 45% sobre 1º salário – Vagas sem reposição; Taxa de 60% sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;");
 });
@@ -309,6 +310,7 @@ await caso("texto R&S: sem reposição a numeração NÃO muda (1.1 a 1.7; 1.1 a
   const semAmbas = itensRs({ ...PADROES_RS, taxa_com_reposicao_pct: 0, taxa_cancelamento_pct: 0 });
   assert.deepEqual(semAmbas.map((i) => i.numero), ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6"]);
   assert.equal(semAmbas[0].texto, TEXTO_11_SEM);
+  assert.ok(!semAmbas[0].texto.includes("Vagas sem reposição"));
   assert.deepEqual(itensAdicionais(["A", "B"], quantidadeItensFixosRs(25) + 1).map((i) => i.numero), ["1.8", "1.9"]);
   assert.deepEqual(itensAdicionais(["A"], quantidadeItensFixosRs(0) + 1).map((i) => i.numero), ["1.7"]);
   assert.equal(quantidadeItensFixosRs(25), 7, "a quantidade de itens não depende da reposição");
@@ -520,13 +522,13 @@ await caso("PDF: com taxa com reposição 0 o trecho não aparece e a 1.1 sai s�
   if (!TEM_PDFTOTEXT) return;
   const normal = (t: string) => t.replace(/\s+/g, " ");
   const sem = normal(textoPdfPorPagina(await gerarV2(snapV2({ condicoes: { taxa_com_reposicao_pct: 0 } }))).join(" "));
-  assert.ok(sem.includes("Taxa de 45% sobre 1º salário – Vagas sem reposição;"), sem.slice(0, 300));
-  assert.ok(!/reposição dentro dos primeiros 30 dias|Vagas c\/ 01 reposição|Taxa de 55%/.test(sem), "trecho da reposição ausente");
+  assert.ok(sem.includes("1.1 Taxa de 45% sobre 1º salário; 1.2 Os currículos"), sem.slice(0, 300));
+  assert.ok(!/reposição dentro dos primeiros 30 dias|Vagas c\/ 01 reposição|Vagas sem reposição|Taxa de 55%/.test(sem), "trecho da reposição e o rótulo 'Vagas sem reposição' ausentes");
   assert.ok(sem.includes("Os currículos serão enviados em até 8 dias úteis;"), "1.2 continua");
   const com = normal(textoPdfPorPagina(await gerarV2(snapV2({}))).join(" "));
   assert.ok(com.includes("Taxa de 55% sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;"));
   const vazio = normal(textoPdfPorPagina(await gerarV2(snapV2({ condicoes: { taxa_com_reposicao_pct: "" } }))).join(" "));
-  assert.ok(!/reposição dentro dos primeiros 30 dias/.test(vazio), "campo apagado também tira o trecho");
+  assert.ok(!/reposição dentro dos primeiros 30 dias|Vagas sem reposição/.test(vazio), "campo apagado também tira o trecho");
 });
 await caso("snapshots já emitidos não mudam: snapshot antigo com 55 (e o parse do schema do snapshot) mantém o texto de hoje; snapshot novo com 0 passa no schema", () => {
   const antigo = snapV2({ condicoes: { taxa_com_reposicao_pct: 55 } });
