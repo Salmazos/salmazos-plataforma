@@ -32,13 +32,13 @@ export default function Hero({ nomeEmpresa, carregando }: { nomeEmpresa: string 
             Vamos encontrar o profissional certo para a sua empresa.
           </h1>
           <p className="mt-4 text-lg text-gray-200">
-            Leva cerca de 5 minutos. Assim que recebermos, nossa equipe começa a busca.
+            Leva cerca de 5 minutos. Assim que recebermos, nossa equipe iniciará as buscas.
           </p>
           <a
             href="#formulario"
             className="mt-6 inline-flex min-h-[52px] items-center justify-center rounded-xl bg-[#FFD700] px-8 text-base font-bold text-black hover:bg-[#FFB800] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FFD700]"
           >
-            Começar agora
+            Começar agora!
           </a>
         </div>
       </div>
