@@ -381,6 +381,44 @@ await ok("CampoDiasTeste (interação): Não → onChange com [] e sem dias; Sim
   botoes(dois).filter((b) => /Remover/.test(JSON.stringify(b.props.children)))[1].props.onClick();
   assert.deepEqual(ultimo!.dias, [D1]);
 });
+await ok("CampoDiasTeste (+ Adicionar dia): o novo dia herda entrada/saída do 1º, com data vazia", () => {
+  let ultimo: EstadoDiasTeste | null = null;
+  const botoes = (st: EstadoDiasTeste) => achar(arvore(st, (e) => { ultimo = e; }), (el) => el.type === "button");
+  botoes({ resposta: "sim", dias: [D1] })[0].props.onClick();
+  assert.deepEqual(ultimo!.dias, [D1, { data: "", entrada: D1.entrada, saida: D1.saida }]);
+  assert.deepEqual(ultimo!.dias[0], D1, "o 1º dia não muda");
+  // Escolher "Sim" pela primeira vez continua gerando a linha toda em branco (não copia nada).
+  const [, rSim] = achar(arvore(ESTADO_DIAS_TESTE_VAZIO, (e) => { ultimo = e; }), (el) => el.type === "input" && el.props.type === "radio");
+  rSim.props.onChange();
+  assert.deepEqual(ultimo!.dias, [{ data: "", entrada: "", saida: "" }]);
+});
+await ok("CampoDiasTeste (+ Adicionar dia): 1º dia sem horário (ou só com um deles) → o novo nasce vazio nesses campos", () => {
+  let ultimo: EstadoDiasTeste | null = null;
+  const botoes = (st: EstadoDiasTeste) => achar(arvore(st, (e) => { ultimo = e; }), (el) => el.type === "button");
+  botoes({ resposta: "sim", dias: [{ data: "2026-11-05", entrada: "", saida: "" }] })[0].props.onClick();
+  assert.deepEqual(ultimo!.dias[1], { data: "", entrada: "", saida: "" });
+  botoes({ resposta: "sim", dias: [{ data: "", entrada: "08:00", saida: "" }] })[0].props.onClick();
+  assert.deepEqual(ultimo!.dias[1], { data: "", entrada: "08:00", saida: "" }, "copia só o que existe");
+});
+await ok("CampoDiasTeste (+ Adicionar dia): dia novo com data vazia continua incompleto e bloqueia o envio; horários seguem editáveis", () => {
+  let ultimo: EstadoDiasTeste | null = null;
+  achar(arvore({ resposta: "sim", dias: [D1] }, (e) => { ultimo = e; }), (el) => el.type === "button")[0].props.onClick();
+  assert.equal(erroDiasTeste(ultimo!), "Preencha data, entrada e saída de cada dia de teste.");
+  // escolher só a data libera o envio (horários copiados valem); alterar o horário do 2º dia não mexe no 1º
+  const comData: EstadoDiasTeste = { resposta: "sim", dias: [ultimo!.dias[0], { ...ultimo!.dias[1], data: "2026-11-06" }] };
+  assert.equal(erroDiasTeste(comData), null);
+  const editado: EstadoDiasTeste = { resposta: "sim", dias: [comData.dias[0], { ...comData.dias[1], saida: "13:00" }] };
+  assert.equal(erroDiasTeste(editado), null);
+  assert.equal(editado.dias[0].saida, D1.saida);
+});
+await ok("CampoDiasTeste (render): dica 'Horário copiado do 1º dia' só com horário copiado igual ao do 1º", () => {
+  const dica = /Horário copiado do 1º dia; ajuste se for diferente\./;
+  assert.match(render({ resposta: "sim", dias: [D1, { data: "", entrada: D1.entrada, saida: D1.saida }] }), dica);
+  assert.doesNotMatch(render({ resposta: "sim", dias: [D1] }), dica);
+  assert.doesNotMatch(render({ resposta: "sim", dias: [D1, { data: "", entrada: "", saida: "" }] }), dica);
+  assert.doesNotMatch(render({ resposta: "sim", dias: [D1, D2] }), dica, "horário editado: a dica some");
+  assert.doesNotMatch(render({ resposta: "sim", dias: [{ data: "", entrada: "", saida: "" }, { data: "", entrada: "", saida: "" }] }), dica, "vazios não contam como cópia");
+});
 
 // ── Parte 3: exibição para o RH/DP (somente leitura) ──
 const MOT = "mao_obra_temporaria", TERC = "terceirizacao", RS = "recrutamento_selecao";

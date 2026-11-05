@@ -57,7 +57,13 @@ export default function CampoDiasTeste({ valor, onChange, mostrarErro = false, i
     onChange(resposta === "nao" ? { resposta, dias: [] } : { resposta, dias: valor.dias.length > 0 ? valor.dias : [{ ...DIA_EM_BRANCO }] });
   const alterarDia = (i: number, parte: Partial<DiaTeste>) =>
     onChange({ ...valor, dias: valor.dias.map((d, j) => (j === i ? { ...d, ...parte } : d)) });
-  const adicionar = () => onChange({ ...valor, dias: [...valor.dias, { ...DIA_EM_BRANCO }] });
+  // Os horários de teste quase sempre se repetem: o dia novo herda entrada/saída do 1º (a data fica em branco, o cliente
+  // escolhe). Só este botão copia; a linha inicial ao marcar "Sim" continua toda em branco.
+  const adicionar = () =>
+    onChange({ ...valor, dias: [...valor.dias, { ...DIA_EM_BRANCO, entrada: valor.dias[0]?.entrada ?? "", saida: valor.dias[0]?.saida ?? "" }] });
+  // Sem estado extra: a dica aparece enquanto o 2º dia ainda tem os mesmos horários do 1º (some ao editar).
+  const horarioCopiado =
+    valor.dias.length > 1 && !!valor.dias[0].entrada && !!valor.dias[0].saida && valor.dias[1].entrada === valor.dias[0].entrada && valor.dias[1].saida === valor.dias[0].saida;
   const remover = (i: number) => onChange({ ...valor, dias: valor.dias.filter((_, j) => j !== i) });
 
   // Borda vermelha só no que falta: a pergunta sem resposta, ou o input da linha ainda vazio.
@@ -92,6 +98,7 @@ export default function CampoDiasTeste({ valor, onChange, mostrarErro = false, i
             <button type="button" onClick={adicionar} className="text-xs font-semibold text-gray-700 hover:underline">+ Adicionar dia</button>
           )}
           <p className="text-[11px] text-gray-400">Informe o horário trabalhado em cada dia.</p>
+          {horarioCopiado && <p className="text-[11px] text-gray-400" data-horario-copiado>Horário copiado do 1º dia; ajuste se for diferente.</p>}
         </div>
       )}
       {erro && <p className="text-red-500 text-xs mt-1">{erro}</p>}
