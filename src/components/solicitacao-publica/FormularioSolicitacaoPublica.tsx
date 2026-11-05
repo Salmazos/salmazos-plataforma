@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ItemProposta } from "@/lib/propostaModelos";
 import {
-  TITULOS_ETAPA, formularioInicial, formularioPreenchido, montarCorpoEnvio, validarEtapa, validarTudo,
+  TITULOS_ETAPA, formularioInicial, formularioPreenchido, formularioProximaVaga, montarCorpoEnvio, validarEtapa, validarTudo,
   type Etapa, type ErrosForm, type FormPublico,
 } from "@/lib/solicitacaoVagaPublicaForm";
 import { ComoFunciona, FaixaConfianca, RodapePublico } from "./BlocosInformativos";
@@ -40,6 +40,8 @@ export default function FormularioSolicitacaoPublica({ token }: { token: string 
   // O estado só muda no próximo render: o ref fecha a janela de um duplo clique ou Enter repetido gerar dois POSTs.
   const enviandoRef = useRef(false);
   const [erroEnvio, setErroEnvio] = useState("");
+  // Cargos já enviados neste link nesta visita (só memória, como o resto do estado): aparecem na tela de confirmação.
+  const [enviadas, setEnviadas] = useState<string[]>([]);
   const tituloEtapa = useRef<HTMLHeadingElement>(null);
   const primeiraRenderizacao = useRef(true);
 
@@ -131,6 +133,17 @@ export default function FormularioSolicitacaoPublica({ token }: { token: string 
     }
   }
 
+  // Mais uma vaga no mesmo link: cada envio continua sendo uma solicitação (e um uso do link) no servidor. A empresa e os benefícios
+  // ficam preenchidos e o formulário reabre na etapa da vaga; o título da etapa recebe o foco pelo efeito que observa `etapa`.
+  function adicionarOutraVaga() {
+    setForm(formularioProximaVaga(form));
+    setErros({});
+    setErroEnvio("");
+    setEtapa(2);
+    setFase("formulario");
+    window.scrollTo({ top: 0 });
+  }
+
   async function enviar() {
     if (enviandoRef.current) return;
     setErroEnvio("");
@@ -150,6 +163,7 @@ export default function FormularioSolicitacaoPublica({ token }: { token: string 
         body: JSON.stringify(montarCorpoEnvio(form)),
       });
       if (res.status === 201 || res.ok) {
+        setEnviadas((lista) => [...lista, form.cargo.trim()]);
         setFase("enviado");
         window.scrollTo({ top: 0 });
         return;
@@ -181,7 +195,7 @@ export default function FormularioSolicitacaoPublica({ token }: { token: string 
     return (
       <>
         <style>{ESTILOS}</style>
-        <TelaSucesso prazoDiasUteis={dados?.prazoDiasUteis ?? 8} />
+        <TelaSucesso prazoDiasUteis={dados?.prazoDiasUteis ?? 8} enviadas={enviadas} onAdicionarOutra={adicionarOutraVaga} />
       </>
     );
   }

@@ -2,13 +2,18 @@ import { MARCA } from "./marca";
 
 // Conteúdo da confirmação de envio (marca de verificação, título e os 3 passos "o que acontece agora"), sem o invólucro do site público (fundo,
 // imagem, rodapé). As classes sp-pop, sp-draw vêm de ESTILOS em FormularioSolicitacaoPublica.tsx: quem usar este conteúdo fora dele precisa
-// incluir esse <style>. `textoFinal` é a frase de fechamento (o padrão é a do link público).
+// incluir esse <style>. `textoFinal` é a frase de fechamento (o padrão é a do link público). `onAdicionarOutra` (só o link público passa)
+// acrescenta a lista do que já foi enviado e o botão para pedir outra vaga; sem ele o conteúdo é exatamente o de sempre.
 export default function ConteudoEnviado({
   prazoDiasUteis,
   textoFinal = `Você já pode fechar esta página. Obrigado por escolher a ${MARCA.nome}.`,
+  enviadas = [],
+  onAdicionarOutra,
 }: {
   prazoDiasUteis: number;
   textoFinal?: string;
+  enviadas?: string[];
+  onAdicionarOutra?: () => void;
 }) {
   const etapas = [
     { titulo: "Análise pela equipe", texto: "Revisamos os dados da sua solicitação." },
@@ -37,6 +42,28 @@ export default function ConteudoEnviado({
           </li>
         ))}
       </ol>
+      {onAdicionarOutra && (
+        <section aria-labelledby="enviadas-titulo" className="mt-8 rounded-xl border border-gray-200 bg-gray-50 p-4 text-left">
+          {enviadas.length > 0 && (
+            <>
+              <p id="enviadas-titulo" className="text-sm font-bold text-gray-900">Você já enviou:</p>
+              <ul className="mt-1 list-disc pl-5 text-base text-gray-900">
+                {enviadas.map((cargo, i) => (
+                  <li key={`${i}-${cargo}`}>{cargo}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          <p className="mt-3 text-sm text-gray-700">Os dados da empresa e os benefícios já vêm preenchidos.</p>
+          <button
+            type="button"
+            onClick={onAdicionarOutra}
+            className="mt-3 min-h-[52px] w-full rounded-xl bg-black px-4 text-base font-bold text-[#FFD700] hover:bg-gray-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+          >
+            Adicionar outra vaga
+          </button>
+        </section>
+      )}
       <p className="mt-8 text-sm text-gray-600">{textoFinal}</p>
     </>
   );
