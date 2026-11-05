@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { DiaTeste } from "@/lib/diasTeste";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import CampoTelefone from "@/components/ui/CampoTelefone";
 import { MOSTRAR_DIA_TESTE_NO_PORTAL } from "@/lib/diaTestePortal";
+import CampoDiasTeste, { ESTADO_DIAS_TESTE_VAZIO, estadoDiasTesteDeValor, diasTesteParaEnvio, erroDiasTeste, type EstadoDiasTeste } from "@/components/CampoDiasTeste";
 
 // Edição de uma indicação já enviada (portal > Minhas Indicações). Pré-preenche com o que foi enviado e
 // manda ao servidor SÓ os campos que mudaram; o servidor refaz o diff e revalida tudo (quem pode editar,
@@ -21,7 +23,8 @@ interface Detalhe {
   pode_trocar_vaga: boolean;
   candidato_nome: string | null;
   candidato_telefone: string | null;
-  [campo: string]: string | number | boolean | null;
+  // admissao_dias_teste é jsonb (lista de dias); os demais campos são escalares.
+  [campo: string]: string | number | boolean | null | DiaTeste[];
 }
 
 interface VagaAtiva {
@@ -58,6 +61,9 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
   const [inicial, setInicial] = useState<Detalhe | null>(null);
   const [form, setForm] = useState<Record<string, string | number | boolean | null>>({});
   const [vagas, setVagas] = useState<VagaAtiva[]>([]);
+  const [diasTeste, setDiasTeste] = useState<EstadoDiasTeste>(ESTADO_DIAS_TESTE_VAZIO);
+  const [diasTesteAlterado, setDiasTesteAlterado] = useState(false);
+  const [tentouSalvar, setTentouSalvar] = useState(false);
   const [curriculo, setCurriculo] = useState<File | null>(null);
   const inputCurriculoRef = useRef<HTMLInputElement>(null);
 
@@ -72,7 +78,9 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
         }
         const d = json.data as Detalhe;
         setInicial(d);
-        setForm({ vaga_id: d.vaga_id, ...Object.fromEntries(Object.entries(d).filter(([k]) => k.startsWith("admissao_") || k.startsWith("candidato_"))) });
+        // Dias de teste têm estado próprio (lista); o resto do formulário continua escalar.
+        setForm({ vaga_id: d.vaga_id, ...Object.fromEntries(Object.entries(d).filter(([k]) => (k.startsWith("admissao_") && k !== "admissao_dias_teste") || k.startsWith("candidato_"))) as Record<string, string | number | boolean | null> });
+        setDiasTeste(estadoDiasTesteDeValor(d.admissao_dias_teste));
         if (d.pode_trocar_vaga) {
           const rv = await fetch("/api/portal/vagas-ativas");
           const jv = await rv.json();
@@ -100,7 +108,7 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
     if (!inicial) return;
     setErro("");
     // Só o que mudou. "" vira null (igual à criação); número 0 do campo de moeda vira null.
-    const mudou: Record<string, string | number | boolean | null> = {};
+    const mudou: Record<string, string | number | boolean | null | DiaTeste[]> = {};
     for (const [campo, valor] of Object.entries(form)) {
       const novo = typeof valor === "string" ? (valor.trim() === "" ? null : valor.trim()) : valor === 0 ? null : valor;
       const antigo = campo === "vaga_id" ? inicial.vaga_id : (inicial[campo] ?? null);
@@ -109,6 +117,14 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
     if (mudou.candidato_nome === null || mudou.candidato_telefone === null) {
       setErro("Nome e telefone do candidato não podem ficar em branco.");
       return;
+    }
+    // Dias de teste: indicação antiga (null) segue editável sem responder; mexeu no campo, precisa estar completo.
+    if (MOSTRAR_DIA_TESTE_NO_PORTAL && !isRS && diasTesteAlterado) {
+      setTentouSalvar(true);
+      const e = erroDiasTeste(diasTeste);
+      if (e) { setErro(e); return; }
+      const novoDias = diasTesteParaEnvio(diasTeste);
+      if (JSON.stringify(novoDias) !== JSON.stringify(inicial.admissao_dias_teste ?? null)) mudou.admissao_dias_teste = novoDias;
     }
 
     setSalvando(true);
@@ -229,7 +245,15 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
               )}
               {!isRS && campoTexto("admissao_exame_responsavel", "Responsável pelo exame admissional")}
               {!isRS && campoTexto("admissao_local_integracao", "Local e data da integração")}
-              {MOSTRAR_DIA_TESTE_NO_PORTAL && !isRS && campoTexto("admissao_dia_teste", "Dia(s) de teste (se houver)")}
+              {MOSTRAR_DIA_TESTE_NO_PORTAL && !isRS && (
+                <Campo label="Houve dia(s) de teste antes do início?">
+                  <CampoDiasTeste
+                    id="campo-dias-teste" valor={diasTeste} inputStyle={inputStyle}
+                    onChange={(novo) => { setDiasTeste(novo); setDiasTesteAlterado(true); }}
+                    mostrarErro={tentouSalvar && diasTesteAlterado}
+                  />
+                </Campo>
+              )}
             </div>
 
             <Campo label="Observações">

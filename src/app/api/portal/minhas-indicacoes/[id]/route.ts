@@ -4,6 +4,7 @@ import { parseBody, portalEditarIndicacaoSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { hojeBrasiliaISO } from "@/lib/rescisaoProgramada";
+import { exigeRespostaDiasTeste, MSG_INFORME_DIAS_TESTE } from "@/lib/diasTeste";
 import { avisarIndicacaoEditada } from "@/lib/avisoIndicacaoEditada";
 import {
   CAMPOS_ADMISSAO,
@@ -133,6 +134,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     const sol = await carregarSolicitacao(service, id, clienteId, user.id);
     if (!sol) return NextResponse.json({ error: "Indicação não encontrada." }, { status: 404 });
     if (!(await avaliarEdicao(service, sol)).pode) return NextResponse.json({ error: MSG_EM_ANDAMENTO }, { status: 409 });
+
+    // O cliente não pode APAGAR a resposta de dias de teste em MOT/Terceirização (null explícito). Registros antigos com
+    // null seguem editáveis: a regra só olha o que veio no corpo, nunca o valor salvo.
+    if (entrada.admissao_dias_teste === null) {
+      const { data: vagaDaIndicacao } = await service.from("vagas").select("tipo_servico").eq("id", sol.vaga_id).maybeSingle();
+      if (exigeRespostaDiasTeste(vagaDaIndicacao?.tipo_servico)) return NextResponse.json({ error: MSG_INFORME_DIAS_TESTE }, { status: 400 });
+    }
 
     const alteracoes: Alteracao[] = calcularDiff(sol, entrada);
     // Nada mudou: não grava, não avisa.

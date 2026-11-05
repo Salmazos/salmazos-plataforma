@@ -1,4 +1,4 @@
-// "Dia(s) de teste" fica oculto do portal do cliente por enquanto (decisão do Olver, até validar o fluxo com o RH).
-// Coluna, rotas e telas do RH/DP seguem prontas e só mostram o valor quando existe; para religar o campo no portal basta
-// trocar para true — nenhuma outra mudança é necessária.
-export const MOSTRAR_DIA_TESTE_NO_PORTAL = false;
+// Liga o campo estruturado "Dia(s) de teste" (CampoDiasTeste) nas telas do portal do cliente. Está LIGADO: a API
+// (portal/avaliar e portal/indicar-candidato) já EXIGE a resposta em MOT e Terceirização, então desligar aqui
+// bloquearia o envio dessas telas com "Informe se houve dia(s) de teste.". Só use false junto com a mudança na API.
+export const MOSTRAR_DIA_TESTE_NO_PORTAL = true;

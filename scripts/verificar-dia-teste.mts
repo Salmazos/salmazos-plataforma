@@ -11,6 +11,11 @@ import { CAMPOS_ADMISSAO, ROTULO_CAMPO, campoDaAdmissao, calcularDiff, formatarV
 import {
   MAX_DIAS_TESTE, diasTesteSchema, horasDoDiaTeste, totalHorasDiasTeste, formatarDiasTeste, exigeRespostaDiasTeste, resolverDiasTeste,
 } from "../src/lib/diasTeste";
+import { createElement, type ReactElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import CampoDiasTeste, {
+  ESTADO_DIAS_TESTE_VAZIO, estadoDiasTesteDeValor, diasTesteParaEnvio, erroDiasTeste, type EstadoDiasTeste,
+} from "../src/components/CampoDiasTeste";
 import { portalAvaliarSchema, portalIndicarCandidatoSchema, portalEditarIndicacaoSchema } from "../src/lib/schemas";
 
 congelarData();
@@ -235,6 +240,144 @@ await ok("avaliação do portal (aprovar): MOT sem resposta → 400 sem gravar; 
   r = await chamarAv(db, { admissao_dias_teste: [D1] });
   assert.equal(r.status, 200, JSON.stringify(r.corpo));
   assert.equal(cv(db).admissao_dias_teste ?? null, null);
+});
+
+// ── PATCH da edição pelo cliente: o cliente não pode apagar a resposta de dias de teste ──
+await ok("edição (PATCH): null recusado em MOT/Terceirização (400), mesmo em indicação aprovada ou pendente", async () => {
+  for (const id of [ID.S_APROV, ID.S_PEND]) {
+    const db = novoDbIndicacao(); logarPortal(db, "cli");
+    sol(db, id).admissao_dias_teste = [D1];
+    const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id }, corpo: { admissao_dias_teste: null } });
+    assert.equal(r.status, 400, JSON.stringify(r.corpo));
+    assert.equal(r.corpo.error, "Informe se houve dia(s) de teste.");
+    assert.deepEqual(sol(db, id).admissao_dias_teste, [D1], "nada foi apagado");
+  }
+  const dbT = novoDbIndicacao(); logarPortal(dbT, "cli");
+  dbT.tabelas.vagas.find((v: any) => v.id === ID.V_MOT_A).tipo_servico = "terceirizacao";
+  const rt = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_dias_teste: null } });
+  assert.equal(rt.status, 400, JSON.stringify(rt.corpo));
+});
+await ok("edição (PATCH): [] e lista são aceitos em MOT; registro antigo (null) segue editável sem enviar o campo", async () => {
+  for (const dias of [[], [D1], [D1, D2]]) {
+    const db = novoDbIndicacao(); logarPortal(db, "cli");
+    const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_dias_teste: dias } });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.deepEqual(sol(db, ID.S_PEND).admissao_dias_teste, dias);
+  }
+  const db = novoDbIndicacao(); logarPortal(db, "cli");
+  assert.equal(sol(db, ID.S_PEND).admissao_dias_teste ?? null, null);
+  const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_funcao: "Outra função" } });
+  assert.equal(r.status, 200, JSON.stringify(r.corpo));
+  assert.equal(sol(db, ID.S_PEND).admissao_dias_teste ?? null, null, "campo não mexido continua não informado");
+});
+await ok("edição (PATCH): 3 dias é recusado pelo schema (400)", async () => {
+  const db = novoDbIndicacao(); logarPortal(db, "cli");
+  const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_dias_teste: [D1, D2, { ...D1, data: "2026-11-09" }] } });
+  assert.equal(r.status, 400);
+});
+await ok("edição (PATCH) em R&S: null não é recusado (campo ignorado nesse serviço)", async () => {
+  const db = novoDbIndicacao(); logarPortal(db, "cli");
+  sol(db, ID.S_PEND).vaga_id = ID.V_RS;
+  const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_dias_teste: null } });
+  assert.equal(r.status, 200, JSON.stringify(r.corpo));
+});
+await ok("edição (GET): detalhe devolve admissao_dias_teste salvo (null, [] e lista)", async () => {
+  for (const salvo of [null, [], [D1]]) {
+    const db = novoDbIndicacao(); logarPortal(db, "cli");
+    sol(db, ID.S_PEND).admissao_dias_teste = salvo;
+    const r = await chamar(editar.GET, { metodo: "GET", params: { id: ID.S_PEND } });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.deepEqual(r.corpo.data.admissao_dias_teste, salvo);
+  }
+});
+
+// ── CampoDiasTeste: helpers e render ──
+const render = (valor: EstadoDiasTeste, extra: Record<string, unknown> = {}) =>
+  renderToStaticMarkup(createElement(CampoDiasTeste, { valor, onChange: () => {}, ...extra }));
+const linhas = (html: string) => (html.match(/data-dia-teste-linha/g) ?? []).length;
+// O componente não usa hooks: chamá-lo devolve a árvore de elementos, onde dá para achar os handlers.
+function achar(no: any, teste: (el: any) => boolean, achados: any[] = []): any[] {
+  if (Array.isArray(no)) { no.forEach((n) => achar(n, teste, achados)); return achados; }
+  if (!no || typeof no !== "object" || !("props" in no)) return achados;
+  if (teste(no)) achados.push(no);
+  achar((no as ReactElement<any>).props?.children, teste, achados);
+  return achados;
+}
+const arvore = (valor: EstadoDiasTeste, onChange: (e: EstadoDiasTeste) => void) => (CampoDiasTeste as any)({ valor, onChange });
+
+await ok("CampoDiasTeste: helpers — sem resposta → null; Não → []; Sim → lista; erros de cada caso", () => {
+  assert.equal(diasTesteParaEnvio(ESTADO_DIAS_TESTE_VAZIO), null);
+  assert.deepEqual(diasTesteParaEnvio({ resposta: "nao", dias: [] }), []);
+  assert.deepEqual(diasTesteParaEnvio({ resposta: "sim", dias: [D1] }), [D1]);
+  assert.equal(erroDiasTeste(ESTADO_DIAS_TESTE_VAZIO), "Informe se houve dia(s) de teste.");
+  assert.equal(erroDiasTeste({ resposta: "nao", dias: [] }), null);
+  assert.ok(erroDiasTeste({ resposta: "sim", dias: [] }));
+  assert.ok(erroDiasTeste({ resposta: "sim", dias: [{ data: "", entrada: "08:00", saida: "12:00" }] }), "linha incompleta");
+  assert.ok(erroDiasTeste({ resposta: "sim", dias: [{ ...D1, saida: D1.entrada }] }), "saída = entrada");
+  assert.ok(erroDiasTeste({ resposta: "sim", dias: [D1, { ...D2, data: D1.data }] }), "data repetida");
+  assert.equal(erroDiasTeste({ resposta: "sim", dias: [D1, D2] }), null);
+});
+await ok("CampoDiasTeste: estado inicial do valor salvo — null → '', [] → 'nao', lista → 'sim'", () => {
+  assert.deepEqual(estadoDiasTesteDeValor(null), { resposta: "", dias: [] });
+  assert.deepEqual(estadoDiasTesteDeValor(undefined), { resposta: "", dias: [] });
+  assert.deepEqual(estadoDiasTesteDeValor([]), { resposta: "nao", dias: [] });
+  assert.deepEqual(estadoDiasTesteDeValor([D1, D2]), { resposta: "sim", dias: [D1, D2] });
+});
+await ok("CampoDiasTeste (render): sem pré-seleção; Sim mostra linhas e horas; limite de 2 esconde 'Adicionar dia'; Remover só com 2", () => {
+  const vazio = render(ESTADO_DIAS_TESTE_VAZIO);
+  assert.equal(linhas(vazio), 0);
+  assert.doesNotMatch(vazio, /checked/);
+  assert.equal(linhas(render({ resposta: "nao", dias: [] })), 0);
+
+  const um = render({ resposta: "sim", dias: [D1] });
+  assert.equal(linhas(um), 1);
+  assert.match(um, />4h</, "horas calculadas ao lado");
+  assert.match(um, /Adicionar dia/);
+  assert.doesNotMatch(um, /Remover/);
+  assert.match(um, /Informe o horário trabalhado em cada dia\./);
+
+  const dois = render({ resposta: "sim", dias: [D1, D2] });
+  assert.equal(linhas(dois), 2);
+  assert.doesNotMatch(dois, /Adicionar dia/, `limite de ${MAX_DIAS_TESTE}`);
+  assert.equal((dois.match(/Remover/g) ?? []).length, 2);
+  assert.match(dois, />8h</, "turno que vira a meia-noite");
+});
+await ok("CampoDiasTeste (render): mostrarErro pinta borda vermelha e mostra a mensagem; sem mostrarErro não", () => {
+  const com = render(ESTADO_DIAS_TESTE_VAZIO, { mostrarErro: true });
+  assert.match(com, /Informe se houve dia\(s\) de teste\./);
+  assert.match(com, /#EF4444/);
+  const sem = render(ESTADO_DIAS_TESTE_VAZIO, { mostrarErro: false });
+  assert.doesNotMatch(sem, /Informe se houve|#EF4444/);
+  const linhaVazia = render({ resposta: "sim", dias: [{ data: "", entrada: "", saida: "" }] }, { mostrarErro: true });
+  assert.match(linhaVazia, /#EF4444/);
+});
+await ok("CampoDiasTeste (render): className e style dos inputs são repassados", () => {
+  const html = render({ resposta: "sim", dias: [D1] }, { inputClassName: "input-field", inputStyle: { border: "1px solid #E5E7EB" } });
+  assert.match(html, /class="input-field"/);
+  assert.match(html, /border:1px solid #E5E7EB/);
+});
+await ok("CampoDiasTeste (interação): Não → onChange com [] e sem dias; Sim → 1 linha em branco; Adicionar até 2; Remover", () => {
+  let ultimo: EstadoDiasTeste | null = null;
+  const radios = (st: EstadoDiasTeste) => achar(arvore(st, (e) => { ultimo = e; }), (el) => el.type === "input" && el.props.type === "radio");
+  const [rNao, rSim] = radios(ESTADO_DIAS_TESTE_VAZIO);
+  rNao.props.onChange();
+  assert.deepEqual(ultimo, { resposta: "nao", dias: [] });
+  assert.deepEqual(diasTesteParaEnvio(ultimo!), []);
+  rSim.props.onChange();
+  assert.deepEqual(ultimo, { resposta: "sim", dias: [{ data: "", entrada: "", saida: "" }] });
+  // Voltar para Sim depois de Sim com dias mantém o que já foi digitado.
+  radios({ resposta: "sim", dias: [D1] })[1].props.onChange();
+  assert.deepEqual(ultimo, { resposta: "sim", dias: [D1] });
+  // Trocar Sim → Não descarta as linhas (envia []).
+  radios({ resposta: "sim", dias: [D1] })[0].props.onChange();
+  assert.deepEqual(ultimo, { resposta: "nao", dias: [] });
+
+  const botoes = (st: EstadoDiasTeste) => achar(arvore(st, (e) => { ultimo = e; }), (el) => el.type === "button");
+  botoes({ resposta: "sim", dias: [D1] })[0].props.onClick();
+  assert.equal(ultimo!.dias.length, 2);
+  const dois: EstadoDiasTeste = { resposta: "sim", dias: [D1, D2] };
+  botoes(dois).filter((b) => /Remover/.test(JSON.stringify(b.props.children)))[1].props.onClick();
+  assert.deepEqual(ultimo!.dias, [D1]);
 });
 
 console.log(`\n${n} verificações OK`);
