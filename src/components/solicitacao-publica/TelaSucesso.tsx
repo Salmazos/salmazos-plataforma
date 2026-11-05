@@ -7,7 +7,15 @@ import ImagemMarca from "./ImagemMarca";
 
 // Confirmação do link público: o invólucro do site (fundo com a foto em opacidade baixa, cartão e rodapé) em volta do ConteudoEnviado, que não
 // mostra dados do cliente nem link para o portal.
-export default function TelaSucesso({ prazoDiasUteis }: { prazoDiasUteis: number }) {
+export default function TelaSucesso({
+  prazoDiasUteis,
+  enviadas,
+  onAdicionarOutra,
+}: {
+  prazoDiasUteis: number;
+  enviadas?: string[];
+  onAdicionarOutra?: () => void;
+}) {
   const [semImagem, setSemImagem] = useState(false);
   return (
     <div className="flex min-h-screen flex-col bg-black">
@@ -19,7 +27,7 @@ export default function TelaSucesso({ prazoDiasUteis }: { prazoDiasUteis: number
           </div>
         )}
         <div className="sp-subir w-full max-w-lg rounded-2xl bg-white p-6 text-center shadow-xl sm:p-8">
-          <ConteudoEnviado prazoDiasUteis={prazoDiasUteis} />
+          <ConteudoEnviado prazoDiasUteis={prazoDiasUteis} enviadas={enviadas} onAdicionarOutra={onAdicionarOutra} />
         </div>
       </main>
       <RodapePublico />

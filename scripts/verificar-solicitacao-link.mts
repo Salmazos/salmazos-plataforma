@@ -15,7 +15,7 @@ import {
   REQ_CNH, REQ_CONHECIMENTOS, REQ_ESCOLARIDADE, REQ_EXPERIENCIA, REQ_NR, BEN_ALIMENTACAO, BEN_QUALIDADE, BEN_SAUDE, BEN_TRANSPORTE,
 } from "../src/lib/solicitacaoVagaCampos";
 import {
-  formularioInicial, formularioPreenchido, montarCorpoEnvio, resumoDaSolicitacao, validarEtapa, validarTudo, type FormPublico,
+  formularioInicial, formularioPreenchido, formularioProximaVaga, montarCorpoEnvio, resumoDaSolicitacao, validarEtapa, validarTudo, type FormPublico,
 } from "../src/lib/solicitacaoVagaPublicaForm";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
@@ -1364,6 +1364,106 @@ await casoRota("link já existente (gravado com 55) continua igual: o cliente v�
   const get = await chamarRota(db, rotaPublica.GET);
   assert.equal(get.status, 200);
   assert.ok(JSON.stringify(get.body).includes("Taxa de 40% sobre 1º salário – Vagas sem reposição; Taxa de 55% sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;"));
+});
+
+// ── Mais de uma vaga no mesmo link (só front-end: cada envio segue sendo 1 solicitação e 1 uso do link) ──
+function formCompletoDeUmaVaga(): FormPublico {
+  return baseForm({
+    tipo_pessoa: "pf", nome: "João da Silva", documento: CPF_OK, contato_nome: "", telefone: "(19) 98888-7777", endereco: "Av. Brasil, 10 - Campinas/SP",
+    email: "joao@exemplo.com.br", mesmo_email: false, email_nf: "nf@exemplo.com.br", cidade: "Campinas", estado: "SP", local_trabalho: "Matriz, Rua A, 10",
+    horario: { ...HORARIO_VAZIO, tipo: "seg_sex", entrada: "08:00", saida: "17:00" },
+    beneficios: { chips: { "Vale Transporte": true, "Vale Refeição": true }, custom: ["Auxílio creche"] },
+    aceite: true,
+    cargo: "Motorista", num_posicoes: "3", previsao_inicio: "2026-11-20", salario: "9.5", salario_modo: "fixo", salario_periodo: "hora", adicionais_salariais: "comissão",
+    sexo: "masc", idade: "até 40", pcd: "sim", habilitacao: "sim", habilitacao_categoria: "D", veiculo_proprio: "sim",
+    requisitos: { chips: { "Ensino Médio": true }, cursos: {}, condicoes: { "Ensino Médio": "Completo" }, custom: ["Boa comunicação"] },
+    principais_atividades: "Dirigir e entregar", observacoes: "Obs interna", website: "preenchido-por-robo",
+  });
+}
+caso("formularioProximaVaga: MANTÉM os dados da empresa, local, horário, benefícios e aceite", () => {
+  const antes = formCompletoDeUmaVaga();
+  const prox = formularioProximaVaga(antes);
+  for (const k of ["tipo_pessoa", "nome", "documento", "contato_nome", "telefone", "endereco", "email", "mesmo_email", "email_nf", "cidade", "estado", "local_trabalho", "aceite"] as const) {
+    assert.equal(prox[k], antes[k], k);
+  }
+  assert.deepEqual(prox.horario, antes.horario);
+  assert.deepEqual(prox.beneficios, antes.beneficios);
+  assert.equal(prox.aceite, true);
+});
+caso("formularioProximaVaga: ZERA tudo que descreve a vaga (valores de formularioInicial)", () => {
+  const prox = formularioProximaVaga(formCompletoDeUmaVaga());
+  const fabrica = formularioInicial(null);
+  for (const k of [
+    "cargo", "num_posicoes", "previsao_inicio", "salario", "salario_modo", "salario_periodo", "adicionais_salariais", "sexo", "idade", "pcd", "habilitacao",
+    "habilitacao_categoria", "veiculo_proprio", "requisitos", "principais_atividades", "observacoes", "website",
+  ] as const) assert.deepEqual(prox[k], fabrica[k], k);
+  assert.equal(prox.num_posicoes, "1");
+  assert.equal(prox.salario_modo, "fixo");
+});
+caso("formularioProximaVaga: não altera o formulário anterior e as cópias são independentes (horário, benefícios e cláusulas)", () => {
+  const antes = formCompletoDeUmaVaga();
+  const foto = JSON.stringify(antes);
+  const prox = formularioProximaVaga(antes);
+  assert.equal(JSON.stringify(antes), foto, "o anterior não muda");
+  prox.horario.entrada = "10:00";
+  prox.beneficios.chips["Plano de Saúde"] = true;
+  prox.beneficios.custom.push("Outro");
+  assert.equal(antes.horario.entrada, "08:00");
+  assert.equal("Plano de Saúde" in antes.beneficios.chips, false);
+  assert.deepEqual(antes.beneficios.custom, ["Auxílio creche"]);
+  assert.notStrictEqual(prox.horario, antes.horario);
+  assert.notStrictEqual(prox.beneficios, antes.beneficios);
+});
+caso("formularioProximaVaga: o que vem preenchido da vaga anterior já passa nas etapas 1 e 4; a etapa da vaga exige o cargo de novo; um segundo envio sai com o corpo novo", () => {
+  const prox = formularioProximaVaga(formCompletoDeUmaVaga());
+  assert.deepEqual(validarEtapa(1, prox), {}, "contratante já completo");
+  assert.deepEqual(validarEtapa(4, prox), {}, "aceite mantido");
+  assert.ok("cargo" in validarEtapa(2, prox), "cargo vazio de novo");
+  assert.ok("principais_atividades" in validarEtapa(3, prox), "atividades vazias de novo (campo obrigatório)");
+  const pronta = { ...prox, cargo: "Auxiliar de logística", principais_atividades: "Separar pedidos" };
+  assert.equal(validarTudo(pronta), null);
+  const corpo = montarCorpoEnvio(pronta) as any;
+  assert.equal(corpo.cargo, "Auxiliar de logística");
+  assert.equal(corpo.nome, "João da Silva");
+  assert.equal(corpo.cidade, "Campinas");
+  assert.equal(corpo.website, "", "honeypot volta vazio (a vaga anterior tinha lixo de robô)");
+  assert.ok(publicoSolicitarVagaSchema.safeParse(corpo).success, "o servidor aceita o corpo da segunda vaga");
+});
+caso("aviso ao sair (beforeunload): no modo 'próxima vaga' o formulário continua contando como preenchido; o de fábrica não", () => {
+  const prox = formularioProximaVaga(formCompletoDeUmaVaga());
+  assert.equal(formularioPreenchido(prox, "Acme Indústria"), true, "dados da empresa mantidos valem como preenchidos");
+  assert.equal(formularioPreenchido(formularioInicial("Acme Indústria"), "Acme Indústria"), false, "só o que veio de fábrica não conta");
+  // Empresa do link + nada digitado: continua sem aviso (comportamento de sempre).
+  assert.equal(formularioPreenchido({ ...formularioProximaVaga(formularioInicial("Acme Indústria")) }, "Acme Indústria"), false);
+});
+caso("confirmação: sem as props novas o HTML é o de sempre; com elas aparecem a lista do que foi enviado, o texto de apoio e o botão, e a frase final continua", () => {
+  const sem = renderToStaticMarkup(createElement(ConteudoEnviado, { prazoDiasUteis: 8 }));
+  assert.ok(!sem.includes("Adicionar outra vaga") && !sem.includes("Você já enviou"), "outro uso (portal/ConteudoEnviado puro) intacto");
+  const semBotao = renderToStaticMarkup(createElement(ConteudoEnviado, { prazoDiasUteis: 8, enviadas: ["Motorista"] }));
+  assert.equal(semBotao, sem, "só 'enviadas' sem o botão não muda nada");
+  const com = renderToStaticMarkup(createElement(ConteudoEnviado, { prazoDiasUteis: 8, enviadas: ["Motorista", "<b>Auxiliar</b> & Cia"], onAdicionarOutra: () => undefined }));
+  assert.ok(com.includes("Você já enviou:") && com.includes("<li>Motorista</li>"));
+  assert.ok(com.includes("&lt;b&gt;Auxiliar&lt;/b&gt; &amp; Cia"), "cargo digitado pelo cliente é escapado");
+  assert.ok(com.includes("Os dados da empresa e os benefícios já vêm preenchidos."));
+  assert.ok(/<button type="button"[^>]*>Adicionar outra vaga<\/button>/.test(com), "botão acessível, type=button");
+  assert.ok(com.includes("Você já pode fechar esta página. Obrigado por escolher a"), "frase final mantida");
+  const semLista = renderToStaticMarkup(createElement(ConteudoEnviado, { prazoDiasUteis: 8, enviadas: [], onAdicionarOutra: () => undefined }));
+  assert.ok(!semLista.includes("Você já enviou") && semLista.includes("Adicionar outra vaga"));
+});
+caso("TelaSucesso repassa as props novas; sem elas é a de sempre (os snapshots de HTML acima continuam byte a byte)", () => {
+  const sem = renderToStaticMarkup(createElement(TelaSucesso, { prazoDiasUteis: 8 }));
+  assert.ok(!sem.includes("Adicionar outra vaga"));
+  const com = renderToStaticMarkup(createElement(TelaSucesso, { prazoDiasUteis: 8, enviadas: ["Motorista"], onAdicionarOutra: () => undefined }));
+  assert.ok(com.includes("Adicionar outra vaga") && com.includes("<li>Motorista</li>") && com.includes("min-h-screen"));
+});
+caso("formulário público: o botão leva de volta à etapa da vaga, limpa erros, guarda o cargo enviado e o backend não foi tocado", () => {
+  const fonte = readFileSync(new URL("../src/components/solicitacao-publica/FormularioSolicitacaoPublica.tsx", import.meta.url), "utf8");
+  const bloco = fonte.slice(fonte.indexOf("function adicionarOutraVaga()"), fonte.indexOf("async function enviar()"));
+  for (const trecho of ["setForm(formularioProximaVaga(form))", "setErros({})", 'setErroEnvio("")', "setEtapa(2)", 'setFase("formulario")', "window.scrollTo({ top: 0 })"]) assert.ok(bloco.includes(trecho), trecho);
+  assert.ok(fonte.includes("setEnviadas((lista) => [...lista, form.cargo.trim()])"), "cargo entra na lista só depois do 201");
+  assert.ok(fonte.includes("onAdicionarOutra={adicionarOutraVaga}"));
+  // 404/410 e 429 seguem como estavam.
+  assert.ok(fonte.includes('res.status === 404 || res.status === 410') && fonte.includes('setFase("indisponivel")') && fonte.includes("res.status === 429"));
 });
 
 console.error = silencio;

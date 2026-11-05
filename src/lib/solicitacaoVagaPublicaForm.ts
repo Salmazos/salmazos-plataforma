@@ -103,6 +103,30 @@ export function formularioInicial(nomeEmpresa: string | null | undefined): FormP
   };
 }
 
+// Formulário da vaga seguinte, no mesmo link, depois de um envio. Mantém os dados da empresa, o local e o horário de trabalho e os
+// benefícios (em geral iguais de uma vaga para outra); tudo que descreve A vaga (cargo, salário, perfil, requisitos, atividades,
+// observações) volta ao valor de fábrica. As cópias são independentes: mexer na vaga nova nunca altera o objeto da anterior.
+export function formularioProximaVaga(anterior: FormPublico): FormPublico {
+  return {
+    ...formularioInicial(null),
+    tipo_pessoa: anterior.tipo_pessoa,
+    nome: anterior.nome,
+    documento: anterior.documento,
+    contato_nome: anterior.contato_nome,
+    telefone: anterior.telefone,
+    endereco: anterior.endereco,
+    email: anterior.email,
+    mesmo_email: anterior.mesmo_email,
+    email_nf: anterior.email_nf,
+    cidade: anterior.cidade,
+    estado: anterior.estado,
+    local_trabalho: anterior.local_trabalho,
+    horario: { ...anterior.horario },
+    beneficios: { chips: { ...anterior.beneficios.chips }, custom: [...anterior.beneficios.custom] },
+    aceite: anterior.aceite,
+  };
+}
+
 // Há algo preenchido? (aviso ao sair da página). Ignora o que já vem de fábrica ou do nome do link.
 export function formularioPreenchido(form: FormPublico, nomeEmpresaDoLink: string | null | undefined): boolean {
   const inicial = formularioInicial(nomeEmpresaDoLink);
