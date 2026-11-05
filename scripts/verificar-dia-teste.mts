@@ -10,9 +10,11 @@ import { novoDbIndicacao, ID } from "./harness-mot/ambiente-indicacao.mjs";
 import { CAMPOS_ADMISSAO, ROTULO_CAMPO, campoDaAdmissao, calcularDiff, formatarValorAviso } from "../src/lib/indicacaoEdicao";
 import {
   MAX_DIAS_TESTE, diasTesteSchema, horasDoDiaTeste, totalHorasDiasTeste, formatarDiasTeste, exigeRespostaDiasTeste, resolverDiasTeste,
+  textoDiasTesteParaRH, seloDiasTeste,
 } from "../src/lib/diasTeste";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import BlocoDiasTesteRH from "../src/components/BlocoDiasTesteRH";
 import CampoDiasTeste, {
   ESTADO_DIAS_TESTE_VAZIO, estadoDiasTesteDeValor, diasTesteParaEnvio, erroDiasTeste, type EstadoDiasTeste,
 } from "../src/components/CampoDiasTeste";
@@ -378,6 +380,87 @@ await ok("CampoDiasTeste (interação): Não → onChange com [] e sem dias; Sim
   const dois: EstadoDiasTeste = { resposta: "sim", dias: [D1, D2] };
   botoes(dois).filter((b) => /Remover/.test(JSON.stringify(b.props.children)))[1].props.onClick();
   assert.deepEqual(ultimo!.dias, [D1]);
+});
+
+// ── Parte 3: exibição para o RH/DP (somente leitura) ──
+const MOT = "mao_obra_temporaria", TERC = "terceirizacao", RS = "recrutamento_selecao";
+await ok("RH: lista → uma linha por dia + total, destacado (inclusive meia-noite)", () => {
+  const r = textoDiasTesteParaRH([D1, D2], null, MOT)!;
+  assert.deepEqual(r.linhas, ["05/11/2026 · 08:00 às 12:00 (4h)", "06/11/2026 · 22:00 às 06:00 (8h)"]);
+  assert.equal(r.total, "Total: 12h");
+  assert.equal(r.destacar, true);
+  const um = textoDiasTesteParaRH([{ data: "2026-11-05", entrada: "08:00", saida: "15:30" }], null, TERC)!;
+  assert.deepEqual(um.linhas, ["05/11/2026 · 08:00 às 15:30 (7h30)"]);
+  assert.equal(um.total, "Total: 7h30");
+  // o texto antigo é ignorado quando existe o estruturado
+  assert.equal(textoDiasTesteParaRH([D1], "texto antigo", MOT)!.linhas.join().includes("texto antigo"), false);
+});
+await ok("RH: [] → 'Não houve dia de teste', sem total e sem destaque (mesmo com texto antigo)", () => {
+  for (const legado of [null, "texto antigo"]) {
+    assert.deepEqual(textoDiasTesteParaRH([], legado, MOT), { linhas: ["Não houve dia de teste"], total: null, destacar: false });
+  }
+});
+await ok("RH: null com texto antigo → mostra o texto antigo (trim), em qualquer serviço", () => {
+  for (const tipo of [MOT, TERC, RS, null]) {
+    assert.deepEqual(textoDiasTesteParaRH(null, "  05/11 e 06/11  ", tipo), { linhas: ["05/11 e 06/11"], total: null, destacar: false });
+  }
+  assert.deepEqual(textoDiasTesteParaRH(undefined, "07/11", MOT)!.linhas, ["07/11"]);
+});
+await ok("RH: null sem texto → 'Não informado pelo cliente' só em MOT/Terceirização; R&S e sem serviço não mostram nada", () => {
+  for (const legado of [null, undefined, "", "   "]) {
+    assert.deepEqual(textoDiasTesteParaRH(null, legado, MOT), { linhas: ["Não informado pelo cliente"], total: null, destacar: false });
+    assert.equal(textoDiasTesteParaRH(null, legado, TERC)!.linhas[0], "Não informado pelo cliente");
+    assert.equal(textoDiasTesteParaRH(null, legado, RS), null);
+    assert.equal(textoDiasTesteParaRH(null, legado, null), null);
+  }
+  assert.equal(textoDiasTesteParaRH("lixo", null, RS), null, "valor não-array é tratado como não informado");
+});
+await ok("RH: selo da lista só com dias ('2 dia(s) · 12h'); [] e null não ganham selo", () => {
+  assert.equal(seloDiasTeste([D1, D2]), "2 dia(s) · 12h");
+  assert.equal(seloDiasTeste([D1]), "1 dia(s) · 4h");
+  assert.equal(seloDiasTeste([]), null);
+  assert.equal(seloDiasTeste(null), null);
+  assert.equal(seloDiasTeste(undefined), null);
+});
+await ok("RH (render): bloco âmbar com título 'a pagar na folha', linhas e total; demais casos sem destaque; R&S/null não renderiza", () => {
+  const html = (dias: unknown, legado: string | null, tipo: string | null) => renderToStaticMarkup(createElement(BlocoDiasTesteRH, { dias, textoLegado: legado, tipoServico: tipo }));
+  const com = html([D1, D2], null, MOT);
+  assert.match(com, /Dia\(s\) de teste \(a pagar na folha\)/);
+  assert.match(com, /#FFFBEB/);
+  assert.match(com, /05\/11\/2026 · 08:00 às 12:00 \(4h\)/);
+  assert.match(com, /06\/11\/2026 · 22:00 às 06:00 \(8h\)/);
+  assert.match(com, /Total: 12h/);
+  for (const [d, l, t, texto] of [[[], null, MOT, "Não houve dia de teste"], [null, "05/11", MOT, "05/11"], [null, null, TERC, "Não informado pelo cliente"]] as const) {
+    const h = html(d, l, t);
+    assert.match(h, new RegExp(texto));
+    assert.doesNotMatch(h, /a pagar na folha|#FFFBEB/);
+  }
+  assert.equal(html(null, null, RS), "");
+});
+await ok("RH: admissão → candidatura pelo par (candidato, vaga): lê dias/legado, ignora outras vagas e candidatos e admissão sem candidatura", async () => {
+  const { buscarDiasTestePorAdmissao } = await importar("src/lib/diasTesteAdmissao.ts");
+  const db = novoDbIndicacao();
+  const A = "cccccccc-0000-4000-8000-000000000001", B = "cccccccc-0000-4000-8000-000000000002", C = "cccccccc-0000-4000-8000-000000000003", E = "cccccccc-0000-4000-8000-000000000004";
+  const cv = (candidato_id: string, vaga_id: string, extra = {}) => ({ id: `cv-${candidato_id}-${vaga_id}`, candidato_id, vaga_id, etapa: "contratado", ...extra });
+  db.tabelas.candidatos_vagas = [
+    cv("CAND1", ID.V_MOT_A, { admissao_dias_teste: [D1, D2], admissao_dia_teste: "legado" }),
+    cv("CAND1", ID.V_MOT_B, { admissao_dias_teste: [], admissao_dia_teste: null }),   // outra vaga do mesmo candidato
+    cv("CAND2", ID.V_MOT_A, { admissao_dias_teste: null, admissao_dia_teste: "só texto" }), // outro candidato, mesma vaga
+  ];
+  // Mesmo cliente em memória que as rotas recebem no harness (o módulo real depende de next/headers).
+  // @ts-expect-error módulo .mjs do harness, sem tipos
+  const { createServiceClient } = await import("./harness-mot/mocks/supabase-server.mjs");
+  const r = await buscarDiasTestePorAdmissao(createServiceClient(), [
+    { id: A, candidato_id: "CAND1", vaga_id: ID.V_MOT_A },
+    { id: B, candidato_id: "CAND1", vaga_id: ID.V_MOT_B },
+    { id: C, candidato_id: "CAND2", vaga_id: ID.V_MOT_A },
+    { id: E, candidato_id: "CAND2", vaga_id: ID.V_MOT_B }, // sem candidatura
+  ]);
+  assert.deepEqual(r.get(A), { dias: [D1, D2], legado: "legado" });
+  assert.deepEqual(r.get(B), { dias: [], legado: null });
+  assert.deepEqual(r.get(C), { dias: null, legado: "só texto" });
+  assert.equal(r.has(E), false, "admissão sem candidatura não herda dados de outra vaga/candidato");
+  assert.equal((await buscarDiasTestePorAdmissao(createServiceClient(), [{ id: "x", candidato_id: "CAND1", vaga_id: null }])).size, 0);
 });
 
 console.log(`\n${n} verificações OK`);

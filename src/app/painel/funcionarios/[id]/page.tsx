@@ -7,6 +7,7 @@ import { contextoRH } from "@/lib/rhUnidadeAuth";
 import SemAcessoPainel from "@/components/SemAcessoPainel";
 import { podeVerUnidade } from "@/lib/unidadeAuth";
 import { resolverFotosFuncionarios } from "@/lib/funcionarioFoto";
+import { buscarDiasTestePorAdmissao } from "@/lib/diasTesteAdmissao";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +76,14 @@ export default async function FuncionarioDetalhePage({ params }: Params) {
     criado_por_nome: c.criado_por ? nomePorUserId.get(c.criado_por) ?? "Usuário removido" : null,
   }));
 
+  // Dias de teste: funcionário criado por admissão digital -> admissão -> candidatura de origem (mesmo par candidato+vaga).
+  // Cadastro manual (sem admissao_id) não tem origem: não mostra nada.
+  let diasTeste: { dias: unknown; legado: string | null } | null = null;
+  if (funcionario.admissao_id) {
+    const { data: admissaoOrigem } = await svc.from("admissoes").select("id, candidato_id, vaga_id").eq("id", funcionario.admissao_id).maybeSingle();
+    if (admissaoOrigem) diasTeste = (await buscarDiasTestePorAdmissao(svc, [admissaoOrigem])).get(admissaoOrigem.id) ?? null;
+  }
+
   return (
     <FuncionarioDetalheClient
       funcionario={funcionarioComFoto}
@@ -82,6 +91,7 @@ export default async function FuncionarioDetalhePage({ params }: Params) {
       contratosIniciais={contratosComNome}
       clientes={clientes ?? []}
       podeExcluirDocumento={podeExcluirDocumento}
+      diasTeste={diasTeste}
       // Funcionário ainda 'ativo' com rescisão = rescisão programada (data futura, ou data chegada e cron pendente).
       desligamentoProgramadoEm={funcionario.status === "ativo" ? rescisaoDoFuncionario?.[0]?.data_desligamento ?? null : null}
     />

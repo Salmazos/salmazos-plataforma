@@ -1,5 +1,6 @@
 "use client";
 
+import BlocoDiasTesteRH from "@/components/BlocoDiasTesteRH";
 import { useEffect, useState } from "react";
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import CampoMoeda from "@/components/ui/CampoMoeda";
@@ -49,6 +50,8 @@ export interface CandidatoElegivel {
   admissao_data_inicio?: string | null;
   // Informativo para o RH avisar o candidato (texto livre do cliente); não vira campo da admissão.
   admissao_dia_teste?: string | null;
+  // Estruturado (jsonb): null = não informado, [] = não houve, lista = dias a lançar na folha.
+  admissao_dias_teste?: unknown;
 }
 
 interface Props {
@@ -412,10 +415,8 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
               />
             </div>
 
-            {selecionado?.admissao_dia_teste?.trim() && (
-              <p className="mb-4 text-sm rounded-lg px-3 py-2" style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#374151" }}>
-                <span className="font-semibold">Dia(s) de teste:</span> {selecionado.admissao_dia_teste.trim()}
-              </p>
+            {selecionado && (
+              <BlocoDiasTesteRH className="mb-4" dias={selecionado.admissao_dias_teste} textoLegado={selecionado.admissao_dia_teste} tipoServico={selecionado.tipo_servico_vigente} />
             )}
 
             <div className="mb-4">

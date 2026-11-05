@@ -1,5 +1,6 @@
 "use client";
 
+import BlocoDiasTesteRH from "@/components/BlocoDiasTesteRH";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatarData, formatarDataSemFuso } from "@/lib/utils";
@@ -109,6 +110,8 @@ interface Props {
   envelopeInterno: AdmissaoEnvelopeAssinatura | null;
   envelopeContabilidade: AdmissaoEnvelopeAssinatura | null;
   documentosContabilidade: AdmissaoDocumentoContabilidade[];
+  // Dias de teste da candidatura de origem (candidatos_vagas, mesmo par candidato+vaga); null = candidatura não encontrada.
+  diasTeste?: { dias: unknown; legado: string | null } | null;
 }
 
 const ACAO_LABEL: Record<string, string> = {
@@ -445,7 +448,7 @@ interface VagaOpcao {
   clientes: { id: string; nome: string } | null;
 }
 
-export default function AdmissaoDetalheClient({ admissao, dadosPessoais, dependentes, documentos: documentosIniciais, adicionais: adicionaisIniciais, auditLogs, valeTransporte, autorizacaoSindical, envelopeInterno, envelopeContabilidade, documentosContabilidade }: Props) {
+export default function AdmissaoDetalheClient({ admissao, dadosPessoais, dependentes, documentos: documentosIniciais, adicionais: adicionaisIniciais, auditLogs, valeTransporte, autorizacaoSindical, envelopeInterno, envelopeContabilidade, documentosContabilidade, diasTeste }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("dados");
   const [status, setStatus] = useState(admissao.status);
@@ -1423,6 +1426,16 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           {badge.label}
         </span>
       </div>
+
+      {/* Dias de teste: o RH lança a folha a partir desta tela. admissoes.modalidade só tem MOT/Terceirização. */}
+      {diasTeste && (
+        <BlocoDiasTesteRH
+          className="mb-5"
+          dias={diasTeste.dias}
+          textoLegado={diasTeste.legado}
+          tipoServico={admissao.modalidade === "MOT" ? "mao_obra_temporaria" : "terceirizacao"}
+        />
+      )}
 
       {/* Cancelamento — sempre visível (não depende da aba selecionada), disponível em
           qualquer status atual, inclusive depois de enviado_contabilidade. */}

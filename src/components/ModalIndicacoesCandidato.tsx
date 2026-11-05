@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { BotaoCurriculo } from "./BotaoCurriculo";
+import { textoDiasTesteParaRH } from "@/lib/diasTeste";
 
 const TIPO_LABEL: Record<string, { label: string; bg: string; color: string }> = {
   recrutamento_selecao: { label: "R&S", bg: "#1D6FA4", color: "#fff" },
@@ -22,6 +23,7 @@ const ADM_CAMPOS: { key: string; label: string }[] = [
   { key: "admissao_tempo_contrato", label: "Tempo de Contrato" },
   { key: "admissao_exame_responsavel", label: "Exame Admissional" },
   { key: "admissao_local_integracao", label: "Local/Data Integração" },
+  { key: "admissao_dias_teste", label: "Dia(s) de teste" },
   { key: "admissao_dia_teste", label: "Dia(s) de teste" },
   { key: "admissao_observacoes", label: "Observações" },
 ];
@@ -63,6 +65,13 @@ interface Props {
 }
 
 function valorAdmissao(item: Indicacao, key: string): string {
+  // Dias de teste: texto único para o RH (linhas separadas por "; " + total); null sem legado em R&S fica vazio.
+  if (key === "admissao_dias_teste") {
+    const info = textoDiasTesteParaRH(item[key], null, item.vagas?.tipo_servico);
+    // Texto antigo tem a própria linha (admissao_dia_teste); aqui só entra o que é estruturado ou "Não informado".
+    if (!info || (item[key] == null && String(item["admissao_dia_teste"] ?? "").trim())) return "";
+    return [...info.linhas, info.total].filter(Boolean).join("; ");
+  }
   const val = item[key];
   if (val == null || val === "") return "";
   if (key === "admissao_data_inicio") return String(val).split("-").reverse().join("/");

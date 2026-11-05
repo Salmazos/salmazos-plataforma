@@ -4,6 +4,7 @@ import AdmissoesClient from "@/components/AdmissoesClient";
 import { contextoRH } from "@/lib/rhUnidadeAuth";
 import { podeVerUnidade } from "@/lib/unidadeAuth";
 import SemAcessoPainel from "@/components/SemAcessoPainel";
+import { buscarDiasTestePorAdmissao } from "@/lib/diasTesteAdmissao";
 
 export const dynamic = "force-dynamic";
 
@@ -45,10 +46,14 @@ export default async function AdmissoesPage() {
     }
   }
 
+  // Dias de teste vêm da candidatura de origem (mesmo par candidato+vaga); só alimentam o selo da lista.
+  const diasTestePorAdmissao = await buscarDiasTestePorAdmissao(svc, admissoes ?? []);
+
   const admissoesComProgresso = (admissoes ?? []).map((a) => ({
     ...a,
     docsEnviados: progressoPorAdmissao.get(a.id) ?? 0,
     docsTotal: 16,
+    dias_teste: diasTestePorAdmissao.get(a.id)?.dias ?? null,
   }));
 
   // "Disponíveis para admissão" — candidatos já contratados (candidatos_vagas.etapa =
@@ -58,7 +63,7 @@ export default async function AdmissoesPage() {
   // 'contratado' — é uma lista de "ação pendente", não de elegibilidade ampla.
   const { data: contratadosSemAdmissao } = await svc
     .from("candidatos_vagas")
-    .select("id, candidato_id, vaga_id, updated_at, admissao_funcao, admissao_salario, admissao_salario_hora, admissao_horario, admissao_data_inicio, admissao_dia_teste, candidatos(id, nome_completo, cargo_pretendido, telefone), vagas!candidatos_vagas_vaga_id_fkey(id, titulo, status, tipo_servico, cliente_id, unidade_id, clientes(nome, entidade_contratante))")
+    .select("id, candidato_id, vaga_id, updated_at, admissao_funcao, admissao_salario, admissao_salario_hora, admissao_horario, admissao_data_inicio, admissao_dia_teste, admissao_dias_teste, candidatos(id, nome_completo, cargo_pretendido, telefone), vagas!candidatos_vagas_vaga_id_fkey(id, titulo, status, tipo_servico, cliente_id, unidade_id, clientes(nome, entidade_contratante))")
     .eq("etapa", "contratado")
     .order("updated_at", { ascending: false });
 
@@ -110,6 +115,7 @@ export default async function AdmissoesPage() {
     admissao_horario: cv.admissao_horario,
     admissao_data_inicio: cv.admissao_data_inicio,
     admissao_dia_teste: cv.admissao_dia_teste,
+    admissao_dias_teste: cv.admissao_dias_teste,
     // Não há "vigente" separado aqui — a regra dessa lista já usa vagas.tipo_servico
     // como fonte única, então o mesmo valor serve pro default de modalidade do modal.
     tipo_servico_vigente: cv.vagas?.tipo_servico ?? null,

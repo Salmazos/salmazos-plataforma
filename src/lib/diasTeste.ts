@@ -85,3 +85,44 @@ export function resolverDiasTeste(
   if (valor === undefined || valor === null) return { ok: false, erro: MSG_INFORME_DIAS_TESTE };
   return { ok: true, valor };
 }
+
+// ── Exibição para o RH/DP (lançar na folha). SOMENTE leitura: nada aqui marca "lançado" nem calcula valor. ──
+
+export interface DiasTesteRH {
+  // Uma linha por dia ("05/11/2026 · 08:00 às 12:00 (4h)"), ou a frase única dos demais casos.
+  linhas: string[];
+  // "Total: 12h" — só quando há dias.
+  total: string | null;
+  // true só com dias a lançar: é o que ganha o bloco âmbar "a pagar na folha".
+  destacar: boolean;
+}
+
+// Regra única de exibição (telas do RH, perfil do candidato, admissão, funcionário):
+//   lista       -> uma linha por dia + total;
+//   []          -> "Não houve dia de teste";
+//   null + texto antigo (admissao_dia_teste) -> o texto antigo, como foi digitado;
+//   null sem texto -> "Não informado pelo cliente", mas só em MOT/Terceirização; em R&S não há o que mostrar (null).
+export function textoDiasTesteParaRH(
+  dias: unknown,
+  textoLegado: string | null | undefined,
+  tipoServico: string | null | undefined
+): DiasTesteRH | null {
+  if (Array.isArray(dias)) {
+    if (dias.length === 0) return { linhas: ["Não houve dia de teste"], total: null, destacar: false };
+    return {
+      linhas: (formatarDiasTeste(dias) as string).split("\n"),
+      total: `Total: ${totalHorasDiasTeste(dias as DiaTeste[])}`,
+      destacar: true,
+    };
+  }
+  const legado = textoLegado?.trim();
+  if (legado) return { linhas: [legado], total: null, destacar: false };
+  if (exigeRespostaDiasTeste(tipoServico)) return { linhas: ["Não informado pelo cliente"], total: null, destacar: false };
+  return null;
+}
+
+// Selo da listagem de admissões: só quando há dias ("2 dia(s) · 12h"); [] e null não ganham selo.
+export function seloDiasTeste(dias: unknown): string | null {
+  if (!Array.isArray(dias) || dias.length === 0) return null;
+  return `${dias.length} dia(s) · ${totalHorasDiasTeste(dias as DiaTeste[])}`;
+}

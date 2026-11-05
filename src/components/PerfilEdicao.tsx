@@ -10,6 +10,8 @@ import type { EmailTemplateName } from "@/lib/emailTemplates";
 import PerfilEtapaSelector from "@/components/PerfilEtapaSelector";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import CampoTelefone from "@/components/ui/CampoTelefone";
+import BlocoDiasTesteRH from "@/components/BlocoDiasTesteRH";
+import { textoDiasTesteParaRH } from "@/lib/diasTeste";
 import PerfilAnotacoes from "@/components/PerfilAnotacoes";
 import { BotaoCurriculo } from "@/components/BotaoCurriculo";
 import TriagemBadge from "@/components/TriagemBadge";
@@ -1009,13 +1011,15 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
           ["Vale Transporte", admissaoInfo.vt == null ? null : admissaoInfo.vt ? "Sim" : "Não"],
           ["Exame Admissional", admissaoInfo.exame_responsavel],
           ["Local/Data Integração", admissaoInfo.local_integracao],
-          ["Dia(s) de teste", admissaoInfo.dia_teste],
           ["Telefone do Candidato", admissaoInfo.telefone_candidato],
           ["Observações", admissaoInfo.observacoes],
         ];
         const linhas = todasLinhas.filter(([, valor]) => valor != null && valor !== "");
 
-        if (linhas.length === 0) return null;
+        // Dias de teste ficam fora do <dl>: ganham bloco próprio, em destaque, quando há dias a lançar na folha.
+        const blocoDias = <BlocoDiasTesteRH dias={admissaoInfo.dias_teste} textoLegado={admissaoInfo.dia_teste} tipoServico={admissaoInfo.tipo_servico} />;
+        const temBlocoDias = textoDiasTesteParaRH(admissaoInfo.dias_teste, admissaoInfo.dia_teste, admissaoInfo.tipo_servico) !== null;
+        if (linhas.length === 0 && !temBlocoDias) return null;
 
         return (
           <div className="card" style={{ marginBottom: 24, padding: "16px 20px" }}>
@@ -1033,6 +1037,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
                 </div>
               ))}
             </dl>
+            <div style={{ marginTop: 12 }}>{blocoDias}</div>
           </div>
         );
       })()}
