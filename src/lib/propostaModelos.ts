@@ -124,7 +124,8 @@ export interface ItemProposta {
 export function cobraTaxaCancelamento(taxaCancelamentoPct: number): boolean {
   return taxaCancelamentoPct > 0;
 }
-// Sem taxa "com reposição" (0) não se oferece reposição: só o trecho da cláusula 1.1 some, a numeração das demais não muda.
+// Sem taxa "com reposição" (0) não se oferece reposição: a cláusula 1.1 passa a ter só a taxa única (sem o rótulo "Vagas sem
+// reposição", que só faz sentido quando existe a outra faixa) e a numeração das demais não muda.
 export function oferecaReposicao(taxaComReposicaoPct: number): boolean {
   return taxaComReposicaoPct > 0;
 }
@@ -134,10 +135,9 @@ export function quantidadeItensFixosRs(taxaCancelamentoPct: number): number {
 
 export function itensRs(c: CondicoesRs): ItemProposta[] {
   const textos = [
-    `Taxa de ${formatarPct(c.taxa_sem_reposicao_pct)} sobre 1º salário – Vagas sem reposição;` +
-      (oferecaReposicao(c.taxa_com_reposicao_pct)
-        ? ` Taxa de ${formatarPct(c.taxa_com_reposicao_pct)} sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;`
-        : ""),
+    oferecaReposicao(c.taxa_com_reposicao_pct)
+      ? `Taxa de ${formatarPct(c.taxa_sem_reposicao_pct)} sobre 1º salário – Vagas sem reposição; Taxa de ${formatarPct(c.taxa_com_reposicao_pct)} sobre 1º salário – Vagas c/ 01 reposição dentro dos primeiros 30 dias;`
+      : `Taxa de ${formatarPct(c.taxa_sem_reposicao_pct)} sobre 1º salário;`,
     `Os currículos serão enviados em até ${c.prazo_envio_curriculos_dias_uteis} dias úteis;`,
     ...(cobraTaxaCancelamento(c.taxa_cancelamento_pct)
       ? [`Caso o processo seletivo tenha sido feito com eficiência, currículos enviados, e o mesmo seja cancelado ou congelado, será cobrada uma taxa de ${formatarPct(c.taxa_cancelamento_pct)} sobre o 1º salário da vaga em questão;`]
