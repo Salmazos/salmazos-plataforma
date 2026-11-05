@@ -10,6 +10,7 @@ import { escaparHtml } from "@/lib/emailPacoteContabilidade";
 import { emailsOuPadrao, emailsSomenteConfigurado } from "@/lib/avisosResolucao";
 import { avisarDecisaoClienteCandidato } from "@/lib/avisarDecisaoClienteCandidato";
 import { avisarFeeRSNaoConfigurado } from "@/lib/avisarFeeRS";
+import { resolverDiasTeste, formatarDiasTeste } from "@/lib/diasTeste";
 
 
 export async function PATCH(request: NextRequest) {
@@ -49,6 +50,16 @@ export async function PATCH(request: NextRequest) {
 
     if (enc.status !== "aguardando")
       return NextResponse.json({ error: "Este encaminhamento já foi avaliado." }, { status: 409 });
+
+    // Dia(s) de teste: MOT/Terceirização precisam responder ao aprovar (inclusive "não houve"); R&S ignora o campo.
+    // O tipo vem da vaga no banco, não do body. Validado ANTES de gravar a avaliação para não deixá-la pela metade.
+    let diasTesteGravar: unknown = undefined;
+    if (status === "aprovado" && enc.vaga_id) {
+      const { data: vagaTipo } = await service.from("vagas").select("tipo_servico").eq("id", enc.vaga_id).maybeSingle();
+      const diasTeste = resolverDiasTeste(vagaTipo?.tipo_servico, parsed.data.admissao_dias_teste);
+      if (!diasTeste.ok) return NextResponse.json({ error: diasTeste.erro }, { status: 400 });
+      if (diasTeste.valor !== null) diasTesteGravar = parsed.data.admissao_dias_teste;
+    }
 
     const { data: updated, error } = await service
       .from("encaminhamentos")
@@ -101,11 +112,13 @@ export async function PATCH(request: NextRequest) {
           "admissao_gestor", "admissao_periodo_experiencia", "admissao_observacoes",
           "admissao_funcao", "admissao_salario_hora", "admissao_turno", "admissao_escala",
           "admissao_tempo_contrato", "admissao_vt", "admissao_exame_responsavel",
-          "admissao_local_integracao", "admissao_dia_teste", "admissao_telefone_candidato",
+          "admissao_local_integracao", "admissao_telefone_candidato",
         ];
         for (const key of admKeys) {
           if (body[key] !== undefined) admFields[key] = body[key];
         }
+        // Estruturado e já validado pelo schema; o texto antigo (admissao_dia_teste) deixou de ser gravado.
+        if (diasTesteGravar !== undefined) admFields.admissao_dias_teste = diasTesteGravar;
 
         // Fee calculation for R&S — verifica mesmo sem admissao_salario ainda
         // preenchido, pra conseguir detectar "vaga R&S sem taxa configurada" (ver
@@ -288,6 +301,7 @@ export async function PATCH(request: NextRequest) {
           admissao_exame_responsavel: "Exame Admissional",
           admissao_local_integracao: "Local/Data Integração",
           admissao_dia_teste: "Dia(s) de teste",
+          admissao_dias_teste: "Dia(s) de teste",
           admissao_telefone_candidato: "Telefone do Candidato",
           admissao_observacoes: "Observações",
         };
@@ -311,6 +325,12 @@ export async function PATCH(request: NextRequest) {
         }
 
         for (const [key, label] of Object.entries(admLabels)) {
+          if (key === "admissao_dias_teste") {
+            // [] ("não houve") também aparece: é resposta do cliente, diferente de não informado.
+            const texto = formatarDiasTeste(diasTesteGravar);
+            if (texto !== null) admRows += linhaTabela(label, escaparHtml(texto).replace(/\n/g, "<br>"));
+            continue;
+          }
           const val = body[key];
           if (val != null && val !== "" && val !== false) {
             const display = typeof val === "boolean" ? (val ? "Sim" : "Não")

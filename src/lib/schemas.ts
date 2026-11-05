@@ -7,6 +7,7 @@ import { VALIDADES_LINK_DIAS, VALIDADE_LINK_PADRAO_DIAS } from "@/lib/solicitaca
 import { salarioPublicoValido } from "@/lib/solicitacaoVagaPublicaForm";
 import { TURNOS_FUNCIONARIO, SEGMENTOS_CLIENTE, TIPOS_SERVICO } from "@/lib/constants";
 import { nomeArquivoCurriculoValido } from "@/lib/indicacaoEdicao";
+import { diasTesteSchema } from "@/lib/diasTeste";
 import { validarSenhaPortal, mensagemSenhaPortalInvalida } from "@/lib/senhaPortal";
 import { normalizarLocalEntrevista, LOCAL_ENTREVISTA_MAX } from "@/lib/localEntrevista";
 
@@ -1074,6 +1075,7 @@ export const portalAvaliarSchema = z.object({
   admissao_exame_responsavel: z.string().optional().nullable(),
   admissao_local_integracao: z.string().optional().nullable(),
   admissao_dia_teste: z.string().optional().nullable(),
+  admissao_dias_teste: diasTesteSchema.optional().nullable(),
   admissao_telefone_candidato: z.string().optional().nullable(),
 });
 
@@ -1113,6 +1115,7 @@ export const portalIndicarCandidatoSchema = z.object({
   admissao_exame_responsavel: z.string().optional().nullable(),
   admissao_local_integracao: z.string().optional().nullable(),
   admissao_dia_teste: z.string().optional().nullable(),
+  admissao_dias_teste: diasTesteSchema.optional().nullable(),
   admissao_observacoes: z.string().optional().nullable(),
 });
 

@@ -1,6 +1,7 @@
 // Regras PURAS da edição de uma indicação direta de candidato pelo próprio cliente (portal).
 // Sem imports de servidor: roda igual na rota e em scripts/verificar-indicacao-edicao.mts. "Hoje" e
 // tudo que vem do banco entram por parâmetro.
+import { formatarDiasTeste, type DiaTeste } from "./diasTeste";
 
 export const CAMPOS_CANDIDATO = ["candidato_nome", "candidato_telefone", "curriculo_url"] as const;
 
@@ -21,6 +22,7 @@ export const CAMPOS_ADMISSAO = [
   "admissao_exame_responsavel",
   "admissao_local_integracao",
   "admissao_dia_teste",
+  "admissao_dias_teste",
   "admissao_observacoes",
 ] as const;
 
@@ -49,6 +51,7 @@ export const ROTULO_CAMPO: Record<CampoEditavel, string> = {
   admissao_exame_responsavel: "Responsável pelo exame admissional",
   admissao_local_integracao: "Local de integração",
   admissao_dia_teste: "Dia(s) de teste",
+  admissao_dias_teste: "Dia(s) de teste",
   admissao_observacoes: "Observações",
 };
 
@@ -56,7 +59,7 @@ const CAMPOS_NUMERICOS = new Set<string>(["admissao_salario", "admissao_salario_
 const ORIGEM_INDICACAO = "indicacao_direta_cliente";
 const LIMITE_OBSERVACOES = 120;
 
-export type Valor = string | number | boolean | null;
+export type Valor = string | number | boolean | DiaTeste[] | null;
 export interface Alteracao {
   campo: CampoEditavel;
   antes: Valor;
@@ -72,6 +75,8 @@ export function normalizarValor(campo: string, valor: unknown): Valor | undefine
   if (valor === null) return null;
   if (typeof valor === "boolean") return valor;
   if (typeof valor === "number") return Number.isFinite(valor) ? valor : null;
+  // Dias de teste: [] ("não houve") é resposta válida e diferente de null ("não informado") — não colapsar.
+  if (Array.isArray(valor)) return valor as DiaTeste[];
   if (typeof valor === "string") {
     const texto = valor.trim();
     if (texto === "") return null;
@@ -84,6 +89,11 @@ export function normalizarValor(campo: string, valor: unknown): Valor | undefine
   return null;
 }
 
+function valoresIguais(a: Valor, b: Valor): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) return JSON.stringify(a) === JSON.stringify(b);
+  return a === b;
+}
+
 // Só os campos presentes em `entrada` entram na comparação; devolve apenas os que mudaram de fato.
 export function calcularDiff(atual: Record<string, unknown>, entrada: Record<string, unknown>): Alteracao[] {
   const mudancas: Alteracao[] = [];
@@ -92,7 +102,7 @@ export function calcularDiff(atual: Record<string, unknown>, entrada: Record<str
     const depois = normalizarValor(campo, entrada[campo]);
     if (depois === undefined) continue;
     const antes = normalizarValor(campo, atual[campo]) ?? null;
-    if (antes !== depois) mudancas.push({ campo, antes, depois });
+    if (!valoresIguais(antes, depois)) mudancas.push({ campo, antes, depois });
   }
   return mudancas;
 }
@@ -237,6 +247,7 @@ export function formatarValorAviso(campo: CampoEditavel, valor: Valor, lado: "an
     if (lado === "depois") return valor ? "novo arquivo anexado" : "(removido)";
     return valor ? "arquivo anexado anteriormente" : "(sem arquivo)";
   }
+  if (campo === "admissao_dias_teste") return formatarDiasTeste(valor)?.replace(/\n/g, "; ") ?? "(vazio)";
   if (valor === null || valor === "") return "(vazio)";
   if (campo === "candidato_telefone") return mascararTelefone(String(valor));
   if (typeof valor === "boolean") return valor ? "Sim" : "Não";
