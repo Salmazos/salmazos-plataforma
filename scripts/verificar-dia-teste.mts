@@ -2,7 +2,7 @@
 // informado, 0 = não houve, 1 ou 2) — sem datas e sem horários. Cobre as regras puras (src/lib/diasTeste.ts), schemas,
 // obrigatoriedade por serviço, criação/avaliação/edição pelo cliente, decisão (cópia para candidatos_vagas), e-mails, a exibição
 // para o RH e o texto legado (admissao_dia_teste, só leitura/cópia). Roda as rotas reais contra o banco em memória do harness.
-// As telas (CampoDiasTeste, BlocoDiasTesteRH) ficam fora deste arquivo até serem reescritas para a quantidade (parte B).
+// Também cobre as telas puras: CampoDiasTeste (Não / Sim + quantidade) e BlocoDiasTesteRH (exibição do RH).
 // Rodar: node --no-warnings --import ./scripts/harness-mot/register.mjs scripts/verificar-dia-teste.mts
 import assert from "node:assert/strict";
 // @ts-expect-error módulo .mjs do harness, sem tipos
@@ -13,7 +13,13 @@ import { CAMPOS_ADMISSAO, ROTULO_CAMPO, campoDaAdmissao, calcularDiff, formatarV
 import {
   MAX_DIAS_TESTE, qtdDiasTesteSchema, formatarDiasTeste, exigeRespostaDiasTeste, resolverDiasTeste, textoDiasTesteParaRH, seloDiasTeste,
 } from "../src/lib/diasTeste";
-import { portalAvaliarSchema, portalIndicarCandidatoSchema, portalEditarIndicacaoSchema } from "../src/lib/schemas";
+import { createElement, type ReactElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import BlocoDiasTesteRH from "../src/components/BlocoDiasTesteRH";
+import CampoDiasTeste, {
+  ESTADO_DIAS_TESTE_VAZIO, estadoDiasTesteDeValor, diasTesteParaEnvio, erroDiasTeste, type EstadoDiasTeste,
+} from "../src/components/CampoDiasTeste";
+import { portalAvaliarSchema, portalIndicarCandidatoSchema, portalEditarIndicacaoSchema, admissaoCreateSchema } from "../src/lib/schemas";
 
 congelarData();
 const criar = await importar("src/app/api/portal/indicar-candidato/route.ts");
@@ -340,6 +346,168 @@ await ok("RH: admissão → candidatura pelo par (candidato, vaga): lê quantida
   assert.deepEqual(r.get(C), { qtd: null, legado: "só texto" });
   assert.equal(r.has(E), false, "admissão sem candidatura não herda dados de outra vaga/candidato");
   assert.equal((await buscarDiasTestePorAdmissao(createServiceClient(), [{ id: "x", candidato_id: "CAND1", vaga_id: null }])).size, 0);
+});
+
+// ── CampoDiasTeste (portal e ajuste do RH): helpers, render e interação ──
+const render = (valor: EstadoDiasTeste, extra: Record<string, unknown> = {}) =>
+  renderToStaticMarkup(createElement(CampoDiasTeste, { valor, onChange: () => {}, ...extra }));
+// O componente não usa hooks: chamá-lo devolve a árvore de elementos, onde dá para achar os handlers.
+function achar(no: any, teste: (el: any) => boolean, achados: any[] = []): any[] {
+  if (Array.isArray(no)) { no.forEach((x) => achar(x, teste, achados)); return achados; }
+  if (!no || typeof no !== "object" || !("props" in no)) return achados;
+  if (teste(no)) achados.push(no);
+  achar((no as ReactElement<any>).props?.children, teste, achados);
+  return achados;
+}
+const arvore = (valor: EstadoDiasTeste, onChange: (e: EstadoDiasTeste) => void) => (CampoDiasTeste as any)({ valor, onChange });
+
+await ok("CampoDiasTeste: helpers — sem resposta → null; Não → 0; Sim → a quantidade; erros de cada caso", () => {
+  assert.equal(diasTesteParaEnvio(ESTADO_DIAS_TESTE_VAZIO), null);
+  assert.strictEqual(diasTesteParaEnvio({ resposta: "nao", qtd: null }), 0);
+  assert.strictEqual(diasTesteParaEnvio({ resposta: "sim", qtd: 1 }), 1);
+  assert.strictEqual(diasTesteParaEnvio({ resposta: "sim", qtd: 2 }), 2);
+  assert.equal(diasTesteParaEnvio({ resposta: "sim", qtd: null }), null, "Sim sem quantidade não vira 0");
+  assert.equal(erroDiasTeste(ESTADO_DIAS_TESTE_VAZIO), "Informe se houve dia(s) de teste.");
+  assert.equal(erroDiasTeste({ resposta: "sim", qtd: null }), "Informe a quantidade de dias de teste.");
+  assert.equal(erroDiasTeste({ resposta: "nao", qtd: null }), null);
+  assert.equal(erroDiasTeste({ resposta: "sim", qtd: 1 }), null);
+  assert.equal(erroDiasTeste({ resposta: "sim", qtd: 2 }), null);
+});
+await ok("CampoDiasTeste: estado a partir do valor salvo — null → sem resposta; 0 → Não; 1 e 2 → Sim + quantidade; lixo → sem resposta", () => {
+  assert.deepEqual(estadoDiasTesteDeValor(null), { resposta: "", qtd: null });
+  assert.deepEqual(estadoDiasTesteDeValor(undefined), { resposta: "", qtd: null });
+  assert.deepEqual(estadoDiasTesteDeValor(0), { resposta: "nao", qtd: null });
+  assert.deepEqual(estadoDiasTesteDeValor(1), { resposta: "sim", qtd: 1 });
+  assert.deepEqual(estadoDiasTesteDeValor(2), { resposta: "sim", qtd: 2 });
+  for (const lixo of [3, -1, 1.5, "1", [], {}]) assert.deepEqual(estadoDiasTesteDeValor(lixo), { resposta: "", qtd: null }, JSON.stringify(lixo));
+  for (const q of [0, 1, 2]) assert.strictEqual(diasTesteParaEnvio(estadoDiasTesteDeValor(q)), q, "ida e volta");
+});
+await ok("CampoDiasTeste (render): sem pré-seleção e sem select; Sim mostra 'Quantos dias?' com Selecione, 1 dia e 2 dias (até MAX_DIAS_TESTE)", () => {
+  const vazio = render(ESTADO_DIAS_TESTE_VAZIO);
+  assert.doesNotMatch(vazio, /checked/);
+  assert.doesNotMatch(vazio, /<select/);
+  const nao = render({ resposta: "nao", qtd: null });
+  assert.doesNotMatch(nao, /<select/);
+  const sim = render({ resposta: "sim", qtd: null });
+  assert.match(sim, /Quantos dias\?/);
+  assert.match(sim, /<option value=""( selected="")?>Selecione<\/option>/);
+  assert.match(sim, />1 dia</);
+  assert.match(sim, />2 dias</);
+  assert.equal((sim.match(/<option /g) ?? []).length, 1 + MAX_DIAS_TESTE, "Selecione + uma opção por quantidade possível");
+  assert.doesNotMatch(sim, /<input type="date"|<input type="time"/, "sem data nem horário");
+  assert.match(render({ resposta: "sim", qtd: 2 }), /<option value="2" selected="">2 dias<\/option>/);
+});
+await ok("CampoDiasTeste (render): mostrarErro — sem resposta pinta o grupo; Sim sem quantidade pinta o select; sem mostrarErro nada", () => {
+  const a = render(ESTADO_DIAS_TESTE_VAZIO, { mostrarErro: true });
+  assert.match(a, /Informe se houve dia\(s\) de teste\./);
+  assert.match(a, /#EF4444/);
+  const b = render({ resposta: "sim", qtd: null }, { mostrarErro: true });
+  assert.match(b, /Informe a quantidade de dias de teste\./);
+  assert.match(b, /#EF4444/);
+  const ok1 = render({ resposta: "sim", qtd: 1 }, { mostrarErro: true });
+  assert.doesNotMatch(ok1, /#EF4444|Informe/);
+  assert.doesNotMatch(render(ESTADO_DIAS_TESTE_VAZIO, { mostrarErro: false }), /#EF4444|Informe se houve/);
+});
+await ok("CampoDiasTeste (render): className e style dos inputs são repassados ao select", () => {
+  const html = render({ resposta: "sim", qtd: null }, { inputClassName: "input-field", inputStyle: { border: "1px solid #E5E7EB" } });
+  assert.match(html, /<select[^>]*class="input-field"/);
+  assert.match(html, /border:1px solid #E5E7EB/);
+});
+await ok("CampoDiasTeste (interação): Não → Não/0; Sim → pede quantidade; escolher 1 e 2; voltar a 'Selecione'; Sim→Não descarta a quantidade", () => {
+  let ultimo: EstadoDiasTeste | null = null;
+  const t = (st: EstadoDiasTeste) => arvore(st, (e) => { ultimo = e; });
+  const radios = (st: EstadoDiasTeste) => achar(t(st), (el) => el.type === "input" && el.props.type === "radio");
+  const select = (st: EstadoDiasTeste) => achar(t(st), (el) => el.type === "select")[0];
+
+  const [rNao, rSim] = radios(ESTADO_DIAS_TESTE_VAZIO);
+  rNao.props.onChange();
+  assert.deepEqual(ultimo, { resposta: "nao", qtd: null });
+  assert.strictEqual(diasTesteParaEnvio(ultimo!), 0);
+  rSim.props.onChange();
+  assert.deepEqual(ultimo, { resposta: "sim", qtd: null });
+  assert.equal(erroDiasTeste(ultimo!), "Informe a quantidade de dias de teste.", "Sim sem quantidade continua bloqueando");
+
+  select({ resposta: "sim", qtd: null }).props.onChange({ target: { value: "1" } });
+  assert.deepEqual(ultimo, { resposta: "sim", qtd: 1 });
+  select({ resposta: "sim", qtd: 1 }).props.onChange({ target: { value: "2" } });
+  assert.deepEqual(ultimo, { resposta: "sim", qtd: 2 });
+  assert.strictEqual(diasTesteParaEnvio(ultimo!), 2);
+  select({ resposta: "sim", qtd: 2 }).props.onChange({ target: { value: "" } });
+  assert.deepEqual(ultimo, { resposta: "sim", qtd: null });
+
+  radios({ resposta: "sim", qtd: 2 })[1].props.onChange();
+  assert.deepEqual(ultimo, { resposta: "sim", qtd: 2 }, "marcar Sim de novo mantém a quantidade");
+  radios({ resposta: "sim", qtd: 2 })[0].props.onChange();
+  assert.deepEqual(ultimo, { resposta: "nao", qtd: null }, "Sim → Não descarta a quantidade");
+});
+await ok("CampoDiasTeste: obrigatoriedade por serviço — só MOT/Terceirização exigem; Não (0) satisfaz; o servidor recusa null", () => {
+  for (const tipo of [MOT, TERC]) {
+    assert.equal(exigeRespostaDiasTeste(tipo), true);
+    assert.deepEqual(resolverDiasTeste(tipo, diasTesteParaEnvio(ESTADO_DIAS_TESTE_VAZIO)), { ok: false, erro: MSG });
+    assert.deepEqual(resolverDiasTeste(tipo, diasTesteParaEnvio({ resposta: "nao", qtd: null })), { ok: true, valor: 0 });
+    assert.deepEqual(resolverDiasTeste(tipo, diasTesteParaEnvio({ resposta: "sim", qtd: 2 })), { ok: true, valor: 2 });
+  }
+  assert.deepEqual(resolverDiasTeste(RS, diasTesteParaEnvio({ resposta: "sim", qtd: 2 })), { ok: true, valor: null }, "R&S ignora");
+});
+
+// ── BlocoDiasTesteRH (exibição do RH) ──
+const bloco = (qtd: unknown, legado: string | null, tipo: string | null) => renderToStaticMarkup(createElement(BlocoDiasTesteRH, { qtd, legado, tipo }));
+await ok("BlocoDiasTesteRH: 1 e 2 → bloco âmbar 'a pagar na folha' com '1 dia de teste' / '2 dias de teste' (sem total, sem horas)", () => {
+  for (const [q, texto] of [[1, "1 dia de teste"], [2, "2 dias de teste"]] as const) {
+    const h = bloco(q, "texto antigo", MOT);
+    assert.match(h, /Dia\(s\) de teste \(a pagar na folha\)/);
+    assert.match(h, /#FFFBEB/);
+    assert.match(h, new RegExp(texto));
+    assert.doesNotMatch(h, /Total|texto antigo|\d{2}:\d{2}/);
+  }
+});
+await ok("BlocoDiasTesteRH: 0, texto antigo e 'não informado' (MOT/Terceirização) aparecem sem destaque", () => {
+  for (const [q, l, t, texto] of [[0, null, MOT, "Não houve dia de teste"], [0, "texto antigo", TERC, "Não houve dia de teste"], [null, "05/11 e 06/11", MOT, "05/11 e 06/11"], [null, null, MOT, "Não informado pelo cliente"], [null, null, TERC, "Não informado pelo cliente"]] as const) {
+    const h = bloco(q, l, t);
+    assert.match(h, new RegExp(texto));
+    assert.match(h, /Dia\(s\) de teste:/);
+    assert.doesNotMatch(h, /a pagar na folha|#FFFBEB/);
+  }
+});
+await ok("BlocoDiasTesteRH: R&S sem quantidade nem texto não renderiza nada; texto antigo em R&S ainda aparece", () => {
+  assert.equal(bloco(null, null, RS), "");
+  assert.equal(bloco(null, "  ", RS), "");
+  assert.equal(bloco(undefined, null, null), "");
+  assert.match(bloco(null, "05/11", RS), /05\/11/);
+});
+
+// ── RH ajusta a quantidade ao iniciar a admissão (POST /api/admissoes) ──
+await ok("admissão (RH ajusta a quantidade): schema aceita 0..2 e recusa 3; grava na candidatura de origem com auditoria; sem a chave não mexe", async () => {
+  const base = { candidato_id: ID.CAND, vaga_id: ID.V_MOT_A, modalidade: "MOT", funcao: "Auxiliar", salario: 1800, horario_trabalho: "08:00 às 17:00", data_admissao: "2026-11-10", entidade_contratante: "X" };
+  for (const q of [0, 1, 2]) assert.equal(admissaoCreateSchema.safeParse({ ...base, admissao_qtd_dias_teste: q }).success, true, String(q));
+  for (const q of [3, -1, 1.5, "1", null]) assert.equal(admissaoCreateSchema.safeParse({ ...base, admissao_qtd_dias_teste: q }).success, false, JSON.stringify(q));
+  assert.equal(admissaoCreateSchema.safeParse(base).success, true);
+
+  const rota = await importar("src/app/api/admissoes/route.ts");
+  const montar = (qtdSalva: number | null) => {
+    const db = novoDbIndicacao(); logar(db, "dir");
+    db.tabelas.candidatos_vagas.find((c: any) => c.id === ID.CV).vaga_id = ID.V_MOT_A;
+    db.tabelas.candidatos_vagas.find((c: any) => c.id === ID.CV).admissao_qtd_dias_teste = qtdSalva;
+    return db;
+  };
+  const cvDe = (db: any) => db.tabelas.candidatos_vagas.find((c: any) => c.id === ID.CV);
+  for (const [salvo, novo] of [[null, 2], [2, 0], [1, 2], [0, 1]] as const) {
+    const db = montar(salvo);
+    const r = await chamar(rota.POST, { metodo: "POST", corpo: { ...base, admissao_qtd_dias_teste: novo } });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.strictEqual(cvDe(db).admissao_qtd_dias_teste, novo, `${salvo} → ${novo}`);
+    const aud = (db.tabelas.audit_logs ?? []).find((l: any) => l.acao === "admissao_qtd_dias_teste_ajustada_pelo_rh");
+    assert.ok(aud, "auditoria do ajuste");
+    assert.deepEqual({ antes: aud.detalhes.antes, depois: aud.detalhes.depois }, { antes: salvo, depois: novo });
+  }
+  const dbSem = montar(2);
+  const rSem = await chamar(rota.POST, { metodo: "POST", corpo: base });
+  assert.equal(rSem.status, 200, JSON.stringify(rSem.corpo));
+  assert.strictEqual(cvDe(dbSem).admissao_qtd_dias_teste, 2, "sem a chave a candidatura não é tocada");
+  assert.equal((dbSem.tabelas.audit_logs ?? []).some((l: any) => l.acao === "admissao_qtd_dias_teste_ajustada_pelo_rh"), false);
+  const dbIgual = montar(1);
+  await chamar(rota.POST, { metodo: "POST", corpo: { ...base, admissao_qtd_dias_teste: 1 } });
+  assert.equal((dbIgual.tabelas.audit_logs ?? []).some((l: any) => l.acao === "admissao_qtd_dias_teste_ajustada_pelo_rh"), false, "mesmo valor: nada a auditar");
 });
 
 console.log(`\n${n} verificações OK`);

@@ -24,8 +24,8 @@ export interface AdmissaoRow {
   vagas: { id: string; titulo: string } | null;
   docsEnviados: number;
   docsTotal: number;
-  // admissao_dias_teste da candidatura de origem (só para o selo da lista): null | [] | lista.
-  dias_teste?: unknown;
+  // admissao_qtd_dias_teste da candidatura de origem (só para o selo da lista): null | 0 | 1 | 2.
+  qtd_dias_teste?: number | null;
 }
 
 export interface DisponivelAdmissao extends CandidatoElegivel {
@@ -318,9 +318,9 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
                     <td style={{ padding: "10px 12px", fontWeight: 600, color: "#111827" }}>{row.candidatos?.nome_completo ?? "—"}</td>
                     <td style={{ padding: "10px 12px", color: "#374151" }}>
                       {row.vagas?.titulo ?? "—"}{row.funcao ? ` (${row.funcao})` : ""}
-                      {seloDiasTeste(row.dias_teste) && (
+                      {seloDiasTeste(row.qtd_dias_teste) && (
                         <span style={{ display: "block", marginTop: 4, width: "fit-content", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#FFFBEB", border: "1px solid #FDE68A", color: "#92400E" }}>
-                          Dia(s) de teste: {seloDiasTeste(row.dias_teste)}
+                          Dia(s) de teste: {seloDiasTeste(row.qtd_dias_teste)}
                         </span>
                       )}
                     </td>

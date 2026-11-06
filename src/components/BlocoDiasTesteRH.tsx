@@ -3,15 +3,16 @@ import { textoDiasTesteParaRH } from "@/lib/diasTeste";
 // Dias de teste para o RH/DP lançar na folha. Sem "use client": serve tanto em página de servidor quanto em
 // componente de cliente. Só exibe — não há marcação de "lançado" nem valor.
 interface Props {
-  dias: unknown;
+  // admissao_qtd_dias_teste: null = não informado, 0 = não houve, 1 ou 2.
+  qtd: unknown;
   // admissao_dia_teste: texto livre dos registros antigos.
-  textoLegado?: string | null;
-  tipoServico?: string | null;
+  legado?: string | null;
+  tipo?: string | null;
   className?: string;
 }
 
-export default function BlocoDiasTesteRH({ dias, textoLegado, tipoServico, className }: Props) {
-  const info = textoDiasTesteParaRH(dias, textoLegado, tipoServico);
+export default function BlocoDiasTesteRH({ qtd, legado, tipo, className }: Props) {
+  const info = textoDiasTesteParaRH(qtd, legado, tipo);
   if (!info) return null;
 
   if (!info.destacar) {
@@ -26,12 +27,7 @@ export default function BlocoDiasTesteRH({ dias, textoLegado, tipoServico, class
       <p style={{ fontSize: 11, fontWeight: 700, color: "#92400E", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
         Dia(s) de teste (a pagar na folha)
       </p>
-      <ul style={{ margin: 0, padding: 0, listStyle: "none", fontSize: 13, color: "#111827" }}>
-        {info.linhas.map((l) => (
-          <li key={l}>{l}</li>
-        ))}
-      </ul>
-      {info.total && <p style={{ marginTop: 6, fontSize: 13, fontWeight: 700, color: "#92400E" }}>{info.total}</p>}
+      <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#111827" }}>{info.linhas.join("; ")}</p>
     </div>
   );
 }

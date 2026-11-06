@@ -1017,8 +1017,8 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
         const linhas = todasLinhas.filter(([, valor]) => valor != null && valor !== "");
 
         // Dias de teste ficam fora do <dl>: ganham bloco próprio, em destaque, quando há dias a lançar na folha.
-        const blocoDias = <BlocoDiasTesteRH dias={admissaoInfo.dias_teste} textoLegado={admissaoInfo.dia_teste} tipoServico={admissaoInfo.tipo_servico} />;
-        const temBlocoDias = textoDiasTesteParaRH(admissaoInfo.dias_teste, admissaoInfo.dia_teste, admissaoInfo.tipo_servico) !== null;
+        const blocoDias = <BlocoDiasTesteRH qtd={admissaoInfo.qtd_dias_teste} legado={admissaoInfo.dia_teste} tipo={admissaoInfo.tipo_servico} />;
+        const temBlocoDias = textoDiasTesteParaRH(admissaoInfo.qtd_dias_teste, admissaoInfo.dia_teste, admissaoInfo.tipo_servico) !== null;
         if (linhas.length === 0 && !temBlocoDias) return null;
 
         return (

@@ -66,7 +66,7 @@ interface Props {
   // Rescisão lançada com data futura: o funcionário continua 'ativo' até a data (null = sem rescisão programada).
   desligamentoProgramadoEm: string | null;
   // Dias de teste da candidatura de origem da admissão (null = cadastro manual ou origem não encontrada).
-  diasTeste?: { dias: unknown; legado: string | null } | null;
+  diasTeste?: { qtd: number | null; legado: string | null } | null;
 }
 
 const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
@@ -283,7 +283,7 @@ export default function FuncionarioDetalheClient({ funcionario: funcionarioInici
       </div>
 
       {diasTeste && (
-        <BlocoDiasTesteRH className="mb-6" dias={diasTeste.dias} textoLegado={diasTeste.legado} tipoServico={funcionario.tipo_servico} />
+        <BlocoDiasTesteRH className="mb-6" qtd={diasTeste.qtd} legado={diasTeste.legado} tipo={funcionario.tipo_servico} />
       )}
 
       {funcionario.tipo_servico === "mao_obra_temporaria" && (

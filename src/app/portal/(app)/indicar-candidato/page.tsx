@@ -227,7 +227,7 @@ export default function IndicarCandidatoPage() {
           admissao_exame_responsavel: admExameResp || null,
           admissao_local_integracao: integracaoComposta || null,
           // R&S não tem dia de teste: undefined sai do JSON. O texto antigo (admissao_dia_teste) não é mais enviado.
-          admissao_dias_teste: MOSTRAR_DIA_TESTE_NO_PORTAL && (isMOT || isTerc) ? diasTesteParaEnvio(admDiasTeste) : undefined,
+          admissao_qtd_dias_teste: MOSTRAR_DIA_TESTE_NO_PORTAL && (isMOT || isTerc) ? diasTesteParaEnvio(admDiasTeste) : undefined,
           admissao_observacoes: admObservacoes || null,
         }),
       });
@@ -517,7 +517,7 @@ export default function IndicarCandidatoPage() {
                     <p className="text-[11px] text-gray-400 mt-1">Preencha os três campos, ou deixe todos em branco.</p>
                   </Field>
                   {MOSTRAR_DIA_TESTE_NO_PORTAL && (
-                    <Field label="Houve dia(s) de teste antes do início?" required>
+                    <Field label="Dia(s) de teste antes do início?" required>
                       <CampoDiasTeste id="campo-dias-teste" valor={admDiasTeste} onChange={setAdmDiasTeste}
                         mostrarErro={tentouEnviar} inputStyle={inputStyle} />
                     </Field>
@@ -598,7 +598,7 @@ export default function IndicarCandidatoPage() {
                     <p className="text-[11px] text-gray-400 mt-1">Preencha os três campos, ou deixe todos em branco.</p>
                   </Field>
                   {MOSTRAR_DIA_TESTE_NO_PORTAL && (
-                    <Field label="Houve dia(s) de teste antes do início?" required>
+                    <Field label="Dia(s) de teste antes do início?" required>
                       <CampoDiasTeste id="campo-dias-teste" valor={admDiasTeste} onChange={setAdmDiasTeste}
                         mostrarErro={tentouEnviar} inputStyle={inputStyle} />
                     </Field>

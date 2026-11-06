@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { DiaTeste } from "@/lib/diasTeste";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import CampoTelefone from "@/components/ui/CampoTelefone";
@@ -23,8 +22,7 @@ interface Detalhe {
   pode_trocar_vaga: boolean;
   candidato_nome: string | null;
   candidato_telefone: string | null;
-  // admissao_dias_teste é jsonb (lista de dias); os demais campos são escalares.
-  [campo: string]: string | number | boolean | null | DiaTeste[];
+  [campo: string]: string | number | boolean | null;
 }
 
 interface VagaAtiva {
@@ -78,9 +76,9 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
         }
         const d = json.data as Detalhe;
         setInicial(d);
-        // Dias de teste têm estado próprio (lista); o resto do formulário continua escalar.
-        setForm({ vaga_id: d.vaga_id, ...Object.fromEntries(Object.entries(d).filter(([k]) => (k.startsWith("admissao_") && k !== "admissao_dias_teste") || k.startsWith("candidato_"))) as Record<string, string | number | boolean | null> });
-        setDiasTeste(estadoDiasTesteDeValor(d.admissao_dias_teste));
+        // Dia(s) de teste tem estado próprio (Não / Sim + quantidade); o resto do formulário continua escalar.
+        setForm({ vaga_id: d.vaga_id, ...Object.fromEntries(Object.entries(d).filter(([k]) => (k.startsWith("admissao_") && k !== "admissao_qtd_dias_teste") || k.startsWith("candidato_"))) });
+        setDiasTeste(estadoDiasTesteDeValor(d.admissao_qtd_dias_teste));
         if (d.pode_trocar_vaga) {
           const rv = await fetch("/api/portal/vagas-ativas");
           const jv = await rv.json();
@@ -108,7 +106,7 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
     if (!inicial) return;
     setErro("");
     // Só o que mudou. "" vira null (igual à criação); número 0 do campo de moeda vira null.
-    const mudou: Record<string, string | number | boolean | null | DiaTeste[]> = {};
+    const mudou: Record<string, string | number | boolean | null> = {};
     for (const [campo, valor] of Object.entries(form)) {
       const novo = typeof valor === "string" ? (valor.trim() === "" ? null : valor.trim()) : valor === 0 ? null : valor;
       const antigo = campo === "vaga_id" ? inicial.vaga_id : (inicial[campo] ?? null);
@@ -118,13 +116,14 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
       setErro("Nome e telefone do candidato não podem ficar em branco.");
       return;
     }
-    // Dias de teste: indicação antiga (null) segue editável sem responder; mexeu no campo, precisa estar completo.
+    // Dia(s) de teste: indicação antiga (null) segue editável sem responder — se o cliente não mexer, o campo NÃO vai no corpo
+    // (null explícito é recusado em MOT/Terceirização). Mexeu, precisa estar completo; 0 ("Não") é resposta e vai como 0.
     if (MOSTRAR_DIA_TESTE_NO_PORTAL && !isRS && diasTesteAlterado) {
       setTentouSalvar(true);
       const e = erroDiasTeste(diasTeste);
       if (e) { setErro(e); return; }
-      const novoDias = diasTesteParaEnvio(diasTeste);
-      if (JSON.stringify(novoDias) !== JSON.stringify(inicial.admissao_dias_teste ?? null)) mudou.admissao_dias_teste = novoDias;
+      const novaQtd = diasTesteParaEnvio(diasTeste);
+      if (novaQtd !== (inicial.admissao_qtd_dias_teste ?? null)) mudou.admissao_qtd_dias_teste = novaQtd;
     }
 
     setSalvando(true);
@@ -246,7 +245,7 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
               {!isRS && campoTexto("admissao_exame_responsavel", "Responsável pelo exame admissional")}
               {!isRS && campoTexto("admissao_local_integracao", "Local e data da integração")}
               {MOSTRAR_DIA_TESTE_NO_PORTAL && !isRS && (
-                <Campo label="Houve dia(s) de teste antes do início?">
+                <Campo label="Dia(s) de teste antes do início? *">
                   <CampoDiasTeste
                     id="campo-dias-teste" valor={diasTeste} inputStyle={inputStyle}
                     onChange={(novo) => { setDiasTeste(novo); setDiasTesteAlterado(true); }}

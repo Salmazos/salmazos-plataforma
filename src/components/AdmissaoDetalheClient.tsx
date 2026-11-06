@@ -111,11 +111,12 @@ interface Props {
   envelopeContabilidade: AdmissaoEnvelopeAssinatura | null;
   documentosContabilidade: AdmissaoDocumentoContabilidade[];
   // Dias de teste da candidatura de origem (candidatos_vagas, mesmo par candidato+vaga); null = candidatura não encontrada.
-  diasTeste?: { dias: unknown; legado: string | null } | null;
+  diasTeste?: { qtd: number | null; legado: string | null } | null;
 }
 
 const ACAO_LABEL: Record<string, string> = {
   admissao_criada: "Admissão criada",
+  admissao_qtd_dias_teste_ajustada_pelo_rh: "Quantidade de dias de teste ajustada pelo RH",
   admissao_atualizada: "Admissão atualizada",
   admissao_pacote_gerado: "Pacote para contabilidade gerado",
   admissao_pacote_enviado_email: "Pacote enviado por e-mail para a contabilidade",
@@ -1431,9 +1432,9 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       {diasTeste && (
         <BlocoDiasTesteRH
           className="mb-5"
-          dias={diasTeste.dias}
-          textoLegado={diasTeste.legado}
-          tipoServico={admissao.modalidade === "MOT" ? "mao_obra_temporaria" : "terceirizacao"}
+          qtd={diasTeste.qtd}
+          legado={diasTeste.legado}
+          tipo={admissao.modalidade === "MOT" ? "mao_obra_temporaria" : "terceirizacao"}
         />
       )}
 

@@ -59,8 +59,8 @@ export interface AdmissaoInfo {
   exame_responsavel: string | null;
   local_integracao: string | null;
   dia_teste: string | null;
-  // admissao_dias_teste (jsonb): null | [] | lista.
-  dias_teste: unknown;
+  // admissao_qtd_dias_teste: null = não informado, 0 = não houve, 1 ou 2.
+  qtd_dias_teste: number | null;
   telefone_candidato: string | null;
   observacoes: string | null;
 }

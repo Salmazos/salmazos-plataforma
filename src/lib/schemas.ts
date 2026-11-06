@@ -515,6 +515,8 @@ export const admissaoCreateSchema = z.object({
   entidade_contratante: z.string().min(1, "Entidade contratante é obrigatória"),
   adicionais: z.array(admissaoAdicionalSchema).optional(),
   autorizacao_sindical: admissaoAutorizacaoSindicalCreateSchema.optional(),
+  // Correção do RH na quantidade de dias de teste informada pelo cliente (candidatos_vagas). Ausente = não mexe.
+  admissao_qtd_dias_teste: qtdDiasTesteSchema.optional(),
 });
 
 // "Vaga casada" (cliente já traz o próprio candidato pra registrar, sem processo seletivo
