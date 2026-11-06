@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatarData } from "@/lib/utils";
+import { seloDiasTeste } from "@/lib/diasTeste";
 import { ADMISSAO_STATUS_BADGE, MODALIDADE_LABEL } from "@/lib/admissaoStatus";
 import { linkAdmissaoWhatsapp } from "@/lib/waLinks";
 import ModalIniciarAdmissao, { type CandidatoElegivel } from "./ModalIniciarAdmissao";
@@ -23,6 +24,8 @@ export interface AdmissaoRow {
   vagas: { id: string; titulo: string } | null;
   docsEnviados: number;
   docsTotal: number;
+  // admissao_qtd_dias_teste da candidatura de origem (só para o selo da lista): null | 0 | 1 | 2.
+  qtd_dias_teste?: number | null;
 }
 
 export interface DisponivelAdmissao extends CandidatoElegivel {
@@ -313,7 +316,14 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
                 return (
                   <tr key={row.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
                     <td style={{ padding: "10px 12px", fontWeight: 600, color: "#111827" }}>{row.candidatos?.nome_completo ?? "—"}</td>
-                    <td style={{ padding: "10px 12px", color: "#374151" }}>{row.vagas?.titulo ?? "—"}{row.funcao ? ` (${row.funcao})` : ""}</td>
+                    <td style={{ padding: "10px 12px", color: "#374151" }}>
+                      {row.vagas?.titulo ?? "—"}{row.funcao ? ` (${row.funcao})` : ""}
+                      {seloDiasTeste(row.qtd_dias_teste) && (
+                        <span style={{ display: "block", marginTop: 4, width: "fit-content", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#FFFBEB", border: "1px solid #FDE68A", color: "#92400E" }}>
+                          Dia(s) de teste: {seloDiasTeste(row.qtd_dias_teste)}
+                        </span>
+                      )}
+                    </td>
                     <td style={{ padding: "10px 12px" }}>
                       <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#EFF6FF", color: "#1D4ED8" }}>
                         {MODALIDADE_LABEL[row.modalidade] ?? row.modalidade}

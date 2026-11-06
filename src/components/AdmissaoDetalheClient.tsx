@@ -1,5 +1,6 @@
 "use client";
 
+import BlocoDiasTesteRH from "@/components/BlocoDiasTesteRH";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatarData, formatarDataSemFuso } from "@/lib/utils";
@@ -109,10 +110,13 @@ interface Props {
   envelopeInterno: AdmissaoEnvelopeAssinatura | null;
   envelopeContabilidade: AdmissaoEnvelopeAssinatura | null;
   documentosContabilidade: AdmissaoDocumentoContabilidade[];
+  // Dias de teste da candidatura de origem (candidatos_vagas, mesmo par candidato+vaga); null = candidatura não encontrada.
+  diasTeste?: { qtd: number | null; legado: string | null } | null;
 }
 
 const ACAO_LABEL: Record<string, string> = {
   admissao_criada: "Admissão criada",
+  admissao_qtd_dias_teste_ajustada_pelo_rh: "Quantidade de dias de teste ajustada pelo RH",
   admissao_atualizada: "Admissão atualizada",
   admissao_pacote_gerado: "Pacote para contabilidade gerado",
   admissao_pacote_enviado_email: "Pacote enviado por e-mail para a contabilidade",
@@ -445,7 +449,7 @@ interface VagaOpcao {
   clientes: { id: string; nome: string } | null;
 }
 
-export default function AdmissaoDetalheClient({ admissao, dadosPessoais, dependentes, documentos: documentosIniciais, adicionais: adicionaisIniciais, auditLogs, valeTransporte, autorizacaoSindical, envelopeInterno, envelopeContabilidade, documentosContabilidade }: Props) {
+export default function AdmissaoDetalheClient({ admissao, dadosPessoais, dependentes, documentos: documentosIniciais, adicionais: adicionaisIniciais, auditLogs, valeTransporte, autorizacaoSindical, envelopeInterno, envelopeContabilidade, documentosContabilidade, diasTeste }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("dados");
   const [status, setStatus] = useState(admissao.status);
@@ -1423,6 +1427,16 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           {badge.label}
         </span>
       </div>
+
+      {/* Dias de teste: o RH lança a folha a partir desta tela. admissoes.modalidade só tem MOT/Terceirização. */}
+      {diasTeste && (
+        <BlocoDiasTesteRH
+          className="mb-5"
+          qtd={diasTeste.qtd}
+          legado={diasTeste.legado}
+          tipo={admissao.modalidade === "MOT" ? "mao_obra_temporaria" : "terceirizacao"}
+        />
+      )}
 
       {/* Cancelamento — sempre visível (não depende da aba selecionada), disponível em
           qualquer status atual, inclusive depois de enviado_contabilidade. */}

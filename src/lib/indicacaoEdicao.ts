@@ -1,6 +1,7 @@
 // Regras PURAS da edição de uma indicação direta de candidato pelo próprio cliente (portal).
 // Sem imports de servidor: roda igual na rota e em scripts/verificar-indicacao-edicao.mts. "Hoje" e
 // tudo que vem do banco entram por parâmetro.
+import { formatarDiasTeste } from "./diasTeste";
 
 export const CAMPOS_CANDIDATO = ["candidato_nome", "candidato_telefone", "curriculo_url"] as const;
 
@@ -21,6 +22,7 @@ export const CAMPOS_ADMISSAO = [
   "admissao_exame_responsavel",
   "admissao_local_integracao",
   "admissao_dia_teste",
+  "admissao_qtd_dias_teste",
   "admissao_observacoes",
 ] as const;
 
@@ -49,6 +51,7 @@ export const ROTULO_CAMPO: Record<CampoEditavel, string> = {
   admissao_exame_responsavel: "Responsável pelo exame admissional",
   admissao_local_integracao: "Local de integração",
   admissao_dia_teste: "Dia(s) de teste",
+  admissao_qtd_dias_teste: "Dia(s) de teste",
   admissao_observacoes: "Observações",
 };
 
@@ -237,6 +240,8 @@ export function formatarValorAviso(campo: CampoEditavel, valor: Valor, lado: "an
     if (lado === "depois") return valor ? "novo arquivo anexado" : "(removido)";
     return valor ? "arquivo anexado anteriormente" : "(sem arquivo)";
   }
+  // 0 ("não houve") é resposta válida e DIFERENTE de null ("não informado"): nunca cai no "(vazio)" por ser falsy.
+  if (campo === "admissao_qtd_dias_teste") return formatarDiasTeste(valor) ?? "(vazio)";
   if (valor === null || valor === "") return "(vazio)";
   if (campo === "candidato_telefone") return mascararTelefone(String(valor));
   if (typeof valor === "boolean") return valor ? "Sim" : "Não";

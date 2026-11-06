@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const parsed = parseBody(admissaoCreateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
-  const { candidato_id, vaga_id, modalidade, funcao, salario, tipo_salario, horario_trabalho, data_admissao, entidade_contratante, adicionais, autorizacao_sindical } = parsed.data;
+  const { candidato_id, vaga_id, modalidade, funcao, salario, tipo_salario, horario_trabalho, data_admissao, entidade_contratante, adicionais, autorizacao_sindical, admissao_qtd_dias_teste } = parsed.data;
 
   const svc = createServiceClient();
 
@@ -101,6 +101,25 @@ export async function POST(request: NextRequest) {
       autoriza_sindical: autorizacao_sindical.autoriza_sindical,
     });
     if (asError) return NextResponse.json({ error: asError.message }, { status: 400 });
+  }
+
+  // O RH corrigiu a quantidade de dias de teste: grava na candidatura de origem (a fonte que todas as telas do RH leem), com
+  // auditoria do antes/depois. Sem a chave no corpo, a candidatura não é tocada.
+  if (admissao_qtd_dias_teste !== undefined) {
+    const { data: cvAtual } = await svc.from("candidatos_vagas").select("admissao_qtd_dias_teste").eq("candidato_id", candidato_id).eq("vaga_id", vaga_id).maybeSingle();
+    const antes = cvAtual?.admissao_qtd_dias_teste ?? null;
+    if (cvAtual && antes !== admissao_qtd_dias_teste) {
+      const { error: qtdError } = await svc.from("candidatos_vagas").update({ admissao_qtd_dias_teste }).eq("candidato_id", candidato_id).eq("vaga_id", vaga_id);
+      if (qtdError) return NextResponse.json({ error: qtdError.message }, { status: 400 });
+      registrarAuditoria({
+        usuario_id: user.id,
+        usuario_nome: user.email ?? null,
+        acao: "admissao_qtd_dias_teste_ajustada_pelo_rh",
+        entidade: "admissoes",
+        entidade_id: admissao.id,
+        detalhes: { candidato_id, vaga_id, antes, depois: admissao_qtd_dias_teste },
+      });
+    }
   }
 
   registrarAuditoria({

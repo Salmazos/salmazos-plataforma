@@ -6,6 +6,7 @@ import { parseBody, portalIndicarCandidatoSchema } from "@/lib/schemas";
 import { resolverUnidadeCliente } from "@/lib/unidadeAuth";
 import { hojeBrasiliaISO } from "@/lib/rescisaoProgramada";
 import { validarDataInicio } from "@/lib/indicacaoEdicao";
+import { resolverDiasTeste } from "@/lib/diasTeste";
 
 const TIPO_LABEL: Record<string, string> = {
   recrutamento_selecao: "Recrutamento e Seleção",
@@ -77,6 +78,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Esta vaga não está mais aberta." }, { status: 409 });
     }
 
+    // MOT/Terceirização precisam responder (inclusive "não houve"); R&S ignora o campo. Vem do tipo da vaga no banco.
+    const diasTeste = resolverDiasTeste(vaga.tipo_servico, dados.admissao_qtd_dias_teste);
+    if (!diasTeste.ok) return NextResponse.json({ error: diasTeste.erro }, { status: 400 });
+
     const { data: cliente } = await service
       .from("clientes")
       .select("nome")
@@ -116,7 +121,7 @@ export async function POST(request: NextRequest) {
         admissao_vt: dados.admissao_vt ?? null,
         admissao_exame_responsavel: dados.admissao_exame_responsavel || null,
         admissao_local_integracao: dados.admissao_local_integracao || null,
-        admissao_dia_teste: dados.admissao_dia_teste?.trim() || null,
+        admissao_qtd_dias_teste: diasTeste.valor,
         admissao_observacoes: dados.admissao_observacoes || null,
       })
       .select("id")

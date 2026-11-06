@@ -4,6 +4,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import AdmissaoDetalheClient from "@/components/AdmissaoDetalheClient";
 import { contextoRH } from "@/lib/rhUnidadeAuth";
 import { podeVerUnidade } from "@/lib/unidadeAuth";
+import { buscarDiasTestePorAdmissao } from "@/lib/diasTesteAdmissao";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,8 @@ export default async function AdmissaoDetalhePage({ params }: Props) {
     svc.from("admissao_documentos_contabilidade").select("*").eq("admissao_id", id).order("criado_em", { ascending: true }),
   ]);
 
+  const diasTeste = (await buscarDiasTestePorAdmissao(svc, [{ id: admissao.id, candidato_id: admissao.candidato_id, vaga_id: admissao.vaga_id }])).get(admissao.id) ?? null;
+
   return (
     <div className="max-w-5xl mx-auto">
       <div className="flex items-center gap-2 mb-6 text-sm text-gray-500">
@@ -67,6 +70,7 @@ export default async function AdmissaoDetalhePage({ params }: Props) {
         envelopeInterno={envelopeInterno ?? null}
         envelopeContabilidade={envelopeContabilidade ?? null}
         documentosContabilidade={documentosContabilidade ?? []}
+        diasTeste={diasTeste}
       />
     </div>
   );

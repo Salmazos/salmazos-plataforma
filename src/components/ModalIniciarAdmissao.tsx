@@ -1,5 +1,7 @@
 "use client";
 
+import BlocoDiasTesteRH from "@/components/BlocoDiasTesteRH";
+import CampoDiasTeste, { ESTADO_DIAS_TESTE_VAZIO, estadoDiasTesteDeValor, diasTesteParaEnvio, erroDiasTeste, type EstadoDiasTeste } from "@/components/CampoDiasTeste";
 import { useEffect, useState } from "react";
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import CampoMoeda from "@/components/ui/CampoMoeda";
@@ -49,6 +51,8 @@ export interface CandidatoElegivel {
   admissao_data_inicio?: string | null;
   // Informativo para o RH avisar o candidato (texto livre do cliente); não vira campo da admissão.
   admissao_dia_teste?: string | null;
+  // Quantidade de dias de teste informada pelo cliente: null = não informado, 0 = não houve, 1 ou 2 = dias a lançar na folha.
+  admissao_qtd_dias_teste?: number | null;
 }
 
 interface Props {
@@ -112,6 +116,9 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
   const [tipoSalario, setTipoSalario] = useState<"mensal" | "hora">("mensal");
   const [horarioTrabalho, setHorarioTrabalho] = useState("");
   const [dataAdmissao, setDataAdmissao] = useState("");
+  // O RH pode corrigir a quantidade de dias de teste informada pelo cliente; só vai ao servidor se ele mexer.
+  const [diasTeste, setDiasTeste] = useState<EstadoDiasTeste>(ESTADO_DIAS_TESTE_VAZIO);
+  const [diasTesteAlterado, setDiasTesteAlterado] = useState(false);
   const [entidadeContratante, setEntidadeContratante] = useState("");
   const [adicionais, setAdicionais] = useState<AdicionalForm[]>([]);
   const [nomeSindicato, setNomeSindicato] = useState("");
@@ -127,6 +134,8 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
     setSalario(valor != null && Number(valor) > 0 ? String(Number(valor)) : "");
     setHorarioTrabalho(c.admissao_horario?.trim() ?? "");
     setDataAdmissao(c.admissao_data_inicio ?? "");
+    setDiasTeste(estadoDiasTesteDeValor(c.admissao_qtd_dias_teste));
+    setDiasTesteAlterado(false);
   };
 
   useEffect(() => {
@@ -186,6 +195,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
   const dadosValidos = Boolean(
     funcao.trim() && salarioNumero > 0 && horarioTrabalho.trim() && dataAdmissao && entidadeContratante
       && autorizaAssistencial && autorizaSindical
+      && (!diasTesteAlterado || !erroDiasTeste(diasTeste))
   );
 
   const adicionarLinhaAdicional = () => {
@@ -229,6 +239,8 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
           horario_trabalho: horarioTrabalho.trim(),
           data_admissao: dataAdmissao,
           entidade_contratante: entidadeContratante,
+          // Só quando o RH corrigiu a quantidade (0 = "Não" também é correção); sem isso o servidor não mexe na candidatura.
+          ...(diasTesteAlterado ? { admissao_qtd_dias_teste: diasTesteParaEnvio(diasTeste) } : {}),
           adicionais: adicionais
             .filter((a) => a.tipo.trim() && valorAdicionalParaNumero(a) > 0)
             .map((a) => ({ tipo: a.tipo.trim(), formato_valor: a.formato_valor, valor: valorAdicionalParaNumero(a) })),
@@ -412,10 +424,16 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
               />
             </div>
 
-            {selecionado?.admissao_dia_teste?.trim() && (
-              <p className="mb-4 text-sm rounded-lg px-3 py-2" style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#374151" }}>
-                <span className="font-semibold">Dia(s) de teste:</span> {selecionado.admissao_dia_teste.trim()}
-              </p>
+            {selecionado && (
+              <div className="mb-4">
+                <BlocoDiasTesteRH qtd={selecionado.admissao_qtd_dias_teste} legado={selecionado.admissao_dia_teste} tipo={selecionado.tipo_servico_vigente} />
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mt-3 mb-1">Ajustar dia(s) de teste (opcional)</label>
+                <CampoDiasTeste
+                  id="campo-dias-teste-rh" valor={diasTeste} inputClassName="input-field"
+                  onChange={(novo) => { setDiasTeste(novo); setDiasTesteAlterado(true); }}
+                  mostrarErro={diasTesteAlterado}
+                />
+              </div>
             )}
 
             <div className="mb-4">

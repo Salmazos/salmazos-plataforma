@@ -11,6 +11,7 @@ import { sendEmail } from "@/lib/sendEmail";
 import { defaultsCandidatoNovo } from "@/lib/candidatoDefaults";
 import { criarAvisoCliente } from "@/lib/avisoCliente";
 import { chaveDedupAviso, textoAvisoIndicacaoDecidida } from "@/lib/avisoClienteRegras";
+import { formatarDiasTeste } from "@/lib/diasTeste";
 import { avaliarDuplicidade, buscarDuplicadosPorTelefone } from "@/lib/indicacaoDuplicados";
 
 interface Params {
@@ -129,6 +130,7 @@ const ADM_LABELS: Record<string, string> = {
   admissao_exame_responsavel: "Exame Admissional",
   admissao_local_integracao: "Local/Data Integração",
   admissao_dia_teste: "Dia(s) de teste",
+  admissao_qtd_dias_teste: "Dia(s) de teste",
   admissao_observacoes: "Observações",
 };
 
@@ -347,6 +349,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         admissao_exame_responsavel: sol.admissao_exame_responsavel,
         admissao_local_integracao: sol.admissao_local_integracao,
         admissao_dia_teste: sol.admissao_dia_teste,
+        admissao_qtd_dias_teste: sol.admissao_qtd_dias_teste,
         admissao_observacoes: sol.admissao_observacoes,
       })
       .select("id")
@@ -583,6 +586,12 @@ export async function POST(request: NextRequest, { params }: Params) {
       for (const [key, label] of Object.entries(ADM_LABELS)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const val = (sol as any)[key];
+        if (key === "admissao_qtd_dias_teste") {
+          // 0 ("não houve") também aparece: é uma resposta do cliente, diferente de não informado (null).
+          const texto = formatarDiasTeste(val);
+          if (texto !== null) admRows += `<tr><td style="padding:6px 12px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">${label}</td><td style="padding:6px 12px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${texto}</td></tr>`;
+          continue;
+        }
         if (val != null && val !== "" && val !== false) {
           const display = typeof val === "boolean" ? (val ? "Sim" : "Não")
             : key === "admissao_data_inicio" ? String(val).split("-").reverse().join("/")

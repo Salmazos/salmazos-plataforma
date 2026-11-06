@@ -5,6 +5,7 @@ import { createPortalBrowserClient } from "@/lib/supabase/client";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import CampoTelefone from "@/components/ui/CampoTelefone";
 import { MOSTRAR_DIA_TESTE_NO_PORTAL } from "@/lib/diaTestePortal";
+import CampoDiasTeste, { ESTADO_DIAS_TESTE_VAZIO, estadoDiasTesteDeValor, diasTesteParaEnvio, erroDiasTeste, type EstadoDiasTeste } from "@/components/CampoDiasTeste";
 
 // Edição de uma indicação já enviada (portal > Minhas Indicações). Pré-preenche com o que foi enviado e
 // manda ao servidor SÓ os campos que mudaram; o servidor refaz o diff e revalida tudo (quem pode editar,
@@ -58,6 +59,9 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
   const [inicial, setInicial] = useState<Detalhe | null>(null);
   const [form, setForm] = useState<Record<string, string | number | boolean | null>>({});
   const [vagas, setVagas] = useState<VagaAtiva[]>([]);
+  const [diasTeste, setDiasTeste] = useState<EstadoDiasTeste>(ESTADO_DIAS_TESTE_VAZIO);
+  const [diasTesteAlterado, setDiasTesteAlterado] = useState(false);
+  const [tentouSalvar, setTentouSalvar] = useState(false);
   const [curriculo, setCurriculo] = useState<File | null>(null);
   const inputCurriculoRef = useRef<HTMLInputElement>(null);
 
@@ -72,7 +76,9 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
         }
         const d = json.data as Detalhe;
         setInicial(d);
-        setForm({ vaga_id: d.vaga_id, ...Object.fromEntries(Object.entries(d).filter(([k]) => k.startsWith("admissao_") || k.startsWith("candidato_"))) });
+        // Dia(s) de teste tem estado próprio (Não / Sim + quantidade); o resto do formulário continua escalar.
+        setForm({ vaga_id: d.vaga_id, ...Object.fromEntries(Object.entries(d).filter(([k]) => (k.startsWith("admissao_") && k !== "admissao_qtd_dias_teste") || k.startsWith("candidato_"))) });
+        setDiasTeste(estadoDiasTesteDeValor(d.admissao_qtd_dias_teste));
         if (d.pode_trocar_vaga) {
           const rv = await fetch("/api/portal/vagas-ativas");
           const jv = await rv.json();
@@ -109,6 +115,15 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
     if (mudou.candidato_nome === null || mudou.candidato_telefone === null) {
       setErro("Nome e telefone do candidato não podem ficar em branco.");
       return;
+    }
+    // Dia(s) de teste: indicação antiga (null) segue editável sem responder — se o cliente não mexer, o campo NÃO vai no corpo
+    // (null explícito é recusado em MOT/Terceirização). Mexeu, precisa estar completo; 0 ("Não") é resposta e vai como 0.
+    if (MOSTRAR_DIA_TESTE_NO_PORTAL && !isRS && diasTesteAlterado) {
+      setTentouSalvar(true);
+      const e = erroDiasTeste(diasTeste);
+      if (e) { setErro(e); return; }
+      const novaQtd = diasTesteParaEnvio(diasTeste);
+      if (novaQtd !== (inicial.admissao_qtd_dias_teste ?? null)) mudou.admissao_qtd_dias_teste = novaQtd;
     }
 
     setSalvando(true);
@@ -229,7 +244,15 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
               )}
               {!isRS && campoTexto("admissao_exame_responsavel", "Responsável pelo exame admissional")}
               {!isRS && campoTexto("admissao_local_integracao", "Local e data da integração")}
-              {MOSTRAR_DIA_TESTE_NO_PORTAL && !isRS && campoTexto("admissao_dia_teste", "Dia(s) de teste (se houver)")}
+              {MOSTRAR_DIA_TESTE_NO_PORTAL && !isRS && (
+                <Campo label="Dia(s) de teste antes do início? *">
+                  <CampoDiasTeste
+                    id="campo-dias-teste" valor={diasTeste} inputStyle={inputStyle}
+                    onChange={(novo) => { setDiasTeste(novo); setDiasTesteAlterado(true); }}
+                    mostrarErro={tentouSalvar && diasTesteAlterado}
+                  />
+                </Campo>
+              )}
             </div>
 
             <Campo label="Observações">

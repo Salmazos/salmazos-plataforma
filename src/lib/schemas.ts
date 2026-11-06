@@ -7,6 +7,7 @@ import { VALIDADES_LINK_DIAS, VALIDADE_LINK_PADRAO_DIAS } from "@/lib/solicitaca
 import { salarioPublicoValido } from "@/lib/solicitacaoVagaPublicaForm";
 import { TURNOS_FUNCIONARIO, SEGMENTOS_CLIENTE, TIPOS_SERVICO } from "@/lib/constants";
 import { nomeArquivoCurriculoValido } from "@/lib/indicacaoEdicao";
+import { qtdDiasTesteSchema } from "@/lib/diasTeste";
 import { validarSenhaPortal, mensagemSenhaPortalInvalida } from "@/lib/senhaPortal";
 import { normalizarLocalEntrevista, LOCAL_ENTREVISTA_MAX } from "@/lib/localEntrevista";
 
@@ -514,6 +515,8 @@ export const admissaoCreateSchema = z.object({
   entidade_contratante: z.string().min(1, "Entidade contratante é obrigatória"),
   adicionais: z.array(admissaoAdicionalSchema).optional(),
   autorizacao_sindical: admissaoAutorizacaoSindicalCreateSchema.optional(),
+  // Correção do RH na quantidade de dias de teste informada pelo cliente (candidatos_vagas). Ausente = não mexe.
+  admissao_qtd_dias_teste: qtdDiasTesteSchema.optional(),
 });
 
 // "Vaga casada" (cliente já traz o próprio candidato pra registrar, sem processo seletivo
@@ -1074,6 +1077,7 @@ export const portalAvaliarSchema = z.object({
   admissao_exame_responsavel: z.string().optional().nullable(),
   admissao_local_integracao: z.string().optional().nullable(),
   admissao_dia_teste: z.string().optional().nullable(),
+  admissao_qtd_dias_teste: qtdDiasTesteSchema.optional().nullable(),
   admissao_telefone_candidato: z.string().optional().nullable(),
 });
 
@@ -1113,6 +1117,7 @@ export const portalIndicarCandidatoSchema = z.object({
   admissao_exame_responsavel: z.string().optional().nullable(),
   admissao_local_integracao: z.string().optional().nullable(),
   admissao_dia_teste: z.string().optional().nullable(),
+  admissao_qtd_dias_teste: qtdDiasTesteSchema.optional().nullable(),
   admissao_observacoes: z.string().optional().nullable(),
 });
 

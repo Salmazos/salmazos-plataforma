@@ -6,6 +6,7 @@ import { createPortalBrowserClient } from "@/lib/supabase/client";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import CampoTelefone from "@/components/ui/CampoTelefone";
 import { MOSTRAR_DIA_TESTE_NO_PORTAL } from "@/lib/diaTestePortal";
+import CampoDiasTeste, { ESTADO_DIAS_TESTE_VAZIO, diasTesteParaEnvio, erroDiasTeste, type EstadoDiasTeste } from "@/components/CampoDiasTeste";
 
 interface VagaAtiva {
   id: string;
@@ -84,7 +85,7 @@ export default function IndicarCandidatoPage() {
   const [admIntegracaoLocal, setAdmIntegracaoLocal] = useState("");
   const [admIntegracaoData, setAdmIntegracaoData] = useState("");
   const [admIntegracaoHora, setAdmIntegracaoHora] = useState("");
-  const [admDiaTeste, setAdmDiaTeste] = useState("");
+  const [admDiasTeste, setAdmDiasTeste] = useState<EstadoDiasTeste>(ESTADO_DIAS_TESTE_VAZIO);
 
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
@@ -148,6 +149,7 @@ export default function IndicarCandidatoPage() {
       if (!admTempoContrato.trim()) return "Informe o tempo de contrato.";
       if (admVt === null) return "Informe se utiliza Vale Transporte.";
       if (!admExameResp.trim()) return "Informe o responsável pelo exame admissional.";
+      if (MOSTRAR_DIA_TESTE_NO_PORTAL) { const e = erroDiasTeste(admDiasTeste); if (e) return e; }
     } else if (isTerc) {
       if (!admDataInicio) return "Informe a data de início.";
       if (!admFuncao.trim()) return "Informe a função/cargo.";
@@ -159,6 +161,7 @@ export default function IndicarCandidatoPage() {
       if (admTurnoSelecionado === "Outro" && !admTurnoOutro.trim()) return "Especifique o turno.";
       if (admVt === null) return "Informe se utiliza Vale Transporte.";
       if (!admExameResp.trim()) return "Informe o responsável pelo exame admissional.";
+      if (MOSTRAR_DIA_TESTE_NO_PORTAL) { const e = erroDiasTeste(admDiasTeste); if (e) return e; }
     }
 
     if (precisaHorarioEstruturado && integracaoPreenchidaParcialmente) {
@@ -170,7 +173,14 @@ export default function IndicarCandidatoPage() {
   const handleEnviar = async () => {
     setTentouEnviar(true);
     const erroValidacao = validar();
-    if (erroValidacao) { setErro(erroValidacao); return; }
+    if (erroValidacao) {
+      setErro(erroValidacao);
+      // Erro do dia(s) de teste: leva o usuário até o campo (ele fica no fim do bloco, fora da vista).
+      if (MOSTRAR_DIA_TESTE_NO_PORTAL && (isMOT || isTerc) && erroValidacao === erroDiasTeste(admDiasTeste)) {
+        document.getElementById("campo-dias-teste")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      return;
+    }
 
     setEnviando(true);
     setErro("");
@@ -216,7 +226,8 @@ export default function IndicarCandidatoPage() {
           admissao_vt: admVt,
           admissao_exame_responsavel: admExameResp || null,
           admissao_local_integracao: integracaoComposta || null,
-          ...(MOSTRAR_DIA_TESTE_NO_PORTAL ? { admissao_dia_teste: admDiaTeste.trim() || null } : {}),
+          // R&S não tem dia de teste: undefined sai do JSON. O texto antigo (admissao_dia_teste) não é mais enviado.
+          admissao_qtd_dias_teste: MOSTRAR_DIA_TESTE_NO_PORTAL && (isMOT || isTerc) ? diasTesteParaEnvio(admDiasTeste) : undefined,
           admissao_observacoes: admObservacoes || null,
         }),
       });
@@ -506,8 +517,9 @@ export default function IndicarCandidatoPage() {
                     <p className="text-[11px] text-gray-400 mt-1">Preencha os três campos, ou deixe todos em branco.</p>
                   </Field>
                   {MOSTRAR_DIA_TESTE_NO_PORTAL && (
-                    <Field label="Dia(s) de teste (se houver)">
-                      <input value={admDiaTeste} onChange={(e) => setAdmDiaTeste(e.target.value)} placeholder="Ex.: 05/11 e 06/11" style={inputStyle} />
+                    <Field label="Dia(s) de teste antes do início?" required>
+                      <CampoDiasTeste id="campo-dias-teste" valor={admDiasTeste} onChange={setAdmDiasTeste}
+                        mostrarErro={tentouEnviar} inputStyle={inputStyle} />
                     </Field>
                   )}
                 </>
@@ -586,8 +598,9 @@ export default function IndicarCandidatoPage() {
                     <p className="text-[11px] text-gray-400 mt-1">Preencha os três campos, ou deixe todos em branco.</p>
                   </Field>
                   {MOSTRAR_DIA_TESTE_NO_PORTAL && (
-                    <Field label="Dia(s) de teste (se houver)">
-                      <input value={admDiaTeste} onChange={(e) => setAdmDiaTeste(e.target.value)} placeholder="Ex.: 05/11 e 06/11" style={inputStyle} />
+                    <Field label="Dia(s) de teste antes do início?" required>
+                      <CampoDiasTeste id="campo-dias-teste" valor={admDiasTeste} onChange={setAdmDiasTeste}
+                        mostrarErro={tentouEnviar} inputStyle={inputStyle} />
                     </Field>
                   )}
                 </>

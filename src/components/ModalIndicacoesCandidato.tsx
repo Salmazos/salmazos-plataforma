@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { BotaoCurriculo } from "./BotaoCurriculo";
+import { textoDiasTesteParaRH } from "@/lib/diasTeste";
 
 const TIPO_LABEL: Record<string, { label: string; bg: string; color: string }> = {
   recrutamento_selecao: { label: "R&S", bg: "#1D6FA4", color: "#fff" },
@@ -22,6 +23,7 @@ const ADM_CAMPOS: { key: string; label: string }[] = [
   { key: "admissao_tempo_contrato", label: "Tempo de Contrato" },
   { key: "admissao_exame_responsavel", label: "Exame Admissional" },
   { key: "admissao_local_integracao", label: "Local/Data Integração" },
+  { key: "admissao_qtd_dias_teste", label: "Dia(s) de teste" },
   { key: "admissao_dia_teste", label: "Dia(s) de teste" },
   { key: "admissao_observacoes", label: "Observações" },
 ];
@@ -63,6 +65,12 @@ interface Props {
 }
 
 function valorAdmissao(item: Indicacao, key: string): string {
+  // Dia(s) de teste: mesma regra de exibição do resto do RH. O texto antigo tem a própria linha (admissao_dia_teste); aqui só
+  // entram a quantidade ou "Não informado pelo cliente" (MOT/Terceirização sem texto antigo). R&S sem valor fica vazio.
+  if (key === "admissao_qtd_dias_teste") {
+    if (item[key] == null && String(item["admissao_dia_teste"] ?? "").trim()) return "";
+    return textoDiasTesteParaRH(item[key], null, item.vagas?.tipo_servico)?.linhas.join("; ") ?? "";
+  }
   const val = item[key];
   if (val == null || val === "") return "";
   if (key === "admissao_data_inicio") return String(val).split("-").reverse().join("/");
