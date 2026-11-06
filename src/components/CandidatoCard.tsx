@@ -11,7 +11,7 @@ import ModalMotivoEtapa from "./ModalMotivoEtapa";
 import { MOTIVOS_REPROVACAO_INTERNA, MOTIVOS_REPROVACAO_CLIENTE } from "@/lib/motivos-reprovacao";
 import { getProximasEtapas, getComportamentoEtapa, getEtapaLabel, getEtapaAnterior } from "@/lib/etapasCandidatura";
 import { useUsuarioLogado, unidadeDaTela } from "./UsuarioLogadoProvider";
-import { nomesCompletosDaUnidade, opcoesResponsavel } from "@/lib/responsaveis";
+import { nomesResponsaveisCandidatoDaUnidade, opcoesResponsavel } from "@/lib/responsaveis";
 import { Pencil } from "lucide-react";
 import { horaEntrevistaReal, dataEntrevistaParaCliente } from "@/lib/horaEntrevista";
 
@@ -250,7 +250,7 @@ export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Prop
             <option value="">Sem responsável</option>
             {opcoesResponsavel(
               // Time da unidade da vaga do card (só quem está ativo), com quem está logado primeiro.
-              nomesCompletosDaUnidade(
+              nomesResponsaveisCandidatoDaUnidade(
                 card.vaga_unidade_id ? usuario.unidadeSlugPorId[card.vaga_unidade_id] : unidadeDaTela(usuario)
               ).filter((n) => analistas.some((a) => a.nome_completo === n)),
               usuario.nomeCompleto,

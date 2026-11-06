@@ -15,6 +15,25 @@ export function nomesCompletosDaUnidade(unidadeSlug: string | null | undefined):
   return responsaveisDaUnidade(unidadeSlug).map((a) => ANALISTAS_NOME_COMPLETO[a]);
 }
 
+// Pessoas que conduzem processos de seleção no Kanban mas não fazem parte de ANALISTAS (decisão
+// do Olver, 06/11). Só alimenta o <select> de Responsável do card do candidato — ANALISTAS e as
+// listas de vaga/cliente/agenda ficam como estão. Nomes exatos de analistas_perfil (o servidor
+// valida por nome completo). Atenção: o "Victor Eduardo" daqui é o login gmail de analista,
+// distinto do "Victor Eduardo Oliveira" (supervisor de SBC).
+export const RESPONSAVEIS_SELECAO_EXTRA: Record<"monte-mor-hortolandia" | "sbc", readonly string[]> = {
+  "monte-mor-hortolandia": ["Beatriz Soares", "Victor Eduardo", "Susy Oliveira"],
+  sbc: [],
+};
+
+// Time da unidade em nome completo + quem conduz seleção naquela unidade, sem duplicar. Sem
+// unidade conhecida = todos os extras de todas as unidades.
+export function nomesResponsaveisCandidatoDaUnidade(unidadeSlug: string | null | undefined): string[] {
+  const extras: readonly string[] = unidadeSlug
+    ? (RESPONSAVEIS_SELECAO_EXTRA as Record<string, readonly string[]>)[unidadeSlug] ?? []
+    : Object.values(RESPONSAVEIS_SELECAO_EXTRA).flat();
+  return [...new Set([...nomesCompletosDaUnidade(unidadeSlug), ...extras])];
+}
+
 // Nome completo de analistas_perfil → nome curto de ANALISTAS (null se não for do time).
 export function apelidoDoNomeCompleto(nomeCompleto: string | null | undefined): Analista | null {
   if (!nomeCompleto) return null;
