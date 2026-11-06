@@ -7,7 +7,7 @@ import { contextoRH } from "@/lib/rhUnidadeAuth";
 import SemAcessoPainel from "@/components/SemAcessoPainel";
 import { podeVerUnidade } from "@/lib/unidadeAuth";
 import { resolverFotosFuncionarios } from "@/lib/funcionarioFoto";
-import { buscarDiasTestePorAdmissao } from "@/lib/diasTesteAdmissao";
+import { buscarDiasTestePorAdmissao, type DiasTesteDaAdmissao } from "@/lib/diasTesteAdmissao";
 
 export const dynamic = "force-dynamic";
 
@@ -78,7 +78,7 @@ export default async function FuncionarioDetalhePage({ params }: Params) {
 
   // Dias de teste: funcionário criado por admissão digital -> admissão -> candidatura de origem (mesmo par candidato+vaga).
   // Cadastro manual (sem admissao_id) não tem origem: não mostra nada.
-  let diasTeste: { dias: unknown; legado: string | null } | null = null;
+  let diasTeste: DiasTesteDaAdmissao | null = null;
   if (funcionario.admissao_id) {
     const { data: admissaoOrigem } = await svc.from("admissoes").select("id, candidato_id, vaga_id").eq("id", funcionario.admissao_id).maybeSingle();
     if (admissaoOrigem) diasTeste = (await buscarDiasTestePorAdmissao(svc, [admissaoOrigem])).get(admissaoOrigem.id) ?? null;

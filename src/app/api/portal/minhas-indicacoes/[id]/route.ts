@@ -137,7 +137,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     // O cliente não pode APAGAR a resposta de dias de teste em MOT/Terceirização (null explícito). Registros antigos com
     // null seguem editáveis: a regra só olha o que veio no corpo, nunca o valor salvo.
-    if (entrada.admissao_dias_teste === null) {
+    if (entrada.admissao_qtd_dias_teste === null) {
       const { data: vagaDaIndicacao } = await service.from("vagas").select("tipo_servico").eq("id", sol.vaga_id).maybeSingle();
       if (exigeRespostaDiasTeste(vagaDaIndicacao?.tipo_servico)) return NextResponse.json({ error: MSG_INFORME_DIAS_TESTE }, { status: 400 });
     }

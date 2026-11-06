@@ -1,23 +1,18 @@
-// Verificação dos "Dia(s) de teste" ESTRUTURADOS (admissao_dias_teste, jsonb) e do texto legado (admissao_dia_teste, só
-// leitura/cópia): regras puras (src/lib/diasTeste.ts), schemas, obrigatoriedade por serviço, criação pelo cliente, avaliação,
-// edição, decisão (cópia para candidatos_vagas) e aviso por e-mail. Roda as rotas reais contra o banco em memória do harness.
+// Verificação dos "Dia(s) de teste": o cliente só informa SE houve e QUANTOS dias (admissao_qtd_dias_teste, smallint: NULL = não
+// informado, 0 = não houve, 1 ou 2) — sem datas e sem horários. Cobre as regras puras (src/lib/diasTeste.ts), schemas,
+// obrigatoriedade por serviço, criação/avaliação/edição pelo cliente, decisão (cópia para candidatos_vagas), e-mails, a exibição
+// para o RH e o texto legado (admissao_dia_teste, só leitura/cópia). Roda as rotas reais contra o banco em memória do harness.
+// As telas (CampoDiasTeste, BlocoDiasTesteRH) ficam fora deste arquivo até serem reescritas para a quantidade (parte B).
 // Rodar: node --no-warnings --import ./scripts/harness-mot/register.mjs scripts/verificar-dia-teste.mts
 import assert from "node:assert/strict";
 // @ts-expect-error módulo .mjs do harness, sem tipos
 import { congelarData, logar, logarPortal, importar, chamar } from "./harness-mot/ambiente.mjs";
 // @ts-expect-error módulo .mjs do harness, sem tipos
 import { novoDbIndicacao, ID } from "./harness-mot/ambiente-indicacao.mjs";
-import { CAMPOS_ADMISSAO, ROTULO_CAMPO, campoDaAdmissao, calcularDiff, formatarValorAviso } from "../src/lib/indicacaoEdicao";
+import { CAMPOS_ADMISSAO, ROTULO_CAMPO, campoDaAdmissao, calcularDiff, formatarValorAviso, normalizarValor } from "../src/lib/indicacaoEdicao";
 import {
-  MAX_DIAS_TESTE, diasTesteSchema, horasDoDiaTeste, totalHorasDiasTeste, formatarDiasTeste, exigeRespostaDiasTeste, resolverDiasTeste,
-  textoDiasTesteParaRH, seloDiasTeste,
+  MAX_DIAS_TESTE, qtdDiasTesteSchema, formatarDiasTeste, exigeRespostaDiasTeste, resolverDiasTeste, textoDiasTesteParaRH, seloDiasTeste,
 } from "../src/lib/diasTeste";
-import { createElement, type ReactElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import BlocoDiasTesteRH from "../src/components/BlocoDiasTesteRH";
-import CampoDiasTeste, {
-  ESTADO_DIAS_TESTE_VAZIO, estadoDiasTesteDeValor, diasTesteParaEnvio, erroDiasTeste, type EstadoDiasTeste,
-} from "../src/components/CampoDiasTeste";
 import { portalAvaliarSchema, portalIndicarCandidatoSchema, portalEditarIndicacaoSchema } from "../src/lib/schemas";
 
 congelarData();
@@ -29,461 +24,307 @@ const avaliar = await importar("src/app/api/portal/avaliar/route.ts");
 let n = 0;
 const ok = async (nome: string, fn: () => void | Promise<void>) => { await fn(); n++; console.log(`OK ${nome}`); };
 
+const MOT = "mao_obra_temporaria", TERC = "terceirizacao", RS = "recrutamento_selecao";
+const MSG = "Informe se houve dia(s) de teste.";
+const ENC = "11111111-1111-4111-8111-111111111111";
+
 const corpo = (extra = {}) => ({
   vaga_id: ID.V_MOT_A, candidato_nome: "Fulano de Tal", candidato_telefone: "(19) 90000-1111",
-  admissao_data_inicio: "2026-11-10", admissao_salario: 1800, admissao_funcao: "Auxiliar", admissao_dias_teste: [], ...extra,
+  admissao_data_inicio: "2026-11-10", admissao_salario: 1800, admissao_funcao: "Auxiliar", admissao_qtd_dias_teste: 0, ...extra,
 });
 const sol = (db: any, id: string) => db.tabelas.solicitacoes_indicacao_candidato.find((s: any) => s.id === id);
-
-await ok("schemas: aceitam texto, vazio, null e ausência (campo opcional)", () => {
-  for (const s of [portalIndicarCandidatoSchema, portalAvaliarSchema]) {
-    const base: any = s === portalAvaliarSchema ? { encaminhamento_id: "11111111-1111-4111-8111-111111111111", status: "aprovado", feedback_cliente: "ok" } : { vaga_id: ID.V_MOT_A, candidato_nome: "A", candidato_telefone: "1" };
-    for (const v of ["05/11 e 06/11", "", null, undefined]) {
-      const r = s.safeParse({ ...base, admissao_dia_teste: v });
-      assert.equal(r.success, true, JSON.stringify(r));
-    }
-    assert.equal(s.safeParse(base).success, true);
-  }
-  assert.equal(portalEditarIndicacaoSchema.safeParse({ admissao_dia_teste: "05/11" }).success, true);
-});
-await ok("edição pelo cliente: campo é editável, tem rótulo e conta como dado de admissão", () => {
-  assert.ok((CAMPOS_ADMISSAO as readonly string[]).includes("admissao_dia_teste"));
-  assert.equal((ROTULO_CAMPO as Record<string, string>).admissao_dia_teste, "Dia(s) de teste");
-  assert.equal(campoDaAdmissao("admissao_dia_teste"), true);
-});
-const D1 = { data: "2026-11-05", entrada: "08:00", saida: "12:00" };
-const D2 = { data: "2026-11-06", entrada: "22:00", saida: "06:00" };
 const ult = (db: any) => db.tabelas.solicitacoes_indicacao_candidato.at(-1);
+const emails = (db: any) => (db.emails ?? []).map((e: any) => e.html).join("\n");
 
-await ok("regras puras: MAX_DIAS_TESTE é 2 e o limite do schema vem dele", () => {
+// ── regras puras ──
+await ok("regras: MAX_DIAS_TESTE é 2; o schema aceita 0, 1 e 2 e recusa 3, negativo, fração, texto e NaN", () => {
   assert.equal(MAX_DIAS_TESTE, 2);
-  const tres = [D1, D2, { data: "2026-11-07", entrada: "08:00", saida: "12:00" }];
-  assert.equal(diasTesteSchema.safeParse(tres.slice(0, MAX_DIAS_TESTE)).success, true);
-  assert.equal(diasTesteSchema.safeParse(tres).success, false, "o 3º dia deve ser recusado");
+  for (const v of [0, 1, 2]) assert.equal(qtdDiasTesteSchema.safeParse(v).success, true, String(v));
+  for (const v of [3, -1, 1.5, "1", "", NaN, null, undefined, [], {}]) assert.equal(qtdDiasTesteSchema.safeParse(v).success, false, String(v));
 });
-await ok("validação: data inexistente/formato, hora inválida, saída = entrada, datas repetidas", () => {
-  const v = (x: any) => diasTesteSchema.safeParse([{ ...D1, ...x }]).success;
-  assert.equal(v({}), true);
-  for (const data of ["2026-02-30", "2026-13-01", "05/11/2026", "2026-1-5", "", "2026-11-05T00:00"]) assert.equal(v({ data }), false, data);
-  for (const entrada of ["24:00", "8:00", "08:60", "", "0800"]) assert.equal(v({ entrada }), false, entrada);
-  for (const saida of ["12:5", "25:00", ""]) assert.equal(v({ saida }), false, saida);
-  assert.equal(v({ entrada: "08:00", saida: "08:00" }), false, "saída igual à entrada");
-  assert.equal(diasTesteSchema.safeParse([D1, { ...D2, data: D1.data }]).success, false, "data repetida");
-  assert.equal(diasTesteSchema.safeParse([]).success, true, "[] = não houve");
-});
-await ok("meia-noite: saída menor que a entrada é permitida e soma 24h-entrada+saída", () => {
-  assert.equal(diasTesteSchema.safeParse([D2]).success, true);
-  assert.equal(horasDoDiaTeste(D2), "8h");
-  assert.equal(horasDoDiaTeste({ data: "2026-11-05", entrada: "23:30", saida: "00:15" }), "0h45");
-});
-await ok("horas: 4h, 7h30 e total", () => {
-  assert.equal(horasDoDiaTeste(D1), "4h");
-  assert.equal(horasDoDiaTeste({ data: "2026-11-05", entrada: "08:00", saida: "15:30" }), "7h30");
-  assert.equal(totalHorasDiasTeste([D1, { data: "2026-11-06", entrada: "08:00", saida: "11:30" }]), "7h30");
-  assert.equal(totalHorasDiasTeste([D1, D2]), "12h");
-  assert.equal(totalHorasDiasTeste([]), "0h");
-});
-await ok("formato: null/undefined → null; [] → Não houve; linhas dd/mm/aaaa · HH:MM às HH:MM (Xh), sem new Date", () => {
+await ok("formato: null/undefined → null; 0 → 'Não houve dia de teste'; 1 → '1 dia de teste'; 2 → '2 dias de teste'", () => {
   assert.equal(formatarDiasTeste(null), null);
   assert.equal(formatarDiasTeste(undefined), null);
-  assert.equal(formatarDiasTeste([]), "Não houve");
-  assert.equal(formatarDiasTeste([D1]), "05/11/2026 · 08:00 às 12:00 (4h)");
-  assert.equal(formatarDiasTeste([D1, D2]), "05/11/2026 · 08:00 às 12:00 (4h)\n06/11/2026 · 22:00 às 06:00 (8h)");
-  const tz = process.env.TZ; process.env.TZ = "America/Los_Angeles";
-  try { assert.equal(formatarDiasTeste([{ ...D1, data: "2026-01-01" }]), "01/01/2026 · 08:00 às 12:00 (4h)"); } finally { if (tz === undefined) delete process.env.TZ; else process.env.TZ = tz; }
+  assert.equal(formatarDiasTeste(0), "Não houve dia de teste");
+  assert.equal(formatarDiasTeste(1), "1 dia de teste");
+  assert.equal(formatarDiasTeste(2), "2 dias de teste");
+  for (const lixo of [3, -1, 1.5, "1", [], {}]) assert.equal(formatarDiasTeste(lixo), null, `valor fora do domínio: ${JSON.stringify(lixo)}`);
 });
-await ok("obrigatoriedade por serviço: MOT e Terceirização exigem; R&S e demais não", () => {
-  assert.equal(exigeRespostaDiasTeste("mao_obra_temporaria"), true);
-  assert.equal(exigeRespostaDiasTeste("terceirizacao"), true);
-  for (const t of ["recrutamento_selecao", "avaliacao_psicologica", "", null, undefined]) assert.equal(exigeRespostaDiasTeste(t), false, String(t));
-  assert.deepEqual(resolverDiasTeste("mao_obra_temporaria", undefined), { ok: false, erro: "Informe se houve dia(s) de teste." });
-  assert.deepEqual(resolverDiasTeste("terceirizacao", null), { ok: false, erro: "Informe se houve dia(s) de teste." });
-  assert.deepEqual(resolverDiasTeste("terceirizacao", []), { ok: true, valor: [] });
-  assert.deepEqual(resolverDiasTeste("recrutamento_selecao", [D1]), { ok: true, valor: null });
+await ok("obrigatoriedade por serviço: MOT e Terceirização exigem; R&S e demais não; resolverDiasTeste", () => {
+  assert.equal(exigeRespostaDiasTeste(MOT), true);
+  assert.equal(exigeRespostaDiasTeste(TERC), true);
+  for (const t of [RS, "avaliacao_psicologica", "", null, undefined]) assert.equal(exigeRespostaDiasTeste(t), false, String(t));
+  assert.deepEqual(resolverDiasTeste(MOT, undefined), { ok: false, erro: MSG });
+  assert.deepEqual(resolverDiasTeste(TERC, null), { ok: false, erro: MSG });
+  for (const q of [0, 1, 2]) assert.deepEqual(resolverDiasTeste(TERC, q), { ok: true, valor: q }, "0 é resposta válida, não ausência");
+  assert.deepEqual(resolverDiasTeste(RS, 2), { ok: true, valor: null });
+  assert.deepEqual(resolverDiasTeste(RS, undefined), { ok: true, valor: null });
 });
-await ok("criação (MOT): grava admissao_dias_teste estruturado e NÃO grava mais o texto antigo", async () => {
-  const db = novoDbIndicacao(); logarPortal(db, "cli");
-  const r = await chamar(criar.POST, { metodo: "POST", corpo: corpo({ admissao_dias_teste: [D1, D2], admissao_dia_teste: "texto antigo" }) });
-  assert.equal(r.status, 201, JSON.stringify(r.corpo));
-  assert.deepEqual(ult(db).admissao_dias_teste, [D1, D2]);
-  assert.equal(ult(db).admissao_dia_teste ?? null, null);
+
+// ── schemas ──
+await ok("schemas: admissao_qtd_dias_teste opcional/nullable nos dois schemas; recusa 3, texto e fração", () => {
+  const baseAv: any = { encaminhamento_id: ENC, status: "aprovado", feedback_cliente: "ok" };
+  const baseInd: any = { vaga_id: ID.V_MOT_A, candidato_nome: "A", candidato_telefone: "1" };
+  for (const [s, base] of [[portalAvaliarSchema, baseAv], [portalIndicarCandidatoSchema, baseInd]] as const) {
+    for (const v of [0, 1, 2, null, undefined]) assert.equal(s.safeParse({ ...base, admissao_qtd_dias_teste: v }).success, true, String(v));
+    for (const v of [3, -1, 1.5, "2", [], [{ data: "2026-11-05" }]]) assert.equal(s.safeParse({ ...base, admissao_qtd_dias_teste: v }).success, false, JSON.stringify(v));
+    // o texto legado continua aceito (campo antigo, só leitura/cópia)
+    for (const v of ["05/11 e 06/11", "", null, undefined]) assert.equal(s.safeParse({ ...base, admissao_dia_teste: v }).success, true);
+  }
+  assert.equal(portalEditarIndicacaoSchema.safeParse({ admissao_qtd_dias_teste: 2 }).success, true);
+  assert.equal(portalEditarIndicacaoSchema.safeParse({ admissao_qtd_dias_teste: 3 }).success, false);
+  assert.equal(portalEditarIndicacaoSchema.safeParse({ admissao_dia_teste: "05/11" }).success, true);
 });
-await ok("criação (MOT): [] ('não houve') é aceito e gravado como []", async () => {
-  const db = novoDbIndicacao(); logarPortal(db, "cli");
-  const r = await chamar(criar.POST, { metodo: "POST", corpo: corpo({ admissao_dias_teste: [] }) });
-  assert.equal(r.status, 201, JSON.stringify(r.corpo));
-  assert.deepEqual(ult(db).admissao_dias_teste, []);
+await ok("campos: admissao_qtd_dias_teste é editável, tem rótulo e conta como dado de admissão (o texto legado também)", () => {
+  for (const c of ["admissao_qtd_dias_teste", "admissao_dia_teste"]) {
+    assert.ok((CAMPOS_ADMISSAO as readonly string[]).includes(c), c);
+    assert.equal((ROTULO_CAMPO as Record<string, string>)[c], "Dia(s) de teste");
+    assert.equal(campoDaAdmissao(c), true);
+  }
+  assert.equal((CAMPOS_ADMISSAO as readonly string[]).includes("admissao_dias_teste"), false, "a jsonb antiga não existe mais");
 });
-await ok("criação (MOT): ausente ou null → 400 'Informe se houve dia(s) de teste.' e nada gravado", async () => {
-  for (const extra of [{ admissao_dias_teste: undefined }, { admissao_dias_teste: null }]) {
+
+// ── criação (indicação direta) ──
+await ok("criação (MOT): grava 1 e 2 em admissao_qtd_dias_teste e NÃO grava o texto antigo nem a jsonb antiga", async () => {
+  for (const q of [1, 2]) {
     const db = novoDbIndicacao(); logarPortal(db, "cli");
+    const r = await chamar(criar.POST, { metodo: "POST", corpo: corpo({ admissao_qtd_dias_teste: q, admissao_dia_teste: "texto antigo" }) });
+    assert.equal(r.status, 201, JSON.stringify(r.corpo));
+    assert.equal(ult(db).admissao_qtd_dias_teste, q);
+    assert.equal(ult(db).admissao_dia_teste ?? null, null);
+    assert.equal("admissao_dias_teste" in ult(db), false);
+  }
+});
+await ok("criação (MOT/Terceirização): 0 ('não houve') é aceito e gravado como 0 — não vira null", async () => {
+  for (const tipo of [MOT, TERC]) {
+    const db = novoDbIndicacao(); logarPortal(db, "cli");
+    db.tabelas.vagas.find((v: any) => v.id === ID.V_MOT_A).tipo_servico = tipo;
+    const r = await chamar(criar.POST, { metodo: "POST", corpo: corpo({ admissao_qtd_dias_teste: 0 }) });
+    assert.equal(r.status, 201, JSON.stringify(r.corpo));
+    assert.strictEqual(ult(db).admissao_qtd_dias_teste, 0);
+  }
+});
+await ok("criação (MOT/Terceirização): ausente ou null → 400 'Informe se houve dia(s) de teste.' e nada gravado", async () => {
+  for (const tipo of [MOT, TERC]) for (const extra of [{ admissao_qtd_dias_teste: undefined }, { admissao_qtd_dias_teste: null }]) {
+    const db = novoDbIndicacao(); logarPortal(db, "cli");
+    db.tabelas.vagas.find((v: any) => v.id === ID.V_MOT_A).tipo_servico = tipo;
     const antes = db.tabelas.solicitacoes_indicacao_candidato.length;
     const r = await chamar(criar.POST, { metodo: "POST", corpo: corpo(extra) });
     assert.equal(r.status, 400, JSON.stringify(r.corpo));
-    assert.equal(r.corpo.error, "Informe se houve dia(s) de teste.");
+    assert.equal(r.corpo.error, MSG);
     assert.equal(db.tabelas.solicitacoes_indicacao_candidato.length, antes);
   }
 });
-await ok("criação: 3 dias, data repetida e hora inválida → 400 do schema", async () => {
-  const tres = [D1, D2, { data: "2026-11-07", entrada: "08:00", saida: "12:00" }];
-  for (const dias of [tres, [D1, D1], [{ ...D1, entrada: "25:00" }], [{ ...D1, saida: D1.entrada }]]) {
+await ok("criação: 3 dias, negativo, fração e texto → 400 do schema, nada gravado", async () => {
+  for (const q of [3, -1, 1.5, "2"]) {
     const db = novoDbIndicacao(); logarPortal(db, "cli");
-    const r = await chamar(criar.POST, { metodo: "POST", corpo: corpo({ admissao_dias_teste: dias }) });
-    assert.equal(r.status, 400, JSON.stringify(dias));
+    const antes = db.tabelas.solicitacoes_indicacao_candidato.length;
+    const r = await chamar(criar.POST, { metodo: "POST", corpo: corpo({ admissao_qtd_dias_teste: q }) });
+    assert.equal(r.status, 400, JSON.stringify(q));
+    assert.equal(db.tabelas.solicitacoes_indicacao_candidato.length, antes);
   }
 });
 await ok("criação (R&S): campo ignorado — não exige e grava null mesmo se enviado", async () => {
-  for (const extra of [{ admissao_dias_teste: undefined }, { admissao_dias_teste: [D1] }]) {
+  for (const extra of [{ admissao_qtd_dias_teste: undefined }, { admissao_qtd_dias_teste: 2 }, { admissao_qtd_dias_teste: 0 }]) {
     const db = novoDbIndicacao(); logarPortal(db, "cli");
     const r = await chamar(criar.POST, { metodo: "POST", corpo: corpo({ vaga_id: ID.V_RS, ...extra }) });
     assert.equal(r.status, 201, JSON.stringify(r.corpo));
-    assert.equal(ult(db).admissao_dias_teste, null);
+    assert.strictEqual(ult(db).admissao_qtd_dias_teste, null);
   }
 });
-await ok("decisão (aprovar): copia o dia de teste da solicitação para candidatos_vagas e o e-mail ao RH mostra", async () => {
+
+// ── avaliação do portal ──
+await ok("avaliação (aprovar): MOT sem resposta → 400 sem gravar; com 0, 1 ou 2 → grava; 3 → 400; R&S ignora", async () => {
+  const montar = (vagaId: string) => {
+    const db = novoDbIndicacao(); logarPortal(db, "cli");
+    db.tabelas.encaminhamentos = [{ id: ENC, candidato_id: ID.CAND, vaga_id: vagaId, cliente_id: "C1", status: "aguardando" }];
+    return db;
+  };
+  const chamarAv = (extra: any) => chamar(avaliar.PATCH, { metodo: "PATCH", corpo: { encaminhamento_id: ENC, status: "aprovado", feedback_cliente: "ok", cv_id: ID.CV, ...extra } });
+  const cv = (db: any) => db.tabelas.candidatos_vagas.find((c: any) => c.id === ID.CV);
+
+  for (const extra of [{ admissao_salario: 1500 }, { admissao_qtd_dias_teste: null }]) {
+    const db = montar(ID.V_MOT_A);
+    const r = await chamarAv(extra);
+    assert.equal(r.status, 400, JSON.stringify(r.corpo));
+    assert.equal(r.corpo.error, MSG);
+    assert.equal(db.tabelas.encaminhamentos[0].status, "aguardando", "avaliação não pode ficar pela metade");
+  }
+  for (const q of [0, 1, 2]) {
+    const db = montar(ID.V_MOT_A);
+    const r = await chamarAv({ admissao_qtd_dias_teste: q, admissao_dia_teste: "texto antigo" });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.strictEqual(cv(db).admissao_qtd_dias_teste, q);
+    assert.notEqual(cv(db).admissao_dia_teste, "texto antigo", "texto antigo não é mais gravado");
+  }
+  const dbTres = montar(ID.V_MOT_A);
+  assert.equal((await chamarAv({ admissao_qtd_dias_teste: 3 })).status, 400);
+  assert.equal(dbTres.tabelas.encaminhamentos[0].status, "aguardando");
+
+  const dbRs = montar(ID.V_RS);
+  const r = await chamarAv({ admissao_qtd_dias_teste: 2 });
+  assert.equal(r.status, 200, JSON.stringify(r.corpo));
+  assert.equal(cv(dbRs).admissao_qtd_dias_teste ?? null, null);
+});
+await ok("avaliação (aprovar): o e-mail ao RH mostra '2 dias de teste' / 'Não houve dia de teste' (0 aparece) e não mostra a linha em R&S", async () => {
+  const rodar = async (vagaId: string, q: number | undefined) => {
+    const db = novoDbIndicacao(); logarPortal(db, "cli");
+    db.tabelas.encaminhamentos = [{ id: ENC, candidato_id: ID.CAND, vaga_id: vagaId, cliente_id: "C1", status: "aguardando" }];
+    const r = await chamar(avaliar.PATCH, { metodo: "PATCH", corpo: { encaminhamento_id: ENC, status: "aprovado", feedback_cliente: "ok", cv_id: ID.CV, tipo_servico: vagaId === ID.V_RS ? RS : MOT, admissao_qtd_dias_teste: q, admissao_funcao: "Auxiliar" } });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    return emails(db);
+  };
+  assert.match(await rodar(ID.V_MOT_A, 2), /Dia\(s\) de teste[\s\S]*2 dias de teste/);
+  assert.match(await rodar(ID.V_MOT_A, 1), /1 dia de teste/);
+  assert.match(await rodar(ID.V_MOT_A, 0), /Não houve dia de teste/);
+  assert.doesNotMatch(await rodar(ID.V_RS, 2), /dias? de teste/);
+});
+
+// ── decisão do analista (cópia solicitação → candidatos_vagas) e e-mail ──
+await ok("decisão (aprovar): copia admissao_qtd_dias_teste (1, 2 e 0) para candidatos_vagas, mantém o texto legado e o e-mail mostra", async () => {
+  for (const [q, esperado] of [[2, /2 dias de teste/], [1, /1 dia de teste/], [0, /Não houve dia de teste/]] as const) {
+    const db = novoDbIndicacao(); logar(db, "dir");
+    sol(db, ID.S_PEND).admissao_qtd_dias_teste = q;
+    sol(db, ID.S_PEND).admissao_dia_teste = "texto legado";
+    const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    const cvNovo = db.tabelas.candidatos_vagas.find((c: any) => c.id === r.corpo.candidatos_vaga_id);
+    assert.strictEqual(cvNovo.admissao_qtd_dias_teste, q, "0 é copiado como 0, não como null");
+    assert.equal(cvNovo.admissao_dia_teste, "texto legado");
+    assert.match(emails(db), esperado);
+    assert.equal("admissao_dias_teste" in cvNovo, false);
+  }
+});
+await ok("decisão sem quantidade (registro antigo): copia null e o e-mail não ganha a linha de quantidade", async () => {
+  const db = novoDbIndicacao(); logar(db, "dir");
+  const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } });
+  assert.equal(r.status, 200, JSON.stringify(r.corpo));
+  const cvNovo = db.tabelas.candidatos_vagas.find((c: any) => c.id === r.corpo.candidatos_vaga_id);
+  assert.equal(cvNovo.admissao_qtd_dias_teste ?? null, null);
+  assert.doesNotMatch(emails(db), /Dia\(s\) de teste/);
+});
+await ok("decisão (legado): texto antigo continua sendo copiado e aparece no e-mail", async () => {
   const db = novoDbIndicacao(); logar(db, "dir");
   sol(db, ID.S_PEND).admissao_dia_teste = "05/11 e 06/11";
   const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } });
   assert.equal(r.status, 200, JSON.stringify(r.corpo));
-  const cvNovo = db.tabelas.candidatos_vagas.find((c: any) => c.id === r.corpo.candidatos_vaga_id);
-  assert.equal(cvNovo.admissao_dia_teste, "05/11 e 06/11");
-  const html = (db.emails ?? []).map((e: any) => e.html).join("\n");
-  assert.match(html, /Dia\(s\) de teste/);
-  assert.match(html, /05\/11 e 06\/11/);
+  assert.equal(db.tabelas.candidatos_vagas.find((c: any) => c.id === r.corpo.candidatos_vaga_id).admissao_dia_teste, "05/11 e 06/11");
+  assert.match(emails(db), /Dia\(s\) de teste/);
+  assert.match(emails(db), /05\/11 e 06\/11/);
 });
-await ok("decisão sem dia de teste: copia null e o e-mail não ganha a linha", async () => {
-  const db = novoDbIndicacao(); logar(db, "dir");
-  const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } });
-  assert.equal(r.status, 200);
-  const cvNovo = db.tabelas.candidatos_vagas.find((c: any) => c.id === r.corpo.candidatos_vaga_id);
-  assert.equal(cvNovo.admissao_dia_teste ?? null, null);
-  assert.doesNotMatch((db.emails ?? []).map((e: any) => e.html).join("\n"), /Dia\(s\) de teste/);
+
+// ── edição pelo cliente (PATCH/GET) ──
+await ok("edição (PATCH): null recusado em MOT/Terceirização (400), em indicação aprovada ou pendente; nada é apagado", async () => {
+  for (const id of [ID.S_APROV, ID.S_PEND]) for (const salvo of [2, 0]) {
+    const db = novoDbIndicacao(); logarPortal(db, "cli");
+    sol(db, id).admissao_qtd_dias_teste = salvo;
+    const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id }, corpo: { admissao_qtd_dias_teste: null } });
+    assert.equal(r.status, 400, JSON.stringify(r.corpo));
+    assert.equal(r.corpo.error, MSG);
+    assert.strictEqual(sol(db, id).admissao_qtd_dias_teste, salvo, "nada foi apagado");
+  }
+  const dbT = novoDbIndicacao(); logarPortal(dbT, "cli");
+  dbT.tabelas.vagas.find((v: any) => v.id === ID.V_MOT_A).tipo_servico = TERC;
+  const rt = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_qtd_dias_teste: null } });
+  assert.equal(rt.status, 400, JSON.stringify(rt.corpo));
 });
-await ok("edição pelo cliente em indicação aprovada: salva na solicitação e propaga para candidatos_vagas", async () => {
+await ok("edição (PATCH): 0, 1 e 2 são aceitos; registro antigo (null) segue editável sem enviar o campo; 3 é recusado", async () => {
+  for (const q of [0, 1, 2]) {
+    const db = novoDbIndicacao(); logarPortal(db, "cli");
+    const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_qtd_dias_teste: q } });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.strictEqual(sol(db, ID.S_PEND).admissao_qtd_dias_teste, q);
+  }
+  const db = novoDbIndicacao(); logarPortal(db, "cli");
+  assert.equal(sol(db, ID.S_PEND).admissao_qtd_dias_teste ?? null, null);
+  const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_funcao: "Outra função" } });
+  assert.equal(r.status, 200, JSON.stringify(r.corpo));
+  assert.equal(sol(db, ID.S_PEND).admissao_qtd_dias_teste ?? null, null, "campo não mexido continua não informado");
+  const dbTres = novoDbIndicacao(); logarPortal(dbTres, "cli");
+  assert.equal((await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_qtd_dias_teste: 3 } })).status, 400);
+});
+await ok("edição em indicação aprovada: troca de quantidade propaga p/ candidatos_vagas; de null para 0 também conta como alteração", async () => {
+  for (const q of [2, 0]) {
+    const db = novoDbIndicacao(); logarPortal(db, "cli");
+    const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_APROV }, corpo: { admissao_qtd_dias_teste: q } });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.strictEqual(sol(db, ID.S_APROV).admissao_qtd_dias_teste, q);
+    assert.strictEqual(db.tabelas.candidatos_vagas.find((c: any) => c.id === ID.CV).admissao_qtd_dias_teste, q);
+  }
+});
+await ok("edição (PATCH) em R&S: null não é recusado (campo ignorado nesse serviço)", async () => {
+  const db = novoDbIndicacao(); logarPortal(db, "cli");
+  sol(db, ID.S_PEND).vaga_id = ID.V_RS;
+  const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_qtd_dias_teste: null } });
+  assert.equal(r.status, 200, JSON.stringify(r.corpo));
+});
+await ok("edição (GET): detalhe devolve admissao_qtd_dias_teste salvo (null, 0 e 2) — 0 não vira null", async () => {
+  for (const salvo of [null, 0, 2]) {
+    const db = novoDbIndicacao(); logarPortal(db, "cli");
+    sol(db, ID.S_PEND).admissao_qtd_dias_teste = salvo;
+    const r = await chamar(editar.GET, { metodo: "GET", params: { id: ID.S_PEND } });
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    assert.strictEqual(r.corpo.data.admissao_qtd_dias_teste, salvo);
+  }
+});
+await ok("edição (legado): o texto antigo continua editável e propaga para candidatos_vagas", async () => {
   const db = novoDbIndicacao(); logarPortal(db, "cli");
   const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_APROV }, corpo: { admissao_dia_teste: "07/11" } });
   assert.equal(r.status, 200, JSON.stringify(r.corpo));
   assert.equal(sol(db, ID.S_APROV).admissao_dia_teste, "07/11");
   assert.equal(db.tabelas.candidatos_vagas.find((c: any) => c.id === ID.CV).admissao_dia_teste, "07/11");
 });
-await ok("edição em indicação pendente: altera só a solicitação (sem candidatura)", async () => {
-  const db = novoDbIndicacao(); logarPortal(db, "cli");
-  const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_dia_teste: "05/11" } });
-  assert.equal(r.status, 200, JSON.stringify(r.corpo));
-  assert.equal(sol(db, ID.S_PEND).admissao_dia_teste, "05/11");
+await ok("edição: 0 é valor válido e DIFERENTE de null (diff, normalização e aviso); mesmo valor não gera alteração", () => {
+  assert.strictEqual(normalizarValor("admissao_qtd_dias_teste", 0), 0);
+  assert.equal(calcularDiff({ admissao_qtd_dias_teste: null }, { admissao_qtd_dias_teste: 0 }).length, 1, "null → 0 é alteração");
+  assert.equal(calcularDiff({ admissao_qtd_dias_teste: 0 }, { admissao_qtd_dias_teste: null }).length, 1, "0 → null é alteração");
+  assert.equal(calcularDiff({ admissao_qtd_dias_teste: 0 }, { admissao_qtd_dias_teste: 0 }).length, 0);
+  assert.equal(calcularDiff({ admissao_qtd_dias_teste: 2 }, { admissao_qtd_dias_teste: 2 }).length, 0);
+  assert.equal(calcularDiff({ admissao_qtd_dias_teste: 1 }, { admissao_qtd_dias_teste: 2 }).length, 1);
+  assert.equal(formatarValorAviso("admissao_qtd_dias_teste", 0, "depois"), "Não houve dia de teste");
+  assert.equal(formatarValorAviso("admissao_qtd_dias_teste", 1, "antes"), "1 dia de teste");
+  assert.equal(formatarValorAviso("admissao_qtd_dias_teste", 2, "depois"), "2 dias de teste");
+  assert.equal(formatarValorAviso("admissao_qtd_dias_teste", null, "antes"), "(vazio)");
 });
 
-await ok("schemas: admissao_dias_teste opcional/nullable nos dois schemas, recusa 3 dias e formato inválido", () => {
-  const baseAv: any = { encaminhamento_id: "11111111-1111-4111-8111-111111111111", status: "aprovado", feedback_cliente: "ok" };
-  const baseInd: any = { vaga_id: ID.V_MOT_A, candidato_nome: "A", candidato_telefone: "1" };
-  for (const base of [baseAv, baseInd]) {
-    const s = base === baseAv ? portalAvaliarSchema : portalIndicarCandidatoSchema;
-    for (const v of [[D1], [], null, undefined]) assert.equal(s.safeParse({ ...base, admissao_dias_teste: v }).success, true);
-    assert.equal(s.safeParse({ ...base, admissao_dias_teste: [D1, D2, { ...D1, data: "2026-11-09" }] }).success, false);
-    assert.equal(s.safeParse({ ...base, admissao_dias_teste: "05/11" }).success, false);
-  }
-  assert.equal(portalEditarIndicacaoSchema.safeParse({ admissao_dias_teste: [D1] }).success, true);
+// ── exibição para o RH/DP (somente leitura) ──
+await ok("RH: 1 e 2 → '1 dia de teste'/'2 dias de teste', destacados; o texto antigo é ignorado quando há quantidade", () => {
+  assert.deepEqual(textoDiasTesteParaRH(2, null, MOT), { linhas: ["2 dias de teste"], destacar: true });
+  assert.deepEqual(textoDiasTesteParaRH(1, null, TERC), { linhas: ["1 dia de teste"], destacar: true });
+  assert.deepEqual(textoDiasTesteParaRH(1, "texto antigo", MOT), { linhas: ["1 dia de teste"], destacar: true });
+  assert.equal("total" in textoDiasTesteParaRH(2, null, MOT)!, false, "sem total: não há horas");
 });
-await ok("decisão (aprovar): copia admissao_dias_teste (inclusive []) para candidatos_vagas, mantém o texto antigo e o e-mail mostra", async () => {
-  for (const [dias, esperado] of [[[D1, D2], /05\/11\/2026 · 08:00 às 12:00 \(4h\)<br>06\/11\/2026/], [[], /Não houve/]] as const) {
-    const db = novoDbIndicacao(); logar(db, "dir");
-    sol(db, ID.S_PEND).admissao_dias_teste = dias;
-    sol(db, ID.S_PEND).admissao_dia_teste = "texto legado";
-    const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } });
-    assert.equal(r.status, 200, JSON.stringify(r.corpo));
-    const cvNovo = db.tabelas.candidatos_vagas.find((c: any) => c.id === r.corpo.candidatos_vaga_id);
-    assert.deepEqual(cvNovo.admissao_dias_teste, dias);
-    assert.equal(cvNovo.admissao_dia_teste, "texto legado");
-    assert.match((db.emails ?? []).map((e: any) => e.html).join("\n"), esperado);
-  }
-});
-await ok("decisão sem admissao_dias_teste (registro antigo): copia null e o e-mail não ganha a linha", async () => {
-  const db = novoDbIndicacao(); logar(db, "dir");
-  const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } });
-  const cvNovo = db.tabelas.candidatos_vagas.find((c: any) => c.id === r.corpo.candidatos_vaga_id);
-  assert.equal(cvNovo.admissao_dias_teste ?? null, null);
-  assert.doesNotMatch((db.emails ?? []).map((e: any) => e.html).join("\n"), /Dia\(s\) de teste/);
-});
-await ok("edição pelo cliente: troca de dias de teste propaga p/ candidatos_vagas; mesmo valor não gera alteração; [] difere de null", async () => {
-  const db = novoDbIndicacao(); logarPortal(db, "cli");
-  const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_APROV }, corpo: { admissao_dias_teste: [D1] } });
-  assert.equal(r.status, 200, JSON.stringify(r.corpo));
-  assert.deepEqual(sol(db, ID.S_APROV).admissao_dias_teste, [D1]);
-  assert.deepEqual(db.tabelas.candidatos_vagas.find((c: any) => c.id === ID.CV).admissao_dias_teste, [D1]);
-  assert.equal(calcularDiff({ admissao_dias_teste: [D1] }, { admissao_dias_teste: [{ ...D1 }] }).length, 0);
-  assert.equal(calcularDiff({ admissao_dias_teste: null }, { admissao_dias_teste: [] }).length, 1);
-  assert.equal(formatarValorAviso("admissao_dias_teste", [D1, D2], "depois"), "05/11/2026 · 08:00 às 12:00 (4h); 06/11/2026 · 22:00 às 06:00 (8h)");
-  assert.equal(formatarValorAviso("admissao_dias_teste", [], "depois"), "Não houve");
-});
-await ok("avaliação do portal (aprovar): MOT sem resposta → 400 sem gravar; com [] ou dias → grava admissao_dias_teste; R&S ignora", async () => {
-  const montar = (vagaId: string) => {
-    const db = novoDbIndicacao(); logarPortal(db, "cli");
-    db.tabelas.encaminhamentos = [{ id: "11111111-1111-4111-8111-111111111111", candidato_id: ID.CAND, vaga_id: vagaId, cliente_id: "C1", status: "aguardando" }];
-    return db;
-  };
-  const chamarAv = (db: any, extra: any) => chamar(avaliar.PATCH, { metodo: "PATCH", corpo: { encaminhamento_id: "11111111-1111-4111-8111-111111111111", status: "aprovado", feedback_cliente: "ok", cv_id: ID.CV, ...extra } });
-  const cv = (db: any) => db.tabelas.candidatos_vagas.find((c: any) => c.id === ID.CV);
-
-  let db = montar(ID.V_MOT_A);
-  let r = await chamarAv(db, { admissao_salario: 1500 });
-  assert.equal(r.status, 400, JSON.stringify(r.corpo));
-  assert.equal(r.corpo.error, "Informe se houve dia(s) de teste.");
-  assert.equal(db.tabelas.encaminhamentos[0].status, "aguardando", "avaliação não pode ficar pela metade");
-
-  for (const dias of [[], [D1, D2]]) {
-    db = montar(ID.V_MOT_A);
-    r = await chamarAv(db, { admissao_dias_teste: dias, admissao_dia_teste: "texto antigo" });
-    assert.equal(r.status, 200, JSON.stringify(r.corpo));
-    assert.deepEqual(cv(db).admissao_dias_teste, dias);
-    assert.notEqual(cv(db).admissao_dia_teste, "texto antigo", "texto antigo não é mais gravado");
-  }
-
-  db = montar(ID.V_RS);
-  r = await chamarAv(db, { admissao_dias_teste: [D1] });
-  assert.equal(r.status, 200, JSON.stringify(r.corpo));
-  assert.equal(cv(db).admissao_dias_teste ?? null, null);
-});
-
-// ── PATCH da edição pelo cliente: o cliente não pode apagar a resposta de dias de teste ──
-await ok("edição (PATCH): null recusado em MOT/Terceirização (400), mesmo em indicação aprovada ou pendente", async () => {
-  for (const id of [ID.S_APROV, ID.S_PEND]) {
-    const db = novoDbIndicacao(); logarPortal(db, "cli");
-    sol(db, id).admissao_dias_teste = [D1];
-    const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id }, corpo: { admissao_dias_teste: null } });
-    assert.equal(r.status, 400, JSON.stringify(r.corpo));
-    assert.equal(r.corpo.error, "Informe se houve dia(s) de teste.");
-    assert.deepEqual(sol(db, id).admissao_dias_teste, [D1], "nada foi apagado");
-  }
-  const dbT = novoDbIndicacao(); logarPortal(dbT, "cli");
-  dbT.tabelas.vagas.find((v: any) => v.id === ID.V_MOT_A).tipo_servico = "terceirizacao";
-  const rt = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_dias_teste: null } });
-  assert.equal(rt.status, 400, JSON.stringify(rt.corpo));
-});
-await ok("edição (PATCH): [] e lista são aceitos em MOT; registro antigo (null) segue editável sem enviar o campo", async () => {
-  for (const dias of [[], [D1], [D1, D2]]) {
-    const db = novoDbIndicacao(); logarPortal(db, "cli");
-    const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_dias_teste: dias } });
-    assert.equal(r.status, 200, JSON.stringify(r.corpo));
-    assert.deepEqual(sol(db, ID.S_PEND).admissao_dias_teste, dias);
-  }
-  const db = novoDbIndicacao(); logarPortal(db, "cli");
-  assert.equal(sol(db, ID.S_PEND).admissao_dias_teste ?? null, null);
-  const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_funcao: "Outra função" } });
-  assert.equal(r.status, 200, JSON.stringify(r.corpo));
-  assert.equal(sol(db, ID.S_PEND).admissao_dias_teste ?? null, null, "campo não mexido continua não informado");
-});
-await ok("edição (PATCH): 3 dias é recusado pelo schema (400)", async () => {
-  const db = novoDbIndicacao(); logarPortal(db, "cli");
-  const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_dias_teste: [D1, D2, { ...D1, data: "2026-11-09" }] } });
-  assert.equal(r.status, 400);
-});
-await ok("edição (PATCH) em R&S: null não é recusado (campo ignorado nesse serviço)", async () => {
-  const db = novoDbIndicacao(); logarPortal(db, "cli");
-  sol(db, ID.S_PEND).vaga_id = ID.V_RS;
-  const r = await chamar(editar.PATCH, { metodo: "PATCH", params: { id: ID.S_PEND }, corpo: { admissao_dias_teste: null } });
-  assert.equal(r.status, 200, JSON.stringify(r.corpo));
-});
-await ok("edição (GET): detalhe devolve admissao_dias_teste salvo (null, [] e lista)", async () => {
-  for (const salvo of [null, [], [D1]]) {
-    const db = novoDbIndicacao(); logarPortal(db, "cli");
-    sol(db, ID.S_PEND).admissao_dias_teste = salvo;
-    const r = await chamar(editar.GET, { metodo: "GET", params: { id: ID.S_PEND } });
-    assert.equal(r.status, 200, JSON.stringify(r.corpo));
-    assert.deepEqual(r.corpo.data.admissao_dias_teste, salvo);
-  }
-});
-
-// ── CampoDiasTeste: helpers e render ──
-const render = (valor: EstadoDiasTeste, extra: Record<string, unknown> = {}) =>
-  renderToStaticMarkup(createElement(CampoDiasTeste, { valor, onChange: () => {}, ...extra }));
-const linhas = (html: string) => (html.match(/data-dia-teste-linha/g) ?? []).length;
-// O componente não usa hooks: chamá-lo devolve a árvore de elementos, onde dá para achar os handlers.
-function achar(no: any, teste: (el: any) => boolean, achados: any[] = []): any[] {
-  if (Array.isArray(no)) { no.forEach((n) => achar(n, teste, achados)); return achados; }
-  if (!no || typeof no !== "object" || !("props" in no)) return achados;
-  if (teste(no)) achados.push(no);
-  achar((no as ReactElement<any>).props?.children, teste, achados);
-  return achados;
-}
-const arvore = (valor: EstadoDiasTeste, onChange: (e: EstadoDiasTeste) => void) => (CampoDiasTeste as any)({ valor, onChange });
-
-await ok("CampoDiasTeste: helpers — sem resposta → null; Não → []; Sim → lista; erros de cada caso", () => {
-  assert.equal(diasTesteParaEnvio(ESTADO_DIAS_TESTE_VAZIO), null);
-  assert.deepEqual(diasTesteParaEnvio({ resposta: "nao", dias: [] }), []);
-  assert.deepEqual(diasTesteParaEnvio({ resposta: "sim", dias: [D1] }), [D1]);
-  assert.equal(erroDiasTeste(ESTADO_DIAS_TESTE_VAZIO), "Informe se houve dia(s) de teste.");
-  assert.equal(erroDiasTeste({ resposta: "nao", dias: [] }), null);
-  assert.ok(erroDiasTeste({ resposta: "sim", dias: [] }));
-  assert.ok(erroDiasTeste({ resposta: "sim", dias: [{ data: "", entrada: "08:00", saida: "12:00" }] }), "linha incompleta");
-  assert.ok(erroDiasTeste({ resposta: "sim", dias: [{ ...D1, saida: D1.entrada }] }), "saída = entrada");
-  assert.ok(erroDiasTeste({ resposta: "sim", dias: [D1, { ...D2, data: D1.data }] }), "data repetida");
-  assert.equal(erroDiasTeste({ resposta: "sim", dias: [D1, D2] }), null);
-});
-await ok("CampoDiasTeste: estado inicial do valor salvo — null → '', [] → 'nao', lista → 'sim'", () => {
-  assert.deepEqual(estadoDiasTesteDeValor(null), { resposta: "", dias: [] });
-  assert.deepEqual(estadoDiasTesteDeValor(undefined), { resposta: "", dias: [] });
-  assert.deepEqual(estadoDiasTesteDeValor([]), { resposta: "nao", dias: [] });
-  assert.deepEqual(estadoDiasTesteDeValor([D1, D2]), { resposta: "sim", dias: [D1, D2] });
-});
-await ok("CampoDiasTeste (render): sem pré-seleção; Sim mostra linhas e horas; limite de 2 esconde 'Adicionar dia'; Remover só com 2", () => {
-  const vazio = render(ESTADO_DIAS_TESTE_VAZIO);
-  assert.equal(linhas(vazio), 0);
-  assert.doesNotMatch(vazio, /checked/);
-  assert.equal(linhas(render({ resposta: "nao", dias: [] })), 0);
-
-  const um = render({ resposta: "sim", dias: [D1] });
-  assert.equal(linhas(um), 1);
-  assert.match(um, />4h</, "horas calculadas ao lado");
-  assert.match(um, /Adicionar dia/);
-  assert.doesNotMatch(um, /Remover/);
-  assert.match(um, /Informe o horário trabalhado em cada dia\./);
-
-  const dois = render({ resposta: "sim", dias: [D1, D2] });
-  assert.equal(linhas(dois), 2);
-  assert.doesNotMatch(dois, /Adicionar dia/, `limite de ${MAX_DIAS_TESTE}`);
-  assert.equal((dois.match(/Remover/g) ?? []).length, 2);
-  assert.match(dois, />8h</, "turno que vira a meia-noite");
-});
-await ok("CampoDiasTeste (render): mostrarErro pinta borda vermelha e mostra a mensagem; sem mostrarErro não", () => {
-  const com = render(ESTADO_DIAS_TESTE_VAZIO, { mostrarErro: true });
-  assert.match(com, /Informe se houve dia\(s\) de teste\./);
-  assert.match(com, /#EF4444/);
-  const sem = render(ESTADO_DIAS_TESTE_VAZIO, { mostrarErro: false });
-  assert.doesNotMatch(sem, /Informe se houve|#EF4444/);
-  const linhaVazia = render({ resposta: "sim", dias: [{ data: "", entrada: "", saida: "" }] }, { mostrarErro: true });
-  assert.match(linhaVazia, /#EF4444/);
-});
-await ok("CampoDiasTeste (render): className e style dos inputs são repassados", () => {
-  const html = render({ resposta: "sim", dias: [D1] }, { inputClassName: "input-field", inputStyle: { border: "1px solid #E5E7EB" } });
-  assert.match(html, /class="input-field"/);
-  assert.match(html, /border:1px solid #E5E7EB/);
-});
-await ok("CampoDiasTeste (interação): Não → onChange com [] e sem dias; Sim → 1 linha em branco; Adicionar até 2; Remover", () => {
-  let ultimo: EstadoDiasTeste | null = null;
-  const radios = (st: EstadoDiasTeste) => achar(arvore(st, (e) => { ultimo = e; }), (el) => el.type === "input" && el.props.type === "radio");
-  const [rNao, rSim] = radios(ESTADO_DIAS_TESTE_VAZIO);
-  rNao.props.onChange();
-  assert.deepEqual(ultimo, { resposta: "nao", dias: [] });
-  assert.deepEqual(diasTesteParaEnvio(ultimo!), []);
-  rSim.props.onChange();
-  assert.deepEqual(ultimo, { resposta: "sim", dias: [{ data: "", entrada: "", saida: "" }] });
-  // Voltar para Sim depois de Sim com dias mantém o que já foi digitado.
-  radios({ resposta: "sim", dias: [D1] })[1].props.onChange();
-  assert.deepEqual(ultimo, { resposta: "sim", dias: [D1] });
-  // Trocar Sim → Não descarta as linhas (envia []).
-  radios({ resposta: "sim", dias: [D1] })[0].props.onChange();
-  assert.deepEqual(ultimo, { resposta: "nao", dias: [] });
-
-  const botoes = (st: EstadoDiasTeste) => achar(arvore(st, (e) => { ultimo = e; }), (el) => el.type === "button");
-  botoes({ resposta: "sim", dias: [D1] })[0].props.onClick();
-  assert.equal(ultimo!.dias.length, 2);
-  const dois: EstadoDiasTeste = { resposta: "sim", dias: [D1, D2] };
-  botoes(dois).filter((b) => /Remover/.test(JSON.stringify(b.props.children)))[1].props.onClick();
-  assert.deepEqual(ultimo!.dias, [D1]);
-});
-await ok("CampoDiasTeste (+ Adicionar dia): o novo dia herda entrada/saída do 1º, com data vazia", () => {
-  let ultimo: EstadoDiasTeste | null = null;
-  const botoes = (st: EstadoDiasTeste) => achar(arvore(st, (e) => { ultimo = e; }), (el) => el.type === "button");
-  botoes({ resposta: "sim", dias: [D1] })[0].props.onClick();
-  assert.deepEqual(ultimo!.dias, [D1, { data: "", entrada: D1.entrada, saida: D1.saida }]);
-  assert.deepEqual(ultimo!.dias[0], D1, "o 1º dia não muda");
-  // Escolher "Sim" pela primeira vez continua gerando a linha toda em branco (não copia nada).
-  const [, rSim] = achar(arvore(ESTADO_DIAS_TESTE_VAZIO, (e) => { ultimo = e; }), (el) => el.type === "input" && el.props.type === "radio");
-  rSim.props.onChange();
-  assert.deepEqual(ultimo!.dias, [{ data: "", entrada: "", saida: "" }]);
-});
-await ok("CampoDiasTeste (+ Adicionar dia): 1º dia sem horário (ou só com um deles) → o novo nasce vazio nesses campos", () => {
-  let ultimo: EstadoDiasTeste | null = null;
-  const botoes = (st: EstadoDiasTeste) => achar(arvore(st, (e) => { ultimo = e; }), (el) => el.type === "button");
-  botoes({ resposta: "sim", dias: [{ data: "2026-11-05", entrada: "", saida: "" }] })[0].props.onClick();
-  assert.deepEqual(ultimo!.dias[1], { data: "", entrada: "", saida: "" });
-  botoes({ resposta: "sim", dias: [{ data: "", entrada: "08:00", saida: "" }] })[0].props.onClick();
-  assert.deepEqual(ultimo!.dias[1], { data: "", entrada: "08:00", saida: "" }, "copia só o que existe");
-});
-await ok("CampoDiasTeste (+ Adicionar dia): dia novo com data vazia continua incompleto e bloqueia o envio; horários seguem editáveis", () => {
-  let ultimo: EstadoDiasTeste | null = null;
-  achar(arvore({ resposta: "sim", dias: [D1] }, (e) => { ultimo = e; }), (el) => el.type === "button")[0].props.onClick();
-  assert.equal(erroDiasTeste(ultimo!), "Preencha data, entrada e saída de cada dia de teste.");
-  // escolher só a data libera o envio (horários copiados valem); alterar o horário do 2º dia não mexe no 1º
-  const comData: EstadoDiasTeste = { resposta: "sim", dias: [ultimo!.dias[0], { ...ultimo!.dias[1], data: "2026-11-06" }] };
-  assert.equal(erroDiasTeste(comData), null);
-  const editado: EstadoDiasTeste = { resposta: "sim", dias: [comData.dias[0], { ...comData.dias[1], saida: "13:00" }] };
-  assert.equal(erroDiasTeste(editado), null);
-  assert.equal(editado.dias[0].saida, D1.saida);
-});
-await ok("CampoDiasTeste (render): dica 'Horário copiado do 1º dia' só com horário copiado igual ao do 1º", () => {
-  const dica = /Horário copiado do 1º dia; ajuste se for diferente\./;
-  assert.match(render({ resposta: "sim", dias: [D1, { data: "", entrada: D1.entrada, saida: D1.saida }] }), dica);
-  assert.doesNotMatch(render({ resposta: "sim", dias: [D1] }), dica);
-  assert.doesNotMatch(render({ resposta: "sim", dias: [D1, { data: "", entrada: "", saida: "" }] }), dica);
-  assert.doesNotMatch(render({ resposta: "sim", dias: [D1, D2] }), dica, "horário editado: a dica some");
-  assert.doesNotMatch(render({ resposta: "sim", dias: [{ data: "", entrada: "", saida: "" }, { data: "", entrada: "", saida: "" }] }), dica, "vazios não contam como cópia");
-});
-
-// ── Parte 3: exibição para o RH/DP (somente leitura) ──
-const MOT = "mao_obra_temporaria", TERC = "terceirizacao", RS = "recrutamento_selecao";
-await ok("RH: lista → uma linha por dia + total, destacado (inclusive meia-noite)", () => {
-  const r = textoDiasTesteParaRH([D1, D2], null, MOT)!;
-  assert.deepEqual(r.linhas, ["05/11/2026 · 08:00 às 12:00 (4h)", "06/11/2026 · 22:00 às 06:00 (8h)"]);
-  assert.equal(r.total, "Total: 12h");
-  assert.equal(r.destacar, true);
-  const um = textoDiasTesteParaRH([{ data: "2026-11-05", entrada: "08:00", saida: "15:30" }], null, TERC)!;
-  assert.deepEqual(um.linhas, ["05/11/2026 · 08:00 às 15:30 (7h30)"]);
-  assert.equal(um.total, "Total: 7h30");
-  // o texto antigo é ignorado quando existe o estruturado
-  assert.equal(textoDiasTesteParaRH([D1], "texto antigo", MOT)!.linhas.join().includes("texto antigo"), false);
-});
-await ok("RH: [] → 'Não houve dia de teste', sem total e sem destaque (mesmo com texto antigo)", () => {
-  for (const legado of [null, "texto antigo"]) {
-    assert.deepEqual(textoDiasTesteParaRH([], legado, MOT), { linhas: ["Não houve dia de teste"], total: null, destacar: false });
-  }
+await ok("RH: 0 → 'Não houve dia de teste', sem destaque (mesmo com texto antigo)", () => {
+  for (const legado of [null, "texto antigo"]) assert.deepEqual(textoDiasTesteParaRH(0, legado, MOT), { linhas: ["Não houve dia de teste"], destacar: false });
 });
 await ok("RH: null com texto antigo → mostra o texto antigo (trim), em qualquer serviço", () => {
-  for (const tipo of [MOT, TERC, RS, null]) {
-    assert.deepEqual(textoDiasTesteParaRH(null, "  05/11 e 06/11  ", tipo), { linhas: ["05/11 e 06/11"], total: null, destacar: false });
-  }
+  for (const tipo of [MOT, TERC, RS, null]) assert.deepEqual(textoDiasTesteParaRH(null, "  05/11 e 06/11  ", tipo), { linhas: ["05/11 e 06/11"], destacar: false });
   assert.deepEqual(textoDiasTesteParaRH(undefined, "07/11", MOT)!.linhas, ["07/11"]);
 });
 await ok("RH: null sem texto → 'Não informado pelo cliente' só em MOT/Terceirização; R&S e sem serviço não mostram nada", () => {
   for (const legado of [null, undefined, "", "   "]) {
-    assert.deepEqual(textoDiasTesteParaRH(null, legado, MOT), { linhas: ["Não informado pelo cliente"], total: null, destacar: false });
+    assert.deepEqual(textoDiasTesteParaRH(null, legado, MOT), { linhas: ["Não informado pelo cliente"], destacar: false });
     assert.equal(textoDiasTesteParaRH(null, legado, TERC)!.linhas[0], "Não informado pelo cliente");
     assert.equal(textoDiasTesteParaRH(null, legado, RS), null);
     assert.equal(textoDiasTesteParaRH(null, legado, null), null);
   }
-  assert.equal(textoDiasTesteParaRH("lixo", null, RS), null, "valor não-array é tratado como não informado");
+  for (const lixo of ["lixo", 3, -1, 1.5, [], {}]) assert.equal(textoDiasTesteParaRH(lixo, null, RS), null, `fora do domínio: ${JSON.stringify(lixo)}`);
+  assert.equal(textoDiasTesteParaRH(3, null, MOT)!.linhas[0], "Não informado pelo cliente", "valor fora de 0..2 é tratado como não informado");
 });
-await ok("RH: selo da lista só com dias ('2 dia(s) · 12h'); [] e null não ganham selo", () => {
-  assert.equal(seloDiasTeste([D1, D2]), "2 dia(s) · 12h");
-  assert.equal(seloDiasTeste([D1]), "1 dia(s) · 4h");
-  assert.equal(seloDiasTeste([]), null);
-  assert.equal(seloDiasTeste(null), null);
-  assert.equal(seloDiasTeste(undefined), null);
+await ok("RH: selo da lista só com teste ('1 dia(s)', '2 dia(s)'); 0, null e fora do domínio não ganham selo", () => {
+  assert.equal(seloDiasTeste(2), "2 dia(s)");
+  assert.equal(seloDiasTeste(1), "1 dia(s)");
+  for (const v of [0, null, undefined, 3, -1, "2", []]) assert.equal(seloDiasTeste(v), null, String(v));
 });
-await ok("RH (render): bloco âmbar com título 'a pagar na folha', linhas e total; demais casos sem destaque; R&S/null não renderiza", () => {
-  const html = (dias: unknown, legado: string | null, tipo: string | null) => renderToStaticMarkup(createElement(BlocoDiasTesteRH, { dias, textoLegado: legado, tipoServico: tipo }));
-  const com = html([D1, D2], null, MOT);
-  assert.match(com, /Dia\(s\) de teste \(a pagar na folha\)/);
-  assert.match(com, /#FFFBEB/);
-  assert.match(com, /05\/11\/2026 · 08:00 às 12:00 \(4h\)/);
-  assert.match(com, /06\/11\/2026 · 22:00 às 06:00 \(8h\)/);
-  assert.match(com, /Total: 12h/);
-  for (const [d, l, t, texto] of [[[], null, MOT, "Não houve dia de teste"], [null, "05/11", MOT, "05/11"], [null, null, TERC, "Não informado pelo cliente"]] as const) {
-    const h = html(d, l, t);
-    assert.match(h, new RegExp(texto));
-    assert.doesNotMatch(h, /a pagar na folha|#FFFBEB/);
-  }
-  assert.equal(html(null, null, RS), "");
-});
-await ok("RH: admissão → candidatura pelo par (candidato, vaga): lê dias/legado, ignora outras vagas e candidatos e admissão sem candidatura", async () => {
+await ok("RH: admissão → candidatura pelo par (candidato, vaga): lê quantidade/legado, ignora outras vagas e candidatos e admissão sem candidatura", async () => {
   const { buscarDiasTestePorAdmissao } = await importar("src/lib/diasTesteAdmissao.ts");
   const db = novoDbIndicacao();
   const A = "cccccccc-0000-4000-8000-000000000001", B = "cccccccc-0000-4000-8000-000000000002", C = "cccccccc-0000-4000-8000-000000000003", E = "cccccccc-0000-4000-8000-000000000004";
   const cv = (candidato_id: string, vaga_id: string, extra = {}) => ({ id: `cv-${candidato_id}-${vaga_id}`, candidato_id, vaga_id, etapa: "contratado", ...extra });
   db.tabelas.candidatos_vagas = [
-    cv("CAND1", ID.V_MOT_A, { admissao_dias_teste: [D1, D2], admissao_dia_teste: "legado" }),
-    cv("CAND1", ID.V_MOT_B, { admissao_dias_teste: [], admissao_dia_teste: null }),   // outra vaga do mesmo candidato
-    cv("CAND2", ID.V_MOT_A, { admissao_dias_teste: null, admissao_dia_teste: "só texto" }), // outro candidato, mesma vaga
+    cv("CAND1", ID.V_MOT_A, { admissao_qtd_dias_teste: 2, admissao_dia_teste: "legado" }),
+    cv("CAND1", ID.V_MOT_B, { admissao_qtd_dias_teste: 0, admissao_dia_teste: null }),   // outra vaga do mesmo candidato
+    cv("CAND2", ID.V_MOT_A, { admissao_qtd_dias_teste: null, admissao_dia_teste: "só texto" }), // outro candidato, mesma vaga
   ];
   // Mesmo cliente em memória que as rotas recebem no harness (o módulo real depende de next/headers).
   // @ts-expect-error módulo .mjs do harness, sem tipos
@@ -494,9 +335,9 @@ await ok("RH: admissão → candidatura pelo par (candidato, vaga): lê dias/leg
     { id: C, candidato_id: "CAND2", vaga_id: ID.V_MOT_A },
     { id: E, candidato_id: "CAND2", vaga_id: ID.V_MOT_B }, // sem candidatura
   ]);
-  assert.deepEqual(r.get(A), { dias: [D1, D2], legado: "legado" });
-  assert.deepEqual(r.get(B), { dias: [], legado: null });
-  assert.deepEqual(r.get(C), { dias: null, legado: "só texto" });
+  assert.deepEqual(r.get(A), { qtd: 2, legado: "legado" });
+  assert.deepEqual(r.get(B), { qtd: 0, legado: null }, "0 continua 0");
+  assert.deepEqual(r.get(C), { qtd: null, legado: "só texto" });
   assert.equal(r.has(E), false, "admissão sem candidatura não herda dados de outra vaga/candidato");
   assert.equal((await buscarDiasTestePorAdmissao(createServiceClient(), [{ id: "x", candidato_id: "CAND1", vaga_id: null }])).size, 0);
 });

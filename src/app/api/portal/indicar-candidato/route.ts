@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     }
 
     // MOT/Terceirização precisam responder (inclusive "não houve"); R&S ignora o campo. Vem do tipo da vaga no banco.
-    const diasTeste = resolverDiasTeste(vaga.tipo_servico, dados.admissao_dias_teste);
+    const diasTeste = resolverDiasTeste(vaga.tipo_servico, dados.admissao_qtd_dias_teste);
     if (!diasTeste.ok) return NextResponse.json({ error: diasTeste.erro }, { status: 400 });
 
     const { data: cliente } = await service
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
         admissao_vt: dados.admissao_vt ?? null,
         admissao_exame_responsavel: dados.admissao_exame_responsavel || null,
         admissao_local_integracao: dados.admissao_local_integracao || null,
-        admissao_dias_teste: diasTeste.valor,
+        admissao_qtd_dias_teste: diasTeste.valor,
         admissao_observacoes: dados.admissao_observacoes || null,
       })
       .select("id")

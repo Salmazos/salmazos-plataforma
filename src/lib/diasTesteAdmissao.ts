@@ -6,7 +6,7 @@ import type { createServiceClient } from "@/lib/supabase/server";
 type Service = ReturnType<typeof createServiceClient>;
 
 export interface DiasTesteDaAdmissao {
-  dias: unknown; // admissao_dias_teste (jsonb): null | [] | lista
+  qtd: number | null; // admissao_qtd_dias_teste: null = não informado, 0 = não houve, 1 ou 2
   legado: string | null; // admissao_dia_teste (texto antigo)
 }
 
@@ -25,12 +25,12 @@ export async function buscarDiasTestePorAdmissao(service: Service, admissoes: Pa
   if (comVaga.length === 0) return resultado;
 
   // Em lotes: dois .in() com centenas de UUIDs estourariam o limite de tamanho da URL do PostgREST (a lista cresce com o tempo).
-  const dados: { candidato_id: string; vaga_id: string; admissao_dias_teste: unknown; admissao_dia_teste: string | null }[] = [];
+  const dados: { candidato_id: string; vaga_id: string; admissao_qtd_dias_teste: number | null; admissao_dia_teste: string | null }[] = [];
   for (let i = 0; i < comVaga.length; i += LOTE) {
     const lote = comVaga.slice(i, i + LOTE);
     const { data, error } = await service
       .from("candidatos_vagas")
-      .select("candidato_id, vaga_id, admissao_dias_teste, admissao_dia_teste")
+      .select("candidato_id, vaga_id, admissao_qtd_dias_teste, admissao_dia_teste")
       .in("candidato_id", Array.from(new Set(lote.map((a) => a.candidato_id))))
       .in("vaga_id", Array.from(new Set(lote.map((a) => a.vaga_id as string))));
     if (error) {
@@ -43,7 +43,7 @@ export async function buscarDiasTestePorAdmissao(service: Service, admissoes: Pa
 
   const porPar = new Map<string, DiasTesteDaAdmissao>();
   for (const cv of dados) {
-    porPar.set(`${cv.candidato_id}|${cv.vaga_id}`, { dias: cv.admissao_dias_teste ?? null, legado: cv.admissao_dia_teste ?? null });
+    porPar.set(`${cv.candidato_id}|${cv.vaga_id}`, { qtd: cv.admissao_qtd_dias_teste ?? null, legado: cv.admissao_dia_teste ?? null });
   }
   for (const a of comVaga) {
     const achado = porPar.get(`${a.candidato_id}|${a.vaga_id}`);
