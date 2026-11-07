@@ -2,6 +2,7 @@ import type { createServiceClient } from "@/lib/supabase/server";
 import { registrarAuditoria } from "@/lib/audit";
 import { apelidoDoNomeCompleto } from "@/lib/responsaveis";
 import { carregarNomesGeradoresCobrancaRS } from "@/lib/cobrancaRSAutor";
+import { TIPO_AVISO_COMISSAO, avisarBeneficiario, textos } from "@/lib/comissaoAvisos";
 import {
   MENSAGEM_RECUSA_MARCACAO,
   arredondar2,
@@ -10,8 +11,10 @@ import {
   competenciaAtual,
   competenciaDoInstante,
   competenciaPassou,
+  rotuloCompetencia,
   ehTerminal,
   motivoDeNaoPoderMarcar,
+  mesAtrasadoDe,
   mudancasPorCobranca,
   statusInicialDaMarcacao,
   statusPelaCobranca,
@@ -59,6 +62,7 @@ export interface Lancamento {
   resolvido_em: string | null;
   resolucao_nota: string | null;
   fechado_em: string | null;
+  fechamento_id: string | null;
   unidade_id: string;
 }
 
@@ -295,7 +299,7 @@ export async function sincronizarComissoesDaCobranca(svc: Service, cobrancaId: s
 
 // Reconcilia, antes de listar, os lançamentos ativos do conjunto (rede de segurança caso uma rota da cobrança tenha falhado
 // em sincronizar). Devolve os lançamentos já atualizados.
-async function reconciliar(svc: Service, lancs: Lancamento[], origem: string): Promise<Lancamento[]> {
+export async function reconciliar(svc: Service, lancs: Lancamento[], origem: string): Promise<Lancamento[]> {
   const ativos = lancs.filter((l) => l.tipo === "comissao" && !ehTerminal(l.status));
   if (ativos.length === 0) return lancs;
   const cobrancas = await lerCobrancas(svc, [...new Set(ativos.map((l) => l.cobranca_id))]);
@@ -328,9 +332,15 @@ export interface LancamentoDetalhado extends Lancamento {
   pode_desmarcar: boolean;
   // Só em ajuste/estorno: status atual do lançamento de comissão original (decide em qual cartão de total o ajuste entra).
   origem_status: StatusLancamento | null;
+  origem_fechado: boolean;
+  // Fechamento em que o lançamento entrou (Fase 2): competência do fechamento e se a folha já foi paga. null = ainda não fechado.
+  fechamento: { id: string; competencia: string; pago_em: string | null } | null;
+  fechamento_pago: boolean;
+  // "Atrasada de <mês>": entrou num fechamento de mês posterior ao da competência dela (competência original preservada).
+  atrasada_de: string | null;
 }
 
-async function detalhar(svc: Service, lancs: Lancamento[]): Promise<LancamentoDetalhado[]> {
+export async function detalhar(svc: Service, lancs: Lancamento[]): Promise<LancamentoDetalhado[]> {
   if (lancs.length === 0) return [];
   const cobrancas = await lerCobrancas(svc, [...new Set(lancs.map((l) => l.cobranca_id))]);
   const vagaIds = [...new Set([...cobrancas.values()].map((c) => c.vaga_id))];
@@ -343,8 +353,12 @@ async function detalhar(svc: Service, lancs: Lancamento[]): Promise<LancamentoDe
   const nomePerfil = new Map((perfis ?? []).map((p) => [p.id, p.nome_completo as string]));
   const nomeBen = new Map((bens ?? []).map((b) => [b.id, nomePerfil.get(b.analista_perfil_id) ?? null]));
   const origemIds = [...new Set(lancs.map((l) => l.lancamento_origem_id).filter((x): x is string => !!x))];
-  const { data: origens } = origemIds.length ? await svc.from("comissao_lancamentos").select("id, status").in("id", origemIds) : { data: [] };
+  const { data: origens } = origemIds.length ? await svc.from("comissao_lancamentos").select("id, status, fechado_em").in("id", origemIds) : { data: [] };
   const statusOrigem = new Map((origens ?? []).map((o) => [o.id, o.status as StatusLancamento]));
+  const origemFechada = new Map((origens ?? []).map((o) => [o.id, !!o.fechado_em]));
+  const fechIds = [...new Set(lancs.map((l) => l.fechamento_id).filter((x): x is string => !!x))];
+  const { data: fechs } = fechIds.length ? await svc.from("comissao_fechamentos").select("id, competencia, pago_em").in("id", fechIds) : { data: [] };
+  const fechPorId = new Map((fechs ?? []).map((f) => [f.id, { id: f.id as string, competencia: f.competencia as string, pago_em: (f.pago_em as string | null) ?? null }]));
 
   return lancs.map((l) => {
     const c = cobrancas.get(l.cobranca_id) ?? null;
@@ -368,6 +382,10 @@ async function detalhar(svc: Service, lancs: Lancamento[]): Promise<LancamentoDe
       beneficiario_nome: nomeBen.get(l.beneficiario_id) ?? null,
       pode_desmarcar: c ? beneficiarioPodeDesmarcar(l, c) : false,
       origem_status: l.lancamento_origem_id ? statusOrigem.get(l.lancamento_origem_id) ?? null : null,
+      origem_fechado: l.lancamento_origem_id ? origemFechada.get(l.lancamento_origem_id) ?? false : false,
+      fechamento: l.fechamento_id ? fechPorId.get(l.fechamento_id) ?? null : null,
+      fechamento_pago: l.fechamento_id ? !!fechPorId.get(l.fechamento_id)?.pago_em : false,
+      atrasada_de: l.fechamento_id && fechPorId.get(l.fechamento_id) ? mesAtrasadoDe(l.competencia, fechPorId.get(l.fechamento_id)!.competencia) : null,
     };
   });
 }
@@ -550,6 +568,7 @@ export async function contestarLancamento(svc: Service, o: { lancamentoId: strin
   const l = await lerLancamento(svc, o.lancamentoId);
   if (!l || l.tipo !== "comissao") return falha(404, "Lançamento não encontrado.");
   if (l.status !== "prevista" && l.status !== "confirmada") return falha(409, "Só dá para contestar uma comissão prevista ou confirmada.", "status_invalido");
+  if (l.fechado_em) return falha(409, "Esta comissão já está em um fechamento (congelado). Corrija com um ajuste/estorno, que entra no próximo fechamento.", "lancamento_fechado");
   const { data, error } = await svc
     .from("comissao_lancamentos")
     .update({
@@ -565,6 +584,9 @@ export async function contestarLancamento(svc: Service, o: { lancamentoId: strin
     .maybeSingle();
   if (error || !data) return falha(409, "O lançamento mudou enquanto era contestado. Recarregue e tente de novo.");
   auditar(o.ator, "comissao_contestada", l.id, { cobranca_id: l.cobranca_id, motivo: o.motivo, status_anterior: l.status, valor_comissao: l.valor_comissao }, l.unidade_id);
+  const cliente = await clienteDaCobranca(svc, l.cobranca_id);
+  const t = textos.contestada({ cliente, valor: Number(l.valor_comissao), motivo: o.motivo });
+  await avisarBeneficiario(svc, { beneficiarioId: l.beneficiario_id, tipo: TIPO_AVISO_COMISSAO.contestada, ...t, referencia: { lancamento_id: l.id }, disparadoPor: o.ator });
   return { ok: true, lancamento: data as Lancamento };
 }
 
@@ -597,7 +619,27 @@ export async function decidirRetroativo(
     novo_status: novoStatus,
     motivo: o.motivo ?? null,
   }, l.unidade_id);
+  const cliente = await clienteDaCobranca(svc, l.cobranca_id);
+  const mes = rotuloCompetencia(l.competencia);
+  const t = o.decisao === "aprovar"
+    ? textos.retroativoAprovado({ cliente, valor: Number(l.valor_comissao), mes })
+    : textos.retroativoRecusado({ cliente, mes, motivo: o.motivo!.trim() });
+  await avisarBeneficiario(svc, {
+    beneficiarioId: l.beneficiario_id,
+    tipo: o.decisao === "aprovar" ? TIPO_AVISO_COMISSAO.retroativoAprovado : TIPO_AVISO_COMISSAO.retroativoRecusado,
+    ...t,
+    referencia: { lancamento_id: l.id },
+    disparadoPor: o.ator,
+  });
   return { ok: true, lancamento: data as Lancamento };
+}
+
+async function clienteDaCobranca(svc: Service, cobrancaId: string): Promise<string | null> {
+  try {
+    return (await lerCobrancas(svc, [cobrancaId])).get(cobrancaId)?.cliente_nome_snapshot ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // Soma já lançada em ajustes/estornos sobre um original (para não estornar mais do que existe).
@@ -705,6 +747,9 @@ export async function resolverContestacao(
     .maybeSingle();
   if (error || !data) return falha(409, "O lançamento mudou enquanto a contestação era resolvida. Recarregue e confira os ajustes antes de tentar de novo.");
   auditar(o.ator, "comissao_contestacao_resolvida", l.id, { acao: o.acao, nota: o.nota.trim(), novo_status: novoStatus, ajuste_id: ajuste?.id ?? null }, l.unidade_id);
+  const cliente = await clienteDaCobranca(svc, l.cobranca_id);
+  const t = textos.contestacaoResolvida({ cliente, acao: o.acao, nota: o.nota.trim() });
+  await avisarBeneficiario(svc, { beneficiarioId: l.beneficiario_id, tipo: TIPO_AVISO_COMISSAO.contestacaoResolvida, ...t, referencia: { lancamento_id: l.id }, disparadoPor: o.ator });
   return { ok: true, lancamento: data as Lancamento, ajuste };
 }
 

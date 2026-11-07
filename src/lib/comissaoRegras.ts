@@ -131,7 +131,8 @@ export function mudancasPorCobranca(
   l: LancamentoSync,
   cobranca: { status: string; tipo?: string | null; fee_valor: number | string | null }
 ): { status?: StatusLancamento; base_valor?: number; valor_comissao?: number } {
-  if (l.tipo !== "comissao" || ehTerminal(l.status)) return {};
+  // Fechado = congelado (Fase 2): nem status nem valor acompanham a cobrança; correção posterior entra como ajuste/estorno.
+  if (l.tipo !== "comissao" || ehTerminal(l.status) || l.fechado_em) return {};
   const mud: { status?: StatusLancamento; base_valor?: number; valor_comissao?: number } = {};
   const alvo = statusPelaCobranca(cobranca);
 
@@ -159,9 +160,14 @@ export function beneficiarioPodeDesmarcar(l: { tipo: string; status: string }, c
 
 export interface TotaisComissao {
   previsto: number;
+  // Confirmado e AINDA NÃO fechado (entra no próximo fechamento).
   confirmado: number;
   contestado: number;
   retroativoPendente: number;
+  // Fechado e ainda não pago na folha.
+  aReceber: number;
+  // Fechado e pago.
+  pago: number;
 }
 
 export interface LancamentoParaTotal {
@@ -172,19 +178,32 @@ export interface LancamentoParaTotal {
   lancamento_origem_id?: string | null;
   // Status ATUAL do lançamento de comissão a que o ajuste/estorno se refere (o serviço preenche; se faltar, procura na própria lista).
   origem_status?: string | null;
+  // O original já foi fechado? (o serviço preenche)
+  origem_fechado?: boolean | null;
+  // Fechamento do PRÓPRIO lançamento: fechado_em preenchido = fechado; fechamento_pago diz se a folha já foi paga.
+  fechado_em?: string | null;
+  fechamento_pago?: boolean | null;
 }
 
-// Somas assinadas. Um ajuste/estorno entra no MESMO grupo do lançamento original (pelo status atual dele): estornar uma comissão
-// prevista reduz o "previsto", estornar uma confirmada reduz o "confirmado" — o líquido fica coerente (original + estorno = 0 no
-// mesmo cartão) e, quando o original muda de status (prevista -> confirmada), o ajuste acompanha. Original cancelado/recusado
-// (nada conta) leva o ajuste junto. Sem como achar o original, o ajuste cai em "confirmado".
+// Somas assinadas. Cada valor aparece em UM cartão só:
+// - fechado: "a receber" (fechamento ainda sem pagamento) ou "pago";
+// - não fechado: pelo status (previsto / confirmado / contestado / retroativo pendente);
+// - ajuste/estorno NÃO fechado entra no cartão do original: estornar uma comissão prevista reduz o "previsto"; estornar uma já
+//   fechada reduz o próximo pagamento ("confirmado", que é o que vai no próximo fechamento) — o líquido de cada cartão fica
+//   coerente e, quando o original muda de status, o ajuste acompanha. Original cancelado/recusado (nada conta) leva o ajuste junto.
+//   Sem como achar o original, o ajuste cai em "confirmado".
 export function totalizar(lancs: LancamentoParaTotal[]): TotaisComissao {
-  const t: TotaisComissao = { previsto: 0, confirmado: 0, contestado: 0, retroativoPendente: 0 };
+  const t: TotaisComissao = { previsto: 0, confirmado: 0, contestado: 0, retroativoPendente: 0, aReceber: 0, pago: 0 };
   const statusPorId = new Map(lancs.filter((l) => l.id).map((l) => [l.id as string, l.status]));
   for (const l of lancs) {
     const v = Number(l.valor_comissao) || 0;
-    const status = l.tipo === "comissao" ? l.status : l.origem_status ?? (l.lancamento_origem_id ? statusPorId.get(l.lancamento_origem_id) : undefined) ?? "confirmada";
     if (l.tipo !== "comissao" && l.status !== "confirmada") continue;
+    if (l.fechado_em) {
+      if (l.fechamento_pago) t.pago += v;
+      else t.aReceber += v;
+      continue;
+    }
+    const status = l.tipo === "comissao" ? l.status : l.origem_fechado ? "confirmada" : l.origem_status ?? (l.lancamento_origem_id ? statusPorId.get(l.lancamento_origem_id) : undefined) ?? "confirmada";
     if (status === "prevista") t.previsto += v;
     else if (status === "confirmada") t.confirmado += v;
     else if (status === "contestada") t.contestado += v;
@@ -195,7 +214,84 @@ export function totalizar(lancs: LancamentoParaTotal[]): TotaisComissao {
     confirmado: arredondar2(t.confirmado),
     contestado: arredondar2(t.contestado),
     retroativoPendente: arredondar2(t.retroativoPendente),
+    aReceber: arredondar2(t.aReceber),
+    pago: arredondar2(t.pago),
   };
+}
+
+// ── Fechamento mensal (Fase 2) ─────────────────────────────────────────────────────────────────────────────────────────
+
+export interface LancamentoParaFechar {
+  id: string;
+  tipo: string;
+  status: string;
+  competencia: string;
+  fechamento_id: string | null;
+  lancamento_origem_id: string | null;
+  valor_comissao: number | string;
+}
+
+// Seleção do fechamento do mês `competencia` (1º dia) para UMA unidade — mesma regra da função SQL comissao_fechar_mes (que é a
+// autoridade; esta serve à prévia da tela e aos testes):
+// - bloqueiam: comissão retroativo_pendente ou contestada com competência <= mês;
+// - entram: comissão CONFIRMADA sem fechamento com competência <= mês (a confirmada depois do fechamento do mês dela entra no
+//   fechamento seguinte, com a competência original preservada), mais ajustes/estornos sem fechamento com competência <= mês cujo
+//   original já foi fechado ou entra agora; prevista, contestada, retroativo, cancelada e recusada ficam fora.
+export function selecionarParaFechamento(
+  lancs: LancamentoParaFechar[],
+  competencia: string,
+  origensJaFechadas: ReadonlySet<string>
+): { comissoes: string[]; ajustes: string[]; bloqueios: string[]; total: number } {
+  const bloqueios = lancs.filter((l) => l.tipo === "comissao" && (l.status === "retroativo_pendente" || l.status === "contestada") && l.competencia <= competencia).map((l) => l.id);
+  const comissoes = lancs.filter((l) => l.tipo === "comissao" && l.status === "confirmada" && !l.fechamento_id && l.competencia <= competencia);
+  const idsComissoes = new Set(comissoes.map((l) => l.id));
+  const ajustes = lancs.filter(
+    (l) => l.tipo !== "comissao" && !l.fechamento_id && l.competencia <= competencia && !!l.lancamento_origem_id && (origensJaFechadas.has(l.lancamento_origem_id) || idsComissoes.has(l.lancamento_origem_id))
+  );
+  const total = arredondar2([...comissoes, ...ajustes].reduce((s, l) => s + Number(l.valor_comissao), 0));
+  return { comissoes: comissoes.map((l) => l.id), ajustes: ajustes.map((l) => l.id), bloqueios, total };
+}
+
+// Lançamento que entra num fechamento de mês POSTERIOR ao da competência dele ("atrasada de <mês de origem>").
+export function mesAtrasadoDe(competenciaLancamento: string, competenciaFechamento: string): string | null {
+  return competenciaLancamento < competenciaFechamento ? competenciaLancamento : null;
+}
+
+// ── CSV para a folha ───────────────────────────────────────────────────────────────────────────────────────────────────
+
+export interface LinhaFolha {
+  beneficiario: string;
+  tipo: string; // Comissão | Ajuste | Estorno
+  cliente: string;
+  vaga: string;
+  competencia: string; // AAAA-MM-01
+  atrasadaDe: string | null; // AAAA-MM-01 | null
+  fee: number | null;
+  comissao: number; // assinado
+  motivo: string | null;
+}
+
+const num2 = (n: number): string => n.toFixed(2).replace(".", ",");
+
+function celulaCsv(v: string): string {
+  // Neutraliza fórmula de planilha (=, +, -, @) em texto livre e escapa ; " e quebras de linha.
+  const seguro = /^[=+\-@]/.test(v) && !/^-?\d+([.,]\d+)?$/.test(v) ? `'${v}` : v;
+  return /[;"\n\r]/.test(seguro) ? `"${seguro.replace(/"/g, '""')}"` : seguro;
+}
+
+// Cabeçalho + uma linha por LinhaFolha (as mesmas linhas da tela) + uma linha TOTAL por beneficiário. Separador ";" e decimal com
+// vírgula (Excel pt-BR); BOM no início para o Excel reconhecer UTF-8. Valores assinados: estorno é negativo.
+export const CABECALHO_CSV = ["Beneficiário", "Tipo", "Cliente", "Vaga", "Competência", "Atrasada de", "Fee (R$)", "Comissão (R$)", "Motivo"] as const;
+
+export function montarCsvFolha(linhas: LinhaFolha[]): string {
+  const mes = (c: string | null): string => (c ? `${c.slice(5, 7)}/${c.slice(0, 4)}` : "");
+  const corpo = linhas.map((l) =>
+    [l.beneficiario, l.tipo, l.cliente, l.vaga, mes(l.competencia), mes(l.atrasadaDe), l.fee == null ? "" : num2(l.fee), num2(l.comissao), l.motivo ?? ""].map(celulaCsv).join(";")
+  );
+  const totais = new Map<string, number>();
+  for (const l of linhas) totais.set(l.beneficiario, (totais.get(l.beneficiario) ?? 0) + l.comissao);
+  const linhasTotal = [...totais.entries()].map(([nome, t]) => [nome, "TOTAL", "", "", "", "", "", num2(arredondar2(t)), ""].map(celulaCsv).join(";"));
+  return "\uFEFF" + [CABECALHO_CSV.join(";"), ...corpo, ...linhasTotal].join("\r\n") + "\r\n";
 }
 
 export const ROTULO_STATUS: Record<StatusLancamento, string> = {

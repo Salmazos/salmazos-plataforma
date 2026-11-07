@@ -236,7 +236,7 @@ await ok("cobrança cancelada antes de paga: o lançamento vira 'cancelada' (nun
   assert.equal(doCob(db, c)[0].id, id);
   assert.equal(doCob(db, c)[0].status, "cancelada");
   logar(db, "gio");
-  assert.deepEqual((await chamar(R.minhas.GET, { url: "http://t/api?mes=2026-10" })).corpo.totais, { previsto: 0, confirmado: 0, contestado: 0, retroativoPendente: 0 });
+  assert.deepEqual((await chamar(R.minhas.GET, { url: "http://t/api?mes=2026-10" })).corpo.totais, { previsto: 0, confirmado: 0, contestado: 0, retroativoPendente: 0, aReceber: 0, pago: 0 });
 });
 await ok("correção de taxa: a comissão não fechada acompanha o fee_valor atual (40% -> 50% = 500 => 25,00); fechada não muda", async () => {
   const db = cenario(); const c = cobranca(db); const c2 = cobranca(db);
@@ -272,7 +272,7 @@ await ok("marcação de MÊS PASSADO nasce retroativo_pendente, não conta nos t
   const l = doCob(db, c)[0];
   assert.deepEqual([l.status, l.competencia], ["retroativo_pendente", "2026-09-01"]);
   const m = await chamar(R.minhas.GET, { url: "http://t/api?mes=2026-09" });
-  assert.deepEqual(m.corpo.totais, { previsto: 0, confirmado: 0, contestado: 0, retroativoPendente: 20 });
+  assert.deepEqual(m.corpo.totais, { previsto: 0, confirmado: 0, contestado: 0, retroativoPendente: 20, aReceber: 0, pago: 0 });
 });
 await ok("diretoria aprova o retroativo (registra quem/quando): passa a valer pelo status da cobrança (validada => confirmada)", async () => {
   const db = cenario(); const c = cobranca(db, { enviado_em: "2026-09-20T15:00:00.000Z", status: "validada", data_vencimento: "2026-10-30" });
@@ -375,7 +375,7 @@ await ok("beneficiário NÃO vê comissão de outro: lista só as dele; desmarca
   assert.equal(t.status, 200);
   assert.equal(t.corpo.lancamentos.length, 2);
   assert.deepEqual(t.corpo.totaisPorBeneficiario.map((b: any) => [b.nome, b.totais.previsto]).sort(), [["Giovanni Prado", 20], ["Rebecca Zambonini", 20]]);
-  assert.deepEqual(t.corpo.totais, { previsto: 40, confirmado: 0, contestado: 0, retroativoPendente: 0 });
+  assert.deepEqual(t.corpo.totais, { previsto: 40, confirmado: 0, contestado: 0, retroativoPendente: 0, aReceber: 0, pago: 0 });
 });
 await ok("rotas da diretoria negam beneficiário comum (403) e anônimo (401)", async () => {
   const db = cenario(); const c = cobranca(db); await marcar(c); const id = doCob(db, c)[0].id;
@@ -445,7 +445,7 @@ await ok("resolver contestação — AJUSTA o valor: cria ajuste vinculado (orig
   logar(db, "gio");
   const m = await chamar(R.minhas.GET, { url: "http://t/api?mes=2026-10" });
   // O ajuste entra no MESMO cartão do original (prevista): 20 − 8 = 12 em "previsto", nada solto em "confirmado".
-  assert.deepEqual(m.corpo.totais, { previsto: 12, confirmado: 0, contestado: 0, retroativoPendente: 0 });
+  assert.deepEqual(m.corpo.totais, { previsto: 12, confirmado: 0, contestado: 0, retroativoPendente: 0, aReceber: 0, pago: 0 });
   logar(db, "dir");
   assert.equal((await chamar(R.resolver.POST, { metodo: "POST", params: { id }, corpo: { acao: "ajuste", valor: 0, nota: "zero" } })).status, 409, "já resolvida");
 });
@@ -459,7 +459,7 @@ await ok("resolver contestação — REMOVE via estorno do que resta: original i
   assert.deepEqual([est.tipo, est.valor_comissao, est.lancamento_origem_id], ["estorno", -20, id]);
   assert.equal(totalizar(doCob(db, c)).previsto + totalizar(doCob(db, c)).confirmado, 0);
 });
-const TOTAIS_ZERO = { previsto: 0, confirmado: 0, contestado: 0, retroativoPendente: 0 };
+const TOTAIS_ZERO = { previsto: 0, confirmado: 0, contestado: 0, retroativoPendente: 0, aReceber: 0, pago: 0 };
 const totaisMinhas = async (db: any, quem = "gio", mes = "2026-10") => { logar(db, quem); return (await chamar(R.minhas.GET, { url: `http://t/api?mes=${mes}` })).corpo.totais; };
 await ok("REMOVER numa comissão PREVISTA: contestada = 20 em 'contestado'; depois do estorno os cartões ficam 0/0/0 (líquido coerente, sem −20 solto em 'confirmado')", async () => {
   const db = cenario(); const c = cobranca(db); await marcar(c); const id = doCob(db, c)[0].id; logar(db, "dir");
