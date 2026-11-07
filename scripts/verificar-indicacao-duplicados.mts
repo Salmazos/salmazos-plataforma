@@ -22,7 +22,9 @@ const DUP2 = "dddddddd-0000-4000-8000-000000000002";
 // Cenário base: candidato já cadastrado com o MESMO telefone da indicação + sinos da indicação (e de outra).
 function cenario({ dupNaVaga = false } = {}) {
   const db = novoDbIndicacao(); logar(db, "dir");
-  db.tabelas.candidatos.push({ id: DUP, nome_completo: "Maria de Souza", telefone: TEL_PEND, cpf: "123.456.789-00", origem: "cadastro_rapido", etapa_kanban: "banco_talentos" });
+  db.tabelas.candidatos.push({ id: DUP, nome_completo: "Maria de Souza", telefone: TEL_PEND, email: "maria@exemplo.com", cidade: "Hortolândia", cpf: "123.456.789-00", origem: "cadastro_rapido", etapa_kanban: "banco_talentos" });
+  // Última candidatura do duplicado (outra vaga, do cliente C1 = "Cliente Um"): alimenta "Última vaga: … (cliente)" no card.
+  db.tabelas.candidatos_vagas.push({ id: "cv-dup-antiga", candidato_id: DUP, vaga_id: ID.V_MOT_B, cliente_id: "C1", etapa: "reprovado_final", created_at: "2026-09-01T10:00:00.000+00:00" });
   if (dupNaVaga) db.tabelas.candidatos_vagas.push({ id: "cv-dup", candidato_id: DUP, vaga_id: ID.V_MOT_A, cliente_id: "C1", etapa: "triagem" });
   db.tabelas.notificacoes_analista = [
     { id: "n1", solicitacao_indicacao_id: ID.S_PEND, lida: false },
@@ -115,6 +117,37 @@ await ok("buscar-duplicados (GET) continua devolvendo o mesmo candidato por tele
   const r = await chamar(buscar.GET, { url: `http://t/api?indicacao_id=${ID.S_PEND}` });
   assert.equal(r.status, 200);
   assert.deepEqual(r.corpo.duplicados.map((d: any) => [d.candidato_id, d.criterio]), [[DUP, "Telefone"]]);
+});
+await ok("duplicado traz e-mail, cidade, última vaga e o CLIENTE dela (clientes.nome, não a coluna inexistente nome_fantasia)", async () => {
+  const db = cenario();
+  const r = await chamar(buscar.GET, { url: `http://t/api?indicacao_id=${ID.S_PEND}` });
+  assert.equal(r.status, 200);
+  const d = r.corpo.duplicados[0];
+  assert.equal(d.email, "maria@exemplo.com");
+  assert.equal(d.cidade, "Hortolândia");
+  assert.equal(d.vaga_titulo, "Operador B");
+  assert.equal(d.cliente_nome, "Cliente Um");
+  // A consulta de cliente pede a coluna real: o harness não valida colunas, então travamos o texto da consulta na fonte.
+  const fonte = (await import("node:fs")).readFileSync("src/lib/indicacaoDuplicados.ts", "utf8");
+  assert.ok(!fonte.includes("nome_fantasia"), "indicacaoDuplicados.ts não pode voltar a usar clientes.nome_fantasia");
+  assert.ok(/from\("clientes"\)\s*\.select\("nome"\)/.test(fonte));
+  void db;
+});
+await ok("sem e-mail/cidade no cadastro: campos vêm ausentes (a tela mostra 'não informado')", async () => {
+  const db = cenario();
+  const c = db.tabelas.candidatos.find((x: any) => x.id === DUP);
+  c.email = "  "; c.cidade = "";
+  const r = await chamar(buscar.GET, { url: `http://t/api?indicacao_id=${ID.S_PEND}` });
+  const d = r.corpo.duplicados[0];
+  assert.equal(d.email, undefined);
+  assert.equal(d.cidade, undefined);
+});
+await ok("409 de duplicado na decisão devolve os mesmos campos novos (e-mail, cidade, cliente)", async () => {
+  cenario();
+  const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar", data_fim: "2027-01-31" } });
+  assert.equal(r.status, 409);
+  const d = r.corpo.duplicados[0];
+  assert.deepEqual([d.email, d.cidade, d.cliente_nome], ["maria@exemplo.com", "Hortolândia", "Cliente Um"]);
 });
 
 // ── 3) sino lido ──

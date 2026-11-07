@@ -6,6 +6,9 @@ export interface DuplicadoEncontrado {
   candidato_nome: string;
   etapa_kanban: string;
   criterio: string;
+  // Ajudam a analista a decidir entre vincular e criar novo (a indicação só traz nome e telefone).
+  email?: string;
+  cidade?: string;
   vaga_titulo?: string;
   cliente_nome?: string;
 }
@@ -34,7 +37,7 @@ export async function buscarDuplicadosPorTelefone(
 
   const { data: porTelefone, error } = await service
     .from("candidatos")
-    .select("id, nome_completo, etapa_kanban, telefone")
+    .select("id, nome_completo, etapa_kanban, telefone, email, cidade")
     .in("telefone", variantes)
     .limit(10);
   if (error) {
@@ -59,11 +62,11 @@ export async function buscarDuplicadosPorTelefone(
     if (vaga?.cliente_id) {
       const { data: cliente, error: clienteErr } = await service
         .from("clientes")
-        .select("nome_fantasia")
+        .select("nome")
         .eq("id", vaga.cliente_id)
         .maybeSingle();
       if (clienteErr) console.error("[indicacaoDuplicados] Erro ao buscar cliente:", clienteErr);
-      clienteNome = cliente?.nome_fantasia;
+      clienteNome = cliente?.nome;
     }
 
     duplicados.push({
@@ -71,6 +74,8 @@ export async function buscarDuplicadosPorTelefone(
       candidato_nome: cand.nome_completo,
       etapa_kanban: ETAPAS_KANBAN.find((e) => e.id === cand.etapa_kanban)?.label ?? cand.etapa_kanban,
       criterio: "Telefone",
+      email: cand.email?.trim() || undefined,
+      cidade: cand.cidade?.trim() || undefined,
       vaga_titulo: vaga?.titulo,
       cliente_nome: clienteNome,
     });

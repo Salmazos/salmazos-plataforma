@@ -53,6 +53,8 @@ interface Duplicado {
   candidato_nome: string;
   etapa_kanban: string;
   criterio: string;
+  email?: string;
+  cidade?: string;
   vaga_titulo?: string;
   cliente_nome?: string;
 }
@@ -76,6 +78,12 @@ function valorAdmissao(item: Indicacao, key: string): string {
   if (val == null || val === "") return "";
   if (key === "admissao_data_inicio") return String(val).split("-").reverse().join("/");
   return String(val);
+}
+
+// A indicação só traz nome e telefone, então o e-mail do cadastro existente não tem com o que ser comparado:
+// aparece sempre para a analista conferir. O nome diferente é só um alerta, nunca bloqueia (apelido, sobrenome etc.).
+function semAcento(t: string): string {
+  return t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, focoId, onVerTodas }: Props) {
@@ -263,6 +271,40 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                 const fimMaxMot = inicioMot ? somarDiasIso(inicioMot, MAX_DIAS_CONTRATO) : null;
                 const fim90Mot = inicioMot ? somarDiasIso(inicioMot, DIAS_AUXILIAR_PRORROGACAO) : null;
                 const bloqueadoPorFim = exigeFimCard && erroFimMot !== null;
+                // Com vínculo em andamento o campo sobe junto com o rodapé fixo (acima do "Confirmar vínculo"): assim o
+                // rodapé sticky nunca fica por cima dele e a analista vê o campo e o botão juntos, sem rolar.
+                const fimNoRodape = vincularPara?.indicacaoId === it.id;
+                const campoDataFim = pendente && exigeFimCard ? (
+
+                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1.5">
+                          <label className="text-xs font-semibold text-gray-700" htmlFor={`data-fim-${it.id}`}>
+                            Data de término do contrato <span className="text-red-600">*</span>
+                          </label>
+                          <div className="flex gap-2 items-center flex-wrap">
+                            <input
+                              id={`data-fim-${it.id}`}
+                              type="date"
+                              value={fimMot}
+                              min={inicioMot || undefined}
+                              max={fimMaxMot ?? undefined}
+                              onChange={(e) => setDatasFim((prev) => ({ ...prev, [it.id]: e.target.value }))}
+                              className="text-xs border border-gray-300 rounded-md px-2 py-1"
+                            />
+                            <button
+                              type="button"
+                              disabled={!fim90Mot}
+                              onClick={() => fim90Mot && setDatasFim((prev) => ({ ...prev, [it.id]: fim90Mot }))}
+                              className="text-xs font-semibold text-gray-700 border border-gray-300 rounded-md px-2 py-1 hover:bg-gray-100 disabled:opacity-50"
+                            >
+                              +{DIAS_AUXILIAR_PRORROGACAO} dias
+                            </button>
+                            <span className="text-[11px] text-gray-500">
+                              Início: {inicioMot ? inicioMot.split("-").reverse().join("/") : "não informado"} · máximo {MAX_DIAS_CONTRATO} dias
+                            </span>
+                          </div>
+                          {fimMot && erroFimMot && <p className="text-xs text-red-600">{erroFimMot}</p>}
+                        </div>
+                ) : null;
 
                 return (
                   <div key={it.id} className="border border-gray-200 rounded-xl p-5 space-y-3">
@@ -321,36 +363,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                       <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{erro.msg}</p>
                     )}
 
-                    {pendente && exigeFimCard && (
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1.5">
-                        <label className="text-xs font-semibold text-gray-700" htmlFor={`data-fim-${it.id}`}>
-                          Data de término do contrato <span className="text-red-600">*</span>
-                        </label>
-                        <div className="flex gap-2 items-center flex-wrap">
-                          <input
-                            id={`data-fim-${it.id}`}
-                            type="date"
-                            value={fimMot}
-                            min={inicioMot || undefined}
-                            max={fimMaxMot ?? undefined}
-                            onChange={(e) => setDatasFim((prev) => ({ ...prev, [it.id]: e.target.value }))}
-                            className="text-xs border border-gray-300 rounded-md px-2 py-1"
-                          />
-                          <button
-                            type="button"
-                            disabled={!fim90Mot}
-                            onClick={() => fim90Mot && setDatasFim((prev) => ({ ...prev, [it.id]: fim90Mot }))}
-                            className="text-xs font-semibold text-gray-700 border border-gray-300 rounded-md px-2 py-1 hover:bg-gray-100 disabled:opacity-50"
-                          >
-                            +{DIAS_AUXILIAR_PRORROGACAO} dias
-                          </button>
-                          <span className="text-[11px] text-gray-500">
-                            Início: {inicioMot ? inicioMot.split("-").reverse().join("/") : "não informado"} · máximo {MAX_DIAS_CONTRATO} dias
-                          </span>
-                        </div>
-                        {fimMot && erroFimMot && <p className="text-xs text-red-600">{erroFimMot}</p>}
-                      </div>
-                    )}
+                    {!fimNoRodape && campoDataFim}
 
                     {pendente && temDuplicado && !vincularPara && !confirmarCriarNovo && (
                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
@@ -358,15 +371,24 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                           ⚠️ Candidato(s) duplicado(s) encontrado(s)
                         </p>
                         <p className="text-xs text-amber-800">
-                          Escolha vincular a um destes ou criar um novo — a aprovação não segue sem essa escolha.
+                          Já existe um cadastro com este telefone. Se for a mesma pessoa, vincule ao cadastro existente. Se for outra pessoa, use Criar novo.
                         </p>
                         {duplicados[it.id].map((dup) => (
                           <div key={dup.candidato_id} className="text-xs text-amber-800 bg-white rounded px-2 py-1.5">
                             <p className="font-medium">{dup.candidato_nome}</p>
                             <p className="text-amber-600">
                               Critério: {dup.criterio} · Etapa: {dup.etapa_kanban}
-                              {dup.vaga_titulo && ` · Última vaga: ${dup.vaga_titulo}`}
+                              {dup.vaga_titulo && ` · Última vaga: ${dup.vaga_titulo}${dup.cliente_nome ? ` (${dup.cliente_nome})` : ""}`}
                             </p>
+                            <p className="text-amber-900">
+                              E-mail cadastrado: <span className="font-medium">{dup.email ?? "não informado"}</span>
+                              {dup.cidade && <> · Cidade: <span className="font-medium">{dup.cidade}</span></>}
+                            </p>
+                            {semAcento(dup.candidato_nome) !== semAcento(it.candidato_nome) && (
+                              <p className="text-amber-700 mt-0.5">
+                                O nome do cadastro é diferente do nome indicado ({it.candidato_nome}) — confira se é a mesma pessoa.
+                              </p>
+                            )}
                             <button
                               onClick={() => setVincularPara({ indicacaoId: it.id, candidatoId: dup.candidato_id })}
                               className="text-xs text-blue-600 font-semibold border border-blue-300 rounded px-2 py-1 mt-1 hover:bg-blue-50"
@@ -386,19 +408,6 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                       </div>
                     )}
 
-                    {pendente && vincularPara?.indicacaoId === it.id && (
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex gap-2 items-center">
-                        <p className="text-xs text-blue-900 flex-1">
-                          ✓ Vinculando a: <strong>{duplicados[it.id]?.find((d) => d.candidato_id === vincularPara.candidatoId)?.candidato_nome || "..."}</strong>
-                        </p>
-                        <button
-                          onClick={() => setVincularPara(null)}
-                          className="text-xs text-blue-600 underline whitespace-nowrap"
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    )}
 
                     {pendente && confirmarCriarNovo === it.id && (
                       <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 space-y-2">
@@ -432,8 +441,47 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                       </div>
                     )}
 
+                    {/* Rodapé fixo: o aviso e o "Confirmar vínculo" ficam sempre visíveis, sem rolar o modal. */}
                     {pendente && (
-                      isRecusando ? (
+                    <div className="sticky bottom-0 bg-white pt-2 -mb-2 pb-2 space-y-2 border-t border-gray-100">
+                    {fimNoRodape && campoDataFim}
+                    {vincularPara?.indicacaoId === it.id && (() => {
+                      const alvo = duplicados[it.id]?.find((d) => d.candidato_id === vincularPara.candidatoId);
+                      return (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
+                          <p className="text-xs text-blue-900">
+                            ✓ Vinculando a: <strong>{alvo?.candidato_nome || "..."}</strong>
+                          </p>
+                          {alvo && (
+                            <p className="text-xs text-blue-800">
+                              E-mail cadastrado: <strong>{alvo.email ?? "não informado"}</strong>
+                              {alvo.cidade && <> · Cidade: <strong>{alvo.cidade}</strong></>}
+                            </p>
+                          )}
+                          <p className="text-xs text-blue-800">
+                            Será usado o cadastro de <strong>{alvo?.candidato_nome || "este candidato"}</strong> e o e-mail/telefone dele não serão alterados.
+                          </p>
+                          <div className="flex gap-2 justify-end items-center">
+                            <button
+                              onClick={() => setVincularPara(null)}
+                              disabled={isLoading}
+                              className="text-xs text-blue-600 underline whitespace-nowrap disabled:opacity-50"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={() => handleDecidir(it.id, "aprovar", vincularPara.candidatoId)}
+                              disabled={isLoading || bloqueadoPorFim}
+                              title={bloqueadoPorFim ? "Informe uma data de término válida acima." : undefined}
+                              className="text-xs font-semibold text-black bg-[#FFD700] rounded-lg px-3 py-1.5 hover:brightness-95 disabled:opacity-50"
+                            >
+                              {isLoading ? "Vinculando..." : "Confirmar vínculo"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {isRecusando ? (
                         <div className="space-y-2">
                           <textarea
                             value={motivoRecusa}
@@ -467,16 +515,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                           >
                             Recusar
                           </button>
-                          {vincularPara?.indicacaoId === it.id ? (
-                            <button
-                              onClick={() => handleDecidir(it.id, "aprovar", vincularPara.candidatoId)}
-                              disabled={isLoading || bloqueadoPorFim}
-                              title={bloqueadoPorFim ? "Informe uma data de término válida acima." : undefined}
-                              className="text-xs font-semibold text-black bg-[#FFD700] rounded-lg px-3 py-1.5 hover:brightness-95 disabled:opacity-50"
-                            >
-                              {isLoading ? "Vinculando..." : "Confirmar vínculo"}
-                            </button>
-                          ) : temDuplicado ? null : (
+                          {vincularPara?.indicacaoId === it.id || temDuplicado ? null : (
                             <button
                               onClick={() => handleDecidir(it.id, "aprovar")}
                               disabled={isLoading || buscandoDuplicado || bloqueadoPorFim}
@@ -487,7 +526,8 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                             </button>
                           )}
                         </div>
-                      )
+                    )}
+                    </div>
                     )}
                   </div>
                 );
