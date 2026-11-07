@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sincronizarComissoesDaCobranca } from "@/lib/comissao";
 import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, cobrancaRsCorrigirTaxaSchema } from "@/lib/schemas";
@@ -153,6 +154,9 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (avisoPago) avisos.push(avisoPago);
 
   revalidatePath("/painel/cobrancas-rs");
+
+  // Comissão (Fase 1): a comissão marcada acompanha o fee_valor corrigido enquanto não houver fechamento.
+  await sincronizarComissoesDaCobranca(svc, id, "cobrancas-rs/corrigir-taxa");
 
   await registrarAuditoria({
     usuario_id: user.id,

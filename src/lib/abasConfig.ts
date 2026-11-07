@@ -30,6 +30,8 @@ export const ABAS_CONFIG: AbaConfig[] = [
   { chave: "faturamento_rs", rotulo: "Faturamento R&S", grupo: "Financeiro" },
   { chave: "faturamento_hortolandia", rotulo: "Faturamento Unidades", grupo: "Financeiro" },
   { chave: "cobrancas_rs", rotulo: "Cobranças R&S", grupo: "Financeiro" },
+  { chave: "comissoes_minhas", rotulo: "Minhas Comissões", grupo: "Financeiro" },
+  { chave: "comissoes", rotulo: "Comissões (diretoria)", grupo: "Financeiro" },
 
   { chave: "configuracoes", rotulo: "Configurações (grupo)", grupo: "Configurações" },
   { chave: "configuracoes_sla", rotulo: "Config. SLA", grupo: "Configurações" },

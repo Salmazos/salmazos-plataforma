@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from "next/server";
+import { sincronizarComissoesDaCobranca } from "@/lib/comissao";
 import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarAcessoCobrancaRS } from "@/lib/fullAccessAuth";
@@ -51,6 +52,9 @@ export async function POST(_request: NextRequest, { params }: Params) {
   // aprovar/route.ts (ver comentário lá). Roda antes do after() do e-mail de propósito, pra
   // garantir que aconteça mesmo se o envio falhar.
   revalidatePath("/painel/cobrancas-rs");
+
+  // Comissão (Fase 1): cobrança paga confirma a comissão (inclusive a de taxa de cancelamento, que só confirma com o pagamento).
+  await sincronizarComissoesDaCobranca(svc, id, "cobrancas-rs/marcar-paga");
 
   registrarAuditoria({
     usuario_id: user.id,

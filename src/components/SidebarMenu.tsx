@@ -64,6 +64,8 @@ interface Props {
   temCobrancasGeradas: boolean;
   canAccessSupervisao: boolean;
   canAccessFinanceiroRs: boolean;
+  canAccessMinhasComissoes: boolean;
+  canAccessComissoes: boolean;
   canAccessFaturamentoRs: boolean;
   canAccessFaturamentoHortolandia: boolean;
   canAccessRelatorios: boolean;
@@ -102,6 +104,8 @@ interface MenuLeafDef {
   requireSupervisao?: boolean;
   requireAniversarios?: boolean;
   requireFinanceiroRs?: boolean;
+  requireMinhasComissoes?: boolean;
+  requireComissoes?: boolean;
   requireFaturamentoRs?: boolean;
   requireFaturamentoHortolandia?: boolean;
   requireRelatorios?: boolean;
@@ -175,6 +179,8 @@ const menuItems: MenuItemDef[] = [
         requireFaturamentoHortolandia: true,
       },
       { label: "Cobranças R&S", href: "/painel/cobrancas-rs", icon: Banknote, requireCobrancasRS: true },
+      { label: "Minhas Comissões", href: "/painel/minhas-comissoes", icon: Wallet, requireMinhasComissoes: true },
+      { label: "Comissões", href: "/painel/comissoes", icon: Handshake, requireComissoes: true },
     ],
   },
   {
@@ -233,6 +239,8 @@ export default function SidebarMenu({
   temCobrancasGeradas,
   canAccessSupervisao,
   canAccessFinanceiroRs,
+  canAccessMinhasComissoes,
+  canAccessComissoes,
   canAccessFaturamentoRs,
   canAccessFaturamentoHortolandia,
   canAccessRelatorios,
@@ -351,6 +359,8 @@ export default function SidebarMenu({
     if (def.requireCobrancasRS && !canAccessCobrancasRS && !temCobrancasGeradas) return false;
     if (def.requireSupervisao && !canAccessSupervisao) return false;
     if (def.requireFinanceiroRs && !canAccessFinanceiroRs) return false;
+    if (def.requireMinhasComissoes && !canAccessMinhasComissoes) return false;
+    if (def.requireComissoes && !canAccessComissoes) return false;
     if (def.requireFaturamentoRs && !canAccessFaturamentoRs) return false;
     if (def.requireFaturamentoHortolandia && !canAccessFaturamentoHortolandia) return false;
     if (def.requireRelatorios && !canAccessRelatorios) return false;

@@ -7,6 +7,7 @@ import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { avisarCobrancaRSEmail } from "@/lib/avisarCobrancaRS";
 import { EVENTO_COBRANCA_RS_VALIDADA, TIPO_EMAIL_COBRANCA_VALIDADA } from "@/lib/cobrancaRSRegras";
+import { sincronizarComissoesDaCobranca } from "@/lib/comissao";
 import { avisoLancamentoPago, buscarLancamentosDaCobranca, separarLancamentos } from "@/lib/cobrancaRSCorrecao";
 
 interface Params {
@@ -103,6 +104,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   // Invalida o Router Cache do lado do cliente pra /painel/cobrancas-rs — data de
   // vencimento aparece na listagem, mesma lógica de aprovar/route.ts (ver comentário lá).
   revalidatePath("/painel/cobrancas-rs");
+
+  // Comissão (Fase 1): a transição de validação grava validada_em (coluna da migração da comissão) e a comissão acompanha o status.
+  // Best-effort e SEPARADO do update principal: antes de a migração ser aplicada a coluna não existe e isso não pode quebrar a
+  // validação; a comissão se reconcilia sozinha na próxima leitura das telas de comissão.
+  if (novoStatus) {
+    const { error: validadaErr } = await svc.from("cobrancas_rs").update({ validada_em: novoStatus === "validada" ? new Date().toISOString() : null }).eq("id", id);
+    if (validadaErr && validadaErr.code !== "42703") console.error("[vencimento] Não foi possível gravar validada_em:", validadaErr.message);
+  }
+  await sincronizarComissoesDaCobranca(svc, id, "cobrancas-rs/vencimento");
 
   registrarAuditoria({
     usuario_id: user.id,

@@ -62,6 +62,11 @@ const REGRA_POR_CHAVE: Record<string, Regra> = {
   // full access de base (aproximação); a liberação individual continua sendo gerenciada em
   // /painel/cobranca-rs-acesso-config, não aqui.
   cobrancas_rs: PAPEIS_FULL_ACCESS,
+  // Comissões (Fase 1): "Minhas comissões" é de quem está cadastrado como beneficiário (comissao_beneficiarios), não de um papel
+  // — por isso a regra por papel é vazia (a matriz só mostra "Acesso: Não"; a exceção individual continua valendo). "Comissões"
+  // (todas, contestar/aprovar) é da diretoria/superuser.
+  comissoes_minhas: [],
+  comissoes: PAPEIS_FULL_ACCESS,
 
   // Configurações — grupo inteiro restrito a superuser (não PAPEIS_FULL_ACCESS/diretoria).
   configuracoes: SUPERUSER_ONLY,

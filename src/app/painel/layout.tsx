@@ -26,6 +26,7 @@ import { PAPEIS_FULL_ACCESS, checarAcessoCobrancaRS } from "@/lib/fullAccessAuth
 import { checarAcessoSupervisao } from "@/lib/supervisaoAuth";
 import { podeAcessarAniversarios } from "@/lib/aniversariosAuth";
 import { podeAcessarFinanceiroRs } from "@/lib/financeiroRsAuth";
+import { resolverAcessoComissoes } from "@/lib/comissaoAuth";
 import { podeAcessarFaturamentoRs } from "@/lib/faturamentoRsAuth";
 import { podeAcessarFaturamentoHortolandia } from "@/lib/faturamentoHortolandiaAuth";
 import { podeAcessarRelatorios } from "@/lib/relatoriosAuth";
@@ -99,6 +100,10 @@ export default async function PainelLayout({
     .eq("user_id", user.id)
     .single();
 
+  // Comissões: reaproveita o perfil já carregado acima — só 2 consultas em paralelo (beneficiário + exceções de aba), nenhuma a mais
+  // para o perfil.
+  const acessoComissoes = await resolverAcessoComissoes(user, perfil ? { id: perfil.id, nome_completo: perfil.nome_completo } : null);
+
   const { data: unidades } = await createServiceClient().from("unidades").select("id, slug");
   const unidadeSlugPorId = Object.fromEntries((unidades ?? []).map((u) => [u.id, u.slug]));
   const usuarioLogado = {
@@ -129,6 +134,8 @@ export default async function PainelLayout({
           temCobrancasGeradas={temCobrancasGeradas}
           canAccessSupervisao={canAccessSupervisao}
           canAccessFinanceiroRs={canAccessFinanceiroRs}
+          canAccessMinhasComissoes={acessoComissoes.minhas}
+          canAccessComissoes={acessoComissoes.diretoria}
           canAccessFaturamentoRs={canAccessFaturamentoRs}
           canAccessFaturamentoHortolandia={canAccessFaturamentoHortolandia}
           canAccessRelatorios={canAccessRelatorios}
