@@ -192,7 +192,7 @@ await ok("decisão (aprovar): copia admissao_qtd_dias_teste (1, 2 e 0) para cand
     const db = novoDbIndicacao(); logar(db, "dir");
     sol(db, ID.S_PEND).admissao_qtd_dias_teste = q;
     sol(db, ID.S_PEND).admissao_dia_teste = "texto legado";
-    const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } });
+    const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar", data_fim: "2027-01-31" } });
     assert.equal(r.status, 200, JSON.stringify(r.corpo));
     const cvNovo = db.tabelas.candidatos_vagas.find((c: any) => c.id === r.corpo.candidatos_vaga_id);
     assert.strictEqual(cvNovo.admissao_qtd_dias_teste, q, "0 é copiado como 0, não como null");
@@ -203,7 +203,7 @@ await ok("decisão (aprovar): copia admissao_qtd_dias_teste (1, 2 e 0) para cand
 });
 await ok("decisão sem quantidade (registro antigo): copia null e o e-mail não ganha a linha de quantidade", async () => {
   const db = novoDbIndicacao(); logar(db, "dir");
-  const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } });
+  const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar", data_fim: "2027-01-31" } });
   assert.equal(r.status, 200, JSON.stringify(r.corpo));
   const cvNovo = db.tabelas.candidatos_vagas.find((c: any) => c.id === r.corpo.candidatos_vaga_id);
   assert.equal(cvNovo.admissao_qtd_dias_teste ?? null, null);
@@ -212,7 +212,7 @@ await ok("decisão sem quantidade (registro antigo): copia null e o e-mail não 
 await ok("decisão (legado): texto antigo continua sendo copiado e aparece no e-mail", async () => {
   const db = novoDbIndicacao(); logar(db, "dir");
   sol(db, ID.S_PEND).admissao_dia_teste = "05/11 e 06/11";
-  const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } });
+  const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar", data_fim: "2027-01-31" } });
   assert.equal(r.status, 200, JSON.stringify(r.corpo));
   assert.equal(db.tabelas.candidatos_vagas.find((c: any) => c.id === r.corpo.candidatos_vaga_id).admissao_dia_teste, "05/11 e 06/11");
   assert.match(emails(db), /Dia\(s\) de teste/);

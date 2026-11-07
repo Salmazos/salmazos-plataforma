@@ -13,18 +13,23 @@ import { criarAvisoCliente } from "@/lib/avisoCliente";
 import { chaveDedupAviso, textoAvisoIndicacaoDecidida } from "@/lib/avisoClienteRegras";
 import { formatarDiasTeste } from "@/lib/diasTeste";
 import { avaliarDuplicidade, buscarDuplicadosPorTelefone } from "@/lib/indicacaoDuplicados";
+import { finalizarContratado } from "@/lib/finalizarContratacao";
+import { erroDataTermino } from "@/lib/dataTerminoContrato";
+import { criarAdmissaoSemEnvio, removerAdmissaoCriada } from "@/lib/admissaoCriacao";
 
 interface Params {
   params: Promise<{ id: string }>;
 }
 
 interface CriadosNestasRequisicao {
+  admissaoId?: string;
   candidatoId?: string;
   candidatoVagaId?: string;
   encaminhamentoId?: string;
 }
 
 interface ResultadoReversao {
+  erroAdmissao?: string | null;
   erroEncaminhamento?: string | null;
   erroCandidatoVaga?: string | null;
   erroCandidato?: string | null;
@@ -36,6 +41,15 @@ async function reverterCriados(
   ids: CriadosNestasRequisicao
 ): Promise<ResultadoReversao> {
   const resultado: ResultadoReversao = { sucesso: true };
+
+  // Admissão primeiro: ela referencia o candidato (FK sem cascade), então precisa sair antes dele.
+  if (ids.admissaoId) {
+    const erroAdm = await removerAdmissaoCriada(service, ids.admissaoId);
+    if (erroAdm) {
+      resultado.erroAdmissao = erroAdm;
+      resultado.sucesso = false;
+    }
+  }
 
   if (ids.encaminhamentoId) {
     const { error: encErr } = await service
@@ -137,11 +151,15 @@ const ADM_LABELS: Record<string, string> = {
 // Decisão do analista sobre uma indicação direta de candidato (mesmo padrão de
 // POST /api/solicitacoes-vagas/[id]/alteracao — discriminated union aprovar/recusar).
 //
-// Aprovar NÃO cria o candidato já "contratado": cria candidato + candidatos_vagas na etapa
-// "aprovado_cliente" (o mesmo estado em que uma aprovação normal via portal/avaliar deixa as
-// coisas) + um encaminhamento "aprovado", e o analista segue dali com o "Finalizar" normal do
-// Kanban — que já recalcula garantia, fee e fechamento automático de posição (incl. a correção
-// de MOT reativada). Isso evita duplicar essa lógica aqui.
+// Aprovar depende do tipo de serviço da vaga (indicação direta já nasce aprovada pelo cliente):
+// - MOT / Terceirização: o candidato nasce (ou é vinculado) já CONTRATADO nesta vaga e a admissão é criada
+//   na hora (Admissões), sem passar pelo Kanban — usa as mesmas funções do "Finalizar" do Kanban
+//   (finalizarContratacao.ts) e do "Iniciar admissão" (admissaoCriacao.ts), então garantia/fee, baixa de posição
+//   e fechamento automático da vaga seguem as regras de sempre. A admissão é só CRIADA: nenhum e-mail nem link
+//   de WhatsApp para o candidato sai daqui — a analista envia o link depois, em Admissões. Se qualquer etapa
+//   falhar, tudo que esta requisição criou é revertido e a indicação continua pendente.
+// - R&S: comportamento antigo — candidato + candidatos_vagas em "aprovado_cliente" + encaminhamento "aprovado", e a
+//   analista segue com o "Finalizar" do Kanban (que decide fee e cobrança R&S); não cria admissão.
 export async function POST(request: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
@@ -160,7 +178,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     const service = createServiceClient();
     const { data: sol } = await service
       .from("solicitacoes_indicacao_candidato")
-      .select("*, vagas(id, titulo, tipo_servico, cidade, estado, cliente_id, status)")
+      .select("*, vagas(id, titulo, tipo_servico, cidade, estado, cliente_id, status, unidade_id)")
       .eq("id", id)
       .maybeSingle();
 
@@ -249,15 +267,69 @@ export async function POST(request: NextRequest, { params }: Params) {
       }
     }
 
+    // MOT/Terceirização: aprovar = contratado (+ admissão). Função, salário, horário e data de início são obrigatórios
+    // (sem eles não há contratação nem admissão válidas): sem algum, 422 ANTES de criar qualquer coisa. Já a entidade
+    // contratante é dado do cadastro do CLIENTE, não da indicação: sem ela a indicação é aprovada e contratada do mesmo
+    // jeito, só a admissão não é criada (aviso na resposta e na auditoria) — a analista cadastra a entidade e inicia a
+    // admissão em Admissões.
+    const modalidadeAdmissao = vaga.tipo_servico === "mao_obra_temporaria" ? "MOT" : vaga.tipo_servico === "terceirizacao" ? "terceirizacao" : null;
+    const contratarNaAprovacao = modalidadeAdmissao !== null;
+    let dadosAdmissao: { funcao: string; salario: number; tipo_salario: "mensal" | "hora"; horario_trabalho: string; data_admissao: string; entidade_contratante: string } | null = null;
+    let dataInicioContratacao = "";
+    let dataFimContratacao: string | undefined;
+    let motivoSemAdmissao: "cliente_sem_entidade_contratante" | null = null;
+    if (modalidadeAdmissao) {
+      let entidadeContratante = "";
+      if (vaga.cliente_id) {
+        const { data: clienteVaga } = await service.from("clientes").select("entidade_contratante").eq("id", vaga.cliente_id).maybeSingle();
+        entidadeContratante = (clienteVaga?.entidade_contratante ?? "").trim();
+      }
+      const horista = sol.admissao_salario_hora != null && Number(sol.admissao_salario_hora) > 0;
+      const salario = Number(horista ? sol.admissao_salario_hora : sol.admissao_salario) || 0;
+      const faltando: string[] = [];
+      if (!String(sol.admissao_funcao ?? "").trim()) faltando.push("Função");
+      if (!(salario > 0)) faltando.push("Salário (mensal ou por hora)");
+      if (!String(sol.admissao_horario ?? "").trim()) faltando.push("Horário");
+      if (!String(sol.admissao_data_inicio ?? "").trim()) faltando.push("Data de início");
+      if (faltando.length > 0) {
+        return NextResponse.json({
+          error: `Não dá para aprovar: esta indicação vira contratação e faltam dados — ${faltando.join(", ")}. Complete a indicação e aprove de novo.`,
+          codigo: "dados_admissao_incompletos",
+          faltando,
+        }, { status: 422 });
+      }
+      dataInicioContratacao = String(sol.admissao_data_inicio).trim();
+      // MOT e Terceirização: data de término obrigatória, não anterior ao início e até 180 dias dele — a mesma exigência do
+      // "Finalizar" do Kanban (ModalFinalizarProcesso), para os dois caminhos não divergirem. Nunca deduzida de
+      // admissao_tempo_contrato, que é um texto padrão igual em todas as indicações. R&S não tem.
+      const erroFim = erroDataTermino(dataInicioContratacao, parsed.data.data_fim);
+      if (erroFim) {
+        return NextResponse.json({ error: erroFim, codigo: "data_termino_invalida" }, { status: 422 });
+      }
+      dataFimContratacao = parsed.data.data_fim!.trim();
+      if (entidadeContratante) {
+        dadosAdmissao = {
+          funcao: String(sol.admissao_funcao).trim(),
+          salario,
+          tipo_salario: horista ? "hora" : "mensal",
+          horario_trabalho: String(sol.admissao_horario).trim(),
+          data_admissao: dataInicioContratacao,
+          entidade_contratante: entidadeContratante,
+        };
+      } else {
+        motivoSemAdmissao = "cliente_sem_entidade_contratante";
+      }
+    }
+
     const nowIso = new Date().toISOString();
-    let candidato: { id: string };
+    let candidato: { id: string; nome_completo?: string };
     let vinculadoAoCandidatoExistente = false;
 
     // Se candidato_existente_id foi informado, usar o candidato existente
     if (parsed.data.candidato_existente_id) {
       const { data: candExistente } = await service
         .from("candidatos")
-        .select("id, etapa_kanban")
+        .select("id, etapa_kanban, nome_completo")
         .eq("id", parsed.data.candidato_existente_id)
         .maybeSingle();
 
@@ -442,6 +514,56 @@ export async function POST(request: NextRequest, { params }: Params) {
       encaminhamentoId = encaminhamento.id;
     }
 
+    // Admissão (só MOT/Terceirização). Só CRIA: o envio do link ao candidato fica para a analista, em Admissões.
+    let admissaoId: string | undefined;
+    if (dadosAdmissao && modalidadeAdmissao) {
+      const criada = await criarAdmissaoSemEnvio(service, {
+        dados: { candidato_id: candidato.id, vaga_id: vaga.id, modalidade: modalidadeAdmissao, ...dadosAdmissao },
+        unidadeId: vaga.unidade_id ?? sol.unidade_id,
+        usuario: { id: user.id, nome: usuarioNome || null },
+      });
+      if (!criada.ok) {
+        console.error("[decisao indicacao] Erro ao criar admissão:", criada.error);
+        const reversao = await reverterCriados(service, {
+          admissaoId: criada.admissaoId,
+          ...(vinculadoAoCandidatoExistente ? {} : { candidatoId: candidato.id }),
+          candidatoVagaId: candidatoVaga.id,
+          encaminhamentoId,
+        });
+        if (!reversao.sucesso) {
+          await registrarAuditoria({
+            usuario_id: user.id,
+            usuario_nome: usuarioNome,
+            acao: "indicacao_candidato_erro_admissao_rollback_falhou",
+            entidade: "solicitacoes_indicacao_candidato",
+            entidade_id: id,
+            detalhes: {
+              erro_admissao: criada.error,
+              erro_delete_admissao: reversao.erroAdmissao,
+              erro_delete_encaminhamentos: reversao.erroEncaminhamento,
+              erro_delete_candidatos_vagas: reversao.erroCandidatoVaga,
+              erro_delete_candidatos: reversao.erroCandidato,
+              candidato_id_orfo: candidato.id,
+              candidatos_vaga_id_orfo: candidatoVaga.id,
+              encaminhamento_id_orfo: encaminhamentoId,
+              admissao_id_orfa: criada.admissaoId,
+            },
+          });
+          return NextResponse.json({ error: "Falha ao criar a admissão e não foi possível reverter. Conferir banco de dados (registros órfãos)." }, { status: 500 });
+        }
+        await registrarAuditoria({
+          usuario_id: user.id,
+          usuario_nome: usuarioNome,
+          acao: "indicacao_candidato_erro_admissao",
+          entidade: "solicitacoes_indicacao_candidato",
+          entidade_id: id,
+          detalhes: { erro: criada.error, cliente: sol.cliente_nome, vaga_id: vaga.id },
+        });
+        return NextResponse.json({ error: "Não foi possível criar a admissão. A indicação não foi aprovada e nada foi gravado." }, { status: 500 });
+      }
+      admissaoId = criada.admissao.id;
+    }
+
     const { data: aprovada, error: updateErr } = await service
       .from("solicitacoes_indicacao_candidato")
       .update({
@@ -465,6 +587,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (updateErr) {
       console.error("[decisao indicacao] Erro ao marcar indicação como aprovada:", updateErr);
       const reversao = await reverterCriados(service, {
+        admissaoId,
         ...(vinculadoAoCandidatoExistente ? {} : { candidatoId: candidato.id }),
         candidatoVagaId: candidatoVaga.id,
         encaminhamentoId,
@@ -479,12 +602,14 @@ export async function POST(request: NextRequest, { params }: Params) {
           entidade_id: id,
           detalhes: {
             erro_update: msgErro(updateErr),
+            erro_delete_admissao: reversao.erroAdmissao,
             erro_delete_encaminhamentos: reversao.erroEncaminhamento,
             erro_delete_candidatos_vagas: reversao.erroCandidatoVaga,
             erro_delete_candidatos: reversao.erroCandidato,
             candidato_id_orfo: candidato.id,
             candidatos_vaga_id_orfo: candidatoVaga.id,
             encaminhamento_id_orfo: encaminhamentoId,
+            admissao_id_orfa: admissaoId,
           },
         });
         return NextResponse.json({ error: "Falha ao finalizar indicação e não foi possível reverter. Conferir banco de dados (registros órfãos)." }, { status: 500 });
@@ -504,6 +629,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     // Caso 2: Indicação já não está pendente (aprovada por outro analista)
     if (!aprovada) {
       const reversao = await reverterCriados(service, {
+        admissaoId,
         ...(vinculadoAoCandidatoExistente ? {} : { candidatoId: candidato.id }),
         candidatoVagaId: candidatoVaga.id,
         encaminhamentoId,
@@ -517,12 +643,14 @@ export async function POST(request: NextRequest, { params }: Params) {
           entidade: "solicitacoes_indicacao_candidato",
           entidade_id: id,
           detalhes: {
+            erro_delete_admissao: reversao.erroAdmissao,
             erro_delete_encaminhamentos: reversao.erroEncaminhamento,
             erro_delete_candidatos_vagas: reversao.erroCandidatoVaga,
             erro_delete_candidatos: reversao.erroCandidato,
             candidato_id_orfo: candidato.id,
             candidatos_vaga_id_orfo: candidatoVaga.id,
             encaminhamento_id_orfo: encaminhamentoId,
+            admissao_id_orfa: admissaoId,
           },
         });
         return NextResponse.json({ error: "Falha ao reverter: esta indicação foi decidida por outro analista. Conferir banco de dados (registros órfãos)." }, { status: 500 });
@@ -541,6 +669,65 @@ export async function POST(request: NextRequest, { params }: Params) {
         { error: motivo === "alterada" ? MSG_ALTERADA : "Esta indicação já foi decidida por outro analista." },
         { status: 409 }
       );
+    }
+
+    // Contratação (só MOT/Terceirização). Fica por último de propósito: a indicação já está "aprovada" (update condicional
+    // acima) e é o passo com efeitos que não dá para desfazer (e-mail de fechamento automático da vaga, baixa de
+    // posição), então só roda com tudo o mais já gravado e a indicação já ganha. Se mesmo assim falhar, desfaz a
+    // aprovação e tudo que foi criado.
+    let vagaEncerrada = false;
+    if (contratarNaAprovacao) {
+      const fin = await finalizarContratado(service, {
+        cvId: candidatoVaga.id,
+        data_inicio: dataInicioContratacao,
+        data_fim: dataFimContratacao,
+        userId: user.id,
+      });
+      if (!fin.ok) {
+        console.error("[decisao indicacao] Erro ao finalizar contratação:", fin.error);
+        const { error: reabrirErr } = await service
+          .from("solicitacoes_indicacao_candidato")
+          .update({ status: "pendente", candidato_id: null, candidatos_vaga_id: null, decidido_por: null, decidido_em: null, updated_at: sol.updated_at })
+          .eq("id", id)
+          .eq("status", "aprovada");
+        const reversao = await reverterCriados(service, {
+          admissaoId,
+          ...(vinculadoAoCandidatoExistente ? {} : { candidatoId: candidato.id }),
+          candidatoVagaId: candidatoVaga.id,
+          encaminhamentoId,
+        });
+        if (!reversao.sucesso || reabrirErr) {
+          await registrarAuditoria({
+            usuario_id: user.id,
+            usuario_nome: usuarioNome,
+            acao: "indicacao_candidato_erro_finalizacao_rollback_falhou",
+            entidade: "solicitacoes_indicacao_candidato",
+            entidade_id: id,
+            detalhes: {
+              erro_finalizacao: fin.error,
+              erro_reabrir_indicacao: reabrirErr ? msgErro(reabrirErr) : null,
+              erro_delete_admissao: reversao.erroAdmissao,
+              erro_delete_encaminhamentos: reversao.erroEncaminhamento,
+              erro_delete_candidatos_vagas: reversao.erroCandidatoVaga,
+              erro_delete_candidatos: reversao.erroCandidato,
+              candidato_id_orfo: candidato.id,
+              candidatos_vaga_id_orfo: candidatoVaga.id,
+              admissao_id_orfa: admissaoId,
+            },
+          });
+          return NextResponse.json({ error: "Falha ao registrar a contratação e não foi possível reverter tudo. Conferir banco de dados (registros órfãos / indicação aprovada sem contratação)." }, { status: 500 });
+        }
+        await registrarAuditoria({
+          usuario_id: user.id,
+          usuario_nome: usuarioNome,
+          acao: "indicacao_candidato_erro_finalizacao",
+          entidade: "solicitacoes_indicacao_candidato",
+          entidade_id: id,
+          detalhes: { erro: fin.error, vaga_id: vaga.id },
+        });
+        return NextResponse.json({ error: "Não foi possível registrar a contratação. A indicação não foi aprovada e nada foi gravado." }, { status: 500 });
+      }
+      vagaEncerrada = fin.vagaEncerrada;
     }
 
     await marcarNotificacoesComoLidas(service, id);
@@ -567,6 +754,15 @@ export async function POST(request: NextRequest, { params }: Params) {
         candidatos_vaga_id: candidatoVaga.id,
         vaga_id: vaga.id,
         vinculado_candidato_existente: vinculadoAoCandidatoExistente,
+        // MOT/Terceirização: aprovar já contrata e (com a entidade contratante do cliente cadastrada) cria a admissão.
+        // R&S: nenhum dos dois.
+        contratado: contratarNaAprovacao,
+        data_fim: dataFimContratacao,
+        admissao_criada: !!admissaoId,
+        admissao_id: admissaoId ?? null,
+        // Contratou mas não criou a admissão: o motivo fica registrado para a analista/diretoria auditarem.
+        admissao_nao_criada_motivo: motivoSemAdmissao ?? undefined,
+        vaga_encerrada: contratarNaAprovacao ? vagaEncerrada : undefined,
         // Criação de novo candidato mesmo com telefone repetido, confirmada pela analista: rastro para auditar duplicidade.
         criado_novo_apesar_de_duplicado: !vinculadoAoCandidatoExistente && duplicadosEncontrados.length > 0,
         duplicados_ignorados: !vinculadoAoCandidatoExistente ? duplicadosEncontrados.map((d) => d.candidato_id) : undefined,
@@ -661,7 +857,16 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({
       data: aprovada,
       candidato_id: candidato.id,
+      // Nome para a mensagem de sucesso (a tela nunca mostra o id interno).
+      candidato_nome: candidato.nome_completo ?? sol.candidato_nome,
       candidatos_vaga_id: candidatoVaga.id,
+      contratado: contratarNaAprovacao,
+      admissao_criada: !!admissaoId,
+      admissao_id: admissaoId ?? null,
+      vaga_encerrada: contratarNaAprovacao ? vagaEncerrada : false,
+      aviso_admissao: motivoSemAdmissao
+        ? "Cliente sem entidade contratante cadastrada. Cadastre e inicie a admissão em Admissões."
+        : null,
     });
   } catch (err) {
     console.error("[POST /api/solicitacoes-indicacao-candidato/[id]/decisao]", err);

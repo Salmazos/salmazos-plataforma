@@ -62,7 +62,10 @@ export function novoDbIndicacao() {
   db.tabelas.candidatos_vagas = [cvBase(ID.CV, ID.CAND, aprov), cvBase(ID.CV_EXISTENTE, ID.CAND_EXISTENTE, existente)];
   db.tabelas.analistas_perfil.forEach((p) => { p.email = `${p.user_id}@salmazos.test`; p.nivel_acesso = "analista"; });
   db.tabelas.cliente_usuarios.push({ id: "cu2", user_id: "u-cli2", cliente_id: "C1" }, { id: "cu3", user_id: "u-cliC2", cliente_id: "C2" });
+  // Aprovar MOT/Terceirização cria a admissão, que exige a entidade contratante do cliente.
+  db.tabelas.clientes.forEach((c) => { c.entidade_contratante = "recrutamento_selecao_terceirizacao"; });
   db.tabelas.admissoes = [];
+  db.tabelas.admissao_documentos = [];
   db.tabelas.encaminhamentos = [];
   db.tabelas.historico_candidato = [];
   db.tabelas.notificacoes_analista = [];

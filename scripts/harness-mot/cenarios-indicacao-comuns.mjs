@@ -83,7 +83,7 @@ const cenarios = {
   },
   async decisao_aprovar_sem_edicao() {
     const db = novoDbIndicacao(); logar(db, "dir");
-    return { resp: await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } }), ...estado(db) };
+    return { resp: await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar", data_fim: "2027-01-31" } }), ...estado(db) };
   },
   async decisao_aprovar_candidato_existente() {
     const db = novoDbIndicacao(); logar(db, "dir");
@@ -95,16 +95,16 @@ const cenarios = {
   },
   async decisao_indicacao_ja_decidida() {
     const db = novoDbIndicacao(); logar(db, "dir");
-    return { resp: await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_APROV }, corpo: { acao: "aprovar" } }), ...estado(db) };
+    return { resp: await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_APROV }, corpo: { acao: "aprovar", data_fim: "2027-01-31" } }), ...estado(db) };
   },
   async decisao_vaga_fechada() {
     const db = novoDbIndicacao(); logar(db, "dir");
     db.tabelas.vagas.find((v) => v.id === ID.V_MOT_A).status = "fechada";
-    return { resp: await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } }), ...estado(db) };
+    return { resp: await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar", data_fim: "2027-01-31" } }), ...estado(db) };
   },
   async decisao_sem_login() {
     const db = novoDbIndicacao(); logar(db, null);
-    return { resp: await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } }), ...estado(db) };
+    return { resp: await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar", data_fim: "2027-01-31" } }), ...estado(db) };
   },
 };
 

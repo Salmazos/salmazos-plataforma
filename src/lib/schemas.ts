@@ -1135,7 +1135,14 @@ export const portalEditarIndicacaoSchema = portalIndicarCandidatoSchema
   .strict();
 
 export const indicacaoCandidatoDecisaoSchema = z.discriminatedUnion("acao", [
-  z.object({ acao: z.literal("aprovar"), candidato_existente_id: z.string().uuid().optional(), confirmar_criar_novo: z.boolean().optional() }),
+  z.object({
+    acao: z.literal("aprovar"),
+    candidato_existente_id: z.string().uuid().optional(),
+    confirmar_criar_novo: z.boolean().optional(),
+    // Data de término da contratação (AAAA-MM-DD). Obrigatória para vaga MOT e Terceirização — a regra (não anterior ao início, máx. 180 dias)
+    // é validada na rota, que conhece a data de início da indicação.
+    data_fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data de término inválida.").optional(),
+  }),
   z.object({ acao: z.literal("recusar"), motivo: z.string().trim().min(1) }),
 ]);
 
