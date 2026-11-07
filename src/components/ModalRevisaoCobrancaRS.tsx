@@ -8,6 +8,7 @@ import { calcularFeeValor } from "@/lib/cobrancaRSCorrecao";
 import { ROTULO_BUCKET_FATURAMENTO, bucketFaturamento } from "@/lib/unidadeFaturamento";
 import CampoUnidadeFaturamento from "@/components/ui/CampoUnidadeFaturamento";
 import ModalContaReceberHortolandia from "./ModalContaReceberHortolandia";
+import ComissaoCobrancaBox from "./comissao/ComissaoCobrancaBox";
 import type { CobrancaRSRow } from "./CobrancasRSPageClient";
 
 interface CobrancaDetalhe {
@@ -591,6 +592,10 @@ export default function ModalRevisaoCobrancaRS({ cobrancaId, onClose, onAtualiza
                     <span className="font-semibold">Justificativa:</span> {cobranca.justificativa_cancelamento ?? "—"}
                   </p>
                 </div>
+              )}
+
+              {(cobranca.status === "aprovada_enviada" || cobranca.status === "validada" || cobranca.status === "paga") && (
+                <ComissaoCobrancaBox cobrancaId={cobranca.id} />
               )}
 
               {podeLancar && (

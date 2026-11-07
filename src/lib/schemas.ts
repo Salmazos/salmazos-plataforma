@@ -1849,3 +1849,28 @@ export const propostaSituacaoSchema = z.object({
   motivo_perda: z.string().trim().max(500).optional().nullable(),
   observacao: z.string().trim().max(500).optional().nullable(),
 });
+
+// ── Comissão de analistas (Fase 1) ──────────────────────────────────────────────
+export const comissaoMarcarSchema = z.object({ cobranca_id: z.string().uuid() });
+export const comissaoDesmarcarSchema = z.object({ lancamento_id: z.string().uuid() });
+export const comissaoContestarSchema = z.object({ motivo: z.string().trim().min(3, "Informe o motivo da contestação.") });
+export const comissaoRetroativoDecisaoSchema = z.discriminatedUnion("decisao", [
+  z.object({ decisao: z.literal("aprovar") }),
+  z.object({ decisao: z.literal("recusar"), motivo: z.string().trim().min(3, "Informe o motivo da recusa.") }),
+]);
+export const comissaoResolverContestacaoSchema = z.object({
+  acao: z.enum(["mantem", "ajuste", "remover"]),
+  valor: coerceNumber.optional(),
+  nota: z.string().trim().min(3, "Informe a justificativa da decisão."),
+});
+export const comissaoAjusteSchema = z.object({
+  lancamento_origem_id: z.string().uuid(),
+  tipo: z.enum(["ajuste", "estorno"]),
+  valor: coerceNumber,
+  motivo: z.string().trim().min(3, "Informe o motivo."),
+});
+export const comissaoBeneficiarioSchema = z.object({
+  analista_perfil_id: z.string().uuid(),
+  percentual: coerceNumber.refine((v) => v >= 0 && v <= 100, "Percentual deve estar entre 0 e 100."),
+  ativo: z.boolean(),
+});

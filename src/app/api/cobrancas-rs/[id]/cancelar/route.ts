@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from "next/server";
+import { sincronizarComissoesDaCobranca } from "@/lib/comissao";
 import { revalidatePath } from "next/cache";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { podeRevisarCobranca } from "@/lib/fullAccessAuth";
@@ -69,6 +70,9 @@ export async function POST(request: NextRequest, { params }: Params) {
   // Mesmo motivo do revalidatePath em aprovar/route.ts e marcar-paga/route.ts: sem isso o
   // Router Cache do cliente reaproveita a lista antiga ao navegar de volta pra tela.
   revalidatePath("/painel/cobrancas-rs");
+
+  // Comissão (Fase 1): cobrança cancelada antes de paga cancela a comissão (o lançamento nunca é apagado).
+  await sincronizarComissoesDaCobranca(svc, id, "cobrancas-rs/cancelar");
 
   registrarAuditoria({
     usuario_id: user.id,
