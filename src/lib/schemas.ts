@@ -1874,3 +1874,13 @@ export const comissaoBeneficiarioSchema = z.object({
   percentual: coerceNumber.refine((v) => v >= 0 && v <= 100, "Percentual deve estar entre 0 e 100."),
   ativo: z.boolean(),
 });
+
+// ── Comissão de analistas (Fase 2: fechamento e pagamento) ──────────────────────
+export const comissaoFecharSchema = z.object({
+  competencia: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Mês inválido."),
+  unidade_id: z.string().uuid(),
+  // O que a diretoria viu na prévia: se o conjunto mudou desde então, o fechamento inteiro é abortado.
+  esperado_qtd: z.number().int().nonnegative().optional(),
+  esperado_total: z.number().optional(),
+});
+export const comissaoPagarSchema = z.object({ pago_em: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe a data do pagamento.") });

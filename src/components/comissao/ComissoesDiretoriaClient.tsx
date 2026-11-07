@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { rotuloCompetencia } from "@/lib/comissaoRegras";
 import type { TotaisComissao } from "@/lib/comissaoRegras";
 import type { LancamentoDetalhado } from "@/lib/comissao";
+import FechamentoComissoes from "./FechamentoComissoes";
 import { Aviso, GradeTotais, StatusChip, chamar, dataHora, mesInicial, moeda, tipoRotulo } from "./ui";
 
 interface Resposta {
@@ -22,8 +23,8 @@ type Acao =
 
 // Aba "Comissões" (diretoria/superuser): todos os beneficiários por mês. A diretoria só CONTESTA o que discordar; retroativos
 // esperam aprovação; ajuste/estorno entram como lançamento novo vinculado (o original nunca é editado). Sem fechamento mensal.
-export default function ComissoesDiretoriaClient() {
-  const [mes, setMes] = useState(mesInicial());
+export default function ComissoesDiretoriaClient({ mesInicialProp }: { mesInicialProp?: string }) {
+  const [mes, setMes] = useState(mesInicialProp && /^\d{4}-(0[1-9]|1[0-2])$/.test(mesInicialProp) ? mesInicialProp : mesInicial());
   const [dados, setDados] = useState<Resposta | null>(null);
   const [erro, setErro] = useState("");
   const [msg, setMsg] = useState("");
@@ -71,7 +72,11 @@ export default function ComissoesDiretoriaClient() {
         <td className="p-3">{tipoRotulo(l.tipo)}{retro && <span className="block text-xs text-gray-500">competência {rotuloCompetencia(l.competencia)}</span>}</td>
         <td className="p-3">{l.tipo === "comissao" ? moeda(l.cobranca?.fee_valor ?? l.base_valor) : "—"}</td>
         <td className="p-3 font-semibold">{moeda(l.valor_comissao)}{l.percentual_aplicado != null && <span className="block text-xs font-normal text-gray-500">{l.percentual_aplicado}%</span>}</td>
-        <td className="p-3"><StatusChip status={l.status} /></td>
+        <td className="p-3">
+          <StatusChip status={l.status} />
+          {l.fechamento && <div className="text-xs text-gray-600 mt-1">Fechado em {rotuloCompetencia(l.fechamento.competencia)} · {l.fechamento.pago_em ? "pago" : "a receber"}</div>}
+          {l.atrasada_de && <div className="text-xs font-semibold text-amber-900">Atrasada de {rotuloCompetencia(l.atrasada_de)}</div>}
+        </td>
         <td className="p-3 text-xs">{dataHora(l.cobranca?.enviado_em)}<br />{dataHora(l.cobranca?.validada_em)}</td>
         <td className="p-3 text-right space-y-1 whitespace-nowrap">
           {l.status === "retroativo_pendente" && (
@@ -82,7 +87,8 @@ export default function ComissoesDiretoriaClient() {
           )}
           {l.tipo === "comissao" && (l.status === "prevista" || l.status === "confirmada") && (
             <>
-              <button onClick={() => abrir({ tipo: "contestar", id: l.id })} className="block ml-auto text-xs font-semibold border border-red-300 text-red-700 rounded px-2 py-1 hover:bg-red-50">Contestar</button>
+              {/* Fechado é congelado: não se contesta, só se corrige com ajuste/estorno (entra no próximo fechamento). */}
+              {!l.fechado_em && <button onClick={() => abrir({ tipo: "contestar", id: l.id })} className="block ml-auto text-xs font-semibold border border-red-300 text-red-700 rounded px-2 py-1 hover:bg-red-50">Contestar</button>}
               <button onClick={() => abrir({ tipo: "ajuste", id: l.id })} className="block ml-auto text-xs underline text-gray-600">Ajuste / estorno</button>
             </>
           )}
@@ -205,6 +211,8 @@ export default function ComissoesDiretoriaClient() {
           </tbody>
         </table>
       </div>
+
+      <FechamentoComissoes />
     </div>
   );
 }

@@ -36,16 +36,22 @@ export function CardTotal({ titulo, valor, destaque }: { titulo: string; valor: 
   );
 }
 
+// Cada valor aparece em UM cartão só: previsto (cobrança ainda não validada) -> confirmado (validada, ainda fora de fechamento) ->
+// a receber (fechado, aguardando pagamento) -> pago. Contestado e retroativo pendente ficam à parte até a diretoria decidir.
 export function GradeTotais({ totais }: { totais: TotaisComissao }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
       <CardTotal titulo="Previsto" valor={totais.previsto} />
-      <CardTotal titulo="Confirmado" valor={totais.confirmado} destaque />
+      <CardTotal titulo="Confirmado (a fechar)" valor={totais.confirmado} destaque />
+      <CardTotal titulo="A receber (fechado)" valor={totais.aReceber} destaque />
+      <CardTotal titulo="Pago" valor={totais.pago} />
       <CardTotal titulo="Contestado" valor={totais.contestado} />
       <CardTotal titulo="Retroativo pendente" valor={totais.retroativoPendente} />
     </div>
   );
 }
+
+export const dataBR = (iso: string | null | undefined): string => (iso ? iso.slice(0, 10).split("-").reverse().join("/") : "—");
 
 export function Aviso({ tipo, children }: { tipo: "erro" | "ok" | "info"; children: ReactNode }) {
   const cor = tipo === "erro" ? "text-red-700 bg-red-50 border-red-200" : tipo === "ok" ? "text-green-800 bg-green-50 border-green-200" : "text-amber-900 bg-amber-50 border-amber-200";

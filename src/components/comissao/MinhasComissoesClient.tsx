@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { rotuloCompetencia } from "@/lib/comissaoRegras";
 import type { TotaisComissao } from "@/lib/comissaoRegras";
 import type { CobrancaParaMarcar, LancamentoDetalhado } from "@/lib/comissao";
-import { Aviso, GradeTotais, StatusChip, chamar, dataHora, mesInicial, moeda, tipoRotulo } from "./ui";
+import { Aviso, GradeTotais, StatusChip, chamar, dataBR, dataHora, mesInicial, moeda, tipoRotulo } from "./ui";
 
 interface Resposta {
   competencia: string;
@@ -157,7 +157,18 @@ export default function MinhasComissoesClient({ nome, percentual }: { nome: stri
                   <td className="p-3">{tipoRotulo(l.tipo)}</td>
                   <td className="p-3">{l.tipo === "comissao" ? moeda(l.cobranca?.fee_valor ?? l.base_valor) : "—"}</td>
                   <td className="p-3 font-semibold">{moeda(l.valor_comissao)}{l.percentual_aplicado != null && <span className="block text-xs font-normal text-gray-500">{l.percentual_aplicado}%</span>}</td>
-                  <td className="p-3"><StatusChip status={l.status} /></td>
+                  <td className="p-3">
+                    <StatusChip status={l.status} />
+                    {l.fechamento ? (
+                      <div className="text-xs mt-1">
+                        <span className="text-gray-600">Fechamento de {rotuloCompetencia(l.fechamento.competencia)}: </span>
+                        {l.fechamento.pago_em ? <span className="font-semibold text-green-700">pago em {dataBR(l.fechamento.pago_em)}</span> : <span className="font-semibold text-amber-800">a receber</span>}
+                      </div>
+                    ) : l.status === "confirmada" ? (
+                      <div className="text-xs mt-1 text-gray-600">Entra no próximo fechamento</div>
+                    ) : null}
+                    {l.atrasada_de && <div className="text-xs font-semibold text-amber-900">Atrasada de {rotuloCompetencia(l.atrasada_de)}</div>}
+                  </td>
                   <td className="p-3 text-xs">{dataHora(l.cobranca?.enviado_em)}</td>
                   <td className="p-3 text-xs">{dataHora(l.cobranca?.validada_em)}</td>
                   <td className="p-3 text-right">
