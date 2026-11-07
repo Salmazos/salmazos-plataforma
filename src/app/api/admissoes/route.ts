@@ -1,17 +1,13 @@
-import { SITE_URL } from "@/lib/siteUrl";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, admissaoCreateSchema } from "@/lib/schemas";
-import { registrarAuditoria } from "@/lib/audit";
 import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
 import { contextoRH } from "@/lib/rhUnidadeAuth";
 import { podeVerUnidade } from "@/lib/unidadeAuth";
-import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
+import { criarAdmissaoSemEnvio } from "@/lib/admissaoCriacao";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { linkAdmissaoWhatsapp } from "@/lib/waLinks";
-
-const TOKEN_VALIDADE_DIAS = 5;
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -25,7 +21,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const parsed = parseBody(admissaoCreateSchema, body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
-  const { candidato_id, vaga_id, modalidade, funcao, salario, tipo_salario, horario_trabalho, data_admissao, entidade_contratante, adicionais, autorizacao_sindical, admissao_qtd_dias_teste } = parsed.data;
+  const { candidato_id, vaga_id } = parsed.data;
 
   const svc = createServiceClient();
 
@@ -40,99 +36,21 @@ export async function POST(request: NextRequest) {
   const ctxRH = await contextoRH(user);
   if (!ctxRH || !podeVerUnidade(ctxRH, vaga.unidade_id)) return NextResponse.json({ error: "Vaga não encontrada." }, { status: 400 });
 
-  const tokenExpiraEm = new Date(Date.now() + TOKEN_VALIDADE_DIAS * 24 * 60 * 60 * 1000).toISOString();
-
   const { data: candidato } = await svc
     .from("candidatos")
     .select("nome_completo, telefone, email, cargo_pretendido")
     .eq("id", candidato_id)
     .single();
 
-  const { data: admissao, error } = await svc
-    .from("admissoes")
-    .insert({
-      candidato_id,
-      vaga_id,
-      unidade_id: vaga.unidade_id,
-      modalidade,
-      funcao,
-      salario,
-      tipo_salario,
-      horario_trabalho,
-      data_admissao,
-      entidade_contratante,
-      criado_por: user.id,
-      token_expira_em: tokenExpiraEm,
-    })
-    .select()
-    .single();
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-
-  // apenasPainel fica de fora do seed automático — só passa a existir
-  // quando o RH decide usá-lo manualmente pela aba Documentos, não como um card sempre
-  // presente (e vazio) igual aos demais tipos.
-  const documentosRows = DOCUMENTOS_ADMISSAO.filter((doc) => !doc.apenasPainel).map((doc) => ({
-    admissao_id: admissao.id,
-    tipo_documento: doc.tipo_documento,
-    obrigatorio: doc.obrigatorio,
-    condicional: doc.condicional,
-  }));
-
-  const { error: docsError } = await svc.from("admissao_documentos").insert(documentosRows);
-  if (docsError) return NextResponse.json({ error: docsError.message }, { status: 400 });
-
-  if (adicionais && adicionais.length > 0) {
-    const adicionaisRows = adicionais.map((a) => ({
-      admissao_id: admissao.id,
-      tipo: a.tipo,
-      formato_valor: a.formato_valor,
-      valor: a.valor,
-    }));
-    const { error: adicionaisError } = await svc.from("admissao_adicionais").insert(adicionaisRows);
-    if (adicionaisError) return NextResponse.json({ error: adicionaisError.message }, { status: 400 });
-  }
-
-  if (autorizacao_sindical) {
-    const { error: asError } = await svc.from("admissao_autorizacao_sindical").insert({
-      admissao_id: admissao.id,
-      nome_sindicato: autorizacao_sindical.nome_sindicato ?? null,
-      autoriza_assistencial_confederativa: autorizacao_sindical.autoriza_assistencial_confederativa,
-      autoriza_sindical: autorizacao_sindical.autoriza_sindical,
-    });
-    if (asError) return NextResponse.json({ error: asError.message }, { status: 400 });
-  }
-
-  // O RH corrigiu a quantidade de dias de teste: grava na candidatura de origem (a fonte que todas as telas do RH leem), com
-  // auditoria do antes/depois. Sem a chave no corpo, a candidatura não é tocada.
-  if (admissao_qtd_dias_teste !== undefined) {
-    const { data: cvAtual } = await svc.from("candidatos_vagas").select("admissao_qtd_dias_teste").eq("candidato_id", candidato_id).eq("vaga_id", vaga_id).maybeSingle();
-    const antes = cvAtual?.admissao_qtd_dias_teste ?? null;
-    if (cvAtual && antes !== admissao_qtd_dias_teste) {
-      const { error: qtdError } = await svc.from("candidatos_vagas").update({ admissao_qtd_dias_teste }).eq("candidato_id", candidato_id).eq("vaga_id", vaga_id);
-      if (qtdError) return NextResponse.json({ error: qtdError.message }, { status: 400 });
-      registrarAuditoria({
-        usuario_id: user.id,
-        usuario_nome: user.email ?? null,
-        acao: "admissao_qtd_dias_teste_ajustada_pelo_rh",
-        entidade: "admissoes",
-        entidade_id: admissao.id,
-        detalhes: { candidato_id, vaga_id, antes, depois: admissao_qtd_dias_teste },
-      });
-    }
-  }
-
-  registrarAuditoria({
-    usuario_id: user.id,
-    usuario_nome: user.email ?? null,
-    acao: "admissao_criada",
-    entidade: "admissoes",
-    entidade_id: admissao.id,
-    detalhes: { candidato_id, vaga_id: vaga_id ?? null, modalidade, funcao, salario, tipo_salario, horario_trabalho, data_admissao },
+  const criada = await criarAdmissaoSemEnvio(svc, {
+    dados: parsed.data,
+    unidadeId: vaga.unidade_id,
+    usuario: { id: user.id, nome: user.email ?? null },
   });
+  if (!criada.ok) return NextResponse.json({ error: criada.error }, { status: 400 });
+  const { admissao, url } = criada;
 
-  const url = `${SITE_URL}/admissao/${admissao.token}`;
-
+  // Envio (e-mail + link de WhatsApp) é só deste endpoint: a criação em si não envia nada.
   let whatsappUrl: string | null = null;
   if (candidato?.telefone) {
     whatsappUrl = linkAdmissaoWhatsapp(candidato.nome_completo, candidato.telefone, candidato.cargo_pretendido, url);

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { BotaoCurriculo } from "./BotaoCurriculo";
 import { textoDiasTesteParaRH } from "@/lib/diasTeste";
+import { DIAS_AUXILIAR_PRORROGACAO, MAX_DIAS_CONTRATO, erroDataTermino, somarDiasIso } from "@/lib/dataTerminoContrato";
 
 const TIPO_LABEL: Record<string, { label: string; bg: string; color: string }> = {
   recrutamento_selecao: { label: "R&S", bg: "#1D6FA4", color: "#fff" },
@@ -90,6 +91,8 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
   const [vincularPara, setVincularPara] = useState<{ indicacaoId: string; candidatoId: string } | null>(null);
   const [confirmarCriarNovo, setConfirmarCriarNovo] = useState<string | null>(null);
   const [riscoEntendido, setRiscoEntendido] = useState(false);
+  // Data de término por indicação (só MOT). Sempre começa vazia: nunca vem de admissao_tempo_contrato.
+  const [datasFim, setDatasFim] = useState<Record<string, string>>({});
 
   const buscarDuplicados = async (indicacaoId: string) => {
     setCarregandoDuplicados((prev) => new Set(prev).add(indicacaoId));
@@ -142,9 +145,9 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
 
   if (!isOpen) return null;
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, ms = 4000) => {
     setToast(msg);
-    setTimeout(() => setToast(""), 4000);
+    setTimeout(() => setToast(""), ms);
   };
 
   const handleDecidir = async (id: string, acao: "aprovar" | "recusar", candidatoExistenteId?: string, confirmarCriarNovoMesmoAssim?: boolean) => {
@@ -152,9 +155,12 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
     setActionLoading(id);
     setErro(null);
     try {
+      const itemDecidido = items.find((x) => x.id === id);
+      const exigeFim = itemDecidido?.vagas?.tipo_servico === "mao_obra_temporaria" || itemDecidido?.vagas?.tipo_servico === "terceirizacao";
       const body = acao === "aprovar"
         ? {
             acao,
+            ...(exigeFim && datasFim[id] && { data_fim: datasFim[id] }),
             ...(candidatoExistenteId && { candidato_existente_id: candidatoExistenteId }),
             ...(confirmarCriarNovoMesmoAssim && { confirmar_criar_novo: true }),
           }
@@ -182,12 +188,19 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
       setVincularPara(null);
       setConfirmarCriarNovo(null);
       setRiscoEntendido(false);
+      const nomeCandidato = typeof json.candidato_nome === "string" && json.candidato_nome.trim() ? json.candidato_nome.trim() : "o candidato";
       showToast(
         acao === "aprovar"
-          ? candidatoExistenteId
-            ? `Indicação aprovada e vinculada a ${json.candidato_id || "candidato"}. Confira o card no Kanban em Retorno Cliente.`
-            : "Indicação aprovada — o candidato já está no Kanban em \"Aprovado pelo Cliente\"."
-          : "Indicação recusada."
+          ? json.admissao_criada
+            ? `Indicação aprovada: ${nomeCandidato} foi contratado(a). Admissão criada em Admissões.`
+            : typeof json.aviso_admissao === "string" && json.aviso_admissao
+              ? `Indicação aprovada: ${nomeCandidato} foi contratado(a). ${json.aviso_admissao}`
+              : candidatoExistenteId
+                ? `Indicação aprovada e vinculada a ${nomeCandidato}. Confira o card no Kanban em Retorno Cliente.`
+                : `Indicação aprovada — ${nomeCandidato} já está no Kanban em "Aprovado pelo Cliente".`
+          : "Indicação recusada.",
+        // O aviso de "cliente sem entidade contratante" pede uma ação da analista: fica mais tempo na tela.
+        typeof json.aviso_admissao === "string" && json.aviso_admissao ? 10000 : 4000
       );
       if (acao === "aprovar") onAprovado();
       if (focoId) onVerTodas?.();
@@ -243,6 +256,13 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                 const pendente = it.status === "pendente";
                 const temDuplicado = (duplicados[it.id]?.length ?? 0) > 0;
                 const buscandoDuplicado = carregandoDuplicados.has(it.id);
+                const exigeFimCard = it.vagas?.tipo_servico === "mao_obra_temporaria" || it.vagas?.tipo_servico === "terceirizacao";
+                const inicioMot = it.admissao_data_inicio ?? "";
+                const fimMot = datasFim[it.id] ?? "";
+                const erroFimMot = exigeFimCard ? erroDataTermino(inicioMot, fimMot) : null;
+                const fimMaxMot = inicioMot ? somarDiasIso(inicioMot, MAX_DIAS_CONTRATO) : null;
+                const fim90Mot = inicioMot ? somarDiasIso(inicioMot, DIAS_AUXILIAR_PRORROGACAO) : null;
+                const bloqueadoPorFim = exigeFimCard && erroFimMot !== null;
 
                 return (
                   <div key={it.id} className="border border-gray-200 rounded-xl p-5 space-y-3">
@@ -299,6 +319,37 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
 
                     {erro?.id === it.id && (
                       <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{erro.msg}</p>
+                    )}
+
+                    {pendente && exigeFimCard && (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1.5">
+                        <label className="text-xs font-semibold text-gray-700" htmlFor={`data-fim-${it.id}`}>
+                          Data de término do contrato <span className="text-red-600">*</span>
+                        </label>
+                        <div className="flex gap-2 items-center flex-wrap">
+                          <input
+                            id={`data-fim-${it.id}`}
+                            type="date"
+                            value={fimMot}
+                            min={inicioMot || undefined}
+                            max={fimMaxMot ?? undefined}
+                            onChange={(e) => setDatasFim((prev) => ({ ...prev, [it.id]: e.target.value }))}
+                            className="text-xs border border-gray-300 rounded-md px-2 py-1"
+                          />
+                          <button
+                            type="button"
+                            disabled={!fim90Mot}
+                            onClick={() => fim90Mot && setDatasFim((prev) => ({ ...prev, [it.id]: fim90Mot }))}
+                            className="text-xs font-semibold text-gray-700 border border-gray-300 rounded-md px-2 py-1 hover:bg-gray-100 disabled:opacity-50"
+                          >
+                            +{DIAS_AUXILIAR_PRORROGACAO} dias
+                          </button>
+                          <span className="text-[11px] text-gray-500">
+                            Início: {inicioMot ? inicioMot.split("-").reverse().join("/") : "não informado"} · máximo {MAX_DIAS_CONTRATO} dias
+                          </span>
+                        </div>
+                        {fimMot && erroFimMot && <p className="text-xs text-red-600">{erroFimMot}</p>}
+                      </div>
                     )}
 
                     {pendente && temDuplicado && !vincularPara && !confirmarCriarNovo && (
@@ -370,7 +421,8 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                             Cancelar
                           </button>
                           <button
-                            disabled={!riscoEntendido || actionLoading === it.id}
+                            disabled={!riscoEntendido || actionLoading === it.id || bloqueadoPorFim}
+                            title={bloqueadoPorFim ? "Informe uma data de término válida acima." : undefined}
                             onClick={() => { setConfirmarCriarNovo(null); setRiscoEntendido(false); handleDecidir(it.id, "aprovar", undefined, true); }}
                             className="text-xs font-semibold text-white bg-orange-600 rounded px-3 py-1 hover:bg-orange-700 disabled:opacity-50"
                           >
@@ -418,7 +470,8 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                           {vincularPara?.indicacaoId === it.id ? (
                             <button
                               onClick={() => handleDecidir(it.id, "aprovar", vincularPara.candidatoId)}
-                              disabled={isLoading}
+                              disabled={isLoading || bloqueadoPorFim}
+                              title={bloqueadoPorFim ? "Informe uma data de término válida acima." : undefined}
                               className="text-xs font-semibold text-black bg-[#FFD700] rounded-lg px-3 py-1.5 hover:brightness-95 disabled:opacity-50"
                             >
                               {isLoading ? "Vinculando..." : "Confirmar vínculo"}
@@ -426,7 +479,8 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                           ) : temDuplicado ? null : (
                             <button
                               onClick={() => handleDecidir(it.id, "aprovar")}
-                              disabled={isLoading || buscandoDuplicado}
+                              disabled={isLoading || buscandoDuplicado || bloqueadoPorFim}
+                              title={bloqueadoPorFim ? "Informe uma data de término válida acima." : undefined}
                               className="text-xs font-semibold text-black bg-[#FFD700] rounded-lg px-3 py-1.5 hover:brightness-95 disabled:opacity-50"
                             >
                               {isLoading ? "Aprovando..." : "Aprovar e registrar candidato"}

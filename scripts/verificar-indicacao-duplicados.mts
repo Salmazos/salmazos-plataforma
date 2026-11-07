@@ -31,7 +31,7 @@ function cenario({ dupNaVaga = false } = {}) {
   ];
   return db;
 }
-const aprovar = (id: string, corpo: Record<string, unknown> = {}) => chamar(decisao.POST, { metodo: "POST", params: { id }, corpo: { acao: "aprovar", ...corpo } });
+const aprovar = (id: string, corpo: Record<string, unknown> = {}) => chamar(decisao.POST, { metodo: "POST", params: { id }, corpo: { acao: "aprovar", data_fim: "2027-01-31", ...corpo } });
 const sol = (db: any, id: string) => db.tabelas.solicitacoes_indicacao_candidato.find((s: any) => s.id === id);
 const lidas = (db: any) => Object.fromEntries(db.tabelas.notificacoes_analista.map((x: any) => [x.id, x.lida]));
 
@@ -125,7 +125,7 @@ await ok("recusar: marca só os sinos DESTA indicação como lidos", async () =>
   assert.deepEqual(lidas(db), { n1: true, n2: true, n3: false });
 });
 await ok("falha ao marcar sino NÃO derruba a decisão (aprovar e recusar): decisão gravada, resposta 200", async () => {
-  for (const corpo of [{ acao: "recusar", motivo: "x" }, { acao: "aprovar", candidato_existente_id: DUP }]) {
+  for (const corpo of [{ acao: "recusar", motivo: "x" }, { acao: "aprovar", data_fim: "2027-01-31", candidato_existente_id: DUP }]) {
     const db = cenario();
     // Tabela ausente faz o update de notificações falhar/lançar no banco em memória.
     delete db.tabelas.notificacoes_analista;

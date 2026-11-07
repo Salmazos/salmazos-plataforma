@@ -274,18 +274,18 @@ await teste("decisão (aprovar): cliente edita DEPOIS da leitura → 409 'altera
   const db = novoDbIndicacao(); logar(db, "dir");
   const antesCand = db.tabelas.candidatos.length, antesCv = db.tabelas.candidatos_vagas.length;
   db.ganchos = { "solicitacoes_indicacao_candidato.update": async () => { const r = await patch(db, ID.S_PEND, { admissao_funcao: "Cargo novo do cliente" }); assert.equal(r.status, 200); logar(db, "dir"); } };
-  const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } });
+  const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar", data_fim: "2027-01-31" } });
   assert.equal(r.status, 409); assert.match(r.corpo.error, /alterada enquanto era analisada/);
   assert.equal(sol(db, ID.S_PEND).status, "pendente"); assert.equal(db.tabelas.candidatos.length, antesCand); assert.equal(db.tabelas.candidatos_vagas.length, antesCv); assert.equal(db.tabelas.encaminhamentos.length, 0);
   const a = auditoria(db).find((x) => x.acao === "indicacao_candidato_aprovacao_concorrente"); assert.equal(a.detalhes.motivo, "alterada");
   // e aprovar de novo, já com os dados novos, funciona:
-  const r2 = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } });
+  const r2 = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar", data_fim: "2027-01-31" } });
   assert.equal(r2.status, 200); assert.ok(db.tabelas.candidatos_vagas.some((c) => c.admissao_funcao === "Cargo novo do cliente"));
 });
 await teste("decisão (aprovar): decidida por outro analista no meio → mantém a mensagem antiga 'já foi decidida por outro analista'", async () => {
   const db = novoDbIndicacao(); logar(db, "dir");
   db.ganchos = { "solicitacoes_indicacao_candidato.update": async () => { sol(db, ID.S_PEND).status = "recusada"; } };
-  const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } });
+  const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar", data_fim: "2027-01-31" } });
   assert.equal(r.status, 409); assert.match(r.corpo.error, /já foi decidida por outro analista/);
   assert.equal(auditoria(db).find((x) => x.acao === "indicacao_candidato_aprovacao_concorrente").detalhes.motivo, "decidida");
 });
@@ -305,7 +305,7 @@ await teste("edição antes da decisão (sem corrida): a aprovação copia os da
   const db = novoDbIndicacao();
   assert.equal((await patch(db, ID.S_PEND, { admissao_funcao: "Cargo editado", admissao_salario: 2100 })).status, 200);
   logar(db, "dir");
-  const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar" } });
+  const r = await chamar(decisao.POST, { metodo: "POST", params: { id: ID.S_PEND }, corpo: { acao: "aprovar", data_fim: "2027-01-31" } });
   assert.equal(r.status, 200); const novo = db.tabelas.candidatos_vagas.find((c) => c.admissao_funcao === "Cargo editado"); assert.equal(novo.admissao_salario, 2100);
 });
 
