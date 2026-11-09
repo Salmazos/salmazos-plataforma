@@ -29,6 +29,8 @@ import {
 
 type Service = ReturnType<typeof createServiceClient>;
 
+export const MENSAGEM_MES_ENCERRADO = "Só dá para marcar comissão do mês corrente. Fale com a diretoria.";
+
 export interface Beneficiario {
   id: string;
   analista_perfil_id: string;
@@ -168,6 +170,7 @@ export async function marcarComissao(
   const reposicao = await ehReposicaoPorGarantia(svc, cobranca.vaga_id);
   const recusa = motivoDeNaoPoderMarcar({ ...cobranca, reposicao_garantia: reposicao });
   if (recusa) return falha(422, MENSAGEM_RECUSA_MARCACAO[recusa], recusa);
+  if (competenciaPassou(competenciaDoInstante(cobranca.enviado_em as string), agora)) return falha(409, MENSAGEM_MES_ENCERRADO, "mes_encerrado");
 
   const { data: ativa } = await svc
     .from("comissao_lancamentos")
@@ -186,6 +189,8 @@ export async function marcarComissao(
   }
 
   const fee = arredondar2(Number(cobranca.fee_valor));
+  // DECISÃO DO NEGÓCIO: o beneficiário só marca comissão do mês corrente (esquecimento se resolve fora do sistema, com a diretoria).
+  // Por isso a marcação nunca cria retroativo_pendente; os que já existem continuam sendo decididos pela diretoria.
   const { competencia, status } = statusInicialDaMarcacao({ status: cobranca.status, tipo: cobranca.tipo, enviado_em: cobranca.enviado_em as string }, agora);
   const { data: criado, error } = await svc
     .from("comissao_lancamentos")
@@ -217,7 +222,6 @@ export async function marcarComissao(
     base_valor: fee,
     percentual_aplicado: o.beneficiario.percentual,
     valor_comissao: criado.valor_comissao,
-    retroativo: status === "retroativo_pendente",
   }, cobranca.unidade_id);
   return { ok: true, lancamento: criado as Lancamento };
 }
@@ -430,15 +434,13 @@ export interface CobrancaParaMarcar {
   status: string;
   fee_valor: number;
   competencia: string;
-  // Mês anterior: a marcação vai para aprovação da diretoria (retroativo_pendente).
-  retroativo: boolean;
   comissao_prevista: number;
   // "voce" = já é sua; "outro" = já marcada por outra pessoa (sem revelar quem nem quanto); null = livre para marcar.
   marcada: "voce" | "outro" | null;
 }
 
-// "Cobranças para marcar": TODAS as cobranças R&S de CONTRATAÇÃO já enviadas para validação (enviadas, validadas ou pagas; nunca
-// canceladas nem em revisão), do mês corrente e dos anteriores, sem exigir acesso à tela de Cobranças R&S — a comissão é de quem o
+// "Cobranças para marcar": as cobranças R&S de CONTRATAÇÃO já enviadas para validação (enviadas, validadas ou pagas; nunca
+// canceladas nem em revisão) com competência no MÊS CORRENTE (o beneficiário não marca mês anterior), sem exigir acesso à tela de Cobranças R&S — a comissão é de quem o
 // beneficiário diz ser, e a cobrança pode ter sido gerada por outro analista. Só sai o necessário para reconhecer a cobrança e
 // calcular a comissão: cliente, vaga/cargo, quem gerou (nome), envio, status e fee_valor. Nenhum dado fiscal, e-mail ou anexo.
 // Reposição por garantia fica fora. As já marcadas por outra pessoa aparecem como "outro", sem a comissão alheia.
@@ -472,6 +474,7 @@ export async function listarCobrancasParaMarcar(svc: Service, o: { beneficiario:
     const vaga = vagaPorId.get(c.vaga_id);
     if (vaga?.reposicao_de_candidato_vaga_id) continue;
     const competencia = competenciaDoInstante(c.enviado_em as string);
+    if (competenciaPassou(competencia, agora)) continue;
     const dono = marcadaPor.get(c.id);
     saida.push({
       id: c.id,
@@ -483,7 +486,6 @@ export async function listarCobrancasParaMarcar(svc: Service, o: { beneficiario:
       status: c.status,
       fee_valor: Number(c.fee_valor),
       competencia,
-      retroativo: competenciaPassou(competencia, agora),
       comissao_prevista: calcularComissao(Number(c.fee_valor), o.beneficiario.percentual),
       marcada: dono ? (dono === o.beneficiario.id ? "voce" : "outro") : null,
     });
@@ -503,8 +505,6 @@ export async function estadoDaCobranca(
   percentual: number;
   comissao_prevista: number | null;
   competencia: string | null;
-  // Cobrança de mês já passado: a marcação vai para aprovação da diretoria (retroativo_pendente).
-  retroativo: boolean;
   // Só uma sugestão visual (a marcação é sempre explícita): o responsável da vaga é o próprio beneficiário.
   sugestao_responsavel_da_vaga: boolean;
   fee_valor: number | null;
@@ -514,7 +514,6 @@ export async function estadoDaCobranca(
     percentual: o.beneficiario.percentual,
     comissao_prevista: null as number | null,
     competencia: null as string | null,
-    retroativo: false,
     sugestao_responsavel_da_vaga: false,
     fee_valor: null as number | null,
   };
@@ -535,14 +534,14 @@ export async function estadoDaCobranca(
   const reposicao = !!vaga?.reposicao_de_candidato_vaga_id;
   const recusa = motivoDeNaoPoderMarcar({ ...cobranca, reposicao_garantia: reposicao });
   const competencia = cobranca.enviado_em ? competenciaDoInstante(cobranca.enviado_em) : null;
+  const mesEncerrado = !!competencia && competenciaPassou(competencia);
   const resp = (vaga?.responsavel ?? "").trim();
   return {
     competencia,
-    retroativo: competencia ? competenciaPassou(competencia) : false,
     sugestao_responsavel_da_vaga: !!resp && (resp === o.beneficiario.nome_completo || resp === apelidoDoNomeCompleto(o.beneficiario.nome_completo)),
     fee_valor: cobranca.fee_valor == null ? null : Number(cobranca.fee_valor),
-    pode_marcar: !recusa && !minha && !outro,
-    motivo_bloqueio: recusa ? MENSAGEM_RECUSA_MARCACAO[recusa] : outro ? "Esta cobrança já tem a comissão marcada por outro beneficiário." : null,
+    pode_marcar: !recusa && !minha && !outro && !mesEncerrado,
+    motivo_bloqueio: recusa ? MENSAGEM_RECUSA_MARCACAO[recusa] : outro ? "Esta cobrança já tem a comissão marcada por outro beneficiário." : !minha && mesEncerrado ? MENSAGEM_MES_ENCERRADO : null,
     lancamento: detalhado,
     marcada_por_outro: outro,
     percentual: o.beneficiario.percentual,

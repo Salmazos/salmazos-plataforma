@@ -38,15 +38,16 @@ export function CardTotal({ titulo, valor, destaque }: { titulo: string; valor: 
 
 // Cada valor aparece em UM cartão só: previsto (cobrança ainda não validada) -> confirmado (validada, ainda fora de fechamento) ->
 // a receber (fechado, aguardando pagamento) -> pago. Contestado e retroativo pendente ficam à parte até a diretoria decidir.
-export function GradeTotais({ totais }: { totais: TotaisComissao }) {
+// `semRetroativo`: tela do beneficiário, que não lança mês anterior — o cartão de retroativo é só da diretoria.
+export function GradeTotais({ totais, semRetroativo = false }: { totais: TotaisComissao; semRetroativo?: boolean }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+    <div className={`grid grid-cols-2 md:grid-cols-3 gap-3 ${semRetroativo ? "lg:grid-cols-5" : "lg:grid-cols-6"}`}>
       <CardTotal titulo="Previsto" valor={totais.previsto} />
       <CardTotal titulo="Confirmado (a fechar)" valor={totais.confirmado} destaque />
       <CardTotal titulo="A receber (fechado)" valor={totais.aReceber} destaque />
       <CardTotal titulo="Pago" valor={totais.pago} />
       <CardTotal titulo="Contestado" valor={totais.contestado} />
-      <CardTotal titulo="Retroativo pendente" valor={totais.retroativoPendente} />
+      {!semRetroativo && <CardTotal titulo="Retroativo pendente" valor={totais.retroativoPendente} />}
     </div>
   );
 }

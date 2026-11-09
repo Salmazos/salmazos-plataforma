@@ -78,6 +78,13 @@ function cobranca(db: any, extra: Cob = {}): string {
 const marcar = (cobranca_id: string) => chamar(R.marcar.POST, { metodo: "POST", corpo: { cobranca_id } });
 const lancs = (db: any, filtro: (l: any) => boolean = () => true) => db.tabelas.comissao_lancamentos.filter(filtro);
 const doCob = (db: any, cobId: string) => lancs(db, (l) => l.cobranca_id === cobId);
+// Retroativo que JÁ existia (criado antes da regra "beneficiário só marca o mês corrente"): o beneficiário não consegue mais criar um
+// pela tela, então os casos de decisão da diretoria partem de um lançamento semeado direto no banco.
+function retroativoExistente(db: any, cobId: string, extra: Record<string, unknown> = {}): any {
+  const l = { id: ID(++seq), cobranca_id: cobId, beneficiario_id: BEN_GIO, tipo: "comissao", status: "retroativo_pendente", competencia: "2026-09-01", base_valor: 400, percentual_aplicado: 5, valor_comissao: 20, lancamento_origem_id: null, motivo: null, marcado_por: "u-gio", unidade_id: "U1", fechado_em: null, fechamento_id: null, marcado_em: "2026-10-01T12:00:00.000Z", ...extra };
+  db.tabelas.comissao_lancamentos.push(l);
+  return l;
+}
 const vencimento = (cobId: string, data: string | null) => chamar(R.vencimento.PATCH, { metodo: "PATCH", params: { id: cobId }, corpo: { data_vencimento: data } });
 
 // ── 1) Regras puras ──
@@ -265,18 +272,46 @@ await ok("envio no dia 31 às 23:30 (Brasília) cai no mês do dia 31", async ()
   assert.equal(doCob(db, c)[0].competencia, "2026-10-01");
   assert.equal(doCob(db, c)[0].status, "prevista");
 });
-await ok("marcação de MÊS PASSADO nasce retroativo_pendente, não conta nos totais até a diretoria aprovar", async () => {
+await ok("beneficiário marca cobrança de MÊS PASSADO: 409 mes_encerrado, mensagem curta e NENHUM lançamento criado (nem retroativo_pendente)", async () => {
+  const db = cenario();
+  for (const st of ["aprovada_enviada", "validada", "paga"]) {
+    const c = cobranca(db, { enviado_em: "2026-09-20T15:00:00.000Z", status: st, data_vencimento: "2026-10-30" });
+    const r = await marcar(c);
+    assert.deepEqual([r.status, r.corpo.codigo, r.corpo.error], [409, "mes_encerrado", "Só dá para marcar comissão do mês corrente. Fale com a diretoria."], st);
+  }
+  assert.equal(lancs(db).length, 0);
+  assert.equal(auditoria(db).some((a: any) => a.acao === "comissao_marcada"), false);
+});
+await ok("marcar cobrança do MÊS CORRENTE segue como antes (prevista/confirmada conforme a cobrança)", async () => {
+  const db = cenario();
+  const a = cobranca(db, { enviado_em: "2026-10-02T15:00:00.000Z" });
+  const b = cobranca(db, { enviado_em: "2026-10-03T15:00:00.000Z", status: "validada", data_vencimento: "2026-10-30" });
+  assert.equal((await marcar(a)).status, 201); assert.equal((await marcar(b)).status, 201);
+  assert.deepEqual([doCob(db, a)[0].status, doCob(db, b)[0].status], ["prevista", "confirmada"]);
+});
+await ok("retroativo_pendente que JÁ existia: aparece na tela do beneficiário (tabela do mês de competência), sem contar nos totais de previsto/confirmado", async () => {
   const db = cenario(); const c = cobranca(db, { enviado_em: "2026-09-20T15:00:00.000Z", status: "validada", data_vencimento: "2026-10-30" });
-  const r = await marcar(c);
-  assert.equal(r.status, 201);
-  const l = doCob(db, c)[0];
-  assert.deepEqual([l.status, l.competencia], ["retroativo_pendente", "2026-09-01"]);
+  const l = retroativoExistente(db, c);
   const m = await chamar(R.minhas.GET, { url: "http://t/api?mes=2026-09" });
+  assert.deepEqual(m.corpo.lancamentos.map((x: any) => [x.id, x.status]), [[l.id, "retroativo_pendente"]]);
   assert.deepEqual(m.corpo.totais, { previsto: 0, confirmado: 0, contestado: 0, retroativoPendente: 20, aReceber: 0, pago: 0 });
 });
-await ok("diretoria aprova o retroativo (registra quem/quando): passa a valer pelo status da cobrança (validada => confirmada)", async () => {
+await ok("tela do beneficiário não tem o cartão nem o texto de retroativo; a da diretoria mantém o cartão e o subtítulo atual", () => {
+  const minhas = fs.readFileSync("src/components/comissao/MinhasComissoesClient.tsx", "utf8");
+  assert.equal(/retroativ/i.test(minhas.replace("semRetroativo", "")), false, "nenhuma menção a retroativo na tela do beneficiário");
+  assert.ok(minhas.includes("semRetroativo") && minhas.includes("Marque aqui as comissões que são suas, até o fim do mês."));
+  const ui = fs.readFileSync("src/components/comissao/ui.tsx", "utf8");
+  assert.ok(ui.includes("{!semRetroativo && <CardTotal titulo=\"Retroativo pendente\""));
+  const dir = fs.readFileSync("src/components/comissao/ComissoesDiretoriaClient.tsx", "utf8");
+  assert.equal(dir.includes("<GradeTotais totais={dados.totais} />"), true, "diretoria sem a flag => cartão de retroativo");
+  assert.equal(dir.includes("sem fechamento mensal nesta fase"), false);
+  assert.ok(dir.includes("competência = mês de envio da cobrança para validação"));
+});
+await ok("diretoria continua vendo e aprovando retroativo existente (registra quem/quando): passa a valer pelo status da cobrança (validada => confirmada)", async () => {
   const db = cenario(); const c = cobranca(db, { enviado_em: "2026-09-20T15:00:00.000Z", status: "validada", data_vencimento: "2026-10-30" });
-  await marcar(c); const id = doCob(db, c)[0].id; logar(db, "dir");
+  const { id } = retroativoExistente(db, c); logar(db, "dir");
+  const lista = await chamar(R.todas.GET, { url: "http://t/api?mes=2026-09" });
+  assert.ok(lista.corpo.retroativosPendentes.some((l: any) => l.id === id), "diretoria enxerga o pendente");
   const r = await chamar(R.retro.POST, { metodo: "POST", params: { id }, corpo: { decisao: "aprovar" } });
   assert.equal(r.status, 200, JSON.stringify(r.corpo));
   const l = doCob(db, c)[0];
@@ -285,18 +320,18 @@ await ok("diretoria aprova o retroativo (registra quem/quando): passa a valer pe
   assert.ok(auditoria(db).some((a: any) => a.acao === "comissao_retroativo_aprovado"));
   assert.equal((await chamar(R.retro.POST, { metodo: "POST", params: { id }, corpo: { decisao: "aprovar" } })).status, 409, "decidir de novo é recusado");
 });
-await ok("diretoria recusa o retroativo (motivo obrigatório): vira 'recusada', registrada, e a cobrança pode ser marcada de novo", async () => {
+await ok("diretoria recusa o retroativo existente (motivo obrigatório): vira 'recusada', registrada; a cobrança de mês passado continua fora do alcance do beneficiário", async () => {
   const db = cenario(); const c = cobranca(db, { enviado_em: "2026-09-20T15:00:00.000Z" });
-  await marcar(c); const id = doCob(db, c)[0].id; logar(db, "dir");
+  const { id } = retroativoExistente(db, c); logar(db, "dir");
   assert.equal((await chamar(R.retro.POST, { metodo: "POST", params: { id }, corpo: { decisao: "recusar" } })).status, 400);
   assert.equal((await chamar(R.retro.POST, { metodo: "POST", params: { id }, corpo: { decisao: "recusar", motivo: "Já foi paga em outro mês" } })).status, 200);
   const l = doCob(db, c)[0];
   assert.deepEqual([l.status, l.decidido_por, l.resolucao_nota], ["recusada", "u-dir", "Já foi paga em outro mês"]);
   logar(db, "gio");
-  assert.equal((await marcar(c)).status, 201, "recusada não bloqueia nova marcação");
-  assert.equal(doCob(db, c).length, 2, "o lançamento recusado continua no histórico");
+  assert.equal((await marcar(c)).status, 409, "mês encerrado vale também depois de recusada");
+  assert.equal(doCob(db, c).length, 1, "só o lançamento recusado, no histórico");
 });
-await ok("\"Cobranças para marcar\": todas de contratação enviadas (mês corrente e anteriores, geradas por qualquer analista), sem exigir acesso à cobrança; canceladas, em revisão, de cancelamento, sem envio/fee e reposição ficam de fora", async () => {
+await ok("\"Cobranças para marcar\": só as de contratação enviadas NO MÊS CORRENTE (geradas por qualquer analista), sem exigir acesso à cobrança; mês passado some; canceladas, em revisão, de cancelamento, sem envio/fee e reposição ficam de fora", async () => {
   const db = cenario();
   db.tabelas.cobranca_rs_analistas_acesso = []; // Giovanni sem acesso amplo
   const velha = cobranca(db, { enviado_em: "2026-09-10T15:00:00.000Z", status: "paga", gerado_por_user_id: "u-reb" });
@@ -310,30 +345,41 @@ await ok("\"Cobranças para marcar\": todas de contratação enviadas (mês corr
   cobranca(db, { enviado_em: null });
   const r = await chamar(R.paraMarcar.GET);
   assert.equal(r.status, 200, JSON.stringify(r.corpo));
-  assert.deepEqual(r.corpo.cobrancas.map((c: any) => c.id).sort(), [velha, corrente, validada].sort());
-  const v = r.corpo.cobrancas.find((c: any) => c.id === velha);
-  assert.deepEqual([v.retroativo, v.competencia, v.comissao_prevista, v.gerada_por, v.marcada], [true, "2026-09-01", 20, "Rebecca Zambonini", null]);
-  assert.equal(r.corpo.cobrancas.find((c: any) => c.id === corrente).retroativo, false);
+  assert.deepEqual(r.corpo.cobrancas.map((c: any) => c.id).sort(), [corrente, validada].sort());
+  assert.equal(r.corpo.cobrancas.some((c: any) => c.id === velha), false, "cobrança de mês passado não é listada");
+  const v = r.corpo.cobrancas.find((c: any) => c.id === corrente);
+  assert.deepEqual([v.competencia, v.comissao_prevista, v.gerada_por, v.marcada], ["2026-10-01", 20, "Rebecca Zambonini", null]);
+});
+await ok("limite do mês em America/Sao_Paulo: enviada 31/10 23:30 BRT NÃO aparece em novembro; enviada 01/11 00:10 BRT aparece (e só esta pode ser marcada)", async () => {
+  congelarData("2026-11-10T15:00:00Z");
+  try {
+    const db = cenario();
+    const outubro = cobranca(db, { enviado_em: "2026-10-31T23:30:00-03:00" });
+    const novembro = cobranca(db, { enviado_em: "2026-11-01T00:10:00-03:00" });
+    const r = await chamar(R.paraMarcar.GET);
+    assert.deepEqual(r.corpo.cobrancas.map((c: any) => [c.id, c.competencia]), [[novembro, "2026-11-01"]]);
+    assert.deepEqual([(await marcar(outubro)).status, (await marcar(outubro)).corpo.codigo], [409, "mes_encerrado"]);
+    assert.equal((await marcar(novembro)).status, 201);
+  } finally { congelarData(); }
 });
 await ok("\"Cobranças para marcar\" mostra SÓ cliente, vaga/cargo, quem gerou, envio, status e fee — nenhum dado fiscal, e-mail ou anexo", async () => {
   const db = cenario();
   cobranca(db, { cliente_cnpj_snapshot: "12.345.678/0001-90", cliente_email_snapshot: "financeiro@cliente.com", cliente_endereco_snapshot: "Rua X, 1", cliente_telefone_snapshot: "19999990000", salario: 1000, candidato_nome_snapshot: "Joao Segredo" });
   const r = await chamar(R.paraMarcar.GET);
-  assert.deepEqual(Object.keys(r.corpo.cobrancas[0]).sort(), ["cargo", "cliente", "competencia", "comissao_prevista", "enviado_em", "fee_valor", "gerada_por", "id", "marcada", "retroativo", "status", "vaga"].sort());
+  assert.deepEqual(Object.keys(r.corpo.cobrancas[0]).sort(), ["cargo", "cliente", "competencia", "comissao_prevista", "enviado_em", "fee_valor", "gerada_por", "id", "marcada", "status", "vaga"].sort());
   const bruto = JSON.stringify(r.corpo);
   for (const proibido of ["12.345.678", "financeiro@cliente.com", "Rua X", "19999990000", "Joao Segredo"]) assert.equal(bruto.includes(proibido), false, proibido);
 });
-await ok("\"Cobranças para marcar\": mês corrente marca como prevista; mês passado como retroativo_pendente; já marcada por outro aparece como \"outro\" SEM expor a comissão alheia; a minha como \"voce\"", async () => {
+await ok("\"Cobranças para marcar\": mês corrente marca como prevista; já marcada por outro aparece como \"outro\" SEM expor a comissão alheia; a minha como \"voce\"", async () => {
   const db = cenario(); db.tabelas.cobranca_rs_analistas_acesso = [];
-  const cor = cobranca(db); const pas = cobranca(db, { enviado_em: "2026-09-20T15:00:00.000Z" });
+  const cor = cobranca(db);
   const deOutro = cobranca(db, { gerado_por_user_id: "u-out" }); const minha = cobranca(db); // gerada por Outra Analista, marcada pela Rebecca
   logar(db, "reb"); assert.equal((await marcar(deOutro)).status, 201); logar(db, "gio");
-  assert.equal((await marcar(cor)).status, 201); assert.equal((await marcar(pas)).status, 201); assert.equal((await marcar(minha)).status, 201);
+  assert.equal((await marcar(cor)).status, 201); assert.equal((await marcar(minha)).status, 201);
   assert.equal(doCob(db, cor)[0].status, "prevista");
-  assert.deepEqual([doCob(db, pas)[0].status, doCob(db, pas)[0].competencia], ["retroativo_pendente", "2026-09-01"]);
   const r = await chamar(R.paraMarcar.GET);
   const por = Object.fromEntries(r.corpo.cobrancas.map((c: any) => [c.id, c.marcada]));
-  assert.deepEqual([por[deOutro], por[cor], por[pas], por[minha]], ["outro", "voce", "voce", "voce"]);
+  assert.deepEqual([por[deOutro], por[cor], por[minha]], ["outro", "voce", "voce"]);
   const bruto = JSON.stringify(r.corpo.cobrancas.find((c: any) => c.id === deOutro));
   assert.equal(bruto.includes("Rebecca"), false, "não revela quem marcou");
   assert.equal(/beneficiario|valor_comissao|lancamento/.test(bruto), false, "não expõe o lançamento alheio");
@@ -497,7 +543,7 @@ await ok("o estorno acompanha o status do original: estorno parcial de comissão
 });
 await ok("estorno em OUTRO mês (original de setembro aprovado como retroativo, estornado em outubro): cada mês mostra o seu lado e o estorno cai no cartão do status do original", async () => {
   const db = cenario(); const c = cobranca(db, { enviado_em: "2026-09-20T15:00:00.000Z", status: "validada", data_vencimento: "2026-10-30" });
-  await marcar(c); const id = doCob(db, c)[0].id; logar(db, "dir");
+  const { id } = retroativoExistente(db, c); logar(db, "dir");
   await chamar(R.retro.POST, { metodo: "POST", params: { id }, corpo: { decisao: "aprovar" } });
   await chamar(R.contestar.POST, { metodo: "POST", params: { id }, corpo: { motivo: "Não é dele" } });
   await chamar(R.resolver.POST, { metodo: "POST", params: { id }, corpo: { acao: "remover", nota: "É da Rebecca" } });

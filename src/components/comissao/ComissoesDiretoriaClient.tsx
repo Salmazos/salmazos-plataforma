@@ -113,7 +113,7 @@ export default function ComissoesDiretoriaClient({ mesInicialProp }: { mesInicia
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Comissões</h1>
-          <p className="text-sm text-gray-500">Todos os beneficiários · competência = mês de envio da cobrança para validação · sem fechamento mensal nesta fase</p>
+          <p className="text-sm text-gray-500">Todos os beneficiários · competência = mês de envio da cobrança para validação</p>
         </div>
         <label className="text-xs font-semibold text-gray-600">
           Mês de competência
