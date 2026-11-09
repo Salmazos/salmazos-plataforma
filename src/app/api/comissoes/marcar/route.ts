@@ -6,8 +6,7 @@ import { marcarComissao } from "@/lib/comissao";
 
 // "Esta comissão é minha": o beneficiário marca a cobrança explicitamente (o sistema nunca deduz por vaga.responsavel). A autorização
 // é só ser beneficiário ativo com a aba "comissoes_minhas" — NÃO exige acesso a Cobranças R&S, porque a comissão pode ser de um
-// analista e a cobrança ter sido gerada por outro. Cobrança de mês já passado entra como retroativo_pendente e só conta depois da
-// aprovação da diretoria.
+// analista e a cobrança ter sido gerada por outro. Só vale cobrança do mês corrente: mês anterior volta 409 "mes_encerrado".
 export async function POST(request: NextRequest) {
   const acesso = await exigirBeneficiario();
   if (acesso instanceof Response) return acesso;

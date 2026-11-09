@@ -13,7 +13,6 @@ interface Estado {
   percentual: number;
   comissao_prevista: number | null;
   competencia: string | null;
-  retroativo: boolean;
   sugestao_responsavel_da_vaga: boolean;
   fee_valor: number | null;
 }
@@ -83,7 +82,6 @@ export default function ComissaoCobrancaBox({ cobrancaId }: { cobrancaId: string
               <strong>Esta comissão é minha</strong>
               <span className="block text-xs text-gray-600">
                 Comissão prevista: {moeda(estado.comissao_prevista)} ({estado.percentual}% de {moeda(estado.fee_valor)}).
-                {estado.retroativo && estado.competencia ? ` Cobrança de ${rotuloCompetencia(estado.competencia)}: vai para aprovação da diretoria.` : ""}
               </span>
             </span>
           </label>

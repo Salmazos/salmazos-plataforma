@@ -47,7 +47,7 @@ export default function MinhasComissoesClient({ nome, percentual }: { nome: stri
     setLancando(c.id); setErro(""); setMsg("");
     const r = await chamar<unknown>("/api/comissoes/marcar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cobranca_id: c.id }) });
     if (!r.ok) setErro(r.json.error ?? "Não foi possível marcar a comissão.");
-    else setMsg(c.retroativo ? "Marcada como retroativo pendente — só conta depois da aprovação da diretoria." : "Comissão marcada.");
+    else setMsg("Comissão marcada.");
     await Promise.all([carregarParaMarcar(), carregar()]);
     setLancando(null);
   }
@@ -75,15 +75,12 @@ export default function MinhasComissoesClient({ nome, percentual }: { nome: stri
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
       {msg && <Aviso tipo="ok">{msg}</Aviso>}
 
-      {dados && <GradeTotais totais={dados.totais} />}
+      {dados && <GradeTotais totais={dados.totais} semRetroativo />}
 
       <div className="rounded-xl border-2 bg-white p-4 space-y-3" style={{ borderColor: "#FFB800" }}>
         <div>
           <h2 className="text-sm font-bold text-gray-900">Cobranças para marcar</h2>
-          <p className="text-xs text-gray-500">
-            Cobranças R&S de contratação já enviadas para validação (mês atual e anteriores). Marque só a comissão que é sua — o sistema não deduz pelo responsável da vaga.
-            Cobrança de mês anterior entra como <strong>retroativo pendente</strong> e só conta depois da aprovação da diretoria.
-          </p>
+          <p className="text-xs text-gray-500">Marque aqui as comissões que são suas, até o fim do mês.</p>
         </div>
         {paraMarcar === null ? (
           <p className="text-sm text-gray-400">Carregando...</p>
@@ -116,7 +113,6 @@ export default function MinhasComissoesClient({ nome, percentual }: { nome: stri
                         <button
                           onClick={() => marcar(c)}
                           disabled={lancando === c.id}
-                          title={c.retroativo ? "Mês anterior: vai para aprovação da diretoria" : undefined}
                           className="text-xs font-semibold rounded-md px-2 py-1 disabled:opacity-50"
                           style={{ background: "#000", color: "#FFD700" }}
                         >
