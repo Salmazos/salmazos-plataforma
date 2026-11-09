@@ -147,7 +147,7 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-              {["Funcionário", "Empresa", "Data desligamento", "Modalidade", "Valor rescisão", "Data Pag. Rescisão", "Data Pag. Guia", "Pago", "ASO"].map((h) => (
+              {["Funcionário", "Empresa", "Data desligamento", "Modalidade", "Valor rescisão", "Data Pag. Rescisão", "Valor guia", "Data Pag. Guia", "Pago", "ASO"].map((h) => (
                 <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>
                   {h}
                 </th>
@@ -157,7 +157,7 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
           <tbody>
             {filtradas.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF" }}>
+                <td colSpan={10} style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF" }}>
                   Nenhuma rescisão encontrada.
                 </td>
               </tr>
@@ -183,6 +183,7 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
                   </td>
                   <td style={{ padding: "10px 12px", color: "#374151" }}>{moeda(r.valor_rescisao)}</td>
                   <td style={{ padding: "10px 12px", color: "#6B7280" }}>{r.data_pagamento_rescisao ? formatarDataSemFuso(r.data_pagamento_rescisao) : "—"}</td>
+                  <td style={{ padding: "10px 12px", color: "#374151" }}>{moeda(r.valor_guia)}</td>
                   <td style={{ padding: "10px 12px", color: "#6B7280" }}>{r.data_pagamento_guia ? formatarDataSemFuso(r.data_pagamento_guia) : "—"}</td>
                   <td style={{ padding: "10px 12px" }}>
                     <button
