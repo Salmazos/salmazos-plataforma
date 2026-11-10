@@ -123,6 +123,8 @@ export default function NotificacoesProvider({ children }: { children: React.Rea
     // Por tipo (não há coluna de id): o aviso diário do Comercial leva ao "Meu dia".
     if (n.tipo === "lembrete_comercial") router.push("/painel/comercial");
     // Comissão (Fase 2): avisos de contestação, retroativo, fechamento e pagamento levam a "Minhas comissões".
+    // Os "comissao_diretoria_*" (marcação, contestações paradas, fechamento liberado/sem pagamento, possível esquecimento) levam a Comissões.
+    else if (n.tipo.startsWith("comissao_diretoria_")) router.push("/painel/comissoes");
     else if (n.tipo.startsWith("comissao_")) router.push("/painel/minhas-comissoes");
     else if (n.vaga_id) router.push(`/painel/vagas/${n.vaga_id}`);
     else if (n.candidato_id) router.push(`/painel/candidato/${n.candidato_id}`);
