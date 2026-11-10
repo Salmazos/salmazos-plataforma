@@ -57,14 +57,12 @@ const TD_STYLE: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-// Cores do selo de modalidade (mesma paleta da lista de Funcionários: azul = MOT, roxo = Terceirização).
-// Destaque verde da coluna "Dias trabalhados" (a coluna pela qual a lista é ordenada). Verde claro de propósito: não confundir com o selo
-// "Dentro do prazo" da coluna Situação (verde mais forte, em pílula).
-const DESTAQUE_DIAS = { fundoCabecalho: "#DCFCE7", fundoCelula: "#F0FDF4", texto: "#166534" } as const;
-
+// Cores do selo de modalidade: MOT = azul claro com borda; Terceirização = preto com letra dourada (cores da marca). Escolha feita para os dois
+// serem inconfundíveis à primeira vista e para não repetir nenhuma cor de SITUAÇÃO desta tela (verde, âmbar, laranja, vermelho e o roxo de
+// "data de admissão no futuro"). A lista de Funcionários tem a própria paleta (azul/roxo) e não muda.
 const SELO_MODALIDADE = {
-  MOT: { bg: "#EFF6FF", text: "#1D4ED8" },
-  "Terceirização": { bg: "#F5F3FF", text: "#6D28D9" },
+  MOT: { bg: "#DBEAFE", text: "#1D4ED8", borda: "#93C5FD" },
+  "Terceirização": { bg: "#111827", text: "#FFD700", borda: "#111827" },
 } as const;
 
 export default function VencimentoContratoPageClient({ linhasIniciais, clientesFiltro }: Props) {
@@ -152,12 +150,12 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
                 <th style={TH_STYLE}>Modalidade</th>
                 <th style={TH_STYLE}>Empresa</th>
                 <th style={TH_STYLE}>Data de Admissão</th>
-                <th style={{ ...TH_STYLE, background: DESTAQUE_DIAS.fundoCabecalho, color: DESTAQUE_DIAS.texto, padding: 0 }} aria-sort={ordemDias === "desc" ? "descending" : "ascending"}>
+                <th style={{ ...TH_STYLE, padding: 0 }} aria-sort={ordemDias === "desc" ? "descending" : "ascending"}>
                   <button
                     type="button"
                     onClick={() => setOrdemDias((o) => (o === "desc" ? "asc" : "desc"))}
                     title={ordemDias === "desc" ? "Do maior para o menor (clique para inverter)" : "Do menor para o maior (clique para inverter)"}
-                    style={{ all: "unset", cursor: "pointer", display: "block", padding: "10px 14px", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.3, whiteSpace: "nowrap" }}
+                    style={{ all: "unset", cursor: "pointer", display: "block", padding: "10px 14px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: 0.3, whiteSpace: "nowrap" }}
                   >
                     Dias Trabalhados {ordemDias === "desc" ? "▼" : "▲"}
                   </button>
@@ -177,13 +175,13 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
                     </Link>
                   </td>
                   <td style={TD_STYLE}>
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: SELO_MODALIDADE[rotuloModalidadeContrato(l.tipoServico)].bg, color: SELO_MODALIDADE[rotuloModalidadeContrato(l.tipoServico)].text, whiteSpace: "nowrap" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: SELO_MODALIDADE[rotuloModalidadeContrato(l.tipoServico)].bg, color: SELO_MODALIDADE[rotuloModalidadeContrato(l.tipoServico)].text, border: `1px solid ${SELO_MODALIDADE[rotuloModalidadeContrato(l.tipoServico)].borda}`, whiteSpace: "nowrap" }}>
                       {rotuloModalidadeContrato(l.tipoServico)}
                     </span>
                   </td>
                   <td style={{ ...TD_STYLE, color: "#374151" }}>{l.empresa}</td>
                   <td style={{ ...TD_STYLE, color: "#374151" }}>{formatarDataSemFuso(l.dataAdmissao)}</td>
-                  <td style={{ ...TD_STYLE, background: DESTAQUE_DIAS.fundoCelula, color: DESTAQUE_DIAS.texto, fontWeight: 800 }}>{l.diasTrabalhados}</td>
+                  <td style={{ ...TD_STYLE, color: "#374151" }}>{l.diasTrabalhados}</td>
                   <td style={TD_STYLE}>
                     <span
                       style={{
