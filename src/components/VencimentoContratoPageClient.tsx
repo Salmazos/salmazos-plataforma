@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { formatarDataSemFuso } from "@/lib/utils";
 import { ehTerceirizacao, ordenarPorDiasTrabalhados, rotuloModalidadeContrato, type ContratoMotFaixa, type OrdemDiasTrabalhados } from "@/lib/contratoMotStatus";
 import type { SeloMot } from "@/lib/contratoMotEventos";
+import { useScrollHorizontalSincronizado } from "@/hooks/useScrollHorizontalSincronizado";
+import BarraScrollFlutuante from "./BarraScrollFlutuante";
 
 export interface VencimentoContratoRow {
   id: string;
@@ -89,6 +91,12 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
   const excedidoTerc = useMemo(() => linhasIniciais.filter((l) => l.faixa === "limite_excedido" && ehTerceirizacao(l.tipoServico)).length, [linhasIniciais]);
   const totalExcedido = excedidoMot + excedidoTerc;
 
+  // Barra de rolagem horizontal FLUTUANTE (fixa no rodapé da tela, visível já na primeira tela): mesma peça do Banco de Candidatos e do
+  // Kanban. A tabela é larga (colunas de vencimento) e a barra nativa dela só aparece no fim da lista.
+  const { scrollRef, floatScrollRef, floatBar, handleScroll, handleFloatScroll } = useScrollHorizontalSincronizado();
+  // Filtrar/ordenar muda a largura/altura da tabela: remede a barra.
+  useEffect(() => { handleScroll(); }, [handleScroll, filtradas]);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
@@ -137,7 +145,7 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
         </select>
       </div>
 
-      <div className="card" style={{ padding: 0, overflowX: "auto" }}>
+      <div ref={scrollRef} onScroll={handleScroll} className="card" style={{ padding: 0, overflowX: "auto" }}>
         {filtradas.length === 0 ? (
           <p style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF", margin: 0 }}>
             Nenhum funcionário MOT ou de Terceirização ativo encontrado.
@@ -223,6 +231,7 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
           </table>
         )}
       </div>
+      <BarraScrollFlutuante floatBar={floatBar} floatScrollRef={floatScrollRef} onScroll={handleFloatScroll} />
     </div>
   );
 }
