@@ -96,11 +96,15 @@ await ok("ordem: empate de dias pelo nome (sem acento/maiúscula), lista origina
   assert.equal(ordenarPorDiasTrabalhados([{ nomeCompleto: "A", diasTrabalhados: 1 }]).length, 1);
   assert.equal(ordenarPorDiasTrabalhados([{ nomeCompleto: "A", diasTrabalhados: -5 }, { nomeCompleto: "B", diasTrabalhados: 2 }])[0].diasTrabalhados, 2, "data futura (negativo) vai para o fim");
 });
-await ok("tela: coluna 'Dias Trabalhados' destacada em verde (cabeçalho e valores), título clicável inverte a ordem; a lista passa pela mesma função pura", () => {
+await ok("tela: SEM destaque verde nos dias; selo de modalidade com cores bem diferentes (MOT azul, Terceirização preto/dourado), sem repetir cor de situação; título da coluna inverte a ordem", () => {
   const tela = fs.readFileSync("src/components/VencimentoContratoPageClient.tsx", "utf8");
-  for (const t of ["DESTAQUE_DIAS", "#DCFCE7", "#F0FDF4", "#166534", 'useState<OrdemDiasTrabalhados>("desc")', "ordenarPorDiasTrabalhados(linhasIniciais, ordemDias)", "aria-sort", "▼", "▲", "Do maior para o menor"]) assert.ok(tela.includes(t), t);
+  for (const t of ["DESTAQUE_DIAS", "#DCFCE7", "#F0FDF4", "#166534"]) assert.equal(tela.includes(t), false, `sem o verde dos dias: ${t}`);
+  const bloco = tela.slice(tela.indexOf("const SELO_MODALIDADE"), tela.indexOf("export default function"));
+  assert.ok(bloco.includes('MOT: { bg: "#DBEAFE", text: "#1D4ED8", borda: "#93C5FD" }'));
+  assert.ok(bloco.includes('"Terceirização": { bg: "#111827", text: "#FFD700", borda: "#111827" }'));
+  for (const corDeSituacao of ["#D1FAE5", "#FEF3C7", "#FFEDD5", "#FEE2E2", "#EDE9FE", "#6D28D9", "#5B21B6"]) assert.equal(bloco.includes(corDeSituacao), false, `cor de situação reaproveitada: ${corDeSituacao}`);
+  for (const t of ['useState<OrdemDiasTrabalhados>("desc")', "ordenarPorDiasTrabalhados(linhasIniciais, ordemDias)", "aria-sort", "▼", "▲", "Do maior para o menor", "border: `1px solid"]) assert.ok(tela.includes(t), t);
 });
-
 await ok("escopo por unidade: supervisor da U1 só vê terceirizado da U1; o da U2 não vê o da U1", async () => {
   const db = cenario([[1, TERC, 300], [2, TERC, 300, { unidade_id: "U2" }]]);
   assert.deepEqual(await idsPainel(db, "dir"), [id(1), id(2)]);
