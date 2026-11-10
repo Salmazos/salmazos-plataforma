@@ -2,7 +2,7 @@ import type { createServiceClient } from "@/lib/supabase/server";
 import { apelidoDoNomeCompleto } from "@/lib/responsaveis";
 import { STATUS_ATIVOS, type Beneficiario, type Lancamento } from "@/lib/comissao";
 import { calcularComissao, competenciaAtual, competenciaDoInstante, dentroDaFolga, mesAnteriorDe, selecionarParaFechamento } from "@/lib/comissaoRegras";
-import { competenciaFechavel, diasEntre, janelaDeLembrete, type JanelaLembrete } from "@/lib/comissaoPendenciasRegras";
+import { competenciaFechavel, competenciaNoControle, diasEntre, janelaDeLembrete, type JanelaLembrete } from "@/lib/comissaoPendenciasRegras";
 
 // Pendências de comissão (rede de segurança): o que o beneficiário ainda não lançou e o que a diretoria ainda não fez. É ESTADO, não
 // evento: sai do banco a cada consulta (popup ao entrar, sino diário), então não existe "esqueceu de avisar" nem aviso que se perde.
@@ -22,8 +22,12 @@ export interface CobrancaSemComissao {
 }
 
 // Cobranças R&S de contratação já enviadas (enviada/validada/paga; nunca cancelada nem em revisão), com fee, fora reposição por garantia,
-// dos meses de competência pedidos e SEM comissão ativa de ninguém. Mesma elegibilidade de "Cobranças para marcar".
+// dos meses de competência pedidos (a partir do início do controle) e SEM comissão ativa de ninguém. Mesma elegibilidade de "Cobranças para marcar".
 export async function cobrancasSemComissao(svc: Service, o: { competencias: readonly string[] }): Promise<CobrancaSemComissao[]> {
+  // Mês anterior ao início do controle no sistema (planilha): nunca é "sem comissão marcada" (ver COMISSAO_CONTROLE_INICIO). Vale para o
+  // possível esquecimento da diretoria e para o popup/sino do beneficiário, que passam todos por aqui.
+  const competenciasNoControle = o.competencias.filter(competenciaNoControle);
+  if (competenciasNoControle.length === 0) return [];
   const { data, error } = await svc
     .from("cobrancas_rs")
     .select("id, vaga_id, status, fee_valor, enviado_em, gerado_por_user_id, cliente_nome_snapshot, unidade_id")
@@ -35,7 +39,7 @@ export async function cobrancasSemComissao(svc: Service, o: { competencias: read
   if (error) throw new Error(`Não foi possível ler as cobranças: ${error.message}`);
   const linhas = ((data ?? []) as unknown as {
     id: string; vaga_id: string; fee_valor: number | null; enviado_em: string | null; gerado_por_user_id: string | null; cliente_nome_snapshot: string | null; unidade_id: string;
-  }[]).filter((c) => c.enviado_em && Number(c.fee_valor) > 0 && o.competencias.includes(competenciaDoInstante(c.enviado_em)));
+  }[]).filter((c) => c.enviado_em && Number(c.fee_valor) > 0 && competenciasNoControle.includes(competenciaDoInstante(c.enviado_em)));
   if (linhas.length === 0) return [];
 
   const ids = linhas.map((c) => c.id);

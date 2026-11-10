@@ -5,9 +5,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 // @ts-expect-error módulo .mjs do harness, sem tipos
 import { congelarData, logar, importar, chamar, novoDb, usuario, USUARIOS } from "./harness-mot/ambiente.mjs";
-import { janelaDeLembrete, competenciaFechavel, textosSino, diasNoMes, TIPO_SINO_COMISSAO } from "../src/lib/comissaoPendenciasRegras";
+import {
+  janelaDeLembrete, competenciaFechavel, textosSino, diasNoMes, TIPO_SINO_COMISSAO, COMISSAO_CONTROLE_INICIO, competenciaNoControle, definirInicioDoControleParaTeste,
+} from "../src/lib/comissaoPendenciasRegras";
 
 congelarData(); // 07/10/2026 15:00Z
+// Os cenários 1 a 6 usam cobranças de OUTUBRO (antes do go-live real, 2026-11); para elas valerem, o início do controle é recuado. A seção 7 volta ao valor real.
+definirInicioDoControleParaTeste("2000-01-01");
 process.env.CRON_SECRET = "segredo-de-teste";
 const R = {
   marcar: await importar("src/app/api/comissoes/marcar/route.ts"),
@@ -262,6 +266,84 @@ await ok("fiação: popup montado só para quem tem acesso às comissões, cron 
   assert.ok(vercel.crons.some((c: any) => c.path === "/api/cron/comissao-pendencias"));
   const popup = fs.readFileSync("src/components/comissao/PopupComissoesPendencias.tsx", "utf8");
   for (const t of ["Para você lançar", "Para a diretoria", "sem comissão marcada", "sem pagamento há", "liberado", "contestada", "/painel/minhas-comissoes", "/painel/comissoes", "sessionStorage"]) assert.ok(popup.includes(t), t);
+});
+
+// ── 7) Início do controle no sistema: cobrança anterior ao go-live nunca entra no aviso "sem comissão marcada" ──
+const MES_FIM = "2026-12-10T15:00:00Z"; // novembro já passou do prazo (dia 10), outubro idem
+await ok("constante única do início do controle: 2026-11-01; competência anterior fica de fora, a partir dela entra (limite no fuso de Brasília)", () => {
+  definirInicioDoControleParaTeste(null);
+  assert.equal(COMISSAO_CONTROLE_INICIO, "2026-11-01");
+  assert.equal(competenciaNoControle("2026-10-01"), false);
+  assert.equal(competenciaNoControle("2026-11-01"), true);
+  assert.equal(competenciaNoControle("2027-01-01"), true);
+});
+await ok("diretoria: cobrança de OUTUBRO sem comissão não é possível esquecimento (popup e sino); a de NOVEMBRO sem comissão depois do prazo é", async () => {
+  definirInicioDoControleParaTeste(null);
+  const db = cenario(); logar(db, "dir");
+  cobranca(db, { enviado_em: "2026-10-20T12:00:00Z", cliente_nome_snapshot: "Cliente BioSafe" });
+  cobranca(db, { enviado_em: "2026-10-31T23:30:00-03:00", cliente_nome_snapshot: "Cliente Rovensa" });
+  await em("2026-11-10T15:00:00Z", async () => { // outubro: prazo terminou, mas é anterior ao controle
+    assert.equal((await pend(db, "dir")).diretoria.esquecidas, null, "popup");
+    await cron(); assert.equal(sinos(db, (x: any) => x.tipo === TIPO_SINO_COMISSAO.diretoriaEsquecidas).length, 0, "sino");
+  });
+  const nov = cobranca(db, { enviado_em: "2026-11-05T12:00:00Z", cliente_nome_snapshot: "Cliente Novembro" });
+  const nov1 = cobranca(db, { enviado_em: "2026-11-01T00:10:00-03:00", cliente_nome_snapshot: "Cliente Dia1" }); // 00:10 BRT do dia 1 = novembro
+  await em(MES_FIM, async () => {
+    const e = (await pend(db, "dir")).diretoria.esquecidas;
+    assert.deepEqual([e.competencia, e.itens.map((i: any) => i.id).sort()], ["2026-11-01", [nov, nov1].sort()], "só novembro");
+    assert.equal(JSON.stringify(e).includes("BioSafe") || JSON.stringify(e).includes("Rovensa"), false);
+    await cron(); const s = sinos(db, (x: any) => x.tipo === TIPO_SINO_COMISSAO.diretoriaEsquecidas);
+    assert.equal(s.length, 1); assert.match(s[0].mensagem, /^2 cobranças de novembro\/2026,/);
+  });
+});
+await ok("analista: cobrança de outubro sem comissão não vira lembrete nem popup (nem na folga de novembro); a de novembro vira", async () => {
+  definirInicioDoControleParaTeste(null);
+  const db = cenario();
+  const out = cobranca(db, { enviado_em: "2026-10-31T20:30:00Z", gerado_por_user_id: "u-gio", vaga_id: V_GIO });
+  await em(DIA2, async () => { // dias 1–3 de novembro: o mês anterior (outubro) ainda é marcável, mas não gera aviso
+    const p = (await pend(db, "gio")).beneficiario; assert.deepEqual(p.a_lancar, [], "popup");
+    logar(db, "dir"); await cron(); assert.equal(sinos(db, (x: any) => x.tipo === TIPO_SINO_COMISSAO.lembreteLancamento).length, 0, "sino");
+  });
+  const nov = cobranca(db, { enviado_em: "2026-11-02T11:00:00Z", gerado_por_user_id: "u-gio", vaga_id: V_GIO });
+  await em(DIA2, async () => {
+    assert.deepEqual((await pend(db, "gio")).beneficiario.a_lancar.map((x: any) => x.id), [nov], "popup: novembro entra");
+    logar(db, "dir"); await cron();
+    assert.equal(sinos(db, (x: any) => x.tipo === TIPO_SINO_COMISSAO.lembreteLancamento).length, 0, "nos dias 1–3 o lembrete mira outubro (fora do controle); o de novembro vem no fim do mês");
+  });
+  await em("2026-11-29T15:00:00Z", async () => { // últimos dias de novembro: lembrete do mês corrente, que está sob controle
+    logar(db, "dir"); await cron();
+    const s = sinos(db, (x: any) => x.tipo === TIPO_SINO_COMISSAO.lembreteLancamento);
+    assert.equal(s.length, 1); assert.match(s[0].mensagem, /^1 cobrança sua de novembro\/2026 está sem comissão marcada\. Prazo até 03\/12\/2026/);
+  });
+  void out;
+});
+await ok("virada de ano: cobrança de dezembro/2026 sem comissão, em 10/01/2027, é possível esquecimento; a de outubro continua de fora", async () => {
+  definirInicioDoControleParaTeste(null);
+  const db = cenario(); logar(db, "dir");
+  const dez = cobranca(db, { enviado_em: "2026-12-31T23:30:00-03:00" }); cobranca(db, { enviado_em: "2026-10-15T12:00:00Z" });
+  await em("2027-01-10T15:00:00Z", async () => {
+    const e = (await pend(db, "dir")).diretoria.esquecidas;
+    assert.deepEqual([e.competencia, e.itens.map((i: any) => i.id)], ["2026-12-01", [dez]]);
+  });
+});
+await ok("os demais avisos da diretoria NÃO dependem do início do controle: contestação, fechamento liberado e fechamento sem pagamento de outubro continuam", async () => {
+  definirInicioDoControleParaTeste(null);
+  const db = cenario();
+  lanc(db, { status: "contestada", contestado_em: "2026-10-12T12:00:00Z" }); lanc(db);
+  db.tabelas.comissao_fechamentos.push({ id: ID(995), competencia: "2026-08-01", unidade_id: "U1", total: 80, qtd_lancamentos: 2, fechado_em: "2026-09-05T13:00:00Z", pago_em: null });
+  await em(DIA10, async () => {
+    const d = (await pend(db, "dir")).diretoria;
+    assert.equal(d.contestadas.qtd, 1); assert.equal(d.fechamento.unidades[0].qtd, 1); assert.equal(d.pagamento.length, 1);
+    logar(db, "dir"); await cron();
+    assert.deepEqual(sinos(db, (x: any) => x.tipo.startsWith("comissao_diretoria_")).map((x: any) => x.tipo).sort(), [TIPO_SINO_COMISSAO.diretoriaContestadas, TIPO_SINO_COMISSAO.diretoriaFechamento, TIPO_SINO_COMISSAO.diretoriaPagamento].sort());
+  });
+});
+await ok("regra documentada: a constante é única e os avisos de 'sem comissão' passam por um ponto só", () => {
+  const regras = fs.readFileSync("src/lib/comissaoPendenciasRegras.ts", "utf8");
+  assert.equal((regras.match(/export const COMISSAO_CONTROLE_INICIO = /g) ?? []).length, 1);
+  const serv = fs.readFileSync("src/lib/comissaoPendencias.ts", "utf8");
+  assert.ok(serv.includes("competenciaNoControle") && serv.includes("o.competencias.filter(competenciaNoControle)"));
+  definirInicioDoControleParaTeste("2000-01-01");
 });
 
 console.log(`\n${n} verificações OK`);
