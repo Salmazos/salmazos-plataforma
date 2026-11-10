@@ -8,6 +8,8 @@ import { calcularStatusAso, ASO_STATUS_INFO } from "@/lib/asoStatus";
 import { TURNOS_FUNCIONARIO } from "@/lib/constants";
 import ModalAdicionarFuncionario from "./ModalAdicionarFuncionario";
 import ModalLancarRescisao from "./ModalLancarRescisao";
+import BuscaNomeFuncionario from "./BuscaNomeFuncionario";
+import { nomeContem, ordenarPorNome } from "@/lib/funcionariosBusca";
 
 export interface FuncionarioRow {
   id: string;
@@ -166,18 +168,22 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
   const totalTerc = useMemo(() => ativos.filter((f) => f.tipo_servico === "terceirizacao").length, [ativos]);
   const totalSemModalidade = useMemo(() => ativos.filter((f) => !f.tipo_servico).length, [ativos]);
 
-  const filtrados = useMemo(() => {
-    const buscaLower = busca.trim().toLowerCase();
+  // Filtros de status/empresa/modalidade (sem o texto da busca): a janela de nomes do campo de busca mostra só quem passa por eles, para
+  // nunca oferecer um nome que a lista não vai exibir (ex.: um desligado com o filtro em "Ativo").
+  const passaFiltros = useMemo(() => {
     return funcionariosIniciais.filter((f) => {
       if (filtroStatus !== "todos" && f.status !== filtroStatus) return false;
       if (filtroClienteId && f.cliente_id !== filtroClienteId) return false;
       if (filtroModalidade === SEM_MODALIDADE) {
         if (f.tipo_servico) return false;
       } else if (filtroModalidade && f.tipo_servico !== filtroModalidade) return false;
-      if (buscaLower && !f.nome_completo.toLowerCase().includes(buscaLower)) return false;
       return true;
     });
-  }, [funcionariosIniciais, filtroStatus, filtroClienteId, filtroModalidade, busca]);
+  }, [funcionariosIniciais, filtroStatus, filtroClienteId, filtroModalidade]);
+
+  // Lista sempre em ordem alfabética (sem diferenciar maiúscula nem acento); a busca também ignora acento.
+  const filtrados = useMemo(() => ordenarPorNome(passaFiltros.filter((f) => nomeContem(f.nome_completo, busca))), [passaFiltros, busca]);
+  const opcoesNomes = useMemo(() => ordenarPorNome(passaFiltros).map((f) => ({ id: f.id, nome: f.nome_completo, detalhe: f.empresa ?? f.clientes?.nome ?? null })), [passaFiltros]);
 
   return (
     <div>
@@ -252,14 +258,7 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
       </div>
 
       <div className="flex gap-3 mb-4 flex-wrap">
-        <input
-          type="text"
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar por nome..."
-          className="input-field"
-          style={{ maxWidth: 240 }}
-        />
+        <BuscaNomeFuncionario value={busca} onChange={setBusca} opcoes={opcoesNomes} />
         <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className="input-field" style={{ maxWidth: 200 }}>
           <option value="todos">Todos os status</option>
           <option value="ativo">Ativo</option>
