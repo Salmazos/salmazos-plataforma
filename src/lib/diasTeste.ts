@@ -67,6 +67,20 @@ export function textoDiasTesteParaRH(
   return null;
 }
 
+// E-mail da contabilidade (admissão): texto CURTO da linha "Dias de teste". Só MOT e Terceirização (R&S nunca leva a linha, mesmo que haja
+// algum valor perdido na coluna). 1 -> "1 dia"; 2 -> "2 dias"; 0 -> "Não houve"; sem quantidade, o texto antigo (admissao_dia_teste) como foi
+// digitado; sem nada, "Não informado pelo cliente". null = linha omitida. A regra de valor/legado é a mesma de textoDiasTesteParaRH; só o
+// formato do texto muda (aqui sem a palavra "teste", que já está no rótulo).
+export const TEXTO_DIAS_TESTE_NAO_INFORMADO = "Não informado pelo cliente";
+
+export function textoDiasTesteParaContabilidade(qtd: unknown, textoLegado: string | null | undefined, tipoServico: string | null | undefined): string | null {
+  if (!exigeRespostaDiasTeste(tipoServico)) return null;
+  const n = qtdValida(qtd);
+  if (n !== null) return n === 0 ? "Não houve" : n === 1 ? "1 dia" : `${n} dias`;
+  const legado = textoLegado?.trim();
+  return legado || TEXTO_DIAS_TESTE_NAO_INFORMADO;
+}
+
 // Selo da listagem de admissões: só quando houve teste ("2 dia(s)"); 0 e null não ganham selo.
 export function seloDiasTeste(qtd: unknown): string | null {
   const n = qtdValida(qtd);

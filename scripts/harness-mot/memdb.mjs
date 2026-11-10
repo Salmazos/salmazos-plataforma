@@ -20,6 +20,8 @@ const RELACOES = {
   vagas: { clientes: { alvo: "clientes", local: "cliente_id" } },
   // Cobrança R&S (scripts/verificar-cobranca-rs-pf.mts): GET /api/cobrancas-rs/[id] e aprovar leem a cobrança com vaga e cliente.
   cobrancas_rs: { vagas: { alvo: "vagas", local: "vaga_id" }, clientes: { alvo: "clientes", local: "cliente_id" } },
+  // E-mail do pacote para a contabilidade (scripts/verificar-email-pacote-contabilidade.mts): a admissão lê o candidato e a vaga (com o cliente).
+  admissoes: { candidatos: { alvo: "candidatos", local: "candidato_id" }, vagas: { alvo: "vagas", local: "vaga_id" } },
 };
 
 export function criarDb(seed = {}) {
@@ -362,6 +364,12 @@ export function criarClienteServico(db) {
         createSignedUploadUrl: async (caminho) => falhaStorage("storage.upload") ?? ({ data: { signedUrl: `https://stub/${balde}/up/${caminho}`, path: caminho, token: "tk" }, error: null }),
         createSignedUrl: async (caminho) => falhaStorage("storage.url") ?? ({ data: { signedUrl: `https://stub/${balde}/dl/${caminho}` }, error: null }),
         remove: async () => ({ error: null }),
+        // Arquivos de teste ficam em db.arquivos[caminho] (Buffer/Uint8Array); sem ele, o download falha como no storage real.
+        download: async (caminho) => {
+          const conteudo = db.arquivos?.[caminho];
+          return conteudo ? { data: new Blob([conteudo]), error: null } : { data: null, error: { message: "Object not found" } };
+        },
+        list: async (pasta, opcoes) => ({ data: Object.keys(db.arquivos ?? {}).filter((c) => c.startsWith(`${pasta}/`) && (!opcoes?.search || c.endsWith(opcoes.search))).map((c) => ({ name: c.slice(pasta.length + 1), metadata: { size: db.arquivos[c].length } })), error: null }),
       }),
     },
   };

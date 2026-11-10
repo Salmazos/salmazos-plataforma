@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { MAX_DIAS_TESTE } from "@/lib/diasTeste";
 import {
   avisosCamposFaltando, formatarDataHoraBR, formatarMB, interpretarValorBR, listarCamposEditados, montarAssuntoDeCampos,
   montarLinhasDeCampos, nomeArquivoAnexo, numeroParaBR, validarCamposEmail,
@@ -23,6 +24,8 @@ interface Preview {
   empresa: string;
   cliente: string;
   avisoCc: string | null;
+  // Dias de teste: `exige` = MOT/Terceirização (só nelas o campo e a linha existem); `legado` = texto antigo do cadastro.
+  diasTeste: { exige: boolean; tipoServico: string | null; legado: string | null };
   ultimoEnvio: { em: string; por_nome: string | null; para: string | null } | null;
 }
 
@@ -42,12 +45,15 @@ interface Form {
   horario: string;
   telefone: string;
   tempoContrato: string;
+  // "" = não informado; "0" = não houve; "1" ou "2" = dias.
+  diasTeste: string;
 }
 
 function formDoCadastro(c: CamposEmailContabilidade): Form {
   return {
     nome: c.nome, funcao: c.funcao, dataInicio: c.dataInicio, salarioTxt: numeroParaBR(c.salarioValor),
     salarioTipo: c.salarioTipo ?? "mensal", horario: c.horario, telefone: c.telefone, tempoContrato: c.tempoContrato,
+    diasTeste: c.diasTeste === null ? "" : String(c.diasTeste),
   };
 }
 
@@ -56,6 +62,7 @@ function camposDoForm(f: Form) {
     nome: f.nome, funcao: f.funcao, dataInicio: f.dataInicio, horario: f.horario, telefone: f.telefone, tempoContrato: f.tempoContrato,
     salarioValor: interpretarValorBR(f.salarioTxt), // NaN = inválido (a validação acusa)
     salarioTipo: f.salarioTipo,
+    diasTeste: f.diasTeste === "" ? null : Number(f.diasTeste),
   };
 }
 
@@ -96,9 +103,11 @@ export default function ModalEnviarPacoteEmail({ admissaoId, onClose, onEnviado 
     () => (preview && campos ? new Set(listarCamposEditados(preview.campos, campos)) : new Set()),
     [preview, campos]
   );
-  const linhasPrevia = preview && campos ? montarLinhasDeCampos(campos, preview.empresa, preview.cliente, preview.tempoContratoPadrao) : [];
+  // Contexto do cadastro para a linha "Dias de teste" (mesma fonte do servidor: montarLinhasDeCampos).
+  const ctxDias = preview ? { tipoServico: preview.diasTeste.tipoServico, legado: preview.diasTeste.legado } : null;
+  const linhasPrevia = preview && campos ? montarLinhasDeCampos(campos, preview.empresa, preview.cliente, preview.tempoContratoPadrao, ctxDias) : [];
   const assunto = campos ? montarAssuntoDeCampos(campos) : "";
-  const avisos = preview && campos ? avisosCamposFaltando(campos, preview.empresa, preview.cliente) : [];
+  const avisos = preview && campos ? avisosCamposFaltando(campos, preview.empresa, preview.cliente, ctxDias) : [];
 
   const jaEnviado = !!preview?.ultimoEnvio;
   const passaDoLimite = !!preview && preview.tamanhoPdfBytes !== null && preview.tamanhoPdfBytes > preview.limiteAnexoBytes;
@@ -217,6 +226,19 @@ export default function ModalEnviarPacoteEmail({ admissaoId, onClose, onEnviado 
                   <label className={rotulo}>Tempo de contrato{selo("tempoContrato")}</label>
                   <input className="input-field" style={estilo("tempoContrato")} value={form.tempoContrato} onChange={(e) => set("tempoContrato", e.target.value)} maxLength={200} />
                 </div>
+                {preview.diasTeste.exige && (
+                  <div>
+                    <label className={rotulo}>Dias de teste{selo("diasTeste")}</label>
+                    <select className="input-field" style={estilo("diasTeste")} value={form.diasTeste} onChange={(e) => set("diasTeste", e.target.value)}>
+                      <option value="">Não informado</option>
+                      <option value="0">Não houve</option>
+                      {Array.from({ length: MAX_DIAS_TESTE }, (_, i) => i + 1).map((n) => <option key={n} value={String(n)}>{n === 1 ? "1 dia" : `${n} dias`}</option>)}
+                    </select>
+                    {preview.diasTeste.legado && form.diasTeste === "" && (
+                      <p className="text-[11px] text-gray-500 mt-1">Registro antigo do cadastro: “{preview.diasTeste.legado}” (vai assim no e-mail).</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -233,7 +255,7 @@ export default function ModalEnviarPacoteEmail({ admissaoId, onClose, onEnviado 
 
             {avisos.length > 0 && (
               <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-3 py-2 text-xs text-yellow-900">
-                <p className="font-semibold mb-1">⚠️ Campos faltando (as linhas correspondentes não vão no e-mail):</p>
+                <p className="font-semibold mb-1">⚠️ Confira antes de enviar (não bloqueia o envio):</p>
                 <ul className="list-disc ml-4">{avisos.map((a) => <li key={a}>{a}</li>)}</ul>
               </div>
             )}

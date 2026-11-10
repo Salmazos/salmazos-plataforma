@@ -3,7 +3,7 @@ export async function sendEmail(opts) {
   const db = globalThis.__DB__;
   const falha = db.falhas?.["sendEmail"];
   if (falha) return { success: false, error: falha };
-  (db.emails ??= []).push({ to: opts.to, subject: opts.subject, html: opts.html, tipo: opts.tipo ?? null, vaga_id: opts.vaga_id ?? null, candidato_id: opts.candidato_id ?? null });
+  (db.emails ??= []).push({ to: opts.to, subject: opts.subject, html: opts.html, tipo: opts.tipo ?? null, vaga_id: opts.vaga_id ?? null, candidato_id: opts.candidato_id ?? null, cc: opts.cc ?? null, anexos: (opts.attachments ?? []).map((a) => a.filename) });
   return { success: true };
 }
 export function obterRemetente() {

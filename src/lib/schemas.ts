@@ -1814,6 +1814,8 @@ export const admissaoEnviarEmailContabilidadeSchema = z.object({
       telefone: textoCampoEmail,
       dataInicio: textoCampoEmail,
       tempoContrato: textoCampoEmail,
+      // Só 0, 1 ou 2 (qtdDiasTesteSchema); null = não informado. O servidor ainda ignora o valor em R&S.
+      diasTeste: qtdDiasTesteSchema.nullable().optional(),
     })
     .optional(),
 });

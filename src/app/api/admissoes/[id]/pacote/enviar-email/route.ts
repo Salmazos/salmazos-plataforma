@@ -7,6 +7,8 @@ import { ENTIDADES_CONTRATANTES, EMAIL_CONTABILIDADE_CC_MINIMO, TEMPO_CONTRATO_P
 import { exibirTelefone } from "@/lib/utils";
 import { sendEmail, obterRemetente } from "@/lib/sendEmail";
 import { registrarAuditoria } from "@/lib/audit";
+import { resolverTipoServicoVigente } from "@/lib/tipoServicoVigente";
+import { exigeRespostaDiasTeste } from "@/lib/diasTeste";
 import {
   LIMITE_ANEXO_EMAIL_BYTES, formatarMB, montarHtmlEmail, montarLinhaEmpresa, montarTextoEmail, nomeArquivoAnexo, podeEnviarAgora,
   resolverTempoContrato, saudacaoSaoPaulo, separarParaCc, classificarErroEmail, validarCamposEmail, montarAssuntoDeCampos,
@@ -32,7 +34,7 @@ async function carregarContexto(svc: ServiceClient, id: string) {
     .select(
       "id, candidato_id, vaga_id, pdf_pacote_path, data_admissao, funcao, salario, tipo_salario, horario_trabalho, entidade_contratante, " +
         "pacote_enviado_email_em, pacote_enviado_email_por, pacote_enviado_email_para, " +
-        "candidatos(nome_completo, telefone), vagas(cliente_id, clientes(nome, entidade_contratante))"
+        "candidatos(nome_completo, telefone), vagas(cliente_id, tipo_servico, clientes(nome, entidade_contratante))"
     )
     .eq("id", id)
     .maybeSingle();
@@ -43,7 +45,7 @@ async function carregarContexto(svc: ServiceClient, id: string) {
   const [{ data: dp }, { data: cv }, { data: destinatarios }] = await Promise.all([
     svc.from("admissao_dados_pessoais").select("nome_completo, telefone").eq("admissao_id", id).maybeSingle(),
     adm.candidato_id && adm.vaga_id
-      ? svc.from("candidatos_vagas").select("admissao_data_inicio, admissao_tempo_contrato").eq("candidato_id", adm.candidato_id).eq("vaga_id", adm.vaga_id).limit(1).maybeSingle()
+      ? svc.from("candidatos_vagas").select("admissao_data_inicio, admissao_tempo_contrato, admissao_qtd_dias_teste, admissao_dia_teste").eq("candidato_id", adm.candidato_id).eq("vaga_id", adm.vaga_id).limit(1).maybeSingle()
       : Promise.resolve({ data: null }),
     svc.from("admissao_contabilidade_email_destinatarios").select("nome, email, copia, ativo").eq("ativo", true).order("nome"),
   ]);
@@ -53,6 +55,11 @@ async function carregarContexto(svc: ServiceClient, id: string) {
   const entidadeValue: string | null = adm.entidade_contratante ?? cliente?.entidade_contratante ?? null;
   const entidade = ENTIDADES_CONTRATANTES.find((e) => e.value === entidadeValue);
   const tempoContratoSugerido = resolverTempoContrato(cv?.admissao_tempo_contrato, TEMPO_CONTRATO_PADRAO);
+  // Dias de teste: o tipo de serviço VIGENTE (encaminhamento mais recente; cai para o da vaga) decide se a linha existe (só MOT/Terceirização).
+  // A quantidade vem de candidatos_vagas; o texto antigo (admissao_dia_teste) só aparece quando não há quantidade. Nada disso é gravado.
+  const tipoVaga: string | null = adm.vagas?.tipo_servico ?? null;
+  const tipoServicoVigente = adm.candidato_id && adm.vaga_id ? await resolverTipoServicoVigente(svc, adm.candidato_id, adm.vaga_id, tipoVaga) : tipoVaga;
+  const diasTesteCtx = { tipoServico: tipoServicoVigente, legado: ((cv?.admissao_dia_teste as string | null | undefined) ?? "").trim() || null };
 
   // Valores do cadastro, já normalizados: base da prévia e da comparação "o que foi editado".
   const dataBruta: string = adm.data_admissao || cv?.admissao_data_inicio || "";
@@ -67,6 +74,7 @@ async function carregarContexto(svc: ServiceClient, id: string) {
     telefone: exibirTelefone(dp?.telefone || candidato?.telefone || ""),
     dataInicio,
     tempoContrato: tempoContratoSugerido,
+    diasTeste: cv?.admissao_qtd_dias_teste ?? null,
   }).camposNormalizados;
   const empresa = entidade ? montarLinhaEmpresa(entidade.codigoContabilidade, entidade.razaoSocialContabilidade) : "";
   const nomeCliente = cliente?.nome ?? "";
@@ -74,6 +82,7 @@ async function carregarContexto(svc: ServiceClient, id: string) {
   return {
     adm,
     camposOriginais,
+    diasTesteCtx,
     empresa,
     cliente: nomeCliente,
     tempoContratoSugerido,
@@ -114,7 +123,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
   const ctx = await carregarContexto(svc, id);
   if (!ctx) return NextResponse.json({ error: "Admissão não encontrada." }, { status: 404 });
 
-  const linhas = montarLinhasDeCampos(ctx.camposOriginais, ctx.empresa, ctx.cliente, TEMPO_CONTRATO_PADRAO);
+  const linhas = montarLinhasDeCampos(ctx.camposOriginais, ctx.empresa, ctx.cliente, TEMPO_CONTRATO_PADRAO, ctx.diasTesteCtx);
   const saudacao = saudacaoSaoPaulo();
   const pdfExiste = !!ctx.adm.pdf_pacote_path;
   const tamanho = pdfExiste ? await tamanhoDoPdf(svc, ctx.adm.pdf_pacote_path) : null;
@@ -147,7 +156,9 @@ export async function GET(_request: NextRequest, { params }: Params) {
     campos: ctx.camposOriginais,
     empresa: ctx.empresa,
     cliente: ctx.cliente,
-    avisos: avisosCamposFaltando(ctx.camposOriginais, ctx.empresa, ctx.cliente),
+    avisos: avisosCamposFaltando(ctx.camposOriginais, ctx.empresa, ctx.cliente, ctx.diasTesteCtx),
+    // Contexto dos dias de teste (não editável): `exige` = MOT/Terceirização (campo e linha só existem aí); `legado` = texto antigo do cadastro.
+    diasTeste: { exige: exigeRespostaDiasTeste(ctx.diasTesteCtx.tipoServico), tipoServico: ctx.diasTesteCtx.tipoServico, legado: ctx.diasTesteCtx.legado },
     ultimoEnvio,
   });
 }
@@ -178,13 +189,19 @@ export async function POST(request: NextRequest, { params }: Params) {
   // Campos do e-mail: os do modal (se vieram) ou os do cadastro, como antes. Valem só para este e-mail:
   // nada é gravado em admissoes, admissao_dados_pessoais, candidatos nem candidatos_vagas.
   const entrada = parsed.data.campos
-    ? { ...parsed.data.campos, tempoContrato: parsed.data.campos.tempoContrato ?? parsed.data.tempoContrato ?? "" }
+    ? {
+        ...parsed.data.campos,
+        tempoContrato: parsed.data.campos.tempoContrato ?? parsed.data.tempoContrato ?? "",
+        // Campo ausente (cliente antigo da API) = valor do cadastro; nunca "não informado" por omissão.
+        diasTeste: parsed.data.campos.diasTeste !== undefined ? parsed.data.campos.diasTeste : ctx.camposOriginais.diasTeste,
+      }
     : { ...ctx.camposOriginais, tempoContrato: parsed.data.tempoContrato ?? ctx.camposOriginais.tempoContrato };
   const validacao = validarCamposEmail(entrada);
   if (!validacao.ok) {
     return NextResponse.json({ error: `Corrija os campos do e-mail: ${validacao.erros.join(" ")}`, erros: validacao.erros }, { status: 400 });
   }
-  const camposEmail = validacao.camposNormalizados;
+  // Em R&S não existe dia de teste: o valor que vier do cliente é descartado (a linha também não entra, ver diasTesteCtx).
+  const camposEmail = exigeRespostaDiasTeste(ctx.diasTesteCtx.tipoServico) ? validacao.camposNormalizados : { ...validacao.camposNormalizados, diasTeste: null };
   const camposEditados = listarCamposEditados(ctx.camposOriginais, camposEmail);
 
   // Baixa o PDF já gerado (nunca gera de novo).
@@ -202,7 +219,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const assunto = semQuebraDeLinha(montarAssuntoDeCampos(camposEmail));
   // O servidor SEMPRE monta o corpo (nunca confia em HTML do cliente), a partir dos campos normalizados.
-  const html = montarHtmlEmail(saudacaoSaoPaulo(), montarLinhasDeCampos(camposEmail, ctx.empresa, ctx.cliente, TEMPO_CONTRATO_PADRAO));
+  const html = montarHtmlEmail(saudacaoSaoPaulo(), montarLinhasDeCampos(camposEmail, ctx.empresa, ctx.cliente, TEMPO_CONTRATO_PADRAO, ctx.diasTesteCtx));
   const para = ctx.para.join(", ");
 
   const resultado = await sendEmail({

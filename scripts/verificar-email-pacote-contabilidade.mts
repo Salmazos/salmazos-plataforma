@@ -1,6 +1,11 @@
-// Verificação dos helpers puros do e-mail da contabilidade (o projeto não tem runner de testes).
-// Rodar: node --experimental-strip-types scripts/verificar-email-pacote-contabilidade.mts
+// Verificação do e-mail da contabilidade: helpers puros e a rota pacote/enviar-email (banco em memória, e-mail e storage simulados do harness).
+// Rodar: node --no-warnings --import ./scripts/harness-mot/register.mjs scripts/verificar-email-pacote-contabilidade.mts
 import assert from "node:assert/strict";
+import fs from "node:fs";
+// @ts-expect-error módulo .mjs do harness, sem tipos
+import { importar, chamar, novoDb, logar } from "./harness-mot/ambiente.mjs";
+import { textoDiasTesteParaContabilidade, TEXTO_DIAS_TESTE_NAO_INFORMADO } from "../src/lib/diasTeste.ts";
+import { admissaoEnviarEmailContabilidadeSchema } from "../src/lib/schemas.ts";
 import {
   escaparHtml, formatarDataBR, formatarSalario, saudacaoSaoPaulo, montarAssunto, montarLinhasDados,
   montarHtmlEmail, montarTextoEmail, nomeArquivoAnexo, podeEnviarAgora, resolverTempoContrato,
@@ -9,6 +14,7 @@ import {
   MSG_ERRO_EMAIL_TIMEOUT, MSG_ERRO_EMAIL_AUTH, MSG_ERRO_EMAIL_OUTRO,
   sanitizarCampoEmail, validarCamposEmail, montarAssuntoDeCampos, montarLinhasDeCampos, listarCamposEditados, avisosCamposFaltando,
   interpretarValorBR, numeroParaBR, formatarTelefoneEmail, dataISOValida,
+  type ContextoDiasTeste,
 } from "../src/lib/emailPacoteContabilidade.ts";
 
 let total = 0;
@@ -222,6 +228,223 @@ caso("avisos sobre valores editados", () => {
   const v = validarCamposEmail({ ...original, funcao: "", salarioValor: null, salarioTipo: null }).camposNormalizados;
   assert.deepEqual(avisosCamposFaltando(v, "293 - E", "Cli"), ["Função não preenchida.", "Salário não preenchido."]);
   assert.deepEqual(avisosCamposFaltando(v, "", ""), ["Empresa (entidade contratante) não definida.", "Cliente não encontrado.", "Função não preenchida.", "Salário não preenchido."]);
+});
+
+// ── Dias de teste no e-mail (só MOT e Terceirização; R&S sem a linha) ──────────────────────────────────────────────────────
+const MOT = "mao_obra_temporaria", TERC = "terceirizacao", RS = "recrutamento_selecao";
+const ctx = (tipoServico: string | null, legado: string | null = null): ContextoDiasTeste => ({ tipoServico, legado });
+const linhaDias = (c: unknown, dias: ContextoDiasTeste | null) => montarLinhasDeCampos(validarCamposEmail(c).camposNormalizados, "293 - EMPRESA", "Cliente X", PADRAO, dias).find((l) => l.rotulo === "Dias de teste")?.valor;
+
+caso("texto: MOT 1 dia / 2 dias / 0 não houve / null não informado", () => {
+  assert.equal(textoDiasTesteParaContabilidade(1, null, MOT), "1 dia");
+  assert.equal(textoDiasTesteParaContabilidade(2, null, MOT), "2 dias");
+  assert.equal(textoDiasTesteParaContabilidade(0, null, MOT), "Não houve");
+  assert.equal(textoDiasTesteParaContabilidade(null, null, MOT), "Não informado pelo cliente");
+  assert.equal(TEXTO_DIAS_TESTE_NAO_INFORMADO, "Não informado pelo cliente");
+});
+caso("texto: Terceirização segue a mesma regra", () => {
+  assert.equal(textoDiasTesteParaContabilidade(2, null, TERC), "2 dias");
+  assert.equal(textoDiasTesteParaContabilidade(null, null, TERC), "Não informado pelo cliente");
+});
+caso("texto: sem quantidade, o texto ANTIGO aparece como foi digitado (aparado); com quantidade, o antigo é ignorado", () => {
+  assert.equal(textoDiasTesteParaContabilidade(null, "  meio período no dia 10  ", MOT), "meio período no dia 10");
+  assert.equal(textoDiasTesteParaContabilidade(undefined, "1 dia (sábado)", TERC), "1 dia (sábado)");
+  assert.equal(textoDiasTesteParaContabilidade(0, "texto antigo", MOT), "Não houve");
+  assert.equal(textoDiasTesteParaContabilidade(null, "   ", MOT), "Não informado pelo cliente");
+});
+caso("texto: R&S e tipo desconhecido NUNCA levam a linha (nem com valor perdido na coluna nem com texto antigo)", () => {
+  for (const t of [RS, null, undefined, "avaliacao_psicologica", ""]) {
+    assert.equal(textoDiasTesteParaContabilidade(2, "texto", t as string | null), null, String(t));
+    assert.equal(textoDiasTesteParaContabilidade(null, null, t as string | null), null, String(t));
+  }
+});
+caso("texto: valor fora de 0..2 ou não inteiro vale como não informado (nunca imprime lixo)", () => {
+  for (const v of [3, -1, 1.5, "2", NaN, {}]) assert.equal(textoDiasTesteParaContabilidade(v, null, MOT), "Não informado pelo cliente", String(v));
+});
+caso("linhas: MOT com 1 dia, 2 dias, 0, null e texto legado", () => {
+  assert.equal(linhaDias({ ...original, diasTeste: 1 }, ctx(MOT)), "1 dia");
+  assert.equal(linhaDias({ ...original, diasTeste: 2 }, ctx(MOT)), "2 dias");
+  assert.equal(linhaDias({ ...original, diasTeste: 0 }, ctx(MOT)), "Não houve");
+  assert.equal(linhaDias({ ...original, diasTeste: null }, ctx(MOT)), "Não informado pelo cliente");
+  assert.equal(linhaDias({ ...original }, ctx(MOT)), "Não informado pelo cliente", "campo ausente = não informado");
+  assert.equal(linhaDias({ ...original, diasTeste: null }, ctx(MOT, "teste de 1 dia, pago à parte")), "teste de 1 dia, pago à parte");
+  assert.equal(linhaDias({ ...original, diasTeste: 2 }, ctx(TERC)), "2 dias");
+});
+caso("linhas: R&S, tipo desconhecido e chamada sem contexto (como antes) não têm a linha", () => {
+  assert.equal(linhaDias({ ...original, diasTeste: 2 }, ctx(RS)), undefined);
+  assert.equal(linhaDias({ ...original, diasTeste: 2 }, ctx(null)), undefined);
+  assert.equal(linhaDias({ ...original, diasTeste: 2 }, null), undefined);
+  assert.equal(linhaDias({ ...original, diasTeste: 2 }, undefined as unknown as null), undefined);
+});
+caso("ordem: 'Dias de teste' vem logo DEPOIS de 'Tempo de Contrato' (lista, HTML e texto), e a linha de dias é a última antes da assinatura", () => {
+  const l = montarLinhasDeCampos(validarCamposEmail({ ...original, diasTeste: 1 }).camposNormalizados, "293 - E", "Cli", PADRAO, ctx(MOT));
+  const rot = l.map((x) => x.rotulo);
+  assert.equal(rot.indexOf("Dias de teste"), rot.indexOf("Tempo de Contrato") + 1);
+  assert.equal(rot[rot.length - 1], "Dias de teste");
+  const html = montarHtmlEmail("Bom dia", l);
+  assert.ok(html.indexOf("Dias de teste: 1 dia") > html.indexOf("Tempo de Contrato:"));
+  assert.ok(html.indexOf("Dias de teste: 1 dia") < html.indexOf("Salmazos RH"));
+  assert.ok(html.includes('<p style="margin:0 0 6px">Dias de teste: 1 dia</p>'), "sem negrito, como as demais");
+  const txt = montarTextoEmail("Bom dia", l).split("\n");
+  assert.equal(txt[txt.indexOf("Dias de teste: 1 dia") - 1].startsWith("Tempo de Contrato: "), true);
+  assert.deepEqual(txt.slice(-3), ["Dias de teste: 1 dia", "", "Salmazos RH"]);
+});
+caso("linhas sem a de dias: HTML/texto idênticos aos de antes (R&S não muda nada)", () => {
+  const l = montarLinhasDeCampos(validarCamposEmail({ ...original, diasTeste: 2 }).camposNormalizados, "293 - E", "Cli", PADRAO, ctx(RS));
+  assert.equal(l[l.length - 1].rotulo, "Tempo de Contrato");
+  assert.equal(montarHtmlEmail("Bom dia", l).includes("Dias de teste"), false);
+  assert.equal(montarTextoEmail("Bom dia", l).includes("Dias de teste"), false);
+});
+caso("validar: dias de teste aceita vazio/null, 0, 1, 2 (número ou texto numérico) e RECUSA o resto", () => {
+  for (const v of [undefined, null, ""]) { const r = validarCamposEmail({ ...original, diasTeste: v }); assert.equal(r.ok, true); assert.equal(r.camposNormalizados.diasTeste, null); }
+  for (const [v, esperado] of [[0, 0], [1, 1], [2, 2], ["0", 0], ["1", 1], [" 2 ", 2]] as const) { const r = validarCamposEmail({ ...original, diasTeste: v }); assert.equal(r.ok, true, String(v)); assert.equal(r.camposNormalizados.diasTeste, esperado); }
+  for (const v of [3, -1, 1.5, "abc", "3", "1.5", "-1", NaN, Infinity, true, {}, []]) {
+    const r = validarCamposEmail({ ...original, diasTeste: v });
+    assert.equal(r.ok, false, `${String(v)} deveria ser recusado`);
+    assert.ok(r.erros.some((e) => e.startsWith("Dias de teste inválido")), String(v));
+    assert.equal(r.camposNormalizados.diasTeste, null, "nunca guarda o valor inválido");
+  }
+});
+caso("edição: listarCamposEditados acusa só 'diasTeste' (e a edição não muda o objeto do cadastro)", () => {
+  const cad = { ...original, diasTeste: 1 }; const copia = JSON.stringify(cad);
+  assert.deepEqual(listarCamposEditados(cad, { ...cad, diasTeste: 2 }), ["diasTeste"]);
+  assert.deepEqual(listarCamposEditados(cad, { ...cad, diasTeste: null }), ["diasTeste"]);
+  assert.deepEqual(listarCamposEditados(cad, { ...cad, diasTeste: 0 }), ["diasTeste"]);
+  assert.deepEqual(listarCamposEditados(cad, { ...cad, diasTeste: "1" }), [], "mesmo valor, outra forma: não conta como edição");
+  assert.deepEqual(listarCamposEditados(cad, { ...cad, nome: "Maria Souza", diasTeste: 2 }), ["nome", "diasTeste"]);
+  assert.equal(JSON.stringify(cad), copia);
+  assert.deepEqual(listarCamposEditados({ ...original }, { ...original, diasTeste: null }), [], "ausente e null são iguais");
+});
+caso("aviso: só quando a linha dirá 'Não informado pelo cliente' (MOT/Terc, sem quantidade e sem texto antigo); não bloqueia", () => {
+  const aviso = (dias: number | null, c: ContextoDiasTeste | null) => avisosCamposFaltando(validarCamposEmail({ ...original, diasTeste: dias }).camposNormalizados, "293 - E", "Cli", c).filter((a) => a.startsWith("Dias de teste"));
+  assert.deepEqual(aviso(null, ctx(MOT)), ["Dias de teste não informado pelo cliente: o e-mail vai dizer “Não informado pelo cliente”."]);
+  assert.equal(aviso(null, ctx(TERC)).length, 1);
+  for (const [d, c] of [[0, ctx(MOT)], [1, ctx(MOT)], [2, ctx(TERC)], [null, ctx(MOT, "texto antigo")], [null, ctx(RS)], [null, ctx(null)], [null, null]] as const) assert.deepEqual(aviso(d, c), [], `${d}/${JSON.stringify(c)}`);
+  // a chamada antiga (3 argumentos) não ganha aviso novo
+  assert.deepEqual(avisosCamposFaltando(validarCamposEmail({ ...original }).camposNormalizados, "293 - E", "Cli"), []);
+});
+caso("schema do POST: diasTeste só 0, 1, 2 ou null; ausente passa; 3, -1, 1.5 e texto são recusados", () => {
+  const ok = (v: unknown) => admissaoEnviarEmailContabilidadeSchema.safeParse({ campos: { nome: "A", diasTeste: v } }).success;
+  for (const v of [0, 1, 2, null, undefined]) assert.equal(ok(v), true, String(v));
+  for (const v of [3, -1, 1.5, "1", NaN, true]) assert.equal(ok(v), false, String(v));
+  assert.equal(admissaoEnviarEmailContabilidadeSchema.safeParse({ campos: { nome: "A" } }).success, true);
+});
+
+// ── Rota pacote/enviar-email (banco em memória; e-mail e storage simulados) ──────────────────────────────────────────────
+const R = await importar("src/app/api/admissoes/[id]/pacote/enviar-email/route.ts");
+const ADM = "dddddddd-0000-4000-8000-000000000001", CAND = "dddddddd-0000-4000-8000-000000000002", VAGA = "dddddddd-0000-4000-8000-000000000003", PDF = `pacotes-contabilidade/${ADM}/pacote.pdf`;
+function cenarioRota(o: { tipoVaga: string; qtd: number | null; legado?: string | null; encaminhamento?: string | null }) {
+  const db = novoDb(); logar(db, "dir");
+  db.tabelas.admissoes = [{ id: ADM, candidato_id: CAND, vaga_id: VAGA, unidade_id: "U1", pdf_pacote_path: PDF, data_admissao: "2026-11-16", funcao: "Auxiliar de Produção", salario: 1800, tipo_salario: "mensal", horario_trabalho: "Segunda a sexta", entidade_contratante: "recrutamento_selecao_terceirizacao", pacote_enviado_email_em: null }];
+  db.tabelas.candidatos = [{ id: CAND, nome_completo: "Maria Exemplo", telefone: "19999990000" }];
+  db.tabelas.vagas = [{ id: VAGA, cliente_id: "C1", tipo_servico: o.tipoVaga }];
+  db.tabelas.admissao_dados_pessoais = [{ admissao_id: ADM, nome_completo: "Maria Exemplo", telefone: "19999990000" }];
+  db.tabelas.candidatos_vagas = [{ id: "cv1", candidato_id: CAND, vaga_id: VAGA, admissao_data_inicio: null, admissao_tempo_contrato: null, admissao_qtd_dias_teste: o.qtd, admissao_dia_teste: o.legado ?? null }];
+  db.tabelas.admissao_contabilidade_email_destinatarios = [{ nome: "Contab", email: "contab@x.com", copia: false, ativo: true }, { nome: "RH", email: "rh@x.com", copia: true, ativo: true }];
+  db.tabelas.encaminhamentos = o.encaminhamento ? [{ candidato_id: CAND, vaga_id: VAGA, tipo_servico: o.encaminhamento, created_at: "2026-11-01T10:00:00Z" }] : [];
+  db.tabelas.audit_logs = []; db.emails = []; db.arquivos = { [PDF]: Buffer.from("%PDF-1.4 teste") };
+  return db;
+}
+const preview = (db: any) => { logar(db, "dir"); return chamar(R.GET, { params: { id: ADM } }); };
+const enviar = (db: any, campos: Record<string, unknown>) => { logar(db, "dir"); return chamar(R.POST, { metodo: "POST", params: { id: ADM }, corpo: { campos } }); };
+async function casoRota(nome: string, fn: () => Promise<void>) {
+  try { await fn(); total++; console.log(`OK    ${nome}`); } catch (e) { console.log(`FALHA ${nome}\n      ${(e as Error).message}`); process.exitCode = 1; }
+}
+const dadosLinhas = (corpo: any) => corpo.linhas.map((l: any) => `${l.rotulo}: ${l.valor}`);
+
+await casoRota("rota GET: MOT com 1 dia mostra a linha depois de Tempo de Contrato e o contexto para o modal", async () => {
+  const r = await preview(cenarioRota({ tipoVaga: MOT, qtd: 1 }));
+  assert.equal(r.status, 200, JSON.stringify(r.corpo));
+  assert.deepEqual(dadosLinhas(r.corpo).slice(-2), ["Tempo de Contrato: 180 dias, prorrogável por mais 90 dias", "Dias de teste: 1 dia"]);
+  assert.deepEqual(r.corpo.diasTeste, { exige: true, tipoServico: MOT, legado: null });
+  assert.equal(r.corpo.campos.diasTeste, 1);
+  assert.ok(r.corpo.corpoHtml.includes("Dias de teste: 1 dia") && r.corpo.corpoTexto.includes("Dias de teste: 1 dia"));
+  assert.deepEqual(r.corpo.avisos, []);
+});
+await casoRota("rota GET: 2 dias, 0 (Não houve), null (aviso amarelo), texto legado e Terceirização", async () => {
+  assert.ok((await preview(cenarioRota({ tipoVaga: MOT, qtd: 2 }))).corpo.corpoTexto.includes("Dias de teste: 2 dias"));
+  assert.ok((await preview(cenarioRota({ tipoVaga: MOT, qtd: 0 }))).corpo.corpoTexto.includes("Dias de teste: Não houve"));
+  const nulo = (await preview(cenarioRota({ tipoVaga: MOT, qtd: null }))).corpo;
+  assert.ok(nulo.corpoTexto.includes("Dias de teste: Não informado pelo cliente"));
+  assert.ok(nulo.avisos.some((a: string) => a.startsWith("Dias de teste não informado pelo cliente")));
+  const legado = (await preview(cenarioRota({ tipoVaga: MOT, qtd: null, legado: "  1 dia no sábado " }))).corpo;
+  assert.ok(legado.corpoTexto.includes("Dias de teste: 1 dia no sábado") && legado.diasTeste.legado === "1 dia no sábado");
+  assert.deepEqual(legado.avisos, [], "com texto antigo não há aviso");
+  const terc = (await preview(cenarioRota({ tipoVaga: TERC, qtd: 2 }))).corpo;
+  assert.ok(terc.corpoTexto.includes("Dias de teste: 2 dias") && terc.diasTeste.exige === true);
+});
+await casoRota("rota GET: R&S não tem a linha nem o campo (mesmo com valor na coluna), e o corpo é o de antes", async () => {
+  const r = (await preview(cenarioRota({ tipoVaga: RS, qtd: 2, legado: "texto antigo" }))).corpo;
+  assert.equal(r.corpoHtml.includes("Dias de teste") || r.corpoTexto.includes("Dias de teste"), false);
+  assert.equal(r.diasTeste.exige, false);
+  assert.equal(dadosLinhas(r).at(-1), "Tempo de Contrato: 180 dias, prorrogável por mais 90 dias");
+  assert.deepEqual(r.avisos, []);
+});
+await casoRota("rota: o tipo de serviço VIGENTE (encaminhamento mais recente) decide, não só o da vaga", async () => {
+  const viraMot = (await preview(cenarioRota({ tipoVaga: RS, qtd: 1, encaminhamento: MOT }))).corpo;
+  assert.equal(viraMot.diasTeste.exige, true); assert.ok(viraMot.corpoTexto.includes("Dias de teste: 1 dia"));
+  const viraRs = (await preview(cenarioRota({ tipoVaga: MOT, qtd: 1, encaminhamento: RS }))).corpo;
+  assert.equal(viraRs.diasTeste.exige, false); assert.equal(viraRs.corpoTexto.includes("Dias de teste"), false);
+});
+await casoRota("rota POST: sem edição, o e-mail sai com o valor do cadastro (1 dia) depois de Tempo de Contrato, HTML e anexo/Cc como antes", async () => {
+  const db = cenarioRota({ tipoVaga: MOT, qtd: 1 });
+  const g = (await preview(db)).corpo;
+  const r = await enviar(db, g.campos);
+  assert.equal(r.status, 200, JSON.stringify(r.corpo));
+  const e = db.emails[0];
+  assert.ok(e.html.indexOf("Dias de teste: 1 dia") > e.html.indexOf("Tempo de Contrato:") && e.html.indexOf("Dias de teste: 1 dia") < e.html.indexOf("Salmazos RH"));
+  assert.deepEqual([e.to, e.cc, e.anexos, e.tipo], ["contab@x.com", "rh@x.com", ["admissao-maria-exemplo.pdf"], "pacote_contabilidade"]);
+  const aud = db.tabelas.audit_logs.find((a: any) => a.acao === "admissao_pacote_enviado_email");
+  assert.deepEqual(aud.detalhes.campos_editados_nomes, []);
+});
+await casoRota("rota POST: editar os dias de teste no modal vale SÓ para o e-mail (nada gravado no cadastro) e a auditoria guarda só o NOME do campo", async () => {
+  const db = cenarioRota({ tipoVaga: MOT, qtd: 1, legado: "antigo" });
+  // Foto do cadastro, sem os 3 campos que o envio registra de propósito (pacote_enviado_email_*).
+  const cadastro = () => structuredClone({
+    cv: db.tabelas.candidatos_vagas, cand: db.tabelas.candidatos, dp: db.tabelas.admissao_dados_pessoais, vagas: db.tabelas.vagas,
+    adm: db.tabelas.admissoes.map(({ pacote_enviado_email_em: _a, pacote_enviado_email_por: _b, pacote_enviado_email_para: _c, ...resto }: any) => resto),
+  });
+  const antes = cadastro();
+  const g = (await preview(db)).corpo;
+  const r = await enviar(db, { ...g.campos, diasTeste: 2 });
+  assert.equal(r.status, 200, JSON.stringify(r.corpo));
+  assert.ok(db.emails[0].html.includes("Dias de teste: 2 dias"));
+  assert.deepEqual(cadastro(), antes, "cadastro intacto");
+  assert.equal(db.tabelas.candidatos_vagas[0].admissao_qtd_dias_teste, 1);
+  const aud = db.tabelas.audit_logs.find((a: any) => a.acao === "admissao_pacote_enviado_email");
+  assert.deepEqual(aud.detalhes.campos_editados_nomes, ["diasTeste"]);
+  assert.equal(JSON.stringify(aud).includes("2 dias"), false);
+  // trocar para "Não informado" (null) com texto antigo no cadastro: o e-mail mostra o texto antigo
+  const db2 = cenarioRota({ tipoVaga: MOT, qtd: 1, legado: "antigo" });
+  await enviar(db2, { ...(await preview(db2)).corpo.campos, diasTeste: null });
+  assert.ok(db2.emails[0].html.includes("Dias de teste: antigo"));
+});
+await casoRota("rota POST: valor inválido é RECUSADO no servidor (400) e nada é enviado nem gravado", async () => {
+  for (const v of [3, -1, 1.5, "abc", true]) {
+    const db = cenarioRota({ tipoVaga: MOT, qtd: 1 });
+    const g = (await preview(db)).corpo;
+    const r = await enviar(db, { ...g.campos, diasTeste: v });
+    assert.equal(r.status, 400, `${String(v)} -> ${r.status}`);
+    assert.equal(db.emails.length, 0); assert.equal(db.tabelas.admissoes[0].pacote_enviado_email_em, null);
+  }
+});
+await casoRota("rota POST: R&S descarta o valor vindo do cliente (a linha não entra e não conta como edição); campo ausente usa o do cadastro", async () => {
+  const rs = cenarioRota({ tipoVaga: RS, qtd: null });
+  const g = (await preview(rs)).corpo;
+  assert.equal((await enviar(rs, { ...g.campos, diasTeste: 2 })).status, 200);
+  assert.equal(rs.emails[0].html.includes("Dias de teste"), false);
+  assert.deepEqual(rs.tabelas.audit_logs.find((a: any) => a.acao === "admissao_pacote_enviado_email").detalhes.campos_editados_nomes, []);
+  const mot = cenarioRota({ tipoVaga: MOT, qtd: 2 });
+  const { diasTeste: _omitido, ...semDias } = (await preview(mot)).corpo.campos;
+  assert.equal((await enviar(mot, semDias)).status, 200);
+  assert.ok(mot.emails[0].html.includes("Dias de teste: 2 dias"), "omitido = cadastro, nunca 'não informado'");
+});
+caso("fonte única: rota e modal usam montarLinhasDeCampos/avisosCamposFaltando com o contexto; o modal tem o campo, o selo e o restaurar", () => {
+  const modal = fs.readFileSync("src/components/ModalEnviarPacoteEmail.tsx", "utf8");
+  for (const t of ["montarLinhasDeCampos(campos, preview.empresa, preview.cliente, preview.tempoContratoPadrao, ctxDias)", "avisosCamposFaltando(campos, preview.empresa, preview.cliente, ctxDias)", 'selo("diasTeste")', 'estilo("diasTeste")', "preview.diasTeste.exige", "Não informado", "Não houve", "MAX_DIAS_TESTE", "Restaurar dados do cadastro", "formDoCadastro(preview.campos)"]) assert.ok(modal.includes(t), t);
+  const rota = fs.readFileSync("src/app/api/admissoes/[id]/pacote/enviar-email/route.ts", "utf8");
+  for (const t of ["resolverTipoServicoVigente", "admissao_qtd_dias_teste, admissao_dia_teste", "tipo_servico, clientes(nome, entidade_contratante)", "ctx.diasTesteCtx"]) assert.ok(rota.includes(t), t);
+  assert.equal(/candidatos_vagas"\)\s*\.update|from\("candidatos_vagas"\)\.update/.test(rota), false, "a rota nunca grava em candidatos_vagas");
 });
 
 console.log(`\n${total} casos passaram${process.exitCode ? " (HOUVE FALHAS)" : ""}`);
