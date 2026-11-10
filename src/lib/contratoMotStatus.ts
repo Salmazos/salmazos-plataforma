@@ -24,6 +24,14 @@ const DIAS_LIMITE_LEGAL = 269;
 // pra ninguém agir.
 export const DIAS_ANTECEDENCIA_POPUP = 10;
 
+// Ordem da lista de Vencimento de Contrato pela coluna "Dias trabalhados": "desc" (padrão) = do maior para o menor. Empate pelo nome
+// (alfabético, sem diferenciar acento nem maiúscula), para a lista nunca "pular" entre uma carga e outra. Não altera a lista recebida.
+export type OrdemDiasTrabalhados = "desc" | "asc";
+export function ordenarPorDiasTrabalhados<T extends { diasTrabalhados: number; nomeCompleto: string }>(linhas: readonly T[], ordem: OrdemDiasTrabalhados = "desc"): T[] {
+  const fator = ordem === "desc" ? -1 : 1;
+  return [...linhas].sort((a, b) => fator * (a.diasTrabalhados - b.diasTrabalhados) || a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR", { sensitivity: "base" }));
+}
+
 // Modalidades acompanhadas na tela "Vencimento de Contrato" e no popup do PAINEL (nunca no portal do cliente).
 export const TIPOS_COM_VENCIMENTO_CONTRATO = ["mao_obra_temporaria", "terceirizacao"] as const;
 export const ehTerceirizacao = (tipoServico: string | null | undefined): boolean => tipoServico === "terceirizacao";

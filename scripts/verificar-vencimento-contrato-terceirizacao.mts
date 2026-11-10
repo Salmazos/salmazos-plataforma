@@ -6,7 +6,7 @@ import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 // @ts-expect-error módulo .mjs do harness, sem tipos
 import { congelarData, AGORA_ISO, HOJE, dataMais, novoDb, logar, logarPortal, importar, chamar, serializar, funcionarioMot, idMot } from "./harness-mot/ambiente.mjs";
-import { mensagemAvisoPopupVencimentoMot, calcularVencimentoContratoMot, rotuloModalidadeContrato, ehTerceirizacao, TIPOS_COM_VENCIMENTO_CONTRATO } from "../src/lib/contratoMotStatus";
+import { mensagemAvisoPopupVencimentoMot, calcularVencimentoContratoMot, rotuloModalidadeContrato, ehTerceirizacao, TIPOS_COM_VENCIMENTO_CONTRATO, ordenarPorDiasTrabalhados } from "../src/lib/contratoMotStatus";
 
 congelarData(AGORA_ISO); // 07/10/2026
 const R = {
@@ -79,6 +79,28 @@ await ok("RELATÓRIO do painel: linhas de MOT e Terceirização com tipoServico,
   assert.deepEqual(portal.map((l: any) => l.id).sort(), [id(1), id(5)].sort(), "portal: só MOT");
   assert.equal(JSON.stringify(portal).includes("terceirizacao"), false);
 });
+await ok("ordem por dias trabalhados: do maior para o menor (padrão), MOT e terceirização misturados, e não só pelo próximo vencimento", () => {
+  // 176 dias vence em 3 dias (apareceria ANTES de quem tem 274 na ordem antiga); agora o 274 vem primeiro.
+  const linhas = [[1, MOT, 83], [2, TERC, 176], [3, TERC, 274], [4, MOT, 736], [5, TERC, 90], [6, MOT, 265]].map(([k, t, d]) => ({ id: id(k as number), nomeCompleto: `Func ${k}`, tipoServico: t as string, diasTrabalhados: d as number }));
+  assert.deepEqual(ordenarPorDiasTrabalhados(linhas).map((l) => l.diasTrabalhados), [736, 274, 265, 176, 90, 83]);
+  assert.deepEqual(ordenarPorDiasTrabalhados(linhas, "desc").map((l) => l.diasTrabalhados), [736, 274, 265, 176, 90, 83]);
+  assert.deepEqual(ordenarPorDiasTrabalhados(linhas, "asc").map((l) => l.diasTrabalhados), [83, 90, 176, 265, 274, 736]);
+});
+await ok("ordem: empate de dias pelo nome (sem acento/maiúscula), lista original intacta, vazia e de um item", () => {
+  const linhas = [{ nomeCompleto: "Zélia", diasTrabalhados: 100 }, { nomeCompleto: "ana", diasTrabalhados: 100 }, { nomeCompleto: "Álvaro", diasTrabalhados: 100 }, { nomeCompleto: "Bruno", diasTrabalhados: 300 }];
+  const copia = JSON.stringify(linhas);
+  assert.deepEqual(ordenarPorDiasTrabalhados(linhas).map((l) => l.nomeCompleto), ["Bruno", "Álvaro", "ana", "Zélia"]);
+  assert.deepEqual(ordenarPorDiasTrabalhados(linhas, "asc").map((l) => l.nomeCompleto), ["Álvaro", "ana", "Zélia", "Bruno"]);
+  assert.equal(JSON.stringify(linhas), copia);
+  assert.deepEqual(ordenarPorDiasTrabalhados([]), []);
+  assert.equal(ordenarPorDiasTrabalhados([{ nomeCompleto: "A", diasTrabalhados: 1 }]).length, 1);
+  assert.equal(ordenarPorDiasTrabalhados([{ nomeCompleto: "A", diasTrabalhados: -5 }, { nomeCompleto: "B", diasTrabalhados: 2 }])[0].diasTrabalhados, 2, "data futura (negativo) vai para o fim");
+});
+await ok("tela: coluna 'Dias Trabalhados' destacada em verde (cabeçalho e valores), título clicável inverte a ordem; a lista passa pela mesma função pura", () => {
+  const tela = fs.readFileSync("src/components/VencimentoContratoPageClient.tsx", "utf8");
+  for (const t of ["DESTAQUE_DIAS", "#DCFCE7", "#F0FDF4", "#166534", 'useState<OrdemDiasTrabalhados>("desc")', "ordenarPorDiasTrabalhados(linhasIniciais, ordemDias)", "aria-sort", "▼", "▲", "Do maior para o menor"]) assert.ok(tela.includes(t), t);
+});
+
 await ok("escopo por unidade: supervisor da U1 só vê terceirizado da U1; o da U2 não vê o da U1", async () => {
   const db = cenario([[1, TERC, 300], [2, TERC, 300, { unidade_id: "U2" }]]);
   assert.deepEqual(await idsPainel(db, "dir"), [id(1), id(2)]);
