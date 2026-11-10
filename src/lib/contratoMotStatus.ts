@@ -9,8 +9,10 @@ export type ContratoMotFaixa =
 // 6.019/74), confirmada com o Olver: até 90 dias corridos desde a admissão a renovação é
 // automática (sem ação necessária); de 91 a 180 dias passa a exigir uma aprovação simples
 // de continuidade; de 181 a 270 dias já está próximo do limite legal; acima de 270 dias o
-// contrato já excedeu o máximo legal permitido. Só se aplica a funcionários MOT
-// (tipo_servico = "mao_obra_temporaria") — Terceirização e R&S não têm esse limite.
+// contrato já excedeu o máximo legal permitido. Vale para MOT (tipo_servico = "mao_obra_temporaria") e, no PAINEL da Salmazos, para
+// Terceirização (tipo_servico = "terceirizacao"): o terceirizado começa no modelo temporário (até 270 dias, contados da data de admissão) e,
+// no fim dessa fase, é desligado ou recebe o registro definitivo. R&S não tem esse limite. O Portal do Cliente continua só com MOT
+// (decisão do Olver): as rotas do portal filtram "mao_obra_temporaria" por conta própria e não usam TIPOS_COM_VENCIMENTO_CONTRATO.
 const DIAS_RENOVACAO_AUTOMATICA = 89;
 const DIAS_APROVACAO_CONTINUIDADE = 179;
 const DIAS_LIMITE_LEGAL = 269;
@@ -21,6 +23,11 @@ const DIAS_LIMITE_LEGAL = 269;
 // legal). O vencimento de 90 dias nunca dispara popup: é automático, avisar não muda nada
 // pra ninguém agir.
 export const DIAS_ANTECEDENCIA_POPUP = 10;
+
+// Modalidades acompanhadas na tela "Vencimento de Contrato" e no popup do PAINEL (nunca no portal do cliente).
+export const TIPOS_COM_VENCIMENTO_CONTRATO = ["mao_obra_temporaria", "terceirizacao"] as const;
+export const ehTerceirizacao = (tipoServico: string | null | undefined): boolean => tipoServico === "terceirizacao";
+export const rotuloModalidadeContrato = (tipoServico: string | null | undefined): "MOT" | "Terceirização" => (ehTerceirizacao(tipoServico) ? "Terceirização" : "MOT");
 
 function hojeUTC(): Date {
   // Mesma técnica usada em asoStatus.ts — Brasil não observa horário de verão desde 2019,
@@ -196,7 +203,17 @@ export function precisaAvisoPopupVencimentoMot(v: VencimentoContratoMot, resumo?
 
 // Mensagem do popup — usada tanto no painel quanto no Portal do Cliente, pra nunca
 // divergir o texto do aviso entre os dois lados.
-export function mensagemAvisoPopupVencimentoMot(v: VencimentoContratoMot): string {
+// Terceirização: o 270 é o fim da fase temporária; a decisão é desligar ou registrar o contrato definitivo (a prorrogação dos 180 é a mesma).
+export function mensagemAvisoPopupVencimentoMot(v: VencimentoContratoMot, tipoServico?: string | null): string {
+  if (ehTerceirizacao(tipoServico)) {
+    if (v.faixa === "limite_excedido") {
+      return `Terceirização: a fase temporária já passou dos 270 dias há ${Math.abs(v.diasParaProximoVencimento)} dia(s) — decida: desligar ou registrar o contrato definitivo.`;
+    }
+    if (v.faixa === "proximo_limite") {
+      return `Terceirização: faltam ${v.diasParaProximoVencimento} dia(s) para o fim da fase temporária (270 dias) — decida: desligar ou registrar o contrato definitivo.`;
+    }
+    return `Terceirização: faltam ${v.diasParaProximoVencimento} dia(s) para completar 180 dias de contrato — requer aprovação de continuidade.`;
+  }
   if (v.faixa === "limite_excedido") {
     return `Contrato já excedeu o limite legal de 270 dias há ${Math.abs(v.diasParaProximoVencimento)} dia(s) — ação imediata necessária (efetivação ou desligamento).`;
   }

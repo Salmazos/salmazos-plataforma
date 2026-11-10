@@ -8,6 +8,7 @@ interface AvisoVencimentoMot {
   funcionario_id: string;
   titulo: string;
   mensagem: string;
+  tipo_servico?: string | null;
 }
 
 // Mesmo mecanismo de PopupAsoPeriodicoHoje.tsx (checagem ao carregar o painel + "marcar
@@ -74,7 +75,7 @@ export default function PopupVencimentoContratoMot() {
         <div className="bg-black px-6 py-5 flex items-start justify-between">
           <div>
             <h2 className="text-lg font-bold text-red-400">
-              ⏳ Vencimento{avisos.length > 1 ? "s" : ""} de contrato MOT
+              ⏳ Vencimento{avisos.length > 1 ? "s" : ""} de contrato (MOT e Terceirização)
             </h2>
             <p className="text-xs text-gray-300 mt-0.5">Prazo de 180/270 dias se aproximando ou já excedido</p>
           </div>
@@ -116,6 +117,7 @@ export default function PopupVencimentoContratoMot() {
       <ModalContratoMot
         funcionarioId={selecionado?.funcionario_id ?? null}
         nome={selecionado?.titulo ?? ""}
+        modalidade={selecionado?.tipo_servico ?? null}
         onClose={() => setSelecionado(null)}
         onAlterado={recarregarLista}
         onVerFicha={marcarVisto}

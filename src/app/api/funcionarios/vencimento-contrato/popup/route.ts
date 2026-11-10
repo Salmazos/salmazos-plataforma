@@ -3,7 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
 import { contextoRH } from "@/lib/rhUnidadeAuth";
 import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
-import { calcularVencimentoContratoMot, precisaAvisoPopupVencimentoMot, mensagemAvisoPopupVencimentoMot } from "@/lib/contratoMotStatus";
+import { calcularVencimentoContratoMot, precisaAvisoPopupVencimentoMot, mensagemAvisoPopupVencimentoMot, TIPOS_COM_VENCIMENTO_CONTRATO } from "@/lib/contratoMotStatus";
 import { carregarResumosMot } from "@/lib/contratoMotEventos";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +13,8 @@ interface AvisoVencimentoMot {
   funcionario_id: string;
   titulo: string;
   mensagem: string;
+  // Para o popup rotular a modalidade (MOT ou Terceirização).
+  tipo_servico: string | null;
 }
 
 // Calculado em tempo real a cada carregamento (sem cron/tabela de notificação
@@ -35,8 +37,9 @@ export async function GET() {
 
   let funcionariosQuery = svc
     .from("funcionarios")
-    .select("id, nome_completo, data_admissao")
-    .eq("tipo_servico", "mao_obra_temporaria")
+    .select("id, nome_completo, data_admissao, tipo_servico")
+    // MOT e Terceirização (fase temporária). O popup do PORTAL do cliente (api/portal/...) segue só com MOT.
+    .in("tipo_servico", [...TIPOS_COM_VENCIMENTO_CONTRATO])
     .eq("status", "ativo")
     .not("data_admissao", "is", null);
   if (!ctx.todasUnidades) funcionariosQuery = funcionariosQuery.eq("unidade_id", ctx.unidadeId);
@@ -54,7 +57,8 @@ export async function GET() {
         id: f.id,
         funcionario_id: f.id,
         titulo: f.nome_completo,
-        mensagem: mensagemAvisoPopupVencimentoMot(v),
+        mensagem: mensagemAvisoPopupVencimentoMot(v, f.tipo_servico),
+        tipo_servico: f.tipo_servico ?? null,
       });
     }
   }

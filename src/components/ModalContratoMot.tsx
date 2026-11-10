@@ -6,6 +6,8 @@ import ContratoMotPainel from "./ContratoMotPainel";
 interface Props {
   funcionarioId: string | null;
   nome: string;
+  // "terceirizacao" troca só o título (o painel de ações é o mesmo).
+  modalidade?: string | null;
   onClose: () => void;
   onAlterado: () => void;
   // Ir pra ficha também dispensa o popup do dia (mesmo efeito do clique antigo no aviso).
@@ -14,7 +16,7 @@ interface Props {
 
 // Modal aberto ao clicar num aviso do popup "Vencimentos de contrato MOT": em vez de só navegar pra ficha,
 // oferece Prorrogar / Registrar afastamento / Encerrar contrato ali mesmo (ContratoMotPainel).
-export default function ModalContratoMot({ funcionarioId, nome, onClose, onAlterado, onVerFicha }: Props) {
+export default function ModalContratoMot({ funcionarioId, nome, modalidade, onClose, onAlterado, onVerFicha }: Props) {
   if (!funcionarioId) return null;
   return (
     <div
@@ -25,7 +27,7 @@ export default function ModalContratoMot({ funcionarioId, nome, onClose, onAlter
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[85vh] overflow-y-auto">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Contrato MOT</h2>
+            <h2 className="text-lg font-bold text-gray-900">{modalidade === "terceirizacao" ? "Contrato temporário (Terceirização)" : "Contrato MOT"}</h2>
             <p className="text-sm text-gray-500">{nome}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Fechar">✕</button>

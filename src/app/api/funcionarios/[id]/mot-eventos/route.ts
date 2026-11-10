@@ -7,6 +7,7 @@ import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { afastamentoEmAberto, eventosMotValidos, resumirFuncionarioMot, type EventoMotLinha } from "@/lib/contratoMotEventos";
 import { hojeBrasiliaISO, formatarDataBR } from "@/lib/rescisaoProgramada";
 import { PAPEIS_FULL_ACCESS } from "@/lib/fullAccessAuth";
+import { TIPOS_COM_VENCIMENTO_CONTRATO } from "@/lib/contratoMotStatus";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -104,8 +105,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (funcionario.status !== "ativo") {
     return NextResponse.json({ error: "Este funcionário já está desligado." }, { status: 409 });
   }
-  if (funcionario.tipo_servico !== "mao_obra_temporaria") {
-    return NextResponse.json({ error: "Prorrogação e afastamento só valem para funcionário de mão de obra temporária." }, { status: 400 });
+  if (!(TIPOS_COM_VENCIMENTO_CONTRATO as readonly string[]).includes(funcionario.tipo_servico ?? "")) {
+    return NextResponse.json({ error: "Prorrogação e afastamento só valem para funcionário de mão de obra temporária ou de terceirização." }, { status: 400 });
   }
 
   // Só a rescisão programada aceita data futura — evento é fato que já aconteceu.

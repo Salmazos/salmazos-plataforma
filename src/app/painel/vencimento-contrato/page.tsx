@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { podeAcessarFuncionarios } from "@/lib/funcionariosAuth";
-import { calcularVencimentoContratoMot } from "@/lib/contratoMotStatus";
+import { calcularVencimentoContratoMot, TIPOS_COM_VENCIMENTO_CONTRATO } from "@/lib/contratoMotStatus";
 import { carregarResumosMot, selosRelatorioMot } from "@/lib/contratoMotEventos";
 import { contextoRH } from "@/lib/rhUnidadeAuth";
 import SemAcessoPainel from "@/components/SemAcessoPainel";
@@ -24,8 +24,8 @@ export default async function VencimentoContratoPage() {
   const svc = createServiceClient();
   let funcionariosQuery = svc
     .from("funcionarios")
-    .select("id, nome_completo, cliente_id, empresa, data_admissao, clientes(nome)")
-    .eq("tipo_servico", "mao_obra_temporaria")
+    .select("id, nome_completo, cliente_id, empresa, data_admissao, tipo_servico, clientes(nome)")
+    .in("tipo_servico", [...TIPOS_COM_VENCIMENTO_CONTRATO])
     .eq("status", "ativo")
     .not("data_admissao", "is", null);
   let clientesQuery = svc.from("clientes").select("id, nome").eq("ativo", true).order("nome");
@@ -34,9 +34,9 @@ export default async function VencimentoContratoPage() {
     clientesQuery = clientesQuery.eq("unidade_id", unidadeRH);
   }
 
-  // Só MOT ativo entra nesse relatório — Terceirização e R&S não têm o limite legal de
-  // 90/180/270 dias (Lei 6.019/74), e desligado não tem mais decisão de renovação pendente
-  // (ver histórico de rescisão em /painel/rescisoes pra isso).
+  // Entram MOT e Terceirização ativos (o terceirizado começa no modelo temporário de até 270 dias, contados da admissão; no fim dele é
+  // desligado ou recebe o registro definitivo). R&S não tem o limite de 90/180/270 dias (Lei 6.019/74), e desligado não tem mais decisão
+  // de renovação pendente (ver /painel/rescisoes). O Portal do Cliente NÃO mostra terceirização: a página dele filtra só MOT.
   const [{ data: funcionarios }, { data: clientes }] = await Promise.all([
     funcionariosQuery,
     clientesQuery,
@@ -64,6 +64,7 @@ export default async function VencimentoContratoPage() {
         clienteId: f.cliente_id,
         empresa: (Array.isArray(cliente) ? cliente[0]?.nome : cliente?.nome) ?? f.empresa ?? "—",
         dataAdmissao: f.data_admissao as string,
+        tipoServico: (f.tipo_servico as string | null) ?? "mao_obra_temporaria",
         ...v,
         ...(selos.length > 0 ? { selos } : {}),
       };

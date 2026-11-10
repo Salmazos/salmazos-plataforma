@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { formatarDataSemFuso } from "@/lib/utils";
-import type { ContratoMotFaixa } from "@/lib/contratoMotStatus";
+import { ehTerceirizacao, rotuloModalidadeContrato, type ContratoMotFaixa } from "@/lib/contratoMotStatus";
 import type { SeloMot } from "@/lib/contratoMotEventos";
 
 export interface VencimentoContratoRow {
@@ -12,6 +12,8 @@ export interface VencimentoContratoRow {
   clienteId: string | null;
   empresa: string;
   dataAdmissao: string;
+  // "mao_obra_temporaria" ou "terceirizacao".
+  tipoServico: string;
   diasTrabalhados: number;
   vencimento90: string;
   vencimento180: string;
@@ -55,20 +57,33 @@ const TD_STYLE: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+// Cores do selo de modalidade (mesma paleta da lista de Funcionários: azul = MOT, roxo = Terceirização).
+const SELO_MODALIDADE = {
+  MOT: { bg: "#EFF6FF", text: "#1D4ED8" },
+  "Terceirização": { bg: "#F5F3FF", text: "#6D28D9" },
+} as const;
+
 export default function VencimentoContratoPageClient({ linhasIniciais, clientesFiltro }: Props) {
   const [filtroClienteId, setFiltroClienteId] = useState("");
+  const [filtroModalidade, setFiltroModalidade] = useState<"" | "mao_obra_temporaria" | "terceirizacao">("");
   const [busca, setBusca] = useState("");
 
   const filtradas = useMemo(() => {
     const buscaLower = busca.trim().toLowerCase();
     return linhasIniciais.filter((l) => {
+      if (filtroModalidade && l.tipoServico !== filtroModalidade) return false;
       if (filtroClienteId && l.clienteId !== filtroClienteId) return false;
       if (buscaLower && !l.nomeCompleto.toLowerCase().includes(buscaLower)) return false;
       return true;
     });
-  }, [linhasIniciais, filtroClienteId, busca]);
+  }, [linhasIniciais, filtroModalidade, filtroClienteId, busca]);
 
-  const totalExcedido = useMemo(() => linhasIniciais.filter((l) => l.faixa === "limite_excedido").length, [linhasIniciais]);
+  // Contagens sobre a lista cheia (não sobre o resultado filtrado), como nos cards de Funcionários.
+  const totalMot = useMemo(() => linhasIniciais.filter((l) => !ehTerceirizacao(l.tipoServico)).length, [linhasIniciais]);
+  const totalTerc = useMemo(() => linhasIniciais.filter((l) => ehTerceirizacao(l.tipoServico)).length, [linhasIniciais]);
+  const excedidoMot = useMemo(() => linhasIniciais.filter((l) => l.faixa === "limite_excedido" && !ehTerceirizacao(l.tipoServico)).length, [linhasIniciais]);
+  const excedidoTerc = useMemo(() => linhasIniciais.filter((l) => l.faixa === "limite_excedido" && ehTerceirizacao(l.tipoServico)).length, [linhasIniciais]);
+  const totalExcedido = excedidoMot + excedidoTerc;
 
   return (
     <div>
@@ -76,7 +91,7 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
         <div>
           <h1 className="text-xl font-bold text-gray-900">Vencimento de Contrato</h1>
           <p style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>
-            Funcionários MOT ativos — prazos de renovação de 90, 180 e 270 dias (Lei 6.019/74)
+            Funcionários MOT e de Terceirização (fase temporária) ativos — prazos de 90, 180 e 270 dias contados da data de admissão (Lei 6.019/74)
           </p>
         </div>
         {totalExcedido > 0 && (
@@ -91,6 +106,7 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
             }}
           >
             ⚠ {totalExcedido} contrato{totalExcedido > 1 ? "s" : ""} acima de 270 dias
+            {excedidoTerc > 0 && excedidoMot > 0 && <span style={{ fontWeight: 600 }}> (MOT: {excedidoMot} · Terceirização: {excedidoTerc})</span>}
           </div>
         )}
       </div>
@@ -104,6 +120,11 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
           className="input-field"
           style={{ maxWidth: 240 }}
         />
+        <select value={filtroModalidade} onChange={(e) => setFiltroModalidade(e.target.value as typeof filtroModalidade)} className="input-field" style={{ maxWidth: 240 }} aria-label="Modalidade">
+          <option value="">Todas as modalidades ({linhasIniciais.length})</option>
+          <option value="mao_obra_temporaria">MOT ({totalMot})</option>
+          <option value="terceirizacao">Terceirização ({totalTerc})</option>
+        </select>
         <select value={filtroClienteId} onChange={(e) => setFiltroClienteId(e.target.value)} className="input-field" style={{ maxWidth: 260 }}>
           <option value="">Todas as empresas</option>
           {clientesFiltro.map((c) => (
@@ -115,13 +136,14 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
       <div className="card" style={{ padding: 0, overflowX: "auto" }}>
         {filtradas.length === 0 ? (
           <p style={{ padding: "40px 12px", textAlign: "center", color: "#9CA3AF", margin: 0 }}>
-            Nenhum funcionário MOT ativo encontrado.
+            Nenhum funcionário MOT ou de Terceirização ativo encontrado.
           </p>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
                 <th style={TH_STYLE}>Funcionário</th>
+                <th style={TH_STYLE}>Modalidade</th>
                 <th style={TH_STYLE}>Empresa</th>
                 <th style={TH_STYLE}>Data de Admissão</th>
                 <th style={TH_STYLE}>Dias Trabalhados</th>
@@ -138,6 +160,11 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
                     <Link href={`/painel/funcionarios/${l.id}`} style={{ color: "#111827", fontWeight: 700, textDecoration: "underline", textDecorationThickness: 1 }}>
                       {l.nomeCompleto}
                     </Link>
+                  </td>
+                  <td style={TD_STYLE}>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: SELO_MODALIDADE[rotuloModalidadeContrato(l.tipoServico)].bg, color: SELO_MODALIDADE[rotuloModalidadeContrato(l.tipoServico)].text, whiteSpace: "nowrap" }}>
+                      {rotuloModalidadeContrato(l.tipoServico)}
+                    </span>
                   </td>
                   <td style={{ ...TD_STYLE, color: "#374151" }}>{l.empresa}</td>
                   <td style={{ ...TD_STYLE, color: "#374151" }}>{formatarDataSemFuso(l.dataAdmissao)}</td>
