@@ -22,6 +22,24 @@ export const LINK_COMISSOES_DIRETORIA = "/painel/comissoes";
 
 export const ehSinoComissaoDiretoria = (tipo: string): boolean => tipo.startsWith("comissao_diretoria_");
 
+// ── Início do controle no sistema ────────────────────────────────────────────────────────────────────────────────────
+// DECISÃO DO NEGÓCIO: antes do go-live as comissões eram controladas na planilha, então cobrança de mês ANTERIOR a esta competência
+// nunca entra nos avisos de "cobrança sem comissão marcada" (possível esquecimento da diretoria e lembretes/popup do beneficiário): seria
+// falso positivo todo dia, sem como resolver no sistema. Os demais avisos (contestações, fechamento liberado, fechamento sem pagamento)
+// não dependem desta data. PARA AJUSTAR O GO-LIVE, ALTERE SÓ ESTA CONSTANTE (1º dia do mês, "AAAA-MM-01").
+export const COMISSAO_CONTROLE_INICIO = "2026-11-01";
+
+let inicioVigente = COMISSAO_CONTROLE_INICIO;
+export const inicioDoControle = (): string => inicioVigente;
+
+// Só para os scripts de verificação (cenários de meses anteriores ao go-live real). O sistema nunca chama isto; null volta à constante.
+export function definirInicioDoControleParaTeste(competencia: string | null): void {
+  inicioVigente = competencia ?? COMISSAO_CONTROLE_INICIO;
+}
+
+// A competência ("AAAA-MM-01") já está sob controle do sistema (não é anterior ao início do controle)?
+export const competenciaNoControle = (competencia: string): boolean => competencia >= inicioVigente;
+
 // Quantos dias tem o mês de uma competência "AAAA-MM-01".
 export function diasNoMes(competencia: string): number {
   const [a, m] = competencia.split("-").map(Number);
