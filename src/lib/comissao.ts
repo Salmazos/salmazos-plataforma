@@ -8,10 +8,17 @@ import {
   arredondar2,
   beneficiarioPodeDesmarcar,
   calcularComissao,
+  MENSAGEM_PRAZO_ENCERRADO,
   competenciaAtual,
   competenciaDoInstante,
-  competenciaPassou,
+  decidirCompetencia,
+  diaDoInstante,
+  dentroDaFolga,
+  lancadaNaFolga,
+  mesAnteriorDe,
   rotuloCompetencia,
+  situacaoParaMarcar,
+  type EscolhaCompetencia,
   ehTerminal,
   motivoDeNaoPoderMarcar,
   mesAtrasadoDe,
@@ -29,7 +36,7 @@ import {
 
 type Service = ReturnType<typeof createServiceClient>;
 
-export const MENSAGEM_MES_ENCERRADO = "Só dá para marcar comissão do mês corrente. Fale com a diretoria.";
+export const MENSAGEM_MES_ENCERRADO = MENSAGEM_PRAZO_ENCERRADO;
 
 export interface Beneficiario {
   id: string;
@@ -158,6 +165,10 @@ export async function marcarComissao(
     beneficiario: Beneficiario;
     ator: Ator;
     agora?: Date;
+    // Escolha explícita do beneficiário (padrão "atual"): "anterior" = vaga fechada no mês anterior (só dias 1–3, cobrança enviada nos dias 1–3).
+    competenciaEscolhida?: EscolhaCompetencia | null;
+    // Justificativa opcional, gravada no campo motivo do lançamento.
+    motivo?: string | null;
   }
 ): Promise<Resultado<{ lancamento: Lancamento }>> {
   const agora = o.agora ?? new Date();
@@ -170,7 +181,8 @@ export async function marcarComissao(
   const reposicao = await ehReposicaoPorGarantia(svc, cobranca.vaga_id);
   const recusa = motivoDeNaoPoderMarcar({ ...cobranca, reposicao_garantia: reposicao });
   if (recusa) return falha(422, MENSAGEM_RECUSA_MARCACAO[recusa], recusa);
-  if (competenciaPassou(competenciaDoInstante(cobranca.enviado_em as string), agora)) return falha(409, MENSAGEM_MES_ENCERRADO, "mes_encerrado");
+  const decisao = decidirCompetencia({ enviadoEm: cobranca.enviado_em as string, agora, escolha: o.competenciaEscolhida });
+  if (!decisao.ok) return falha(decisao.status, decisao.error, decisao.codigo);
 
   const { data: ativa } = await svc
     .from("comissao_lancamentos")
@@ -189,9 +201,12 @@ export async function marcarComissao(
   }
 
   const fee = arredondar2(Number(cobranca.fee_valor));
-  // DECISÃO DO NEGÓCIO: o beneficiário só marca comissão do mês corrente (esquecimento se resolve fora do sistema, com a diretoria).
-  // Por isso a marcação nunca cria retroativo_pendente; os que já existem continuam sendo decididos pela diretoria.
-  const { competencia, status } = statusInicialDaMarcacao({ status: cobranca.status, tipo: cobranca.tipo, enviado_em: cobranca.enviado_em as string }, agora);
+  // DECISÃO DO NEGÓCIO: o beneficiário lança a comissão do mês até o dia 3 do mês seguinte ("folga"); depois disso o esquecimento se
+  // resolve fora do sistema, com a diretoria. Por isso a marcação nunca cria retroativo_pendente (os que já existem continuam sendo
+  // decididos pela diretoria). A competência gravada é a derivada/escolhida e não muda depois (a coluna é imutável).
+  const { competencia, folga } = decisao;
+  const status = statusInicialDaMarcacao(cobranca);
+  const motivo = o.motivo?.trim() ? o.motivo.trim().slice(0, 500) : null;
   const { data: criado, error } = await svc
     .from("comissao_lancamentos")
     .insert({
@@ -203,7 +218,11 @@ export async function marcarComissao(
       base_valor: fee,
       percentual_aplicado: o.beneficiario.percentual,
       valor_comissao: calcularComissao(fee, o.beneficiario.percentual),
+      motivo,
       marcado_por: o.ator.id,
+      // Mesmo relógio da decisão de competência (e não o now() do banco): o selo "lançada na folga" é derivado de marcado_em e não pode
+      // divergir da competência decidida aqui, nem por milissegundos na virada do dia 3 para o dia 4.
+      marcado_em: agora.toISOString(),
       unidade_id: cobranca.unidade_id,
     })
     .select("*")
@@ -222,6 +241,8 @@ export async function marcarComissao(
     base_valor: fee,
     percentual_aplicado: o.beneficiario.percentual,
     valor_comissao: criado.valor_comissao,
+    // Marcação na folga (depois do fim do mês da competência): registra a escolha e a data real do lançamento.
+    ...(folga ? { na_folga: true, competencia_escolhida: decisao.escolha, marcado_na_data: agora.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }), enviado_em: cobranca.enviado_em, motivo } : {}),
   }, cobranca.unidade_id);
   return { ok: true, lancamento: criado as Lancamento };
 }
@@ -342,6 +363,8 @@ export interface LancamentoDetalhado extends Lancamento {
   fechamento_pago: boolean;
   // "Atrasada de <mês>": entrou num fechamento de mês posterior ao da competência dela (competência original preservada).
   atrasada_de: string | null;
+  // "Lançada na folga": marcada no mês seguinte ao da competência (dias 1–3). Derivado de marcado_em, sem coluna.
+  lancada_na_folga: boolean;
 }
 
 export async function detalhar(svc: Service, lancs: Lancamento[]): Promise<LancamentoDetalhado[]> {
@@ -389,6 +412,7 @@ export async function detalhar(svc: Service, lancs: Lancamento[]): Promise<Lanca
       origem_fechado: l.lancamento_origem_id ? origemFechada.get(l.lancamento_origem_id) ?? false : false,
       fechamento: l.fechamento_id ? fechPorId.get(l.fechamento_id) ?? null : null,
       fechamento_pago: l.fechamento_id ? !!fechPorId.get(l.fechamento_id)?.pago_em : false,
+      lancada_na_folga: lancadaNaFolga(l),
       atrasada_de: l.fechamento_id && fechPorId.get(l.fechamento_id) ? mesAtrasadoDe(l.competencia, fechPorId.get(l.fechamento_id)!.competencia) : null,
     };
   });
@@ -433,14 +457,19 @@ export interface CobrancaParaMarcar {
   enviado_em: string;
   status: string;
   fee_valor: number;
+  // Competência em que a marcação vale por padrão (mês corrente, ou o mês anterior para cobrança do mês anterior ainda no prazo).
   competencia: string;
+  // Cobrança do mês anterior lançada dentro do prazo (até o dia 3).
+  mes_anterior: boolean;
+  // Enviada nos dias 1–3 e hoje é dia 1–3: o beneficiário pode escolher "vaga fechada no mês anterior".
+  permite_escolha_competencia: boolean;
   comissao_prevista: number;
   // "voce" = já é sua; "outro" = já marcada por outra pessoa (sem revelar quem nem quanto); null = livre para marcar.
   marcada: "voce" | "outro" | null;
 }
 
 // "Cobranças para marcar": as cobranças R&S de CONTRATAÇÃO já enviadas para validação (enviadas, validadas ou pagas; nunca
-// canceladas nem em revisão) com competência no MÊS CORRENTE (o beneficiário não marca mês anterior), sem exigir acesso à tela de Cobranças R&S — a comissão é de quem o
+// canceladas nem em revisão) do MÊS CORRENTE e, enquanto for dia 1–3, também do mês anterior (prazo de lançamento), sem exigir acesso à tela de Cobranças R&S — a comissão é de quem o
 // beneficiário diz ser, e a cobrança pode ter sido gerada por outro analista. Só sai o necessário para reconhecer a cobrança e
 // calcular a comissão: cliente, vaga/cargo, quem gerou (nome), envio, status e fee_valor. Nenhum dado fiscal, e-mail ou anexo.
 // Reposição por garantia fica fora. As já marcadas por outra pessoa aparecem como "outro", sem a comissão alheia.
@@ -473,8 +502,9 @@ export async function listarCobrancasParaMarcar(svc: Service, o: { beneficiario:
   for (const c of linhas) {
     const vaga = vagaPorId.get(c.vaga_id);
     if (vaga?.reposicao_de_candidato_vaga_id) continue;
-    const competencia = competenciaDoInstante(c.enviado_em as string);
-    if (competenciaPassou(competencia, agora)) continue;
+    // Mesma função pura da rota de marcar: o que ela aceitaria com a escolha padrão é o que aparece aqui.
+    const situacao = situacaoParaMarcar({ enviadoEm: c.enviado_em as string, agora });
+    if (!situacao) continue;
     const dono = marcadaPor.get(c.id);
     saida.push({
       id: c.id,
@@ -485,7 +515,9 @@ export async function listarCobrancasParaMarcar(svc: Service, o: { beneficiario:
       enviado_em: c.enviado_em as string,
       status: c.status,
       fee_valor: Number(c.fee_valor),
-      competencia,
+      competencia: situacao.competencia,
+      mes_anterior: situacao.folga,
+      permite_escolha_competencia: situacao.escolhaCompetencia,
       comissao_prevista: calcularComissao(Number(c.fee_valor), o.beneficiario.percentual),
       marcada: dono ? (dono === o.beneficiario.id ? "voce" : "outro") : null,
     });
@@ -504,7 +536,10 @@ export async function estadoDaCobranca(
   marcada_por_outro: boolean;
   percentual: number;
   comissao_prevista: number | null;
+  // Competência em que a marcação vale (padrão): o mês corrente, ou o mês anterior para cobrança do mês anterior ainda no prazo.
   competencia: string | null;
+  // Cobrança enviada nos dias 1–3 com hoje dia 1–3: só a tela Minhas comissões oferece a escolha "vaga fechada no mês anterior".
+  permite_escolha_competencia: boolean;
   // Só uma sugestão visual (a marcação é sempre explícita): o responsável da vaga é o próprio beneficiário.
   sugestao_responsavel_da_vaga: boolean;
   fee_valor: number | null;
@@ -514,6 +549,7 @@ export async function estadoDaCobranca(
     percentual: o.beneficiario.percentual,
     comissao_prevista: null as number | null,
     competencia: null as string | null,
+    permite_escolha_competencia: false,
     sugestao_responsavel_da_vaga: false,
     fee_valor: null as number | null,
   };
@@ -533,11 +569,15 @@ export async function estadoDaCobranca(
   const { data: vaga } = await svc.from("vagas").select("responsavel, reposicao_de_candidato_vaga_id").eq("id", cobranca.vaga_id).maybeSingle();
   const reposicao = !!vaga?.reposicao_de_candidato_vaga_id;
   const recusa = motivoDeNaoPoderMarcar({ ...cobranca, reposicao_garantia: reposicao });
-  const competencia = cobranca.enviado_em ? competenciaDoInstante(cobranca.enviado_em) : null;
-  const mesEncerrado = !!competencia && competenciaPassou(competencia);
+  // Mesma decisão da rota de marcar (escolha padrão): o quadro nunca é um caminho paralelo com regra própria.
+  const decisao = cobranca.enviado_em ? decidirCompetencia({ enviadoEm: cobranca.enviado_em }) : null;
+  const competencia = decisao?.ok ? decisao.competencia : cobranca.enviado_em ? competenciaDoInstante(cobranca.enviado_em) : null;
+  const mesEncerrado = !!decisao && !decisao.ok;
+  const escolha = cobranca.enviado_em ? situacaoParaMarcar({ enviadoEm: cobranca.enviado_em })?.escolhaCompetencia ?? false : false;
   const resp = (vaga?.responsavel ?? "").trim();
   return {
     competencia,
+    permite_escolha_competencia: escolha,
     sugestao_responsavel_da_vaga: !!resp && (resp === o.beneficiario.nome_completo || resp === apelidoDoNomeCompleto(o.beneficiario.nome_completo)),
     fee_valor: cobranca.fee_valor == null ? null : Number(cobranca.fee_valor),
     pode_marcar: !recusa && !minha && !outro && !mesEncerrado,

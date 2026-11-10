@@ -6,7 +6,8 @@ import { marcarComissao } from "@/lib/comissao";
 
 // "Esta comissão é minha": o beneficiário marca a cobrança explicitamente (o sistema nunca deduz por vaga.responsavel). A autorização
 // é só ser beneficiário ativo com a aba "comissoes_minhas" — NÃO exige acesso a Cobranças R&S, porque a comissão pode ser de um
-// analista e a cobrança ter sido gerada por outro. Só vale cobrança do mês corrente: mês anterior volta 409 "mes_encerrado".
+// analista e a cobrança ter sido gerada por outro. Prazo: mês corrente, ou o mês anterior até o dia 3 ("folga"); fora disso 409
+// "mes_encerrado". competencia_escolhida="anterior" (só dias 1–3, cobrança enviada nos dias 1–3) lança no mês anterior; motivo é opcional.
 export async function POST(request: NextRequest) {
   const acesso = await exigirBeneficiario();
   if (acesso instanceof Response) return acesso;
@@ -16,6 +17,8 @@ export async function POST(request: NextRequest) {
     cobrancaId: parsed.data.cobranca_id,
     beneficiario: acesso.beneficiario,
     ator: acesso.ator,
+    competenciaEscolhida: parsed.data.competencia_escolhida,
+    motivo: parsed.data.motivo,
   });
   if (!r.ok) return NextResponse.json({ error: r.error, codigo: r.codigo }, { status: r.status });
   return NextResponse.json({ lancamento: r.lancamento }, { status: 201 });
