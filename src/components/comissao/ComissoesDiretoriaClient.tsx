@@ -65,6 +65,7 @@ export default function ComissoesDiretoriaClient({ mesInicialProp }: { mesInicia
         <td className="p-3">
           <div className="font-medium text-gray-900">{l.cobranca?.cliente ?? "—"}</div>
           <div className="text-xs text-gray-500">{l.cobranca?.vaga ?? "—"}{l.cobranca?.candidato ? ` · ${l.cobranca.candidato}` : ""}</div>
+          {l.lancada_na_folga && <div className="mt-1"><span className="text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: "#FEF3C7", color: "#92400E" }} title={`Marcada em ${dataHora(l.marcado_em)}, depois do fim de ${rotuloCompetencia(l.competencia)}`}>lançada na folga</span> <span className="text-xs text-gray-500">marcada em {dataHora(l.marcado_em)}</span></div>}
           {l.motivo && <div className="text-xs text-gray-600 mt-1">Motivo: {l.motivo}</div>}
           {l.status === "contestada" && <div className="text-xs text-red-700 mt-1">Contestada em {dataHora(l.contestado_em)}: {l.contestacao_motivo}</div>}
           {l.resolucao_nota && l.status !== "contestada" && <div className="text-xs text-gray-600 mt-1">Decisão ({dataHora(l.resolvido_em)}): {l.resolucao_nota}</div>}

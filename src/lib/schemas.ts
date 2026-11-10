@@ -1851,7 +1851,11 @@ export const propostaSituacaoSchema = z.object({
 });
 
 // ── Comissão de analistas (Fase 1) ──────────────────────────────────────────────
-export const comissaoMarcarSchema = z.object({ cobranca_id: z.string().uuid() });
+export const comissaoMarcarSchema = z.object({
+  cobranca_id: z.string().uuid(),
+  competencia_escolhida: z.enum(["atual", "anterior"]).optional(),
+  motivo: z.string().trim().max(500).optional().nullable(),
+});
 export const comissaoDesmarcarSchema = z.object({ lancamento_id: z.string().uuid() });
 export const comissaoContestarSchema = z.object({ motivo: z.string().trim().min(3, "Informe o motivo da contestação.") });
 export const comissaoRetroativoDecisaoSchema = z.discriminatedUnion("decisao", [

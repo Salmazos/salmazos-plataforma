@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { rotuloCompetencia } from "@/lib/comissaoRegras";
+import { mesAnteriorDe, rotuloCompetencia, type EscolhaCompetencia } from "@/lib/comissaoRegras";
 import type { TotaisComissao } from "@/lib/comissaoRegras";
 import type { CobrancaParaMarcar, LancamentoDetalhado } from "@/lib/comissao";
 import { Aviso, GradeTotais, StatusChip, chamar, dataBR, dataHora, mesInicial, moeda, tipoRotulo } from "./ui";
@@ -13,6 +13,8 @@ interface Resposta {
   totais: TotaisComissao;
 }
 
+interface Janela { aberta: boolean; competencia_anterior: string; prazo_ate: string }
+
 const ROTULO_STATUS_COBRANCA: Record<string, string> = { aprovada_enviada: "Aguardando validação", validada: "Aguardando pagamento", paga: "Paga" };
 
 // Aba "Minhas comissões": só o que pertence ao beneficiário logado, por mês de competência.
@@ -22,7 +24,12 @@ export default function MinhasComissoesClient({ nome, percentual }: { nome: stri
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [paraMarcar, setParaMarcar] = useState<CobrancaParaMarcar[] | null>(null);
+  const [janela, setJanela] = useState<Janela | null>(null);
   const [lancando, setLancando] = useState<string | null>(null);
+  // Cobrança enviada nos dias 1–3 (dentro da janela): "Esta comissão é minha" abre antes a escolha da competência e o motivo opcional.
+  const [escolhendo, setEscolhendo] = useState<string | null>(null);
+  const [escolha, setEscolha] = useState<EscolhaCompetencia>("atual");
+  const [motivo, setMotivo] = useState("");
   const [msg, setMsg] = useState("");
 
   const carregar = useCallback(async () => {
@@ -36,18 +43,30 @@ export default function MinhasComissoesClient({ nome, percentual }: { nome: stri
   useEffect(() => { void carregar(); }, [carregar]);
 
   const carregarParaMarcar = useCallback(async () => {
-    const r = await chamar<{ cobrancas: CobrancaParaMarcar[] }>("/api/comissoes/para-marcar");
+    const r = await chamar<{ cobrancas: CobrancaParaMarcar[]; janela: Janela }>("/api/comissoes/para-marcar");
     if (!r.ok) { setErro(r.json.error ?? "Não foi possível carregar as cobranças para marcar."); return; }
     setParaMarcar(r.json.cobrancas);
+    setJanela(r.json.janela);
   }, []);
 
   useEffect(() => { void carregarParaMarcar(); }, [carregarParaMarcar]);
 
-  async function marcar(c: CobrancaParaMarcar) {
+  function iniciar(c: CobrancaParaMarcar) {
+    if (!c.permite_escolha_competencia) return void marcar(c);
+    setEscolhendo(c.id); setEscolha("atual"); setMotivo(""); setErro(""); setMsg("");
+  }
+
+  async function marcar(c: CobrancaParaMarcar, comEscolha?: EscolhaCompetencia) {
     setLancando(c.id); setErro(""); setMsg("");
-    const r = await chamar<unknown>("/api/comissoes/marcar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cobranca_id: c.id }) });
+    const corpo = { cobranca_id: c.id, ...(comEscolha ? { competencia_escolhida: comEscolha, motivo: motivo.trim() || null } : {}) };
+    const r = await chamar<{ lancamento?: { competencia: string } }>("/api/comissoes/marcar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
     if (!r.ok) setErro(r.json.error ?? "Não foi possível marcar a comissão.");
-    else setMsg("Comissão marcada.");
+    else {
+      const comp = r.json.lancamento?.competencia ?? c.competencia;
+      setMsg(`Comissão marcada (competência ${rotuloCompetencia(comp)}).`);
+      setEscolhendo(null);
+      setMes(comp.slice(0, 7)); // mostra o lançamento logo abaixo, no mês em que ele ficou
+    }
     await Promise.all([carregarParaMarcar(), carregar()]);
     setLancando(null);
   }
@@ -80,8 +99,11 @@ export default function MinhasComissoesClient({ nome, percentual }: { nome: stri
       <div className="rounded-xl border-2 bg-white p-4 space-y-3" style={{ borderColor: "#FFB800" }}>
         <div>
           <h2 className="text-sm font-bold text-gray-900">Cobranças para marcar</h2>
-          <p className="text-xs text-gray-500">Marque aqui as comissões que são suas, até o fim do mês.</p>
+          <p className="text-xs text-gray-500">Marque aqui as comissões que são suas, até o fim do mês (o mês anterior ainda pode ser lançado até o dia 3).</p>
         </div>
+        {janela?.aberta && (
+          <Aviso tipo="info">Prazo para lançar as comissões de {rotuloCompetencia(janela.competencia_anterior)}: até {janela.prazo_ate.slice(8, 10)}/{janela.prazo_ate.slice(5, 7)}.</Aviso>
+        )}
         {paraMarcar === null ? (
           <p className="text-sm text-gray-400">Carregando...</p>
         ) : paraMarcar.length === 0 ? (
@@ -100,7 +122,7 @@ export default function MinhasComissoesClient({ nome, percentual }: { nome: stri
                     <td className="py-2 pr-3 font-medium text-gray-900">{c.cliente ?? "—"}</td>
                     <td className="pr-3">{c.vaga ?? "—"}{c.cargo && c.cargo !== c.vaga ? <span className="block text-xs text-gray-500">{c.cargo}</span> : null}</td>
                     <td className="pr-3">{c.gerada_por ?? "não registrado"}</td>
-                    <td className="pr-3 text-xs">{dataHora(c.enviado_em)}<span className="block text-gray-500">{rotuloCompetencia(c.competencia)}</span></td>
+                    <td className="pr-3 text-xs">{dataHora(c.enviado_em)}<span className="block text-gray-500">{rotuloCompetencia(c.competencia)}</span>{c.mes_anterior && <span className="block font-semibold text-amber-900">Competência: mês anterior</span>}</td>
                     <td className="pr-3 text-xs">{ROTULO_STATUS_COBRANCA[c.status] ?? c.status}</td>
                     <td className="pr-3">{moeda(c.fee_valor)}</td>
                     <td className="pr-3 font-semibold">{moeda(c.comissao_prevista)}</td>
@@ -111,8 +133,8 @@ export default function MinhasComissoesClient({ nome, percentual }: { nome: stri
                         <span className="text-xs text-green-700">Marcada por você</span>
                       ) : (
                         <button
-                          onClick={() => marcar(c)}
-                          disabled={lancando === c.id}
+                          onClick={() => iniciar(c)}
+                          disabled={lancando === c.id || escolhendo === c.id}
                           className="text-xs font-semibold rounded-md px-2 py-1 disabled:opacity-50"
                           style={{ background: "#000", color: "#FFD700" }}
                         >
@@ -126,6 +148,29 @@ export default function MinhasComissoesClient({ nome, percentual }: { nome: stri
             </table>
           </div>
         )}
+        {escolhendo && paraMarcar?.find((c) => c.id === escolhendo) && (() => {
+          const c = paraMarcar.find((x) => x.id === escolhendo)!;
+          const anterior = mesAnteriorDe(c.competencia);
+          return (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
+              <p className="text-sm font-semibold text-gray-900">{c.cliente ?? "—"} · {c.vaga ?? "—"}</p>
+              <fieldset className="flex gap-4 flex-wrap text-sm">
+                <legend className="text-xs font-semibold text-gray-600 mb-1">Vaga fechada em:</legend>
+                <label className="flex items-center gap-1"><input type="radio" name="competencia" checked={escolha === "anterior"} onChange={() => setEscolha("anterior")} /> {rotuloCompetencia(anterior)}</label>
+                <label className="flex items-center gap-1"><input type="radio" name="competencia" checked={escolha === "atual"} onChange={() => setEscolha("atual")} /> {rotuloCompetencia(c.competencia)}</label>
+              </fieldset>
+              <label className="block text-xs font-semibold text-gray-600">Motivo (opcional)
+                <input value={motivo} onChange={(e) => setMotivo(e.target.value)} maxLength={500} className="block mt-1 w-full border border-gray-300 rounded-md px-2 py-1 text-sm font-normal" />
+              </label>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setEscolhendo(null)} className="text-sm text-gray-600 px-3 py-1.5">Cancelar</button>
+                <button onClick={() => marcar(c, escolha)} disabled={lancando === c.id} className="text-sm font-semibold rounded-lg px-4 py-1.5 disabled:opacity-50" style={{ background: "#000", color: "#FFD700" }}>
+                  {lancando === c.id ? "Marcando..." : "Confirmar"}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white overflow-x-auto">

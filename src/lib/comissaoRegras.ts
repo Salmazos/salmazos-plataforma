@@ -101,16 +101,85 @@ export const MENSAGEM_RECUSA_MARCACAO: Record<MotivoRecusaMarcacao, string> = {
   reposicao_garantia: "Reposição por garantia não gera comissão.",
 };
 
-// Status inicial de uma marcação nova. Competência de mês passado -> retroativo_pendente (só conta depois da aprovação da
-// diretoria), independente do status da cobrança.
-export function statusInicialDaMarcacao(
-  cobranca: { status: string; tipo?: string | null; enviado_em: string },
-  agora: Date = new Date()
-): { competencia: string; status: "prevista" | "confirmada" | "retroativo_pendente" } {
-  const competencia = competenciaDoInstante(cobranca.enviado_em);
-  if (competenciaPassou(competencia, agora)) return { competencia, status: "retroativo_pendente" };
-  const s = statusPelaCobranca(cobranca);
-  return { competencia, status: s === "confirmada" ? "confirmada" : "prevista" };
+// Status inicial de uma marcação nova: o da cobrança (prevista/confirmada). A marcação do beneficiário NUNCA nasce retroativo_pendente:
+// o que está fora do prazo é recusado (409) em decidirCompetencia, não vira pedido para a diretoria.
+export function statusInicialDaMarcacao(cobranca: { status: string; tipo?: string | null }): "prevista" | "confirmada" {
+  return statusPelaCobranca(cobranca) === "confirmada" ? "confirmada" : "prevista";
+}
+
+// ── Prazo de lançamento ("folga" até o dia 3 do mês seguinte) ────────────────────────────────────────────────────────
+// DECISÃO DO NEGÓCIO: a cobrança enviada na sexta 17:30 do último dia do mês só é vista na segunda; por isso o beneficiário pode
+// lançar a comissão do mês M até o dia 3 do mês M+1 (23:59:59 de Brasília; o dia 4 às 00:00 já bloqueia). Tudo em America/Sao_Paulo.
+
+export const DIA_LIMITE_LANCAMENTO = 3;
+export const MENSAGEM_PRAZO_ENCERRADO = "Prazo para lançar esta comissão encerrado (até o dia 3 do mês seguinte). Fale com a diretoria.";
+export const MENSAGEM_ESCOLHA_INVALIDA = "Só cobranças enviadas nos dias 1 a 3 podem ser lançadas no mês anterior.";
+
+export type EscolhaCompetencia = "atual" | "anterior";
+
+// Dia do mês (1–31) de um instante, em Brasília.
+export function diaDoInstante(instante: Date | string): number {
+  const d = typeof instante === "string" ? new Date(instante) : instante;
+  return Number(d.toLocaleDateString("en-CA", { timeZone: FUSO_COMISSAO }).slice(8, 10));
+}
+
+// Soma/subtrai meses de uma competência "AAAA-MM-01" (vira o ano: 2027-01 − 1 = 2026-12).
+export function deslocarCompetencia(competencia: string, meses: number): string {
+  const [a, m] = competencia.split("-").map(Number);
+  const idx = a * 12 + (m - 1) + meses;
+  return `${Math.floor(idx / 12)}-${String((idx % 12) + 1).padStart(2, "0")}-01`;
+}
+export const mesAnteriorDe = (competencia: string): string => deslocarCompetencia(competencia, -1);
+export const mesSeguinteDe = (competencia: string): string => deslocarCompetencia(competencia, 1);
+
+// Estamos dentro do prazo de lançamento do mês anterior? (dia 1 a 3, Brasília)
+export const dentroDaFolga = (agora: Date = new Date()): boolean => diaDoInstante(agora) <= DIA_LIMITE_LANCAMENTO;
+
+// Competência em que a marcação vale, a partir do envio da cobrança, de "agora" e da escolha explícita do beneficiário.
+// 1) enviada no mês corrente: vale o corrente; EXCEÇÃO hoje<=3 E envio<=3: o beneficiário pode escolher "anterior" (vaga fechada no mês anterior);
+// 2) enviada no mês anterior: só até o dia 3, com competência = mês do envio (a escolha não muda nada aqui);
+// 3) qualquer outro caso: 409 mes_encerrado. Escolha "anterior" fora da janela = 409; para cobrança enviada depois do dia 3 = 422.
+export type DecisaoCompetencia =
+  | { ok: true; competencia: string; folga: boolean; escolha: EscolhaCompetencia }
+  | { ok: false; status: 409 | 422; codigo: "mes_encerrado" | "competencia_invalida"; error: string };
+
+export function decidirCompetencia(o: { enviadoEm: string; agora?: Date; escolha?: EscolhaCompetencia | null }): DecisaoCompetencia {
+  const agora = o.agora ?? new Date();
+  const mesH = competenciaAtual(agora);
+  const mesE = competenciaDoInstante(o.enviadoEm);
+  const encerrado: DecisaoCompetencia = { ok: false, status: 409, codigo: "mes_encerrado", error: MENSAGEM_PRAZO_ENCERRADO };
+
+  if (mesE === mesH) {
+    if (o.escolha !== "anterior") return { ok: true, competencia: mesH, folga: false, escolha: "atual" };
+    if (!dentroDaFolga(agora)) return encerrado;
+    if (diaDoInstante(o.enviadoEm) > DIA_LIMITE_LANCAMENTO) return { ok: false, status: 422, codigo: "competencia_invalida", error: MENSAGEM_ESCOLHA_INVALIDA };
+    return { ok: true, competencia: mesAnteriorDe(mesH), folga: true, escolha: "anterior" };
+  }
+  if (mesE === mesAnteriorDe(mesH) && dentroDaFolga(agora)) return { ok: true, competencia: mesE, folga: true, escolha: "atual" };
+  return encerrado;
+}
+
+// A cobrança aparece em "Cobranças para marcar" (com a competência padrão) e, se sim, o beneficiário pode escolher a competência?
+export function situacaoParaMarcar(o: { enviadoEm: string; agora?: Date }): { competencia: string; folga: boolean; escolhaCompetencia: boolean } | null {
+  const agora = o.agora ?? new Date();
+  const d = decidirCompetencia({ enviadoEm: o.enviadoEm, agora });
+  if (!d.ok) return null;
+  const escolhaCompetencia = decidirCompetencia({ enviadoEm: o.enviadoEm, agora, escolha: "anterior" }).ok && d.competencia === competenciaAtual(agora);
+  return { competencia: d.competencia, folga: d.folga, escolhaCompetencia };
+}
+
+// "Lançada na folga": marcada no mês SEGUINTE ao da competência, até o dia 3 (derivado de marcado_em; sem coluna). Ajuste/estorno nunca
+// (a competência deles é a do registro). Retroativos antigos marcados fora dos dias 1–3 também não contam.
+export function lancadaNaFolga(l: { tipo: string; competencia: string; marcado_em: string | null | undefined }): boolean {
+  if (l.tipo !== "comissao" || !l.marcado_em) return false;
+  return competenciaDoInstante(l.marcado_em) === mesSeguinteDe(l.competencia) && diaDoInstante(l.marcado_em) <= DIA_LIMITE_LANCAMENTO;
+}
+
+// Fechamento do mês M só a partir do dia 4 do mês seguinte (depois do prazo de lançamento). Devolve o 1º dia liberado ("AAAA-MM-04").
+export const fechamentoLiberadoEm = (competencia: string): string => `${mesSeguinteDe(competencia).slice(0, 8)}0${DIA_LIMITE_LANCAMENTO + 1}`;
+export function prazoDeLancamentoAberto(competencia: string, agora: Date = new Date()): boolean {
+  const hoje = agora.toLocaleDateString("en-CA", { timeZone: FUSO_COMISSAO });
+  return hoje < fechamentoLiberadoEm(competencia);
 }
 
 export interface LancamentoSync {

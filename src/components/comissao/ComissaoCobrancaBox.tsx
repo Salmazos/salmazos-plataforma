@@ -13,6 +13,7 @@ interface Estado {
   percentual: number;
   comissao_prevista: number | null;
   competencia: string | null;
+  permite_escolha_competencia: boolean;
   sugestao_responsavel_da_vaga: boolean;
   fee_valor: number | null;
 }
@@ -81,10 +82,16 @@ export default function ComissaoCobrancaBox({ cobrancaId }: { cobrancaId: string
             <span>
               <strong>Esta comissão é minha</strong>
               <span className="block text-xs text-gray-600">
-                Comissão prevista: {moeda(estado.comissao_prevista)} ({estado.percentual}% de {moeda(estado.fee_valor)}).
+                Comissão prevista: {moeda(estado.comissao_prevista)} ({estado.percentual}% de {moeda(estado.fee_valor)})
+                {estado.competencia ? ` · competência ${rotuloCompetencia(estado.competencia)}` : ""}.
               </span>
             </span>
           </label>
+          {estado.permite_escolha_competencia && (
+            <p className="text-xs text-gray-600">
+              Vaga fechada no mês anterior? Para lançar nele (até o dia 3), use <a href="/painel/minhas-comissoes" className="underline font-semibold">Minhas comissões</a>.
+            </p>
+          )}
         </div>
       ) : (
         <p className="text-xs text-gray-600">{estado.motivo_bloqueio ?? "Esta cobrança não pode receber marcação de comissão."}</p>

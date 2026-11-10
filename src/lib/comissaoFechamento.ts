@@ -6,8 +6,10 @@ import {
   arredondar2,
   competenciaAtual,
   competenciaDoMes,
+  fechamentoLiberadoEm,
   mesAtrasadoDe,
   montarCsvFolha,
+  prazoDeLancamentoAberto,
   rotuloCompetencia,
   selecionarParaFechamento,
   type LinhaFolha,
@@ -73,6 +75,9 @@ export interface PreviaUnidade {
   competencia: string;
   fechamento: FechamentoResumo | null;
   mes_futuro: boolean;
+  // Prazo de lançamento (até o dia 3 do mês seguinte) ainda aberto: a prévia funciona, mas o mês não fecha antes de `fechavel_a_partir_de`.
+  prazo_de_lancamento_aberto: boolean;
+  fechavel_a_partir_de: string;
   fechamento_posterior: boolean;
   bloqueios: Bloqueio[];
   qtd: number;
@@ -187,6 +192,8 @@ export async function previaFechamento(svc: Service, o: { competencia: string; u
       competencia: o.competencia,
       fechamento: existente ? resumo(existente, unidades) : null,
       mes_futuro: o.competencia > competenciaAtual(o.agora),
+      prazo_de_lancamento_aberto: prazoDeLancamentoAberto(o.competencia, o.agora),
+      fechavel_a_partir_de: fechamentoLiberadoEm(o.competencia),
       fechamento_posterior: (fechs ?? []).some((f) => f.unidade_id === unidade && f.competencia > o.competencia),
       bloqueios: bloq.map((l) => ({
         id: l.id,
@@ -209,8 +216,15 @@ export async function previaFechamento(svc: Service, o: { competencia: string; u
 
 export async function fecharMes(
   svc: Service,
-  o: { competencia: string; unidadeId: string; ator: Ator; esperadoQtd?: number | null; esperadoTotal?: number | null }
+  o: { competencia: string; unidadeId: string; ator: Ator; esperadoQtd?: number | null; esperadoTotal?: number | null; agora?: Date }
 ): Promise<Resultado<{ fechamento_id: string; total: number; qtd: number; ja_existia: boolean }>> {
+  // REGRA NA APLICAÇÃO (a função SQL comissao_fechar_mes não muda): o mês M só fecha a partir do dia 4 do mês seguinte (Brasília), porque o
+  // beneficiário pode lançar até o dia 3. Mês futuro continua com a recusa própria.
+  if (o.competencia > competenciaAtual(o.agora)) return falha(422, "Não dá para fechar um mês que ainda não começou.", "mes_futuro");
+  if (prazoDeLancamentoAberto(o.competencia, o.agora)) {
+    const liberado = fechamentoLiberadoEm(o.competencia).split("-").reverse().join("/");
+    return falha(409, `Este mês só pode ser fechado a partir de ${liberado.slice(0, 5)}, depois do prazo de lançamento (até o dia 3).`, "prazo_de_lancamento", { fechavel_a_partir_de: fechamentoLiberadoEm(o.competencia) });
+  }
   const { data, error } = await svc.rpc("comissao_fechar_mes", {
     p_competencia: o.competencia,
     p_unidade: o.unidadeId,

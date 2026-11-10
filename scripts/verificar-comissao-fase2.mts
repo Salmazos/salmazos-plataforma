@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 // @ts-expect-error módulo .mjs do harness, sem tipos
 import { congelarData, logar, importar, chamar, auditoria, novoDb, usuario, USUARIOS } from "./harness-mot/ambiente.mjs";
-import { competenciaAtual, mesAtrasadoDe, montarCsvFolha, selecionarParaFechamento, totalizar, mudancasPorCobranca } from "../src/lib/comissaoRegras";
+import { competenciaAtual, fechamentoLiberadoEm, mesAtrasadoDe, montarCsvFolha, selecionarParaFechamento, totalizar, mudancasPorCobranca } from "../src/lib/comissaoRegras";
 
 congelarData(); // 07/10/2026 15:00Z => mês corrente 2026-10-01
 const R = {
@@ -107,7 +107,12 @@ function lanc(db: any, extra: Record<string, unknown> = {}): any {
 // Comissão "prevista" de verdade: a cobrança ainda aguarda validação (senão a sincronização a confirmaria, como deve).
 const prevista = (db: any, extra: Record<string, unknown> = {}) => lanc(db, { status: "prevista", cobranca_id: cobranca(db, { status: "aprovada_enviada", data_vencimento: null }), ...extra });
 const L = (db: any, id: string) => db.tabelas.comissao_lancamentos.find((l: any) => l.id === id);
-const fechar = (mes: string, extra: Record<string, unknown> = {}) => chamar(R.fechamentos.POST, { metodo: "POST", corpo: { competencia: mes, unidade_id: U1, ...extra } });
+// Fechar o mês corrente (outubro) só é possível depois do prazo de lançamento (dia 4 do mês seguinte): nesses casos o relógio vai para 10/11.
+const fechar = async (mes: string, extra: Record<string, unknown> = {}) => {
+  const depoisDoPrazo = `${mes}-01` === OUT;
+  if (depoisDoPrazo) congelarData("2026-11-10T15:00:00Z");
+  try { return await chamar(R.fechamentos.POST, { metodo: "POST", corpo: { competencia: mes, unidade_id: U1, ...extra } }); } finally { if (depoisDoPrazo) congelarData(); }
+};
 const detalhe = (id: string) => chamar(R.detalhe.GET, { params: { id } });
 const sinos = (db: any, userId?: string) => db.tabelas.notificacoes_analista.filter((x: any) => !userId || x.user_id === userId);
 
@@ -465,6 +470,73 @@ await ok("a regra do banco existe na migração: lançamento fechado congelado, 
   for (const trecho of ["lançamento fechado não pode ser alterado", "fechamento não pode ser apagado", "pagamento já registrado não pode ser desfeito", "GRANT EXECUTE ON FUNCTION public.comissao_fechar_mes", "FROM PUBLIC, anon, authenticated", "SET search_path = ''", "unidade_invalida", "pg_advisory_xact_lock", "FOR UPDATE", "mudou_desde_a_previa"]) {
     assert.ok(sql.includes(trecho), trecho);
   }
+});
+
+// ── 8) Prazo de lançamento: o mês M só fecha a partir do dia 4 do mês seguinte (a regra está na aplicação; a função SQL não muda) ──
+const emData = async <T,>(iso: string, fn: () => Promise<T>): Promise<T> => { congelarData(iso); try { return await fn(); } finally { congelarData(); } };
+const fecharNaData = (iso: string, mes: string, extra: Record<string, unknown> = {}) => emData(iso, () => chamar(R.fechamentos.POST, { metodo: "POST", corpo: { competencia: mes, unidade_id: U1, ...extra } }));
+const previaNaData = (iso: string, mes: string) => emData(iso, async () => (await chamar(R.previa.GET, { url: `http://t/api?mes=${mes}` })).corpo.unidades[0]);
+const DIA3_2359 = "2026-11-04T02:59:00Z", DIA4_0000 = "2026-11-04T03:00:00Z";
+
+await ok("fechar outubro no dia 3 (23:59 BRT) => 409 prazo_de_lancamento, nada gravado; a prévia funciona e avisa; no dia 4 (00:00 BRT) fecha com a prévia batendo", async () => {
+  const db = cenario(); lanc(db, { competencia: OUT });
+  const r = await fecharNaData(DIA3_2359, "2026-10");
+  assert.deepEqual([r.status, r.corpo.codigo, r.corpo.fechavel_a_partir_de], [409, "prazo_de_lancamento", "2026-11-04"]);
+  assert.equal(db.tabelas.comissao_fechamentos.length, 0);
+  assert.equal(db.tabelas.comissao_lancamentos.some((l: any) => l.fechamento_id), false);
+  const antes = await previaNaData(DIA3_2359, "2026-10");
+  assert.deepEqual([antes.qtd, antes.total, antes.prazo_de_lancamento_aberto, antes.fechavel_a_partir_de], [1, 20, true, "2026-11-04"]);
+  assert.equal((await fecharNaData(DIA4_0000, "2026-10")).status === 201, true, "dia 4 às 00:00 BRT já fecha");
+});
+await ok("dia 4: a prévia bate com o fechamento (esperado_qtd/esperado_total) e a prévia deixa de avisar", async () => {
+  const db = cenario(); lanc(db, { competencia: OUT }); lanc(db, { competencia: OUT, valor_comissao: 30 });
+  const p = await previaNaData(DIA4_0000, "2026-10");
+  assert.deepEqual([p.qtd, p.total, p.prazo_de_lancamento_aberto], [2, 50, false]);
+  const r = await fecharNaData(DIA4_0000, "2026-10", { esperado_qtd: p.qtd, esperado_total: p.total });
+  assert.deepEqual([r.status, r.corpo.qtd, r.corpo.total], [201, 2, 50]);
+});
+await ok("mês corrente e mês futuro continuam sem fechar (409 prazo_de_lancamento / 422 mes_futuro); setembro fecha no dia 4/10 e não antes", async () => {
+  const db = cenario(); lanc(db); lanc(db, { competencia: OUT });
+  assert.equal((await fecharNaData("2026-11-10T15:00:00Z", "2026-11")).corpo.codigo, "prazo_de_lancamento", "mês corrente");
+  assert.equal((await fecharNaData("2026-11-10T15:00:00Z", "2026-12")).corpo.codigo, "mes_futuro");
+  assert.equal((await fecharNaData("2026-10-03T14:59:00Z", "2026-09")).corpo.codigo, "prazo_de_lancamento", "03/10 11:59 BRT");
+  assert.equal((await fecharNaData("2026-10-04T15:00:00Z", "2026-09")).status, 201);
+});
+await ok("virada de ano: dezembro só fecha a partir de 04/01", async () => {
+  const db = cenario(); lanc(db, { competencia: "2026-12-01" });
+  assert.equal(fechamentoLiberadoEm("2026-12-01"), "2027-01-04");
+  assert.equal((await fecharNaData("2027-01-03T20:00:00Z", "2026-12")).corpo.codigo, "prazo_de_lancamento");
+  assert.equal((await fecharNaData("2027-01-04T03:00:00Z", "2026-12")).status, 201);
+});
+await ok("marcação feita na folga (competência outubro, marcada em 02/11) entra no fechamento de OUTUBRO, fechado no dia 4", async () => {
+  const db = cenario();
+  const dentro = lanc(db, { competencia: OUT });
+  const cobF = cobranca(db, { enviado_em: "2026-10-31T20:30:00Z", status: "validada" });
+  await emData("2026-11-02T15:00:00Z", async () => { logar(db, "gio"); const r = await chamar(R.marcar.POST, { metodo: "POST", corpo: { cobranca_id: cobF, motivo: "Aceite na segunda" } }); assert.equal(r.status, 201, JSON.stringify(r.corpo)); logar(db, "dir"); });
+  const folga = db.tabelas.comissao_lancamentos.find((l: any) => l.cobranca_id === cobF);
+  assert.deepEqual([folga.competencia, folga.status, folga.motivo], [OUT, "confirmada", "Aceite na segunda"]);
+  const p = await previaNaData(DIA4_0000, "2026-10");
+  assert.deepEqual([p.qtd, p.total], [2, 40]);
+  const r = await fecharNaData(DIA4_0000, "2026-10", { esperado_qtd: p.qtd, esperado_total: p.total });
+  assert.equal(r.status, 201, JSON.stringify(r.corpo));
+  assert.deepEqual([L(db, folga.id).fechamento_id, L(db, dentro.id).fechamento_id].map((x: any) => x === r.corpo.fechamento_id), [true, true]);
+  assert.equal(r.corpo.total, 40);
+});
+await ok("mês de competência JÁ fechado antes (fechamento feito pela regra antiga): marcar na folga não quebra nada — o lançamento fica aberto, com a competência original, e entra no fechamento seguinte como 'atrasada de outubro'", async () => {
+  const db = cenario(); lanc(db, { competencia: OUT });
+  assert.equal((await fecharNaData("2026-11-10T15:00:00Z", "2026-10")).status, 201); // simula o outubro já fechado
+  const cobF = cobranca(db, { enviado_em: "2026-10-31T20:30:00Z", status: "validada" });
+  await emData("2026-11-02T15:00:00Z", async () => { logar(db, "gio"); assert.equal((await chamar(R.marcar.POST, { metodo: "POST", corpo: { cobranca_id: cobF } })).status, 201); logar(db, "dir"); });
+  const folga = db.tabelas.comissao_lancamentos.find((l: any) => l.cobranca_id === cobF);
+  assert.equal(folga.competencia, OUT); assert.ok(!folga.fechamento_id, "fica aberto");
+  const r = await fecharNaData("2026-12-04T15:00:00Z", "2026-11");
+  assert.equal(r.status, 201, JSON.stringify(r.corpo));
+  assert.equal(L(db, folga.id).fechamento_id, r.corpo.fechamento_id);
+  assert.equal(L(db, folga.id).competencia, OUT, "competência original preservada");
+});
+await ok("tela do fechamento: botão desabilitado dentro do prazo, com o texto 'Disponível a partir de 04/<mês seguinte>, depois do prazo de lançamento'", () => {
+  const t = fs.readFileSync("src/components/comissao/FechamentoComissoes.tsx", "utf8");
+  for (const x of ["u.prazo_de_lancamento_aberto ||", "Disponível a partir de", "depois do prazo de lançamento"]) assert.ok(t.includes(x), x);
 });
 
 console.log(`\n${n} verificações OK`);

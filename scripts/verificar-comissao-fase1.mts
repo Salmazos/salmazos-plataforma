@@ -8,6 +8,7 @@ import fs from "node:fs";
 import { congelarData, logar, importar, chamar, auditoria, novoDb, usuario, USUARIOS } from "./harness-mot/ambiente.mjs";
 import {
   calcularComissao, competenciaDoInstante, competenciaAtual, statusInicialDaMarcacao, statusPelaCobranca, mudancasPorCobranca, totalizar, competenciaDoMes,
+  decidirCompetencia, mesAnteriorDe, mesSeguinteDe, fechamentoLiberadoEm, prazoDeLancamentoAberto, lancadaNaFolga, situacaoParaMarcar,
 } from "../src/lib/comissaoRegras";
 
 congelarData(); // 07/10/2026 15:00Z => competência corrente 2026-10-01
@@ -114,10 +115,11 @@ await ok("status pela cobrança: enviada=prevista, validada=confirmada, paga=con
   assert.equal(statusPelaCobranca({ status: "validada", tipo: "cancelamento" }), "prevista");
   assert.equal(statusPelaCobranca({ status: "paga", tipo: "cancelamento" }), "confirmada");
 });
-await ok("status inicial: mês corrente = prevista/confirmada; mês passado = retroativo_pendente (qualquer status da cobrança)", () => {
-  assert.deepEqual(statusInicialDaMarcacao({ status: "aprovada_enviada", enviado_em: "2026-10-02T12:00:00Z" }), { competencia: "2026-10-01", status: "prevista" });
-  assert.deepEqual(statusInicialDaMarcacao({ status: "validada", enviado_em: "2026-10-02T12:00:00Z" }), { competencia: "2026-10-01", status: "confirmada" });
-  assert.deepEqual(statusInicialDaMarcacao({ status: "paga", enviado_em: "2026-09-30T23:00:00-03:00" }), { competencia: "2026-09-01", status: "retroativo_pendente" });
+await ok("status inicial: o da cobrança (prevista/confirmada); a marcação NUNCA nasce retroativo_pendente, nem na folga", () => {
+  assert.equal(statusInicialDaMarcacao({ status: "aprovada_enviada" }), "prevista");
+  assert.equal(statusInicialDaMarcacao({ status: "validada" }), "confirmada");
+  assert.equal(statusInicialDaMarcacao({ status: "paga" }), "confirmada");
+  assert.equal(statusInicialDaMarcacao({ status: "validada", tipo: "cancelamento" }), "prevista");
 });
 await ok("mudancasPorCobranca: valor acompanha fee_valor com o percentual JÁ aplicado; fechado não muda; ajuste/estorno e terminal nunca mudam", () => {
   const base = { tipo: "comissao", status: "prevista", base_valor: 400, valor_comissao: 20, percentual_aplicado: 5, fechado_em: null };
@@ -272,12 +274,12 @@ await ok("envio no dia 31 às 23:30 (Brasília) cai no mês do dia 31", async ()
   assert.equal(doCob(db, c)[0].competencia, "2026-10-01");
   assert.equal(doCob(db, c)[0].status, "prevista");
 });
-await ok("beneficiário marca cobrança de MÊS PASSADO: 409 mes_encerrado, mensagem curta e NENHUM lançamento criado (nem retroativo_pendente)", async () => {
+await ok("beneficiário marca cobrança de MÊS PASSADO fora da folga (hoje dia 7): 409 mes_encerrado, mensagem do prazo e NENHUM lançamento criado (nem retroativo_pendente)", async () => {
   const db = cenario();
   for (const st of ["aprovada_enviada", "validada", "paga"]) {
     const c = cobranca(db, { enviado_em: "2026-09-20T15:00:00.000Z", status: st, data_vencimento: "2026-10-30" });
     const r = await marcar(c);
-    assert.deepEqual([r.status, r.corpo.codigo, r.corpo.error], [409, "mes_encerrado", "Só dá para marcar comissão do mês corrente. Fale com a diretoria."], st);
+    assert.deepEqual([r.status, r.corpo.codigo, r.corpo.error], [409, "mes_encerrado", "Prazo para lançar esta comissão encerrado (até o dia 3 do mês seguinte). Fale com a diretoria."], st);
   }
   assert.equal(lancs(db).length, 0);
   assert.equal(auditoria(db).some((a: any) => a.acao === "comissao_marcada"), false);
@@ -299,7 +301,7 @@ await ok("retroativo_pendente que JÁ existia: aparece na tela do beneficiário 
 await ok("tela do beneficiário não tem o cartão nem o texto de retroativo; a da diretoria mantém o cartão e o subtítulo atual", () => {
   const minhas = fs.readFileSync("src/components/comissao/MinhasComissoesClient.tsx", "utf8");
   assert.equal(/retroativ/i.test(minhas.replace("semRetroativo", "")), false, "nenhuma menção a retroativo na tela do beneficiário");
-  assert.ok(minhas.includes("semRetroativo") && minhas.includes("Marque aqui as comissões que são suas, até o fim do mês."));
+  assert.ok(minhas.includes("semRetroativo") && minhas.includes("Marque aqui as comissões que são suas, até o fim do mês"));
   const ui = fs.readFileSync("src/components/comissao/ui.tsx", "utf8");
   assert.ok(ui.includes("{!semRetroativo && <CardTotal titulo=\"Retroativo pendente\""));
   const dir = fs.readFileSync("src/components/comissao/ComissoesDiretoriaClient.tsx", "utf8");
@@ -366,7 +368,7 @@ await ok("\"Cobranças para marcar\" mostra SÓ cliente, vaga/cargo, quem gerou,
   const db = cenario();
   cobranca(db, { cliente_cnpj_snapshot: "12.345.678/0001-90", cliente_email_snapshot: "financeiro@cliente.com", cliente_endereco_snapshot: "Rua X, 1", cliente_telefone_snapshot: "19999990000", salario: 1000, candidato_nome_snapshot: "Joao Segredo" });
   const r = await chamar(R.paraMarcar.GET);
-  assert.deepEqual(Object.keys(r.corpo.cobrancas[0]).sort(), ["cargo", "cliente", "competencia", "comissao_prevista", "enviado_em", "fee_valor", "gerada_por", "id", "marcada", "status", "vaga"].sort());
+  assert.deepEqual(Object.keys(r.corpo.cobrancas[0]).sort(), ["cargo", "cliente", "competencia", "comissao_prevista", "enviado_em", "fee_valor", "gerada_por", "id", "marcada", "mes_anterior", "permite_escolha_competencia", "status", "vaga"].sort());
   const bruto = JSON.stringify(r.corpo);
   for (const proibido of ["12.345.678", "financeiro@cliente.com", "Rua X", "19999990000", "Joao Segredo"]) assert.equal(bruto.includes(proibido), false, proibido);
 });
@@ -623,5 +625,167 @@ await ok("resolverAcessoComissoes com o perfil já carregado faz no máximo 2 co
   // sem perfil de analista: só vale o padrão do papel
   assert.deepEqual((({ minhas, diretoria }) => ({ minhas, diretoria }))(await R.auth.resolverAcessoComissoes(usuario("u-sem-perfil", "diretoria"))), { minhas: false, diretoria: true });
 });
+
+// ── 9) Prazo de lançamento ("folga" até o dia 3 do mês seguinte) ──
+// Relógio congelado em instantes de Brasília (BRT = UTC−3). Nov/2026: dia 3 às 23:59:00 BRT = 04/11 02:59Z; dia 4 às 00:00 BRT = 04/11 03:00Z.
+const em = async (iso: string, fn: () => void | Promise<void>) => { congelarData(iso); try { await fn(); } finally { congelarData(); } };
+const DIA2 = "2026-11-02T15:00:00Z", DIA3_2359 = "2026-11-04T02:59:00Z", DIA4_0000 = "2026-11-04T03:00:00Z", DIA10 = "2026-11-10T15:00:00Z";
+const marcarCom = (cobranca_id: string, extra: Record<string, unknown> = {}) => chamar(R.marcar.POST, { metodo: "POST", corpo: { cobranca_id, ...extra } });
+const MSG_PRAZO = "Prazo para lançar esta comissão encerrado (até o dia 3 do mês seguinte). Fale com a diretoria.";
+
+await ok("regra pura: competência permitida — mês corrente, mês anterior só até o dia 3, escolha 'anterior' só com hoje<=3 e envio<=3", () => {
+  const d = (enviadoEm: string, agora: string, escolha?: "atual" | "anterior") => decidirCompetencia({ enviadoEm, agora: new Date(agora), escolha });
+  // caso 1: mesmo mês
+  assert.deepEqual(d("2026-11-15T15:00:00Z", DIA10), { ok: true, competencia: "2026-11-01", folga: false, escolha: "atual" });
+  assert.deepEqual(d("2026-11-02T15:00:00Z", DIA2), { ok: true, competencia: "2026-11-01", folga: false, escolha: "atual" }, "padrão = mês corrente");
+  assert.deepEqual(d("2026-11-02T15:00:00Z", DIA2, "anterior"), { ok: true, competencia: "2026-10-01", folga: true, escolha: "anterior" });
+  assert.deepEqual(d("2026-11-02T15:00:00Z", DIA3_2359, "anterior"), { ok: true, competencia: "2026-10-01", folga: true, escolha: "anterior" }, "dia 3 às 23:59 BRT ainda vale");
+  assert.deepEqual(d("2026-11-02T15:00:00Z", DIA4_0000, "anterior"), { ok: false, status: 409, codigo: "mes_encerrado", error: MSG_PRAZO }, "dia 4 às 00:00 BRT já bloqueia");
+  assert.equal((d("2026-11-05T15:00:00Z", DIA10, "anterior") as any).codigo, "mes_encerrado", "fora da janela");
+  const futuro = d("2026-11-15T15:00:00Z", DIA2, "anterior") as any; // enviada depois do dia 3
+  assert.deepEqual([futuro.ok, futuro.status, futuro.codigo], [false, 422, "competencia_invalida"]);
+  // caso 2: enviada no mês anterior
+  assert.deepEqual(d("2026-10-31T20:30:00Z", DIA3_2359), { ok: true, competencia: "2026-10-01", folga: true, escolha: "atual" });
+  assert.deepEqual(d("2026-10-31T20:30:00Z", DIA4_0000), { ok: false, status: 409, codigo: "mes_encerrado", error: MSG_PRAZO });
+  // caso 3: mais antiga
+  assert.equal((d("2026-09-30T20:30:00Z", DIA2) as any).codigo, "mes_encerrado");
+  // virada de ano
+  assert.equal(mesAnteriorDe("2027-01-01"), "2026-12-01"); assert.equal(mesSeguinteDe("2026-12-01"), "2027-01-01");
+  assert.deepEqual(d("2026-12-31T20:30:00Z", "2027-01-02T15:00:00Z"), { ok: true, competencia: "2026-12-01", folga: true, escolha: "atual" });
+  assert.deepEqual(d("2027-01-02T15:00:00Z", "2027-01-02T16:00:00Z", "anterior"), { ok: true, competencia: "2026-12-01", folga: true, escolha: "anterior" });
+  assert.equal((d("2026-12-31T20:30:00Z", "2027-01-04T03:00:00Z") as any).codigo, "mes_encerrado");
+  // lista e escolha derivam da mesma função
+  assert.deepEqual(situacaoParaMarcar({ enviadoEm: "2026-11-02T15:00:00Z", agora: new Date(DIA2) }), { competencia: "2026-11-01", folga: false, escolhaCompetencia: true });
+  assert.deepEqual(situacaoParaMarcar({ enviadoEm: "2026-10-31T20:30:00Z", agora: new Date(DIA2) }), { competencia: "2026-10-01", folga: true, escolhaCompetencia: false });
+  assert.equal(situacaoParaMarcar({ enviadoEm: "2026-10-31T20:30:00Z", agora: new Date(DIA10) }), null);
+});
+await ok("regra pura: selo de folga derivado de marcado_em (mês seguinte, dias 1–3) e liberação do fechamento (dia 4)", () => {
+  assert.equal(lancadaNaFolga({ tipo: "comissao", competencia: "2026-10-01", marcado_em: "2026-11-02T15:00:00Z" }), true);
+  assert.equal(lancadaNaFolga({ tipo: "comissao", competencia: "2026-10-01", marcado_em: "2026-10-31T23:30:00-03:00" }), false, "marcada dentro do mês");
+  assert.equal(lancadaNaFolga({ tipo: "comissao", competencia: "2026-10-01", marcado_em: "2026-11-15T15:00:00Z" }), false, "retroativo antigo, fora dos dias 1–3");
+  assert.equal(lancadaNaFolga({ tipo: "estorno", competencia: "2026-10-01", marcado_em: "2026-11-02T15:00:00Z" }), false);
+  assert.equal(lancadaNaFolga({ tipo: "comissao", competencia: "2026-12-01", marcado_em: "2027-01-03T12:00:00Z" }), true, "virada de ano");
+  assert.equal(fechamentoLiberadoEm("2026-10-01"), "2026-11-04"); assert.equal(fechamentoLiberadoEm("2026-12-01"), "2027-01-04");
+  assert.equal(prazoDeLancamentoAberto("2026-10-01", new Date(DIA3_2359)), true);
+  assert.equal(prazoDeLancamentoAberto("2026-10-01", new Date(DIA4_0000)), false);
+});
+await ok("dia 3 às 23:59 BRT marca cobrança do mês anterior; dia 4 às 00:00 BRT => 409 mes_encerrado", async () => {
+  const db = cenario(); const c = cobranca(db, { enviado_em: "2026-10-31T20:30:00Z" }); const c2 = cobranca(db, { enviado_em: "2026-10-30T20:30:00Z" });
+  await em(DIA3_2359, async () => { const r = await marcarCom(c); assert.equal(r.status, 201, JSON.stringify(r.corpo)); });
+  await em(DIA4_0000, async () => {
+    const r = await marcarCom(c2);
+    assert.deepEqual([r.status, r.corpo.codigo, r.corpo.error], [409, "mes_encerrado", MSG_PRAZO]);
+  });
+  assert.equal(doCob(db, c2).length, 0);
+});
+await ok("cobrança enviada dia 31 e marcada dia 2 => competência do mês anterior, status NORMAL (prevista/confirmada, nunca retroativo_pendente), sem motivo", async () => {
+  const db = cenario();
+  const a = cobranca(db, { enviado_em: "2026-10-31T20:30:00Z" });
+  const b = cobranca(db, { enviado_em: "2026-10-31T20:30:00Z", status: "validada", data_vencimento: "2026-11-30" });
+  await em(DIA2, async () => { assert.equal((await marcar(a)).status, 201); assert.equal((await marcar(b)).status, 201); });
+  assert.deepEqual([doCob(db, a)[0].competencia, doCob(db, a)[0].status, doCob(db, a)[0].motivo], ["2026-10-01", "prevista", null]);
+  assert.deepEqual([doCob(db, b)[0].competencia, doCob(db, b)[0].status], ["2026-10-01", "confirmada"]);
+  const aud = auditoria(db).find((x: any) => x.acao === "comissao_marcada");
+  assert.deepEqual([aud.detalhes.na_folga, aud.detalhes.competencia, aud.detalhes.marcado_na_data], [true, "2026-10-01", "2026-11-02"]);
+});
+await ok("enviada dia 2 do mês corrente, hoje dia 2: escolha 'anterior' => competência anterior COM motivo salvo e auditoria da folga; sem escolha => mês corrente", async () => {
+  const db = cenario();
+  const a = cobranca(db, { enviado_em: "2026-11-02T12:00:00Z" }); const b = cobranca(db, { enviado_em: "2026-11-02T12:00:00Z" }); const c = cobranca(db, { enviado_em: "2026-11-02T12:00:00Z" });
+  await em(DIA2, async () => {
+    const r = await marcarCom(a, { competencia_escolhida: "anterior", motivo: "  Vaga fechada em 30/10, cliente só enviou o aceite hoje  " });
+    assert.equal(r.status, 201, JSON.stringify(r.corpo));
+    assert.equal((await marcar(b)).status, 201);
+    assert.equal((await marcarCom(c, { competencia_escolhida: "atual", motivo: "x" })).status, 201);
+  });
+  assert.deepEqual([doCob(db, a)[0].competencia, doCob(db, a)[0].status, doCob(db, a)[0].motivo], ["2026-10-01", "prevista", "Vaga fechada em 30/10, cliente só enviou o aceite hoje"]);
+  assert.deepEqual([doCob(db, b)[0].competencia, doCob(db, b)[0].motivo], ["2026-11-01", null], "padrão = mês corrente");
+  assert.equal(doCob(db, c)[0].competencia, "2026-11-01");
+  const aud = auditoria(db).filter((x: any) => x.acao === "comissao_marcada");
+  const daA = aud.find((x: any) => x.detalhes.cobranca_id === a);
+  assert.deepEqual([daA.detalhes.na_folga, daA.detalhes.competencia_escolhida, daA.detalhes.marcado_na_data, daA.detalhes.competencia], [true, "anterior", "2026-11-02", "2026-10-01"]);
+  assert.equal(aud.find((x: any) => x.detalhes.cobranca_id === b).detalhes.na_folga, undefined, "marcação normal não vira folga");
+});
+await ok("escolha 'anterior' fora da janela (dia 10) => 409; para cobrança enviada no dia 15 => recusada (422); nada gravado", async () => {
+  const db = cenario();
+  const dia2 = cobranca(db, { enviado_em: "2026-11-02T12:00:00Z" });
+  const dia15 = cobranca(db, { enviado_em: "2026-11-15T12:00:00Z" });
+  await em(DIA10, async () => {
+    const r = await marcarCom(dia2, { competencia_escolhida: "anterior" });
+    assert.deepEqual([r.status, r.corpo.codigo], [409, "mes_encerrado"]);
+  });
+  await em(DIA2, async () => {
+    const r = await marcarCom(dia15, { competencia_escolhida: "anterior" });
+    assert.deepEqual([r.status, r.corpo.codigo], [422, "competencia_invalida"]);
+  });
+  assert.equal(lancs(db).length, 0);
+});
+await ok("cobrança do mês anterior marcada na folga não é retroativo: validada vira confirmada; a sincronização com a cobrança continua valendo", async () => {
+  const db = cenario(); const c = cobranca(db, { enviado_em: "2026-10-31T20:30:00Z" });
+  await em(DIA2, async () => { assert.equal((await marcar(c)).status, 201); });
+  assert.equal(doCob(db, c)[0].status, "prevista");
+  await em(DIA10, async () => { logar(db, "dir"); assert.equal((await vencimento(c, "2026-11-30")).status, 200); });
+  assert.equal(doCob(db, c)[0].status, "confirmada");
+  assert.equal(doCob(db, c)[0].competencia, "2026-10-01", "competência imutável");
+});
+await ok("virada dez→jan: enviada 31/12 marcada em 02/01 => 2026-12; escolha 'anterior' em janeiro => 2026-12; dia 4/01 => 409", async () => {
+  const db = cenario();
+  const a = cobranca(db, { enviado_em: "2026-12-31T20:30:00Z" }); const b = cobranca(db, { enviado_em: "2027-01-02T12:00:00Z" }); const c = cobranca(db, { enviado_em: "2026-12-30T20:30:00Z" });
+  await em("2027-01-02T15:00:00Z", async () => {
+    assert.equal((await marcar(a)).status, 201);
+    assert.equal((await marcarCom(b, { competencia_escolhida: "anterior" })).status, 201);
+  });
+  assert.deepEqual([doCob(db, a)[0].competencia, doCob(db, b)[0].competencia], ["2026-12-01", "2026-12-01"]);
+  await em("2027-01-04T03:00:00Z", async () => { assert.equal((await marcar(c)).corpo.codigo, "mes_encerrado"); });
+});
+await ok("listagem muda com a janela: dia 2 inclui mês anterior (com rótulo/competência) e libera a escolha; dia 10 volta só ao mês corrente; aviso no topo só dentro da janela", async () => {
+  const db = cenario();
+  const out31 = cobranca(db, { enviado_em: "2026-10-31T20:30:00Z" }); const set20 = cobranca(db, { enviado_em: "2026-09-20T15:00:00Z" });
+  const nov1 = cobranca(db, { enviado_em: "2026-11-01T15:00:00Z" }); const nov5 = cobranca(db, { enviado_em: "2026-11-05T15:00:00Z" });
+  await em(DIA2, async () => {
+    const r = await chamar(R.paraMarcar.GET);
+    assert.deepEqual(r.corpo.cobrancas.map((c: any) => [c.id, c.competencia, c.mes_anterior, c.permite_escolha_competencia]).sort(), [[out31, "2026-10-01", true, false], [nov1, "2026-11-01", false, true], [nov5, "2026-11-01", false, false]].sort());
+    assert.deepEqual(r.corpo.janela, { aberta: true, competencia_anterior: "2026-10-01", prazo_ate: "2026-11-03" });
+    assert.ok(r.corpo.cobrancas.every((c: any) => c.id !== set20), "dois meses atrás nunca entra");
+  });
+  await em(DIA10, async () => {
+    const r = await chamar(R.paraMarcar.GET);
+    assert.deepEqual(r.corpo.cobrancas.map((c: any) => c.id).sort(), [nov1, nov5].sort());
+    assert.equal(r.corpo.janela.aberta, false);
+    assert.equal(r.corpo.cobrancas.some((c: any) => c.permite_escolha_competencia || c.mes_anterior), false);
+  });
+  const tela = fs.readFileSync("src/components/comissao/MinhasComissoesClient.tsx", "utf8");
+  for (const t of ["Prazo para lançar as comissões de", "janela?.aberta", "Vaga fechada em:", "Motivo (opcional)", "permite_escolha_competencia"]) assert.ok(tela.includes(t), t);
+});
+await ok("quadro dentro da cobrança segue a MESMA regra do servidor: pode_marcar/competência/mensagem, e a escolha de competência fica só em Minhas comissões", async () => {
+  const db = cenario();
+  const out31 = cobranca(db, { enviado_em: "2026-10-31T20:30:00Z" }); const nov2 = cobranca(db, { enviado_em: "2026-11-02T12:00:00Z" });
+  const estado = async (id: string) => (await chamar(R.daCobranca.GET, { params: { id } })).corpo;
+  await em(DIA2, async () => {
+    const a = await estado(out31); assert.deepEqual([a.pode_marcar, a.competencia, a.permite_escolha_competencia], [true, "2026-10-01", false]);
+    const b = await estado(nov2); assert.deepEqual([b.pode_marcar, b.competencia, b.permite_escolha_competencia], [true, "2026-11-01", true]);
+  });
+  await em(DIA4_0000, async () => {
+    const a = await estado(out31); assert.deepEqual([a.pode_marcar, a.motivo_bloqueio], [false, MSG_PRAZO]);
+    assert.equal((await estado(nov2)).pode_marcar, true);
+  });
+  const caixa = fs.readFileSync("src/components/comissao/ComissaoCobrancaBox.tsx", "utf8");
+  assert.ok(caixa.includes("permite_escolha_competencia") && caixa.includes("/painel/minhas-comissoes"));
+});
+await ok("selo 'lançada na folga' na diretoria: só nas marcadas depois do fim do mês da competência, com o motivo; contestação continua igual", async () => {
+  const db = cenario();
+  const folga = cobranca(db, { enviado_em: "2026-10-31T20:30:00Z" }); const normal = cobranca(db, { enviado_em: "2026-10-05T15:00:00Z" });
+  await em("2026-10-06T15:00:00Z", async () => { assert.equal((await marcar(normal)).status, 201); });
+  await em(DIA2, async () => { assert.equal((await marcarCom(folga, { motivo: "Aceite chegou na segunda" })).status, 201); });
+  logar(db, "dir");
+  const out = (await chamar(R.todas.GET, { url: "http://t/api?mes=2026-10" })).corpo.lancamentos;
+  assert.deepEqual(out.map((l: any) => [l.cobranca_id, l.lancada_na_folga]).sort(), [[folga, true], [normal, false]].sort());
+  assert.equal(out.find((l: any) => l.cobranca_id === folga).motivo, "Aceite chegou na segunda");
+  const dir = fs.readFileSync("src/components/comissao/ComissoesDiretoriaClient.tsx", "utf8");
+  assert.ok(dir.includes("lançada na folga") && dir.includes("l.lancada_na_folga"));
+  const idFolga = out.find((l: any) => l.cobranca_id === folga).id;
+  await em(DIA10, async () => { assert.equal((await chamar(R.contestar.POST, { metodo: "POST", params: { id: idFolga }, corpo: { motivo: "Valor errado" } })).status, 200); });
+  assert.equal(L(db, idFolga).status, "contestada");
+});
+function L(db: any, id: string) { return db.tabelas.comissao_lancamentos.find((l: any) => l.id === id); }
 
 console.log(`\n${n} verificações OK`);

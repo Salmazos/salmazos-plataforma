@@ -148,6 +148,7 @@ export default function FechamentoComissoes() {
                   </div>
                 )}
                 {u.mes_futuro && <Aviso tipo="erro">Este mês ainda não começou.</Aviso>}
+                {!u.mes_futuro && u.prazo_de_lancamento_aberto && <Aviso tipo="info">Disponível a partir de {u.fechavel_a_partir_de.slice(8, 10)}/{u.fechavel_a_partir_de.slice(5, 7)}, depois do prazo de lançamento.</Aviso>}
                 {u.fechamento_posterior && <Aviso tipo="erro">Já existe fechamento de um mês posterior; este mês não pode mais ser fechado.</Aviso>}
                 <TabelaGrupos grupos={u.grupos} />
                 {confirmando === u.unidade_id ? (
@@ -163,7 +164,7 @@ export default function FechamentoComissoes() {
                 ) : (
                   <div className="flex justify-end">
                     <button
-                      disabled={u.bloqueios.length > 0 || u.mes_futuro || u.fechamento_posterior || u.qtd === 0}
+                      disabled={u.bloqueios.length > 0 || u.mes_futuro || u.prazo_de_lancamento_aberto || u.fechamento_posterior || u.qtd === 0}
                       onClick={() => { setConfirmando(u.unidade_id); setEntendi(false); }}
                       className="text-sm font-semibold rounded-lg px-4 py-2 disabled:opacity-50"
                       style={{ background: "#000", color: "#FFD700" }}
