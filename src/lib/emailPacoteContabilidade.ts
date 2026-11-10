@@ -1,6 +1,7 @@
-// Helpers puros do e-mail "Pacote para contabilidade" (admissão). Sem imports de propósito: roda no
-// servidor, no client e no script de verificação (scripts/verificar-email-pacote-contabilidade.mts).
+// Helpers puros do e-mail "Pacote para contabilidade" (admissão). Sem I/O: roda no servidor, no client e no script de
+// verificação (scripts/verificar-email-pacote-contabilidade.mts). Só importa a regra pura de dias de teste (diasTeste.ts).
 // Constantes de negócio (tempo de contrato padrão, Cc) vêm de constants.ts e entram por parâmetro.
+import { exigeRespostaDiasTeste, qtdDiasTesteSchema, textoDiasTesteParaContabilidade, TEXTO_DIAS_TESTE_NAO_INFORMADO } from "./diasTeste";
 
 export const LIMITE_ANEXO_EMAIL_BYTES = 15 * 1024 * 1024;
 export const INTERVALO_REENVIO_MS = 10 * 60 * 1000;
@@ -74,6 +75,8 @@ export interface DadosEmailPacote {
   horario: string | null;
   telefone: string; // já formatado por exibirTelefone
   tempoContrato: string;
+  // Texto já pronto da linha "Dias de teste" (textoDiasTesteParaContabilidade); vazio/ausente = linha omitida (R&S).
+  diasTeste?: string | null;
 }
 
 export interface LinhaDado {
@@ -103,6 +106,9 @@ export function montarLinhasDados(d: DadosEmailPacote): LinhaDado[] {
   ].map((l) => ({ ...l, valor: (l.valor ?? "").trim() }));
   const preenchidas = linhas.filter((l) => l.valor !== "");
   preenchidas.push({ rotulo: "Tempo de Contrato", valor: d.tempoContrato.trim() });
+  // "Dias de teste" vem logo depois do tempo de contrato; só MOT/Terceirização (quem monta o texto decide; vazio = omitida).
+  const diasTeste = (d.diasTeste ?? "").trim();
+  if (diasTeste) preenchidas.push({ rotulo: "Dias de teste", valor: diasTeste });
   return preenchidas;
 }
 
@@ -225,7 +231,18 @@ export interface CamposEmailContabilidade {
   telefone: string;
   dataInicio: string; // YYYY-MM-DD ou vazio
   tempoContrato: string;
+  // Dias de teste (candidatos_vagas.admissao_qtd_dias_teste): null = não informado, 0 = não houve, 1 ou 2 = dias a lançar.
+  diasTeste: number | null;
 }
+
+// O que NÃO é editável no modal e vem do cadastro: o tipo de serviço vigente (decide se a linha existe) e o texto antigo
+// (admissao_dia_teste), mostrado quando não há quantidade.
+export interface ContextoDiasTeste {
+  tipoServico: string | null;
+  legado: string | null;
+}
+
+export const diasTesteSeAplica = (ctx: ContextoDiasTeste | null | undefined): boolean => !!ctx && exigeRespostaDiasTeste(ctx.tipoServico);
 
 export const LIMITES_CAMPOS_EMAIL = { nome: 120, funcao: 120, horario: 200, telefone: 40, tempoContrato: 200 } as const;
 
@@ -283,6 +300,16 @@ export function validarCamposEmail(entrada: unknown): { ok: boolean; erros: stri
   const dataInicio = sanitizarCampoEmail(e.dataInicio, 10);
   if (dataInicio && !dataISOValida(dataInicio)) erros.push("Data de início inválida.");
 
+  // Dias de teste: vazio/null = não informado; só 0, 1 ou 2 (mesma regra do cadastro, qtdDiasTesteSchema). Qualquer outra coisa é recusada.
+  let diasTeste: number | null = null;
+  const brutoDias = e.diasTeste;
+  if (brutoDias !== null && brutoDias !== undefined && brutoDias !== "") {
+    const n = typeof brutoDias === "number" ? brutoDias : typeof brutoDias === "string" && /^\d+$/.test(brutoDias.trim()) ? Number(brutoDias.trim()) : NaN;
+    const r = qtdDiasTesteSchema.safeParse(n);
+    if (r.success) diasTeste = r.data;
+    else erros.push("Dias de teste inválido (informe não houve, 1 ou 2 dias).");
+  }
+
   let salarioValor: number | null = null;
   let salarioTipo: "hora" | "mensal" | null = null;
   const bruto = e.salarioValor;
@@ -309,6 +336,7 @@ export function validarCamposEmail(entrada: unknown): { ok: boolean; erros: stri
       telefone: formatarTelefoneEmail(sanitizarCampoEmail(e.telefone, LIMITES_CAMPOS_EMAIL.telefone)),
       dataInicio: dataISOValida(dataInicio) ? dataInicio : "",
       tempoContrato: sanitizarCampoEmail(e.tempoContrato, LIMITES_CAMPOS_EMAIL.tempoContrato),
+      diasTeste,
     },
   };
 }
@@ -318,7 +346,8 @@ export function montarAssuntoDeCampos(c: CamposEmailContabilidade): string {
   return montarAssunto(c.dataInicio, c.nome);
 }
 
-export function montarLinhasDeCampos(c: CamposEmailContabilidade, empresa: string, cliente: string, tempoContratoPadrao: string): LinhaDado[] {
+// `dias`: contexto do cadastro para a linha "Dias de teste"; sem ele (ou em R&S) a linha não existe.
+export function montarLinhasDeCampos(c: CamposEmailContabilidade, empresa: string, cliente: string, tempoContratoPadrao: string, dias?: ContextoDiasTeste | null): LinhaDado[] {
   return montarLinhasDados({
     empresa,
     cliente,
@@ -329,11 +358,12 @@ export function montarLinhasDeCampos(c: CamposEmailContabilidade, empresa: strin
     horario: c.horario,
     telefone: c.telefone,
     tempoContrato: resolverTempoContrato(c.tempoContrato, tempoContratoPadrao),
+    diasTeste: dias ? textoDiasTesteParaContabilidade(c.diasTeste, dias.legado, dias.tipoServico) : null,
   });
 }
 
 // Campos que o e-mail omitiria (só aviso, não bloqueia). Calculado sobre os valores já editados.
-export function avisosCamposFaltando(c: CamposEmailContabilidade, empresa: string, cliente: string): string[] {
+export function avisosCamposFaltando(c: CamposEmailContabilidade, empresa: string, cliente: string, dias?: ContextoDiasTeste | null): string[] {
   const avisos: string[] = [];
   if (!c.nome) avisos.push("Nome do candidato não encontrado.");
   if (!c.dataInicio) avisos.push("Data de início não definida.");
@@ -343,10 +373,14 @@ export function avisosCamposFaltando(c: CamposEmailContabilidade, empresa: strin
   if (c.salarioValor === null) avisos.push("Salário não preenchido.");
   if (!c.horario) avisos.push("Horário não preenchido.");
   if (!c.telefone) avisos.push("Telefone não encontrado.");
+  // Aqui a linha VAI no e-mail (como "Não informado pelo cliente"); o aviso só chama a atenção, não bloqueia o envio.
+  if (dias && textoDiasTesteParaContabilidade(c.diasTeste, dias.legado, dias.tipoServico) === TEXTO_DIAS_TESTE_NAO_INFORMADO) {
+    avisos.push(`Dias de teste não informado pelo cliente: o e-mail vai dizer “${TEXTO_DIAS_TESTE_NAO_INFORMADO}”.`);
+  }
   return avisos;
 }
 
-export type NomeCampoEmail = "nome" | "funcao" | "salario" | "horario" | "telefone" | "dataInicio" | "tempoContrato";
+export type NomeCampoEmail = "nome" | "funcao" | "salario" | "horario" | "telefone" | "dataInicio" | "tempoContrato" | "diasTeste";
 
 // Nomes dos campos que mudaram (ambos os lados passam pela mesma normalização antes de comparar).
 export function listarCamposEditados(original: unknown, editado: unknown): NomeCampoEmail[] {
@@ -360,5 +394,6 @@ export function listarCamposEditados(original: unknown, editado: unknown): NomeC
   if (a.telefone !== b.telefone) mudou.push("telefone");
   if (a.dataInicio !== b.dataInicio) mudou.push("dataInicio");
   if (a.tempoContrato !== b.tempoContrato) mudou.push("tempoContrato");
+  if (a.diasTeste !== b.diasTeste) mudou.push("diasTeste");
   return mudou;
 }
