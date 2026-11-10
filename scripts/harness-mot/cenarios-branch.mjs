@@ -41,7 +41,9 @@ const db = () => globalThis.__DB__;
 const id = (n) => idMot(n);
 const POST = (funcionarioId, corpo) => chamar(eventos.POST, { metodo: "POST", params: { id: funcionarioId }, corpo });
 const GET = (funcionarioId) => chamar(eventos.GET, { params: { id: funcionarioId } });
-const listaPainel = async () => (await chamar(popupPainel.GET)).corpo.data.map((a) => a.funcionario_id);
+// Estes cenários são da regra MOT. O painel agora também lista Terceirização (F_T1 do seed, 270 dias): isso é verificado em
+// scripts/verificar-vencimento-contrato-terceirizacao.mts; aqui o terceirizado fica fora da lista para os cenários seguirem sendo MOT.
+const listaPainel = async () => (await chamar(popupPainel.GET)).corpo.data.map((a) => a.funcionario_id).filter((x) => x !== F_T1);
 const listaPortal = async () => (await chamar(popupPortal.GET)).corpo.data.map((a) => a.id);
 const rescisaoBody = (funcionarioId, extra = {}) => ({
   funcionario_id: funcionarioId, empresa: "Cliente Um", data_desligamento: "2026-11-30", modalidade: "desligamento_pela_empresa",
@@ -173,7 +175,9 @@ await caso("POST: datas (futura, antes da admissão), tipo, benefício, anexo, f
   await ruim(id(4), { tipo: "prorrogacao", data_evento: "2026-10-01", arquivo_path: `contratos/${id(4)}/contrato.pdf` }, 400, /Anexo inválido/);
   await ruim(id(4), { tipo: "prorrogacao", data_evento: "2026-10-01", arquivo_path: `aditivos/${id(4)}/../${id(5)}/x.pdf` }, 400, /Anexo inválido/);
   await ruim(F_D1, { tipo: "prorrogacao", data_evento: "2026-09-01" }, 409, /desligado/);
-  await ruim(F_T1, { tipo: "prorrogacao", data_evento: "2026-09-01" }, 400, /mão de obra temporária/);
+  // Terceirização agora aceita prorrogação/afastamento (fase temporária); R&S continua recusado.
+  db().tabelas.funcionarios.push(funcionarioMot("dddddddd-0000-4000-8000-0000000000a1", "2026-01-10", { tipo_servico: "recrutamento_selecao" }));
+  await ruim("dddddddd-0000-4000-8000-0000000000a1", { tipo: "prorrogacao", data_evento: "2026-09-01" }, 400, /mão de obra temporária ou de terceirização/);
   assert.equal(db().tabelas.funcionario_mot_eventos.length, 0, "nada gravado nos casos inválidos");
 });
 
@@ -535,7 +539,7 @@ await caso("popup/relatórios: se a tabela nova ainda não existe (migration nã
   db().falhas["funcionario_mot_eventos.select"] = 'relation "funcionario_mot_eventos" does not exist';
   assert.deepEqual(await listaPainel(), [id(1), id(4)]);
   assert.deepEqual(await listaPortal(), [id(1), id(4)]);
-  assert.equal(serializar(await paginaPainel()).props.linhasIniciais.length, 32); // 31 da U1 + 1 da U2 (diretoria vê todas)
+  assert.equal(serializar(await paginaPainel()).props.linhasIniciais.length, 33); // 31 MOT da U1 + 1 MOT da U2 + 1 terceirizado (diretoria vê todas)
 });
 
 // ── Datas de borda (fuso de Brasília) ────────────────────────────────────────

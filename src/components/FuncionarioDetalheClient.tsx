@@ -286,10 +286,14 @@ export default function FuncionarioDetalheClient({ funcionario: funcionarioInici
         <BlocoDiasTesteRH className="mb-6" qtd={diasTeste.qtd} legado={diasTeste.legado} tipo={funcionario.tipo_servico} />
       )}
 
-      {funcionario.tipo_servico === "mao_obra_temporaria" && (
+      {(funcionario.tipo_servico === "mao_obra_temporaria" || funcionario.tipo_servico === "terceirizacao") && (
         <div className="card mb-6">
-          <p className="section-title mb-1">Contrato MOT</p>
-          <p className="text-xs text-gray-400 mb-4">Prorrogação, afastamento e encerramento do contrato de mão de obra temporária.</p>
+          <p className="section-title mb-1">{funcionario.tipo_servico === "terceirizacao" ? "Contrato temporário (Terceirização)" : "Contrato MOT"}</p>
+          <p className="text-xs text-gray-400 mb-4">
+            {funcionario.tipo_servico === "terceirizacao"
+              ? "Prorrogação, afastamento e encerramento da fase temporária (até 270 dias da admissão) do funcionário de terceirização."
+              : "Prorrogação, afastamento e encerramento do contrato de mão de obra temporária."}
+          </p>
           <ContratoMotPainel funcionarioId={funcionario.id} onAlterado={() => router.refresh()} />
         </div>
       )}
