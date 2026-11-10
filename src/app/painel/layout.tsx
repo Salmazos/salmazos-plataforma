@@ -6,6 +6,7 @@ import PopupRescisoesHoje from "@/components/PopupRescisoesHoje";
 import PopupAsoPeriodicoHoje from "@/components/PopupAsoPeriodicoHoje";
 import PopupCobrancasRSPendentes from "@/components/PopupCobrancasRSPendentes";
 import PopupCobrancaEnviada from "@/components/PopupCobrancaEnviada";
+import PopupComissoesPendencias from "@/components/comissao/PopupComissoesPendencias";
 import PopupCobrancaVencida from "@/components/PopupCobrancaVencida";
 import PopupSupervisaoPendente from "@/components/PopupSupervisaoPendente";
 import PopupLembretesComercial from "@/components/PopupLembretesComercial";
@@ -153,6 +154,7 @@ export default async function PainelLayout({
         <PopupAsoPeriodicoHoje />
         <PopupCobrancasRSPendentes />
         <PopupCobrancaEnviada />
+        {(acessoComissoes.minhas || acessoComissoes.diretoria) && <PopupComissoesPendencias />}
         <PopupCobrancaVencida />
         <PopupSupervisaoPendente />
         <PopupLembretesComercial />

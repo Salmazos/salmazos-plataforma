@@ -3,6 +3,7 @@ import { registrarAuditoria } from "@/lib/audit";
 import { apelidoDoNomeCompleto } from "@/lib/responsaveis";
 import { carregarNomesGeradoresCobrancaRS } from "@/lib/cobrancaRSAutor";
 import { TIPO_AVISO_COMISSAO, avisarBeneficiario, textos } from "@/lib/comissaoAvisos";
+import { avisarDiretoriaMarcacao } from "@/lib/comissaoAvisosDiretoria";
 import {
   MENSAGEM_RECUSA_MARCACAO,
   arredondar2,
@@ -86,7 +87,7 @@ export interface Ator {
 
 const falha = (status: number, error: string, codigo?: string): Falha => ({ ok: false, status, error, ...(codigo ? { codigo } : {}) });
 
-const STATUS_ATIVOS: StatusLancamento[] = ["prevista", "confirmada", "retroativo_pendente", "contestada"];
+export const STATUS_ATIVOS: StatusLancamento[] = ["prevista", "confirmada", "retroativo_pendente", "contestada"];
 
 function auditar(ator: Ator, acao: string, lancId: string | null, detalhes: Record<string, unknown>, unidadeId?: string | null) {
   void unidadeId; // audit_logs.unidade_id tem DEFAULT; o registro de comissão não força outra unidade
@@ -244,6 +245,11 @@ export async function marcarComissao(
     // Marcação na folga (depois do fim do mês da competência): registra a escolha e a data real do lançamento.
     ...(folga ? { na_folga: true, competencia_escolhida: decisao.escolha, marcado_na_data: agora.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }), enviado_em: cobranca.enviado_em, motivo } : {}),
   }, cobranca.unidade_id);
+  // A diretoria é avisada na hora (sino), com destaque para a marcada na folga. Nunca lança nem altera o resultado.
+  await avisarDiretoriaMarcacao(svc, {
+    marcadoPorUserId: o.ator.id || null, beneficiario: o.beneficiario.nome_completo, cliente: cobranca.cliente_nome_snapshot,
+    valor: Number(criado.valor_comissao), competencia, folga, unidadeId: cobranca.unidade_id, agora,
+  });
   return { ok: true, lancamento: criado as Lancamento };
 }
 
