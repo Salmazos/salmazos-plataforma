@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { formatarDataSemFuso } from "@/lib/utils";
-import { ehTerceirizacao, rotuloModalidadeContrato, type ContratoMotFaixa } from "@/lib/contratoMotStatus";
+import { ehTerceirizacao, ordenarPorDiasTrabalhados, rotuloModalidadeContrato, type ContratoMotFaixa, type OrdemDiasTrabalhados } from "@/lib/contratoMotStatus";
 import type { SeloMot } from "@/lib/contratoMotEventos";
 
 export interface VencimentoContratoRow {
@@ -58,6 +58,10 @@ const TD_STYLE: React.CSSProperties = {
 };
 
 // Cores do selo de modalidade (mesma paleta da lista de Funcionários: azul = MOT, roxo = Terceirização).
+// Destaque verde da coluna "Dias trabalhados" (a coluna pela qual a lista é ordenada). Verde claro de propósito: não confundir com o selo
+// "Dentro do prazo" da coluna Situação (verde mais forte, em pílula).
+const DESTAQUE_DIAS = { fundoCabecalho: "#DCFCE7", fundoCelula: "#F0FDF4", texto: "#166534" } as const;
+
 const SELO_MODALIDADE = {
   MOT: { bg: "#EFF6FF", text: "#1D4ED8" },
   "Terceirização": { bg: "#F5F3FF", text: "#6D28D9" },
@@ -67,16 +71,18 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
   const [filtroClienteId, setFiltroClienteId] = useState("");
   const [filtroModalidade, setFiltroModalidade] = useState<"" | "mao_obra_temporaria" | "terceirizacao">("");
   const [busca, setBusca] = useState("");
+  // Padrão: dias trabalhados do maior para o menor (clicar no título da coluna inverte).
+  const [ordemDias, setOrdemDias] = useState<OrdemDiasTrabalhados>("desc");
 
   const filtradas = useMemo(() => {
     const buscaLower = busca.trim().toLowerCase();
-    return linhasIniciais.filter((l) => {
+    return ordenarPorDiasTrabalhados(linhasIniciais, ordemDias).filter((l) => {
       if (filtroModalidade && l.tipoServico !== filtroModalidade) return false;
       if (filtroClienteId && l.clienteId !== filtroClienteId) return false;
       if (buscaLower && !l.nomeCompleto.toLowerCase().includes(buscaLower)) return false;
       return true;
     });
-  }, [linhasIniciais, filtroModalidade, filtroClienteId, busca]);
+  }, [linhasIniciais, ordemDias, filtroModalidade, filtroClienteId, busca]);
 
   // Contagens sobre a lista cheia (não sobre o resultado filtrado), como nos cards de Funcionários.
   const totalMot = useMemo(() => linhasIniciais.filter((l) => !ehTerceirizacao(l.tipoServico)).length, [linhasIniciais]);
@@ -146,7 +152,16 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
                 <th style={TH_STYLE}>Modalidade</th>
                 <th style={TH_STYLE}>Empresa</th>
                 <th style={TH_STYLE}>Data de Admissão</th>
-                <th style={TH_STYLE}>Dias Trabalhados</th>
+                <th style={{ ...TH_STYLE, background: DESTAQUE_DIAS.fundoCabecalho, color: DESTAQUE_DIAS.texto, padding: 0 }} aria-sort={ordemDias === "desc" ? "descending" : "ascending"}>
+                  <button
+                    type="button"
+                    onClick={() => setOrdemDias((o) => (o === "desc" ? "asc" : "desc"))}
+                    title={ordemDias === "desc" ? "Do maior para o menor (clique para inverter)" : "Do menor para o maior (clique para inverter)"}
+                    style={{ all: "unset", cursor: "pointer", display: "block", padding: "10px 14px", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.3, whiteSpace: "nowrap" }}
+                  >
+                    Dias Trabalhados {ordemDias === "desc" ? "▼" : "▲"}
+                  </button>
+                </th>
                 <th style={TH_STYLE}>Situação</th>
                 <th style={TH_STYLE}>Vencimento 90 dias</th>
                 <th style={TH_STYLE}>Vencimento 180 dias</th>
@@ -168,7 +183,7 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
                   </td>
                   <td style={{ ...TD_STYLE, color: "#374151" }}>{l.empresa}</td>
                   <td style={{ ...TD_STYLE, color: "#374151" }}>{formatarDataSemFuso(l.dataAdmissao)}</td>
-                  <td style={{ ...TD_STYLE, color: "#374151" }}>{l.diasTrabalhados}</td>
+                  <td style={{ ...TD_STYLE, background: DESTAQUE_DIAS.fundoCelula, color: DESTAQUE_DIAS.texto, fontWeight: 800 }}>{l.diasTrabalhados}</td>
                   <td style={TD_STYLE}>
                     <span
                       style={{
