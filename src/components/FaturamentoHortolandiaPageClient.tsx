@@ -8,7 +8,9 @@ import SeletorUnidade from "./SeletorUnidade";
 import ImpostoLinhaCelula from "./ImpostoLinhaCelula";
 import {
   FILTROS_INICIAIS,
+  type BaseData,
   calcularCards,
+  contarSemEmissaoNosCards,
   entradasDosCards,
   filtrarEntradas,
   filtrarSaidas,
@@ -203,6 +205,7 @@ export default function FaturamentoHortolandiaPageClient({
       busca: filtros.buscaEntradas,
       clienteId: filtros.clienteId,
       periodo: periodoTabela,
+      base: filtros.baseData,
     });
     return tab === "todas" ? porFiltros : porFiltros.filter((r) => r.status === tab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -267,6 +270,8 @@ export default function FaturamentoHortolandiaPageClient({
       ),
     [rows, saidas, filtros, chaveMesCorrente, impostosPorMes]
   );
+  const semEmissaoFora = useMemo(() => contarSemEmissaoNosCards(rows, filtros), [rows, filtros]);
+  const baseEmissao = filtros.baseData === "emissao";
   const totalMes = cards.totalEntrada;
   const totalSaidaMes = cards.totalSaida;
   const liquido = cards.liquido;
@@ -429,7 +434,7 @@ export default function FaturamentoHortolandiaPageClient({
         <div style={{ background: "#D1FAE5", border: "2px solid #166534", borderRadius: 12, padding: "14px 16px" }}>
           <p style={{ fontSize: 22, fontWeight: 800, color: "#166534", margin: 0 }}>{formatarMoeda(totalMes)}</p>
           <p style={{ fontSize: 12, fontWeight: 600, color: "#166534", margin: "2px 0 0" }}>
-            Total Entrada — {rotuloPeriodoCards} (por vencimento, sem cancelados)
+            Total Entrada — {rotuloPeriodoCards} (por {baseEmissao ? "emissão" : "vencimento"}, sem cancelados)
           </p>
         </div>
 
@@ -597,7 +602,7 @@ export default function FaturamentoHortolandiaPageClient({
           escolhidos, filtram tabela e cards. De/Até vale no lugar do mês. Busca é por visão; Cliente
           só em Entradas; Responsável só em Saídas. */}
       <div className="card p-4 mb-4">
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
+        <div className="grid grid-cols-2 md:grid-cols-7 gap-3 items-end">
           <div className="col-span-2 md:col-span-2">
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Buscar</label>
             <input
@@ -612,6 +617,20 @@ export default function FaturamentoHortolandiaPageClient({
               }
               className="input-field"
             />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Filtrar por
+            </label>
+            <select
+              value={filtros.baseData}
+              onChange={(e) => setFiltros((f) => ({ ...f, baseData: e.target.value as BaseData }))}
+              title="Vencimento, ou Emissão (data de emissão da NF ou do acordo) — vale só para as Entradas"
+              className="input-field"
+            >
+              <option value="vencimento">Vencimento</option>
+              <option value="emissao">Emissão</option>
+            </select>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Mês</label>
@@ -689,12 +708,18 @@ export default function FaturamentoHortolandiaPageClient({
             Limpar filtros
           </button>
           <p className="text-xs text-gray-500">
-            Cards: {rotuloPeriodoCards}.{" "}
+            Cards: {rotuloPeriodoCards} (Entradas por {baseEmissao ? "emissão" : "vencimento"}).{" "}
             {periodoEscolhido(filtros)
               ? "Tabela filtrada pelo mesmo período."
               : "Tabela sem filtro de período (todos os meses)."}
             {periodoEmUso && filtros.mes ? " O período De/Até vale no lugar do mês." : ""}
           </p>
+          <p className="text-xs text-gray-400">A base de data vale só para as Entradas; Saídas usam sempre a data de pagamento.</p>
+          {baseEmissao && semEmissaoFora > 0 && (
+            <p className="text-xs text-amber-700">
+              {semEmissaoFora} lançamento(s) sem data de emissão ficaram de fora.
+            </p>
+          )}
           {intervaloComErro && (
             <p className="text-xs text-red-600">&quot;De&quot; é depois de &quot;Até&quot; — período ignorado.</p>
           )}
@@ -722,6 +747,7 @@ export default function FaturamentoHortolandiaPageClient({
               <thead>
                 <tr className="text-left text-gray-500 border-b border-gray-200">
                   <th className="py-2 px-3">Vencimento</th>
+                  <th className="py-2 px-3" title="Data de emissão da NF ou do acordo">Emissão</th>
                   <th className="py-2 px-3">Cliente</th>
                   <th className="py-2 px-3">Nº NF</th>
                   <th className="py-2 px-3 text-right">Valor R$</th>
@@ -730,7 +756,6 @@ export default function FaturamentoHortolandiaPageClient({
                   <th className="py-2 px-3 text-center">Dias p/ venc.</th>
                   <th className="py-2 px-3">Pagamento</th>
                   <th className="py-2 px-3">Status</th>
-                  <th className="py-2 px-3">Emissão NF/Acordo</th>
                 </tr>
               </thead>
               <tbody>
@@ -745,6 +770,7 @@ export default function FaturamentoHortolandiaPageClient({
                       className={`border-b border-gray-100 hover:bg-gray-50 ${somenteLeitura ? "" : "cursor-pointer"}`}
                     >
                       <td className="py-2 px-3">{formatarData(row.dataVencimento)}</td>
+                      <td className="py-2 px-3">{formatarData(row.dataEmissaoNf)}</td>
                       <td className="py-2 px-3 font-medium text-gray-900">{row.clienteNome}</td>
                       <td className="py-2 px-3 text-gray-500">{row.numeroNf ?? "—"}</td>
                       <td className="py-2 px-3 text-right font-medium">{formatarMoeda(row.valor)}</td>
@@ -772,7 +798,6 @@ export default function FaturamentoHortolandiaPageClient({
                           {s.label}
                         </span>
                       </td>
-                      <td className="py-2 px-3">{formatarData(row.dataEmissaoNf)}</td>
                     </tr>
                   );
                 })}
@@ -789,7 +814,7 @@ export default function FaturamentoHortolandiaPageClient({
               {rowsFiltradas.length > 0 && (
                 <tfoot>
                   <tr className="border-t border-gray-200 font-semibold text-gray-900">
-                    <td className="py-2 px-3" colSpan={3}>
+                    <td className="py-2 px-3" colSpan={4}>
                       Total ({rowsFiltradas.length})
                     </td>
                     <td className="py-2 px-3 text-right">{formatarMoeda(totalFiltrado)}</td>
@@ -797,7 +822,7 @@ export default function FaturamentoHortolandiaPageClient({
                     <td className="py-2 px-3 text-right">
                       {existeLiquidoConhecido ? formatarMoeda(totalLiquidoFiltrado) : "—"}
                     </td>
-                    <td className="py-2 px-3" colSpan={4} />
+                    <td className="py-2 px-3" colSpan={3} />
                   </tr>
                 </tfoot>
               )}
