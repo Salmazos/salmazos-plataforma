@@ -27,7 +27,14 @@ export interface SaidaFiltravel {
   responsavel: string;
 }
 
+// Qual data das ENTRADAS o período (mês ou De/Até) compara. Saídas ignoram isto: sempre
+// dataPagamento. "vencimento" é o padrão (comportamento de sempre); "emissao" usa dataEmissaoNf.
+export type BaseData = "vencimento" | "emissao";
+
 export interface FiltrosFaturamento {
+  // Só vale nas Entradas. Faz parte do estado inicial: limpar filtros / trocar de unidade volta a
+  // "vencimento".
+  baseData: BaseData;
   // "YYYY-MM" escolhido no seletor; null = sem escolha explícita (vale o mês corrente só nos cards).
   mes: string | null;
   // "YYYY-MM-DD" ou "" — quando qualquer um estiver preenchido (e o intervalo for válido), vale
@@ -42,6 +49,7 @@ export interface FiltrosFaturamento {
 }
 
 export const FILTROS_INICIAIS: FiltrosFaturamento = {
+  baseData: "vencimento",
   mes: null,
   de: "",
   ate: "",
@@ -53,6 +61,7 @@ export const FILTROS_INICIAIS: FiltrosFaturamento = {
 
 export function haFiltroAtivo(f: FiltrosFaturamento): boolean {
   return (
+    f.baseData !== "vencimento" ||
     f.mes !== null ||
     f.de !== "" ||
     f.ate !== "" ||
@@ -115,12 +124,18 @@ export function rotuloMes(chave: string): string {
 
 export function filtrarEntradas<T extends EntradaFiltravel>(
   rows: T[],
-  opcoes: { busca: string; clienteId: string; periodo: Periodo | null }
+  opcoes: { busca: string; clienteId: string; periodo: Periodo | null; base?: BaseData }
 ): T[] {
   const busca = normalizarTexto(opcoes.busca);
+  const base = opcoes.base ?? "vencimento";
   return rows.filter((r) => {
     if (opcoes.clienteId !== "todos" && r.clienteId !== opcoes.clienteId) return false;
-    if (opcoes.periodo && !dataNoPeriodo(r.dataVencimento, opcoes.periodo)) return false;
+    if (opcoes.periodo) {
+      // Sem data de emissão não dá pra dizer em que período cai: com base "emissao" fica de fora
+      // (nunca assume uma data); a tela avisa quantos ficaram (ver contarSemEmissaoNosCards).
+      const data = base === "emissao" ? r.dataEmissaoNf : r.dataVencimento;
+      if (!data || !dataNoPeriodo(data, opcoes.periodo)) return false;
+    }
     if (busca && !contem([r.clienteNome, r.numeroNf, r.observacoes], busca)) return false;
     return true;
   });
@@ -153,7 +168,17 @@ export function entradasDosCards<T extends EntradaFiltravel>(
     busca: f.buscaEntradas,
     clienteId: f.clienteId,
     periodo: periodoDosCards(f, chaveMesCorrente),
+    base: f.baseData,
   }).filter((r) => r.status !== "cancelado");
+}
+
+// Quantos lançamentos (não cancelados, dentro dos filtros de busca/cliente) ficaram fora dos cards
+// só por não terem dataEmissaoNf. Sempre 0 com base "vencimento".
+export function contarSemEmissaoNosCards<T extends EntradaFiltravel>(rows: T[], f: FiltrosFaturamento): number {
+  if (f.baseData !== "emissao") return 0;
+  return filtrarEntradas(rows, { busca: f.buscaEntradas, clienteId: f.clienteId, periodo: null }).filter(
+    (r) => r.status !== "cancelado" && !r.dataEmissaoNf
+  ).length;
 }
 
 // Saída não tem status: já nasce paga (ver ContaPagarRow), então não há cancelada a excluir.

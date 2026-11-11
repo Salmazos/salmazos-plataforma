@@ -5,6 +5,7 @@ import {
   FILTROS_INICIAIS,
   calcularCards,
   calcularLiquido,
+  contarSemEmissaoNosCards,
   entradasDosCards,
   filtrarEntradas,
   filtrarSaidas,
@@ -150,6 +151,92 @@ caso("nenhum percentual conhecido: valor null; sem lançamentos: 0 completo", ()
   assert.equal(calcularLiquido([ent({ dataEmissaoNf: null })], IMPOSTOS).semDataEmissao, 1);
   const vazio = calcularLiquido([], IMPOSTOS);
   assert.deepEqual([vazio.valor, vazio.parcial], [0, false]);
+});
+
+// ── Base da data (Vencimento | Emissão) nas Entradas ──
+// Linhas que separam as duas bases: vence em outubro mas foi emitida em setembro; vence em
+// janeiro/27 mas foi emitida em dezembro/26 (virada de ano); e uma sem data de emissão.
+const rowsBase: EntradaFiltravel[] = [
+  ...rows,
+  ent({ valor: 111, dataVencimento: "2026-10-15", dataEmissaoNf: "2026-09-28" }),
+  ent({ valor: 222, dataVencimento: "2027-01-05", dataEmissaoNf: "2026-12-30" }),
+  ent({ valor: 333, dataVencimento: "2026-10-20", dataEmissaoNf: null }),
+  ent({ valor: 444, dataVencimento: "2026-10-22", dataEmissaoNf: null, status: "cancelado" }),
+];
+const EMI: FiltrosFaturamento = { ...FILTROS_INICIAIS, baseData: "emissao" };
+const tab = (f: FiltrosFaturamento, r = rowsBase) =>
+  filtrarEntradas(r, { busca: "", clienteId: "todos", periodo: periodoEscolhido(f), base: f.baseData }).map((x) => x.valor);
+
+caso("base inicial é vencimento e não conta como filtro ativo", () => {
+  assert.equal(FILTROS_INICIAIS.baseData, "vencimento");
+  assert.equal(haFiltroAtivo(FILTROS_INICIAIS), false);
+  assert.equal(haFiltroAtivo(EMI), true); // habilita "Limpar filtros" para voltar a vencimento
+});
+caso("regressão: base vencimento (explícita ou omitida) = comportamento antigo", () => {
+  const f = { ...FILTROS_INICIAIS, mes: "2026-10" };
+  const antigo = filtrarEntradas(rowsBase, { busca: "", clienteId: "todos", periodo: periodoEscolhido(f) }).map((x) => x.valor);
+  assert.deepEqual(tab(f), antigo);
+  assert.deepEqual(antigo, [1000, 500, 400, 111, 333, 444]);
+  assert.deepEqual(entradasDosCards(rowsBase, f, MES_CORRENTE).map((x) => x.valor), [1000, 400, 111, 333]);
+});
+caso("base emissão com mês: compara dataEmissaoNf, não o vencimento", () => {
+  assert.deepEqual(tab({ ...EMI, mes: "2026-09" }), [2000, 111]);
+  assert.deepEqual(entradasDosCards(rowsBase, { ...EMI, mes: "2026-09" }, MES_CORRENTE).map((x) => x.valor), [2000, 111]);
+});
+caso("base emissão com De/Até: inclusivo e vence o mês", () => {
+  const f = { ...EMI, mes: "2026-10", de: "2026-09-28", ate: "2026-10-01" };
+  assert.deepEqual(tab(f), [1000, 500, 400, 111]);
+  assert.deepEqual(entradasDosCards(rowsBase, f, MES_CORRENTE).map((x) => x.valor), [1000, 400, 111]);
+});
+caso("sem data de emissão: fora da base emissão e contada no aviso (cancelado não conta)", () => {
+  const f = { ...EMI, mes: "2026-10" };
+  assert.equal(tab(f).includes(333), false);
+  assert.equal(entradasDosCards(rowsBase, f, MES_CORRENTE).some((x) => x.valor === 333), false);
+  assert.equal(contarSemEmissaoNosCards(rowsBase, f), 1);
+  assert.equal(contarSemEmissaoNosCards(rowsBase, { ...f, baseData: "vencimento" }), 0);
+  assert.equal(contarSemEmissaoNosCards(rowsBase, { ...f, clienteId: "c2" }), 0); // respeita o filtro de cliente
+});
+caso("saídas inalteradas pela base", () => {
+  const a = { ...FILTROS_INICIAIS, de: "2026-09-01", ate: "2026-09-30" };
+  const b = { ...a, baseData: "emissao" as const };
+  assert.deepEqual(saidasDosCards(saidas, b, MES_CORRENTE), saidasDosCards(saidas, a, MES_CORRENTE));
+  assert.deepEqual(saidasDosCards(saidas, EMI, MES_CORRENTE), saidasDosCards(saidas, FILTROS_INICIAIS, MES_CORRENTE));
+  assert.deepEqual(filtrarSaidas(saidas, { busca: "", responsavel: "todos", periodo: periodoEscolhido(b) }).map((s) => s.valor), [100]);
+});
+caso("abertura sem filtro idêntica à atual: tabela inteira (inclusive sem emissão) e cards no mês corrente por vencimento", () => {
+  assert.equal(tab(FILTROS_INICIAIS).length, rowsBase.length);
+  assert.deepEqual(entradasDosCards(rowsBase, FILTROS_INICIAIS, MES_CORRENTE).map((x) => x.valor), [1000, 400, 111, 333]);
+  assert.equal(contarSemEmissaoNosCards(rowsBase, FILTROS_INICIAIS), 0);
+});
+caso("limpar filtros / trocar de unidade (remonta com FILTROS_INICIAIS) voltam à base vencimento", () => {
+  const sujo: FiltrosFaturamento = { ...EMI, mes: "2026-09" };
+  const limpo = { ...FILTROS_INICIAIS };
+  assert.equal(limpo.baseData, "vencimento");
+  assert.deepEqual(limpo, FILTROS_INICIAIS);
+  assert.equal(sujo.baseData, "emissao"); // o estado sujo não vaza para o inicial
+  assert.equal(FILTROS_INICIAIS.baseData, "vencimento");
+});
+caso("cards base emissão sem período escolhido: mês corrente pela emissão", () => {
+  assert.deepEqual(entradasDosCards(rowsBase, EMI, MES_CORRENTE).map((x) => x.valor), [1000, 400]);
+  assert.equal(contarSemEmissaoNosCards(rowsBase, EMI), 1);
+});
+caso("cancelados continuam fora dos cards nas duas bases", () => {
+  for (const f of [FILTROS_INICIAIS, EMI, { ...EMI, de: "2026-01-01" }]) {
+    assert.equal(entradasDosCards(rowsBase, f, MES_CORRENTE).some((x) => x.status === "cancelado"), false);
+  }
+});
+caso("virada de ano: emissão 12/2026 com vencimento 01/2027", () => {
+  assert.deepEqual(entradasDosCards(rowsBase, { ...EMI, mes: "2026-12" }, MES_CORRENTE).map((x) => x.valor), [222]);
+  assert.deepEqual(entradasDosCards(rowsBase, { ...FILTROS_INICIAIS, mes: "2027-01" }, MES_CORRENTE).map((x) => x.valor), [222]);
+  assert.deepEqual(entradasDosCards(rowsBase, { ...EMI, de: "2026-12-31", ate: "2027-01-31" }, MES_CORRENTE), []);
+});
+caso("líquido e saldo usam o mesmo conjunto de entradas dos cards na base emissão", () => {
+  const f = { ...EMI, mes: "2026-09" };
+  const ent9 = entradasDosCards(rowsBase, f, MES_CORRENTE);
+  const c = calcularCards(ent9, saidasDosCards(saidas, f, MES_CORRENTE), IMPOSTOS);
+  assert.equal(c.totalEntrada, 2111);
+  assert.ok(Math.abs((c.liquido.valor ?? 0) - 1899.9) < 1e-6); // imposto de setembro (10%) pela emissão
+  assert.ok(Math.abs((c.saldoLiquido ?? 0) - 1799.9) < 1e-6);
 });
 
 console.log(`\n${n} casos ok`);
