@@ -42,6 +42,7 @@ interface Form {
   dataInicio: string;
   salarioTxt: string;
   salarioTipo: "hora" | "mensal";
+  adicionais: string;
   horario: string;
   telefone: string;
   tempoContrato: string;
@@ -52,7 +53,7 @@ interface Form {
 function formDoCadastro(c: CamposEmailContabilidade): Form {
   return {
     nome: c.nome, funcao: c.funcao, dataInicio: c.dataInicio, salarioTxt: numeroParaBR(c.salarioValor),
-    salarioTipo: c.salarioTipo ?? "mensal", horario: c.horario, telefone: c.telefone, tempoContrato: c.tempoContrato,
+    salarioTipo: c.salarioTipo ?? "mensal", adicionais: c.adicionais, horario: c.horario, telefone: c.telefone, tempoContrato: c.tempoContrato,
     diasTeste: c.diasTeste === null ? "" : String(c.diasTeste),
   };
 }
@@ -62,6 +63,7 @@ function camposDoForm(f: Form) {
     nome: f.nome, funcao: f.funcao, dataInicio: f.dataInicio, horario: f.horario, telefone: f.telefone, tempoContrato: f.tempoContrato,
     salarioValor: interpretarValorBR(f.salarioTxt), // NaN = inválido (a validação acusa)
     salarioTipo: f.salarioTipo,
+    adicionais: f.adicionais,
     diasTeste: f.diasTeste === "" ? null : Number(f.diasTeste),
   };
 }
@@ -213,6 +215,11 @@ export default function ModalEnviarPacoteEmail({ admissaoId, onClose, onEnviado 
                       <option value="hora">por hora</option>
                     </select>
                   </div>
+                </div>
+                <div>
+                  <label className={rotulo}>Adicionais{selo("adicionais")}</label>
+                  <input className="input-field" style={estilo("adicionais")} placeholder="Ex.: Insalubridade 20%" value={form.adicionais} onChange={(e) => set("adicionais", e.target.value)} maxLength={200} />
+                  <p className="text-[11px] text-gray-400 mt-1">Vai na linha do Salário. Deixe vazio se não houver.</p>
                 </div>
                 <div>
                   <label className={rotulo}>Horário{selo("horario")}</label>

@@ -1810,6 +1810,7 @@ export const admissaoEnviarEmailContabilidadeSchema = z.object({
       funcao: textoCampoEmail,
       salarioValor: z.number().nullable().optional(),
       salarioTipo: z.enum(["hora", "mensal"]).nullable().optional(),
+      adicionais: textoCampoEmail,
       horario: textoCampoEmail,
       telefone: textoCampoEmail,
       dataInicio: textoCampoEmail,
