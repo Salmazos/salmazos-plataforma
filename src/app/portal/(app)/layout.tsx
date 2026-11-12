@@ -129,9 +129,11 @@ export default async function PortalAppLayout({
               <img
                 src={cliente.logo_url}
                 alt="Logo da empresa"
-                // ASSUNÇÃO DE NEGÓCIO CONFIRMADA COM O OLVER: logo pequeno demais na tela do
-                // cliente (48px) — aumentado mantendo a proporção original da imagem.
-                style={{ height: 72, width: "auto", maxWidth: 260, objectFit: "contain" }}
+                // ASSUNÇÃO DE NEGÓCIO CONFIRMADA COM O OLVER: logo ainda ficava pequeno ao lado
+                // do conteúdo (caso do logo redondo do Haras Larissa) — 72px -> 120px (maxWidth
+                // 260 -> 360) a partir de md; abaixo disso 88px/260 pra não empurrar o conteúdo
+                // no celular. Proporção original preservada (w-auto + object-contain).
+                className="h-[88px] max-w-[260px] md:h-[120px] md:max-w-[360px] w-auto object-contain"
               />
             </div>
           )}
