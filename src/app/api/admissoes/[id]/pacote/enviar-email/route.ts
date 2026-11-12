@@ -12,7 +12,7 @@ import { exigeRespostaDiasTeste } from "@/lib/diasTeste";
 import {
   LIMITE_ANEXO_EMAIL_BYTES, formatarMB, montarHtmlEmail, montarLinhaEmpresa, montarTextoEmail, nomeArquivoAnexo, podeEnviarAgora,
   resolverTempoContrato, saudacaoSaoPaulo, separarParaCc, classificarErroEmail, validarCamposEmail, montarAssuntoDeCampos,
-  montarLinhasDeCampos, avisosCamposFaltando, listarCamposEditados, dataISOValida,
+  montarLinhasDeCampos, avisosCamposFaltando, listarCamposEditados, dataISOValida, formatarAdicionaisEmail,
 } from "@/lib/emailPacoteContabilidade";
 
 export const maxDuration = 30;
@@ -42,12 +42,14 @@ async function carregarContexto(svc: ServiceClient, id: string) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const adm = admissao as any;
 
-  const [{ data: dp }, { data: cv }, { data: destinatarios }] = await Promise.all([
+  const [{ data: dp }, { data: cv }, { data: destinatarios }, { data: adicionais }] = await Promise.all([
     svc.from("admissao_dados_pessoais").select("nome_completo, telefone").eq("admissao_id", id).maybeSingle(),
     adm.candidato_id && adm.vaga_id
       ? svc.from("candidatos_vagas").select("admissao_data_inicio, admissao_tempo_contrato, admissao_qtd_dias_teste, admissao_dia_teste").eq("candidato_id", adm.candidato_id).eq("vaga_id", adm.vaga_id).limit(1).maybeSingle()
       : Promise.resolve({ data: null }),
     svc.from("admissao_contabilidade_email_destinatarios").select("nome, email, copia, ativo").eq("ativo", true).order("nome"),
+    // Adicionais salariais (insalubridade etc.) da admissão, na ordem em que foram lançados. Só leitura: entram no texto da linha "Salário".
+    svc.from("admissao_adicionais").select("tipo, formato_valor, valor, criado_em").eq("admissao_id", id).order("criado_em", { ascending: true }),
   ]);
 
   const candidato = adm.candidatos as { nome_completo: string | null; telefone: string | null } | null;
@@ -70,6 +72,7 @@ async function carregarContexto(svc: ServiceClient, id: string) {
     funcao: adm.funcao ?? "",
     salarioValor: salarioNum !== null && Number.isFinite(salarioNum) ? salarioNum : null,
     salarioTipo: adm.tipo_salario === "hora" ? "hora" : "mensal",
+    adicionais: formatarAdicionaisEmail(adicionais),
     horario: adm.horario_trabalho ?? "",
     telefone: exibirTelefone(dp?.telefone || candidato?.telefone || ""),
     dataInicio,
@@ -194,6 +197,8 @@ export async function POST(request: NextRequest, { params }: Params) {
         tempoContrato: parsed.data.campos.tempoContrato ?? parsed.data.tempoContrato ?? "",
         // Campo ausente (cliente antigo da API) = valor do cadastro; nunca "não informado" por omissão.
         diasTeste: parsed.data.campos.diasTeste !== undefined ? parsed.data.campos.diasTeste : ctx.camposOriginais.diasTeste,
+        // Idem: omitido = adicionais do cadastro (nunca "sem adicionais" por omissão); "" explícito = o usuário limpou o campo.
+        adicionais: parsed.data.campos.adicionais !== undefined && parsed.data.campos.adicionais !== null ? parsed.data.campos.adicionais : ctx.camposOriginais.adicionais,
       }
     : { ...ctx.camposOriginais, tempoContrato: parsed.data.tempoContrato ?? ctx.camposOriginais.tempoContrato };
   const validacao = validarCamposEmail(entrada);

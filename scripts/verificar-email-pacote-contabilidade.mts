@@ -14,6 +14,7 @@ import {
   MSG_ERRO_EMAIL_TIMEOUT, MSG_ERRO_EMAIL_AUTH, MSG_ERRO_EMAIL_OUTRO,
   sanitizarCampoEmail, validarCamposEmail, montarAssuntoDeCampos, montarLinhasDeCampos, listarCamposEditados, avisosCamposFaltando,
   interpretarValorBR, numeroParaBR, formatarTelefoneEmail, dataISOValida,
+  formatarAdicionaisEmail, salarioComAdicionaisEmail,
   type ContextoDiasTeste,
 } from "../src/lib/emailPacoteContabilidade.ts";
 
@@ -445,6 +446,147 @@ caso("fonte única: rota e modal usam montarLinhasDeCampos/avisosCamposFaltando 
   const rota = fs.readFileSync("src/app/api/admissoes/[id]/pacote/enviar-email/route.ts", "utf8");
   for (const t of ["resolverTipoServicoVigente", "admissao_qtd_dias_teste, admissao_dia_teste", "tipo_servico, clientes(nome, entidade_contratante)", "ctx.diasTesteCtx"]) assert.ok(rota.includes(t), t);
   assert.equal(/candidatos_vagas"\)\s*\.update|from\("candidatos_vagas"\)\.update/.test(rota), false, "a rota nunca grava em candidatos_vagas");
+});
+
+// ── Adicionais salariais na linha "Salário" ──────────────────────────────────────────────────────────────────────────
+const ad = (tipo: string, formato: string, valor: number | string, criado_em = "2026-11-01T10:00:00Z") => ({ tipo, formato_valor: formato, valor, criado_em });
+const linhaSalario = (c: Record<string, unknown>) => montarLinhasDeCampos(validarCamposEmail({ ...original, ...c }).camposNormalizados, "293 - EMPRESA", "Cliente X", PADRAO, null).find((l) => l.rotulo === "Salário")?.valor;
+const MENSAL = { salarioValor: 2588.1, salarioTipo: "mensal" };
+
+caso("adicionais: um percentual", () => {
+  assert.equal(formatarAdicionaisEmail([ad("Insalubridade", "percentual", 20)]), "Insalubridade 20%");
+  assert.equal(linhaSalario({ ...MENSAL, adicionais: "Insalubridade 20%" }), "R$ 2.588,10 mensal + Insalubridade 20%");
+});
+caso("adicionais: vários, na ordem de criado_em (não na ordem recebida)", () => {
+  const lista = [ad("Acúmulo de função", "percentual", 10, "2026-11-02T10:00:00Z"), ad("Insalubridade", "percentual", 20, "2026-11-01T10:00:00Z")];
+  assert.equal(formatarAdicionaisEmail(lista), "Insalubridade 20% + Acúmulo de função 10%");
+  assert.equal(linhaSalario({ ...MENSAL, adicionais: formatarAdicionaisEmail(lista) }), "R$ 2.588,10 mensal + Insalubridade 20% + Acúmulo de função 10%");
+});
+caso("adicionais: sem criado_em mantém a ordem recebida", () => assert.equal(formatarAdicionaisEmail([{ tipo: "B", formato_valor: "percentual", valor: 1 }, { tipo: "A", formato_valor: "percentual", valor: 2 }]), "B 1% + A 2%"));
+caso("adicionais: fixo vira R$ com vírgula e milhar", () => {
+  assert.equal(formatarAdicionaisEmail([ad("Periculosidade", "fixo", 150)]), "Periculosidade R$ 150,00");
+  assert.equal(formatarAdicionaisEmail([ad("Gratificação", "fixo", "1234.5")]), "Gratificação R$ 1.234,50");
+  assert.equal(linhaSalario({ ...MENSAL, adicionais: formatarAdicionaisEmail([ad("Periculosidade", "fixo", 150)]) }), "R$ 2.588,10 mensal + Periculosidade R$ 150,00");
+});
+caso("adicionais: percentual sem zeros à toa (20 -> 20%, 12.5 -> 12,5%, '20.00' do banco -> 20%)", () => {
+  assert.equal(formatarAdicionaisEmail([ad("X", "percentual", 20)]), "X 20%");
+  assert.equal(formatarAdicionaisEmail([ad("X", "percentual", 12.5)]), "X 12,5%");
+  assert.equal(formatarAdicionaisEmail([ad("X", "percentual", "20.00")]), "X 20%");
+  assert.equal(formatarAdicionaisEmail([ad("X", "percentual", 12.345)]), "X 12,35%");
+});
+caso("adicionais: salário por hora mantém o sufixo atual e só acrescenta", () => assert.equal(linhaSalario({ salarioValor: 15, salarioTipo: "hora", adicionais: "Insalubridade 20%" }), "R$ 15,00 hora + Insalubridade 20%"));
+caso("adicionais: sem adicionais a linha é IDÊNTICA à de hoje", () => {
+  assert.equal(linhaSalario({ ...MENSAL }), "R$ 2.588,10 mensal");
+  assert.equal(linhaSalario({ ...MENSAL, adicionais: "" }), linhaSalario({ ...MENSAL }));
+  assert.equal(formatarAdicionaisEmail([]), ""); assert.equal(formatarAdicionaisEmail(null), "");
+  const hoje = montarLinhasDados({ ...base }), agoraLinhas = montarLinhasDados({ ...base, adicionais: "" });
+  assert.deepEqual(agoraLinhas, hoje);
+  assert.equal(salarioComAdicionaisEmail("R$ 9,40 hora", undefined), "R$ 9,40 hora");
+});
+caso("adicionais: nome em minúsculas é normalizado só na exibição (trim + 1ª maiúscula, resto intacto)", () => {
+  const lista = [ad("  insalubridade ", "percentual", 20), ad("acúmulo de função", "percentual", 10, "2026-11-02T10:00:00Z")];
+  assert.equal(formatarAdicionaisEmail(lista), "Insalubridade 20% + Acúmulo de função 10%");
+  assert.equal(lista[0].tipo, "  insalubridade ", "a lista de origem (o cadastro) não é alterada");
+});
+caso("adicionais: linhas inválidas (sem tipo, valor vazio/NaN/negativo) são ignoradas", () => assert.equal(formatarAdicionaisEmail([ad("", "percentual", 5), ad("A", "percentual", "abc"), { tipo: "B", formato_valor: "fixo", valor: null }, ad("C", "fixo", -3), ad("D", "percentual", 7)]), "D 7%"));
+caso("adicionais: sem salário a linha segue omitida (adicional nunca aparece solto)", () => {
+  assert.equal(linhaSalario({ salarioValor: null, salarioTipo: null, adicionais: "Insalubridade 20%" }), undefined);
+  assert.equal(salarioComAdicionaisEmail("", "Insalubridade 20%"), "");
+  assert.equal(montarLinhasDados({ ...base, salario: "", adicionais: "Insalubridade 20%" }).some((l) => l.rotulo === "Salário"), false);
+});
+caso("adicionais: aparecem no HTML e no texto simples (mesma linha, mesma fonte)", () => {
+  const l = montarLinhasDeCampos(validarCamposEmail({ ...original, ...MENSAL, adicionais: "Insalubridade 20% + Acúmulo de função 10%" }).camposNormalizados, "E", "C", PADRAO, null);
+  const html = montarHtmlEmail("Bom dia", l), txt = montarTextoEmail("Bom dia", l);
+  assert.ok(html.includes("Salário: R$ 2.588,10 mensal + Insalubridade 20% + Acúmulo de função 10%"), html);
+  assert.ok(txt.includes("Salário: R$ 2.588,10 mensal + Insalubridade 20% + Acúmulo de função 10%"), txt);
+});
+caso("adicionais: texto malicioso/quebra de linha é sanitizado, limitado e escapado no HTML", () => {
+  const v = validarCamposEmail({ ...original, ...MENSAL, adicionais: "+ Insal\r\nBcc: x@y.com <script>alert(1)</script>" }).camposNormalizados;
+  assert.equal(v.adicionais, "Insal Bcc: x@y.com <script>alert(1)</script>", "sem quebra, sem '+' inicial");
+  const html = montarHtmlEmail("Oi", montarLinhasDeCampos(v, "E", "C", PADRAO, null));
+  assert.equal(html.includes("<script>"), false); assert.ok(html.includes("&lt;script&gt;"));
+  assert.equal(validarCamposEmail({ ...original, ...MENSAL, adicionais: "a".repeat(500) }).camposNormalizados.adicionais.length, 200);
+  assert.equal(validarCamposEmail({ ...original, ...MENSAL, adicionais: "\r\n\t" }).camposNormalizados.adicionais, "");
+});
+caso("adicionais: edição aparece como campo editado (só o NOME) e restaurar = sem diferença", () => {
+  const cad = { ...original, ...MENSAL, adicionais: "Insalubridade 20%" };
+  assert.deepEqual(listarCamposEditados(cad, { ...cad, adicionais: "Insalubridade 40%" }), ["adicionais"]);
+  assert.deepEqual(listarCamposEditados(cad, { ...cad, adicionais: "  Insalubridade 20% " }), []);
+  assert.deepEqual(listarCamposEditados(cad, cad), []);
+});
+caso("adicionais: schema da rota aceita o campo (texto, nulo ou ausente)", () => {
+  for (const a of ["Insalubridade 20%", "", null, undefined]) assert.equal(admissaoEnviarEmailContabilidadeSchema.safeParse({ campos: { nome: "A", adicionais: a } }).success, true);
+  assert.equal(admissaoEnviarEmailContabilidadeSchema.safeParse({ campos: { nome: "A", adicionais: 5 } }).success, false);
+});
+
+function comAdicionais(db: any, lista: any[]) { db.tabelas.admissao_adicionais = lista.map((a, i) => ({ id: `ad${i}`, admissao_id: ADM, ...a })); return db; }
+// Ignora só o registro de envio (pacote_enviado_email_*, gravado de propósito depois do envio aceito): o resto do cadastro tem de ficar igual.
+const semRegistroEnvio = (l: any) => { const { pacote_enviado_email_em, pacote_enviado_email_por, pacote_enviado_email_para, ...resto } = l; return resto; };
+const cadastroSnap = (db: any) => JSON.stringify({ a: db.tabelas.admissoes.map(semRegistroEnvio), c: db.tabelas.candidatos, cv: db.tabelas.candidatos_vagas, dp: db.tabelas.admissao_dados_pessoais, ad: db.tabelas.admissao_adicionais });
+await casoRota("rota GET/POST: 1 adicional vindo do banco (minúsculo) entra na linha Salário do e-mail real, igual à prévia", async () => {
+  const db = comAdicionais(cenarioRota({ tipoVaga: MOT, qtd: 1 }), [ad("insalubridade", "percentual", "20.00")]);
+  const g = (await preview(db)).corpo;
+  assert.equal(g.campos.adicionais, "Insalubridade 20%");
+  assert.ok(dadosLinhas(g).includes("Salário: R$ 1.800,00 mensal + Insalubridade 20%"), JSON.stringify(dadosLinhas(g)));
+  const antes = cadastroSnap(db);
+  assert.equal((await enviar(db, g.campos)).status, 200);
+  assert.ok(db.emails[0].html.includes("Salário: R$ 1.800,00 mensal + Insalubridade 20%"));
+  assert.equal(cadastroSnap(db), antes, "cadastro idêntico antes e depois");
+});
+await casoRota("rota POST: 2 adicionais (um fixo), ordem de criado_em, corpo do e-mail igual ao da prévia", async () => {
+  const db = comAdicionais(cenarioRota({ tipoVaga: MOT, qtd: 1 }), [ad("Acúmulo de função", "percentual", 10, "2026-11-02T10:00:00Z"), ad("Insalubridade", "percentual", 20, "2026-11-01T10:00:00Z"), ad("periculosidade", "fixo", 150, "2026-11-03T10:00:00Z")]);
+  const g = (await preview(db)).corpo;
+  const esperado = "Salário: R$ 1.800,00 mensal + Insalubridade 20% + Acúmulo de função 10% + Periculosidade R$ 150,00";
+  assert.ok(dadosLinhas(g).includes(esperado), JSON.stringify(dadosLinhas(g)));
+  assert.equal((await enviar(db, g.campos)).status, 200);
+  assert.ok(db.emails[0].html.includes(esperado));
+  assert.ok(g.corpoTexto.includes(esperado));
+  assert.deepEqual(db.tabelas.audit_logs.find((x: any) => x.acao === "admissao_pacote_enviado_email").detalhes.campos_editados_nomes, []);
+});
+await casoRota("rota: sem adicionais o e-mail é idêntico ao de hoje (tabela vazia ou ausente)", async () => {
+  const vazia = cenarioRota({ tipoVaga: MOT, qtd: 1 });
+  const g = (await preview(vazia)).corpo;
+  assert.equal(g.campos.adicionais, "");
+  assert.ok(dadosLinhas(g).includes("Salário: R$ 1.800,00 mensal"));
+  assert.equal(dadosLinhas(g).some((l: string) => l.includes(" + ")), false);
+});
+await casoRota("rota POST: editar só o e-mail (texto livre) não grava nada no cadastro e a auditoria leva só o NOME do campo", async () => {
+  const db = comAdicionais(cenarioRota({ tipoVaga: MOT, qtd: 1 }), [ad("Insalubridade", "percentual", 20)]);
+  const g = (await preview(db)).corpo;
+  const antes = cadastroSnap(db);
+  const r = await enviar(db, { ...g.campos, adicionais: "Insalubridade 40%\r\nBcc: x@y.com" });
+  assert.equal(r.status, 200, JSON.stringify(r.corpo));
+  assert.ok(db.emails[0].html.includes("Salário: R$ 1.800,00 mensal + Insalubridade 40% Bcc: x@y.com"));
+  assert.equal(db.emails[0].html.includes("Bcc: x@y.com\r"), false);
+  assert.equal(cadastroSnap(db), antes, "admissao_adicionais e demais tabelas intactas");
+  const aud = db.tabelas.audit_logs.find((x: any) => x.acao === "admissao_pacote_enviado_email");
+  assert.deepEqual(aud.detalhes.campos_editados_nomes, ["adicionais"]);
+  assert.equal(JSON.stringify(aud).includes("40%"), false, "auditoria sem o valor");
+  // limpar o campo = enviar sem adicionais; omitir o campo = usa o do cadastro
+  const db2 = comAdicionais(cenarioRota({ tipoVaga: MOT, qtd: 1 }), [ad("Insalubridade", "percentual", 20)]);
+  const g2 = (await preview(db2)).corpo;
+  assert.equal((await enviar(db2, { ...g2.campos, adicionais: "" })).status, 200);
+  assert.equal(db2.emails[0].html.includes("Insalubridade"), false);
+  const db3 = comAdicionais(cenarioRota({ tipoVaga: MOT, qtd: 1 }), [ad("Insalubridade", "percentual", 20)]);
+  const { adicionais: _omitido, ...semAd } = (await preview(db3)).corpo.campos;
+  assert.equal((await enviar(db3, semAd)).status, 200);
+  assert.ok(db3.emails[0].html.includes("+ Insalubridade 20%"), "omitido = cadastro");
+});
+await casoRota("rota POST: sem salário, adicional nunca aparece solto", async () => {
+  const db = comAdicionais(cenarioRota({ tipoVaga: MOT, qtd: 1 }), [ad("Insalubridade", "percentual", 20)]);
+  db.tabelas.admissoes[0].salario = null;
+  const g = (await preview(db)).corpo;
+  assert.equal(dadosLinhas(g).some((l: string) => l.startsWith("Salário")), false);
+  assert.equal((await enviar(db, g.campos)).status, 200);
+  assert.equal(db.emails[0].html.includes("Insalubridade"), false);
+});
+caso("fonte única (adicionais): modal e rota usam a mesma montagem; o modal tem o campo, o selo e o restaurar", () => {
+  const modal = fs.readFileSync("src/components/ModalEnviarPacoteEmail.tsx", "utf8");
+  for (const t of ["montarLinhasDeCampos(campos, preview.empresa", 'selo("adicionais")', 'estilo("adicionais")', "Adicionais", "maxLength={200}", "adicionais: c.adicionais", "formDoCadastro(preview.campos)"]) assert.ok(modal.includes(t), t);
+  assert.equal(/Insalubridade 20%\s*\+|salarioComAdicionaisEmail/.test(modal), false, "o modal não monta a linha por conta própria");
+  const rota = fs.readFileSync("src/app/api/admissoes/[id]/pacote/enviar-email/route.ts", "utf8");
+  for (const t of ['from("admissao_adicionais")', 'order("criado_em", { ascending: true })', "formatarAdicionaisEmail(adicionais)", "montarLinhasDeCampos(camposEmail"]) assert.ok(rota.includes(t), t);
+  assert.equal(/admissao_adicionais"\)\s*\.(update|insert|delete|upsert)/.test(rota), false, "a rota só lê admissao_adicionais");
 });
 
 console.log(`\n${total} casos passaram${process.exitCode ? " (HOUVE FALHAS)" : ""}`);

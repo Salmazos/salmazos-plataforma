@@ -47,6 +47,57 @@ export function formatarSalario(salario: number | string | null | undefined, tip
   return `R$ ${n < 0 ? "-" : ""}${comMilhar},${centavos} ${tipo === "hora" ? "hora" : "mensal"}`;
 }
 
+// ── Adicionais salariais (admissao_adicionais) na linha "Salário" ────────────────────────────────────────────────
+export interface AdicionalEmail {
+  tipo: string | null;
+  formato_valor: string | null; // "percentual" | "fixo"
+  valor: number | string | null;
+  criado_em?: string | null;
+}
+
+// Só para exibição: o cadastro nunca é alterado. "insalubridade" -> "Insalubridade"; o resto do texto fica como está.
+function nomeAdicional(tipo: string | null | undefined): string {
+  const t = sanitizarCampoEmail(tipo, 80);
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : "";
+}
+
+// 20 -> "20"; 12.5 -> "12,5"; 12.345 -> "12,35". Sem Intl (mesma razão de formatarSalario) e sem zeros à toa.
+function numeroSemZerosBR(n: number): string {
+  const [inteiro, dec] = Math.abs(n).toFixed(2).split(".");
+  const decimais = dec.replace(/0+$/, "");
+  const comMilhar = inteiro.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return decimais ? `${comMilhar},${decimais}` : comMilhar;
+}
+
+// "Insalubridade 20% + Acúmulo de função 10% + Periculosidade R$ 150,00", na ordem de criado_em (empate/ausência mantém a
+// ordem recebida). Linha sem tipo ou com valor inválido/negativo é ignorada: melhor omitir do que mandar lixo à contabilidade.
+export function formatarAdicionaisEmail(lista: AdicionalEmail[] | null | undefined): string {
+  const itens = (lista ?? []).map((a, i) => ({ a, i }));
+  itens.sort((x, y) => {
+    const tx = x.a.criado_em ? Date.parse(x.a.criado_em) : NaN;
+    const ty = y.a.criado_em ? Date.parse(y.a.criado_em) : NaN;
+    if (Number.isNaN(tx) || Number.isNaN(ty) || tx === ty) return x.i - y.i;
+    return tx - ty;
+  });
+  const partes: string[] = [];
+  for (const { a } of itens) {
+    const nome = nomeAdicional(a.tipo);
+    const n = a.valor === null || a.valor === undefined || a.valor === "" ? NaN : Number(a.valor);
+    if (!nome || !Number.isFinite(n) || n < 0) continue;
+    partes.push(a.formato_valor === "percentual" ? `${nome} ${numeroSemZerosBR(n)}%` : `${nome} R$ ${numeroParaBR(n)}`);
+  }
+  return partes.join(" + ");
+}
+
+// "R$ 2.588,10 mensal" + "Insalubridade 20%" -> "R$ 2.588,10 mensal + Insalubridade 20%". Sem salário não mostra nada;
+// sem adicionais devolve o salário exatamente como veio.
+export function salarioComAdicionaisEmail(salario: string, adicionais: string | null | undefined): string {
+  const base = (salario ?? "").trim();
+  if (!base) return "";
+  const extra = (adicionais ?? "").trim();
+  return extra ? `${base} + ${extra}` : base;
+}
+
 // Bom dia 5h–11h59, Boa tarde 12h–17h59, Boa noite nas demais (hora de Brasília, não a do servidor).
 export function saudacaoSaoPaulo(agora: Date = new Date()): string {
   const hora = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hourCycle: "h23" }).format(agora));
@@ -72,6 +123,9 @@ export interface DadosEmailPacote {
   nome: string;
   funcao: string | null;
   salario: string; // já formatado por formatarSalario
+  // Texto já pronto dos adicionais salariais (formatarAdicionaisEmail ou o campo editado no modal). Vai na MESMA linha do
+  // Salário, à frente do valor; sem salário a linha inteira é omitida (adicional solto não diz nada para a contabilidade).
+  adicionais?: string | null;
   horario: string | null;
   telefone: string; // já formatado por exibirTelefone
   tempoContrato: string;
@@ -100,7 +154,7 @@ export function montarLinhasDados(d: DadosEmailPacote): LinhaDado[] {
     { rotulo: "Data de início", valor: formatarDataBR(d.dataInicio), negrito: true },
     { rotulo: "Nome", valor: d.nome },
     { rotulo: "Função", valor: d.funcao ?? "" },
-    { rotulo: "Salário", valor: d.salario },
+    { rotulo: "Salário", valor: salarioComAdicionaisEmail(d.salario, d.adicionais) },
     { rotulo: "Horário", valor: d.horario ?? "" },
     { rotulo: "Telefone", valor: d.telefone },
   ].map((l) => ({ ...l, valor: (l.valor ?? "").trim() }));
@@ -227,6 +281,8 @@ export interface CamposEmailContabilidade {
   funcao: string;
   salarioValor: number | null;
   salarioTipo: "hora" | "mensal" | null;
+  // Texto livre dos adicionais salariais, só deste e-mail (ex.: "Insalubridade 20%"). Vazio = sem adicionais.
+  adicionais: string;
   horario: string;
   telefone: string;
   dataInicio: string; // YYYY-MM-DD ou vazio
@@ -244,7 +300,7 @@ export interface ContextoDiasTeste {
 
 export const diasTesteSeAplica = (ctx: ContextoDiasTeste | null | undefined): boolean => !!ctx && exigeRespostaDiasTeste(ctx.tipoServico);
 
-export const LIMITES_CAMPOS_EMAIL = { nome: 120, funcao: 120, horario: 200, telefone: 40, tempoContrato: 200 } as const;
+export const LIMITES_CAMPOS_EMAIL = { nome: 120, funcao: 120, adicionais: 200, horario: 200, telefone: 40, tempoContrato: 200 } as const;
 
 // Tira quebras de linha e caracteres de controle (evita injeção de cabeçalho no assunto), colapsa
 // espaços repetidos, apara e limita o tamanho.
@@ -332,6 +388,8 @@ export function validarCamposEmail(entrada: unknown): { ok: boolean; erros: stri
       funcao: sanitizarCampoEmail(e.funcao, LIMITES_CAMPOS_EMAIL.funcao),
       salarioValor,
       salarioTipo,
+      // Quem digita costuma começar com "+": o "+" de ligação com o salário já é posto na montagem da linha.
+      adicionais: sanitizarCampoEmail(e.adicionais, LIMITES_CAMPOS_EMAIL.adicionais).replace(/^(\+\s*)+/, ""),
       horario: sanitizarCampoEmail(e.horario, LIMITES_CAMPOS_EMAIL.horario),
       telefone: formatarTelefoneEmail(sanitizarCampoEmail(e.telefone, LIMITES_CAMPOS_EMAIL.telefone)),
       dataInicio: dataISOValida(dataInicio) ? dataInicio : "",
@@ -355,6 +413,7 @@ export function montarLinhasDeCampos(c: CamposEmailContabilidade, empresa: strin
     nome: c.nome,
     funcao: c.funcao,
     salario: c.salarioValor === null ? "" : formatarSalario(c.salarioValor, c.salarioTipo),
+    adicionais: c.adicionais,
     horario: c.horario,
     telefone: c.telefone,
     tempoContrato: resolverTempoContrato(c.tempoContrato, tempoContratoPadrao),
@@ -380,7 +439,7 @@ export function avisosCamposFaltando(c: CamposEmailContabilidade, empresa: strin
   return avisos;
 }
 
-export type NomeCampoEmail = "nome" | "funcao" | "salario" | "horario" | "telefone" | "dataInicio" | "tempoContrato" | "diasTeste";
+export type NomeCampoEmail = "nome" | "funcao" | "salario" | "adicionais" | "horario" | "telefone" | "dataInicio" | "tempoContrato" | "diasTeste";
 
 // Nomes dos campos que mudaram (ambos os lados passam pela mesma normalização antes de comparar).
 export function listarCamposEditados(original: unknown, editado: unknown): NomeCampoEmail[] {
@@ -390,6 +449,7 @@ export function listarCamposEditados(original: unknown, editado: unknown): NomeC
   if (a.nome !== b.nome) mudou.push("nome");
   if (a.funcao !== b.funcao) mudou.push("funcao");
   if (a.salarioValor !== b.salarioValor || (a.salarioValor !== null && a.salarioTipo !== b.salarioTipo)) mudou.push("salario");
+  if (a.adicionais !== b.adicionais) mudou.push("adicionais");
   if (a.horario !== b.horario) mudou.push("horario");
   if (a.telefone !== b.telefone) mudou.push("telefone");
   if (a.dataInicio !== b.dataInicio) mudou.push("dataInicio");
