@@ -1429,6 +1429,17 @@ export const rescisaoUpdateSchema = rescisaoCreateSchema
   .omit({ funcionario_id: true, empresa: true })
   .partial();
 
+// Anexar/substituir o ASO demissional direto da lista (PATCH /api/rescisoes/[id]/aso-demissional): só o caminho
+// devolvido por aso-upload-url (conferido contra o funcionário na rota) e a data do exame, opcional.
+export const rescisaoAsoDemissionalSchema = z.object({
+  path: z.string().trim().min(1, "Arquivo do ASO é obrigatório"),
+  data_exame: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data do exame inválida")
+    .optional()
+    .nullable(),
+});
+
 // Toggle isolado do badge "Faturado" na tabela (PATCH /api/rescisoes/[id]/faturado) —
 // mesmo padrão de rota dedicada já usado em cobrancaRsVencimentoSchema.
 export const rescisaoFaturadoSchema = z.object({

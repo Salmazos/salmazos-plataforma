@@ -5,6 +5,7 @@ import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
 import { contextoRH, checarAcessoFuncionarioRH } from "@/lib/rhUnidadeAuth";
 import { dispararAvisosRescisao } from "@/lib/dispararAvisosRescisao";
+import { pathAsoDoFuncionario, registrarAnexoAsoDemissional } from "@/lib/asoDemissional";
 import { hojeBrasiliaISO, dataJaChegou, dataEhFutura, formatarDataBR } from "@/lib/rescisaoProgramada";
 
 export async function GET(request: NextRequest) {
@@ -59,6 +60,10 @@ export async function POST(request: NextRequest) {
   // Supervisor só lança rescisão de funcionário da própria unidade.
   const bloqueioUnidade = await checarAcessoFuncionarioRH(user, parsed.data.funcionario_id);
   if (bloqueioUnidade) return bloqueioUnidade;
+
+  if (parsed.data.aso_documento_path && !pathAsoDoFuncionario(parsed.data.aso_documento_path, parsed.data.funcionario_id)) {
+    return NextResponse.json({ error: "Arquivo do ASO inválido. Envie um PDF, JPG ou PNG." }, { status: 400 });
+  }
 
   const svc = createServiceClient();
 
@@ -155,6 +160,11 @@ export async function POST(request: NextRequest) {
   // Disparo síncrono do momento "lançamento" — anti-void: aguardado, mas
   // dispararAvisosRescisao nunca lança exceção, então nunca bloqueia esta resposta.
   await dispararAvisosRescisao(rescisao.id, "lancamento");
+
+  // ASO já anexado no lançamento: carimba quem/quando e avisa o cliente (1ª anexação).
+  if (rescisao.aso_documento_path) {
+    await registrarAnexoAsoDemissional(svc, { rescisaoId: rescisao.id, userId: user.id });
+  }
 
   return NextResponse.json({ data: rescisao });
 }

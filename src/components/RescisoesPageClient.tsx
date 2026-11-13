@@ -4,7 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { formatarDataSemFuso } from "@/lib/utils";
 import { RESCISAO_MODALIDADE_LABEL } from "@/lib/rescisaoModalidade";
+import { hojeBrasiliaISO } from "@/lib/rescisaoProgramada";
+import { asoDemissionalPendente, diasDesdeDesligamento } from "@/lib/asoDemissionalRegras";
 import ModalEditarRescisao from "./ModalEditarRescisao";
+import ModalAnexarAsoDemissional from "./ModalAnexarAsoDemissional";
 
 export interface RescisaoRow {
   id: string;
@@ -22,6 +25,7 @@ export interface RescisaoRow {
   farmacia: number | null;
   faturado: boolean;
   aso_documento_path: string | null;
+  aso_demissional_data_exame?: string | null;
   criado_em: string;
   funcionarios: { nome_completo: string; cargo: string | null } | null;
 }
@@ -43,11 +47,16 @@ function moeda(v: number | null): string {
 export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Props) {
   const searchParams = useSearchParams();
   const rescisaoFocoId = searchParams.get("rescisao");
+  // Deep-link do aviso diário de ASO pendente: abre a lista já filtrada.
+  const asoPendenteInicial = searchParams.get("aso") === "pendente";
   const linhaRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
 
   const [rescisoes, setRescisoes] = useState(rescisoesIniciais);
   const [filtroEmpresa, setFiltroEmpresa] = useState("");
   const [filtroFaturado, setFiltroFaturado] = useState("todos");
+  const [filtroAso, setFiltroAso] = useState(asoPendenteInicial ? "pendente" : "todos");
+  const [rescisaoAnexandoAso, setRescisaoAnexandoAso] = useState<RescisaoRow | null>(null);
+  const hojeISO = useMemo(() => hojeBrasiliaISO(), []);
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const [rescisaoEditando, setRescisaoEditando] = useState<RescisaoRow | null>(null);
@@ -59,6 +68,7 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
     if (!rescisaoFocoId) return;
     setFiltroEmpresa("");
     setFiltroFaturado("todos");
+    setFiltroAso("todos");
     setDataInicio("");
     setDataFim("");
   }, [rescisaoFocoId]);
@@ -74,11 +84,12 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
       if (filtroEmpresa && r.empresa !== filtroEmpresa) return false;
       if (filtroFaturado === "sim" && !r.faturado) return false;
       if (filtroFaturado === "nao" && r.faturado) return false;
+      if (filtroAso === "pendente" && !asoDemissionalPendente(r)) return false;
       if (dataInicio && r.data_desligamento < dataInicio) return false;
       if (dataFim && r.data_desligamento > dataFim) return false;
       return true;
     });
-  }, [rescisoes, filtroEmpresa, filtroFaturado, dataInicio, dataFim]);
+  }, [rescisoes, filtroEmpresa, filtroFaturado, filtroAso, dataInicio, dataFim]);
 
   const handleVerAso = async (e: React.MouseEvent, rescisaoId: string) => {
     e.stopPropagation();
@@ -134,6 +145,10 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
           <option value="todos">Todos (pago)</option>
           <option value="sim">Pago</option>
           <option value="nao">Não pago</option>
+        </select>
+        <select value={filtroAso} onChange={(e) => setFiltroAso(e.target.value)} className="input-field" style={{ maxWidth: 180 }}>
+          <option value="todos">Todos (ASO)</option>
+          <option value="pendente">ASO pendente</option>
         </select>
         <div className="flex items-center gap-2">
           <label className="text-xs text-gray-500">De</label>
@@ -202,13 +217,27 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
                     </button>
                   </td>
                   <td style={{ padding: "10px 12px" }}>
-                    {r.aso_documento_path ? (
-                      <button onClick={(e) => handleVerAso(e, r.id)} className="btn-outline" style={{ padding: "4px 10px", fontSize: 12 }}>
-                        Ver ASO
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      {r.aso_documento_path ? (
+                        <button onClick={(e) => handleVerAso(e, r.id)} className="btn-outline" style={{ padding: "4px 10px", fontSize: 12 }}>
+                          Ver ASO
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "#FEF3C7", color: "#92400E", whiteSpace: "nowrap" }}>
+                          {/* Rescisão programada (data futura) ainda não tem dias contados. */}
+                          {diasDesdeDesligamento(r.data_desligamento, hojeISO) > 0
+                            ? `Pendente · ${diasDesdeDesligamento(r.data_desligamento, hojeISO)} ${diasDesdeDesligamento(r.data_desligamento, hojeISO) === 1 ? "dia" : "dias"}`
+                            : "Pendente"}
+                        </span>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setRescisaoAnexandoAso(r); }}
+                        className="btn-outline"
+                        style={{ padding: "4px 10px", fontSize: 12 }}
+                      >
+                        {r.aso_documento_path ? "Substituir" : "Anexar ASO"}
                       </button>
-                    ) : (
-                      <span style={{ color: "#9CA3AF", fontSize: 12 }}>—</span>
-                    )}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -216,6 +245,17 @@ export default function RescisoesPageClient({ rescisoesIniciais, clientes }: Pro
           </tbody>
         </table>
       </div>
+
+      {rescisaoAnexandoAso && (
+        <ModalAnexarAsoDemissional
+          rescisao={rescisaoAnexandoAso}
+          onClose={() => setRescisaoAnexandoAso(null)}
+          onAnexado={(atualizada) => {
+            setRescisoes((prev) => prev.map((r) => (r.id === atualizada.id ? atualizada : r)));
+            setRescisaoAnexandoAso(null);
+          }}
+        />
+      )}
 
       {rescisaoEditando && (
         <ModalEditarRescisao

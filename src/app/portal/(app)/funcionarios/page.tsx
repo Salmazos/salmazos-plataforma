@@ -94,10 +94,10 @@ export default async function PortalFuncionariosPage() {
     funcionarioIdsDesligados.length
       ? service
           .from("rescisoes")
-          .select("funcionario_id, data_desligamento")
+          .select("funcionario_id, data_desligamento, aso_documento_path")
           .in("funcionario_id", funcionarioIdsDesligados)
           .order("data_desligamento", { ascending: false })
-      : Promise.resolve({ data: [] as { funcionario_id: string; data_desligamento: string }[] }),
+      : Promise.resolve({ data: [] as { funcionario_id: string; data_desligamento: string; aso_documento_path: string | null }[] }),
   ]);
 
   const telefonePorCandidato = new Map((candidatos ?? []).map((c) => [c.id, c.telefone]));
@@ -105,9 +105,13 @@ export default async function PortalFuncionariosPage() {
   // Já ordenado por data_desligamento desc — primeiro encontro de cada funcionario_id é a
   // rescisão mais recente (mesma técnica usada acima pra ASO/contrato mais recente).
   const dataDesligamentoPorFuncionario = new Map<string, string>();
+  // ASO demissional: só "anexado" ou "em andamento" — nunca o caminho do arquivo (a rota aso-demissional-url
+  // resolve e valida tudo no servidor).
+  const asoDemissionalAnexadoPorFuncionario = new Set<string>();
   for (const r of rescisoes ?? []) {
     if (!dataDesligamentoPorFuncionario.has(r.funcionario_id)) {
       dataDesligamentoPorFuncionario.set(r.funcionario_id, r.data_desligamento);
+      if (r.aso_documento_path) asoDemissionalAnexadoPorFuncionario.add(r.funcionario_id);
     }
   }
 
@@ -182,6 +186,13 @@ export default async function PortalFuncionariosPage() {
       turno: f.turno ?? "—",
       celular: telefone ? formatarTelefone(telefone) : "—",
       badgeAso: { ...badgeAso, url: urlAso },
+      // Só para rescindido (a aba Ativos continua com o ASO periódico, sem mudança).
+      asoDemissional:
+        f.status === "desligado"
+          ? asoDemissionalAnexadoPorFuncionario.has(f.id)
+            ? { anexado: true, url: `/api/portal/funcionarios/${f.id}/aso-demissional-url` }
+            : { anexado: false, url: null }
+          : null,
       badgeContrato: { ...badgeContrato, url: urlContrato },
     };
   });

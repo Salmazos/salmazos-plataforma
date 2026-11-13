@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
 import { checarAcessoFuncionarioRH } from "@/lib/rhUnidadeAuth";
+import { extensaoAsoValida } from "@/lib/asoDemissional";
 
 // Reaproveita o bucket privado "admissao-docs" (já usado pelo módulo de Admissão Digital)
 // em vez de criar um bucket novo só pro ASO — mesmo padrão de pastas por categoria dentro
@@ -25,6 +26,10 @@ export async function POST(request: NextRequest) {
   if (!funcionarioId) return NextResponse.json({ error: "funcionario_id é obrigatório." }, { status: 400 });
   const bloqueioUnidade = await checarAcessoFuncionarioRH(user, funcionarioId);
   if (bloqueioUnidade) return bloqueioUnidade;
+  // Mesma regra do input da tela (PDF, JPG, PNG), agora também no servidor.
+  if (!extensaoAsoValida(nomeArquivo)) {
+    return NextResponse.json({ error: "O ASO deve ser um arquivo PDF, JPG ou PNG." }, { status: 400 });
+  }
 
   const safeFilename = nomeArquivo.replace(/[^a-zA-Z0-9._-]/g, "_");
   const path = `rescisoes-aso/${funcionarioId}/aso-${Date.now()}-${safeFilename}`;

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { dispararAvisosRescisao } from "@/lib/dispararAvisosRescisao";
 import { efetivarDesligamentosProgramados } from "@/lib/rescisaoProgramadaCron";
+import { avisarAsoDemissionalPendente } from "@/lib/asoDemissionalCron";
 
 export const dynamic = "force-dynamic";
 
@@ -121,7 +122,21 @@ export async function GET(request: Request) {
       console.error("[cron/rescisao-avisos] Falha ao efetivar desligamentos programados:", err);
     }
 
+    // ── Quarto passo: ASO demissional pendente (10+ dias) — aviso interno consolidado, 1 por destinatário por dia ──
+    // Isolado em try/catch como o passo anterior: nunca derruba os avisos de vencimento.
+    let asoPendentes = 0;
+    let asoDestinatarios = 0;
+    try {
+      const r = await avisarAsoDemissionalPendente(supabase, hojeSP);
+      asoPendentes = r.pendentes;
+      asoDestinatarios = r.destinatarios;
+    } catch (err) {
+      console.error("[cron/rescisao-avisos] Falha no aviso de ASO demissional pendente:", err);
+    }
+
     return NextResponse.json({
+      aso_demissional_pendentes: asoPendentes,
+      aso_demissional_destinatarios: asoDestinatarios,
       desligamentos_efetivados: desligamentosEfetivados,
       vencimento_rescisao_enviados: vencimentoRescisaoEnviados,
       vencimento_rescisao_falhados: vencimentoRescisaoFalhados,

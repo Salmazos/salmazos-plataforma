@@ -7,6 +7,7 @@ import { checarAcessoRescisaoRH } from "@/lib/rhUnidadeAuth";
 import { avisarRescisaoPaga } from "@/lib/dispararAvisosRescisao";
 import { checarPapelFullAccess } from "@/lib/fullAccessAuth";
 import { hojeBrasiliaISO, dataJaChegou, dataEhFutura } from "@/lib/rescisaoProgramada";
+import { pathAsoDoFuncionario, registrarAnexoAsoDemissional } from "@/lib/asoDemissional";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -62,6 +63,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Nenhum campo para atualizar." }, { status: 400 });
   }
 
+  // O ASO só pode apontar para um arquivo que o aso-upload-url gerou para ESTE funcionário (senão o portal
+  // poderia expor o arquivo de outro).
+  if (typeof campos.aso_documento_path === "string" && !pathAsoDoFuncionario(campos.aso_documento_path, antes.funcionario_id)) {
+    return NextResponse.json({ error: "Arquivo do ASO inválido. Envie um PDF, JPG ou PNG." }, { status: 400 });
+  }
+
   // Mudança da data de desligamento (rescisão programada): enquanto o funcionário está 'ativo' vale qualquer
   // data, e se a nova data já chegou ele vira 'desligado' no ato. Funcionário já 'desligado' nunca volta a ter
   // data futura (não existe "reativar" — a data futura só faz sentido pra rescisão ainda programada).
@@ -114,6 +121,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         removeError.message
       );
     }
+  }
+
+  // ASO anexado pelo "Editar": mesmo carimbo e mesmo aviso ao cliente (só na 1ª anexação) do anexo direto da lista.
+  if (typeof campos.aso_documento_path === "string") {
+    await registrarAnexoAsoDemissional(svc, { rescisaoId: id, userId: user.id });
   }
 
   registrarAuditoria({

@@ -149,7 +149,7 @@ export type GrupoAviso = "vagas" | "rescisao" | "aso" | "portal_cliente" | "avis
 
 export const EVENTOS_POR_GRUPO: Record<GrupoAviso, string[]> = {
   vagas: ["vaga_criada", "vaga_reativada", "vaga_fechada", "vaga_cancelada", "solicitacao_vaga", "garantia_rs_vencendo", "garantia_rs_acionada", "pos_venda_rs_7dias", ...EVENTOS_AVISOS_RESTANTES],
-  rescisao: ["rescisao_lancamento", "rescisao_vencimento_rescisao", "rescisao_vencimento_guia", "rescisao_paga"],
+  rescisao: ["rescisao_lancamento", "rescisao_vencimento_rescisao", "rescisao_vencimento_guia", "rescisao_paga", "rescisao_aso_pendente"],
   aso: ["aso_periodico_sem_registro", "aso_periodico_vencendo", "aso_periodico_atrasado"],
   portal_cliente: [
     "indicacao_candidato_recebida",
@@ -171,6 +171,7 @@ export const EVENTOS_POR_GRUPO: Record<GrupoAviso, string[]> = {
     "entrevista_remarcada_cliente",
     "solicitacao_vaga_decidida_cliente",
     "pedido_vaga_decidido_cliente",
+    "aso_demissional_anexado_cliente",
   ],
 };
 
@@ -244,6 +245,8 @@ export const ROTULO_EVENTO: Record<string, string> = {
   rescisao_vencimento_rescisao: "Pagamento de rescisão vence hoje",
   rescisao_vencimento_guia: "Pagamento de guia vence hoje",
   rescisao_paga: "Rescisão paga",
+  rescisao_aso_pendente: "ASO demissional pendente",
+  aso_demissional_anexado_cliente: "ASO demissional anexado (aviso ao cliente)",
   aso_periodico_sem_registro: "ASO periódico sem registro",
   aso_periodico_vencendo: "ASO periódico vencendo",
   aso_periodico_atrasado: "ASO periódico em atraso",
@@ -299,6 +302,8 @@ export const CANAIS_POR_EVENTO: Record<string, readonly ("email" | "sino" | "pop
   email_cliente_alteracao_decidida: ["email"],
   email_cliente_lembrete_agendamento: ["email"],
   rescisao_paga: ["sino"],
+  rescisao_aso_pendente: ["sino"],
+  aso_demissional_anexado_cliente: ["sino", "popup"],
   portal_candidato_aprovado: ["email", "sino", "popup"],
   portal_candidato_reprovado: ["email", "sino", "popup"],
   garantia_rs_vencendo: ["email", "sino", "popup"],
@@ -362,6 +367,10 @@ export const NOTA_EVENTO: Record<string, string> = {
   indicacao_candidato_editada_cliente:
     "Dispara quando o cliente altera, pelo portal, uma indicação direta que já enviou (enquanto está em análise ou aprovada e ainda sem admissão iniciada). O sino e o e-mail dizem quais campos mudaram (telefone mascarado; salário com valor); no e-mail há a tabela Campo / Antes / Depois e, se algum dado não pôde ser atualizado no cadastro do candidato, o motivo. Em indicação aprovada o sino leva ao perfil do candidato; em análise, à indicação. Não há popup. O filtro de unidade é regra fixa: só recebem quem atende a unidade do cliente.",
   rescisao_paga: "Hoje este aviso só existe no sino (e no popup de login, que deriva dele).",
+  rescisao_aso_pendente:
+    "Dispara pelo cron diário (9h) quando há rescisão sem ASO demissional anexado e com 10 dias ou mais desde o desligamento. Cada pessoa da lista recebe UM aviso por dia, consolidado (quantas rescisões estão pendentes e as mais antigas), até o ASO ser anexado. Só sino (o popup de login deriva dele); sem e-mail. Sem ninguém na lista, ninguém é avisado. O cliente não recebe nada.",
+  aso_demissional_anexado_cliente:
+    "Avisa o cliente, no portal, quando a Salmazos anexa o ASO demissional de um funcionário rescindido pela primeira vez; ele pode abrir o ASO na aba Rescindidos. Trocar o arquivo depois não avisa de novo. O clique leva à lista de Funcionários do portal. O sino fica no topo do portal; o popup abre uma vez por aviso novo, quando o usuário entra. Não há lista de pessoas: recebem todos os usuários do portal daquele cliente. Sem configuração ou com o canal desligado, ninguém recebe.",
   portal_candidato_aprovado:
     "Dispara quando o cliente aprova um candidato no portal. E-mail: lista abaixo (padrão Olver e RH). Sino: com o canal ligado o responsável pelo candidato SEMPRE é avisado, além das pessoas da lista (a lista pode ficar vazia); sem responsável e sem lista vai um aviso geral para a equipe da unidade do cliente; desligado, ninguém recebe o sino. Popup: abre uma vez por aviso para quem recebeu o aviso nominal (o responsável e a lista do sino); não tem lista própria e vem desligado até ser ligado. O aviso traz o comentário do cliente, nunca fee nem dados de admissão.",
   portal_candidato_reprovado:
