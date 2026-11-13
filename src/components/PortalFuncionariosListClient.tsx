@@ -90,6 +90,8 @@ export interface FuncionarioPortalRow {
   turno: string;
   celular: string;
   badgeAso: { label: string; bg: string; text: string; url: string | null };
+  // Só preenchido para rescindido: no lugar do ASO periódico (que não faz sentido depois do desligamento).
+  asoDemissional: { anexado: boolean; url: string | null } | null;
   badgeContrato: { label: string; bg: string; text: string; url: string | null };
 }
 
@@ -232,9 +234,22 @@ export default function PortalFuncionariosListClient({ funcionarios }: Props) {
                   <Campo label="Função">{f.cargo}</Campo>
                   <Campo label="Turno de trabalho">{f.turno}</Campo>
                   <Campo label="Celular">{f.celular}</Campo>
-                  <Campo label="ASO Periódico">
-                    <PortalDocumentoBadge label={f.badgeAso.label} bg={f.badgeAso.bg} text={f.badgeAso.text} url={f.badgeAso.url} />
-                  </Campo>
+                  {f.status === "desligado" && f.asoDemissional ? (
+                    <Campo label="ASO Demissional">
+                      {f.asoDemissional.anexado ? (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          <PortalDocumentoBadge label="Anexado" bg="#D1FAE5" text="#166534" url={null} />
+                          <PortalDocumentoBadge label="Ver" bg="#EFF6FF" text="#1D4ED8" url={f.asoDemissional.url} />
+                        </span>
+                      ) : (
+                        <PortalDocumentoBadge label="Em andamento" bg="#F3F4F6" text="#374151" url={null} />
+                      )}
+                    </Campo>
+                  ) : (
+                    <Campo label="ASO Periódico">
+                      <PortalDocumentoBadge label={f.badgeAso.label} bg={f.badgeAso.bg} text={f.badgeAso.text} url={f.badgeAso.url} />
+                    </Campo>
+                  )}
                   <Campo label="Contrato">
                     <PortalDocumentoBadge label={f.badgeContrato.label} bg={f.badgeContrato.bg} text={f.badgeContrato.text} url={f.badgeContrato.url} />
                   </Campo>

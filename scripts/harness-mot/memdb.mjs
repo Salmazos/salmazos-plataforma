@@ -363,7 +363,13 @@ export function criarClienteServico(db) {
       from: (balde) => ({
         createSignedUploadUrl: async (caminho) => falhaStorage("storage.upload") ?? ({ data: { signedUrl: `https://stub/${balde}/up/${caminho}`, path: caminho, token: "tk" }, error: null }),
         createSignedUrl: async (caminho) => falhaStorage("storage.url") ?? ({ data: { signedUrl: `https://stub/${balde}/dl/${caminho}` }, error: null }),
-        remove: async () => ({ error: null }),
+        // Registra o que foi removido em db.storageRemovidos (scripts/verificar-aso-demissional.mts); db.falhas["storage.remove"] injeta erro.
+        remove: async (caminhos) => {
+          const falha = falhaStorage("storage.remove");
+          if (falha) return { error: falha.error };
+          (db.storageRemovidos ??= []).push(...caminhos.map((c) => `${balde}/${c}`));
+          return { error: null };
+        },
         // Arquivos de teste ficam em db.arquivos[caminho] (Buffer/Uint8Array); sem ele, o download falha como no storage real.
         download: async (caminho) => {
           const conteudo = db.arquivos?.[caminho];

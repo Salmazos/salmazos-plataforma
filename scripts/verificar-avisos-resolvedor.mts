@@ -576,7 +576,7 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
 
   // ── Avisos ao cliente (sino e popup no portal): bloco 1 ──
   await caso("avisos ao cliente: grupo novo, com os eventos dos 4 blocos, rótulo e canais sino/popup", () => {
-    assert.deepEqual(EVENTOS_POR_GRUPO.avisos_cliente, ["indicacao_decidida_cliente", "candidato_enviado_cliente", "entrevista_agendada_cliente", "entrevista_remarcada_cliente", "solicitacao_vaga_decidida_cliente", "pedido_vaga_decidido_cliente"]);
+    assert.deepEqual(EVENTOS_POR_GRUPO.avisos_cliente, ["indicacao_decidida_cliente", "candidato_enviado_cliente", "entrevista_agendada_cliente", "entrevista_remarcada_cliente", "solicitacao_vaga_decidida_cliente", "pedido_vaga_decidido_cliente", "aso_demissional_anexado_cliente"]);
     assert.equal(ROTULO_GRUPO.avisos_cliente, "Avisos ao cliente");
     assert.equal(ROTULO_EVENTO.indicacao_decidida_cliente, "Indicação direta decidida pela Salmazos");
     assert.deepEqual([...canaisDoEvento("indicacao_decidida_cliente")], ["sino", "popup"]);
@@ -883,8 +883,8 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
   });
 
   // ── Avisos ao cliente: bloco 4 (solicitação de vaga decidida e pedido decidido) ──
-  await caso("bloco 4 catálogo: 2 eventos novos, grupo avisos_cliente passa a ter 6, sem lista, só sino e popup", () => {
-    assert.equal(EVENTOS_POR_GRUPO.avisos_cliente.length, 6);
+  await caso("bloco 4 catálogo: 2 eventos novos, grupo avisos_cliente passa a ter 6 (7 com o ASO demissional), sem lista, só sino e popup", () => {
+    assert.equal(EVENTOS_POR_GRUPO.avisos_cliente.length, 7);
     assert.equal(ROTULO_EVENTO.solicitacao_vaga_decidida_cliente, "Solicitação de vaga decidida");
     assert.equal(ROTULO_EVENTO.pedido_vaga_decidido_cliente, "Pedido do cliente decidido");
     for (const ev of ["solicitacao_vaga_decidida_cliente", "pedido_vaga_decidido_cliente"]) {
@@ -1014,11 +1014,11 @@ function fonte(c: Cenario): FonteAvisos & { chamadas: string[] } {
     }
     assert.equal(APOIO_EMAILS_CLIENTE, "Os e-mails vão para o login de cada usuário do portal do cliente. Sem usuário no portal, vão para o e-mail de contato.");
   });
-  await caso("catálogo: os 6 eventos de sino/popup não mudaram e nenhum nome colide com os e-mails ao cliente", () => {
-    assert.equal(EVENTOS_POR_GRUPO.avisos_cliente.length, 6);
+  await caso("catálogo: os 6 eventos de sino/popup não mudaram (mais o ASO demissional) e nenhum nome colide com os e-mails ao cliente", () => {
+    assert.equal(EVENTOS_POR_GRUPO.avisos_cliente.length, 7);
     for (const ev of EVENTOS_POR_GRUPO.avisos_cliente) { assert.equal(eventoEmailCliente(ev), false, ev); assert.deepEqual([...canaisDoEvento(ev)], ["sino", "popup"], ev); }
-    assert.equal(new Set([...EVENTOS_POR_GRUPO.avisos_cliente, ...LISTA_EMAIL, ...EVENTOS_POR_GRUPO.portal_cliente, ...EVENTOS_POR_GRUPO.vagas]).size, 6 + 7 + 9 + 26);
-    assert.equal(EVENTOS_SEM_LISTA.length, 13);
+    assert.equal(new Set([...EVENTOS_POR_GRUPO.avisos_cliente, ...LISTA_EMAIL, ...EVENTOS_POR_GRUPO.portal_cliente, ...EVENTOS_POR_GRUPO.vagas]).size, 7 + 7 + 9 + 26);
+    assert.equal(EVENTOS_SEM_LISTA.length, 14);
     for (const ev of ["solicitacao_vaga", "vaga_pausa_pedida", "portal_candidato_aprovado", "rescisao_paga"]) assert.equal(eventoSemLista(ev), false, ev);
   });
   await caso("padrão dos e-mails ao cliente (documentação): 5 ligados e 2 desligados; grupo continua sem Restaurar padrão", () => {

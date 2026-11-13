@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 interface AvisoRescisaoHoje {
   id: string;
+  tipo: string;
   titulo: string;
   mensagem: string;
   rescisao_id: string | null;
@@ -48,9 +49,11 @@ export default function PopupRescisoesHoje() {
     }
   }
 
-  function abrirRescisao(rescisaoId: string | null) {
+  function abrirRescisao(rescisaoId: string | null, tipo?: string) {
     marcarVisto();
     if (rescisaoId) router.push(`/painel/rescisoes?rescisao=${rescisaoId}`);
+    // Aviso consolidado de ASO demissional pendente não tem uma rescisão só: abre a lista já filtrada.
+    else if (tipo === "rescisao_aso_pendente") router.push("/painel/rescisoes?aso=pendente");
   }
 
   if (!aberto) return null;
@@ -80,7 +83,7 @@ export default function PopupRescisoesHoje() {
           {avisos.map((a) => (
             <button
               key={a.id}
-              onClick={() => abrirRescisao(a.rescisao_id)}
+              onClick={() => abrirRescisao(a.rescisao_id, a.tipo)}
               className="w-full text-left flex items-start gap-3 bg-[#FFFBEB] border border-[#FFD700]/30 rounded-xl px-4 py-3"
             >
               <span className="text-2xl leading-none">📋</span>
