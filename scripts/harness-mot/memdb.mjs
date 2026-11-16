@@ -362,6 +362,13 @@ export function criarClienteServico(db) {
     storage: {
       from: (balde) => ({
         createSignedUploadUrl: async (caminho) => falhaStorage("storage.upload") ?? ({ data: { signedUrl: `https://stub/${balde}/up/${caminho}`, path: caminho, token: "tk" }, error: null }),
+        // Upload direto (rota do painel): guarda o que foi enviado em db.arquivos[caminho]; db.falhas["storage.upload"] injeta erro.
+        upload: async (caminho, conteudo) => {
+          const falha = falhaStorage("storage.upload");
+          if (falha) return { data: null, error: falha.error };
+          (db.arquivos ??= {})[caminho] = conteudo;
+          return { data: { path: caminho }, error: null };
+        },
         createSignedUrl: async (caminho) => falhaStorage("storage.url") ?? ({ data: { signedUrl: `https://stub/${balde}/dl/${caminho}` }, error: null }),
         // Registra o que foi removido em db.storageRemovidos (scripts/verificar-aso-demissional.mts); db.falhas["storage.remove"] injeta erro.
         remove: async (caminhos) => {

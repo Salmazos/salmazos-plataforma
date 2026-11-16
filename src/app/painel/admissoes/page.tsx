@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { TIPO_CERTIDAO_VERSO } from "@/lib/admissaoDocumentos";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import AdmissoesClient from "@/components/AdmissoesClient";
 import { contextoRH } from "@/lib/rhUnidadeAuth";
@@ -36,11 +37,13 @@ export default async function AdmissoesPage() {
 
   const ids = (admissoes ?? []).map((a) => a.id);
   const { data: docs } = ids.length
-    ? await svc.from("admissao_documentos").select("admissao_id, status").in("admissao_id", ids)
-    : { data: [] as { admissao_id: string; status: string }[] };
+    ? await svc.from("admissao_documentos").select("admissao_id, status, tipo_documento, storage_path").in("admissao_id", ids)
+    : { data: [] as { admissao_id: string; status: string; tipo_documento: string; storage_path: string | null }[] };
 
   const progressoPorAdmissao = new Map<string, number>();
   for (const d of docs ?? []) {
+    // O verso opcional da certidão fica fora: docsTotal (16) não o inclui, senão a lista mostraria 17/16.
+    if (d.tipo_documento === TIPO_CERTIDAO_VERSO) continue;
     if (d.status === "enviado" || d.status === "aprovado") {
       progressoPorAdmissao.set(d.admissao_id, (progressoPorAdmissao.get(d.admissao_id) ?? 0) + 1);
     }

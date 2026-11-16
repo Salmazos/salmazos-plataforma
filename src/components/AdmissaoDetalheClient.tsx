@@ -7,7 +7,7 @@ import { formatarData, formatarDataSemFuso } from "@/lib/utils";
 import { ADMISSAO_STATUS_BADGE, ADMISSAO_STATUS_OPTIONS, MODALIDADE_LABEL, STATUS_JA_ENVIADO } from "@/lib/admissaoStatus";
 import { MOTIVOS_REJEICAO_DOCUMENTO } from "@/lib/admissaoConstants";
 import { OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
-import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
+import { DOCUMENTOS_ADMISSAO, TIPO_CERTIDAO_VERSO, contaNoProgressoDocumentos } from "@/lib/admissaoDocumentos";
 import {
   ESTADO_CIVIL_OPTIONS, GRAU_INSTRUCAO_OPTIONS, OPCAO_VALE_TRANSPORTE_LABEL,
   COR_RACA_OPTIONS, PARENTESCO_OPTIONS, CNH_CATEGORIAS,
@@ -2330,9 +2330,22 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
               ⚠️ {erroUpload}
             </div>
           )}
-          <p className="text-sm font-semibold text-gray-700 mb-4">{docsAprovados} de {documentos.length} documentos aprovados</p>
+          <p className="text-sm font-semibold text-gray-700 mb-4">{docsAprovados} de {documentos.filter(contaNoProgressoDocumentos).length} documentos aprovados</p>
           {DOCUMENTOS_ADMISSAO.filter((def) => !def.apenasPainel).map((def) => {
             const rows = documentos.filter((d) => d.tipo_documento === def.tipo_documento);
+            // Admissão criada antes do verso opcional da certidão não tem a linha: oferece adicioná-lo (a rota cria a linha sob demanda).
+            if (rows.length === 0 && def.tipo_documento === TIPO_CERTIDAO_VERSO && documentos.some((d) => d.tipo_documento === "certidao_civil")) {
+              return (
+                <button
+                  key={def.tipo_documento}
+                  onClick={() => iniciarUpload(def.tipo_documento, undefined, def.label)}
+                  disabled={enviandoUpload && uploadAlvo?.tipo === def.tipo_documento}
+                  className="btn-outline mb-3" style={{ padding: "6px 12px", fontSize: 12 }}
+                >
+                  {enviandoUpload && uploadAlvo?.tipo === def.tipo_documento ? "Enviando..." : "+ Adicionar verso da certidão (averbação de divórcio)"}
+                </button>
+              );
+            }
             if (rows.length === 0) return null;
             const aceitaMultiplos = def.multiArquivo === true;
 

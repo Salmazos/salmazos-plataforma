@@ -153,8 +153,9 @@ export default function PassoRevisao({ form, dependentes, documentos, valeTransp
           const enviado = doc.status === "enviado" || doc.status === "aprovado";
           return (
             <div key={doc.id} style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "1px solid #F3F4F6", fontSize: 13 }}>
-              <span style={{ color: "#374151" }}>{def?.label ?? doc.tipo_documento}</span>
-              <span>{enviado ? "✅ Enviado" : "⚠️ Pendente"}</span>
+              <span style={{ color: "#374151" }}>{def?.labelCandidato ?? def?.label ?? doc.tipo_documento}</span>
+              {/* Verso opcional não enviado não é pendência: nunca bloqueia o envio. */}
+              <span>{enviado ? "✅ Enviado" : def?.versoOpcional ? "Opcional — não enviado" : "⚠️ Pendente"}</span>
             </div>
           );
         })}

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseBody, admissaoDocumentoConfirmarSchema } from "@/lib/schemas";
 import { resolveAdmissaoByToken } from "@/lib/admissaoToken";
-import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
+import { DOCUMENTOS_ADMISSAO, garantirLinhaVersoOpcional } from "@/lib/admissaoDocumentos";
 import { registrarAuditoria } from "@/lib/audit";
 import { converterHeicSeNecessario } from "@/lib/heicConversion";
 
@@ -123,6 +123,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       data = inserted;
     }
   } else {
+    // Verso opcional da certidão: admissão criada antes dele existir não tem a linha — cria vazia antes do UPDATE abaixo.
+    const garantida = await garantirLinhaVersoOpcional(svc, admissaoId, tipo);
+    if (garantida.error) return NextResponse.json({ error: garantida.error.message }, { status: 400 });
     const { data: updated, error } = await svc
       .from("admissao_documentos")
       .update({

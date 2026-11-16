@@ -60,7 +60,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
   const itens: DocumentoPortalItem[] = [];
   for (const def of DOCUMENTOS_ADMISSAO) {
-    if (def.apenasPainel) continue;
+    if (def.apenasPainel || def.ocultoNoPortal) continue;
     const rows = (documentos ?? []).filter((d) => d.tipo_documento === def.tipo_documento);
     rows.forEach((doc, idx) => {
       const partes = doc.storage_path?.split(".") ?? [];

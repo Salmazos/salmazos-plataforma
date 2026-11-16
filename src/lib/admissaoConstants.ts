@@ -105,6 +105,10 @@ export const ORIENTACAO_FOTO_3X4_DICA_EXTRA =
 export const NOTAS_DOCUMENTO: Record<string, string> = {
   rg:
     "Envie uma imagem nítida e bem iluminada, com o documento inteiro visível, sem cortes.",
+  certidao_civil:
+    "Envie a frente da certidão (foto do celular ou PDF). Se preferir, pode mandar frente e verso juntos em um único PDF.",
+  certidao_civil_verso:
+    "Só envie se a certidão tiver averbação de divórcio no verso. Se não tiver, deixe em branco e siga em frente.",
   foto_3x4:
     "Envie uma foto com boa iluminação, fundo neutro (parede branca ou clara) e olhando diretamente para a câmera. Evite usar filtros.",
   ctps_todas_paginas:

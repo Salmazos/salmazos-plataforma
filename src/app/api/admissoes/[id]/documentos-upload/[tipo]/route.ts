@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
 import { registrarAuditoria } from "@/lib/audit";
-import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
+import { DOCUMENTOS_ADMISSAO, garantirLinhaVersoOpcional } from "@/lib/admissaoDocumentos";
 import { checarAcessoAdmissaoRH } from "@/lib/rhUnidadeAuth";
 
 interface Params {
@@ -132,6 +132,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   } else {
     // Tipo de arquivo único, sem doc_id — substitui a linha única existente (mesma
     // semântica de "reenviar" já usada em todo o resto do módulo).
+    // Verso opcional da certidão: admissão antiga não tem a linha — cria vazia antes do UPDATE.
+    const garantida = await garantirLinhaVersoOpcional(svc, id, tipo);
+    if (garantida.error) return NextResponse.json({ error: garantida.error.message }, { status: 400 });
     const { data: updated, error } = await svc
       .from("admissao_documentos")
       .update({ storage_path: storagePath, status: "enviado", motivo_rejeicao: null })

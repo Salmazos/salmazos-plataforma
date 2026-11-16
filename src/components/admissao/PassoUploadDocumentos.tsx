@@ -144,7 +144,7 @@ function DocumentoCard({ doc, token, onAtualizado, faltando }: { doc: DocumentoT
     setEnviando(false);
   };
 
-  const label = def?.label ?? doc.tipo_documento;
+  const label = def?.labelCandidato ?? def?.label ?? doc.tipo_documento;
 
   const handleVerImagem = async () => {
     if (previewUrl) { window.open(previewUrl, "_blank"); return; }
@@ -568,7 +568,7 @@ export default function PassoUploadDocumentos({ token, documentos, setDocumentos
 
   const labelsFaltando = tiposVisiveis
     .filter((def) => errosVisiveis.has(`doc_${def.tipo_documento}`))
-    .map((def) => def.label);
+    .map((def) => def.labelCandidato ?? def.label);
 
   return (
     <div>

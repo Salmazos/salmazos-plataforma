@@ -5,7 +5,7 @@ import { PDFDocument, rgb } from "pdf-lib";
 import { registrarAuditoria } from "@/lib/audit";
 import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
 import { parseBody, admissaoGerarPdfSchema } from "@/lib/schemas";
-import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
+import { DOCUMENTOS_ADMISSAO, documentoEntraNoPacote } from "@/lib/admissaoDocumentos";
 import { ordenarDocumentosPacote, anexarDocumentosAoPacote, inserirIndiceEBookmarks } from "@/lib/pacoteOrdem";
 import { PdfWriter, PW, PH, ML, safe, BLACK, YELLOW, DARK, GRAY } from "@/lib/pdfWriter";
 import { desenharFichaCadastral, desenharAutorizacaoSindical, desenharSolicitacaoValeTransporte } from "@/lib/admissaoDocumentosPdf";
@@ -241,7 +241,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   // Ordem fixa (a mesma do formulário público) e determinística: a semeadura da admissão faz
   // todas as linhas nascerem com o mesmo created_at, então a ordem do banco não serve.
   const labelPorTipo = (tipo: string) => DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === tipo)?.label ?? tipo;
-  const docsOrdenados = ordenarDocumentosPacote(docs, DOCUMENTOS_ADMISSAO.map((d) => d.tipo_documento)).filter((d) => d.storage_path);
+  const docsOrdenados = ordenarDocumentosPacote(docs, DOCUMENTOS_ADMISSAO.map((d) => d.tipo_documento)).filter(documentoEntraNoPacote);
   const anexos = await anexarDocumentosAoPacote({
     pdfDoc,
     w,

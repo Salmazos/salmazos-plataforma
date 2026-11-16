@@ -65,6 +65,7 @@ export function rotularDocumentos<T extends { tipo_documento: string }>(docs: re
 }
 
 export const ROTULO_RG_FRENTE_E_VERSO = "Identidade RG (frente e verso)";
+export const ROTULO_CERTIDAO_FRENTE_E_VERSO = "Certidão de Nascimento/Casamento/União Estável (frente e verso)";
 
 export type MotivoNaoIncorporado = "download_falhou" | "formato_nao_suportado" | "pdf_sem_paginas" | `erro_ao_embutir:${string}`;
 
@@ -99,19 +100,28 @@ interface AnexarArgs {
 
 const sha256 = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
 
-// Se rg e rg_verso são o MESMO arquivo (RG digital com frente e verso, enviado nos dois campos),
-// embute uma vez só. Só decide quando há exatamente uma linha de cada com arquivo e os dois
+// Pares frente/verso em que o MESMO arquivo enviado nos dois campos (documento digital com as duas faces, ou PDF único
+// anexado em ambos) vira um documento só no pacote. Só decide quando há exatamente uma linha de cada com arquivo e os dois
 // downloads funcionaram; qualquer dúvida cai no comportamento normal (dois documentos).
+const PARES_FRENTE_VERSO = [
+  { frente: "rg", verso: "rg_verso", rotulo: ROTULO_RG_FRENTE_E_VERSO },
+  { frente: "certidao_civil", verso: "certidao_civil_verso", rotulo: ROTULO_CERTIDAO_FRENTE_E_VERSO },
+] as const;
+
 // Os bytes baixados para comparar o hash ficam em `baixados`, pra o laço não baixar de novo.
-async function detectarRgIdentico(docs: readonly DocumentoOrdenavel[], baixar: AnexarArgs["baixar"], baixados: Map<DocumentoOrdenavel, Uint8Array>) {
-  const rgs = docs.filter((d) => d.tipo_documento === "rg");
-  const versos = docs.filter((d) => d.tipo_documento === "rg_verso");
-  if (rgs.length !== 1 || versos.length !== 1) return null;
-  const [a, b] = await Promise.all([baixar(rgs[0].storage_path!), baixar(versos[0].storage_path!)]);
-  if (a) baixados.set(rgs[0], a);
-  if (b) baixados.set(versos[0], b);
-  if (!a || !b || sha256(a) !== sha256(b)) return null;
-  return { frente: rgs[0], verso: versos[0] };
+async function detectarParesIdenticos(docs: readonly DocumentoOrdenavel[], baixar: AnexarArgs["baixar"], baixados: Map<DocumentoOrdenavel, Uint8Array>) {
+  const achados: { frente: DocumentoOrdenavel; verso: DocumentoOrdenavel; rotulo: string }[] = [];
+  for (const par of PARES_FRENTE_VERSO) {
+    const frentes = docs.filter((d) => d.tipo_documento === par.frente);
+    const versos = docs.filter((d) => d.tipo_documento === par.verso);
+    if (frentes.length !== 1 || versos.length !== 1) continue;
+    const [a, b] = await Promise.all([baixar(frentes[0].storage_path!), baixar(versos[0].storage_path!)]);
+    if (a) baixados.set(frentes[0], a);
+    if (b) baixados.set(versos[0], b);
+    if (!a || !b || sha256(a) !== sha256(b)) continue;
+    achados.push({ frente: frentes[0], verso: versos[0], rotulo: par.rotulo });
+  }
+  return achados;
 }
 
 export async function anexarDocumentosAoPacote({ pdfDoc, w, admissaoId, docs, labelPorTipo, baixar }: AnexarArgs): Promise<ResultadoAnexos> {
@@ -124,15 +134,16 @@ export async function anexarDocumentosAoPacote({ pdfDoc, w, admissaoId, docs, la
   };
 
   const baixados = new Map<DocumentoOrdenavel, Uint8Array>();
-  const rgIdentico = await detectarRgIdentico(docs, baixar, baixados);
+  const pares = await detectarParesIdenticos(docs, baixar, baixados);
+  const versosIdenticos = new Set(pares.map((p) => p.verso));
   // O verso idêntico sai da lista ANTES de numerar/rotular, senão o contador de rótulos o enxergaria.
-  const lista = rgIdentico ? docs.filter((d) => d !== rgIdentico.verso) : docs;
+  const lista = docs.filter((d) => !versosIdenticos.has(d));
   const rotulos = rotularDocumentos(lista, labelPorTipo);
 
   for (let i = 0; i < lista.length; i++) {
     const doc = lista[i];
-    const ehRgUnico = rgIdentico !== null && doc === rgIdentico.frente;
-    const rotulo = ehRgUnico ? ROTULO_RG_FRENTE_E_VERSO : rotulos[i];
+    const parUnico = pares.find((p) => p.frente === doc);
+    const rotulo = parUnico ? parUnico.rotulo : rotulos[i];
     const entrada: EntradaIndice = { rotulo, tipo_documento: doc.tipo_documento, paginaInicial: null };
     resultado.entradas.push(entrada);
 
