@@ -1331,6 +1331,12 @@ const dataISOValida = z
     return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
   }, "Data inválida");
 
+// Efetivação (POST /api/funcionarios/[id]/efetivacao). A janela da data [admissão, hoje] é conferida na rota (precisa do funcionário).
+export const funcionarioEfetivarSchema = z.object({
+  data_efetivacao: dataISOValida,
+  observacao: z.string().trim().max(2000, "Observação muito longa").optional().nullable(),
+});
+
 export const funcionarioMotEventoCreateSchema = z
   .object({
     tipo: z.enum(TIPOS_EVENTO_MOT, { message: "Tipo de evento inválido" }),

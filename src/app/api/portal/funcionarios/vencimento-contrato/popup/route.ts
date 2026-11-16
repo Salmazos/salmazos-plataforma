@@ -3,6 +3,7 @@ import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
 import { calcularVencimentoContratoMot, precisaAvisoPopupVencimentoMot, mensagemAvisoPopupVencimentoMot } from "@/lib/contratoMotStatus";
 import { carregarResumosMot } from "@/lib/contratoMotEventos";
+import { consultarComEfetivacao } from "@/lib/funcionarioEfetivacao";
 
 export const dynamic = "force-dynamic";
 
@@ -32,13 +33,18 @@ export async function GET() {
     .single();
   if (!clienteUsuario) return NextResponse.json({ error: "Acesso não autorizado." }, { status: 403 });
 
-  const { data: funcionarios } = await service
-    .from("funcionarios")
-    .select("id, nome_completo, data_admissao")
-    .eq("cliente_id", clienteUsuario.cliente_id)
-    .eq("tipo_servico", "mao_obra_temporaria")
-    .eq("status", "ativo")
-    .not("data_admissao", "is", null);
+  // Efetivado sai do aviso (relógio parou); coluna ausente cai na consulta antiga.
+  const { data: funcionarios } = await consultarComEfetivacao<{ id: string; nome_completo: string; data_admissao: string | null }>((comEfetivacao) => {
+    let q = service
+      .from("funcionarios")
+      .select("id, nome_completo, data_admissao")
+      .eq("cliente_id", clienteUsuario.cliente_id)
+      .eq("tipo_servico", "mao_obra_temporaria")
+      .eq("status", "ativo")
+      .not("data_admissao", "is", null);
+    if (comEfetivacao) q = q.is("efetivado_em", null);
+    return q;
+  }, "popup do portal");
 
   // Mesma regra de silêncio do painel; o portal só recebe "tem aviso ou não" — nada de afastamento,
   // benefício ou observação (dado de saúde, LGPD) sai desta rota.

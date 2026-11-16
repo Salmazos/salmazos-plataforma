@@ -5,6 +5,7 @@ import { contextoRH } from "@/lib/rhUnidadeAuth";
 import { obterDataHojeBrasil, formatarDataISO } from "@/lib/dataHojeBrasil";
 import { calcularVencimentoContratoMot, precisaAvisoPopupVencimentoMot, mensagemAvisoPopupVencimentoMot, TIPOS_COM_VENCIMENTO_CONTRATO } from "@/lib/contratoMotStatus";
 import { carregarResumosMot } from "@/lib/contratoMotEventos";
+import { consultarComEfetivacao } from "@/lib/funcionarioEfetivacao";
 
 export const dynamic = "force-dynamic";
 
@@ -35,15 +36,20 @@ export async function GET() {
   const ctx = await contextoRH(user);
   if (!ctx) return NextResponse.json({ data: [] });
 
-  let funcionariosQuery = svc
-    .from("funcionarios")
-    .select("id, nome_completo, data_admissao, tipo_servico")
-    // MOT e Terceirização (fase temporária). O popup do PORTAL do cliente (api/portal/...) segue só com MOT.
-    .in("tipo_servico", [...TIPOS_COM_VENCIMENTO_CONTRATO])
-    .eq("status", "ativo")
-    .not("data_admissao", "is", null);
-  if (!ctx.todasUnidades) funcionariosQuery = funcionariosQuery.eq("unidade_id", ctx.unidadeId);
-  const { data: funcionarios } = await funcionariosQuery;
+  // Efetivado (efetivado_em preenchido) não é avisado: o relógio de vencimento parou. Coluna ainda inexistente (migração
+  // pendente) cai na consulta de antes, sem o filtro — nunca derruba o popup.
+  const { data: funcionarios } = await consultarComEfetivacao<{ id: string; nome_completo: string; data_admissao: string | null; tipo_servico: string | null }>((comEfetivacao) => {
+    let q = svc
+      .from("funcionarios")
+      .select("id, nome_completo, data_admissao, tipo_servico")
+      // MOT e Terceirização (fase temporária). O popup do PORTAL do cliente (api/portal/...) segue só com MOT.
+      .in("tipo_servico", [...TIPOS_COM_VENCIMENTO_CONTRATO])
+      .eq("status", "ativo")
+      .not("data_admissao", "is", null);
+    if (!ctx.todasUnidades) q = q.eq("unidade_id", ctx.unidadeId);
+    if (comEfetivacao) q = q.is("efetivado_em", null);
+    return q;
+  }, "popup do painel");
 
   // Afastamento em aberto, prorrogação e rescisão programada silenciam o aviso (regra única em
   // contratoMotStatus.avisoMotSilenciado). Sem evento nenhum, o resumo vem vazio e nada muda.

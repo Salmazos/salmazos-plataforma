@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import { calcularVencimentoContratoMot, aplicarSilencioPortal } from "@/lib/contratoMotStatus";
 import { carregarResumosMot } from "@/lib/contratoMotEventos";
+import { consultarComEfetivacao } from "@/lib/funcionarioEfetivacao";
 import VencimentoContratoPortalListClient, {
   type VencimentoContratoPortalRow,
 } from "@/components/VencimentoContratoPortalListClient";
@@ -28,13 +29,18 @@ export default async function PortalVencimentoContratoPage() {
   // Só MOT ativo entra nesse relatório — mesma regra do lado do painel (só essa
   // modalidade tem o limite legal de 90/180/270 dias, Lei 6.019/74). Cliente já vê só os
   // próprios funcionários por construção do filtro cliente_id.
-  const { data: funcionarios } = await service
-    .from("funcionarios")
-    .select("id, nome_completo, data_admissao")
-    .eq("cliente_id", clienteUsuario.cliente_id)
-    .eq("tipo_servico", "mao_obra_temporaria")
-    .eq("status", "ativo")
-    .not("data_admissao", "is", null);
+  // Funcionário efetivado não aparece (o relógio de vencimento parou; o portal não mostra o motivo). Coluna ausente = consulta antiga.
+  const { data: funcionarios } = await consultarComEfetivacao<{ id: string; nome_completo: string; data_admissao: string | null }>((comEfetivacao) => {
+    let q = service
+      .from("funcionarios")
+      .select("id, nome_completo, data_admissao")
+      .eq("cliente_id", clienteUsuario.cliente_id)
+      .eq("tipo_servico", "mao_obra_temporaria")
+      .eq("status", "ativo")
+      .not("data_admissao", "is", null);
+    if (comEfetivacao) q = q.is("efetivado_em", null);
+    return q;
+  }, "tela do portal");
 
   const resumos = await carregarResumosMot(service, (funcionarios ?? []).map((f) => f.id));
 

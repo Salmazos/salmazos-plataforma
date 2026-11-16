@@ -98,7 +98,9 @@ await ok("ordem: empate de dias pelo nome (sem acento/maiúscula), lista origina
 });
 await ok("tela: SEM destaque verde nos dias; selo de modalidade com cores bem diferentes (MOT azul, Terceirização preto/dourado), sem repetir cor de situação; título da coluna inverte a ordem", () => {
   const tela = fs.readFileSync("src/components/VencimentoContratoPageClient.tsx", "utf8");
-  for (const t of ["DESTAQUE_DIAS", "#DCFCE7", "#F0FDF4", "#166534"]) assert.equal(tela.includes(t), false, `sem o verde dos dias: ${t}`);
+  // O verde #DCFCE7/#166534 agora existe SÓ no selo "Efetivado em ..." (efetivação, pedido do Olver); a coluna de dias continua sem destaque.
+  assert.equal(tela.includes("DESTAQUE_DIAS"), false, "sem destaque nos dias");
+  assert.equal(/\{l\.diasTrabalhados\}/.test(tela) && /color: "#374151" \}\}>\{l\.diasTrabalhados\}/.test(tela), true, "dias trabalhados em cinza neutro, sem verde");
   const bloco = tela.slice(tela.indexOf("const SELO_MODALIDADE"), tela.indexOf("export default function"));
   assert.ok(bloco.includes('MOT: { bg: "#DBEAFE", text: "#1D4ED8", borda: "#93C5FD" }'));
   assert.ok(bloco.includes('"Terceirização": { bg: "#111827", text: "#FFD700", borda: "#111827" }'));

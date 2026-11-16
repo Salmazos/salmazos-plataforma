@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { podeAcessarFuncionarios } from "@/lib/funcionariosAuth";
 import { calcularVencimentoContratoMot, TIPOS_COM_VENCIMENTO_CONTRATO } from "@/lib/contratoMotStatus";
 import { carregarResumosMot, selosRelatorioMot } from "@/lib/contratoMotEventos";
+import { consultarComEfetivacao } from "@/lib/funcionarioEfetivacao";
 import { contextoRH } from "@/lib/rhUnidadeAuth";
 import SemAcessoPainel from "@/components/SemAcessoPainel";
 import VencimentoContratoPageClient, { type VencimentoContratoRow } from "@/components/VencimentoContratoPageClient";
@@ -22,23 +23,26 @@ export default async function VencimentoContratoPage() {
   const unidadeRH = ctxRH.todasUnidades ? null : ctxRH.unidadeId;
 
   const svc = createServiceClient();
-  let funcionariosQuery = svc
-    .from("funcionarios")
-    .select("id, nome_completo, cliente_id, empresa, data_admissao, tipo_servico, clientes(nome)")
-    .in("tipo_servico", [...TIPOS_COM_VENCIMENTO_CONTRATO])
-    .eq("status", "ativo")
-    .not("data_admissao", "is", null);
   let clientesQuery = svc.from("clientes").select("id, nome").eq("ativo", true).order("nome");
-  if (unidadeRH) {
-    funcionariosQuery = funcionariosQuery.eq("unidade_id", unidadeRH);
-    clientesQuery = clientesQuery.eq("unidade_id", unidadeRH);
-  }
+  if (unidadeRH) clientesQuery = clientesQuery.eq("unidade_id", unidadeRH);
 
   // Entram MOT e Terceirização ativos (o terceirizado começa no modelo temporário de até 270 dias, contados da admissão; no fim dele é
   // desligado ou recebe o registro definitivo). R&S não tem o limite de 90/180/270 dias (Lei 6.019/74), e desligado não tem mais decisão
   // de renovação pendente (ver /painel/rescisoes). O Portal do Cliente NÃO mostra terceirização: a página dele filtra só MOT.
+  // Efetivados NÃO são filtrados aqui: continuam na lista com o selo "Efetivado" (o filtro "Ocultar efetivados" é da tela) e a tela os
+  // exclui das contagens. Coluna efetivado_em ausente (migração pendente) cai na consulta antiga — todos como não efetivados.
+  type FuncionarioVencimento = { id: string; nome_completo: string; cliente_id: string | null; empresa: string | null; data_admissao: string | null; tipo_servico: string | null; clientes: unknown; efetivado_em?: string | null };
   const [{ data: funcionarios }, { data: clientes }] = await Promise.all([
-    funcionariosQuery,
+    consultarComEfetivacao<FuncionarioVencimento>((comEfetivacao) => {
+      let q = svc
+        .from("funcionarios")
+        .select(`id, nome_completo, cliente_id, empresa, data_admissao, tipo_servico, clientes(nome)${comEfetivacao ? ", efetivado_em" : ""}`)
+        .in("tipo_servico", [...TIPOS_COM_VENCIMENTO_CONTRATO])
+        .eq("status", "ativo")
+        .not("data_admissao", "is", null);
+      if (unidadeRH) q = q.eq("unidade_id", unidadeRH);
+      return q as unknown as PromiseLike<{ data: FuncionarioVencimento[] | null; error: { code?: string | null; message?: string | null } | null }>;
+    }, "tela do painel"),
     clientesQuery,
   ]);
 
@@ -65,6 +69,7 @@ export default async function VencimentoContratoPage() {
         empresa: (Array.isArray(cliente) ? cliente[0]?.nome : cliente?.nome) ?? f.empresa ?? "—",
         dataAdmissao: f.data_admissao as string,
         tipoServico: (f.tipo_servico as string | null) ?? "mao_obra_temporaria",
+        efetivadoEm: (f.efetivado_em as string | null | undefined) ?? null,
         ...v,
         ...(selos.length > 0 ? { selos } : {}),
       };

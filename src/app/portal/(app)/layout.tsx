@@ -4,6 +4,7 @@ import { PlusCircle, UserPlus } from "lucide-react";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
 import SidebarPortal from "@/components/SidebarPortal";
 import PopupVencimentoContratoMotPortal from "@/components/PopupVencimentoContratoMotPortal";
+import { consultarComEfetivacao } from "@/lib/funcionarioEfetivacao";
 import AvisosPortalProvider from "@/components/AvisosPortalProvider";
 import PortalSino from "@/components/PortalSino";
 import PopupAvisosPortal from "@/components/PopupAvisosPortal";
@@ -54,14 +55,20 @@ export default async function PortalAppLayout({
   // ativo — é a única modalidade com o limite legal de 90/180/270 dias (Lei 6.019/74).
   // Flag própria e mais estreita que mostrarFuncionarios (que também conta Terceirização e
   // desligado, que não têm essa contagem).
-  const { data: funcionarioMotAtivo } = await service
-    .from("funcionarios")
-    .select("id")
-    .eq("cliente_id", clienteUsuario.cliente_id)
-    .eq("tipo_servico", "mao_obra_temporaria")
-    .eq("status", "ativo")
-    .limit(1)
-    .maybeSingle();
+  // Efetivado não conta (a tela dele ficaria vazia). Coluna ausente (migração pendente) NÃO pode quebrar o layout do portal:
+  // cai na consulta antiga.
+  const { data: motAtivos } = await consultarComEfetivacao<{ id: string }>((comEfetivacao) => {
+    let q = service
+      .from("funcionarios")
+      .select("id")
+      .eq("cliente_id", clienteUsuario.cliente_id)
+      .eq("tipo_servico", "mao_obra_temporaria")
+      .eq("status", "ativo")
+      .limit(1);
+    if (comEfetivacao) q = q.is("efetivado_em", null);
+    return q;
+  }, "menu do portal");
+  const funcionarioMotAtivo = motAtivos[0] ?? null;
 
   return (
     <AvisosPortalProvider>

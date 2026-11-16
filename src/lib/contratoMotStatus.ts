@@ -120,6 +120,8 @@ export interface ResumoContratoMot {
   diasAfastado: number | null;
   prorrogado: boolean;
   rescisaoProgramadaEm: string | null;
+  // Efetivado (funcionarios.efetivado_em): o relógio de vencimento parou. Opcional pra não mudar quem não usa.
+  efetivado?: boolean;
 }
 
 // Regra única de silêncio do aviso (popup do painel, popup do portal e relatórios). DECISÃO DO OLVER:
@@ -128,6 +130,8 @@ export interface ResumoContratoMot {
 // aviso do limite de 270 continua, porque a prorrogação não move o limite legal.
 export function avisoMotSilenciado(faixa: ContratoMotFaixa, resumo?: ResumoContratoMot | null): boolean {
   if (!resumo) return false;
+  // Efetivado silencia tudo, inclusive o limite de 270 (deixou de ser temporário). Os chamadores já filtram na query; isto é a rede de segurança.
+  if (resumo.efetivado) return true;
   if (resumo.afastadoEmAberto) return true;
   if (resumo.rescisaoProgramadaEm) return true;
   return resumo.prorrogado && faixa === "aprovacao_continuidade";

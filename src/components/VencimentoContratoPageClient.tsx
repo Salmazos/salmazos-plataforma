@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { formatarDataSemFuso } from "@/lib/utils";
 import { ehTerceirizacao, ordenarPorDiasTrabalhados, rotuloModalidadeContrato, type ContratoMotFaixa, type OrdemDiasTrabalhados } from "@/lib/contratoMotStatus";
 import type { SeloMot } from "@/lib/contratoMotEventos";
@@ -28,6 +29,8 @@ export interface VencimentoContratoRow {
   label: string;
   // Só presente pra quem tem afastamento, prorrogação ou rescisão programada.
   selos?: SeloMot[];
+  // Data da efetivação (YYYY-MM-DD); null = não efetivado. Efetivado: relógio de vencimento parado.
+  efetivadoEm: string | null;
 }
 
 interface ClienteOption {
@@ -67,7 +70,25 @@ const SELO_MODALIDADE = {
   "Terceirização": { bg: "#111827", text: "#FFD700", borda: "#111827" },
 } as const;
 
-export default function VencimentoContratoPageClient({ linhasIniciais, clientesFiltro }: Props) {
+// "Hoje" em Brasília (UTC-3, sem horário de verão): a data padrão/limite do modal não pode virar "amanhã" à noite no fuso do navegador.
+function hojeLocalISO(): string {
+  return new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+const SELO_EFETIVADO = { bg: "#DCFCE7", text: "#166534" } as const;
+
+export default function VencimentoContratoPageClient({ linhasIniciais: linhasDoServidor, clientesFiltro }: Props) {
+  const router = useRouter();
+  // Cópia local: ao efetivar/desfazer a linha muda na hora (o servidor é a fonte da verdade e o refresh confirma).
+  const [linhasIniciais, setLinhas] = useState(linhasDoServidor);
+  useEffect(() => { setLinhas(linhasDoServidor); }, [linhasDoServidor]);
+  // Padrão DESLIGADO (decisão do Olver): a linha continua visível com o selo verde "Efetivado em ...".
+  const [ocultarEfetivados, setOcultarEfetivados] = useState(false);
+  const [alvoEfetivar, setAlvoEfetivar] = useState<VencimentoContratoRow | null>(null);
+  const [dataEfetivacao, setDataEfetivacao] = useState("");
+  const [obsEfetivacao, setObsEfetivacao] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [erroEfetivacao, setErroEfetivacao] = useState("");
   const [filtroClienteId, setFiltroClienteId] = useState("");
   const [filtroModalidade, setFiltroModalidade] = useState<"" | "mao_obra_temporaria" | "terceirizacao">("");
   const [busca, setBusca] = useState("");
@@ -77,18 +98,21 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
   const filtradas = useMemo(() => {
     const buscaLower = busca.trim().toLowerCase();
     return ordenarPorDiasTrabalhados(linhasIniciais, ordemDias).filter((l) => {
+      if (ocultarEfetivados && l.efetivadoEm) return false;
       if (filtroModalidade && l.tipoServico !== filtroModalidade) return false;
       if (filtroClienteId && l.clienteId !== filtroClienteId) return false;
       if (buscaLower && !l.nomeCompleto.toLowerCase().includes(buscaLower)) return false;
       return true;
     });
-  }, [linhasIniciais, ordemDias, filtroModalidade, filtroClienteId, busca]);
+  }, [linhasIniciais, ordemDias, filtroModalidade, filtroClienteId, busca, ocultarEfetivados]);
 
   // Contagens sobre a lista cheia (não sobre o resultado filtrado), como nos cards de Funcionários.
+  // Efetivado sai do banner de "acima de 270 dias" (relógio parou); os totais por modalidade seguem contando a lista cheia.
   const totalMot = useMemo(() => linhasIniciais.filter((l) => !ehTerceirizacao(l.tipoServico)).length, [linhasIniciais]);
   const totalTerc = useMemo(() => linhasIniciais.filter((l) => ehTerceirizacao(l.tipoServico)).length, [linhasIniciais]);
-  const excedidoMot = useMemo(() => linhasIniciais.filter((l) => l.faixa === "limite_excedido" && !ehTerceirizacao(l.tipoServico)).length, [linhasIniciais]);
-  const excedidoTerc = useMemo(() => linhasIniciais.filter((l) => l.faixa === "limite_excedido" && ehTerceirizacao(l.tipoServico)).length, [linhasIniciais]);
+  const totalEfetivados = useMemo(() => linhasIniciais.filter((l) => l.efetivadoEm).length, [linhasIniciais]);
+  const excedidoMot = useMemo(() => linhasIniciais.filter((l) => !l.efetivadoEm && l.faixa === "limite_excedido" && !ehTerceirizacao(l.tipoServico)).length, [linhasIniciais]);
+  const excedidoTerc = useMemo(() => linhasIniciais.filter((l) => !l.efetivadoEm && l.faixa === "limite_excedido" && ehTerceirizacao(l.tipoServico)).length, [linhasIniciais]);
   const totalExcedido = excedidoMot + excedidoTerc;
 
   // Barra de rolagem horizontal FLUTUANTE (fixa no rodapé da tela, visível já na primeira tela): mesma peça do Banco de Candidatos e do
@@ -96,6 +120,55 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
   const { scrollRef, floatScrollRef, floatBar, handleScroll, handleFloatScroll } = useScrollHorizontalSincronizado();
   // Filtrar/ordenar muda a largura/altura da tabela: remede a barra.
   useEffect(() => { handleScroll(); }, [handleScroll, filtradas]);
+
+  function abrirEfetivar(l: VencimentoContratoRow) {
+    setAlvoEfetivar(l);
+    setDataEfetivacao(hojeLocalISO());
+    setObsEfetivacao("");
+    setErroEfetivacao("");
+  }
+
+  async function confirmarEfetivacao() {
+    if (!alvoEfetivar || salvando) return;
+    setSalvando(true);
+    setErroEfetivacao("");
+    try {
+      const res = await fetch(`/api/funcionarios/${alvoEfetivar.id}/efetivacao`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data_efetivacao: dataEfetivacao, observacao: obsEfetivacao.trim() || null }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErroEfetivacao(json.error ?? "Não foi possível efetivar. Tente novamente.");
+        return;
+      }
+      const id = alvoEfetivar.id;
+      setLinhas((ls) => ls.map((l) => (l.id === id ? { ...l, efetivadoEm: json.data?.efetivado_em ?? dataEfetivacao } : l)));
+      setAlvoEfetivar(null);
+      router.refresh();
+    } catch {
+      setErroEfetivacao("Falha de conexão. Tente novamente.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function desfazerEfetivacao(l: VencimentoContratoRow) {
+    if (!window.confirm(`Desfazer a efetivação de ${l.nomeCompleto}? Ele volta a aparecer nos alertas de vencimento.`)) return;
+    try {
+      const res = await fetch(`/api/funcionarios/${l.id}/efetivacao`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        window.alert(json.error ?? "Não foi possível desfazer a efetivação. Tente novamente.");
+        return;
+      }
+      setLinhas((ls) => ls.map((x) => (x.id === l.id ? { ...x, efetivadoEm: null } : x)));
+      router.refresh();
+    } catch {
+      window.alert("Falha de conexão. Tente novamente.");
+    }
+  }
 
   return (
     <div>
@@ -143,6 +216,10 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
             <option key={c.id} value={c.id}>{c.nome}</option>
           ))}
         </select>
+        <label className="flex items-center gap-2 text-sm text-gray-600" style={{ whiteSpace: "nowrap" }}>
+          <input type="checkbox" checked={ocultarEfetivados} onChange={(e) => setOcultarEfetivados(e.target.checked)} />
+          Ocultar efetivados ({totalEfetivados})
+        </label>
       </div>
 
       <div ref={scrollRef} onScroll={handleScroll} className="card" style={{ padding: 0, overflowX: "auto" }}>
@@ -191,19 +268,35 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
                   <td style={{ ...TD_STYLE, color: "#374151" }}>{formatarDataSemFuso(l.dataAdmissao)}</td>
                   <td style={{ ...TD_STYLE, color: "#374151" }}>{l.diasTrabalhados}</td>
                   <td style={TD_STYLE}>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        padding: "2px 8px",
-                        borderRadius: 999,
-                        background: l.bg,
-                        color: l.text,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {l.label}
-                    </span>
+                    {l.efetivadoEm ? (
+                      <>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: SELO_EFETIVADO.bg, color: SELO_EFETIVADO.text, whiteSpace: "nowrap" }}>
+                          Efetivado em {formatarDataSemFuso(l.efetivadoEm)}
+                        </span>
+                        <button type="button" onClick={() => desfazerEfetivacao(l)} style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: "#6B7280", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}>
+                          Desfazer
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            background: l.bg,
+                            color: l.text,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {l.label}
+                        </span>
+                        <button type="button" onClick={() => abrirEfetivar(l)} style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: "#166534", border: "1px solid #86EFAC", background: "#F0FDF4", borderRadius: 6, padding: "1px 8px", cursor: "pointer" }}>
+                          Efetivar
+                        </button>
+                      </>
+                    )}
                     {l.selos?.map((s) => (
                       <span
                         key={s.texto}
@@ -231,6 +324,38 @@ export default function VencimentoContratoPageClient({ linhasIniciais, clientesF
           </table>
         )}
       </div>
+      {alvoEfetivar && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.6)" }}
+          onClick={(e) => { if (e.target === e.currentTarget && !salvando) setAlvoEfetivar(null); }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6" role="dialog" aria-modal="true" aria-label="Efetivar funcionário">
+            <h2 className="text-lg font-bold text-gray-900">Efetivar funcionário</h2>
+            <p className="text-sm text-gray-500 mb-4">{alvoEfetivar.nomeCompleto} — {alvoEfetivar.empresa}</p>
+            <label className="block text-sm font-semibold text-gray-700 mb-1" htmlFor="data-efetivacao">Data da efetivação</label>
+            <input
+              id="data-efetivacao"
+              type="date"
+              className="input-field mb-3"
+              value={dataEfetivacao}
+              min={alvoEfetivar.dataAdmissao}
+              max={hojeLocalISO()}
+              onChange={(e) => setDataEfetivacao(e.target.value)}
+            />
+            <label className="block text-sm font-semibold text-gray-700 mb-1" htmlFor="obs-efetivacao">Observação (opcional)</label>
+            <textarea id="obs-efetivacao" className="input-field mb-3" rows={3} maxLength={2000} value={obsEfetivacao} onChange={(e) => setObsEfetivacao(e.target.value)} />
+            <p className="text-xs text-gray-500 mb-3">Isso remove o funcionário dos alertas de vencimento. Pode ser desfeito.</p>
+            {erroEfetivacao && <p className="text-sm mb-3" style={{ color: "#B91C1C" }} role="alert">{erroEfetivacao}</p>}
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-secondary" disabled={salvando} onClick={() => setAlvoEfetivar(null)}>Cancelar</button>
+              <button type="button" className="btn-primary" disabled={salvando || !dataEfetivacao} onClick={confirmarEfetivacao}>
+                {salvando ? "Efetivando..." : "Confirmar efetivação"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <BarraScrollFlutuante floatBar={floatBar} floatScrollRef={floatScrollRef} onScroll={handleFloatScroll} />
     </div>
   );
