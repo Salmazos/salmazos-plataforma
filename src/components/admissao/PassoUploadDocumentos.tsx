@@ -96,6 +96,23 @@ async function enviarArquivo(
   }
 }
 
+// Destaca o lado ("Frente"/"Verso") no título dos documentos de dois lados, pra o candidato não confundir os dois cards.
+function TituloComLado({ label }: { label: string }) {
+  const m = /^(.*?) — (Frente|Verso)(.*)$/.exec(label);
+  if (!m) return <>{label}</>;
+  return (
+    <>
+      {m[1]} — <span style={{ background: "#FEF3C7", color: "#92400E", borderRadius: 6, padding: "1px 8px", fontWeight: 800 }}>{m[2]}</span>{m[3]}
+    </>
+  );
+}
+
+// Aviso do verso opcional em caixa âmbar (o texto cinza passava despercebido e candidato sem averbação ficava em dúvida).
+const notaVersoOpcionalStyle: React.CSSProperties = {
+  fontSize: 13, fontWeight: 600, color: "#92400E", background: "#FFFBEB", border: "1px solid #FCD34D",
+  borderRadius: 8, padding: "8px 10px", lineHeight: 1.5, margin: "0 0 8px",
+};
+
 function DocumentoCard({ doc, token, onAtualizado, faltando }: { doc: DocumentoToken; token: string; onAtualizado: (doc: DocumentoToken) => void; faltando: boolean }) {
   const def = DOCUMENTOS_ADMISSAO.find((d) => d.tipo_documento === doc.tipo_documento);
   const nota = NOTAS_DOCUMENTO[doc.tipo_documento];
@@ -172,7 +189,7 @@ function DocumentoCard({ doc, token, onAtualizado, faltando }: { doc: DocumentoT
   return (
     <div style={{ ...cardStyle, marginBottom: 12, border: rejeitado || faltando ? "2px solid #DC2626" : cardStyle.border }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
-        <p style={{ fontSize: 15, fontWeight: 700, color: "#111827", margin: 0 }}>{label}</p>
+        <p style={{ fontSize: 15, fontWeight: 700, color: "#111827", margin: 0 }}><TituloComLado label={label} /></p>
         <span
           style={{
             fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, whiteSpace: "nowrap",
@@ -190,7 +207,9 @@ function DocumentoCard({ doc, token, onAtualizado, faltando }: { doc: DocumentoT
           <p style={{ fontSize: 11, color: "#9CA3AF", margin: "4px 0 10px" }}>{ORIENTACAO_FOTO_3X4_DICA_EXTRA}</p>
         </>
       ) : (
-        nota && <p style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.5, margin: "0 0 8px" }}>{nota}</p>
+        nota && (def?.versoOpcional
+          ? <p style={notaVersoOpcionalStyle}>{nota}</p>
+          : <p style={{ fontSize: 12, color: "#6B7280", lineHeight: 1.5, margin: "0 0 8px" }}>{nota}</p>)
       )}
 
       <div style={{ ...infoBoxStyle, fontSize: 11, padding: "8px 10px", marginBottom: 10 }}>{NOTA_HEIC_IPHONE}</div>

@@ -172,6 +172,8 @@ await ok("candidato: verso nunca aparece como pendência (revisão mostra 'Opcio
   assert.ok(rev.includes("Opcional — não enviado") && rev.includes("def?.labelCandidato"));
   const up = fs.readFileSync("src/components/admissao/PassoUploadDocumentos.tsx", "utf8");
   assert.ok(up.includes("def?.labelCandidato ?? def?.label") && up.includes("def.labelCandidato ?? def.label"));
+  assert.ok(up.includes("<TituloComLado label={label} />") && up.includes("notaVersoOpcionalStyle") && up.includes("(Frente|Verso)"), "lado (Frente/Verso) e aviso do verso destacados");
+  assert.ok(/<p style=\{notaVersoOpcionalStyle\}>/.test(up) && !up.includes("notaVersoOpcionalStyle}>{nota}</p>\n      )}\n\n      <div style={{ ...infoBox"), "só o verso opcional usa a caixa âmbar");
   const form = fs.readFileSync("src/components/admissao/AdmissaoFormClient.tsx", "utf8");
   assert.ok(form.includes("else if (!def.obrigatorio) return false;"), "documento não obrigatório nunca entra em 'faltando'");
 });
