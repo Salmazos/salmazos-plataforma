@@ -159,6 +159,30 @@ reforçado repetidamente ao longo do histórico:
   `.env.local`.
 - `.claude/settings.local.json` é config local de permissões da ferramenta — nunca faz parte
   de commit de feature.
+- **Storage do Supabase não se apaga por SQL nem numa sessão na nuvem.** O trigger
+  `protect_objects_delete` em `storage.objects` recusa o `DELETE` (e, mesmo desviando dele,
+  só some o registro: o arquivo fica órfão e invisível). O conector Supabase da sessão na
+  nuvem não tem ferramenta de Storage, e o container não alcança `*.supabase.co` nem o site
+  de produção (proxy 403). Quem apaga é o usuário, pelo painel (Storage > `admissao-docs`:
+  pasta `<admissao_id>/` e `pacotes-contabilidade/<admissao_id>/`); depois confira com
+  `select name from storage.objects where bucket_id='admissao-docs' and name like '<id>/%'`.
+  Teste que não envia arquivo não deixa nada no Storage.
+- **Teste de admissão pela nuvem (dados ZZTEST):** crie as linhas por SQL numa única
+  instrução atômica (a rota da API de criar admissão manda o link por e-mail ao candidato).
+  Semeie `admissao_documentos` como `admissaoCriacao.ts` e preencha os dados pessoais
+  (inclusive `pais_nascimento` e `possui_ctps_digital`) para o link abrir direto no passo 8.
+  Valores aceitos pelos CHECKs: `estado_civil='solteiro'`, `grau_instrucao='medio_completo'`,
+  `tipo_conta='corrente'`, `modalidade='MOT'`. Limpeza, por ids exatos: funcionário (a FK da
+  admissão é SET NULL e deixaria órfão) → admissão (documentos, dados e VT saem em cascata) →
+  candidato → vaga → cliente.
+- **"Gerar pacote" no painel NÃO envia e-mail, mas há um botão separado de envio à
+  contabilidade** ("Enviar por e-mail" → `pacote/enviar-email`, destinatário real
+  `rh@rcacont.com.br`). O botão aparece assim que o pacote é gerado (basta `pdf_pacote_path`
+  existir; não depende do download no navegador) e o envio só ocorre ao confirmar o modal.
+  O anexo NÃO é o arquivo baixado no computador: a rota baixa o PDF do Storage
+  (`pdf_pacote_path`, sempre o último gerado) e o anexa (limite de 15 MB). Em teste nunca
+  confirmar esse envio — já aconteceu uma vez (ZZTEST A, nov/2026). `audit_logs` e
+  `email_logs` são registro de produção: a limpeza de teste não os apaga.
 
 ## Pendências conhecidas (no momento em que este documento foi gerado)
 
