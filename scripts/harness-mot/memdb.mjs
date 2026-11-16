@@ -369,7 +369,11 @@ export function criarClienteServico(db) {
           (db.arquivos ??= {})[caminho] = conteudo;
           return { data: { path: caminho }, error: null };
         },
-        createSignedUrl: async (caminho) => falhaStorage("storage.url") ?? ({ data: { signedUrl: `https://stub/${balde}/dl/${caminho}` }, error: null }),
+        // Registra as opções pedidas (ex.: { download: nome }) em db.urlsAssinadas, para o teste conferir o que a rota solicitou.
+        createSignedUrl: async (caminho, ttl, opcoes) => {
+          (db.urlsAssinadas ??= []).push({ caminho, ttl, opcoes });
+          return falhaStorage("storage.url") ?? ({ data: { signedUrl: `https://stub/${balde}/dl/${caminho}${opcoes?.download ? `?download=${encodeURIComponent(opcoes.download)}` : ""}` }, error: null });
+        },
         // Registra o que foi removido em db.storageRemovidos (scripts/verificar-aso-demissional.mts); db.falhas["storage.remove"] injeta erro.
         remove: async (caminhos) => {
           const falha = falhaStorage("storage.remove");

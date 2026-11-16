@@ -479,6 +479,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [erroUpload, setErroUpload] = useState("");
   const [gerandoPdf, setGerandoPdf] = useState(false);
   const [abrindoPacote, setAbrindoPacote] = useState(false);
+  const [baixandoPacote, setBaixandoPacote] = useState(false);
   const [modalEmailAberto, setModalEmailAberto] = useState(false);
   const [toast, setToast] = useState("");
   const [erroPacote, setErroPacote] = useState("");
@@ -1192,17 +1193,10 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
         setTab("documentos");
         return;
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `admissao-${(admissao.candidatos?.nome_completo ?? "candidato").toLowerCase().replace(/\s+/g, "-")}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // NÃO baixa o PDF automaticamente (decisão do Olver): o pacote fica guardado e segue por "Enviar por e-mail" (o RH vai em cópia).
+      // O download é opcional, pelo botão "Baixar PDF", para um envio manual.
       setStatus("enviado_contabilidade");
-      showToast("⚠️ Este PDF contém dados pessoais sensíveis. Envie com segurança e não compartilhe por canais não seguros.");
+      showToast("Pacote gerado e guardado. Envie por e-mail; se precisar de envio manual, use \"Baixar PDF\".");
       router.refresh();
     } catch {
       const msg = "Erro de conexão ao gerar o PDF.";
@@ -1263,19 +1257,10 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
         showToast(msg);
         return;
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `admissao-${(admissao.candidatos?.nome_completo ?? "candidato").toLowerCase().replace(/\s+/g, "-")}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
       setStatus("enviado_contabilidade");
       setForcandoPacote(false);
       setJustificativaForcar("");
-      showToast("⚠️ Pacote gerado com pendências — este PDF contém dados sensíveis, envie com segurança.");
+      showToast("⚠️ Pacote gerado com pendências e guardado. Envie por e-mail; se precisar de envio manual, use \"Baixar PDF\".");
       router.refresh();
     } catch {
       const msg = "Erro de conexão ao gerar o PDF.";
@@ -1283,6 +1268,27 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       showToast(msg);
     } finally {
       setGerandoPdfForcado(false);
+    }
+  };
+
+  // Download OPCIONAL do pacote já gerado (envio manual à contabilidade): pede a URL assinada com ?baixar=1 (Content-Disposition:
+  // attachment) e dispara o download sem sair da tela. O aviso de dado sensível mora aqui, que é onde o arquivo sai do sistema.
+  const handleBaixarPacote = async () => {
+    setBaixandoPacote(true);
+    try {
+      const res = await fetch(`/api/admissoes/${admissao.id}/pacote?baixar=1`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.signedUrl) { showToast(json.error || "Erro ao baixar o pacote."); return; }
+      const a = document.createElement("a");
+      a.href = json.signedUrl;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast("⚠️ Este PDF contém dados pessoais sensíveis. Envie com segurança e não compartilhe por canais não seguros.");
+    } catch {
+      showToast("Erro de conexão ao baixar o pacote.");
+    } finally {
+      setBaixandoPacote(false);
     }
   };
 
@@ -1509,6 +1515,9 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
               </p>
               <button onClick={handleVerPacote} disabled={abrindoPacote} className="btn-outline w-full">
                 {abrindoPacote ? "Abrindo..." : "Visualizar"}
+              </button>
+              <button onClick={handleBaixarPacote} disabled={baixandoPacote} className="btn-outline w-full mt-2" title="Opcional — para envio manual à contabilidade">
+                {baixandoPacote ? "Baixando..." : "Baixar PDF"}
               </button>
               <button onClick={() => setModalEmailAberto(true)} className="btn-outline w-full mt-2">
                 Enviar por e-mail
