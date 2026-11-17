@@ -4,6 +4,7 @@ import BotaoUsarModeloJornada from "@/components/BotaoUsarModeloJornada";
 import { useEffect, useState } from "react";
 import type { FuncionarioDetalhe } from "./FuncionarioDetalheClient";
 import { TURNOS_FUNCIONARIO } from "@/lib/constants";
+import { salvarHorarioFuncionario } from "@/lib/salvarHorarioJornada";
 
 interface ClienteOption {
   id: string;
@@ -16,6 +17,8 @@ interface Props {
   clientes: ClienteOption[];
   onClose: () => void;
   onSalvo: (funcionarioAtualizado: FuncionarioDetalhe) => void;
+  // "Salvar horário" do modelo de jornada: o horário foi gravado e o modal CONTINUA aberto (a tela por trás só atualiza o funcionário, sem fechar).
+  onHorarioSalvo?: (funcionarioAtualizado: FuncionarioDetalhe) => void;
 }
 
 const TIPOS_SERVICO_FUNCIONARIO = [
@@ -23,7 +26,7 @@ const TIPOS_SERVICO_FUNCIONARIO = [
   { id: "terceirizacao", label: "Terceirização de Serviços" },
 ];
 
-export default function ModalEditarFuncionario({ isOpen, funcionario, clientes, onClose, onSalvo }: Props) {
+export default function ModalEditarFuncionario({ isOpen, funcionario, clientes, onClose, onSalvo, onHorarioSalvo }: Props) {
   const [nomeCompleto, setNomeCompleto] = useState("");
   const [cargo, setCargo] = useState("");
   const [dataAdmissao, setDataAdmissao] = useState("");
@@ -34,6 +37,7 @@ export default function ModalEditarFuncionario({ isOpen, funcionario, clientes, 
   const [turno, setTurno] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
+  const [avisoHorario, setAvisoHorario] = useState("");
 
   // Vínculo (cliente_id preenchido) ou cadastro manual (empresa livre) — fixo conforme o
   // estado atual do registro, não é possível trocar de modo nesta tela.
@@ -50,11 +54,23 @@ export default function ModalEditarFuncionario({ isOpen, funcionario, clientes, 
     setHorarioTrabalho(funcionario.horario_trabalho ?? "");
     setTurno(funcionario.turno ?? "");
     setErro("");
-  }, [isOpen, funcionario]);
+    setAvisoHorario("");
+    // Só o id: "Salvar horário" atualiza o funcionário com a tela aberta e isso NÃO pode refazer o formulário (apagaria o que ainda não foi salvo).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, funcionario.id]);
 
   if (!isOpen) return null;
 
   const valido = Boolean(nomeCompleto.trim() && (vinculadoACliente ? clienteId : empresaLivre.trim()));
+
+  const salvarHorarioModelo = async (texto: string): Promise<string | null> => {
+    setAvisoHorario("");
+    const { erro: erroHorario, data } = await salvarHorarioFuncionario(funcionario.id, texto);
+    if (erroHorario) return erroHorario;
+    if (data) onHorarioSalvo?.(data as unknown as FuncionarioDetalhe);
+    setAvisoHorario("Horário salvo.");
+    return null;
+  };
 
   const handleSalvar = async () => {
     if (!valido) return;
@@ -178,7 +194,8 @@ export default function ModalEditarFuncionario({ isOpen, funcionario, clientes, 
               placeholder="Ex: 06h às 15h"
               className="input-field"
             />
-            <BotaoUsarModeloJornada onAplicar={setHorarioTrabalho} />
+            <BotaoUsarModeloJornada onAplicar={setHorarioTrabalho} onSalvar={salvarHorarioModelo} />
+            {avisoHorario && <p className="text-xs text-green-700 mt-1" role="status">{avisoHorario}</p>}
           </div>
           <div className="flex-1">
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Turno</label>

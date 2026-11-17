@@ -1,6 +1,7 @@
 "use client";
 
 import BotaoUsarModeloJornada from "@/components/BotaoUsarModeloJornada";
+import { salvarHorarioAdmissao } from "@/lib/salvarHorarioJornada";
 import BlocoDiasTesteRH from "@/components/BlocoDiasTesteRH";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -609,6 +610,16 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
 
   const atualizarCampoDadosAdmissao = <K extends keyof typeof formDadosAdmissao>(campo: K, valor: (typeof formDadosAdmissao)[K]) => {
     setFormDadosAdmissao((prev) => ({ ...prev, [campo]: valor }));
+  };
+
+  // "Salvar horário" do modelo de jornada: grava SÓ o horário (mesma rota do Salvar da edição) e não mexe nos outros campos do formulário, salvos ou não.
+  const salvarHorarioModelo = async (texto: string): Promise<string | null> => {
+    const { erro, data } = await salvarHorarioAdmissao(admissao.id, texto);
+    if (erro) return erro;
+    setHorarioAtual((data?.horario_trabalho as string | null | undefined) ?? texto);
+    showToast("Horário salvo.");
+    router.refresh();
+    return null;
   };
 
   const vagaTrocada = editandoDadosAdmissao && formDadosAdmissao.vagaId && formDadosAdmissao.vagaId !== (vagaAtual.id ?? "");
@@ -1783,7 +1794,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                   <div className="flex-1">
                     <label className="block text-xs text-gray-500 mb-1">Horário de trabalho</label>
                     <input type="text" value={formDadosAdmissao.horario} onChange={(e) => atualizarCampoDadosAdmissao("horario", e.target.value)} className="input-field text-sm" />
-                    <BotaoUsarModeloJornada onAplicar={(texto) => atualizarCampoDadosAdmissao("horario", texto)} />
+                    <BotaoUsarModeloJornada onAplicar={(texto) => atualizarCampoDadosAdmissao("horario", texto)} onSalvar={salvarHorarioModelo} />
                   </div>
                   <div className="flex-1">
                     <label className="block text-xs text-gray-500 mb-1">Turno</label>

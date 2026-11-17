@@ -10,6 +10,9 @@ import { HORAS_JORNADA_VAZIAS, MODELOS_JORNADA, ROTULO_JORNADA, gerarTextoJornad
 
 interface Props {
   onAplicar: (texto: string) => void;
+  // Telas do RH: quando informado, o botão vira "Salvar horário" — preenche o campo (onAplicar) e GRAVA só o horário (onSalvar devolve a mensagem de erro
+  // do servidor, ou null se salvou). Em erro o painel fica aberto e o que foi digitado, preservado. Sem onSalvar (ex.: portal do cliente) segue "Aplicar no campo".
+  onSalvar?: (texto: string) => Promise<string | null>;
   // Só para teste de renderização (SSR não clica): abre já o painel.
   abertoInicial?: boolean;
 }
@@ -17,11 +20,27 @@ interface Props {
 const INPUT = "input-field text-sm w-full";
 const LABEL = "block text-[11px] text-gray-500 mb-1";
 
-export default function BotaoUsarModeloJornada({ onAplicar, abertoInicial = false }: Props) {
+export default function BotaoUsarModeloJornada({ onAplicar, onSalvar, abertoInicial = false }: Props) {
   const [aberto, setAberto] = useState(abertoInicial);
   const [modelo, setModelo] = useState<ModeloJornada>("seg_sex");
   const [horas, setHoras] = useState<HorasJornada>({ ...HORAS_JORNADA_VAZIAS });
+  const [salvando, setSalvando] = useState(false);
+  const [erroSalvar, setErroSalvar] = useState("");
   const texto = gerarTextoJornada(modelo, horas);
+
+  const aplicar = async () => {
+    onAplicar(texto);
+    if (!onSalvar) { setAberto(false); return; }
+    setSalvando(true);
+    setErroSalvar("");
+    try {
+      const erro = await onSalvar(texto);
+      if (erro) setErroSalvar(erro);
+      else setAberto(false);
+    } finally {
+      setSalvando(false);
+    }
+  };
 
   return (
     <div className="mt-1">
@@ -54,12 +73,13 @@ export default function BotaoUsarModeloJornada({ onAplicar, abertoInicial = fals
           {texto && <p className="text-xs text-gray-600">Texto: <strong>{texto}</strong></p>}
           <button
             type="button"
-            disabled={!texto}
-            onClick={() => { onAplicar(texto); setAberto(false); }}
+            disabled={!texto || salvando}
+            onClick={aplicar}
             className="text-xs font-semibold border border-gray-300 rounded-lg px-3 py-1.5 bg-white hover:bg-gray-50 disabled:opacity-50"
           >
-            Aplicar no campo
+            {onSalvar ? (salvando ? "Salvando..." : "Salvar horário") : "Aplicar no campo"}
           </button>
+          {erroSalvar && <p className="text-xs text-red-600" role="alert">{erroSalvar}</p>}
         </div>
       )}
     </div>

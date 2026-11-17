@@ -474,6 +474,7 @@ export default function FuncionarioDetalheClient({ funcionario: funcionarioInici
         funcionario={funcionario}
         clientes={clientes}
         onClose={() => setModalEditarAberto(false)}
+        onHorarioSalvo={(atualizado) => setFuncionario(atualizado)}
         onSalvo={(atualizado) => {
           setFuncionario(atualizado);
           setModalEditarAberto(false);

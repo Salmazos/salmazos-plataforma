@@ -20,10 +20,11 @@ import { faltandoObrigatorios } from "../src/lib/admissaoObrigatorios";
 import { HORARIO_TIPOS, HORARIO_VAZIO, gerarHorarioTexto } from "../src/lib/solicitacaoVagaCampos";
 import { LIMITES_CAMPOS_EMAIL, sanitizarCampoEmail } from "../src/lib/emailPacoteContabilidade";
 import { PdfWriter } from "../src/lib/pdfWriter";
-import { admissaoCreateSchema, funcionarioCreateSchema, parseBody, publicoSolicitarVagaSchema } from "../src/lib/schemas";
+import { admissaoCreateSchema, admissaoDadosAdmissaoUpdateSchema, funcionarioCreateSchema, funcionarioUpdateSchema, parseBody, publicoSolicitarVagaSchema } from "../src/lib/schemas";
 import CamposAdmissaoPadrao from "../src/components/CamposAdmissaoPadrao";
 import CamposHorasJornada from "../src/components/CamposHorasJornada";
 import BotaoUsarModeloJornada from "../src/components/BotaoUsarModeloJornada";
+import { salvarHorarioAdmissao, salvarHorarioFuncionario } from "../src/lib/salvarHorarioJornada";
 import SeletorHorarioIniciarAdmissao from "../src/components/admissao/SeletorHorarioIniciarAdmissao";
 
 const req = createRequire(import.meta.url);
@@ -339,6 +340,55 @@ await ok("botão 'Usar modelo' ABERTO: oferece os 3 modelos, entrada e saída e 
   for (const m of MODELOS_JORNADA) assert.ok(aberto.includes(`>${ROTULO_JORNADA[m]}</option>`), ROTULO_JORNADA[m]);
   assert.ok(aberto.includes("Entrada") && aberto.includes("Saída") && aberto.includes("Aplicar no campo") && /<button[^>]*disabled=""[^>]*>Aplicar no campo/.test(aberto), "botão Aplicar desabilitado sem horas");
   assert.equal(aberto.includes("Texto:"), false, "sem horas, nenhuma prévia");
+});
+
+await ok("'Salvar horário' (telas do RH): rótulo novo só nas 2 telas do RH; portal e demais seguem 'Aplicar no campo'; painel continua com 'Fechar modelo'", () => {
+  const comSalvar = render(React.createElement(BotaoUsarModeloJornada, { onAplicar: () => {}, onSalvar: async () => null, abertoInicial: true }));
+  assert.ok(comSalvar.includes("Salvar horário") && !comSalvar.includes("Aplicar no campo") && comSalvar.includes("Fechar modelo"));
+  const semSalvar = render(React.createElement(BotaoUsarModeloJornada, { onAplicar: () => {}, abertoInicial: true }));
+  assert.ok(semSalvar.includes("Aplicar no campo") && !semSalvar.includes("Salvar horário"));
+  for (const arquivo of ["src/components/AdmissaoDetalheClient.tsx", "src/components/ModalEditarFuncionario.tsx"]) assert.match(lerFonte(arquivo), /<BotaoUsarModeloJornada [^\n]*onSalvar=\{salvarHorarioModelo\}/, arquivo);
+  const portal = lerFonte("src/components/FormularioEdicaoSolicitacao.tsx");
+  assert.ok(portal.includes("<BotaoUsarModeloJornada onAplicar={(texto) => set(\"horario_texto\", texto)} />") && !/<BotaoUsarModeloJornada[^\n]*onSalvar/.test(portal), "pedido de alteração do portal não muda");
+  const usos = fs.readdirSync("src/components").filter((f) => f.endsWith(".tsx") && lerFonte(`src/components/${f}`).includes("<BotaoUsarModeloJornada")).sort();
+  assert.deepEqual(usos, ["AdmissaoDetalheClient.tsx", "FormularioEdicaoSolicitacao.tsx", "ModalEditarFuncionario.tsx"], "nenhuma outra tela usa o botão");
+});
+
+await ok("'Salvar horário': chama a rota de salvamento SÓ com o campo de horário (admissão e funcionário); erro devolve a mensagem do servidor sem 'salvar'", async () => {
+  const chamadas: { url: string; init: any }[] = [];
+  const fakeOk = (data: unknown) => async (url: string, init: any) => { chamadas.push({ url, init }); return { ok: true, json: async () => ({ data }) }; };
+  const texto = "Segunda a quinta-feira, das 08h00 às 17h00; sexta-feira, até as 16h00";
+  const a = await salvarHorarioAdmissao("adm-1", texto, fakeOk({ horario_trabalho: texto }));
+  assert.deepEqual([a.erro, a.data?.horario_trabalho], [null, texto]);
+  const f = await salvarHorarioFuncionario("func-1", texto, fakeOk({ id: "func-1", horario_trabalho: texto }));
+  assert.equal(f.erro, null);
+  assert.deepEqual(chamadas.map((c) => [c.url, c.init.method]), [["/api/admissoes/adm-1/dados-admissao", "PATCH"], ["/api/funcionarios/func-1", "PATCH"]]);
+  for (const c of chamadas) assert.deepEqual(JSON.parse(c.init.body), { horario_trabalho: texto }, "nenhum outro campo no corpo");
+  // O servidor NÃO muda: os dois schemas aceitam edição parcial só com o horário, e só ele chega ao update.
+  for (const schema of [admissaoDadosAdmissaoUpdateSchema, funcionarioUpdateSchema]) {
+    const r = parseBody(schema as any, { horario_trabalho: texto });
+    assert.equal(r.success, true);
+    assert.deepEqual(Object.keys((r as any).data), ["horario_trabalho"]);
+  }
+  const erroServidor = async () => ({ ok: false, json: async () => ({ error: "Horário de trabalho é obrigatório" }) });
+  assert.deepEqual(await salvarHorarioAdmissao("adm-1", texto, erroServidor), { erro: "Horário de trabalho é obrigatório", data: null });
+  assert.equal((await salvarHorarioFuncionario("func-1", texto, async () => ({ ok: false, json: async () => ({}) }))).erro, "Erro ao salvar o horário.");
+  assert.equal((await salvarHorarioFuncionario("func-1", texto, async () => { throw new Error("rede"); })).erro, "Erro de conexão. Tente novamente.");
+});
+
+await ok("'Salvar horário': erro NÃO fecha o painel nem perde o digitado; sucesso fecha; outros campos da tela nem são tocados (fonte)", () => {
+  const b = lerFonte("src/components/BotaoUsarModeloJornada.tsx");
+  assert.ok(b.includes("if (erro) setErroSalvar(erro);\n      else setAberto(false);"), "só fecha quando salvou");
+  assert.ok(b.includes("disabled={!texto || salvando}") && b.includes('"Salvando..."') && b.includes('role="alert"'));
+  assert.equal(/setHoras\(\{ \.\.\.HORAS_JORNADA_VAZIAS|setModelo\("seg_sex"\)/.test(b.split("const aplicar")[1] ?? ""), false, "não zera modelo/horas ao salvar");
+  const adm = lerFonte("src/components/AdmissaoDetalheClient.tsx");
+  const trecho = adm.slice(adm.indexOf("const salvarHorarioModelo"), adm.indexOf("const vagaTrocada"));
+  assert.ok(trecho.includes("setHorarioAtual(") && !/setFormDadosAdmissao|setEditandoDadosAdmissao|setFuncaoAtual|setSalarioAtual|setVagaAtual|setTurnoAtual/.test(trecho), "só o horário mostrado muda; edição e demais campos intactos");
+  const fun = lerFonte("src/components/ModalEditarFuncionario.tsx");
+  assert.ok(fun.includes("}, [isOpen, funcionario.id]);"), "atualizar o funcionário com o modal aberto não refaz o formulário");
+  const trechoF = fun.slice(fun.indexOf("const salvarHorarioModelo"), fun.indexOf("const handleSalvar"));
+  assert.ok(!trechoF.includes("onSalvo(") && !trechoF.includes("onClose("), "não fecha o modal nem usa o fluxo de salvar tudo");
+  assert.ok(lerFonte("src/components/FuncionarioDetalheClient.tsx").includes("onHorarioSalvo={(atualizado) => setFuncionario(atualizado)}"));
 });
 
 // ── E-mail da contabilidade e PDF ────────────────────────────────────────────
