@@ -5,7 +5,7 @@ import { BotaoCurriculo } from "./BotaoCurriculo";
 import { BotaoAprovarIndicacao, CartaoIndicacaoTopo } from "./CartaoIndicacaoAnalista";
 import { estadoIndicacaoAnalista } from "@/lib/indicacaoSemVaga";
 import { textoDiasTesteParaRH } from "@/lib/diasTeste";
-import { DIAS_AUXILIAR_PRORROGACAO, MAX_DIAS_CONTRATO, erroDataTermino, somarDiasIso } from "@/lib/dataTerminoContrato";
+import { DIAS_AUXILIAR_PRORROGACAO, MAX_DIAS_CONTRATO, dataFimEfetiva, erroDataTermino, somarDiasIso } from "@/lib/dataTerminoContrato";
 
 
 const ADM_CAMPOS: { key: string; label: string }[] = [
@@ -100,7 +100,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
   const [vincularPara, setVincularPara] = useState<{ indicacaoId: string; candidatoId: string } | null>(null);
   const [confirmarCriarNovo, setConfirmarCriarNovo] = useState<string | null>(null);
   const [riscoEntendido, setRiscoEntendido] = useState(false);
-  // Data de término por indicação (só MOT). Sempre começa vazia: nunca vem de admissao_tempo_contrato.
+  // Só o que o analista digitou/alterou. Sem edição, a tela usa a sugestão início + 90 dias (dataFimEfetiva); nunca vem de admissao_tempo_contrato.
   const [datasFim, setDatasFim] = useState<Record<string, string>>({});
   // Fila "Sem vaga" (aguardando direcionamento): filtro da lista e aviso que pede ação da analista.
   const [filtroSemVaga, setFiltroSemVaga] = useState(false);
@@ -171,7 +171,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
       const body = acao === "aprovar"
         ? {
             acao,
-            ...(exigeFim && datasFim[id] && { data_fim: datasFim[id] }),
+            ...(exigeFim && dataFimEfetiva(datasFim[id], itemDecidido?.admissao_data_inicio) && { data_fim: dataFimEfetiva(datasFim[id], itemDecidido?.admissao_data_inicio) }),
             ...(candidatoExistenteId && { candidato_existente_id: candidatoExistenteId }),
             ...(confirmarCriarNovoMesmoAssim && { confirmar_criar_novo: true }),
           }
@@ -289,7 +289,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                 const buscandoDuplicado = carregandoDuplicados.has(it.id);
                 const exigeFimCard = it.vagas?.tipo_servico === "mao_obra_temporaria" || it.vagas?.tipo_servico === "terceirizacao";
                 const inicioMot = it.admissao_data_inicio ?? "";
-                const fimMot = datasFim[it.id] ?? "";
+                const fimMot = dataFimEfetiva(datasFim[it.id], inicioMot);
                 const erroFimMot = exigeFimCard ? erroDataTermino(inicioMot, fimMot) : null;
                 const fimMaxMot = inicioMot ? somarDiasIso(inicioMot, MAX_DIAS_CONTRATO) : null;
                 const fim90Mot = inicioMot ? somarDiasIso(inicioMot, DIAS_AUXILIAR_PRORROGACAO) : null;
@@ -326,6 +326,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                             </span>
                           </div>
                           {fimMot && erroFimMot && <p className="text-xs text-red-600">{erroFimMot}</p>}
+                          {!fimMot && erroFimMot && <p className="text-xs text-amber-700">Preencha a data de término do contrato para aprovar.</p>}
                         </div>
                 ) : null;
 

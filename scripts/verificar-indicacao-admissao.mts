@@ -2,11 +2,12 @@
 // Roda a rota real contra o banco em memória do harness; nada toca produção.
 // Rodar: node --no-warnings --import ./scripts/harness-mot/register.mjs scripts/verificar-indicacao-admissao.mts
 import assert from "node:assert/strict";
+import fs from "node:fs";
 // @ts-expect-error módulo .mjs do harness, sem tipos
 import { congelarData, logar, importar, chamar, auditoria, flush } from "./harness-mot/ambiente.mjs";
 // @ts-expect-error módulo .mjs do harness, sem tipos
 import { novoDbIndicacao, ID, solicitacaoBase } from "./harness-mot/ambiente-indicacao.mjs";
-import { erroDataTermino, somarDiasIso, diasEntre } from "../src/lib/dataTerminoContrato";
+import { dataFimEfetiva, erroDataTermino, somarDiasIso, diasEntre } from "../src/lib/dataTerminoContrato";
 
 congelarData();
 const decisao = await importar("src/app/api/solicitacoes-indicacao-candidato/[id]/decisao/route.ts");
@@ -282,7 +283,7 @@ await ok("MOT sem função e sem data de início: 422 lista os dois; nada criado
   assert.deepEqual(estadoBanco(db), antes);
 });
 
-// ── Data de término (MOT): obrigatória, não anterior ao início, máx. 180 dias; sempre vazia na tela, nunca deduzida do texto ──
+// ── Data de término (MOT): obrigatória, não anterior ao início, máx. 180 dias; sugerida na tela com início + 90 dias, nunca deduzida do texto ──
 await ok("regra pura: início 02/11/2026 — 180 dias é o limite; 181, anterior, vazia e inválida são recusadas", () => {
   const I = "2026-11-02";
   assert.equal(erroDataTermino(I, "2027-05-01"), null); // +180
@@ -293,6 +294,23 @@ await ok("regra pura: início 02/11/2026 — 180 dias é o limite; 181, anterior
   assert.match(erroDataTermino(I, "2026-02-30")!, /inválida/);
   assert.equal(somarDiasIso(I, 90), "2027-01-31");
   assert.equal(diasEntre(I, "2027-05-01"), 180);
+});
+
+await ok("término sugerido na tela: início + 90 dias; sem início vazio; o que o analista digitou/apagou nunca é sobrescrito; mudar o início sem edição recalcula; sempre dentro de 180 dias", () => {
+  assert.equal(dataFimEfetiva(undefined, "2026-11-02"), "2027-01-31", "início + 90");
+  assert.equal(dataFimEfetiva(undefined, "2026-11-02"), somarDiasIso("2026-11-02", 90), "mesmo cálculo do botão +90 dias");
+  assert.equal(dataFimEfetiva(undefined, ""), "");
+  assert.equal(dataFimEfetiva(undefined, null), "");
+  assert.equal(dataFimEfetiva(undefined, "2026-02-30"), "", "início inválido não gera sugestão");
+  assert.equal(dataFimEfetiva("2027-02-15", "2026-11-02"), "2027-02-15", "editado não é sobrescrito");
+  assert.equal(dataFimEfetiva("", "2026-11-02"), "", "apagado de propósito continua vazio");
+  assert.equal(dataFimEfetiva(undefined, "2026-12-01"), "2027-03-01", "início mudou sem edição: recalcula");
+  assert.equal(dataFimEfetiva("2027-02-15", "2026-12-01"), "2027-02-15", "início mudou mas houve edição: mantém");
+  for (const i of ["2026-11-02", "2028-02-29", "2026-12-31"]) assert.equal(erroDataTermino(i, dataFimEfetiva(undefined, i)), null, "a sugestão sempre passa na validação (máx. 180)");
+  const modal = fs.readFileSync("src/components/ModalIndicacoesCandidato.tsx", "utf8");
+  assert.ok(modal.includes("const fimMot = dataFimEfetiva(datasFim[it.id], inicioMot)"), "a tela usa o valor efetivo");
+  assert.ok(modal.includes("dataFimEfetiva(datasFim[id], itemDecidido?.admissao_data_inicio)"), "a aprovação envia o mesmo valor mostrado");
+  assert.ok(modal.includes("+{DIAS_AUXILIAR_PRORROGACAO} dias") && modal.includes("Preencha a data de término do contrato para aprovar."));
 });
 
 await ok("MOT: a data de término informada vai para a candidatura e para a alocação (e para o histórico)", async () => {

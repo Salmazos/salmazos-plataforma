@@ -1,6 +1,8 @@
 // Data de término da contratação MOT e Terceirização (mesma regra do "Finalizar" do Kanban: obrigatória, até 180 dias
-// da data de início; R&S não tem). Aqui também: não anterior ao início. O campo começa SEMPRE vazio — admissao_tempo_contrato é um texto padrão igual em todas as indicações
-// e não é fonte confiável de data. Compartilhado entre o servidor (valida de verdade) e o modal (só orienta).
+// da data de início; R&S não tem). Aqui também: não anterior ao início. O campo NUNCA é deduzido de admissao_tempo_contrato (texto padrão igual em todas as
+// indicações, não é fonte confiável de data). Na tela do analista ele vem SUGERIDO com início + 90 dias (o mesmo cálculo do botão "+90 dias", sempre dentro do
+// máximo de 180) e continua editável: antes, começar vazio fazia o botão de aprovar ficar travado até alguém clicar em "+90 dias", o que confundia.
+// Compartilhado entre o servidor (valida de verdade) e o modal (só orienta).
 export const MAX_DIAS_CONTRATO = 180;
 export const DIAS_AUXILIAR_PRORROGACAO = 90;
 
@@ -19,6 +21,13 @@ export function somarDiasIso(iso: string, dias: number): string | null {
   const ms = utcMs(iso);
   if (ms === null) return null;
   return new Date(ms + dias * 86_400_000).toISOString().slice(0, 10);
+}
+
+// Valor mostrado e enviado na aprovação: o que o analista digitou/alterou (inclusive vazio, se ele apagou) NUNCA é sobrescrito; sem edição, vale a
+// sugestão início + 90 dias, que acompanha mudanças da data de início. Sem início válido, vazio.
+export function dataFimEfetiva(editada: string | undefined, inicio: string | null | undefined): string {
+  if (editada !== undefined) return editada;
+  return somarDiasIso((inicio ?? "").trim(), DIAS_AUXILIAR_PRORROGACAO) ?? "";
 }
 
 export function diasEntre(inicio: string, fim: string): number | null {
