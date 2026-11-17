@@ -72,6 +72,8 @@ export default function IndicacaoSemVagaAcoes({ item, onAtualizado }: Props) {
   const [titulo, setTitulo] = useState(String(item.admissao_funcao ?? ""));
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  // Título repetido: o servidor devolve a vaga que já existe quando ela aceita esta indicação (aberta, mesmo tipo e unidade).
+  const [vagaExistente, setVagaExistente] = useState<{ id: string; titulo: string } | null>(null);
   const [simples, setSimples] = useState<Record<string, string>>({});
   const [vt, setVt] = useState("");
   const [tipoForm, setTipoForm] = useState(String(item.tipo_servico ?? item.vagas?.tipo_servico ?? ""));
@@ -96,7 +98,10 @@ export default function IndicacaoSemVagaAcoes({ item, onAtualizado }: Props) {
 
   const abrir = (p: Painel) => {
     setErro("");
-    setPainel((atual) => (atual === p ? null : p));
+    const abrindo = painel !== p;
+    setPainel(abrindo ? p : null);
+    // A lista pode ter mudado desde o carregamento da tela (outra indicação criou uma vaga): busca de novo toda vez que o painel abre.
+    if (p === "direcionar" && abrindo) { setVagaEscolhida(""); setRecarregarVagas((n) => n + 1); }
     if (p === "editar") {
       setSimples(Object.fromEntries(CAMPOS_SIMPLES.map((c) => [c.chave, item[c.chave] == null ? "" : String(item[c.chave])])));
       setVt(item.admissao_vt === true ? "sim" : item.admissao_vt === false ? "nao" : "");
@@ -108,10 +113,16 @@ export default function IndicacaoSemVagaAcoes({ item, onAtualizado }: Props) {
   const chamar = async (url: string, metodo: "POST" | "PATCH", corpo: Record<string, unknown>) => {
     setSalvando(true);
     setErro("");
+    setVagaExistente(null);
     try {
       const res = await fetch(url, { method: metodo, headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) { setErro(typeof json.error === "string" ? json.error : "Não foi possível concluir."); return null; }
+      if (!res.ok) {
+        setErro(typeof json.error === "string" ? json.error : "Não foi possível concluir.");
+        const ve = json.vaga_existente as { id?: unknown; titulo?: unknown } | undefined;
+        if (ve && typeof ve.id === "string") setVagaExistente({ id: ve.id, titulo: typeof ve.titulo === "string" ? ve.titulo : "" });
+        return null;
+      }
       return json as Record<string, unknown>;
     } catch {
       setErro("Erro de conexão. Tente novamente.");
@@ -121,9 +132,9 @@ export default function IndicacaoSemVagaAcoes({ item, onAtualizado }: Props) {
     }
   };
 
-  const direcionar = async () => {
-    if (!vagaEscolhida) return;
-    const json = await chamar(`/api/solicitacoes-indicacao-candidato/${item.id}/direcionar`, "POST", { vaga_id: vagaEscolhida });
+  const direcionar = async (vagaId: string = vagaEscolhida) => {
+    if (!vagaId) return;
+    const json = await chamar(`/api/solicitacoes-indicacao-candidato/${item.id}/direcionar`, "POST", { vaga_id: vagaId });
     if (json?.data) onAtualizado(json.data as Record<string, unknown>, "Indicação direcionada para a vaga. Agora ela pode ser aprovada.");
   };
 
@@ -199,7 +210,7 @@ export default function IndicacaoSemVagaAcoes({ item, onAtualizado }: Props) {
                 {vagas.map((v) => <option key={v.id} value={v.id}>{v.titulo}{v.cidade ? ` — ${v.cidade}${v.estado ? `/${v.estado}` : ""}` : ""}</option>)}
               </select>
               <div className="flex justify-end">
-                <button type="button" onClick={direcionar} disabled={!vagaEscolhida || salvando} className={`${btnCls} border-black bg-black text-[#FFD700]`}>
+                <button type="button" onClick={() => direcionar()} disabled={!vagaEscolhida || salvando} className={`${btnCls} border-black bg-black text-[#FFD700]`}>
                   {salvando ? "Direcionando..." : "Direcionar"}
                 </button>
               </div>
@@ -270,6 +281,11 @@ export default function IndicacaoSemVagaAcoes({ item, onAtualizado }: Props) {
       )}
 
       {erro && <p className="text-xs text-red-600" role="alert">{erro}</p>}
+      {erro && vagaExistente && (
+        <button type="button" onClick={() => direcionar(vagaExistente.id)} disabled={salvando} className={`${btnCls} border-black bg-black text-[#FFD700]`}>
+          {salvando ? "Direcionando..." : "Direcionar para essa vaga"}
+        </button>
+      )}
     </div>
   );
 }

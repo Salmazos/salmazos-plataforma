@@ -17,6 +17,13 @@ export const MSG_SEM_VAGA_APROVAR =
   "Esta indicação ainda não tem vaga. Direcione para uma vaga existente ou crie a vaga a partir da indicação antes de aprovar.";
 export const MSG_SEM_VAGA_INDISPONIVEL = "A indicação sem vaga ainda não está disponível neste ambiente. Tente novamente em instantes.";
 export const MSG_JA_TEM_VAGA = "Esta indicação já tem vaga.";
+export const MSG_TITULO_DUPLICADO = "Já existe uma vaga com este título para este cliente: mude o título ou direcione para a vaga existente.";
+export const MSG_TITULO_DUPLICADO_INDISPONIVEL =
+  "Já existe uma vaga com este título para este cliente, mas ela está fechada ou é de outra unidade ou tipo de serviço: mude o título para criar a vaga.";
+
+// Índice único de vagas é (titulo, cliente_nome): o nome dele vem na mensagem do Postgres e distingue este conflito de qualquer outro 23505.
+export const ehConflitoTituloVaga = (erro: { code?: string | null; message?: string | null } | null | undefined): boolean =>
+  erro?.code === "23505" && typeof erro.message === "string" && erro.message.includes("vagas_titulo_cliente_unique");
 
 export const indicacaoSemVaga = (sol: { vaga_id?: string | null }): boolean => !sol.vaga_id;
 

@@ -382,6 +382,78 @@ await ok("CRIAR VAGA: se a ligação com a indicação falha, a vaga recém-cria
   assert.ok(auditoria(db).some((a: any) => a.acao === "indicacao_vaga_criada_rollback_falhou"));
 });
 
+await ok("elegíveis: vaga PRIVADA aberta (criada por outra indicação) do mesmo cliente/tipo/unidade aparece e pode receber a indicação", async () => {
+  const db = cenario();
+  await indicar(db, SEM_VAGA);
+  const primeira = ultima(db).id;
+  const c = await criarVaga(db, primeira);
+  assert.equal(c.status, 200, JSON.stringify(c.corpo));
+  const privada = linhas(db, "vagas").find((v: any) => v.id === c.corpo.vaga.id);
+  assert.equal(privada.visivel_publicamente, false);
+  await indicar(db, SEM_VAGA);
+  const segunda = ultima(db).id;
+  logar(db, "dir");
+  const l = await chamar(R.elegiveis.GET, { params: { id: segunda } });
+  assert.ok(l.corpo.data.some((v: any) => v.id === privada.id), "a vaga privada está na lista");
+  assert.equal((await direcionar(db, segunda, privada.id)).status, 200);
+  assert.equal(sol(db, segunda).vaga_id, privada.id);
+});
+
+await ok("CRIAR VAGA com título repetido: 409 com a mensagem e vaga_existente (aberta, mesmo tipo/unidade); indicação segue sem vaga; direcionar à vaga existente funciona", async () => {
+  const db = cenario();
+  await indicar(db, SEM_VAGA);
+  const id = ultima(db).id;
+  const alvo = linhas(db, "vagas").find((v: any) => v.id === ID.V_MOT_A);
+  alvo.cliente_nome = "Cliente Um"; // o índice único é (titulo, cliente_nome); a vaga real sempre tem
+  const n0 = linhas(db, "vagas").length;
+  db.falhas["vagas.insert"] = { code: "23505", message: 'duplicate key value violates unique constraint "vagas_titulo_cliente_unique"' };
+  const r = await criarVaga(db, id, { titulo: alvo.titulo });
+  assert.equal(r.status, 409, JSON.stringify(r.corpo));
+  assert.equal(r.corpo.error, "Já existe uma vaga com este título para este cliente: mude o título ou direcione para a vaga existente.");
+  assert.deepEqual(r.corpo.vaga_existente, { id: alvo.id, titulo: alvo.titulo });
+  delete db.falhas["vagas.insert"];
+  assert.equal(linhas(db, "vagas").length, n0, "nada criado");
+  assert.equal(sol(db, id).vaga_id, null, "indicação segue sem vaga");
+  assert.equal((await direcionar(db, id, r.corpo.vaga_existente.id)).status, 200);
+  assert.equal(sol(db, id).vaga_id, alvo.id);
+});
+
+await ok("CRIAR VAGA com título repetido de vaga fechada / outra unidade / outro tipo: 409 SEM vaga_existente; outros erros de insert seguem 500 genérico", async () => {
+  for (const alvoId of [ID.V_FECHADA, ID.V_OUTRA_UNIDADE, ID.V_RS]) {
+    const db = cenario();
+    await indicar(db, SEM_VAGA);
+    const id = ultima(db).id;
+    const alvo = linhas(db, "vagas").find((v: any) => v.id === alvoId);
+    alvo.cliente_nome = "Cliente Um";
+    db.falhas["vagas.insert"] = { code: "23505", message: 'duplicate key value violates unique constraint "vagas_titulo_cliente_unique"' };
+    const r = await criarVaga(db, id, { titulo: alvo.titulo });
+    assert.equal(r.status, 409, `${alvoId}: ${JSON.stringify(r.corpo)}`);
+    assert.match(r.corpo.error, /fechada ou é de outra unidade ou tipo/);
+    assert.equal("vaga_existente" in r.corpo, false);
+    assert.equal(sol(db, id).vaga_id, null);
+  }
+  const db = cenario();
+  await indicar(db, SEM_VAGA);
+  const id = ultima(db).id;
+  for (const falha of [{ code: "23505", message: 'duplicate key value violates unique constraint "vagas_slug_key"' }, { code: "XX000", message: "falha forçada" }]) {
+    db.falhas["vagas.insert"] = falha;
+    const r = await criarVaga(db, id);
+    assert.equal(r.status, 500);
+    assert.equal(r.corpo.error, "Não foi possível criar a vaga.");
+    assert.equal("vaga_existente" in r.corpo, false);
+  }
+});
+
+await ok("TELA: abrir o painel 'Direcionar' busca a lista de novo (estado de carregamento); título repetido mostra 'Direcionar para essa vaga' só com vaga_existente, pelo /direcionar já existente", () => {
+  const t = fs.readFileSync("src/components/IndicacaoSemVagaAcoes.tsx", "utf8");
+  assert.match(t, /if \(p === "direcionar" && abrindo\) \{[^}]*setRecarregarVagas\(\(n\) => n \+ 1\)/, "recarrega ao abrir");
+  assert.match(t, /Carregando vagas/);
+  assert.match(t, /\{erro && vagaExistente && \(/);
+  assert.match(t, /Direcionar para essa vaga/);
+  assert.match(t, /direcionar\(vagaExistente\.id\)/);
+  assert.equal(/vagas-elegiveis/.test(fs.readFileSync("src/components/IndicacaoSemVagaAcoes.tsx", "utf8")), true);
+});
+
 await ok("edição do analista: sem vaga só ganha vaga por Direcionar/Criar (PATCH com vaga_id é recusado); tipo editável só sem vaga", async () => {
   const db = cenario();
   await indicar(db, SEM_VAGA);

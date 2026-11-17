@@ -5,7 +5,7 @@ import { parseBody, indicacaoCriarVagaSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { generateUniqueSlug } from "@/lib/slug";
 import { apelidoDoNomeCompleto } from "@/lib/responsaveis";
-import { avisoTaxaVagaCriada, dadosVagaDaIndicacao, ehErroSemVagaIndisponivel, MSG_JA_TEM_VAGA, MSG_SEM_VAGA_INDISPONIVEL } from "@/lib/indicacaoSemVaga";
+import { avisoTaxaVagaCriada, dadosVagaDaIndicacao, ehConflitoTituloVaga, ehErroSemVagaIndisponivel, MSG_JA_TEM_VAGA, MSG_SEM_VAGA_INDISPONIVEL, MSG_TITULO_DUPLICADO, MSG_TITULO_DUPLICADO_INDISPONIVEL, validarDirecionamento } from "@/lib/indicacaoSemVaga";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -70,6 +70,21 @@ export async function POST(request: NextRequest, { params }: Params) {
       })
       .select("id, titulo, tipo_servico, fee_rs_percentual")
       .single();
+    if (vagaErr && ehConflitoTituloVaga(vagaErr)) {
+      // O índice único é (titulo, cliente_nome): busca a vaga com as MESMAS colunas. Só oferece direcionar se ela passaria na regra do /direcionar
+      // (aberta, mesmo tipo e unidade); do contrário o analista precisa mudar o título.
+      const { data: existente } = await service
+        .from("vagas")
+        .select("id, titulo, cliente_id, status, tipo_servico, unidade_id")
+        .eq("titulo", titulo)
+        .eq("cliente_nome", cliente.nome ?? sol.cliente_nome ?? null)
+        .limit(1)
+        .maybeSingle();
+      if (existente && validarDirecionamento(sol, existente) === null) {
+        return NextResponse.json({ error: MSG_TITULO_DUPLICADO, vaga_existente: { id: existente.id, titulo: existente.titulo } }, { status: 409 });
+      }
+      return NextResponse.json({ error: MSG_TITULO_DUPLICADO_INDISPONIVEL }, { status: 409 });
+    }
     if (vagaErr || !vaga) {
       console.error("[criar-vaga indicacao] Erro ao criar a vaga:", vagaErr?.message);
       return NextResponse.json({ error: "Não foi possível criar a vaga." }, { status: 500 });
