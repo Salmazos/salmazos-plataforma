@@ -4,7 +4,8 @@ import { parseBody, portalEditarIndicacaoSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { hojeBrasiliaISO } from "@/lib/rescisaoProgramada";
-import { exigeRespostaDiasTeste, MSG_INFORME_DIAS_TESTE } from "@/lib/diasTeste";
+import { exigeRespostaDiasTeste, MSG_INFORME_DIAS_TESTE, resolverDiasTeste } from "@/lib/diasTeste";
+import { faltandoObrigatorios, mexeNosDadosDeAdmissao } from "@/lib/admissaoObrigatorios";
 import { avisarIndicacaoEditada } from "@/lib/avisoIndicacaoEditada";
 import { mensagemErrosAdmissao, validarCamposAdmissao } from "@/lib/admissaoCamposPadrao";
 import {
@@ -139,11 +140,27 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!sol) return NextResponse.json({ error: "Indicação não encontrada." }, { status: 404 });
     if (!(await avaliarEdicao(service, sol)).pode) return NextResponse.json({ error: MSG_EM_ANDAMENTO }, { status: 409 });
 
+    // Tipo da indicação: o da vaga ou, sem vaga, o que o cliente escolheu ao indicar.
+    let tipoDaIndicacao: string | null = sol.tipo_servico ?? null;
+    if (sol.vaga_id) {
+      const { data: vagaDaIndicacao } = await service.from("vagas").select("tipo_servico").eq("id", sol.vaga_id).maybeSingle();
+      tipoDaIndicacao = vagaDaIndicacao?.tipo_servico ?? null;
+    }
+
     // O cliente não pode APAGAR a resposta de dias de teste em MOT/Terceirização (null explícito). Registros antigos com
     // null seguem editáveis: a regra só olha o que veio no corpo, nunca o valor salvo.
-    if (entrada.admissao_qtd_dias_teste === null && sol.vaga_id) {
-      const { data: vagaDaIndicacao } = await service.from("vagas").select("tipo_servico").eq("id", sol.vaga_id).maybeSingle();
-      if (exigeRespostaDiasTeste(vagaDaIndicacao?.tipo_servico)) return NextResponse.json({ error: MSG_INFORME_DIAS_TESTE }, { status: 400 });
+    if (entrada.admissao_qtd_dias_teste === null && exigeRespostaDiasTeste(tipoDaIndicacao)) {
+      return NextResponse.json({ error: MSG_INFORME_DIAS_TESTE }, { status: 400 });
+    }
+
+    // Indicação SEM vaga: mexeu nos dados de admissão, o resultado precisa estar completo para o tipo (mesmo módulo da tela). A indicação antiga,
+    // que só tem a função, segue editável em nome, telefone, currículo e função sem essa exigência.
+    if (!sol.vaga_id && mexeNosDadosDeAdmissao(Object.keys(entrada))) {
+      const final = { ...sol, ...entrada } as Linha;
+      const falta = faltandoObrigatorios(tipoDaIndicacao, final as Parameters<typeof faltandoObrigatorios>[1]);
+      if (falta.length > 0) return NextResponse.json({ error: falta.join(" ") }, { status: 400 });
+      const dias = resolverDiasTeste(tipoDaIndicacao, final.admissao_qtd_dias_teste as number | null | undefined);
+      if (!dias.ok) return NextResponse.json({ error: dias.erro }, { status: 400 });
     }
 
     // Coerência horário x turno: só quando um dos dois vem no corpo (registro antigo fora do padrão não bloqueia a edição de outros campos).

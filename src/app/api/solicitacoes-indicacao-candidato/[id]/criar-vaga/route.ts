@@ -59,8 +59,11 @@ export async function POST(request: NextRequest, { params }: Params) {
           clienteNome: cliente.nome ?? sol.cliente_nome ?? null,
           unidadeId: sol.unidade_id,
           responsavel,
-          candidatoNome: sol.candidato_nome,
           cidade: cliente.cidade,
+          // Pré-preenche a vaga com o que o cliente informou na indicação (tipo, status, visibilidade e posições seguem sendo fixados acima). Setor não entra na vaga.
+          salario: sol.admissao_salario,
+          salarioHora: sol.admissao_salario_hora,
+          horario: sol.admissao_horario,
         }),
         slug,
         data_abertura: agora,

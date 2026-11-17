@@ -2,6 +2,8 @@
 // status 'pendente' E vaga_id nulo — não existe status novo, então tudo que já filtra por 'pendente' continua valendo.
 // A indicação sem vaga NÃO cria candidatura, admissão, cobrança nem comissão: isso só nasce quando ela ganha vaga e é aprovada.
 
+import { formatarSalarioHora } from "@/lib/constants";
+
 export const TIPOS_SERVICO_INDICACAO = ["recrutamento_selecao", "mao_obra_temporaria", "terceirizacao"] as const;
 export type TipoServicoIndicacao = (typeof TIPOS_SERVICO_INDICACAO)[number];
 
@@ -73,10 +75,18 @@ export function dadosVagaDaIndicacao(o: {
   clienteNome: string | null;
   unidadeId: string;
   responsavel: string;
-  candidatoNome: string;
   cidade?: string | null;
   estado?: string | null;
+  // Dados que o cliente já informou na indicação: viram o pré-preenchimento da vaga (salário e horário). O setor NÃO entra: a vaga não tem campo
+  // interno para ele e `observacoes` aparece na página pública /vagas/[slug]. Opcionais: indicação antiga sem eles gera a vaga como antes.
+  salario?: number | string | null;
+  salarioHora?: number | string | null;
+  horario?: string | null;
 }) {
+  const mensal = Number(o.salario);
+  const hora = Number(o.salarioHora);
+  // Formato que parseSalarioFixo/formatarSalarioHora já leem: mensal "R$ 3.500,00"; por hora "R$ 9,50/hora" (nunca lido como mensal).
+  const salario = mensal > 0 ? `R$ ${mensal.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : hora > 0 ? formatarSalarioHora(hora) : null;
   return {
     titulo: o.titulo.trim(),
     cliente_id: o.clienteId,
@@ -90,7 +100,10 @@ export function dadosVagaDaIndicacao(o: {
     responsavel: o.responsavel,
     unidade_id: o.unidadeId,
     visivel_publicamente: false,
-    observacoes: `Criada a partir da indicação direta de ${o.candidatoNome}.`,
+    // Texto genérico de propósito: `observacoes` aparece na página pública /vagas/[slug]; nada de nome de candidato aqui.
+    observacoes: "Criada a partir de indicação direta de cliente.",
+    ...(salario ? { salario } : {}),
+    ...(o.horario?.trim() ? { horario: o.horario.trim() } : {}),
   };
 }
 

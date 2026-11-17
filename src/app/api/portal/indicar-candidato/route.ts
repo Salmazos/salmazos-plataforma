@@ -8,6 +8,7 @@ import { hojeBrasiliaISO } from "@/lib/rescisaoProgramada";
 import { validarDataInicio } from "@/lib/indicacaoEdicao";
 import { resolverDiasTeste } from "@/lib/diasTeste";
 import { mensagemErrosAdmissao, validarCamposAdmissao } from "@/lib/admissaoCamposPadrao";
+import { faltandoObrigatorios } from "@/lib/admissaoObrigatorios";
 import { ROTULO_TIPO_SERVICO, ehErroSemVagaIndisponivel, indicacoesPendentesComMesmoTelefone, MSG_SEM_VAGA_INDISPONIVEL } from "@/lib/indicacaoSemVaga";
 
 const escaparHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -95,9 +96,16 @@ export async function POST(request: NextRequest) {
     }
     const tipoServico: string = vaga ? vaga.tipo_servico : (dados.tipo_servico as string);
 
-    // MOT/Terceirização precisam responder (inclusive "não houve"); R&S ignora o campo. Vem do tipo da vaga no banco. Sem vaga o
-    // cliente não responde isso agora: fica nulo e o analista completa (o RH vê "Não informado pelo cliente").
-    const diasTeste = vaga ? resolverDiasTeste(vaga.tipo_servico, dados.admissao_qtd_dias_teste) : ({ ok: true, valor: null } as const);
+    // SEM vaga: o cliente preenche o MESMO bloco "Dados para Admissão" do tipo escolhido, e aqui a exigência por tipo vale no servidor (módulo único
+    // admissaoObrigatorios.ts, o mesmo da tela). COM vaga o servidor segue como sempre foi: só a tela exige.
+    if (semVaga) {
+      const falta = faltandoObrigatorios(tipoServico, dados);
+      if (falta.length > 0) return NextResponse.json({ error: falta.join(" ") }, { status: 400 });
+    }
+
+    // MOT/Terceirização precisam responder (inclusive "não houve"); R&S ignora o campo. O tipo vem da vaga no banco ou, sem vaga, da própria
+    // indicação (já validado pelo schema).
+    const diasTeste = resolverDiasTeste(tipoServico, dados.admissao_qtd_dias_teste);
     if (!diasTeste.ok) return NextResponse.json({ error: diasTeste.erro }, { status: 400 });
 
     const { data: cliente } = await service

@@ -3,15 +3,13 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
-import CampoMoeda from "@/components/ui/CampoMoeda";
 import CampoTelefone from "@/components/ui/CampoTelefone";
-import {
-  CENTRO_CUSTO_MAX, ESCALA_OPCOES_MOT, PERIODOS_EXP, TURNO_OPCOES, TURNO_OPCOES_MOT,
-  erroCentroCusto, erroEscala, erroTempoContrato, erroTurno, formatarHoraTexto,
-} from "@/lib/admissaoCamposPadrao";
-import { TEMPO_CONTRATO_PADRAO } from "@/lib/constants";
+import BlocoDadosAdmissao from "@/components/BlocoDadosAdmissao";
+import { erroDiasTeste } from "@/components/CampoDiasTeste";
+import { mensagemErrosAdmissao, validarCamposAdmissao } from "@/lib/admissaoCamposPadrao";
+import { faltandoObrigatorios } from "@/lib/admissaoObrigatorios";
+import { colunasDeDados, comHorario, dadosAoTrocarTipo, dadosVazios, integracaoPreenchidaParcialmente } from "@/lib/admissaoForm";
 import { MOSTRAR_DIA_TESTE_NO_PORTAL } from "@/lib/diaTestePortal";
-import CampoDiasTeste, { ESTADO_DIAS_TESTE_VAZIO, diasTesteParaEnvio, erroDiasTeste, type EstadoDiasTeste } from "@/components/CampoDiasTeste";
 
 interface VagaAtiva {
   id: string;
@@ -50,10 +48,6 @@ function Field({ label, required, children }: { label: string; required?: boolea
   );
 }
 
-function formatarDataTexto(iso: string): string {
-  return iso.split("-").reverse().join("/");
-}
-
 export default function IndicarCandidatoPage() {
   const [carregando, setCarregando] = useState(true);
   const [vagas, setVagas] = useState<VagaAtiva[]>([]);
@@ -66,29 +60,7 @@ export default function IndicarCandidatoPage() {
   const [arrastando, setArrastando] = useState(false);
   const inputCurriculoRef = useRef<HTMLInputElement>(null);
 
-  const [admDataInicio, setAdmDataInicio] = useState("");
-  const [admSalario, setAdmSalario] = useState("");
-  const [admSetor, setAdmSetor] = useState("");
-  const [admCentroCusto, setAdmCentroCusto] = useState("");
-  const [admGestor, setAdmGestor] = useState("");
-  const [admPeriodoExp, setAdmPeriodoExp] = useState("");
-  const [admObservacoes, setAdmObservacoes] = useState("");
-  const [admFuncao, setAdmFuncao] = useState("");
-  const [admSalarioTipo, setAdmSalarioTipo] = useState<"horista" | "mensalista">("horista");
-  const [admSalarioHora, setAdmSalarioHora] = useState("");
-  const [admTempoContrato, setAdmTempoContrato] = useState(TEMPO_CONTRATO_PADRAO);
-  const [admVt, setAdmVt] = useState<boolean | null>(null);
-  const [admExameResp, setAdmExameResp] = useState("");
-  const [admHorarioEntrada, setAdmHorarioEntrada] = useState("");
-  const [admHorarioSaida, setAdmHorarioSaida] = useState("");
-  const [admTurnoSelecionado, setAdmTurnoSelecionado] = useState("");
-  const [admTurnoOutro, setAdmTurnoOutro] = useState("");
-  const [admEscalaSelecionada, setAdmEscalaSelecionada] = useState("");
-  const [admEscalaOutro, setAdmEscalaOutro] = useState("");
-  const [admIntegracaoLocal, setAdmIntegracaoLocal] = useState("");
-  const [admIntegracaoData, setAdmIntegracaoData] = useState("");
-  const [admIntegracaoHora, setAdmIntegracaoHora] = useState("");
-  const [admDiasTeste, setAdmDiasTeste] = useState<EstadoDiasTeste>(ESTADO_DIAS_TESTE_VAZIO);
+  const [dados, setDados] = useState(() => dadosVazios(null));
 
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
@@ -111,80 +83,45 @@ export default function IndicarCandidatoPage() {
 
   const semVaga = vagaId === SEM_VAGA;
   const vaga = vagas.find((v) => v.id === vagaId) ?? null;
-  const isRS = vaga?.tipo_servico === "recrutamento_selecao";
-  const isMOT = vaga?.tipo_servico === "mao_obra_temporaria";
-  const isTerc = vaga?.tipo_servico === "terceirizacao";
-  const precisaHorarioEstruturado = isMOT || isTerc;
-  const missing = (v: string | boolean | null) => tentouEnviar && (v === "" || v === null);
+  // Tipo de serviço: da vaga escolhida ou, no sem vaga, o que o cliente escolheu para a indicação. O bloco "Dados para Admissão" é o mesmo.
+  const tipoServico = vaga ? vaga.tipo_servico : semVaga ? tipoSemVaga || null : null;
+  const horarioEstruturado = comHorario(tipoServico);
 
-  const turnoFinal = admTurnoSelecionado === "Outro" ? admTurnoOutro.trim() : admTurnoSelecionado;
-  const escalaFinal = admEscalaSelecionada === "Outro" ? admEscalaOutro.trim() : admEscalaSelecionada;
-  const horarioComposto = admHorarioEntrada && admHorarioSaida && turnoFinal
-    ? `${turnoFinal}, ${formatarHoraTexto(admHorarioEntrada)} às ${formatarHoraTexto(admHorarioSaida)}`
-    : "";
-  const integracaoPreenchidaParcialmente = Boolean(
-    (admIntegracaoLocal.trim() || admIntegracaoData || admIntegracaoHora) &&
-    !(admIntegracaoLocal.trim() && admIntegracaoData && admIntegracaoHora)
-  );
-  const integracaoComposta = admIntegracaoLocal.trim() && admIntegracaoData && admIntegracaoHora
-    ? `${admIntegracaoLocal.trim()}, ${formatarDataTexto(admIntegracaoData)} às ${admIntegracaoHora}`
-    : "";
+  // Trocar de vaga/tipo refaz o que depende do tipo (listas de turno e escala, tempo de contrato) e mantém o resto.
+  const trocarTipo = (novoTipo: string | null) => setDados((d) => dadosAoTrocarTipo(d, novoTipo));
+  const escolherVaga = (id: string) => {
+    setVagaId(id);
+    trocarTipo(vagas.find((v) => v.id === id)?.tipo_servico ?? (id === SEM_VAGA ? tipoSemVaga || null : null));
+  };
+  const escolherTipoSemVaga = (tipo: string) => {
+    setTipoSemVaga(tipo);
+    trocarTipo(tipo || null);
+  };
+  const missing = (v: string | boolean | null) => tentouEnviar && (v === "" || v === null);
 
   const validar = (): string | null => {
     if (!vagaId) return "Selecione a vaga.";
     if (!candidatoNome.trim()) return "Informe o nome do candidato.";
     if (!candidatoTelefone.trim()) return "Informe o telefone do candidato.";
-
-    // Sem vaga: só o mínimo (o analista completa o resto depois).
     if (semVaga) {
       if (!tipoSemVaga) return "Selecione o tipo de serviço.";
-      if (!admFuncao.trim()) return "Informe o cargo/função do candidato.";
-      return null;
+      if (!dados.funcao.trim()) return "Informe o cargo/função do candidato.";
     }
 
-    // Mesmas obrigatoriedades por tipo de serviço do fluxo normal de aprovação
-    // (PortalAvaliacaoBtn.validateRequired) — regra de negócio, não de schema.
-    if (isRS) {
-      if (!admDataInicio) return "Informe a data de início.";
-      if (!admFuncao.trim()) return "Informe a função confirmada.";
-      if (!admSalario) return "Informe o salário acordado.";
-    } else if (isMOT) {
-      if (!admDataInicio) return "Informe a data de início.";
-      if (!admFuncao.trim()) return "Informe a função.";
-      if (!admSetor.trim()) return "Informe o setor.";
-      if (!admCentroCusto.trim()) return "Informe o centro de custo.";
-      { const e = erroCentroCusto(admCentroCusto.trim()); if (e) return e; }
-      if (admSalarioTipo === "horista" ? !admSalarioHora : !admSalario) return "Informe o salário.";
-      if (!admHorarioEntrada || !admHorarioSaida) return "Informe o horário de entrada e saída.";
-      if (!admTurnoSelecionado) return "Selecione o turno.";
-      if (admTurnoSelecionado === "Outro" && !admTurnoOutro.trim()) return "Especifique o turno.";
-      { const e = erroTurno(turnoFinal); if (e) return e; }
-      if (!admEscalaSelecionada) return "Selecione a escala.";
-      if (admEscalaSelecionada === "Outro" && !admEscalaOutro.trim()) return "Especifique a escala.";
-      { const e = erroEscala(escalaFinal); if (e) return e; }
-      if (!admTempoContrato.trim()) return "Informe o tempo de contrato.";
-      { const e = erroTempoContrato(admTempoContrato.trim()); if (e) return e; }
-      if (admVt === null) return "Informe se utiliza Vale Transporte.";
-      if (!admExameResp.trim()) return "Informe o responsável pelo exame admissional.";
-      if (MOSTRAR_DIA_TESTE_NO_PORTAL) { const e = erroDiasTeste(admDiasTeste); if (e) return e; }
-    } else if (isTerc) {
-      if (!admDataInicio) return "Informe a data de início.";
-      if (!admFuncao.trim()) return "Informe a função/cargo.";
-      if (!admSetor.trim()) return "Informe o setor.";
-      if (!admCentroCusto.trim()) return "Informe o centro de custo.";
-      { const e = erroCentroCusto(admCentroCusto.trim()); if (e) return e; }
-      if (!admSalario) return "Informe o salário.";
-      if (!admHorarioEntrada || !admHorarioSaida) return "Informe o horário de entrada e saída.";
-      if (!admTurnoSelecionado) return "Selecione o turno.";
-      if (admTurnoSelecionado === "Outro" && !admTurnoOutro.trim()) return "Especifique o turno.";
-      { const e = erroTurno(turnoFinal); if (e) return e; }
-      if (admVt === null) return "Informe se utiliza Vale Transporte.";
-      if (!admExameResp.trim()) return "Informe o responsável pelo exame admissional.";
-      if (MOSTRAR_DIA_TESTE_NO_PORTAL) { const e = erroDiasTeste(admDiasTeste); if (e) return e; }
-    }
-
-    if (precisaHorarioEstruturado && integracaoPreenchidaParcialmente) {
-      return "Preencha local, data e hora da integração, ou deixe os três em branco.";
+    // Mesmas obrigatoriedades por tipo nos dois modos (módulo único, o mesmo que o servidor usa no sem vaga).
+    const colunas = colunasDeDados(dados, tipoServico);
+    const falta = faltandoObrigatorios(tipoServico, colunas as Parameters<typeof faltandoObrigatorios>[1]);
+    if (falta.length > 0) return falta[0];
+    const formato = validarCamposAdmissao({
+      admissao_salario: colunas.admissao_salario as number | null, admissao_salario_hora: colunas.admissao_salario_hora as number | null,
+      admissao_centro_custo: colunas.admissao_centro_custo as string | null, admissao_horario: colunas.admissao_horario as string | null,
+      admissao_turno: colunas.admissao_turno as string | null, admissao_escala: colunas.admissao_escala as string | null,
+      admissao_tempo_contrato: colunas.admissao_tempo_contrato as string | null,
+    });
+    if (formato.length > 0) return mensagemErrosAdmissao(formato);
+    if (horarioEstruturado) {
+      if (MOSTRAR_DIA_TESTE_NO_PORTAL) { const e = erroDiasTeste(dados.dias_teste); if (e) return e; }
+      if (integracaoPreenchidaParcialmente(dados)) return "Preencha local, data e hora da integração, ou deixe os três em branco.";
     }
     return null;
   };
@@ -195,7 +132,7 @@ export default function IndicarCandidatoPage() {
     if (erroValidacao) {
       setErro(erroValidacao);
       // Erro do dia(s) de teste: leva o usuário até o campo (ele fica no fim do bloco, fora da vista).
-      if (MOSTRAR_DIA_TESTE_NO_PORTAL && (isMOT || isTerc) && erroValidacao === erroDiasTeste(admDiasTeste)) {
+      if (MOSTRAR_DIA_TESTE_NO_PORTAL && horarioEstruturado && erroValidacao === erroDiasTeste(dados.dias_teste)) {
         document.getElementById("campo-dias-teste")?.scrollIntoView({ behavior: "smooth", block: "center" });
       }
       return;
@@ -225,38 +162,13 @@ export default function IndicarCandidatoPage() {
       const res = await fetch("/api/portal/indicar-candidato", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(semVaga ? {
-          // Mínimo: nada de dados de admissão (o analista completa). O resto do formulário nem é enviado.
-          vaga_id: null,
-          tipo_servico: tipoSemVaga,
+        body: JSON.stringify({
+          vaga_id: semVaga ? null : vagaId,
+          ...(semVaga ? { tipo_servico: tipoSemVaga } : {}),
           candidato_nome: candidatoNome.trim(),
           candidato_telefone: candidatoTelefone.trim(),
           curriculo_url,
-          admissao_funcao: admFuncao.trim(),
-          admissao_observacoes: admObservacoes.trim() || null,
-        } : {
-          vaga_id: vagaId,
-          candidato_nome: candidatoNome.trim(),
-          candidato_telefone: candidatoTelefone.trim(),
-          curriculo_url,
-          admissao_data_inicio: admDataInicio || null,
-          admissao_salario: admSalario ? parseFloat(admSalario) : null,
-          admissao_salario_hora: admSalarioHora ? parseFloat(admSalarioHora) : null,
-          admissao_setor: admSetor || null,
-          admissao_centro_custo: admCentroCusto || null,
-          admissao_horario: precisaHorarioEstruturado ? (horarioComposto || null) : null,
-          admissao_gestor: admGestor || null,
-          admissao_periodo_experiencia: admPeriodoExp || null,
-          admissao_funcao: admFuncao || null,
-          admissao_turno: precisaHorarioEstruturado ? (turnoFinal || null) : null,
-          admissao_escala: isMOT ? (escalaFinal || null) : null,
-          admissao_tempo_contrato: admTempoContrato || null,
-          admissao_vt: admVt,
-          admissao_exame_responsavel: admExameResp || null,
-          admissao_local_integracao: integracaoComposta || null,
-          // R&S não tem dia de teste: undefined sai do JSON. O texto antigo (admissao_dia_teste) não é mais enviado.
-          admissao_qtd_dias_teste: MOSTRAR_DIA_TESTE_NO_PORTAL && (isMOT || isTerc) ? diasTesteParaEnvio(admDiasTeste) : undefined,
-          admissao_observacoes: admObservacoes || null,
+          ...colunasDeDados(dados, tipoServico),
         }),
       });
       const json = await res.json();
@@ -324,16 +236,16 @@ export default function IndicarCandidatoPage() {
           <Field label="Selecione a vaga" required>
             <select
               value={vagaId}
-              onChange={(e) => setVagaId(e.target.value)}
+              onChange={(e) => escolherVaga(e.target.value)}
               style={{ ...inputStyle, background: "#fff", cursor: "pointer", ...(tentouEnviar && !vagaId ? inv : {}) }}
             >
               <option value="">Selecione...</option>
+              <option value={SEM_VAGA}>A Salmazos direciona (sem vaga)</option>
               {vagas.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.titulo}{v.cidade ? ` — ${v.cidade}${v.estado ? `/${v.estado}` : ""}` : ""}
                 </option>
               ))}
-              <option value={SEM_VAGA}>A Salmazos direciona (sem vaga)</option>
             </select>
           </Field>
         </div>
@@ -407,271 +319,38 @@ export default function IndicarCandidatoPage() {
               <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Sobre a indicação</p>
                 <Field label="Tipo de serviço" required>
-                  <select value={tipoSemVaga} onChange={(e) => setTipoSemVaga(e.target.value)}
+                  <select value={tipoSemVaga} onChange={(e) => escolherTipoSemVaga(e.target.value)}
                     style={{ ...inputStyle, background: "#fff", cursor: "pointer", ...(tentouEnviar && !tipoSemVaga ? inv : {}) }}>
                     <option value="">Selecione...</option>
                     {TIPOS_SEM_VAGA.map((t) => <option key={t.valor} value={t.valor}>{t.rotulo}</option>)}
                   </select>
                 </Field>
+                {/* Um campo só: é a "função" do bloco "Dados para Admissão" logo abaixo (que não repete este campo). */}
                 <Field label="Cargo / função do candidato" required>
-                  <input value={admFuncao} onChange={(e) => setAdmFuncao(e.target.value)}
-                    placeholder="Ex: Auxiliar de produção" style={{ ...inputStyle, ...(missing(admFuncao.trim() || null) ? inv : {}) }} />
-                </Field>
-                <Field label="Observações">
-                  <textarea value={admObservacoes} onChange={(e) => setAdmObservacoes(e.target.value)}
-                    rows={3} placeholder="Algo que a Salmazos precise saber sobre esta indicação..." style={{ ...inputStyle, resize: "vertical" }} />
+                  <input value={dados.funcao} onChange={(e) => setDados((d) => ({ ...d, funcao: e.target.value }))}
+                    placeholder="Ex: Auxiliar de produção" style={{ ...inputStyle, ...(missing(dados.funcao.trim() || null) ? inv : {}) }} />
                 </Field>
                 <p className="text-xs text-gray-500">
                   A Salmazos vai analisar a indicação e direcionar o candidato para uma vaga. Isto não cria vaga nem garante a contratação.
-                  Os demais dados (salário, horário etc.) a Salmazos completa depois.
+                  Preencha os dados abaixo conforme o tipo de serviço escolhido.
                 </p>
               </div>
             )}
 
-            {vaga && (
-            <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
-              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-2">
-                <span>📋</span> Dados para Admissão
-              </p>
-
-              {isRS && (
-                <>
-                  <Field label="Data de Início" required>
-                    <input type="date" value={admDataInicio} onChange={(e) => setAdmDataInicio(e.target.value)}
-                      style={{ ...inputStyle, ...(missing(admDataInicio) ? inv : {}) }} />
-                  </Field>
-                  <Field label="Função" required>
-                    <input value={admFuncao} onChange={(e) => setAdmFuncao(e.target.value)}
-                      placeholder="Ex: Analista de RH" style={{ ...inputStyle, ...(missing(admFuncao) ? inv : {}) }} />
-                  </Field>
-                  <Field label="Salário Acordado R$" required>
-                    <CampoMoeda value={admSalario} onChange={(v) => setAdmSalario(v > 0 ? String(v) : "")}
-                      placeholder="Ex: 3.500,00" style={{ ...inputStyle, ...(missing(admSalario) ? inv : {}) }} />
-                  </Field>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field label="Departamento/Setor">
-                      <input value={admSetor} onChange={(e) => setAdmSetor(e.target.value)} placeholder="Ex: Administrativo" style={inputStyle} />
-                    </Field>
-                    <Field label="Gestor Direto">
-                      <input value={admGestor} onChange={(e) => setAdmGestor(e.target.value)} placeholder="Nome do gestor" style={inputStyle} />
-                    </Field>
-                  </div>
-                  <Field label="Período de Experiência">
-                    <select value={admPeriodoExp} onChange={(e) => setAdmPeriodoExp(e.target.value)} style={{ ...inputStyle, background: "#fff", cursor: "pointer" }}>
-                      <option value="">Selecione...</option>
-                      {PERIODOS_EXP.map((p) => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                  </Field>
-                </>
-              )}
-
-              {isMOT && (
-                <>
-                  <Field label="Data de Início" required>
-                    <input type="date" value={admDataInicio} onChange={(e) => setAdmDataInicio(e.target.value)}
-                      style={{ ...inputStyle, ...(missing(admDataInicio) ? inv : {}) }} />
-                  </Field>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field label="Função" required>
-                      <input value={admFuncao} onChange={(e) => setAdmFuncao(e.target.value)}
-                        placeholder="Ex: Auxiliar de Produção" style={{ ...inputStyle, ...(missing(admFuncao) ? inv : {}) }} />
-                    </Field>
-                    <Field label="Setor" required>
-                      <input value={admSetor} onChange={(e) => setAdmSetor(e.target.value)}
-                        placeholder="Ex: Produção" style={{ ...inputStyle, ...(missing(admSetor) ? inv : {}) }} />
-                    </Field>
-                  </div>
-                  <Field label="Centro de Custo" required>
-                    <input value={admCentroCusto} maxLength={CENTRO_CUSTO_MAX} onChange={(e) => setAdmCentroCusto(e.target.value.replace(/[^A-Za-z0-9._/-]/g, ""))}
-                      placeholder="Ex: CC-0042" style={{ ...inputStyle, ...(missing(admCentroCusto) ? inv : {}) }} />
-                  </Field>
-                  <Field label="Tipo de Salário" required>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button type="button" onClick={() => { setAdmSalarioTipo("horista"); setAdmSalario(""); }}
-                        className="px-3 py-2 rounded-lg border-2 text-sm font-semibold transition-all"
-                        style={admSalarioTipo === "horista"
-                          ? { backgroundColor: "#111827", color: "#FFD700", borderColor: "#111827" }
-                          : { backgroundColor: "#ffffff", color: "#6b7280", borderColor: "#e5e7eb" }}>
-                        Horista
-                      </button>
-                      <button type="button" onClick={() => { setAdmSalarioTipo("mensalista"); setAdmSalarioHora(""); }}
-                        className="px-3 py-2 rounded-lg border-2 text-sm font-semibold transition-all"
-                        style={admSalarioTipo === "mensalista"
-                          ? { backgroundColor: "#111827", color: "#FFD700", borderColor: "#111827" }
-                          : { backgroundColor: "#ffffff", color: "#6b7280", borderColor: "#e5e7eb" }}>
-                        Mensalista
-                      </button>
-                    </div>
-                  </Field>
-                  {admSalarioTipo === "horista" ? (
-                    <Field label="Salário R$/hora" required>
-                      <CampoMoeda value={admSalarioHora} onChange={(v) => setAdmSalarioHora(v > 0 ? String(v) : "")}
-                        placeholder="Ex: 18,50" style={{ ...inputStyle, ...(missing(admSalarioHora) ? inv : {}) }} />
-                    </Field>
-                  ) : (
-                    <Field label="Salário mensal" required>
-                      <CampoMoeda value={admSalario} onChange={(v) => setAdmSalario(v > 0 ? String(v) : "")}
-                        placeholder="Ex: 1.800,00" style={{ ...inputStyle, ...(missing(admSalario) ? inv : {}) }} />
-                    </Field>
-                  )}
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field label="Entrada" required>
-                      <input type="time" value={admHorarioEntrada} onChange={(e) => setAdmHorarioEntrada(e.target.value)}
-                        style={{ ...inputStyle, ...(missing(admHorarioEntrada) ? inv : {}) }} />
-                    </Field>
-                    <Field label="Saída" required>
-                      <input type="time" value={admHorarioSaida} onChange={(e) => setAdmHorarioSaida(e.target.value)}
-                        style={{ ...inputStyle, ...(missing(admHorarioSaida) ? inv : {}) }} />
-                    </Field>
-                  </div>
-                  <Field label="Turno" required>
-                    <select value={admTurnoSelecionado} onChange={(e) => setAdmTurnoSelecionado(e.target.value)}
-                      style={{ ...inputStyle, background: "#fff", cursor: "pointer", ...(missing(admTurnoSelecionado) ? inv : {}) }}>
-                      <option value="" disabled>Selecione...</option>
-                      {TURNO_OPCOES_MOT.map((t) => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </Field>
-                  {admTurnoSelecionado === "Outro" && (
-                    <Field label="Especifique o turno" required>
-                      <input value={admTurnoOutro} onChange={(e) => setAdmTurnoOutro(e.target.value)}
-                        placeholder="Ex: Turno E" style={{ ...inputStyle, ...(tentouEnviar && !admTurnoOutro.trim() ? inv : {}) }} />
-                    </Field>
-                  )}
-                  <Field label="Escala" required>
-                    <select value={admEscalaSelecionada} onChange={(e) => setAdmEscalaSelecionada(e.target.value)}
-                      style={{ ...inputStyle, background: "#fff", cursor: "pointer", ...(missing(admEscalaSelecionada) ? inv : {}) }}>
-                      <option value="" disabled>Selecione...</option>
-                      {ESCALA_OPCOES_MOT.map((es) => <option key={es} value={es}>{es}</option>)}
-                    </select>
-                  </Field>
-                  {admEscalaSelecionada === "Outro" && (
-                    <Field label="Especifique a escala" required>
-                      <input value={admEscalaOutro} onChange={(e) => setAdmEscalaOutro(e.target.value)}
-                        placeholder="Ex: 5x2" style={{ ...inputStyle, ...(tentouEnviar && !admEscalaOutro.trim() ? inv : {}) }} />
-                    </Field>
-                  )}
-                  <Field label="Tempo de Contrato" required>
-                    <input value={admTempoContrato} onChange={(e) => setAdmTempoContrato(e.target.value)}
-                      style={{ ...inputStyle, ...(missing(admTempoContrato) ? inv : {}) }} />
-                  </Field>
-                  <Field label="Vale Transporte?" required>
-                    <div className="flex gap-4 mt-1">
-                      {[true, false].map((v) => (
-                        <label key={String(v)} className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
-                          <input type="radio" name="vt" checked={admVt === v} onChange={() => setAdmVt(v)} className="accent-black" />
-                          {v ? "Sim" : "Não"}
-                        </label>
-                      ))}
-                    </div>
-                    {missing(admVt) && <p className="text-red-500 text-xs mt-1">Selecione uma opção.</p>}
-                  </Field>
-                  <Field label="Exame Admissional — Responsável" required>
-                    <input value={admExameResp} onChange={(e) => setAdmExameResp(e.target.value)}
-                      placeholder="Ex: Clínica MedTrab / RH do cliente" style={{ ...inputStyle, ...(missing(admExameResp) ? inv : {}) }} />
-                  </Field>
-                  <Field label="Local/Data/Hora da Integração">
-                    <div className="grid grid-cols-3 gap-2">
-                      <input value={admIntegracaoLocal} onChange={(e) => setAdmIntegracaoLocal(e.target.value)} placeholder="Ex: Portaria" style={inputStyle} />
-                      <input type="date" value={admIntegracaoData} onChange={(e) => setAdmIntegracaoData(e.target.value)} style={inputStyle} />
-                      <input type="time" value={admIntegracaoHora} onChange={(e) => setAdmIntegracaoHora(e.target.value)} style={inputStyle} />
-                    </div>
-                    <p className="text-[11px] text-gray-400 mt-1">Preencha os três campos, ou deixe todos em branco.</p>
-                  </Field>
-                  {MOSTRAR_DIA_TESTE_NO_PORTAL && (
-                    <Field label="Dia(s) de teste antes do início?" required>
-                      <CampoDiasTeste id="campo-dias-teste" valor={admDiasTeste} onChange={setAdmDiasTeste}
-                        mostrarErro={tentouEnviar} inputStyle={inputStyle} />
-                    </Field>
-                  )}
-                </>
-              )}
-
-              {isTerc && (
-                <>
-                  <Field label="Data de Início" required>
-                    <input type="date" value={admDataInicio} onChange={(e) => setAdmDataInicio(e.target.value)}
-                      style={{ ...inputStyle, ...(missing(admDataInicio) ? inv : {}) }} />
-                  </Field>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field label="Função" required>
-                      <input value={admFuncao} onChange={(e) => setAdmFuncao(e.target.value)}
-                        placeholder="Ex: Auxiliar de Limpeza" style={{ ...inputStyle, ...(missing(admFuncao) ? inv : {}) }} />
-                    </Field>
-                    <Field label="Setor" required>
-                      <input value={admSetor} onChange={(e) => setAdmSetor(e.target.value)}
-                        placeholder="Ex: Facilities" style={{ ...inputStyle, ...(missing(admSetor) ? inv : {}) }} />
-                    </Field>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field label="Centro de Custo" required>
-                      <input value={admCentroCusto} maxLength={CENTRO_CUSTO_MAX} onChange={(e) => setAdmCentroCusto(e.target.value.replace(/[^A-Za-z0-9._/-]/g, ""))}
-                        placeholder="Ex: CC-0042" style={{ ...inputStyle, ...(missing(admCentroCusto) ? inv : {}) }} />
-                    </Field>
-                    <Field label="Salário R$" required>
-                      <CampoMoeda value={admSalario} onChange={(v) => setAdmSalario(v > 0 ? String(v) : "")}
-                        placeholder="Ex: 1.800,00" style={{ ...inputStyle, ...(missing(admSalario) ? inv : {}) }} />
-                    </Field>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field label="Entrada" required>
-                      <input type="time" value={admHorarioEntrada} onChange={(e) => setAdmHorarioEntrada(e.target.value)}
-                        style={{ ...inputStyle, ...(missing(admHorarioEntrada) ? inv : {}) }} />
-                    </Field>
-                    <Field label="Saída" required>
-                      <input type="time" value={admHorarioSaida} onChange={(e) => setAdmHorarioSaida(e.target.value)}
-                        style={{ ...inputStyle, ...(missing(admHorarioSaida) ? inv : {}) }} />
-                    </Field>
-                  </div>
-                  <Field label="Turno" required>
-                    <select value={admTurnoSelecionado} onChange={(e) => setAdmTurnoSelecionado(e.target.value)}
-                      style={{ ...inputStyle, background: "#fff", cursor: "pointer", ...(missing(admTurnoSelecionado) ? inv : {}) }}>
-                      <option value="" disabled>Selecione...</option>
-                      {TURNO_OPCOES.map((t) => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </Field>
-                  {admTurnoSelecionado === "Outro" && (
-                    <Field label="Especifique o turno" required>
-                      <input value={admTurnoOutro} onChange={(e) => setAdmTurnoOutro(e.target.value)}
-                        placeholder="Ex: Turno E" style={{ ...inputStyle, ...(tentouEnviar && !admTurnoOutro.trim() ? inv : {}) }} />
-                    </Field>
-                  )}
-                  <Field label="Vale Transporte?" required>
-                    <div className="flex gap-4 mt-1">
-                      {[true, false].map((v) => (
-                        <label key={String(v)} className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
-                          <input type="radio" name="vt-terc" checked={admVt === v} onChange={() => setAdmVt(v)} className="accent-black" />
-                          {v ? "Sim" : "Não"}
-                        </label>
-                      ))}
-                    </div>
-                    {missing(admVt) && <p className="text-red-500 text-xs mt-1">Selecione uma opção.</p>}
-                  </Field>
-                  <Field label="Exame Admissional — Responsável" required>
-                    <input value={admExameResp} onChange={(e) => setAdmExameResp(e.target.value)}
-                      placeholder="Ex: Clínica MedTrab / RH do cliente" style={{ ...inputStyle, ...(missing(admExameResp) ? inv : {}) }} />
-                  </Field>
-                  <Field label="Local/Data/Hora da Integração">
-                    <div className="grid grid-cols-3 gap-2">
-                      <input value={admIntegracaoLocal} onChange={(e) => setAdmIntegracaoLocal(e.target.value)} placeholder="Ex: Portaria" style={inputStyle} />
-                      <input type="date" value={admIntegracaoData} onChange={(e) => setAdmIntegracaoData(e.target.value)} style={inputStyle} />
-                      <input type="time" value={admIntegracaoHora} onChange={(e) => setAdmIntegracaoHora(e.target.value)} style={inputStyle} />
-                    </div>
-                    <p className="text-[11px] text-gray-400 mt-1">Preencha os três campos, ou deixe todos em branco.</p>
-                  </Field>
-                  {MOSTRAR_DIA_TESTE_NO_PORTAL && (
-                    <Field label="Dia(s) de teste antes do início?" required>
-                      <CampoDiasTeste id="campo-dias-teste" valor={admDiasTeste} onChange={setAdmDiasTeste}
-                        mostrarErro={tentouEnviar} inputStyle={inputStyle} />
-                    </Field>
-                  )}
-                </>
-              )}
-
-              <Field label="Observações">
-                <textarea value={admObservacoes} onChange={(e) => setAdmObservacoes(e.target.value)}
-                  rows={2} placeholder="Observações adicionais..." style={{ ...inputStyle, resize: "vertical" }} />
-              </Field>
-            </div>
+            {tipoServico && (
+              <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-2">
+                  <span>📋</span> Dados para Admissão
+                </p>
+                <BlocoDadosAdmissao
+                  tipoServico={tipoServico}
+                  valores={dados}
+                  onChange={(patch) => setDados((d) => ({ ...d, ...patch }))}
+                  tentouEnviar={tentouEnviar}
+                  ocultarFuncao={semVaga}
+                  inputStyle={inputStyle}
+                />
+              </div>
             )}
           </>
         )}

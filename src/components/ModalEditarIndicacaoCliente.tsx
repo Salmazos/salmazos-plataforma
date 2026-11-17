@@ -2,16 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
-import CamposAdmissaoPadrao from "@/components/CamposAdmissaoPadrao";
-import { mensagemErrosAdmissao, validarCamposAdmissao, type CamposAdmissaoPadrao as DadosPadrao } from "@/lib/admissaoCamposPadrao";
+import BlocoDadosAdmissao from "@/components/BlocoDadosAdmissao";
+import { mensagemErrosAdmissao, validarCamposAdmissao } from "@/lib/admissaoCamposPadrao";
+import { faltandoObrigatorios, mexeNosDadosDeAdmissao } from "@/lib/admissaoObrigatorios";
+import { colunasDeDados, colunasVisiveis, comHorario, dadosDeColunas, dadosVazios, integracaoPreenchidaParcialmente } from "@/lib/admissaoForm";
 import CampoTelefone from "@/components/ui/CampoTelefone";
 import { MOSTRAR_DIA_TESTE_NO_PORTAL } from "@/lib/diaTestePortal";
-import CampoDiasTeste, { ESTADO_DIAS_TESTE_VAZIO, estadoDiasTesteDeValor, diasTesteParaEnvio, erroDiasTeste, type EstadoDiasTeste } from "@/components/CampoDiasTeste";
+import { diasTesteParaEnvio, erroDiasTeste } from "@/components/CampoDiasTeste";
 
 // Edição de uma indicação já enviada (portal > Minhas Indicações). Pré-preenche com o que foi enviado e
 // manda ao servidor SÓ os campos que mudaram; o servidor refaz o diff e revalida tudo (quem pode editar,
-// vaga, data). Salário, centro de custo, horário, turno, escala e tempo de contrato usam o padrão da plataforma
-// (CamposAdmissaoPadrao), os mesmos controles do formulário de criação; os demais continuam texto simples.
+// vaga, data). Os dados de admissão usam o MESMO bloco do formulário de criação (BlocoDadosAdmissao): mesmos controles, listas e máscaras.
 
 interface Detalhe {
   id: string;
@@ -62,7 +63,7 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
   const [inicial, setInicial] = useState<Detalhe | null>(null);
   const [form, setForm] = useState<Record<string, string | number | boolean | null>>({});
   const [vagas, setVagas] = useState<VagaAtiva[]>([]);
-  const [diasTeste, setDiasTeste] = useState<EstadoDiasTeste>(ESTADO_DIAS_TESTE_VAZIO);
+  const [dados, setDados] = useState(() => dadosVazios(null));
   const [diasTesteAlterado, setDiasTesteAlterado] = useState(false);
   const [tentouSalvar, setTentouSalvar] = useState(false);
   const [curriculo, setCurriculo] = useState<File | null>(null);
@@ -79,9 +80,9 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
         }
         const d = json.data as Detalhe;
         setInicial(d);
-        // Dia(s) de teste tem estado próprio (Não / Sim + quantidade); o resto do formulário continua escalar.
-        setForm({ vaga_id: d.vaga_id, ...Object.fromEntries(Object.entries(d).filter(([k]) => (k.startsWith("admissao_") && k !== "admissao_qtd_dias_teste") || k.startsWith("candidato_"))) });
-        setDiasTeste(estadoDiasTesteDeValor(d.admissao_qtd_dias_teste));
+        // `form` guarda só nome, telefone e vaga; os dados de admissão vivem no estado do bloco (`dados`).
+        setForm({ vaga_id: d.vaga_id, candidato_nome: d.candidato_nome, candidato_telefone: d.candidato_telefone });
+        setDados(dadosDeColunas(d, d.vaga_tipo_servico));
         if (d.pode_trocar_vaga) {
           const rv = await fetch("/api/portal/vagas-ativas");
           const jv = await rv.json();
@@ -97,7 +98,7 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
 
   const set = (campo: string, valor: string | number | boolean | null) => setForm((f) => ({ ...f, [campo]: valor }));
   const txt = (campo: string) => (form[campo] as string | null) ?? "";
-  const isRS = inicial?.vaga_tipo_servico === "recrutamento_selecao";
+  const tipo = inicial?.vaga_tipo_servico ?? null;
 
   const campoTexto = (campo: string, label: string) => (
     <Campo label={label}>
@@ -110,8 +111,9 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
     setErro("");
     // Só o que mudou. "" vira null (igual à criação); número 0 do campo de moeda vira null.
     const mudou: Record<string, string | number | boolean | null> = {};
+    const normalizar = (valor: unknown) => (typeof valor === "string" ? (valor.trim() === "" ? null : valor.trim()) : valor === 0 || valor === undefined ? null : (valor as string | number | boolean | null));
     for (const [campo, valor] of Object.entries(form)) {
-      const novo = typeof valor === "string" ? (valor.trim() === "" ? null : valor.trim()) : valor === 0 ? null : valor;
+      const novo = normalizar(valor);
       const antigo = campo === "vaga_id" ? inicial.vaga_id : (inicial[campo] ?? null);
       if (novo !== antigo) mudou[campo] = novo;
     }
@@ -119,16 +121,36 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
       setErro("Nome e telefone do candidato não podem ficar em branco.");
       return;
     }
+    // Dados de admissão: o bloco emite as mesmas colunas da criação; só as que o tipo mostra e que mudaram vão no corpo.
+    const colunas = colunasDeDados(dados, tipo);
+    for (const c of colunasVisiveis(tipo)) {
+      const novo = normalizar(colunas[c]);
+      const antigo = inicial[c] ?? null;
+      if (novo !== antigo) mudou[c] = novo;
+    }
     // Mesmas regras do servidor, antes de enviar. Só o que o cliente MUDOU é conferido: dado antigo intocado não trava o salvar.
-    const errosPadrao = validarCamposAdmissao(form as DadosPadrao).filter((e) => e.campo in mudou);
+    const errosPadrao = validarCamposAdmissao({
+      admissao_salario: colunas.admissao_salario as number | null, admissao_salario_hora: colunas.admissao_salario_hora as number | null,
+      admissao_centro_custo: colunas.admissao_centro_custo as string | null, admissao_horario: colunas.admissao_horario as string | null,
+      admissao_turno: colunas.admissao_turno as string | null, admissao_escala: colunas.admissao_escala as string | null,
+      admissao_tempo_contrato: colunas.admissao_tempo_contrato as string | null,
+    }).filter((e) => e.campo in mudou);
     if (errosPadrao.length > 0) { setErro(mensagemErrosAdmissao(errosPadrao)); return; }
+    if (comHorario(tipo) && integracaoPreenchidaParcialmente(dados)) { setErro("Preencha local, data e hora da integração, ou deixe os três em branco."); return; }
+    // Indicação SEM vaga: mexeu nos dados de admissão, precisa deixá-los completos para o tipo (mesma regra do servidor). Indicação antiga que
+    // só teve nome, telefone, currículo ou função editados segue sem exigência.
+    const semVagaMexeu = inicial.sem_vaga && mexeNosDadosDeAdmissao([...Object.keys(mudou), ...(diasTesteAlterado ? ["admissao_qtd_dias_teste"] : [])]);
+    if (semVagaMexeu) {
+      const falta = faltandoObrigatorios(tipo, colunas as Parameters<typeof faltandoObrigatorios>[1]);
+      if (falta.length > 0) { setErro(falta[0]); return; }
+    }
     // Dia(s) de teste: indicação antiga (null) segue editável sem responder — se o cliente não mexer, o campo NÃO vai no corpo
     // (null explícito é recusado em MOT/Terceirização). Mexeu, precisa estar completo; 0 ("Não") é resposta e vai como 0.
-    if (MOSTRAR_DIA_TESTE_NO_PORTAL && !isRS && diasTesteAlterado) {
+    if (MOSTRAR_DIA_TESTE_NO_PORTAL && comHorario(tipo) && (diasTesteAlterado || semVagaMexeu)) {
       setTentouSalvar(true);
-      const e = erroDiasTeste(diasTeste);
+      const e = erroDiasTeste(dados.dias_teste);
       if (e) { setErro(e); return; }
-      const novaQtd = diasTesteParaEnvio(diasTeste);
+      const novaQtd = diasTesteParaEnvio(dados.dias_teste);
       if (novaQtd !== (inicial.admissao_qtd_dias_teste ?? null)) mudou.admissao_qtd_dias_teste = novaQtd;
     }
 
@@ -214,51 +236,17 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
               </div>
             </Campo>
 
-            <CamposAdmissaoPadrao
-              tipoServico={inicial.vaga_tipo_servico}
-              valores={form as DadosPadrao}
-              onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
-              inputClassName="w-full text-sm border border-gray-300 rounded-lg px-3 py-2"
-              labelClassName="text-[11px] font-bold text-gray-500 uppercase tracking-wide"
+            <BlocoDadosAdmissao
+              tipoServico={tipo}
+              valores={dados}
+              onChange={(patch) => {
+                setDados((d) => ({ ...d, ...patch }));
+                if (patch.dias_teste) setDiasTesteAlterado(true);
+              }}
+              tentouEnviar={tentouSalvar}
+              dataMinima={hojeBrasilia()}
+              inputStyle={inputStyle}
             />
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Campo label="Data de início">
-                <input type="date" min={hojeBrasilia()} value={txt("admissao_data_inicio")} onChange={(e) => set("admissao_data_inicio", e.target.value)} style={inputStyle} />
-              </Campo>
-              {campoTexto("admissao_funcao", isRS ? "Função confirmada" : "Função")}
-              {!isRS && campoTexto("admissao_setor", "Setor")}
-              {!isRS && campoTexto("admissao_gestor", "Gestor")}
-              {!isRS && campoTexto("admissao_periodo_experiencia", "Período de experiência")}
-              {!isRS && (
-                <Campo label="Vale transporte">
-                  <select
-                    value={form.admissao_vt === true ? "sim" : form.admissao_vt === false ? "nao" : ""}
-                    onChange={(e) => set("admissao_vt", e.target.value === "" ? null : e.target.value === "sim")}
-                    style={inputStyle}
-                  >
-                    <option value="">Não informado</option>
-                    <option value="sim">Sim</option>
-                    <option value="nao">Não</option>
-                  </select>
-                </Campo>
-              )}
-              {!isRS && campoTexto("admissao_exame_responsavel", "Responsável pelo exame admissional")}
-              {!isRS && campoTexto("admissao_local_integracao", "Local e data da integração")}
-              {MOSTRAR_DIA_TESTE_NO_PORTAL && !isRS && (
-                <Campo label="Dia(s) de teste antes do início? *">
-                  <CampoDiasTeste
-                    id="campo-dias-teste" valor={diasTeste} inputStyle={inputStyle}
-                    onChange={(novo) => { setDiasTeste(novo); setDiasTesteAlterado(true); }}
-                    mostrarErro={tentouSalvar && diasTesteAlterado}
-                  />
-                </Campo>
-              )}
-            </div>
-
-            <Campo label="Observações">
-              <textarea value={txt("admissao_observacoes")} onChange={(e) => set("admissao_observacoes", e.target.value)} rows={3} style={inputStyle} />
-            </Campo>
 
             {erro && <p className="text-sm text-red-600">{erro}</p>}
 

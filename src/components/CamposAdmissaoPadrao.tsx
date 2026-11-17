@@ -21,6 +21,8 @@ interface Props {
   onChange: (patch: CamposAdmissaoPadrao) => void;
   inputClassName?: string;
   labelClassName?: string;
+  // Campos obrigatórios no contexto de quem usa: só marca o rótulo com " *" (a validação continua em quem usa). Omitido = nenhum asterisco.
+  obrigatorios?: readonly (keyof CamposAdmissaoPadrao)[];
 }
 
 const INPUT_PADRAO = "w-full text-xs border border-gray-300 rounded-md px-2 py-1.5";
@@ -42,7 +44,8 @@ function estadoInicialLista(valor: string | null | undefined, lista: string[], v
   return { sel: "", outro: "", foraDoPadrao: true };
 }
 
-export default function CamposAdmissaoPadrao({ tipoServico, valores, onChange, inputClassName = INPUT_PADRAO, labelClassName = LABEL_PADRAO }: Props) {
+export default function CamposAdmissaoPadrao({ tipoServico, valores, onChange, inputClassName = INPUT_PADRAO, labelClassName = LABEL_PADRAO, obrigatorios = [] }: Props) {
+  const ast = (campo: keyof CamposAdmissaoPadrao) => (obrigatorios.includes(campo) ? " *" : "");
   const mot = tipoServico === MOT;
   const terc = tipoServico === TERC;
   const comHorario = mot || terc;
@@ -90,7 +93,7 @@ export default function CamposAdmissaoPadrao({ tipoServico, valores, onChange, i
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
       {comHorario && (
-        <label className={labelClassName}>Centro de custo
+        <label className={labelClassName}>Centro de custo{ast("admissao_centro_custo")}
           <input
             value={valores.admissao_centro_custo ?? ""}
             maxLength={CENTRO_CUSTO_MAX}
@@ -111,7 +114,7 @@ export default function CamposAdmissaoPadrao({ tipoServico, valores, onChange, i
                   type="radio" name="tipo-salario" checked={tipoSalario === t}
                   onChange={() => { setTipoSalario(t); onChange(t === "horista" ? { admissao_salario: null } : { admissao_salario_hora: null }); }}
                 />
-                {t === "horista" ? "Salário por hora" : "Salário mensal"}
+                {t === "horista" ? "Salário por hora" : "Salário mensal"}{tipoSalario === t ? ast("admissao_salario") : ""}
               </label>
             ))}
           </div>
@@ -120,7 +123,7 @@ export default function CamposAdmissaoPadrao({ tipoServico, valores, onChange, i
             : <>{moeda(valores.admissao_salario, (n) => onChange({ admissao_salario: n }), "Ex.: 2.000,00")}{erroP("admissao_salario")}</>}
         </div>
       ) : (
-        <div className={labelClassName}>Salário mensal
+        <div className={labelClassName}>Salário mensal{ast("admissao_salario")}
           {moeda(valores.admissao_salario, (n) => onChange({ admissao_salario: n }), "Ex.: 2.000,00")}
           {erroP("admissao_salario")}
         </div>
@@ -128,13 +131,13 @@ export default function CamposAdmissaoPadrao({ tipoServico, valores, onChange, i
 
       {comHorario && (
         <>
-          <label className={labelClassName}>Horário de entrada
+          <label className={labelClassName}>Horário de entrada{ast("admissao_horario")}
             <input type="time" value={entrada} onChange={(e) => { setEntrada(e.target.value); emitirHorario(turno.sel, turno.outro, e.target.value, saida); }} className={inputClassName} />
           </label>
-          <label className={labelClassName}>Horário de saída
+          <label className={labelClassName}>Horário de saída{ast("admissao_horario")}
             <input type="time" value={saida} onChange={(e) => { setSaida(e.target.value); emitirHorario(turno.sel, turno.outro, entrada, e.target.value); }} className={inputClassName} />
           </label>
-          <label className={labelClassName}>Turno
+          <label className={labelClassName}>Turno{ast("admissao_turno")}
             <select
               value={turno.sel}
               onChange={(e) => { const t = { ...turno, sel: e.target.value, foraDoPadrao: false }; setTurno(t); emitirHorario(t.sel, t.outro, entrada, saida); }}
@@ -167,7 +170,7 @@ export default function CamposAdmissaoPadrao({ tipoServico, valores, onChange, i
 
       {mot && (
         <>
-          <label className={labelClassName}>Escala
+          <label className={labelClassName}>Escala{ast("admissao_escala")}
             <select
               value={escala.sel}
               onChange={(e) => { const s = { ...escala, sel: e.target.value, foraDoPadrao: false }; setEscala(s); onChange({ admissao_escala: (s.sel === OPCAO_OUTRO ? s.outro.trim() : s.sel) || null }); }}
@@ -189,7 +192,7 @@ export default function CamposAdmissaoPadrao({ tipoServico, valores, onChange, i
             </label>
           )}
 
-          <div className={labelClassName}>Tempo de contrato
+          <div className={labelClassName}>Tempo de contrato{ast("admissao_tempo_contrato")}
             <select
               value={tempoSel}
               onChange={(e) => { const v = e.target.value as "" | "padrao" | "outro"; setTempoSel(v); emitirTempo(v, dias, prorrogacao); }}

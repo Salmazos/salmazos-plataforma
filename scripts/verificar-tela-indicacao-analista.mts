@@ -38,7 +38,12 @@ const MOT = "mao_obra_temporaria", TERC = "terceirizacao", RS = "recrutamento_se
 // Indicação sem vaga criada pela rota real do portal; o memdb não aplica DEFAULTs do banco, então simula status/datas.
 const db = novoDbIndicacao();
 logar(db, "dir"); logarPortal(db, "cli");
-const criada = await chamar(R.criar.POST, { metodo: "POST", corpo: { vaga_id: null, tipo_servico: MOT, candidato_nome: "Beatriz Lima", candidato_telefone: "(19) 97777-1111", admissao_funcao: "Auxiliar" } });
+const criada = await chamar(R.criar.POST, { metodo: "POST", corpo: {
+  vaga_id: null, tipo_servico: MOT, candidato_nome: "Beatriz Lima", candidato_telefone: "(19) 97777-1111", admissao_funcao: "Auxiliar",
+  // Mesmo bloco "Dados para Admissão" da indicação com vaga (exigido no servidor para MOT sem vaga).
+  admissao_data_inicio: "2026-11-02", admissao_setor: "Produção", admissao_centro_custo: "CC-0042", admissao_salario_hora: 18.5, admissao_horario: "Turno A, 08h00 às 17h00",
+  admissao_turno: "Turno A", admissao_escala: "6x1", admissao_tempo_contrato: "180 dias, prorrogável por mais 90 dias", admissao_vt: true, admissao_exame_responsavel: "Clínica", admissao_qtd_dias_teste: 0,
+} });
 assert.equal(criada.status, 201);
 const nova = db.tabelas.solicitacoes_indicacao_candidato.at(-1);
 nova.status ??= "pendente"; nova.created_at ??= "2026-10-07T12:00:00Z"; nova.updated_at ??= nova.created_at;

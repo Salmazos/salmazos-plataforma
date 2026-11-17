@@ -1,7 +1,7 @@
 // Indicação direta de candidato SEM vaga (Portal do Cliente): o cliente indica mesmo sem vaga aberta ("A Salmazos direciona"); o analista
 // direciona para uma vaga existente ou cria a vaga a partir da indicação, e a aprovação segue o fluxo de sempre. Rotas reais contra o banco
 // em memória do harness; nada toca produção.
-// Rodar: node --no-warnings --import ./scripts/harness-mot/register.mjs scripts/verificar-indicacao-sem-vaga.mts
+// Rodar: HARNESS_COMPONENTES_REAIS=1 node --no-warnings --import ./scripts/harness-mot/register.mjs scripts/verificar-indicacao-sem-vaga.mts (o env carrega os componentes de verdade para o teste do bloco)
 import assert from "node:assert/strict";
 import fs from "node:fs";
 // @ts-expect-error módulo .mjs do harness, sem tipos
@@ -12,6 +12,7 @@ import {
   MSG_SEM_VAGA_APROVAR, MSG_SEM_VAGA_INDISPONIVEL, avisoTaxaVagaCriada, dadosVagaDaIndicacao, ehErroSemVagaIndisponivel,
   indicacoesPendentesComMesmoTelefone, validarDirecionamento,
 } from "../src/lib/indicacaoSemVaga";
+import { TEMPO_CONTRATO_PADRAO } from "../src/lib/constants";
 
 congelarData();
 const R = {
@@ -41,7 +42,24 @@ function cenario() {
   db.tabelas.comissao_lancamentos = [];
   return db;
 }
-const SEM_VAGA = { vaga_id: null, tipo_servico: MOT, candidato_nome: "Beatriz Lima", candidato_telefone: "(19) 97777-1111", admissao_funcao: "Auxiliar de produção" };
+// Indicação SEM vaga agora traz o MESMO bloco "Dados para Admissão" do tipo escolhido (módulo admissaoObrigatorios.ts, exigido no servidor).
+const BLOCO: Record<string, Record<string, unknown>> = {
+  [RS]: { admissao_data_inicio: "2026-11-02", admissao_salario: 3500 },
+  [MOT]: {
+    admissao_data_inicio: "2026-11-02", admissao_setor: "Produção", admissao_centro_custo: "CC-0042", admissao_salario_hora: 18.5, admissao_horario: "Turno A, 08h00 às 17h00",
+    admissao_turno: "Turno A", admissao_escala: "6x1", admissao_tempo_contrato: TEMPO_CONTRATO_PADRAO, admissao_vt: true, admissao_exame_responsavel: "Clínica MedTrab", admissao_qtd_dias_teste: 0,
+  },
+  [TERC]: {
+    admissao_data_inicio: "2026-11-02", admissao_setor: "Facilities", admissao_centro_custo: "CC-0042", admissao_salario: 1800, admissao_horario: "Turno B, 08h00 às 17h00",
+    admissao_turno: "Turno B", admissao_vt: false, admissao_exame_responsavel: "RH do cliente", admissao_qtd_dias_teste: 1,
+  },
+};
+const semVagaDe = (tipo: string, extra: Record<string, unknown> = {}) => ({
+  vaga_id: null, tipo_servico: tipo, candidato_nome: "Beatriz Lima", candidato_telefone: "(19) 97777-1111", admissao_funcao: "Auxiliar de produção", ...BLOCO[tipo], ...extra,
+});
+const SEM_VAGA = semVagaDe(MOT);
+// Indicação ANTIGA (criada quando o sem vaga só pedia o mínimo): só tipo, função, nome e telefone. Simula apagando o bloco da linha recém-criada.
+const COLUNAS_BLOCO = ["admissao_data_inicio", "admissao_salario", "admissao_salario_hora", "admissao_setor", "admissao_centro_custo", "admissao_horario", "admissao_turno", "admissao_escala", "admissao_tempo_contrato", "admissao_vt", "admissao_exame_responsavel", "admissao_qtd_dias_teste", "admissao_local_integracao"];
 const COM_VAGA = { vaga_id: ID.V_MOT_A, candidato_nome: "Carla Dias", candidato_telefone: "(19) 96666-2222", admissao_funcao: "Operador", admissao_qtd_dias_teste: 0 };
 // O memdb não aplica os DEFAULT do banco: simula status 'pendente' e created_at/updated_at (como o Postgres faria) na linha recém-criada.
 const indicar = async (db: any, corpo: Record<string, unknown>, quem = "cli") => {
@@ -50,6 +68,12 @@ const indicar = async (db: any, corpo: Record<string, unknown>, quem = "cli") =>
   const r = await chamar(R.criar.POST, { metodo: "POST", corpo });
   const nova = linhas(db, "solicitacoes_indicacao_candidato")[antes];
   if (r.status === 201 && nova) { nova.status ??= "pendente"; nova.created_at ??= "2026-10-07T12:00:00.000+00:00"; nova.updated_at ??= nova.created_at; }
+  return r;
+};
+const indicarAntiga = async (db: any, corpo: Record<string, unknown> = SEM_VAGA) => {
+  const r = await indicar(db, corpo);
+  const nova = ultima(db);
+  for (const c of COLUNAS_BLOCO) nova[c] = null;
   return r;
 };
 const ultima = (db: any) => linhas(db, "solicitacoes_indicacao_candidato").at(-1);
@@ -69,7 +93,7 @@ await ok("regra pura: direcionar exige mesmo cliente, vaga aberta, mesmo tipo e 
   }
   assert.equal(validarDirecionamento({ ...s, status: "aprovada" }, v), "Esta indicação já foi decidida.");
   assert.match(validarDirecionamento({ ...s, vaga_id: "x" }, v) ?? "", /já tem vaga/);
-  const d = dadosVagaDaIndicacao({ titulo: "  Auxiliar ", tipoServico: MOT, clienteId: "C1", clienteNome: "Cliente Um", unidadeId: "U1", responsavel: "Olver", candidatoNome: "Bia", cidade: "Monte Mor" });
+  const d = dadosVagaDaIndicacao({ titulo: "  Auxiliar ", tipoServico: MOT, clienteId: "C1", clienteNome: "Cliente Um", unidadeId: "U1", responsavel: "Olver", cidade: "Monte Mor" });
   assert.deepEqual([d.titulo, d.status, d.num_posicoes, d.num_posicoes_abertas, d.visivel_publicamente, d.responsavel, d.unidade_id], ["Auxiliar", "aberta", 1, 1, false, "Olver", "U1"]);
   assert.equal(avisoTaxaVagaCriada(RS) !== null && avisoTaxaVagaCriada(MOT) === null && avisoTaxaVagaCriada(TERC) === null, true);
   assert.deepEqual(indicacoesPendentesComMesmoTelefone([{ id: "a", candidato_telefone: "(19) 98765-4321" }, { id: "b", candidato_telefone: "11 90000-0000" }], "19987654321"), ["a"]);
@@ -97,7 +121,9 @@ await ok("SEM vaga é aceita (mesmo com vagas abertas): vaga_id nulo, tipo e fla
   assert.equal(r.status, 201, JSON.stringify(r.corpo));
   const s = ultima(db);
   assert.deepEqual([s.vaga_id, s.tipo_servico, s.sem_vaga_origem, s.status, s.cliente_id, s.unidade_id, s.admissao_funcao], [null, MOT, true, "pendente", "C1", "U1", "Auxiliar de produção"]);
-  assert.equal(["admissao_salario", "admissao_horario", "admissao_data_inicio", "admissao_qtd_dias_teste"].every((c) => s[c] == null), true, "o resto fica nulo para o analista completar");
+  // O bloco "Dados para Admissão" é o mesmo da indicação com vaga: tudo que o cliente informou fica gravado (não fica mais para o analista completar).
+  assert.deepEqual([s.admissao_salario_hora, s.admissao_horario, s.admissao_data_inicio, s.admissao_qtd_dias_teste, s.admissao_tempo_contrato, s.admissao_turno, s.admissao_escala],
+    [18.5, "Turno A, 08h00 às 17h00", "2026-11-02", 0, TEMPO_CONTRATO_PADRAO, "Turno A", "6x1"]);
   assert.equal(nadaDerivado(db), true, "sem candidatura, encaminhamento, admissão, cobrança nem comissão");
   assert.equal(linhas(db, "candidatos").length, 2, "nenhum candidato criado");
   assert.equal(["cobrancas_rs", "comissao_lancamentos"].some((t) => tocouTabela(db, t)), false);
@@ -107,7 +133,7 @@ await ok("SEM vaga é aceita (mesmo com vagas abertas): vaga_id nulo, tipo e fla
   assert.ok(emailsPara(db).some((e: any) => /sem vaga/.test(e.subject)));
 });
 
-await ok("SEM vaga: só o mínimo vale (tipo e cargo obrigatórios; tipo inválido recusado); corpo com dados de admissão não é exigido", async () => {
+await ok("SEM vaga: tipo e cargo continuam obrigatórios (tipo inválido recusado); vaga_id ausente = sem vaga; observações são gravadas", async () => {
   const db = cenario();
   assert.equal((await indicar(db, { ...SEM_VAGA, tipo_servico: undefined })).status, 400);
   assert.equal((await indicar(db, { ...SEM_VAGA, admissao_funcao: "  " })).status, 400);
@@ -181,8 +207,10 @@ await ok("cliente edita a indicação sem vaga (função, dados de admissão) se
   assert.equal(troca.status, 400);
   assert.match(troca.corpo.error, /aguardando direcionamento/);
   assert.equal(sol(db, id).vaga_id, null);
+  // Agora o tipo vem da indicação: em MOT/Terceirização o cliente não pode APAGAR a resposta de dias de teste, nem sem vaga (como com vaga).
   const semDias = await chamar(R.minhasId.PATCH, { metodo: "PATCH", params: { id }, corpo: { admissao_qtd_dias_teste: null } });
-  assert.equal(semDias.status, 200, "sem vaga não há regra de dias de teste a conferir");
+  assert.equal(semDias.status, 400, JSON.stringify(semDias.corpo));
+  assert.equal(sol(db, id).admissao_qtd_dias_teste, 0, "a resposta anterior continua");
 });
 
 await ok("APROVAR sem vaga é BLOQUEADO com mensagem própria (nada é criado, segue pendente); RECUSAR sem vaga sempre funciona", async () => {
@@ -207,7 +235,7 @@ await ok("vagas elegíveis: só do mesmo cliente, abertas, mesmo tipo e mesma un
   const r = await chamar(R.elegiveis.GET, { params: { id } });
   assert.equal(r.status, 200);
   assert.deepEqual(r.corpo.data.map((v: any) => v.id).sort(), [ID.V_MOT_A, ID.V_MOT_B].sort(), "fora: outro cliente, R&S, outra unidade, fechada");
-  await indicar(db, { ...SEM_VAGA, tipo_servico: RS });
+  await indicar(db, semVagaDe(RS));
   assert.deepEqual((await chamar(R.elegiveis.GET, { params: { id: ultima(db).id } })).corpo.data.map((v: any) => v.id), [ID.V_RS]);
   logar(db, "sup2");
   assert.equal((await chamar(R.elegiveis.GET, { params: { id } })).status, 404);
@@ -242,9 +270,9 @@ await ok("DIRECIONAR: liga à vaga existente (quem, quando, como), segue pendent
   assert.equal((await direcionar(db, id, ID.V_MOT_A)).status, 409, "decidida não direciona");
 });
 
-await ok("depois de direcionada, o fluxo é o NORMAL: analista completa os dados (422 antes), aprova e vira candidato + candidatura + contratação + admissão", async () => {
+await ok("INDICAÇÃO ANTIGA (só o mínimo): depois de direcionada, o fluxo é o NORMAL: analista completa os dados (422 antes), aprova e vira candidato + candidatura + contratação + admissão", async () => {
   const db = cenario();
-  await indicar(db, SEM_VAGA);
+  await indicarAntiga(db);
   const id = ultima(db).id;
   await direcionar(db, id, ID.V_MOT_A);
   const incompleta = await decidir(db, id, { acao: "aprovar", data_fim: FIM_90 });
@@ -296,7 +324,7 @@ await ok("CRIAR VAGA: vaga PRIVADA, aberta, 1 posição, responsável = analista
 
 await ok("CRIAR VAGA: título pode ser trocado; R&S avisa da taxa; campos sensíveis NUNCA vêm do corpo (visibilidade, status, cliente, tipo) — corpo extra é recusado", async () => {
   const db = cenario();
-  await indicar(db, { ...SEM_VAGA, tipo_servico: RS });
+  await indicar(db, semVagaDe(RS));
   const id = ultima(db).id;
   for (const extra of [{ visivel_publicamente: true }, { status: "fechada" }, { cliente_id: "C2" }, { tipo_servico: MOT }, { num_posicoes: 5 }]) {
     const r = await criarVaga(db, id, { titulo: "X", ...extra });
@@ -411,7 +439,7 @@ await ok("PROTEÇÃO migração ausente: sem vaga devolve 503 claro (23502/42703
   assert.equal(comVaga.status, 201, "caminho com vaga segue igual");
 });
 
-await ok("fiação das telas: formulário do portal (opção sempre disponível, mínimo, aviso), Minhas Indicações, modal do analista, badge do painel", () => {
+await ok("fiação das telas: formulário do portal (opção sempre disponível, tipo e cargo, aviso), Minhas Indicações, modal do analista, badge do painel", () => {
   const form = fs.readFileSync("src/app/portal/(app)/indicar-candidato/page.tsx", "utf8");
   for (const t of ["A Salmazos direciona (sem vaga)", "SEM_VAGA", "Tipo de serviço", "Cargo / função do candidato", "Isto não cria vaga nem garante a contratação", "aviso_duplicada", "if ((json.data ?? []).length === 0) setVagaId(SEM_VAGA)"]) assert.ok(form.includes(t), t);
   assert.equal(form.includes("Solicite uma vaga primeiro"), false, "o beco sem saída antigo some");
@@ -427,5 +455,219 @@ await ok("fiação das telas: formulário do portal (opção sempre disponível,
   for (const t of ["Direcionar para vaga existente", "Criar vaga a partir da indicação", "Completar dados", "privada"]) assert.ok(acoes.includes(t), t);
   assert.ok(fs.readFileSync("src/components/VagasPageClient.tsx", "utf8").includes("sem vaga"));
 });
+
+// ════════════ Bloco "Dados para Admissão" único: mesmos campos, listas, máscaras e validações com e sem vaga ════════════
+const msgs = (r: any) => String(r.corpo?.error ?? "");
+const COMPLETOS: [string, string][] = [[RS, "R&S"], [MOT, "MOT"], [TERC, "Terceirização"]];
+
+await ok("SEM vaga COMPLETO por tipo (R&S, MOT, Terceirização): 201 e o bloco inteiro gravado, igual ao que a indicação com vaga grava", async () => {
+  for (const [tipo] of COMPLETOS) {
+    const db = cenario();
+    const r = await indicar(db, semVagaDe(tipo));
+    assert.equal(r.status, 201, `${tipo}: ${JSON.stringify(r.corpo)}`);
+    const s = ultima(db);
+    for (const [campo, valor] of Object.entries(BLOCO[tipo])) assert.deepEqual(s[campo] ?? null, tipo === RS && campo === "admissao_qtd_dias_teste" ? null : valor, `${tipo} ${campo}`);
+    assert.equal(s.vaga_id, null); assert.equal(s.tipo_servico, tipo); assert.equal(nadaDerivado(db), true);
+  }
+});
+
+await ok("SEM vaga FALTANDO obrigatório do tipo = 400 com a mensagem do campo (uma por uma, as mesmas da tela)", async () => {
+  const casos: [string, string, string][] = [
+    [RS, "admissao_data_inicio", "Informe a data de início."], [RS, "admissao_salario", "Informe o salário acordado."],
+    [MOT, "admissao_setor", "Informe o setor."], [MOT, "admissao_centro_custo", "Informe o centro de custo."], [MOT, "admissao_turno", "Selecione o turno."],
+    [MOT, "admissao_horario", "Informe o horário de entrada e saída."], [MOT, "admissao_escala", "Selecione a escala."], [MOT, "admissao_tempo_contrato", "Informe o tempo de contrato."],
+    [MOT, "admissao_vt", "Informe se utiliza Vale Transporte."], [MOT, "admissao_exame_responsavel", "Informe o responsável pelo exame admissional."], [MOT, "admissao_data_inicio", "Informe a data de início."],
+    [TERC, "admissao_salario", "Informe o salário."], [TERC, "admissao_centro_custo", "Informe o centro de custo."], [TERC, "admissao_vt", "Informe se utiliza Vale Transporte."],
+    [TERC, "admissao_exame_responsavel", "Informe o responsável pelo exame admissional."],
+  ];
+  for (const [tipo, campo, mensagem] of casos) {
+    const db = cenario();
+    const antes = linhas(db, "solicitacoes_indicacao_candidato").length;
+    const r = await indicar(db, semVagaDe(tipo, { [campo]: undefined }));
+    assert.equal(r.status, 400, `${tipo}/${campo}: ${JSON.stringify(r.corpo)}`);
+    assert.ok(msgs(r).includes(mensagem), `${tipo}/${campo}: ${msgs(r)}`);
+    assert.equal(linhas(db, "solicitacoes_indicacao_candidato").length, antes, "nada gravado");
+  }
+  const db = cenario();
+  assert.equal((await indicar(db, semVagaDe(MOT, { admissao_salario_hora: undefined }))).status, 400, "MOT sem nenhum salário");
+  assert.equal((await indicar(db, semVagaDe(MOT, { admissao_salario_hora: undefined, admissao_salario: 1800 }))).status, 201, "MOT mensalista também vale");
+});
+
+await ok("SEM vaga com formato FORA DO PADRÃO = 400 (as mesmas regras de sempre: centro de custo, tempo, turno, escala, horário, salário)", async () => {
+  for (const extra of [
+    { admissao_centro_custo: "CC 42" }, { admissao_tempo_contrato: "6 meses" }, { admissao_turno: "noite", admissao_horario: "noite, 08h00 às 17h00" }, { admissao_escala: "5 por 2" },
+    { admissao_horario: "das 8 às 17" }, { admissao_salario_hora: 5000 }, { admissao_horario: "Turno B, 08h00 às 17h00" } /* não confere com o turno A */,
+  ]) {
+    const db = cenario();
+    const r = await indicar(db, semVagaDe(MOT, extra));
+    assert.equal(r.status, 400, JSON.stringify(extra) + JSON.stringify(r.corpo));
+  }
+  const db = cenario();
+  assert.equal((await indicar(db, semVagaDe(MOT, { admissao_escala: "5x2", admissao_tempo_contrato: "120 dias, prorrogável por mais 60 dias" }))).status, 201, "'Outro' no formato NxM e prazo dentro dos limites valem");
+});
+
+await ok("DIAS DE TESTE sem vaga usam o TIPO DA INDICAÇÃO: MOT/Terceirização exigem resposta (0 vale), R&S ignora e grava nulo", async () => {
+  for (const tipo of [MOT, TERC]) {
+    const db = cenario();
+    const r = await indicar(db, semVagaDe(tipo, { admissao_qtd_dias_teste: undefined }));
+    assert.equal(r.status, 400); assert.match(msgs(r), /dia\(s\) de teste/);
+    assert.equal((await indicar(db, semVagaDe(tipo, { admissao_qtd_dias_teste: 0 }))).status, 201, "0 = 'não houve' é resposta");
+    assert.equal(ultima(db).admissao_qtd_dias_teste, 0);
+  }
+  const db = cenario();
+  assert.equal((await indicar(db, semVagaDe(RS, { admissao_qtd_dias_teste: 2 }))).status, 201);
+  assert.equal(ultima(db).admissao_qtd_dias_teste, null, "R&S não tem dia de teste");
+});
+
+await ok("COM vaga NÃO foi endurecida: o corpo mínimo de sempre continua 201 (a exigência por tipo é só tela + sem vaga)", async () => {
+  const db = cenario();
+  const r = await indicar(db, COM_VAGA);
+  assert.equal(r.status, 201, JSON.stringify(r.corpo));
+  assert.equal(ultima(db).vaga_id, ID.V_MOT_A);
+  assert.equal((await indicar(db, { ...COM_VAGA, admissao_qtd_dias_teste: undefined })).status, 400, "dias de teste com vaga seguem exigidos, como antes");
+});
+
+await ok("EDIÇÃO do cliente (sem vaga completa): campo editado vale; APAGAR obrigatório = 400; indicação ANTIGA só com função segue editável sem exigência", async () => {
+  const db = cenario();
+  await indicar(db, SEM_VAGA);
+  const id = ultima(db).id;
+  logar(db, "dir"); logarPortal(db, "cli");
+  const edita = (alvo: string, corpo: Record<string, unknown>) => chamar(R.minhasId.PATCH, { metodo: "PATCH", params: { id: alvo }, corpo });
+  assert.equal((await edita(id, { admissao_setor: "Expedição" })).status, 200);
+  const apaga = await edita(id, { admissao_centro_custo: null });
+  assert.equal(apaga.status, 400, JSON.stringify(apaga.corpo)); assert.match(msgs(apaga), /centro de custo/);
+  assert.equal(sol(db, id).admissao_centro_custo, "CC-0042", "nada gravado");
+  assert.equal((await edita(id, { admissao_centro_custo: "CC 1" })).status, 400, "formato continua valendo");
+  const antiga = cenario();
+  await indicarAntiga(antiga);
+  const idAntiga = ultima(antiga).id;
+  logar(antiga, "dir"); logarPortal(antiga, "cli");
+  assert.equal((await edita(idAntiga, { candidato_nome: "Beatriz L. Lima", admissao_funcao: "Auxiliar de logística", admissao_observacoes: "Ajuste" })).status, 200, "nome, função e observações: sem exigência");
+  const mexeu = await edita(idAntiga, { admissao_setor: "Expedição" });
+  assert.equal(mexeu.status, 400, JSON.stringify(mexeu.corpo)); assert.match(msgs(mexeu), /data de início/);
+  const completa = await edita(idAntiga, { ...BLOCO[MOT], admissao_setor: "Expedição" });
+  assert.equal(completa.status, 200, JSON.stringify(completa.corpo));
+  assert.equal(sol(antiga, idAntiga).admissao_setor, "Expedição");
+});
+
+await ok("INDICAÇÃO ANTIGA (só o mínimo) continua funcionando: aparece na fila do analista, segue sem vaga, aprovar = 409, recusar funciona", async () => {
+  const db = cenario();
+  await indicarAntiga(db);
+  const id = ultima(db).id;
+  logar(db, "dir");
+  const lista = await chamar(R.analistaLista.GET, { url: "http://t/api?status=pendente" });
+  const it = lista.corpo.data.find((x: any) => x.id === id);
+  assert.ok(it && it.vaga_id === null && it.admissao_salario === null);
+  const r = await decidir(db, id, { acao: "aprovar", data_fim: FIM_90 });
+  assert.deepEqual([r.status, r.corpo.codigo], [409, "sem_vaga"]);
+  assert.equal(sol(db, id).status, "pendente"); assert.equal(nadaDerivado(db), true);
+  assert.equal((await decidir(db, id, { acao: "recusar", motivo: "Sem perfil" })).status, 200);
+});
+
+await ok("APROVAR sem vaga COMPLETA continua 409 (nada criado); depois de direcionar, aprova direto com os dados que o cliente já informou", async () => {
+  const db = cenario();
+  await indicar(db, SEM_VAGA);
+  const id = ultima(db).id;
+  const r = await decidir(db, id, { acao: "aprovar", data_fim: FIM_90 });
+  assert.deepEqual([r.status, r.corpo.codigo], [409, "sem_vaga"]);
+  assert.equal(nadaDerivado(db), true);
+  assert.equal((await direcionar(db, id, ID.V_MOT_A)).status, 200);
+  const ok1 = await decidir(db, id, { acao: "aprovar", data_fim: FIM_90 });
+  assert.equal(ok1.status, 200, JSON.stringify(ok1.corpo));
+  assert.deepEqual([ok1.corpo.contratado, ok1.corpo.admissao_criada], [true, true]);
+});
+
+await ok("CRIAR VAGA PRÉ-PREENCHIDA: salário (formato do parseSalarioFixo) e horário da indicação (setor fica de fora); tipo, status, visibilidade, posições e responsável seguem fixados; antiga gera vaga como antes", async () => {
+  const { parseSalarioFixo } = await import("../src/lib/constants");
+  for (const [tipo, esperadoSalario, esperadoNumero] of [[TERC, "R$ 1.800,00", 1800], [RS, "R$ 3.500,00", 3500]] as const) {
+    const db = cenario();
+    await indicar(db, semVagaDe(tipo, tipo === TERC ? { admissao_setor: "Facilities" } : { admissao_setor: "Administrativo" }));
+    const r = await criarVaga(db, ultima(db).id);
+    assert.equal(r.status, 200, JSON.stringify(r.corpo));
+    const vaga = linhas(db, "vagas").find((v: any) => v.id === r.corpo.vaga.id);
+    assert.equal(vaga.salario, esperadoSalario); assert.equal(parseSalarioFixo(vaga.salario), esperadoNumero, "o parser do sistema lê de volta o mesmo valor");
+    assert.equal(vaga.horario ?? null, tipo === TERC ? "Turno B, 08h00 às 17h00" : null);
+    assert.equal(vaga.observacoes, "Criada a partir de indicação direta de cliente.", "texto genérico: sem nome de candidato nem setor (observacoes aparece na página pública)");
+    assert.equal(JSON.stringify(vaga).includes("Beatriz") || JSON.stringify(vaga).includes("Lima"), false, "nome do candidato em nenhum campo da vaga");
+    assert.equal(JSON.stringify(vaga).includes("Facilities") || JSON.stringify(vaga).includes("Administrativo"), false, "setor em nenhum campo da vaga");
+    assert.deepEqual([vaga.tipo_servico, vaga.status, vaga.num_posicoes, vaga.num_posicoes_abertas, vaga.visivel_publicamente, vaga.responsavel], [tipo, "aberta", 1, 1, false, "Nome u-dir"]);
+  }
+  const hora = cenario();
+  await indicar(hora, SEM_VAGA);
+  const rh = await criarVaga(hora, ultima(hora).id);
+  const vagaHora = linhas(hora, "vagas").find((v: any) => v.id === rh.corpo.vaga.id);
+  assert.equal(vagaHora.salario, "R$ 18,50/hora"); assert.equal(parseSalarioFixo(vagaHora.salario), null, "salário por hora nunca é lido como mensal");
+  const antiga = cenario();
+  await indicarAntiga(antiga);
+  const ra = await criarVaga(antiga, ultima(antiga).id);
+  assert.equal(ra.status, 200);
+  const vagaAntiga = linhas(antiga, "vagas").find((v: any) => v.id === ra.corpo.vaga.id);
+  assert.equal(vagaAntiga.salario ?? null, null); assert.equal(vagaAntiga.horario ?? null, null);
+  assert.equal(vagaAntiga.observacoes, "Criada a partir de indicação direta de cliente.");
+});
+
+await ok("módulo único de obrigatórios (tela + servidor): mensagens por tipo, salário horista/mensalista, e quando a edição passa a exigir", async () => {
+  const { faltandoObrigatorios, mexeNosDadosDeAdmissao } = await import("../src/lib/admissaoObrigatorios");
+  assert.deepEqual(faltandoObrigatorios(RS, {}), ["Informe a data de início.", "Informe a função confirmada.", "Informe o salário acordado."]);
+  assert.equal(faltandoObrigatorios(MOT, BLOCO[MOT] as never).length, 1, "só a função falta (o bloco não a traz)");
+  assert.deepEqual(faltandoObrigatorios(MOT, { ...BLOCO[MOT], admissao_funcao: "x" } as never), []);
+  assert.deepEqual(faltandoObrigatorios(TERC, { ...BLOCO[TERC], admissao_funcao: "x" } as never), []);
+  assert.deepEqual(faltandoObrigatorios("outro", {}), []);
+  assert.deepEqual(faltandoObrigatorios(null, {}), []);
+  assert.equal(mexeNosDadosDeAdmissao(["candidato_nome", "admissao_funcao", "admissao_observacoes"]), false);
+  assert.equal(mexeNosDadosDeAdmissao(["admissao_setor"]), true);
+});
+
+await ok("BLOCO único nos dois modos (SSR): mesmos controles e ORDEM com e sem vaga; sem vaga só omite 'Função' (vem do cartão); tempo de contrato é SELEÇÃO, sem texto livre", async () => {
+  const { createRequire } = await import("node:module");
+  const req = createRequire(import.meta.url);
+  const { renderToStaticMarkup } = req("react-dom/server");
+  const React = req("react");
+  const Bloco = (await import("../src/components/BlocoDadosAdmissao")).default;
+  const { dadosVazios } = await import("../src/lib/admissaoForm");
+  const html = (tipo: string, ocultarFuncao: boolean) => renderToStaticMarkup(React.createElement(Bloco, { tipoServico: tipo, valores: dadosVazios(tipo), onChange: () => {}, ocultarFuncao }));
+  const rotulos = (h: string) => [...h.matchAll(/<label[^>]*>([^<]+)</g)].map((m) => m[1].replace(/\s*\*$/, "").trim()).filter(Boolean);
+  const ESPERADO_MOT = ["Data de Início", "Função", "Setor", "Centro de custo", "Salário por hora", "Salário mensal", "Horário de entrada", "Horário de saída", "Turno", "Escala", "Tempo de contrato", "Vale Transporte?", "Exame Admissional — Responsável", "Local/Data/Hora da Integração", "Observações"];
+  for (const tipo of [MOT, TERC, RS]) {
+    const com = rotulos(html(tipo, false));
+    const sem = rotulos(html(tipo, true));
+    assert.deepEqual(sem, com.filter((r) => r !== "Função" && r !== "Função confirmada"), `${tipo}: sem vaga = com vaga menos a função`);
+  }
+  const mot = rotulos(html(MOT, false));
+  for (const r of ESPERADO_MOT.filter((x) => x !== "Salário mensal")) assert.ok(mot.includes(r) || html(MOT, false).includes(r), `MOT: ${r}`);
+  const h = html(MOT, false);
+  assert.ok(h.includes('type="time"') && h.includes("12x36 - Noite") && h.includes("Turno D") && h.includes("Salário por hora"));
+  assert.ok(h.includes("Outro prazo") && h.includes("180 dias, prorrogável por mais 90 dias"), "tempo de contrato: padrão ou outro prazo");
+  assert.equal(/<input[^>]*value="180 dias/.test(h), false, "sem input de texto livre com o prazo");
+  const terc = html(TERC, false);
+  assert.ok(terc.includes("Escala 6x1") && !terc.includes("Tempo de contrato") && !terc.includes("Escala</label>"), "Terceirização: turno combinado, sem escala nem tempo");
+  const rs = html(RS, false);
+  assert.ok(rs.includes("Período de Experiência") && rs.includes("30 dias") && rs.includes("Gestor Direto") && !rs.includes("Centro de custo"));
+  // Asterisco só no que o tipo exige (mesma lista do módulo de obrigatórios); R&S pede só o salário, Terceirização não tem escala nem tempo.
+  assert.ok(["Centro de custo *", "Horário de entrada *", "Horário de saída *", "Turno *", "Escala *", "Tempo de contrato *"].every((t) => h.includes(t)), "MOT");
+  assert.ok(terc.includes("Centro de custo *") && terc.includes("Turno *") && terc.includes("Salário mensal *") && !/>Escala[ *]*</.test(terc), "Terceirização");
+  assert.ok(rs.includes("Salário mensal *") && !rs.includes("Centro de custo") && !rs.includes("Turno"), "R&S: só o salário");
+  assert.ok(html(MOT, true).includes("Observações") && !/>Função\s*\*?</.test(html(MOT, true)));
+});
+
+await ok("FIAÇÃO do formulário: um único bloco para os dois modos, cargo único alimenta a função, seletor com 'sem vaga' no topo e valor padrão vazio, validação pelo módulo único", () => {
+  const form = fs.readFileSync("src/app/portal/(app)/indicar-candidato/page.tsx", "utf8");
+  assert.equal((form.match(/<BlocoDadosAdmissao/g) ?? []).length, 1, "um único uso do bloco (serve a vaga e o sem vaga)");
+  assert.ok(form.includes("ocultarFuncao={semVaga}") && form.includes("value={dados.funcao}"), "cargo do cartão = função do bloco");
+  assert.equal((form.match(/Cargo \/ função do candidato/g) ?? []).length, 1);
+  assert.ok(form.includes("faltandoObrigatorios") && form.includes("validarCamposAdmissao") && form.includes("colunasDeDados"));
+  assert.equal(/admCentroCusto|admTurnoSelecionado|admEscalaSelecionada|admTempoContrato/.test(form), false, "sem os estados duplicados de antes");
+  const iSelecione = form.indexOf('<option value="">Selecione...</option>');
+  const iSem = form.indexOf("<option value={SEM_VAGA}>A Salmazos direciona (sem vaga)</option>");
+  const iVagas = form.indexOf("{vagas.map((v) => (");
+  assert.ok(iSelecione > -1 && iSelecione < iSem && iSem < iVagas, "ordem: Selecione... → sem vaga → vagas abertas");
+  assert.ok(form.includes('const [vagaId, setVagaId] = useState("");'), "valor padrão continua vazio");
+  assert.ok(form.includes("if ((json.data ?? []).length === 0) setVagaId(SEM_VAGA)"), "sem nenhuma vaga aberta, continua selecionando 'sem vaga'");
+  const modal = fs.readFileSync("src/components/ModalEditarIndicacaoCliente.tsx", "utf8");
+  assert.ok(modal.includes("<BlocoDadosAdmissao") && !modal.includes('campoTexto("admissao_periodo_experiencia"') && !modal.includes('campoTexto("admissao_tempo_contrato"'));
+  const avaliacao = fs.readFileSync("src/components/PortalAvaliacaoBtn.tsx", "utf8");
+  assert.equal(avaliacao.includes("BlocoDadosAdmissao"), false, "PortalAvaliacaoBtn fica fora desta mudança");
+});
+
 
 console.log(`\n${n} verificações OK`);
