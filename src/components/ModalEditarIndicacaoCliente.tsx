@@ -2,15 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
-import CampoMoeda from "@/components/ui/CampoMoeda";
+import CamposAdmissaoPadrao from "@/components/CamposAdmissaoPadrao";
+import { mensagemErrosAdmissao, validarCamposAdmissao, type CamposAdmissaoPadrao as DadosPadrao } from "@/lib/admissaoCamposPadrao";
 import CampoTelefone from "@/components/ui/CampoTelefone";
 import { MOSTRAR_DIA_TESTE_NO_PORTAL } from "@/lib/diaTestePortal";
 import CampoDiasTeste, { ESTADO_DIAS_TESTE_VAZIO, estadoDiasTesteDeValor, diasTesteParaEnvio, erroDiasTeste, type EstadoDiasTeste } from "@/components/CampoDiasTeste";
 
 // Edição de uma indicação já enviada (portal > Minhas Indicações). Pré-preenche com o que foi enviado e
 // manda ao servidor SÓ os campos que mudaram; o servidor refaz o diff e revalida tudo (quem pode editar,
-// vaga, data). Os campos de horário/turno/escala/integração aparecem como texto livre, exatamente como
-// foram gravados na indicação (o formulário de criação os compõe a partir de vários seletores).
+// vaga, data). Salário, centro de custo, horário, turno, escala e tempo de contrato usam o padrão da plataforma
+// (CamposAdmissaoPadrao), os mesmos controles do formulário de criação; os demais continuam texto simples.
 
 interface Detalhe {
   id: string;
@@ -118,6 +119,9 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
       setErro("Nome e telefone do candidato não podem ficar em branco.");
       return;
     }
+    // Mesmas regras do servidor, antes de enviar. Só o que o cliente MUDOU é conferido: dado antigo intocado não trava o salvar.
+    const errosPadrao = validarCamposAdmissao(form as DadosPadrao).filter((e) => e.campo in mudou);
+    if (errosPadrao.length > 0) { setErro(mensagemErrosAdmissao(errosPadrao)); return; }
     // Dia(s) de teste: indicação antiga (null) segue editável sem responder — se o cliente não mexer, o campo NÃO vai no corpo
     // (null explícito é recusado em MOT/Terceirização). Mexeu, precisa estar completo; 0 ("Não") é resposta e vai como 0.
     if (MOSTRAR_DIA_TESTE_NO_PORTAL && !isRS && diasTesteAlterado) {
@@ -210,27 +214,22 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
               </div>
             </Campo>
 
+            <CamposAdmissaoPadrao
+              tipoServico={inicial.vaga_tipo_servico}
+              valores={form as DadosPadrao}
+              onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+              inputClassName="w-full text-sm border border-gray-300 rounded-lg px-3 py-2"
+              labelClassName="text-[11px] font-bold text-gray-500 uppercase tracking-wide"
+            />
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Campo label="Data de início">
                 <input type="date" min={hojeBrasilia()} value={txt("admissao_data_inicio")} onChange={(e) => set("admissao_data_inicio", e.target.value)} style={inputStyle} />
               </Campo>
               {campoTexto("admissao_funcao", isRS ? "Função confirmada" : "Função")}
-              <Campo label="Salário mensal">
-                <CampoMoeda value={(form.admissao_salario as number | null) ?? null} onChange={(n) => set("admissao_salario", n || null)} style={inputStyle} />
-              </Campo>
-              {!isRS && (
-                <Campo label="Salário por hora">
-                  <CampoMoeda value={(form.admissao_salario_hora as number | null) ?? null} onChange={(n) => set("admissao_salario_hora", n || null)} style={inputStyle} />
-                </Campo>
-              )}
               {!isRS && campoTexto("admissao_setor", "Setor")}
-              {!isRS && campoTexto("admissao_centro_custo", "Centro de custo")}
               {!isRS && campoTexto("admissao_gestor", "Gestor")}
-              {!isRS && campoTexto("admissao_horario", "Horário")}
-              {!isRS && campoTexto("admissao_turno", "Turno")}
-              {inicial.vaga_tipo_servico === "mao_obra_temporaria" && campoTexto("admissao_escala", "Escala")}
               {!isRS && campoTexto("admissao_periodo_experiencia", "Período de experiência")}
-              {!isRS && campoTexto("admissao_tempo_contrato", "Tempo de contrato")}
               {!isRS && (
                 <Campo label="Vale transporte">
                   <select

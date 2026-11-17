@@ -418,7 +418,11 @@ await ok("fiação das telas: formulário do portal (opção sempre disponível,
   const minhas = fs.readFileSync("src/app/portal/(app)/minhas-indicacoes/page.tsx", "utf8");
   assert.ok(minhas.includes("Em análise pela Salmazos") && minhas.includes("Sem vaga definida"));
   const modal = fs.readFileSync("src/components/ModalIndicacoesCandidato.tsx", "utf8");
-  for (const t of ["Sem vaga (", "IndicacaoSemVagaAcoes", "Direcione a indicação para uma vaga para poder aprovar."]) assert.ok(modal.includes(t), t);
+  // A tela foi extraída para CartaoIndicacaoAnalista (testável); o modal só a usa. A dica de Aprovar vive em indicacaoSemVaga.ts.
+  for (const t of ["Sem vaga (", "CartaoIndicacaoTopo", "BotaoAprovarIndicacao", "estadoIndicacaoAnalista"]) assert.ok(modal.includes(t), t);
+  const cartao = fs.readFileSync("src/components/CartaoIndicacaoAnalista.tsx", "utf8");
+  for (const t of ["IndicacaoSemVagaAcoes", "mostrarAcoesSemVaga"]) assert.ok(cartao.includes(t), t);
+  assert.ok(fs.readFileSync("src/lib/indicacaoSemVaga.ts", "utf8").includes("Direcione a indicação para uma vaga (ou crie a vaga) antes de aprovar."));
   const acoes = fs.readFileSync("src/components/IndicacaoSemVagaAcoes.tsx", "utf8");
   for (const t of ["Direcionar para vaga existente", "Criar vaga a partir da indicação", "Completar dados", "privada"]) assert.ok(acoes.includes(t), t);
   assert.ok(fs.readFileSync("src/components/VagasPageClient.tsx", "utf8").includes("sem vaga"));

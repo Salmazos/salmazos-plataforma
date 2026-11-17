@@ -17,6 +17,7 @@ import { finalizarContratado } from "@/lib/finalizarContratacao";
 import { erroDataTermino } from "@/lib/dataTerminoContrato";
 import { criarAdmissaoSemEnvio, removerAdmissaoCriada } from "@/lib/admissaoCriacao";
 import { MSG_SEM_VAGA_APROVAR } from "@/lib/indicacaoSemVaga";
+import { mensagemErrosAdmissao, validarCamposAdmissao } from "@/lib/admissaoCamposPadrao";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -325,6 +326,26 @@ export async function POST(request: NextRequest, { params }: Params) {
       } else {
         motivoSemAdmissao = "cliente_sem_entidade_contratante";
       }
+    }
+
+    // Dados de admissão gravados precisam estar no padrão (src/lib/admissaoCamposPadrao.ts): o que entrou antes da validação do servidor, ou por
+    // outro caminho, não pode virar candidatura/admissão. 422 ANTES de criar qualquer coisa, dizendo o que corrigir em "Completar dados".
+    const num = (v: unknown) => (v == null ? null : Number(v));
+    const foraDoPadrao = validarCamposAdmissao({
+      admissao_salario: num(sol.admissao_salario),
+      admissao_salario_hora: num(sol.admissao_salario_hora),
+      admissao_centro_custo: sol.admissao_centro_custo,
+      admissao_horario: sol.admissao_horario,
+      admissao_turno: sol.admissao_turno,
+      admissao_escala: sol.admissao_escala,
+      admissao_tempo_contrato: sol.admissao_tempo_contrato,
+    });
+    if (foraDoPadrao.length > 0) {
+      return NextResponse.json({
+        error: `Não dá para aprovar: há dados fora do padrão — ${mensagemErrosAdmissao(foraDoPadrao)} Corrija em "Completar dados" e aprove de novo.`,
+        codigo: "dados_admissao_fora_do_padrao",
+        campos: foraDoPadrao.map((e) => e.campo),
+      }, { status: 422 });
     }
 
     const nowIso = new Date().toISOString();

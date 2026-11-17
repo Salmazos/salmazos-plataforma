@@ -6,6 +6,7 @@ import { registrarHistorico } from "@/lib/registrarHistorico";
 import { hojeBrasiliaISO } from "@/lib/rescisaoProgramada";
 import { exigeRespostaDiasTeste, MSG_INFORME_DIAS_TESTE } from "@/lib/diasTeste";
 import { avisarIndicacaoEditada } from "@/lib/avisoIndicacaoEditada";
+import { mensagemErrosAdmissao, validarCamposAdmissao } from "@/lib/admissaoCamposPadrao";
 import {
   CAMPOS_ADMISSAO,
   ROTULO_CAMPO,
@@ -143,6 +144,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (entrada.admissao_qtd_dias_teste === null && sol.vaga_id) {
       const { data: vagaDaIndicacao } = await service.from("vagas").select("tipo_servico").eq("id", sol.vaga_id).maybeSingle();
       if (exigeRespostaDiasTeste(vagaDaIndicacao?.tipo_servico)) return NextResponse.json({ error: MSG_INFORME_DIAS_TESTE }, { status: 400 });
+    }
+
+    // Coerência horário x turno: só quando um dos dois vem no corpo (registro antigo fora do padrão não bloqueia a edição de outros campos).
+    if (entrada.admissao_horario !== undefined || entrada.admissao_turno !== undefined) {
+      const errosAdm = validarCamposAdmissao({
+        admissao_horario: (entrada.admissao_horario as string | null | undefined) ?? (entrada.admissao_turno !== undefined ? sol.admissao_horario : null),
+        admissao_turno: (entrada.admissao_turno as string | null | undefined) ?? (entrada.admissao_horario !== undefined ? sol.admissao_turno : null),
+      });
+      if (errosAdm.length > 0) return NextResponse.json({ error: mensagemErrosAdmissao(errosAdm) }, { status: 400 });
     }
 
     const alteracoes: Alteracao[] = calcularDiff(sol, entrada);

@@ -5,6 +5,11 @@ import Link from "next/link";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import CampoTelefone from "@/components/ui/CampoTelefone";
+import {
+  CENTRO_CUSTO_MAX, ESCALA_OPCOES_MOT, PERIODOS_EXP, TURNO_OPCOES, TURNO_OPCOES_MOT,
+  erroCentroCusto, erroEscala, erroTempoContrato, erroTurno, formatarHoraTexto,
+} from "@/lib/admissaoCamposPadrao";
+import { TEMPO_CONTRATO_PADRAO } from "@/lib/constants";
 import { MOSTRAR_DIA_TESTE_NO_PORTAL } from "@/lib/diaTestePortal";
 import CampoDiasTeste, { ESTADO_DIAS_TESTE_VAZIO, diasTesteParaEnvio, erroDiasTeste, type EstadoDiasTeste } from "@/components/CampoDiasTeste";
 
@@ -23,14 +28,6 @@ const TIPOS_SEM_VAGA = [
   { valor: "terceirizacao", rotulo: "Terceirização" },
   { valor: "recrutamento_selecao", rotulo: "Recrutamento e Seleção (R&S)" },
 ];
-
-const PERIODOS_EXP = ["30 dias", "45 dias", "90 dias"];
-const TURNO_OPCOES = [
-  "Turno A", "Turno B", "Turno C", "Turno D",
-  "Horário Administrativo", "Escala 6x1", "Escala 6x2", "Escala Fixa", "Outro",
-];
-const TURNO_OPCOES_MOT = ["Turno A", "Turno B", "Turno C", "Turno D", "Horário Administrativo", "Outro"];
-const ESCALA_OPCOES_MOT = ["6x1", "6x2", "12x36 - Dia", "12x36 - Noite", "Fixa", "Outro"];
 
 const labelStyle: React.CSSProperties = {
   fontSize: 11, fontWeight: 700, color: "#6B7280",
@@ -53,10 +50,6 @@ function Field({ label, required, children }: { label: string; required?: boolea
   );
 }
 
-function formatarHoraTexto(hhmm: string): string {
-  const [h, m] = hhmm.split(":");
-  return `${h}h${m}`;
-}
 function formatarDataTexto(iso: string): string {
   return iso.split("-").reverse().join("/");
 }
@@ -83,7 +76,7 @@ export default function IndicarCandidatoPage() {
   const [admFuncao, setAdmFuncao] = useState("");
   const [admSalarioTipo, setAdmSalarioTipo] = useState<"horista" | "mensalista">("horista");
   const [admSalarioHora, setAdmSalarioHora] = useState("");
-  const [admTempoContrato, setAdmTempoContrato] = useState("180 dias, prorrogável por mais 90 dias");
+  const [admTempoContrato, setAdmTempoContrato] = useState(TEMPO_CONTRATO_PADRAO);
   const [admVt, setAdmVt] = useState<boolean | null>(null);
   const [admExameResp, setAdmExameResp] = useState("");
   const [admHorarioEntrada, setAdmHorarioEntrada] = useState("");
@@ -160,13 +153,17 @@ export default function IndicarCandidatoPage() {
       if (!admFuncao.trim()) return "Informe a função.";
       if (!admSetor.trim()) return "Informe o setor.";
       if (!admCentroCusto.trim()) return "Informe o centro de custo.";
+      { const e = erroCentroCusto(admCentroCusto.trim()); if (e) return e; }
       if (admSalarioTipo === "horista" ? !admSalarioHora : !admSalario) return "Informe o salário.";
       if (!admHorarioEntrada || !admHorarioSaida) return "Informe o horário de entrada e saída.";
       if (!admTurnoSelecionado) return "Selecione o turno.";
       if (admTurnoSelecionado === "Outro" && !admTurnoOutro.trim()) return "Especifique o turno.";
+      { const e = erroTurno(turnoFinal); if (e) return e; }
       if (!admEscalaSelecionada) return "Selecione a escala.";
       if (admEscalaSelecionada === "Outro" && !admEscalaOutro.trim()) return "Especifique a escala.";
+      { const e = erroEscala(escalaFinal); if (e) return e; }
       if (!admTempoContrato.trim()) return "Informe o tempo de contrato.";
+      { const e = erroTempoContrato(admTempoContrato.trim()); if (e) return e; }
       if (admVt === null) return "Informe se utiliza Vale Transporte.";
       if (!admExameResp.trim()) return "Informe o responsável pelo exame admissional.";
       if (MOSTRAR_DIA_TESTE_NO_PORTAL) { const e = erroDiasTeste(admDiasTeste); if (e) return e; }
@@ -175,10 +172,12 @@ export default function IndicarCandidatoPage() {
       if (!admFuncao.trim()) return "Informe a função/cargo.";
       if (!admSetor.trim()) return "Informe o setor.";
       if (!admCentroCusto.trim()) return "Informe o centro de custo.";
+      { const e = erroCentroCusto(admCentroCusto.trim()); if (e) return e; }
       if (!admSalario) return "Informe o salário.";
       if (!admHorarioEntrada || !admHorarioSaida) return "Informe o horário de entrada e saída.";
       if (!admTurnoSelecionado) return "Selecione o turno.";
       if (admTurnoSelecionado === "Outro" && !admTurnoOutro.trim()) return "Especifique o turno.";
+      { const e = erroTurno(turnoFinal); if (e) return e; }
       if (admVt === null) return "Informe se utiliza Vale Transporte.";
       if (!admExameResp.trim()) return "Informe o responsável pelo exame admissional.";
       if (MOSTRAR_DIA_TESTE_NO_PORTAL) { const e = erroDiasTeste(admDiasTeste); if (e) return e; }
@@ -483,7 +482,7 @@ export default function IndicarCandidatoPage() {
                     </Field>
                   </div>
                   <Field label="Centro de Custo" required>
-                    <input value={admCentroCusto} onChange={(e) => setAdmCentroCusto(e.target.value)}
+                    <input value={admCentroCusto} maxLength={CENTRO_CUSTO_MAX} onChange={(e) => setAdmCentroCusto(e.target.value.replace(/[^A-Za-z0-9._/-]/g, ""))}
                       placeholder="Ex: CC-0042" style={{ ...inputStyle, ...(missing(admCentroCusto) ? inv : {}) }} />
                   </Field>
                   <Field label="Tipo de Salário" required>
@@ -605,7 +604,7 @@ export default function IndicarCandidatoPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <Field label="Centro de Custo" required>
-                      <input value={admCentroCusto} onChange={(e) => setAdmCentroCusto(e.target.value)}
+                      <input value={admCentroCusto} maxLength={CENTRO_CUSTO_MAX} onChange={(e) => setAdmCentroCusto(e.target.value.replace(/[^A-Za-z0-9._/-]/g, ""))}
                         placeholder="Ex: CC-0042" style={{ ...inputStyle, ...(missing(admCentroCusto) ? inv : {}) }} />
                     </Field>
                     <Field label="Salário R$" required>

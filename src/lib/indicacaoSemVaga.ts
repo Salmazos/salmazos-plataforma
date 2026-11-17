@@ -100,3 +100,31 @@ export function avisoTaxaVagaCriada(tipoServico: string): string | null {
     ? "Vaga de Recrutamento e Seleção criada sem taxa (%). Configure a taxa na vaga antes de finalizar a contratação."
     : null;
 }
+
+// ── Estado de uma indicação para a TELA do analista (ModalIndicacoesCandidato) ──
+// Função pura, testada com o payload REAL das rotas (scripts/verificar-tela-indicacao-analista.mts): a regra "sem vaga" é só `vaga_id` nulo
+// (o tipo de serviço vem da própria indicação), e a tela não pode inferir nada além disso.
+export const DICA_APROVAR_SEM_VAGA = "Direcione a indicação para uma vaga (ou crie a vaga) antes de aprovar.";
+
+export interface IndicacaoParaTela {
+  status: string;
+  vaga_id?: string | null;
+  tipo_servico?: string | null;
+  sem_vaga_origem?: boolean;
+  vagas?: { titulo: string; tipo_servico: string } | null;
+}
+
+export function estadoIndicacaoAnalista(it: IndicacaoParaTela) {
+  const semVaga = !it.vaga_id;
+  const pendente = it.status === "pendente";
+  return {
+    semVaga,
+    pendente,
+    // Com vaga, vale o da vaga; sem vaga, o que o cliente escolheu na indicação.
+    tipoServico: it.vagas?.tipo_servico ?? it.tipo_servico ?? null,
+    // As ações aparecem enquanto está sem vaga E também depois de direcionada ("Completar dados" segue valendo até aprovar).
+    mostrarAcoesSemVaga: pendente && (semVaga || it.sem_vaga_origem === true),
+    aprovarBloqueadoSemVaga: semVaga,
+    dicaAprovar: semVaga ? DICA_APROVAR_SEM_VAGA : undefined,
+  };
+}

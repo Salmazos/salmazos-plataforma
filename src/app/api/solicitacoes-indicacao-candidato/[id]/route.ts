@@ -4,6 +4,7 @@ import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 import { parseBody, indicacaoCandidatoEditSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { ehErroSemVagaIndisponivel, MSG_SEM_VAGA_INDISPONIVEL } from "@/lib/indicacaoSemVaga";
+import { mensagemErrosAdmissao, validarCamposAdmissao } from "@/lib/admissaoCamposPadrao";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -63,6 +64,16 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
     if (atual.status !== "pendente") {
       return NextResponse.json({ error: "Esta indicação já foi decidida." }, { status: 409 });
+    }
+
+    // Formatos de cada campo já foram validados pelo schema; aqui a coerência entre eles (o horário é composto a partir do turno). Só olha o que
+    // veio no corpo, para um registro antigo fora do padrão não bloquear a edição de outros campos.
+    if (parsed.data.admissao_horario !== undefined || parsed.data.admissao_turno !== undefined) {
+      const errosAdm = validarCamposAdmissao({
+        admissao_horario: parsed.data.admissao_horario ?? (parsed.data.admissao_turno !== undefined ? atual.admissao_horario : null),
+        admissao_turno: parsed.data.admissao_turno ?? (parsed.data.admissao_horario !== undefined ? atual.admissao_turno : null),
+      });
+      if (errosAdm.length > 0) return NextResponse.json({ error: mensagemErrosAdmissao(errosAdm) }, { status: 400 });
     }
 
     // Indicação SEM vaga só ganha vaga por "Direcionar" / "Criar vaga" (que conferem tipo, unidade e vaga aberta): por aqui seria

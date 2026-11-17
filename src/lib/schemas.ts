@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { TIPOS_SERVICO_INDICACAO } from "@/lib/indicacaoSemVaga";
+import { erroCentroCusto, erroEscala, erroHorario, erroSalarioHora, erroSalarioMensal, erroTempoContrato, erroTurno } from "@/lib/admissaoCamposPadrao";
 import { conteudoRsSchema } from "@/lib/propostaModelos";
 import { validarCnpj, validarCpf } from "@/lib/documentoBr";
 import { UNIDADES_FATURAMENTO } from "@/lib/unidadeFaturamento";
@@ -36,6 +37,36 @@ const coerceNumberOptional = z.preprocess((val) => {
   const n = Number(val);
   return isNaN(n) ? val : n;
 }, z.number().optional());
+
+// ── Dados de admissão no padrão da plataforma (src/lib/admissaoCamposPadrao.ts) ──────────────────────────────────────────────
+// Texto livre não entra por requisição direta: horário, turno, escala, centro de custo e tempo de contrato precisam estar no formato que as telas
+// geram; salário precisa ser número em reais dentro da faixa, com até 2 casas. Vazio ("" ou só espaços) vira null, como as telas já enviavam.
+const campoAdmissaoTexto = (validar: (v: string) => string | null) =>
+  z.preprocess(
+    (v) => (typeof v === "string" ? (v.trim() === "" ? null : v.trim()) : v),
+    z.string().nullable().optional().superRefine((v, ctx) => {
+      if (typeof v === "string") {
+        const e = validar(v);
+        if (e) ctx.addIssue({ code: "custom", message: e });
+      }
+    })
+  );
+// permiteNull: nas indicações null LIMPA o salário (o analista/cliente pode apagá-lo); em portal/avaliar e finalizar continua como era (null = não enviado).
+const campoAdmissaoSalario = (validar: (n: number) => string | null, permiteNull: boolean) =>
+  z.preprocess(
+    (v) => {
+      if (v === "" || v === undefined) return undefined;
+      if (v === null) return permiteNull ? null : undefined;
+      const n = Number(v);
+      return Number.isNaN(n) ? v : n;
+    },
+    z.number({ message: "Salário inválido: informe um valor numérico em reais (ex.: 2000,00), sem texto." }).nullable().optional().superRefine((n, ctx) => {
+      if (typeof n === "number") {
+        const e = validar(n);
+        if (e) ctx.addIssue({ code: "custom", message: e });
+      }
+    })
+  );
 
 const coerceNumberNullable = z.preprocess((val) => {
   if (val === "" || val === null || val === undefined) return null;
@@ -467,7 +498,7 @@ export const candidatoVagaFinalizarSchema = z.object({
   responsavel_encerramento: z.string().optional().nullable(),
   vaga_cancelada_cliente: z.boolean().optional(),
   observacoes: z.string().optional().nullable(),
-  admissao_salario: coerceNumberOptional,
+  admissao_salario: campoAdmissaoSalario(erroSalarioMensal, false),
   // Obrigatória só quando a vaga é R&S e não tem fee_rs_percentual configurado — ver
   // guard em finalizar/route.ts. Mesmo padrão de justificativa do forçar geração de
   // pacote (admissaoGerarPdfSchema).
@@ -1060,20 +1091,20 @@ export const portalAvaliarSchema = z.object({
   cv_id: z.string().uuid().optional(),
   tipo_servico: z.string().optional(),
   admissao_data_inicio: z.string().optional().nullable(),
-  admissao_salario: coerceNumberOptional,
+  admissao_salario: campoAdmissaoSalario(erroSalarioMensal, false),
   admissao_setor: z.string().optional().nullable(),
-  admissao_centro_custo: z.string().optional().nullable(),
-  admissao_horario: z.string().optional().nullable(),
+  admissao_centro_custo: campoAdmissaoTexto(erroCentroCusto),
+  admissao_horario: campoAdmissaoTexto(erroHorario),
   admissao_gestor: z.string().optional().nullable(),
   admissao_periodo_experiencia: z.string().optional().nullable(),
   admissao_observacoes: z.string().optional().nullable(),
   admissao_funcao: z.string().optional().nullable(),
-  admissao_salario_hora: coerceNumberOptional,
-  admissao_turno: z.string().optional().nullable(),
+  admissao_salario_hora: campoAdmissaoSalario(erroSalarioHora, false),
+  admissao_turno: campoAdmissaoTexto(erroTurno),
   // Só usado no fluxo MOT — Terceirização continua com o valor combinado em
   // admissao_turno (ver TURNO_OPCOES vs TURNO_OPCOES_MOT em PortalAvaliacaoBtn.tsx).
-  admissao_escala: z.string().optional().nullable(),
-  admissao_tempo_contrato: z.string().optional().nullable(),
+  admissao_escala: campoAdmissaoTexto(erroEscala),
+  admissao_tempo_contrato: campoAdmissaoTexto(erroTempoContrato),
   admissao_vt: z.boolean().optional().nullable(),
   admissao_exame_responsavel: z.string().optional().nullable(),
   admissao_local_integracao: z.string().optional().nullable(),
@@ -1105,17 +1136,17 @@ const portalIndicarCandidatoBaseSchema = z.object({
   candidato_telefone: z.string().trim().min(1),
   curriculo_url: z.string().optional().nullable(),
   admissao_data_inicio: z.string().optional().nullable(),
-  admissao_salario: coerceNumberOptional,
-  admissao_salario_hora: coerceNumberOptional,
+  admissao_salario: campoAdmissaoSalario(erroSalarioMensal, true),
+  admissao_salario_hora: campoAdmissaoSalario(erroSalarioHora, true),
   admissao_setor: z.string().optional().nullable(),
-  admissao_centro_custo: z.string().optional().nullable(),
-  admissao_horario: z.string().optional().nullable(),
+  admissao_centro_custo: campoAdmissaoTexto(erroCentroCusto),
+  admissao_horario: campoAdmissaoTexto(erroHorario),
   admissao_gestor: z.string().optional().nullable(),
   admissao_periodo_experiencia: z.string().optional().nullable(),
   admissao_funcao: z.string().optional().nullable(),
-  admissao_turno: z.string().optional().nullable(),
-  admissao_escala: z.string().optional().nullable(),
-  admissao_tempo_contrato: z.string().optional().nullable(),
+  admissao_turno: campoAdmissaoTexto(erroTurno),
+  admissao_escala: campoAdmissaoTexto(erroEscala),
+  admissao_tempo_contrato: campoAdmissaoTexto(erroTempoContrato),
   admissao_vt: z.boolean().optional().nullable(),
   admissao_exame_responsavel: z.string().optional().nullable(),
   admissao_local_integracao: z.string().optional().nullable(),

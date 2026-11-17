@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import CamposAdmissaoPadrao from "./CamposAdmissaoPadrao";
 import { ROTULO_TIPO_SERVICO, TIPOS_SERVICO_INDICACAO } from "@/lib/indicacaoSemVaga";
+import { mensagemErrosAdmissao, validarCamposAdmissao, type CamposAdmissaoPadrao as DadosPadrao } from "@/lib/admissaoCamposPadrao";
 
 // Ações do analista numa indicação que NASCEU sem vaga (migration_indicacao_sem_vaga.sql):
 //  • Direcionar para vaga existente (mesmo cliente, aberta, mesmo tipo e unidade — o servidor confere de novo);
@@ -9,6 +11,7 @@ import { ROTULO_TIPO_SERVICO, TIPOS_SERVICO_INDICACAO } from "@/lib/indicacaoSem
 //  • Completar dados (salário, horário etc. — o cliente só informou o mínimo). Continua disponível depois de direcionada,
 //    porque a aprovação MOT/Terceirização exige função, salário, horário e data de início.
 // Aprovar só libera depois que a indicação tem vaga (o servidor também bloqueia, com mensagem própria).
+// Os campos de admissão usam o PADRÃO da plataforma (DadosPadrao) — nada de texto livre onde o portal tem seletor.
 
 interface VagaElegivel {
   id: string;
@@ -20,7 +23,7 @@ interface VagaElegivel {
 export interface ItemIndicacaoSemVaga {
   id: string;
   candidato_nome: string;
-  vaga_id: string | null;
+  vaga_id?: string | null;
   tipo_servico?: string | null;
   vagas?: { titulo: string; tipo_servico: string } | null;
   [campo: string]: unknown;
@@ -32,20 +35,19 @@ interface Props {
   onAtualizado: (novo: Record<string, unknown>, mensagem: string, aviso?: string | null) => void;
 }
 
-const CAMPOS_TEXTO: { chave: string; rotulo: string; tipo?: "date" | "number" }[] = [
+// Campos que o portal trata como texto/data/observação simples: continuam assim (decisão: manter o comportamento do portal para eles).
+const CAMPOS_SIMPLES: { chave: string; rotulo: string; tipo?: "date" | "textarea" }[] = [
   { chave: "admissao_funcao", rotulo: "Função" },
   { chave: "admissao_data_inicio", rotulo: "Data de início", tipo: "date" },
-  { chave: "admissao_salario", rotulo: "Salário mensal (R$)", tipo: "number" },
-  { chave: "admissao_salario_hora", rotulo: "Salário por hora (R$)", tipo: "number" },
-  { chave: "admissao_horario", rotulo: "Horário" },
   { chave: "admissao_setor", rotulo: "Setor" },
-  { chave: "admissao_centro_custo", rotulo: "Centro de custo" },
-  { chave: "admissao_turno", rotulo: "Turno" },
-  { chave: "admissao_escala", rotulo: "Escala" },
-  { chave: "admissao_tempo_contrato", rotulo: "Tempo de contrato" },
   { chave: "admissao_exame_responsavel", rotulo: "Exame admissional (responsável)" },
   { chave: "admissao_gestor", rotulo: "Gestor direto" },
-  { chave: "admissao_observacoes", rotulo: "Observações" },
+  { chave: "admissao_observacoes", rotulo: "Observações", tipo: "textarea" },
+];
+
+// Os 7 campos padronizados (DadosPadrao), com o tipo de valor de cada um.
+const CAMPOS_PADRAO: (keyof DadosPadrao)[] = [
+  "admissao_salario", "admissao_salario_hora", "admissao_centro_custo", "admissao_horario", "admissao_turno", "admissao_escala", "admissao_tempo_contrato",
 ];
 
 const inputCls = "w-full text-xs border border-gray-300 rounded-md px-2 py-1.5";
@@ -53,36 +55,53 @@ const btnCls = "text-xs font-semibold border rounded-lg px-3 py-1.5 disabled:opa
 
 type Painel = "direcionar" | "criar" | "editar" | null;
 
+const valorPadraoDoItem = (item: ItemIndicacaoSemVaga, campo: keyof DadosPadrao): string | number | null => {
+  const v = item[campo];
+  if (v === null || v === undefined || v === "") return null;
+  return campo === "admissao_salario" || campo === "admissao_salario_hora" ? Number(v) : String(v);
+};
+
 export default function IndicacaoSemVagaAcoes({ item, onAtualizado }: Props) {
   const temVaga = !!item.vaga_id;
   const [painel, setPainel] = useState<Painel>(null);
   const [vagas, setVagas] = useState<VagaElegivel[] | null>(null);
+  // Falha ao carregar as vagas é diferente de "nenhuma vaga elegível": a tela diz qual dos dois aconteceu.
+  const [erroVagas, setErroVagas] = useState("");
+  const [recarregarVagas, setRecarregarVagas] = useState(0);
   const [vagaEscolhida, setVagaEscolhida] = useState("");
   const [titulo, setTitulo] = useState(String(item.admissao_funcao ?? ""));
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
-  const [form, setForm] = useState<Record<string, string>>({});
+  const [simples, setSimples] = useState<Record<string, string>>({});
+  const [vt, setVt] = useState("");
+  const [tipoForm, setTipoForm] = useState(String(item.tipo_servico ?? item.vagas?.tipo_servico ?? ""));
+  const [padrao, setPadrao] = useState<DadosPadrao>({});
 
   // Vagas elegíveis só enquanto a indicação não tem vaga.
   useEffect(() => {
     if (temVaga) return;
     let ativo = true;
+    setVagas(null);
+    setErroVagas("");
     fetch(`/api/solicitacoes-indicacao-candidato/${item.id}/vagas-elegiveis`)
-      .then((r) => r.json())
-      .then((j) => { if (ativo) setVagas(Array.isArray(j.data) ? j.data : []); })
-      .catch(() => { if (ativo) setVagas([]); });
+      .then(async (r) => {
+        const j = await r.json().catch(() => ({}));
+        if (!ativo) return;
+        if (!r.ok) { setErroVagas(typeof j.error === "string" ? j.error : "Não foi possível carregar as vagas do cliente."); return; }
+        setVagas(Array.isArray(j.data) ? j.data : []);
+      })
+      .catch(() => { if (ativo) setErroVagas("Não foi possível carregar as vagas do cliente (erro de conexão)."); });
     return () => { ativo = false; };
-  }, [item.id, temVaga]);
+  }, [item.id, temVaga, recarregarVagas]);
 
   const abrir = (p: Painel) => {
     setErro("");
     setPainel((atual) => (atual === p ? null : p));
     if (p === "editar") {
-      setForm({
-        tipo_servico: String(item.tipo_servico ?? ""),
-        vt: item.admissao_vt === true ? "sim" : item.admissao_vt === false ? "nao" : "",
-        ...Object.fromEntries(CAMPOS_TEXTO.map((c) => [c.chave, item[c.chave] == null ? "" : String(item[c.chave])])),
-      });
+      setSimples(Object.fromEntries(CAMPOS_SIMPLES.map((c) => [c.chave, item[c.chave] == null ? "" : String(item[c.chave])])));
+      setVt(item.admissao_vt === true ? "sim" : item.admissao_vt === false ? "nao" : "");
+      setTipoForm(String(item.tipo_servico ?? item.vagas?.tipo_servico ?? ""));
+      setPadrao(Object.fromEntries(CAMPOS_PADRAO.map((c) => [c, valorPadraoDoItem(item, c)])) as DadosPadrao);
     }
   };
 
@@ -117,16 +136,24 @@ export default function IndicacaoSemVagaAcoes({ item, onAtualizado }: Props) {
   };
 
   const salvarDados = async () => {
+    // Mesmas regras do servidor, ANTES de enviar: o analista vê o que está fora do padrão sem ir e voltar.
+    const errosPadrao = validarCamposAdmissao(padrao);
+    if (errosPadrao.length > 0) { setErro(mensagemErrosAdmissao(errosPadrao)); return; }
+
     const corpo: Record<string, unknown> = {};
-    for (const c of CAMPOS_TEXTO) {
-      const novo = (form[c.chave] ?? "").trim();
+    for (const c of CAMPOS_SIMPLES) {
+      const novo = (simples[c.chave] ?? "").trim();
       const antigo = item[c.chave] == null ? "" : String(item[c.chave]);
-      if (novo === antigo) continue;
-      corpo[c.chave] = novo === "" ? null : c.tipo === "number" ? Number(novo.replace(",", ".")) : novo;
+      if (novo !== antigo) corpo[c.chave] = novo === "" ? null : novo;
+    }
+    for (const c of CAMPOS_PADRAO) {
+      const novo = padrao[c] ?? null;
+      const antigo = valorPadraoDoItem(item, c);
+      if (novo !== antigo) corpo[c] = novo;
     }
     const vtAntigo = item.admissao_vt === true ? "sim" : item.admissao_vt === false ? "nao" : "";
-    if ((form.vt ?? "") !== vtAntigo) corpo.admissao_vt = form.vt === "sim" ? true : form.vt === "nao" ? false : null;
-    if (!temVaga && (form.tipo_servico ?? "") !== String(item.tipo_servico ?? "") && form.tipo_servico) corpo.tipo_servico = form.tipo_servico;
+    if (vt !== vtAntigo) corpo.admissao_vt = vt === "sim" ? true : vt === "nao" ? false : null;
+    if (!temVaga && tipoForm && tipoForm !== String(item.tipo_servico ?? "")) corpo.tipo_servico = tipoForm;
     if (Object.keys(corpo).length === 0) { setErro("Nenhum dado foi alterado."); return; }
     const json = await chamar(`/api/solicitacoes-indicacao-candidato/${item.id}`, "PATCH", corpo);
     if (json?.data) { setPainel(null); onAtualizado(json.data as Record<string, unknown>, "Dados da indicação atualizados."); }
@@ -155,7 +182,12 @@ export default function IndicacaoSemVagaAcoes({ item, onAtualizado }: Props) {
 
       {painel === "direcionar" && (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
-          {vagas === null ? (
+          {erroVagas ? (
+            <div className="space-y-1">
+              <p className="text-xs text-red-600" role="alert">{erroVagas}</p>
+              <button type="button" onClick={() => setRecarregarVagas((n) => n + 1)} className={`${btnCls} border-gray-300 text-gray-800`}>Tentar de novo</button>
+            </div>
+          ) : vagas === null ? (
             <p className="text-xs text-gray-500">Carregando vagas...</p>
           ) : vagas.length === 0 ? (
             <p className="text-xs text-gray-600">Este cliente não tem vaga aberta do mesmo tipo de serviço e unidade. Crie a vaga a partir da indicação.</p>
@@ -193,29 +225,42 @@ export default function IndicacaoSemVagaAcoes({ item, onAtualizado }: Props) {
       )}
 
       {painel === "editar" && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {!temVaga && (
               <label className="text-[11px] text-gray-600">Tipo de serviço
-                <select value={form.tipo_servico ?? ""} onChange={(e) => setForm((f) => ({ ...f, tipo_servico: e.target.value }))} className={inputCls}>
+                <select value={tipoForm} onChange={(e) => setTipoForm(e.target.value)} className={inputCls}>
                   {TIPOS_SERVICO_INDICACAO.map((t) => <option key={t} value={t}>{ROTULO_TIPO_SERVICO[t]}</option>)}
                 </select>
               </label>
             )}
-            {CAMPOS_TEXTO.map((c) => (
-              <label key={c.chave} className="text-[11px] text-gray-600">{c.rotulo}
-                <input type={c.tipo ?? "text"} step={c.tipo === "number" ? "0.01" : undefined} value={form[c.chave] ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, [c.chave]: e.target.value }))} className={inputCls} />
+            {CAMPOS_SIMPLES.map((c) => (
+              <label key={c.chave} className={`text-[11px] text-gray-600 ${c.tipo === "textarea" ? "sm:col-span-2" : ""}`}>{c.rotulo}
+                {c.tipo === "textarea" ? (
+                  <textarea rows={2} value={simples[c.chave] ?? ""} onChange={(e) => setSimples((f) => ({ ...f, [c.chave]: e.target.value }))} className={inputCls} />
+                ) : (
+                  <input type={c.tipo ?? "text"} value={simples[c.chave] ?? ""} onChange={(e) => setSimples((f) => ({ ...f, [c.chave]: e.target.value }))} className={inputCls} />
+                )}
               </label>
             ))}
             <label className="text-[11px] text-gray-600">Vale transporte
-              <select value={form.vt ?? ""} onChange={(e) => setForm((f) => ({ ...f, vt: e.target.value }))} className={inputCls}>
+              <select value={vt} onChange={(e) => setVt(e.target.value)} className={inputCls}>
                 <option value="">Não informado</option>
                 <option value="sim">Sim</option>
                 <option value="nao">Não</option>
               </select>
             </label>
           </div>
+
+          {/* Padrão da plataforma: moeda com máscara, turno/escala em lista, horário por entrada e saída, tempo de contrato padrão. key: trocar o tipo refaz as listas. */}
+          <CamposAdmissaoPadrao
+            key={tipoForm}
+            tipoServico={tipoForm}
+            valores={padrao}
+            onChange={(patch) => setPadrao((v) => ({ ...v, ...patch }))}
+            inputClassName={inputCls}
+          />
+
           <div className="flex justify-end">
             <button type="button" onClick={salvarDados} disabled={salvando} className={`${btnCls} border-black bg-black text-[#FFD700]`}>
               {salvando ? "Salvando..." : "Salvar dados"}
@@ -224,7 +269,7 @@ export default function IndicacaoSemVagaAcoes({ item, onAtualizado }: Props) {
         </div>
       )}
 
-      {erro && <p className="text-xs text-red-600">{erro}</p>}
+      {erro && <p className="text-xs text-red-600" role="alert">{erro}</p>}
     </div>
   );
 }

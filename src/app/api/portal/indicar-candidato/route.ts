@@ -7,6 +7,7 @@ import { resolverUnidadeCliente } from "@/lib/unidadeAuth";
 import { hojeBrasiliaISO } from "@/lib/rescisaoProgramada";
 import { validarDataInicio } from "@/lib/indicacaoEdicao";
 import { resolverDiasTeste } from "@/lib/diasTeste";
+import { mensagemErrosAdmissao, validarCamposAdmissao } from "@/lib/admissaoCamposPadrao";
 import { ROTULO_TIPO_SERVICO, ehErroSemVagaIndisponivel, indicacoesPendentesComMesmoTelefone, MSG_SEM_VAGA_INDISPONIVEL } from "@/lib/indicacaoSemVaga";
 
 const escaparHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -61,6 +62,10 @@ export async function POST(request: NextRequest) {
     const parsed = parseBody(portalIndicarCandidatoSchema, body);
     if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const dados = parsed.data;
+
+    // Coerência horário x turno (os formatos de cada campo já foram validados pelo schema).
+    const errosAdm = validarCamposAdmissao({ admissao_horario: dados.admissao_horario, admissao_turno: dados.admissao_turno });
+    if (errosAdm.length > 0) return NextResponse.json({ error: mensagemErrosAdmissao(errosAdm) }, { status: 400 });
 
     // Data de início não pode estar no passado (Brasília). "Hoje" é calculado nesta requisição.
     if (dados.admissao_data_inicio) {

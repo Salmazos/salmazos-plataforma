@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { MOTIVOS_REPROVACAO_CLIENTE, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import CampoTelefone from "@/components/ui/CampoTelefone";
+import {
+  CENTRO_CUSTO_MAX, ESCALA_OPCOES_MOT, PERIODOS_EXP, TURNO_OPCOES, TURNO_OPCOES_MOT,
+  erroCentroCusto, erroEscala, erroTempoContrato, erroTurno, formatarHoraTexto,
+} from "@/lib/admissaoCamposPadrao";
+import { TEMPO_CONTRATO_PADRAO } from "@/lib/constants";
 import { MOSTRAR_DIA_TESTE_NO_PORTAL } from "@/lib/diaTestePortal";
 import CampoDiasTeste, { ESTADO_DIAS_TESTE_VAZIO, diasTesteParaEnvio, erroDiasTeste, type EstadoDiasTeste } from "@/components/CampoDiasTeste";
 
@@ -17,28 +22,6 @@ interface Props {
   feePrazo?: string | null;
   vagaId?: string | null;
   cvId?: string | null;
-}
-
-const PERIODOS_EXP = ["30 dias", "45 dias", "90 dias"];
-
-// Terceirização continua com o select único combinado (fora de escopo desta mudança).
-const TURNO_OPCOES = [
-  "Turno A", "Turno B", "Turno C", "Turno D",
-  "Horário Administrativo", "Escala 6x1", "Escala 6x2", "Escala Fixa", "Outro",
-];
-
-// MOT — Turno e Escala viraram dois campos independentes (admissao_turno +
-// admissao_escala, novos envios apenas; registros antigos ficam com o valor
-// combinado como estava).
-const TURNO_OPCOES_MOT = [
-  "Turno A", "Turno B", "Turno C", "Turno D", "Horário Administrativo", "Outro",
-];
-const ESCALA_OPCOES_MOT = ["6x1", "6x2", "12x36 - Dia", "12x36 - Noite", "Fixa", "Outro"];
-
-// "06:00" (input type=time) -> "06h00", pro texto final salvo em admissao_horario
-function formatarHoraTexto(hhmm: string): string {
-  const [h, m] = hhmm.split(":");
-  return `${h}h${m}`;
 }
 
 // "2026-07-27" (input type=date) -> "27/07/2026"
@@ -97,7 +80,7 @@ export default function PortalAvaliacaoBtn({
   const [admFuncao, setAdmFuncao] = useState("");
   const [admSalarioTipo, setAdmSalarioTipo] = useState<"horista" | "mensalista">("horista");
   const [admSalarioHora, setAdmSalarioHora] = useState("");
-  const [admTempoContrato, setAdmTempoContrato] = useState("180 dias, prorrogável por mais 90 dias");
+  const [admTempoContrato, setAdmTempoContrato] = useState(TEMPO_CONTRATO_PADRAO);
   const [admVt, setAdmVt] = useState<boolean | null>(null);
   const [admExameResp, setAdmExameResp] = useState("");
   const [admTelefone, setAdmTelefone] = useState("");
@@ -243,13 +226,17 @@ export default function PortalAvaliacaoBtn({
       if (!admFuncao.trim()) return "Informe a função.";
       if (!admSetor.trim()) return "Informe o setor.";
       if (!admCentroCusto.trim()) return "Informe o centro de custo.";
+      { const e = erroCentroCusto(admCentroCusto.trim()); if (e) return e; }
       if (admSalarioTipo === "horista" ? !admSalarioHora : !admSalario) return "Informe o salário.";
       if (!admHorarioEntrada || !admHorarioSaida) return "Informe o horário de entrada e saída.";
       if (!admTurnoSelecionado) return "Selecione o turno.";
       if (admTurnoSelecionado === "Outro" && !admTurnoOutro.trim()) return "Especifique o turno.";
+      { const e = erroTurno(turnoFinal); if (e) return e; }
       if (!admEscalaSelecionada) return "Selecione a escala.";
       if (admEscalaSelecionada === "Outro" && !admEscalaOutro.trim()) return "Especifique a escala.";
+      { const e = erroEscala(escalaFinal); if (e) return e; }
       if (!admTempoContrato.trim()) return "Informe o tempo de contrato.";
+      { const e = erroTempoContrato(admTempoContrato.trim()); if (e) return e; }
       if (!admTelefone.trim()) return "Informe o telefone do candidato.";
       if (admVt === null) return "Informe se utiliza Vale Transporte.";
       if (!admExameResp.trim()) return "Informe o responsável pelo exame admissional.";
@@ -259,10 +246,12 @@ export default function PortalAvaliacaoBtn({
       if (!admFuncao.trim()) return "Informe a função/cargo.";
       if (!admSetor.trim()) return "Informe o setor.";
       if (!admCentroCusto.trim()) return "Informe o centro de custo.";
+      { const e = erroCentroCusto(admCentroCusto.trim()); if (e) return e; }
       if (!admSalario) return "Informe o salário.";
       if (!admHorarioEntrada || !admHorarioSaida) return "Informe o horário de entrada e saída.";
       if (!admTurnoSelecionado) return "Selecione o turno.";
       if (admTurnoSelecionado === "Outro" && !admTurnoOutro.trim()) return "Especifique o turno.";
+      { const e = erroTurno(turnoFinal); if (e) return e; }
       if (!admTelefone.trim()) return "Informe o telefone do candidato.";
       if (admVt === null) return "Informe se utiliza Vale Transporte.";
       if (!admExameResp.trim()) return "Informe o responsável pelo exame admissional.";
@@ -506,7 +495,7 @@ export default function PortalAvaliacaoBtn({
                         </Field>
                       </div>
                       <Field label="Centro de Custo" required>
-                        <input value={admCentroCusto} onChange={(e) => setAdmCentroCusto(e.target.value)}
+                        <input value={admCentroCusto} maxLength={CENTRO_CUSTO_MAX} onChange={(e) => setAdmCentroCusto(e.target.value.replace(/[^A-Za-z0-9._/-]/g, ""))}
                           placeholder="Ex: CC-0042" className="input-field"
                           style={missing(admCentroCusto) ? inv : undefined} />
                       </Field>
@@ -650,7 +639,7 @@ export default function PortalAvaliacaoBtn({
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <Field label="Centro de Custo" required>
-                          <input value={admCentroCusto} onChange={(e) => setAdmCentroCusto(e.target.value)}
+                          <input value={admCentroCusto} maxLength={CENTRO_CUSTO_MAX} onChange={(e) => setAdmCentroCusto(e.target.value.replace(/[^A-Za-z0-9._/-]/g, ""))}
                             placeholder="Ex: CC-0042" className="input-field"
                             style={missing(admCentroCusto) ? inv : undefined} />
                         </Field>

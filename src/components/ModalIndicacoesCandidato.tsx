@@ -2,15 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { BotaoCurriculo } from "./BotaoCurriculo";
-import IndicacaoSemVagaAcoes from "./IndicacaoSemVagaAcoes";
+import { BotaoAprovarIndicacao, CartaoIndicacaoTopo } from "./CartaoIndicacaoAnalista";
+import { estadoIndicacaoAnalista } from "@/lib/indicacaoSemVaga";
 import { textoDiasTesteParaRH } from "@/lib/diasTeste";
 import { DIAS_AUXILIAR_PRORROGACAO, MAX_DIAS_CONTRATO, erroDataTermino, somarDiasIso } from "@/lib/dataTerminoContrato";
 
-const TIPO_LABEL: Record<string, { label: string; bg: string; color: string }> = {
-  recrutamento_selecao: { label: "R&S", bg: "#1D6FA4", color: "#fff" },
-  mao_obra_temporaria: { label: "MOT", bg: "#FFD700", color: "#000" },
-  terceirizacao: { label: "Terceirização", bg: "#1D9E75", color: "#fff" },
-};
 
 const ADM_CAMPOS: { key: string; label: string }[] = [
   { key: "admissao_data_inicio", label: "Data de Início" },
@@ -283,11 +279,8 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
           ) : (
             <div className="space-y-4">
               {itemsVisiveis.map((it) => {
-                const tipoDaIndicacao = it.vagas?.tipo_servico ?? it.tipo_servico ?? null;
-                const tipo = tipoDaIndicacao
-                  ? TIPO_LABEL[tipoDaIndicacao] ?? { label: tipoDaIndicacao, bg: "#6B7280", color: "#fff" }
-                  : null;
-                const semVaga = !it.vaga_id;
+                const estado = estadoIndicacaoAnalista(it);
+                const semVaga = estado.semVaga;
                 const isRecusando = recusandoId === it.id;
                 const isLoading = actionLoading === it.id;
                 const admPreenchidos = ADM_CAMPOS.filter((c) => valorAdmissao(it, c.key));
@@ -338,35 +331,10 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
 
                 return (
                   <div key={it.id} className="border border-gray-200 rounded-xl p-5 space-y-3">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-gray-900 text-sm">{it.candidato_nome}</span>
-                      <span className="text-gray-300">—</span>
-                      <span className="font-semibold text-gray-800 text-sm">{it.candidato_telefone}</span>
-                      {tipo && (
-                        <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: tipo.bg, color: tipo.color }}>
-                          {tipo.label}
-                        </span>
-                      )}
-                      <span className="text-[10px] text-gray-400 ml-auto">
-                        {new Date(it.created_at).toLocaleDateString("pt-BR")}
-                      </span>
-                    </div>
-
-                    <div className="text-xs text-gray-500">
-                      <span className="font-medium text-gray-700">{it.cliente_nome}</span>{" "}
-                      {semVaga ? (
-                        <>indicou <span className="font-medium text-amber-700">sem vaga (aguardando direcionamento)</span></>
-                      ) : (
-                        <>indicou pra vaga <span className="font-medium text-gray-700">{it.vagas?.titulo ?? "—"}</span></>
-                      )}
-                    </div>
-
-                    {pendente && (semVaga || it.sem_vaga_origem === true) && (
-                      <IndicacaoSemVagaAcoes
-                        item={it}
-                        onAtualizado={(novo, mensagem, aviso) => handleAtualizadoSemVaga(it.id, novo, mensagem, aviso)}
-                      />
-                    )}
+                    <CartaoIndicacaoTopo
+                      item={it}
+                      onAtualizadoSemVaga={(novo, mensagem, aviso) => handleAtualizadoSemVaga(it.id, novo, mensagem, aviso)}
+                    />
 
                     {it.curriculo_url && (
                       <BotaoCurriculo storagePath={it.curriculo_url} variant="link" label="Ver currículo anexado" />
@@ -406,7 +374,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
 
                     {!fimNoRodape && campoDataFim}
 
-                    {pendente && temDuplicado && !vincularPara && !confirmarCriarNovo && (
+                    {pendente && !semVaga && temDuplicado && !vincularPara && !confirmarCriarNovo && (
                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
                         <p className="text-xs font-semibold text-amber-900">
                           ⚠️ Candidato(s) duplicado(s) encontrado(s)
@@ -556,18 +524,15 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                           >
                             Recusar
                           </button>
-                          {semVaga ? (
-                            <span className="text-[11px] text-amber-800 self-center">Direcione a indicação para uma vaga para poder aprovar.</span>
-                          ) : vincularPara?.indicacaoId === it.id || temDuplicado ? null : (
-                            <button
+                          {semVaga || !(vincularPara?.indicacaoId === it.id || temDuplicado) ? (
+                            <BotaoAprovarIndicacao
+                              semVaga={semVaga}
+                              carregando={isLoading}
+                              desabilitado={isLoading || buscandoDuplicado || bloqueadoPorFim}
+                              dica={estado.dicaAprovar ?? (bloqueadoPorFim ? "Informe uma data de término válida acima." : undefined)}
                               onClick={() => handleDecidir(it.id, "aprovar")}
-                              disabled={isLoading || buscandoDuplicado || bloqueadoPorFim}
-                              title={bloqueadoPorFim ? "Informe uma data de término válida acima." : undefined}
-                              className="text-xs font-semibold text-black bg-[#FFD700] rounded-lg px-3 py-1.5 hover:brightness-95 disabled:opacity-50"
-                            >
-                              {isLoading ? "Aprovando..." : "Aprovar e registrar candidato"}
-                            </button>
-                          )}
+                            />
+                          ) : null}
                         </div>
                     )}
                     </div>
