@@ -13,6 +13,7 @@ import { calcularDuracaoResumo } from "@/lib/calcularDuracaoResumo";
 import { registrarHistorico } from "@/lib/registrarHistorico";
 import { registrarAuditoria } from "@/lib/audit";
 import { parseBody, candidatoCreateSchema } from "@/lib/schemas";
+import { conferirVagasPublicas } from "@/lib/vagaVisibilidade";
 
 async function enviarEmailsVaga({
   body,
@@ -101,6 +102,20 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createServiceClient();
+
+    // Candidatura do formulário PÚBLICO (sem sessão interna) só vale para vaga pública. Vaga privada não tem página nem listagem; quem chega nela
+    // é por URL/requisição direta. Mensagem genérica de propósito: não confirma que a vaga existe nem revela nada dela. O cadastro rápido do painel
+    // (com sessão) não é afetado. Na dúvida (não deu para conferir) recusa.
+    const idsDeVaga: unknown[] = [body.vaga_id, ...(Array.isArray(body.vaga_ids) ? body.vaga_ids : [])];
+    if (idsDeVaga.some((i) => typeof i === "string" && i)) {
+      const authInterno = await createClient();
+      const { data: { user: usuarioInterno } } = await authInterno.auth.getUser();
+      if (!usuarioInterno) {
+        const visibilidade = await conferirVagasPublicas(supabase, idsDeVaga);
+        if (visibilidade === "privada") return NextResponse.json({ error: "Não foi possível registrar a candidatura para esta vaga." }, { status: 400 });
+        if (visibilidade === "erro") return NextResponse.json({ error: "Não foi possível registrar a candidatura agora. Tente novamente." }, { status: 503 });
+      }
+    }
 
     // ── Duplicate detection ────────────────────────────────────────────────────
     const origemTipo: "publico" | "rapido" =

@@ -1,5 +1,6 @@
 "use client";
 
+import BotaoCompartilharVaga from "@/components/BotaoCompartilharVaga";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -89,7 +90,6 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
   const [pendingFinalizar, setPendingFinalizar] = useState<{ cvId: string; candidatoNome: string; resultado: "contratado" | "reprovado_final" } | null>(null);
   const [calculandoTodos, setCalculandoTodos] = useState(false);
   const [gerandoPDF, setGerandoPDF] = useState(false);
-  const [linkCopiado, setLinkCopiado] = useState(false);
   const [historicoModalidade, setHistoricoModalidade] = useState<HistoricoModalidade[]>([]);
   const [historicoAberto, setHistoricoAberto] = useState(false);
 
@@ -102,14 +102,6 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
       .then((j) => setHistoricoModalidade(j.data ?? []))
       .catch(() => {});
   }, [vaga.id, vaga.tipo_servico_original, vaga.tipo_servico]);
-
-  const handleCompartilhar = () => {
-    const url = window.location.origin + "/vagas/" + vaga.id;
-    navigator.clipboard.writeText(url).then(() => {
-      setLinkCopiado(true);
-      setTimeout(() => setLinkCopiado(false), 2000);
-    });
-  };
 
   const handleGerarPDF = async () => {
     setGerandoPDF(true);
@@ -406,13 +398,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleCompartilhar}
-              className="text-sm px-3 py-2 rounded-lg font-semibold transition-colors"
-              style={{ backgroundColor: linkCopiado ? "#16a34a" : "#f3f4f6", color: linkCopiado ? "#fff" : "#374151" }}
-            >
-              {linkCopiado ? "✓ Link copiado!" : "🔗 Compartilhar"}
-            </button>
+            <BotaoCompartilharVaga vagaId={vaga.id} visivelPublicamente={vaga.visivel_publicamente} />
             <button
               onClick={handleGerarPDF}
               disabled={gerandoPDF}

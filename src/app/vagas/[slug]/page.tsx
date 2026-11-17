@@ -62,17 +62,18 @@ interface VagaPublica {
 }
 
 // pcd entra na leitura só para o selo "Vaga PCD"; se a coluna ainda não existir, a vaga sai igual, sem o selo. A leitura é compartilhada entre
-// generateMetadata e a página (cache por requisição).
+// generateMetadata e a página (cache por requisição). SÓ vaga pública (visivel_publicamente=true): vaga privada não existe aqui, nem por slug nem
+// por id (e o redirecionamento id → slug também só vale para vaga pública) — a página responde 404 para todos, sem exceção.
 const carregarVaga = cache(async (slug: string): Promise<{ vaga: VagaPublica | null; slugCanonico: string | null }> => {
   const supabase = createServiceClient();
   type Resposta = PromiseLike<{ data: VagaPublica | null; error: unknown }>;
   const { data: porSlug } = await selecionarComPcd<VagaPublica>(
-    (colunas) => supabase.from("vagas").select(colunas).eq("slug", slug).maybeSingle() as unknown as Resposta,
+    (colunas) => supabase.from("vagas").select(colunas).eq("slug", slug).eq("visivel_publicamente", true).maybeSingle() as unknown as Resposta,
     COLUNAS_VAGA
   );
   if (porSlug) return { vaga: porSlug, slugCanonico: null };
   const { data: porId } = await selecionarComPcd<VagaPublica>(
-    (colunas) => supabase.from("vagas").select(colunas).eq("id", slug).maybeSingle() as unknown as Resposta,
+    (colunas) => supabase.from("vagas").select(colunas).eq("id", slug).eq("visivel_publicamente", true).maybeSingle() as unknown as Resposta,
     `${COLUNAS_VAGA}, slug`
   );
   return { vaga: porId, slugCanonico: porId?.slug ?? null };
