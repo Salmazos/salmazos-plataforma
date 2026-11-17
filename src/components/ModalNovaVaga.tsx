@@ -1,5 +1,7 @@
 "use client";
 
+import CamposHorasJornada from "@/components/CamposHorasJornada";
+import { ROTULO_JORNADA, gerarTextoJornada, modeloDoRotulo } from "@/lib/jornadaTrabalho";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { TIPOS_SERVICO, HABILIDADES, ESTADOS, SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, detectarModoSalario, type SalarioModo } from "@/lib/constants";
@@ -36,6 +38,9 @@ const BENEFICIOS_OPCOES = [
 
 const HORARIO_TIPOS = [
   "Segunda a Sexta",
+  // Compensação de horas (jornadaTrabalho.ts): o texto é gerado a partir das horas digitadas.
+  ROTULO_JORNADA.seg_qui_sex_reduzida,
+  ROTULO_JORNADA.seg_sex_sab_reduzido,
   "Escala 6x1",
   "Escala 6x2",
   "Escala 12x36",
@@ -157,6 +162,10 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades
   const [horInicio, setHorInicio] = useState("");
   const [horFim, setHorFim]       = useState("");
   const [horOutros, setHorOutros] = useState("");
+  // Horas extras dos chips com compensação (sexta reduzida / sábado reduzido).
+  const [horSextaSaida, setHorSextaSaida] = useState("");
+  const [horSabadoEntrada, setHorSabadoEntrada] = useState("");
+  const [horSabadoSaida, setHorSabadoSaida] = useState("");
 
   // requisitos
   const [reqChips, setReqChips]   = useState<string[]>([]);
@@ -287,6 +296,11 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades
   const assembleHorario = (): string | null => {
     if (horOutros.trim()) return horOutros.trim();
     if (!horTipo) return null;
+    const modeloJornada = modeloDoRotulo(horTipo);
+    if (modeloJornada) {
+      // Texto padrão gerado; faltando hora, segue o comportamento dos outros chips (grava só o rótulo).
+      return gerarTextoJornada(modeloJornada, { entrada: horInicio, saida: horFim, sextaSaida: horSextaSaida, sabadoEntrada: horSabadoEntrada, sabadoSaida: horSabadoSaida }) || horTipo;
+    }
     const suffix = horInicio || horFim ? ` das ${horInicio} às ${horFim}` : "";
     return horTipo + suffix;
   };
@@ -670,6 +684,18 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades
                   placeholder="17h30"
                   maxLength={5}
                   className="input-field w-24"
+                />
+              </div>
+            )}
+            {modeloDoRotulo(horTipo) && (
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <CamposHorasJornada
+                  modelo={modeloDoRotulo(horTipo)}
+                  horas={{ sextaSaida: horSextaSaida, sabadoEntrada: horSabadoEntrada, sabadoSaida: horSabadoSaida }}
+                  onChange={(p) => { if (p.sextaSaida !== undefined) setHorSextaSaida(p.sextaSaida); if (p.sabadoEntrada !== undefined) setHorSabadoEntrada(p.sabadoEntrada); if (p.sabadoSaida !== undefined) setHorSabadoSaida(p.sabadoSaida); }}
+                  inputClassName="input-field"
+                  labelClassName="text-xs text-gray-500"
+                  obrigatorio={false}
                 />
               </div>
             )}

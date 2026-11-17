@@ -337,7 +337,7 @@ caso("mesmas constantes: o portal e o link público importam as listas do MESMO 
   }
   console.log(linhas.join("\n"));
   // Rótulos dos tipos de horário e dos intervalos iguais aos do portal (o portal mantém só as opções de intervalo inline no JSX).
-  assert.deepEqual(campos.HORARIO_TIPOS.map((h) => h.label), ["Segunda a Sexta", "Escala 6x1", "Escala 6x2", "Escala 12x36", "Turno Fixo", "A combinar", "Personalizado"]);
+  assert.deepEqual(campos.HORARIO_TIPOS.map((h) => h.label), ["Segunda a Sexta", "Segunda a quinta-feira + sexta reduzida", "Segunda a sexta-feira + sábado reduzido", "Escala 6x1", "Escala 6x2", "Escala 12x36", "Turno Fixo", "A combinar", "Personalizado"]);
 });
 
 // ── Condições comerciais do link ─────────────────────────────────────────────

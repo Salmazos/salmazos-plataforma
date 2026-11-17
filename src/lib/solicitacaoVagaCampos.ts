@@ -2,7 +2,9 @@
 // condições de escolaridade), importada pelo formulário do portal (portal/solicitar-vaga/page.tsx) e pelo link público. Acrescentar ou
 // remover um chip aqui vale para os dois. Os geradores de texto do portal continuam como closures dentro da página dele; aqui ficam
 // versões PURAS (recebem os valores por parâmetro) que scripts/verificar-solicitacao-link.mts compara, em teste, com as do portal.
-// Sem imports, para rodar nesse script.
+// Só importa o módulo puro jornadaTrabalho (sem imports de servidor nem de tela), para rodar nesse script.
+
+import { gerarTextoJornada } from "@/lib/jornadaTrabalho";
 
 export const ESTADOS = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG",
@@ -11,6 +13,9 @@ export const ESTADOS = [
 
 export const HORARIO_TIPOS = [
   { id: "seg_sex", label: "Segunda a Sexta" },
+  // Compensação de horas (jornadaTrabalho.ts): sexta reduzida ou sábado reduzido.
+  { id: "seg_qui_sex_reduzida", label: "Segunda a quinta-feira + sexta reduzida" },
+  { id: "seg_sex_sab_reduzido", label: "Segunda a sexta-feira + sábado reduzido" },
   { id: "6x1", label: "Escala 6x1" },
   { id: "6x2", label: "Escala 6x2" },
   { id: "12x36", label: "Escala 12x36" },
@@ -61,10 +66,14 @@ export interface HorarioForm {
   diurnoNoturno: "diurno" | "noturno";
   turnoNome: string;
   custom: string;
+  // só nos tipos com compensação (seg_qui_sex_reduzida: sextaSaida; seg_sex_sab_reduzido: sabadoEntrada e sabadoSaida)
+  sextaSaida: string;
+  sabadoEntrada: string;
+  sabadoSaida: string;
 }
 
 export const HORARIO_VAZIO: HorarioForm = {
-  tipo: "", entrada: "", saida: "", intervalo: "", intervaloInicio: "", intervaloFim: "", diurnoNoturno: "diurno", turnoNome: "", custom: "",
+  tipo: "", entrada: "", saida: "", intervalo: "", intervaloInicio: "", intervaloFim: "", diurnoNoturno: "diurno", turnoNome: "", custom: "", sextaSaida: "", sabadoEntrada: "", sabadoSaida: "",
 };
 
 function fmtHora(t: string): string {
@@ -87,8 +96,13 @@ export function gerarHorarioTexto(h: HorarioForm): string {
   if (!h.tipo) return "";
   if (h.tipo === "a_combinar") return "A combinar";
   if (h.tipo === "personalizado") return h.custom.trim();
-  const horas = `${fmtHora(h.entrada)} às ${fmtHora(h.saida)}`;
   const intervalo = sufixoIntervalo(h);
+  if (h.tipo === "seg_qui_sex_reduzida" || h.tipo === "seg_sex_sab_reduzido") {
+    return gerarTextoJornada(h.tipo === "seg_qui_sex_reduzida" ? "seg_qui_sex_reduzida" : "seg_sex_sab_reduzido", {
+      entrada: h.entrada, saida: h.saida, sextaSaida: h.sextaSaida, sabadoEntrada: h.sabadoEntrada, sabadoSaida: h.sabadoSaida, intervalo,
+    });
+  }
+  const horas = `${fmtHora(h.entrada)} às ${fmtHora(h.saida)}`;
   const comIntervalo = (base: string) => (intervalo ? `${base} (${intervalo})` : base);
   if (h.tipo === "seg_sex") return comIntervalo(`Segunda a Sexta, ${horas}`);
   if (h.tipo === "6x1") return comIntervalo(`Escala 6x1, ${horas}`);

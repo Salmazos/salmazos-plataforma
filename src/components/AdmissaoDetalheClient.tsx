@@ -1,5 +1,6 @@
 "use client";
 
+import BotaoUsarModeloJornada from "@/components/BotaoUsarModeloJornada";
 import BlocoDiasTesteRH from "@/components/BlocoDiasTesteRH";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -1782,6 +1783,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
                   <div className="flex-1">
                     <label className="block text-xs text-gray-500 mb-1">Horário de trabalho</label>
                     <input type="text" value={formDadosAdmissao.horario} onChange={(e) => atualizarCampoDadosAdmissao("horario", e.target.value)} className="input-field text-sm" />
+                    <BotaoUsarModeloJornada onAplicar={(texto) => atualizarCampoDadosAdmissao("horario", texto)} />
                   </div>
                   <div className="flex-1">
                     <label className="block text-xs text-gray-500 mb-1">Turno</label>

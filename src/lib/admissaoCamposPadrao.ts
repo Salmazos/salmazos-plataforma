@@ -1,5 +1,6 @@
 import { TEMPO_CONTRATO_PADRAO } from "@/lib/constants";
 import { DIAS_AUXILIAR_PRORROGACAO, MAX_DIAS_CONTRATO } from "@/lib/dataTerminoContrato";
+import { MODELOS_JORNADA, ROTULO_JORNADA, interpretarTextoJornada, modeloDoRotulo } from "@/lib/jornadaTrabalho";
 
 // Padrão ÚNICO dos dados de admissão que o cliente informa na indicação / aprovação de candidato (admissao_* em candidatos_vagas e
 // solicitacoes_indicacao_candidato). As listas abaixo existiam duplicadas em PortalAvaliacaoBtn.tsx e portal/indicar-candidato/page.tsx e foram
@@ -17,7 +18,10 @@ export const TURNO_OPCOES = [
 
 // MOT — Turno e Escala são dois campos independentes (admissao_turno + admissao_escala).
 export const TURNO_OPCOES_MOT = ["Turno A", "Turno B", "Turno C", "Turno D", "Horário Administrativo", "Outro"];
-export const ESCALA_OPCOES_MOT = ["6x1", "6x2", "12x36 - Dia", "12x36 - Noite", "Fixa", "Outro"];
+// Escalas com jornada em texto padrão (jornadaTrabalho.ts): o horário dessas escalas é o texto gerado ("Segunda a quinta-feira, das 08h00 às 17h00;
+// sexta-feira, até as 16h00"), SEM prefixo de turno; o turno continua um campo à parte. Ficam depois de "Fixa" e antes de "Outro".
+export const ESCALAS_JORNADA = MODELOS_JORNADA.map((m) => ROTULO_JORNADA[m]);
+export const ESCALA_OPCOES_MOT = ["6x1", "6x2", "12x36 - Dia", "12x36 - Noite", "Fixa", ...ESCALAS_JORNADA, "Outro"];
 
 // "Outro" na tela vira o texto digitado no banco. DECISÃO DO OLVER: esse texto só vale em formato reconhecido ("Turno X" / "NxM[ - Dia|Noite]").
 export const OPCAO_OUTRO = "Outro";
@@ -65,8 +69,10 @@ export function erroEscala(v: string): string | null {
   return escalaValida(v) ? null : `Escala inválida: escolha uma das opções (${ESCALAS_VALIDAS.join(", ")}) ou, em "Outro", use o formato NxM (ex.: 5x2) ou NxM - Dia/Noite.`;
 }
 export function erroHorario(v: string): string | null {
+  // Texto padrão de jornada (jornadaTrabalho.ts) vale sem prefixo de turno.
+  if (interpretarTextoJornada(v)) return null;
   const d = decomporHorario(v);
-  if (!d) return 'Horário inválido: use o formato "Turno B, 08h00 às 17h00" (turno, hora de entrada e hora de saída).';
+  if (!d) return 'Horário inválido: use o formato "Turno B, 08h00 às 17h00" (turno, hora de entrada e hora de saída) ou um dos modelos "Segunda a sexta-feira, das 08h00 às 17h00", "Segunda a quinta-feira, das 08h00 às 17h00; sexta-feira, até as 16h00" ou "Segunda a sexta-feira, das 08h00 às 17h00; sábado, das 08h00 às 12h00".';
   return turnoValido(d.turno) ? null : `Horário inválido: o turno "${d.turno}" não é uma das opções. ${erroTurno(d.turno)}`;
 }
 export function erroCentroCusto(v: string): string | null {
@@ -111,6 +117,22 @@ export interface ErroCampoAdmissao {
   erro: string;
 }
 
+const ROTULO_JORNADA_EXEMPLO = {
+  seg_sex: "Segunda a sexta-feira, das 08h00 às 17h00",
+  seg_qui_sex_reduzida: "Segunda a quinta-feira, das 08h00 às 17h00; sexta-feira, até as 16h00",
+  seg_sex_sab_reduzido: "Segunda a sexta-feira, das 08h00 às 17h00; sábado, das 08h00 às 12h00",
+} as const;
+
+// Escala de jornada x horário: sem horário não há o que conferir (a exigência de preenchimento é de quem usa); com horário, ele precisa ser o texto
+// padrão DA MESMA escala. Escalas comuns (6x1, 6x2, Fixa...) não entram: valem como sempre.
+export function erroEscalaHorario(escala: string | null | undefined, horario: string | null | undefined): string | null {
+  const modelo = modeloDoRotulo(escala);
+  if (!modelo || !horario) return null;
+  const j = interpretarTextoJornada(horario);
+  if (j && j.modelo === modelo) return null;
+  return `Horário e escala não conferem: a escala "${escala}" exige o horário no texto padrão dela (ex.: ${ROTULO_JORNADA_EXEMPLO[modelo]}).`;
+}
+
 const VALIDADORES: { campo: keyof CamposAdmissaoPadrao; rotulo: string; validar: (v: never) => string | null; tipo: "texto" | "numero" }[] = [
   { campo: "admissao_salario", rotulo: "Salário mensal", validar: erroSalarioMensal as (v: never) => string | null, tipo: "numero" },
   { campo: "admissao_salario_hora", rotulo: "Salário por hora", validar: erroSalarioHora as (v: never) => string | null, tipo: "numero" },
@@ -131,6 +153,10 @@ export function validarCamposAdmissao(c: CamposAdmissaoPadrao): ErroCampoAdmissa
     const e = (v.validar as (x: unknown) => string | null)(valor);
     if (e) erros.push({ campo: v.campo, rotulo: v.rotulo, erro: e });
   }
+  // Escala de jornada (Segunda a sexta-feira, + sexta reduzida, + sábado reduzido): o horário precisa ser o texto padrão DESSA escala.
+  const erroJornada = erroEscalaHorario(c.admissao_escala, c.admissao_horario);
+  if (erroJornada) erros.push({ campo: "admissao_horario", rotulo: "Horário", erro: erroJornada });
+  // A coerência horário x turno vale SÓ para o formato antigo ("Turno X, HHhMM às HHhMM"); o texto padrão de jornada não leva turno.
   if (c.admissao_turno && c.admissao_horario) {
     const d = decomporHorario(c.admissao_horario);
     if (d && d.turno !== c.admissao_turno) {

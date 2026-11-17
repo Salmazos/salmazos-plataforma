@@ -4,8 +4,10 @@ import { useState } from "react";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import { TEMPO_CONTRATO_PADRAO } from "@/lib/constants";
 import { DIAS_AUXILIAR_PRORROGACAO, MAX_DIAS_CONTRATO } from "@/lib/dataTerminoContrato";
+import CamposHorasJornada from "@/components/CamposHorasJornada";
+import { gerarTextoJornada, horaParaInput, interpretarTextoJornada, modeloDoRotulo } from "@/lib/jornadaTrabalho";
 import {
-  CENTRO_CUSTO_MAX, ESCALA_OPCOES_MOT, OPCAO_OUTRO, TURNO_OPCOES, TURNO_OPCOES_MOT,
+  CENTRO_CUSTO_MAX, ESCALAS_JORNADA, ESCALA_OPCOES_MOT, OPCAO_OUTRO, TURNO_OPCOES, TURNO_OPCOES_MOT,
   comporHorario, decomporHorario, erroTempoContrato, escalaValida, turnoValido, validarCamposAdmissao,
   type CamposAdmissaoPadrao,
 } from "@/lib/admissaoCamposPadrao";
@@ -55,8 +57,13 @@ export default function CamposAdmissaoPadrao({ tipoServico, valores, onChange, i
   const horarioAtual = decomporHorario(valores.admissao_horario);
   const turnoValor = valores.admissao_turno ?? horarioAtual?.turno ?? "";
   const [turno, setTurno] = useState(() => estadoInicialLista(turnoValor, listaTurno, turnoValido));
-  const [entrada, setEntrada] = useState(horarioAtual?.entrada ?? "");
-  const [saida, setSaida] = useState(horarioAtual?.saida ?? "");
+  // Escala de jornada (texto padrão, sem turno no horário): as horas vêm do texto. Formato antigo ("Turno X, ...") segue como sempre.
+  const jornadaAtual = interpretarTextoJornada(valores.admissao_horario);
+  const [entrada, setEntrada] = useState(horarioAtual?.entrada ?? horaParaInput(jornadaAtual?.entrada ?? ""));
+  const [saida, setSaida] = useState(horarioAtual?.saida ?? horaParaInput(jornadaAtual?.saida ?? ""));
+  const [sextaSaida, setSextaSaida] = useState(horaParaInput(jornadaAtual?.sextaSaida ?? ""));
+  const [sabadoEntrada, setSabadoEntrada] = useState(horaParaInput(jornadaAtual?.sabadoEntrada ?? ""));
+  const [sabadoSaida, setSabadoSaida] = useState(horaParaInput(jornadaAtual?.sabadoSaida ?? ""));
   const [escala, setEscala] = useState(() => estadoInicialLista(valores.admissao_escala, ESCALA_OPCOES_MOT, escalaValida));
   const [tipoSalario, setTipoSalario] = useState<"horista" | "mensalista">(() => (Number(valores.admissao_salario ?? 0) > 0 && !(Number(valores.admissao_salario_hora ?? 0) > 0) ? "mensalista" : "horista"));
 
@@ -67,10 +74,38 @@ export default function CamposAdmissaoPadrao({ tipoServico, valores, onChange, i
   const [prorrogacao, setProrrogacao] = useState(tempoOutro?.[2] ?? "");
   const tempoForaDoPadrao = !!tempoAtual && tempoSel === "" && erroTempoContrato(tempoAtual) !== null;
 
-  const emitirHorario = (sel: string, outro: string, ent: string, sai: string) => {
-    const t = sel === OPCAO_OUTRO ? outro.trim() : sel;
-    onChange({ admissao_turno: t || null, admissao_horario: t && ent && sai ? comporHorario(t, ent, sai) : null });
+  const horasExtras = { sextaSaida, sabadoEntrada, sabadoSaida };
+  const mudarEscala = (s: { sel: string; outro: string; foraDoPadrao: boolean }) => {
+    setEscala(s);
+    const valor = (s.sel === OPCAO_OUTRO ? s.outro.trim() : s.sel) || null;
+    // Entrar ou sair de uma escala de jornada refaz o horário (texto padrão <-> "turno, entrada às saída"); as demais escalas só trocam a escala.
+    if (modeloDoRotulo(s.sel) || modeloDoRotulo(escala.sel)) {
+      const t = turno.sel === OPCAO_OUTRO ? turno.outro.trim() : turno.sel;
+      const modelo = modeloDoRotulo(s.sel);
+      const horario = modelo ? gerarTextoJornada(modelo, { entrada, saida, ...{ sextaSaida, sabadoEntrada, sabadoSaida } }) || null : t && entrada && saida ? comporHorario(t, entrada, saida) : null;
+      onChange({ admissao_escala: valor, admissao_horario: horario });
+    } else {
+      onChange({ admissao_escala: valor });
+    }
   };
+  const mudarHorasExtras = (patch: { sextaSaida?: string; sabadoEntrada?: string; sabadoSaida?: string }) => {
+    const extras = { sextaSaida, sabadoEntrada, sabadoSaida, ...patch };
+    if (patch.sextaSaida !== undefined) setSextaSaida(patch.sextaSaida);
+    if (patch.sabadoEntrada !== undefined) setSabadoEntrada(patch.sabadoEntrada);
+    if (patch.sabadoSaida !== undefined) setSabadoSaida(patch.sabadoSaida);
+    emitirHorario(turno.sel, turno.outro, entrada, saida, extras);
+  };
+  const modeloEscala = modeloDoRotulo(escala.sel);
+  // Horário + turno juntos. Escala de jornada: horário = texto padrão (sem turno); demais: "<turno>, HHhMM às HHhMM" como sempre.
+  const patchHorario = (sel: string, outro: string, ent: string, sai: string, escSel: string = escala.sel, extras = horasExtras) => {
+    const t = sel === OPCAO_OUTRO ? outro.trim() : sel;
+    const modelo = modeloDoRotulo(escSel);
+    const horario = modelo
+      ? gerarTextoJornada(modelo, { entrada: ent, saida: sai, ...extras }) || null
+      : t && ent && sai ? comporHorario(t, ent, sai) : null;
+    return { admissao_turno: t || null, admissao_horario: horario };
+  };
+  const emitirHorario = (sel: string, outro: string, ent: string, sai: string, extras = horasExtras) => onChange(patchHorario(sel, outro, ent, sai, escala.sel, extras));
   const emitirTempo = (sel: "" | "padrao" | "outro", d: string, p: string) => {
     if (sel === "padrao") onChange({ admissao_tempo_contrato: TEMPO_CONTRATO_PADRAO });
     else if (sel === "outro") onChange({ admissao_tempo_contrato: d ? `${d} dias${p ? `, prorrogável por mais ${p} dias` : ""}` : null });
@@ -158,6 +193,19 @@ export default function CamposAdmissaoPadrao({ tipoServico, valores, onChange, i
               {turno.outro.trim() && !REGEX_TURNO_OUTRO.test(turno.outro.trim()) && <p className="text-[11px] text-red-600 mt-0.5">Use o formato "Turno X" (ex.: Turno E).</p>}
             </label>
           )}
+          {terc && (
+            <>
+              {/* Terceirização não tem lista de escala: aqui só a jornada com compensação, opcional. Vazio = horário padrão (turno + entrada/saída), como sempre. */}
+              <label className={labelClassName}>Jornada com compensação (opcional)
+                <select value={escala.sel} onChange={(e) => mudarEscala({ ...escala, sel: e.target.value, foraDoPadrao: false })} className={inputClassName}>
+                  <option value="">Horário padrão (turno + entrada e saída)</option>
+                  {ESCALAS_JORNADA.map((e) => <option key={e} value={e}>{e}</option>)}
+                </select>
+                {erroP("admissao_escala")}
+              </label>
+              <CamposHorasJornada modelo={modeloEscala} horas={horasExtras} onChange={mudarHorasExtras} inputClassName={inputClassName} labelClassName={labelClassName} obrigatorio={obrigatorios.includes("admissao_horario")} />
+            </>
+          )}
           {(entradaSemSaida || erroDe("admissao_horario") || erroDe("admissao_turno")) && (
             <div className="sm:col-span-2">
               {entradaSemSaida && <p className="text-[11px] text-amber-700">Preencha entrada e saída para gravar o horário.</p>}
@@ -173,7 +221,7 @@ export default function CamposAdmissaoPadrao({ tipoServico, valores, onChange, i
           <label className={labelClassName}>Escala{ast("admissao_escala")}
             <select
               value={escala.sel}
-              onChange={(e) => { const s = { ...escala, sel: e.target.value, foraDoPadrao: false }; setEscala(s); onChange({ admissao_escala: (s.sel === OPCAO_OUTRO ? s.outro.trim() : s.sel) || null }); }}
+              onChange={(e) => mudarEscala({ ...escala, sel: e.target.value, foraDoPadrao: false })}
               className={inputClassName}
             >
               <option value="">Selecione...</option>
@@ -182,6 +230,7 @@ export default function CamposAdmissaoPadrao({ tipoServico, valores, onChange, i
             {escala.foraDoPadrao && <p className="text-[11px] text-amber-700 mt-0.5">O valor atual ("{valores.admissao_escala}") está fora das opções: escolha a escala de novo.</p>}
             {erroP("admissao_escala")}
           </label>
+          <CamposHorasJornada modelo={modeloEscala} horas={horasExtras} onChange={mudarHorasExtras} inputClassName={inputClassName} labelClassName={labelClassName} obrigatorio={obrigatorios.includes("admissao_horario")} />
           {escala.sel === OPCAO_OUTRO && (
             <label className={labelClassName}>Especifique a escala
               <input

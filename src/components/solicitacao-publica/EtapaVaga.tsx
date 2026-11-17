@@ -6,12 +6,13 @@ import {
   type HorarioForm, type HorarioTipo,
 } from "@/lib/solicitacaoVagaCampos";
 import ChipGroupPublico from "./ChipGroupPublico";
+import CamposHorasJornada from "@/components/CamposHorasJornada";
 import { AvisoAnuncio, CLASSE_ENTRADA, CampoSelecao, CampoTexto, ChipToggle, ListaPersonalizada, PreviaTextoGerado, Segmentado } from "./controles";
 import { OPCOES_SALARIO, escolherOpcaoSalario, opcaoSalarioAtual } from "@/lib/solicitacaoVagaPublicaForm";
 import type { PropsEtapa } from "./tipos";
 
 const OPCOES_ESTADO = ESTADOS.map((uf) => ({ id: uf, label: uf }));
-const TIPOS_COM_HORAS = new Set<HorarioTipo | "">(["seg_sex", "6x1", "6x2", "12x36", "turno_fixo"]);
+const TIPOS_COM_HORAS = new Set<HorarioTipo | "">(["seg_sex", "seg_qui_sex_reduzida", "seg_sex_sab_reduzido", "6x1", "6x2", "12x36", "turno_fixo"]);
 
 function SeletorHorario({ horario, onChange, erro }: { horario: HorarioForm; onChange: (h: HorarioForm) => void; erro?: string }) {
   const mudar = (parcial: Partial<HorarioForm>) => onChange({ ...horario, ...parcial });
@@ -55,6 +56,18 @@ function SeletorHorario({ horario, onChange, erro }: { horario: HorarioForm; onC
             <CampoTexto id="campo-horario_entrada" rotulo="Entrada" tipo="time" valor={horario.entrada} onChange={(v) => mudar({ entrada: v })} />
             <CampoTexto id="campo-horario_saida" rotulo="Saída" tipo="time" valor={horario.saida} onChange={(v) => mudar({ saida: v })} />
           </div>
+          {(horario.tipo === "seg_qui_sex_reduzida" || horario.tipo === "seg_sex_sab_reduzido") && (
+            <div className="grid grid-cols-2 gap-3">
+              <CamposHorasJornada
+                modelo={horario.tipo}
+                horas={{ sextaSaida: horario.sextaSaida, sabadoEntrada: horario.sabadoEntrada, sabadoSaida: horario.sabadoSaida }}
+                onChange={(p) => mudar(p)}
+                inputClassName={CLASSE_ENTRADA}
+                labelClassName="block text-sm font-semibold text-gray-900"
+                obrigatorio={false}
+              />
+            </div>
+          )}
           <CampoSelecao
             id="campo-horario_intervalo"
             rotulo="Intervalo"

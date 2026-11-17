@@ -10,6 +10,8 @@ import {
   erroCentroCusto, erroEscala, erroTempoContrato, erroTurno, formatarHoraTexto,
 } from "@/lib/admissaoCamposPadrao";
 import { TEMPO_CONTRATO_PADRAO } from "@/lib/constants";
+import CamposHorasJornada from "@/components/CamposHorasJornada";
+import { ROTULO_JORNADA, MODELOS_JORNADA, gerarTextoJornada, modeloDoRotulo } from "@/lib/jornadaTrabalho";
 import { MOSTRAR_DIA_TESTE_NO_PORTAL } from "@/lib/diaTestePortal";
 import CampoDiasTeste, { ESTADO_DIAS_TESTE_VAZIO, diasTesteParaEnvio, erroDiasTeste, type EstadoDiasTeste } from "@/components/CampoDiasTeste";
 
@@ -93,6 +95,10 @@ export default function PortalAvaliacaoBtn({
   // Só usados no bloco MOT — ver TURNO_OPCOES_MOT/ESCALA_OPCOES_MOT.
   const [admEscalaSelecionada, setAdmEscalaSelecionada] = useState("");
   const [admEscalaOutro, setAdmEscalaOutro] = useState("");
+  // Horas extras das escalas de jornada (sexta reduzida / sábado reduzido) — jornadaTrabalho.ts.
+  const [admSextaSaida, setAdmSextaSaida] = useState("");
+  const [admSabadoEntrada, setAdmSabadoEntrada] = useState("");
+  const [admSabadoSaida, setAdmSabadoSaida] = useState("");
 
   // Local/Data/Hora da Integração estruturados (substituem o texto livre antigo)
   const [admIntegracaoLocal, setAdmIntegracaoLocal] = useState("");
@@ -197,9 +203,13 @@ export default function PortalAvaliacaoBtn({
   const precisaHorarioEstruturado = isMOT || isTerc;
   const turnoFinal = admTurnoSelecionado === "Outro" ? admTurnoOutro.trim() : admTurnoSelecionado;
   const escalaFinal = admEscalaSelecionada === "Outro" ? admEscalaOutro.trim() : admEscalaSelecionada;
-  const horarioComposto = admHorarioEntrada && admHorarioSaida && turnoFinal
-    ? `${turnoFinal}, ${formatarHoraTexto(admHorarioEntrada)} às ${formatarHoraTexto(admHorarioSaida)}`
-    : "";
+  // Escala de jornada: o horário é o texto padrão dela (sem turno); as demais seguem "<turno>, entrada às saída" como sempre.
+  const modeloEscala = precisaHorarioEstruturado ? modeloDoRotulo(escalaFinal) : null;
+  const horarioComposto = modeloEscala
+    ? gerarTextoJornada(modeloEscala, { entrada: admHorarioEntrada, saida: admHorarioSaida, sextaSaida: admSextaSaida, sabadoEntrada: admSabadoEntrada, sabadoSaida: admSabadoSaida })
+    : admHorarioEntrada && admHorarioSaida && turnoFinal
+      ? `${turnoFinal}, ${formatarHoraTexto(admHorarioEntrada)} às ${formatarHoraTexto(admHorarioSaida)}`
+      : "";
 
   const integracaoPreenchidaParcialmente = Boolean(
     (admIntegracaoLocal.trim() || admIntegracaoData || admIntegracaoHora) &&
@@ -235,6 +245,7 @@ export default function PortalAvaliacaoBtn({
       if (!admEscalaSelecionada) return "Selecione a escala.";
       if (admEscalaSelecionada === "Outro" && !admEscalaOutro.trim()) return "Especifique a escala.";
       { const e = erroEscala(escalaFinal); if (e) return e; }
+      if (modeloEscala && !horarioComposto) return "Informe os horários da jornada escolhida (entrada, saída e " + (modeloEscala === "seg_qui_sex_reduzida" ? "saída de sexta-feira)." : "entrada e saída de sábado).");
       if (!admTempoContrato.trim()) return "Informe o tempo de contrato.";
       { const e = erroTempoContrato(admTempoContrato.trim()); if (e) return e; }
       if (!admTelefone.trim()) return "Informe o telefone do candidato.";
@@ -252,6 +263,7 @@ export default function PortalAvaliacaoBtn({
       if (!admTurnoSelecionado) return "Selecione o turno.";
       if (admTurnoSelecionado === "Outro" && !admTurnoOutro.trim()) return "Especifique o turno.";
       { const e = erroTurno(turnoFinal); if (e) return e; }
+      if (modeloEscala && !horarioComposto) return "Informe os horários da jornada escolhida (entrada, saída e " + (modeloEscala === "seg_qui_sex_reduzida" ? "saída de sexta-feira)." : "entrada e saída de sábado).");
       if (!admTelefone.trim()) return "Informe o telefone do candidato.";
       if (admVt === null) return "Informe se utiliza Vale Transporte.";
       if (!admExameResp.trim()) return "Informe o responsável pelo exame admissional.";
@@ -303,7 +315,7 @@ export default function PortalAvaliacaoBtn({
             admissao_funcao: admFuncao || null,
             admissao_salario_hora: admSalarioHora ? parseFloat(admSalarioHora) : null,
             admissao_turno: precisaHorarioEstruturado ? (turnoFinal || null) : null,
-            admissao_escala: isMOT ? (escalaFinal || null) : null,
+            admissao_escala: isMOT ? (escalaFinal || null) : isTerc && modeloEscala ? escalaFinal : null,
             admissao_tempo_contrato: admTempoContrato || null,
             admissao_vt: admVt,
             admissao_exame_responsavel: admExameResp || null,
@@ -565,6 +577,12 @@ export default function PortalAvaliacaoBtn({
                           {ESCALA_OPCOES_MOT.map((es) => <option key={es} value={es}>{es}</option>)}
                         </select>
                       </Field>
+                      <CamposHorasJornada
+                        modelo={modeloEscala}
+                        horas={{ sextaSaida: admSextaSaida, sabadoEntrada: admSabadoEntrada, sabadoSaida: admSabadoSaida }}
+                        onChange={(p) => { if (p.sextaSaida !== undefined) setAdmSextaSaida(p.sextaSaida); if (p.sabadoEntrada !== undefined) setAdmSabadoEntrada(p.sabadoEntrada); if (p.sabadoSaida !== undefined) setAdmSabadoSaida(p.sabadoSaida); }}
+                        inputClassName="input-field"
+                      />
                       {admEscalaSelecionada === "Outro" && (
                         <Field label="Especifique a escala" required>
                           <input value={admEscalaOutro} onChange={(e) => setAdmEscalaOutro(e.target.value)}
@@ -673,6 +691,19 @@ export default function PortalAvaliacaoBtn({
                             style={tentouEnviar && !admTurnoOutro.trim() ? inv : undefined} />
                         </Field>
                       )}
+                      {/* Terceirização não tem lista de escala: só a jornada com compensação, opcional (vazio = horário padrão, como sempre). */}
+                      <Field label="Jornada com compensação (opcional)">
+                        <select value={admEscalaSelecionada} onChange={(e) => setAdmEscalaSelecionada(e.target.value)} className="input-field">
+                          <option value="">Horário padrão (turno + entrada e saída)</option>
+                          {MODELOS_JORNADA.map((m) => <option key={m} value={ROTULO_JORNADA[m]}>{ROTULO_JORNADA[m]}</option>)}
+                        </select>
+                      </Field>
+                      <CamposHorasJornada
+                        modelo={modeloEscala}
+                        horas={{ sextaSaida: admSextaSaida, sabadoEntrada: admSabadoEntrada, sabadoSaida: admSabadoSaida }}
+                        onChange={(p) => { if (p.sextaSaida !== undefined) setAdmSextaSaida(p.sextaSaida); if (p.sabadoEntrada !== undefined) setAdmSabadoEntrada(p.sabadoEntrada); if (p.sabadoSaida !== undefined) setAdmSabadoSaida(p.sabadoSaida); }}
+                        inputClassName="input-field"
+                      />
                       <Field label="Telefone do Candidato" required>
                         <CampoTelefone value={admTelefone} onChange={setAdmTelefone}
                           placeholder="(11) 99999-9999" className="input-field"

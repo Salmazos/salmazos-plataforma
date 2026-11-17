@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import CamposHorasJornada from "@/components/CamposHorasJornada";
+import { gerarTextoJornada, horaParaInput, interpretarTextoJornada, modeloDoRotulo } from "@/lib/jornadaTrabalho";
 
 interface Props {
   value: string;
@@ -15,6 +17,9 @@ const JORNADA_TIPOS = [
   "Segunda a sexta",
   "Segunda a sábado",
   "Todos os dias",
+  // Compensação de horas (jornadaTrabalho.ts): o texto sai do gerador do módulo único. A "Exceção" abaixo continua como sempre foi.
+  "Segunda a quinta-feira + sexta reduzida",
+  "Segunda a sexta-feira + sábado reduzido",
   "Escala 6x1",
   "Escala 6x2",
   "Escala 12x36",
@@ -53,10 +58,17 @@ const labelStyle = "block text-xs font-semibold text-gray-500 uppercase tracking
 export default function SeletorHorarioIniciarAdmissao({ value, onChange }: Props) {
   // Horário pré-preenchido (texto livre vindo da indicação do cliente) não tem como virar campos estruturados
   // sem adivinhar; entra como "Personalizado" e continua editável.
-  const [tipo, setTipo] = useState<JornadaTipo | "">(value.trim() ? "Personalizado" : "");
-  const [entrada, setEntrada] = useState("");
-  const [saida, setSaida] = useState("");
-  const [intervalo, setIntervalo] = useState("");
+  // Exceção: valor que já é o texto PADRÃO de uma jornada com compensação volta para o chip dela, com as horas preenchidas.
+  const inicial = interpretarTextoJornada(value);
+  const fraseIntervalo = inicial?.intervalo ?? "";
+  const inicialJornada = inicial && inicial.modelo !== "seg_sex" && (!fraseIntervalo || fraseIntervalo.startsWith("intervalo de ")) ? inicial : null;
+  const [tipo, setTipo] = useState<JornadaTipo | "">(inicialJornada ? (inicialJornada.modelo === "seg_qui_sex_reduzida" ? "Segunda a quinta-feira + sexta reduzida" : "Segunda a sexta-feira + sábado reduzido") : value.trim() ? "Personalizado" : "");
+  const [entrada, setEntrada] = useState(inicialJornada ? horaParaInput(inicialJornada.entrada) : "");
+  const [saida, setSaida] = useState(inicialJornada ? horaParaInput(inicialJornada.saida) : "");
+  const [intervalo, setIntervalo] = useState(inicialJornada ? fraseIntervalo.replace(/^intervalo de /, "") : "");
+  const [sextaSaida, setSextaSaida] = useState(inicialJornada ? horaParaInput(inicialJornada.sextaSaida ?? "") : "");
+  const [sabadoEntrada, setSabadoEntrada] = useState(inicialJornada ? horaParaInput(inicialJornada.sabadoEntrada ?? "") : "");
+  const [sabadoSaida, setSabadoSaida] = useState(inicialJornada ? horaParaInput(inicialJornada.sabadoSaida ?? "") : "");
   const [turno1236, setTurno1236] = useState<"diurno" | "noturno">("diurno");
   const [comExcecao, setComExcecao] = useState(false);
   const [excecaoDia, setExcecaoDia] = useState("");
@@ -66,10 +78,15 @@ export default function SeletorHorarioIniciarAdmissao({ value, onChange }: Props
 
   const ehDiaRegular = tipo !== "" && DIAS_REGULARES.has(tipo as JornadaTipo);
   const ehEscala = tipo !== "" && ESCALAS.has(tipo as JornadaTipo);
+  const modeloCompensacao = tipo !== "" ? modeloDoRotulo(tipo) : null;
 
   const montarHorarioTexto = (): string => {
     if (!tipo) return "";
     if (tipo === "Personalizado") return personalizado.trim();
+    // Jornada com compensação: texto padrão do módulo único (jornadaTrabalho.ts). A "Exceção" dos dias regulares abaixo continua como sempre foi.
+    if (modeloCompensacao) {
+      return gerarTextoJornada(modeloCompensacao, { entrada, saida, sextaSaida, sabadoEntrada, sabadoSaida, intervalo: intervalo.trim() ? `intervalo de ${intervalo.trim()}` : "" });
+    }
 
     if (ehEscala) {
       if (!entrada || !saida) return "";
@@ -182,6 +199,31 @@ export default function SeletorHorarioIniciarAdmissao({ value, onChange }: Props
             </div>
           )}
         </>
+      )}
+
+      {modeloCompensacao && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <div>
+            <label className={labelStyle}>Entrada</label>
+            <input type="time" value={entrada} onChange={(e) => setEntrada(e.target.value)} className="input-field w-32" />
+          </div>
+          <div>
+            <label className={labelStyle}>Saída</label>
+            <input type="time" value={saida} onChange={(e) => setSaida(e.target.value)} className="input-field w-32" />
+          </div>
+          <CamposHorasJornada
+            modelo={modeloCompensacao}
+            horas={{ sextaSaida, sabadoEntrada, sabadoSaida }}
+            onChange={(p) => { if (p.sextaSaida !== undefined) setSextaSaida(p.sextaSaida); if (p.sabadoEntrada !== undefined) setSabadoEntrada(p.sabadoEntrada); if (p.sabadoSaida !== undefined) setSabadoSaida(p.sabadoSaida); }}
+            inputClassName="input-field w-32"
+            labelClassName={labelStyle}
+            obrigatorio={false}
+          />
+          <div>
+            <label className={labelStyle}>Intervalo</label>
+            <input type="text" value={intervalo} onChange={(e) => setIntervalo(e.target.value)} placeholder="Ex: 1h12" className="input-field w-28" />
+          </div>
+        </div>
       )}
 
       {ehEscala && (

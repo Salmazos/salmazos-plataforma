@@ -7,7 +7,7 @@ import { hojeBrasiliaISO } from "@/lib/rescisaoProgramada";
 import { exigeRespostaDiasTeste, MSG_INFORME_DIAS_TESTE, resolverDiasTeste } from "@/lib/diasTeste";
 import { faltandoObrigatorios, mexeNosDadosDeAdmissao } from "@/lib/admissaoObrigatorios";
 import { avisarIndicacaoEditada } from "@/lib/avisoIndicacaoEditada";
-import { mensagemErrosAdmissao, validarCamposAdmissao } from "@/lib/admissaoCamposPadrao";
+import { erroEscalaHorario, mensagemErrosAdmissao, validarCamposAdmissao } from "@/lib/admissaoCamposPadrao";
 import {
   CAMPOS_ADMISSAO,
   ROTULO_CAMPO,
@@ -170,6 +170,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         admissao_turno: (entrada.admissao_turno as string | null | undefined) ?? (entrada.admissao_horario !== undefined ? sol.admissao_turno : null),
       });
       if (errosAdm.length > 0) return NextResponse.json({ error: mensagemErrosAdmissao(errosAdm) }, { status: 400 });
+    }
+
+    // Escala de jornada x horário: mexeu em um dos dois, o par (valor novo ou o já salvo) precisa conferir.
+    if (entrada.admissao_escala !== undefined || entrada.admissao_horario !== undefined) {
+      const erroJ = erroEscalaHorario(
+        (entrada.admissao_escala !== undefined ? entrada.admissao_escala : sol.admissao_escala) as string | null | undefined,
+        (entrada.admissao_horario !== undefined ? entrada.admissao_horario : sol.admissao_horario) as string | null | undefined,
+      );
+      if (erroJ) return NextResponse.json({ error: erroJ }, { status: 400 });
     }
 
     const alteracoes: Alteracao[] = calcularDiff(sol, entrada);

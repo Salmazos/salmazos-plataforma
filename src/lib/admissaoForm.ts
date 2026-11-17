@@ -3,6 +3,7 @@ import { MOSTRAR_DIA_TESTE_NO_PORTAL } from "@/lib/diaTestePortal";
 import { ESTADO_DIAS_TESTE_VAZIO, diasTesteParaEnvio, estadoDiasTesteDeValor, type EstadoDiasTeste } from "@/components/CampoDiasTeste";
 import type { CamposAdmissaoPadrao } from "@/lib/admissaoCamposPadrao";
 import { TIPO_MOT, TIPO_RS, TIPO_TERC } from "@/lib/admissaoObrigatorios";
+import { modeloDoRotulo } from "@/lib/jornadaTrabalho";
 
 // Estado do bloco "Dados para Admissão" do Portal do Cliente (indicação com vaga, sem vaga e edição) e a conversão de/para as colunas
 // admissao_* de solicitacoes_indicacao_candidato. O bloco (BlocoDadosAdmissao) é o MESMO nos três; aqui mora tudo que não é tela.
@@ -70,7 +71,8 @@ export function colunasVisiveis(tipo: string | null | undefined): string[] {
       "admissao_vt", "admissao_exame_responsavel", "admissao_local_integracao"];
   }
   if (tipo === TIPO_TERC) {
-    return [...base, "admissao_centro_custo", "admissao_horario", "admissao_turno", "admissao_vt", "admissao_exame_responsavel", "admissao_local_integracao"];
+    // admissao_escala na Terceirização: só a jornada com compensação (opcional); vazio = como sempre.
+    return [...base, "admissao_centro_custo", "admissao_horario", "admissao_turno", "admissao_escala", "admissao_vt", "admissao_exame_responsavel", "admissao_local_integracao"];
   }
   return base;
 }
@@ -94,7 +96,7 @@ export function colunasDeDados(d: DadosAdmissaoForm, tipo: string | null | undef
     admissao_centro_custo: horario ? p.admissao_centro_custo || null : null,
     admissao_horario: horario ? p.admissao_horario || null : null,
     admissao_turno: horario ? p.admissao_turno || null : null,
-    admissao_escala: mot ? p.admissao_escala || null : null,
+    admissao_escala: mot ? p.admissao_escala || null : tipo === TIPO_TERC && modeloDoRotulo(p.admissao_escala) ? p.admissao_escala ?? null : null,
     admissao_tempo_contrato: mot ? p.admissao_tempo_contrato || null : null,
     admissao_vt: horario ? d.vt : null,
     admissao_exame_responsavel: horario ? d.exame.trim() || null : null,

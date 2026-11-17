@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     const dados = parsed.data;
 
     // Coerência horário x turno (os formatos de cada campo já foram validados pelo schema).
-    const errosAdm = validarCamposAdmissao({ admissao_horario: dados.admissao_horario, admissao_turno: dados.admissao_turno });
+    const errosAdm = validarCamposAdmissao({ admissao_horario: dados.admissao_horario, admissao_turno: dados.admissao_turno, admissao_escala: dados.admissao_escala });
     if (errosAdm.length > 0) return NextResponse.json({ error: mensagemErrosAdmissao(errosAdm) }, { status: 400 });
 
     // Data de início não pode estar no passado (Brasília). "Hoje" é calculado nesta requisição.

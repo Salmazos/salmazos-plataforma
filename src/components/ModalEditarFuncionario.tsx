@@ -1,5 +1,6 @@
 "use client";
 
+import BotaoUsarModeloJornada from "@/components/BotaoUsarModeloJornada";
 import { useEffect, useState } from "react";
 import type { FuncionarioDetalhe } from "./FuncionarioDetalheClient";
 import { TURNOS_FUNCIONARIO } from "@/lib/constants";
@@ -177,6 +178,7 @@ export default function ModalEditarFuncionario({ isOpen, funcionario, clientes, 
               placeholder="Ex: 06h às 15h"
               className="input-field"
             />
+            <BotaoUsarModeloJornada onAplicar={setHorarioTrabalho} />
           </div>
           <div className="flex-1">
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Turno</label>

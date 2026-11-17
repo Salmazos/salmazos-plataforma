@@ -4,7 +4,7 @@ import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 import { parseBody, indicacaoCandidatoEditSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { ehErroSemVagaIndisponivel, MSG_SEM_VAGA_INDISPONIVEL } from "@/lib/indicacaoSemVaga";
-import { mensagemErrosAdmissao, validarCamposAdmissao } from "@/lib/admissaoCamposPadrao";
+import { erroEscalaHorario, mensagemErrosAdmissao, validarCamposAdmissao } from "@/lib/admissaoCamposPadrao";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -74,6 +74,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         admissao_turno: parsed.data.admissao_turno ?? (parsed.data.admissao_horario !== undefined ? atual.admissao_turno : null),
       });
       if (errosAdm.length > 0) return NextResponse.json({ error: mensagemErrosAdmissao(errosAdm) }, { status: 400 });
+    }
+    // Escala de jornada (Segunda a sexta-feira, + sexta reduzida, + sábado reduzido) x horário: mexeu em um dos dois, o par precisa conferir.
+    if (parsed.data.admissao_escala !== undefined || parsed.data.admissao_horario !== undefined) {
+      const erroJ = erroEscalaHorario(
+        parsed.data.admissao_escala !== undefined ? parsed.data.admissao_escala : atual.admissao_escala,
+        parsed.data.admissao_horario !== undefined ? parsed.data.admissao_horario : atual.admissao_horario,
+      );
+      if (erroJ) return NextResponse.json({ error: erroJ }, { status: 400 });
     }
 
     // Indicação SEM vaga só ganha vaga por "Direcionar" / "Criar vaga" (que conferem tipo, unidade e vaga aberta): por aqui seria

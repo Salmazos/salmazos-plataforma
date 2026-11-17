@@ -1,5 +1,7 @@
 "use client";
 
+import CamposHorasJornada from "@/components/CamposHorasJornada";
+import { gerarTextoJornada } from "@/lib/jornadaTrabalho";
 import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import CampoMoeda from "@/components/ui/CampoMoeda";
@@ -39,7 +41,7 @@ interface VagaTemplate {
   salario: string | null;
   horario_tipo: string | null;
   horario_texto: string | null;
-  horario_padrao: { modelo?: string; entrada?: string; saida?: string; intervalo?: string; intervalo_inicio?: string; intervalo_fim?: string; diurno_noturno?: string; turno?: string } | null;
+  horario_padrao: { modelo?: string; entrada?: string; saida?: string; intervalo?: string; intervalo_inicio?: string; intervalo_fim?: string; diurno_noturno?: string; turno?: string; sexta_saida?: string; sabado_entrada?: string; sabado_saida?: string } | null;
   requisitos: string | null;
   requisitos_chips: string[] | null;
   beneficios: string | null;
@@ -98,6 +100,10 @@ export default function SolicitarVagaPage() {
   const [hor1236, setHor1236] = useState<"diurno" | "noturno">("diurno");
   const [horTurnoNome, setHorTurnoNome] = useState("");
   const [horCustom, setHorCustom] = useState("");
+  // Horas extras dos tipos com compensação (sexta reduzida / sábado reduzido) — jornadaTrabalho.ts.
+  const [horSextaSaida, setHorSextaSaida] = useState("");
+  const [horSabadoEntrada, setHorSabadoEntrada] = useState("");
+  const [horSabadoSaida, setHorSabadoSaida] = useState("");
   const [horPadraoLoaded, setHorPadraoLoaded] = useState(false);
 
   const [reqChips, setReqChips] = useState<Record<string, boolean>>({});
@@ -138,6 +144,9 @@ export default function SolicitarVagaPage() {
       if (hp.intervalo_fim) setHorIntervaloFim(hp.intervalo_fim);
       if (hp.diurno_noturno) setHor1236(hp.diurno_noturno as "diurno" | "noturno");
       if (hp.turno) setHorTurnoNome(hp.turno);
+      if (hp.sexta_saida) setHorSextaSaida(hp.sexta_saida);
+      if (hp.sabado_entrada) setHorSabadoEntrada(hp.sabado_entrada);
+      if (hp.sabado_saida) setHorSabadoSaida(hp.sabado_saida);
       setHorPadraoLoaded(true);
     }
   };
@@ -173,6 +182,9 @@ export default function SolicitarVagaPage() {
       if (hp.intervalo_fim) setHorIntervaloFim(hp.intervalo_fim);
       if (hp.diurno_noturno) setHor1236(hp.diurno_noturno as "diurno" | "noturno");
       if (hp.turno) setHorTurnoNome(hp.turno);
+      if (hp.sexta_saida) setHorSextaSaida(hp.sexta_saida);
+      if (hp.sabado_entrada) setHorSabadoEntrada(hp.sabado_entrada);
+      if (hp.sabado_saida) setHorSabadoSaida(hp.sabado_saida);
     } else if (tpl.horario_tipo) {
       setHorarioTipo(tpl.horario_tipo as HorarioTipo);
     }
@@ -302,6 +314,9 @@ export default function SolicitarVagaPage() {
     const times = `${fmtTime(horEntrada)} às ${fmtTime(horSaida)}`;
     const intervalo = intervaloSufixo();
     const comIntervalo = (base: string) => intervalo ? `${base} (${intervalo})` : base;
+    if (horarioTipo === "seg_qui_sex_reduzida" || horarioTipo === "seg_sex_sab_reduzido") {
+      return gerarTextoJornada(horarioTipo, { entrada: horEntrada, saida: horSaida, sextaSaida: horSextaSaida, sabadoEntrada: horSabadoEntrada, sabadoSaida: horSabadoSaida, intervalo });
+    }
     if (horarioTipo === "seg_sex") return comIntervalo(`Segunda a Sexta, ${times}`);
     if (horarioTipo === "6x1") return comIntervalo(`Escala 6x1, ${times}`);
     if (horarioTipo === "6x2") return comIntervalo(`Escala 6x2, ${times}`);
@@ -351,7 +366,7 @@ export default function SolicitarVagaPage() {
     return result;
   };
 
-  const horarioTexto = useMemo(gerarHorarioTexto, [horarioTipo, horEntrada, horSaida, horIntervalo, horIntervaloInicio, horIntervaloFim, hor1236, horTurnoNome, horCustom]);
+  const horarioTexto = useMemo(gerarHorarioTexto, [horarioTipo, horEntrada, horSaida, horIntervalo, horIntervaloInicio, horIntervaloFim, hor1236, horTurnoNome, horCustom, horSextaSaida, horSabadoEntrada, horSabadoSaida]);
 
   const montarHorarioPadrao = () => horarioTipo ? {
     modelo: horarioTipo,
@@ -362,6 +377,9 @@ export default function SolicitarVagaPage() {
     intervalo_fim: horIntervalo === "personalizado" ? (horIntervaloFim || null) : null,
     diurno_noturno: horarioTipo === "12x36" ? hor1236 : null,
     turno: horarioTipo === "turno_fixo" ? horTurnoNome || null : null,
+    // só os tipos com compensação gravam estes campos (o objeto dos demais tipos segue exatamente como era)
+    ...(horarioTipo === "seg_qui_sex_reduzida" ? { sexta_saida: horSextaSaida || null } : {}),
+    ...(horarioTipo === "seg_sex_sab_reduzido" ? { sabado_entrada: horSabadoEntrada || null, sabado_saida: horSabadoSaida || null } : {}),
     texto: horarioTexto,
   } : null;
   const requisitosTexto = useMemo(gerarRequisitosTexto, [reqChips, reqCursos, reqCondicoes, reqCustom]);
@@ -814,6 +832,22 @@ export default function SolicitarVagaPage() {
             <div className="flex items-start gap-3 flex-wrap">
               <div><label style={labelStyle}>Entrada</label><input type="time" value={horEntrada} onChange={(e) => setHorEntrada(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
               <div><label style={labelStyle}>Saída</label><input type="time" value={horSaida} onChange={(e) => setHorSaida(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
+              <IntervaloField value={horIntervalo} onChange={setHorIntervalo} inicio={horIntervaloInicio} fim={horIntervaloFim} onInicioChange={setHorIntervaloInicio} onFimChange={setHorIntervaloFim} />
+            </div>
+          )}
+
+          {(horarioTipo === "seg_qui_sex_reduzida" || horarioTipo === "seg_sex_sab_reduzido") && (
+            <div className="flex items-start gap-3 flex-wrap">
+              <div><label style={labelStyle}>Entrada</label><input type="time" value={horEntrada} onChange={(e) => setHorEntrada(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
+              <div><label style={labelStyle}>Saída</label><input type="time" value={horSaida} onChange={(e) => setHorSaida(e.target.value)} style={{ ...inputStyle, width: 130 }} /></div>
+              <CamposHorasJornada
+                modelo={horarioTipo}
+                horas={{ sextaSaida: horSextaSaida, sabadoEntrada: horSabadoEntrada, sabadoSaida: horSabadoSaida }}
+                onChange={(p) => { if (p.sextaSaida !== undefined) setHorSextaSaida(p.sextaSaida); if (p.sabadoEntrada !== undefined) setHorSabadoEntrada(p.sabadoEntrada); if (p.sabadoSaida !== undefined) setHorSabadoSaida(p.sabadoSaida); }}
+                inputStyle={{ ...inputStyle, width: 130 }}
+                labelStyle={labelStyle}
+                obrigatorio={false}
+              />
               <IntervaloField value={horIntervalo} onChange={setHorIntervalo} inicio={horIntervaloInicio} fim={horIntervaloFim} onInicioChange={setHorIntervaloInicio} onFimChange={setHorIntervaloFim} />
             </div>
           )}

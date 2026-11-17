@@ -1,5 +1,7 @@
 "use client";
 
+import BotaoUsarModeloJornada from "@/components/BotaoUsarModeloJornada";
+
 // Formulário de edição de uma solicitação de vaga, compartilhado entre o painel (equipe edita
 // direto — ModalSolicitacoesVagas) e o portal (cliente pede alteração, que a Salmazos aprova —
 // portal/solicitacoes). Mesmos campos que o card mostra e que viram a vaga (ver
@@ -156,6 +158,7 @@ export default function FormularioEdicaoSolicitacao({
         <div className="sm:col-span-4">
           <label className={labelCls}>Horário</label>
           <input value={form.horario_texto} onChange={(e) => set("horario_texto", e.target.value)} className={inputCls} />
+          <BotaoUsarModeloJornada onAplicar={(texto) => set("horario_texto", texto)} />
         </div>
         <div className="sm:col-span-4">
           <label className={labelCls}>Requisitos</label>

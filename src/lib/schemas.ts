@@ -941,6 +941,10 @@ const horarioPadraoSchema = z.object({
   intervalo_fim: z.string().optional().nullable(),
   diurno_noturno: z.string().optional().nullable(),
   turno: z.string().optional().nullable(),
+  // Tipos com compensação de horas (jornadaTrabalho.ts): sexta reduzida / sábado reduzido. Sem estas chaves o zod as descartaria ao gravar o padrão.
+  sexta_saida: z.string().optional().nullable(),
+  sabado_entrada: z.string().optional().nullable(),
+  sabado_saida: z.string().optional().nullable(),
   texto: z.string().optional().nullable(),
 });
 
