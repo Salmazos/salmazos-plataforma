@@ -33,14 +33,23 @@ export default async function VagasPage() {
     .from("solicitacoes_indicacao_candidato")
     .select("id", { count: "exact", head: true })
     .eq("status", "pendente");
+  // Das pendentes, as que ainda estão SEM vaga (aguardando direcionamento — migration_indicacao_sem_vaga.sql). Só usa vaga_id,
+  // que sempre existiu: antes da migração a contagem simplesmente dá 0.
+  let indicacoesSemVagaQuery = supabase
+    .from("solicitacoes_indicacao_candidato")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pendente")
+    .is("vaga_id", null);
   if (!ctx.todasUnidades) {
+    indicacoesSemVagaQuery = indicacoesSemVagaQuery.eq("unidade_id", ctx.unidadeId);
     vagasQuery = vagasQuery.eq("unidade_id", ctx.unidadeId);
     solicitacoesQuery = solicitacoesQuery.eq("unidade_id", ctx.unidadeId);
     pedidosAlteracaoQuery = pedidosAlteracaoQuery.eq("unidade_id", ctx.unidadeId);
     indicacoesQuery = indicacoesQuery.eq("unidade_id", ctx.unidadeId);
   }
 
-  const [{ data: vagas }, { count: solicitacoesPendentes }, { data: unidades }, { count: pedidosPendentes }, { count: indicacoesPendentes }] = await Promise.all([
+  const [{ data: vagas }, { count: solicitacoesPendentes }, { data: unidades }, { count: pedidosPendentes }, { count: indicacoesPendentes }, { count: indicacoesSemVaga }] = await Promise.all([
+
     vagasQuery,
     solicitacoesQuery,
     // Só quem vê todas as unidades escolhe a unidade de vaga sem cliente no formulário.
@@ -51,6 +60,7 @@ export default async function VagasPage() {
       : Promise.resolve({ data: null }),
     pedidosAlteracaoQuery,
     indicacoesQuery,
+    indicacoesSemVagaQuery,
   ]);
   const pendingCount = (solicitacoesPendentes ?? 0) + (pedidosPendentes ?? 0);
 
@@ -59,6 +69,7 @@ export default async function VagasPage() {
       vagas={(vagas ?? []) as Vaga[]}
       pendingCount={pendingCount}
       indicacoesPendentes={indicacoesPendentes ?? 0}
+      indicacoesSemVaga={indicacoesSemVaga ?? 0}
       unidades={(unidades as { id: string; nome: string; ativa: boolean }[] | null) ?? undefined}
     />
   );

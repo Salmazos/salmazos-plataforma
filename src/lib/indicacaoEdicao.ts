@@ -122,7 +122,7 @@ export interface AdmissaoResumo {
 
 // Admissão "viva" da indicação: mesmo candidato e mesma vaga (ou vaga nula — a FK é ON DELETE SET NULL,
 // então uma admissão sem vaga continua sendo desse candidato). Cancelada libera a edição.
-export function temAdmissaoAtiva(admissoes: AdmissaoResumo[], vagaId: string): boolean {
+export function temAdmissaoAtiva(admissoes: AdmissaoResumo[], vagaId: string | null): boolean {
   return admissoes.some((a) => a.status !== "cancelada" && (a.vaga_id === vagaId || a.vaga_id == null));
 }
 
@@ -130,7 +130,8 @@ export type MotivoNaoEditavel = "recusada" | "finalizada" | "admissao" | "sem_vi
 
 export interface EntradaPodeEditar {
   status: string;
-  vagaId: string;
+  // Nulo na indicação SEM vaga (sempre pendente: nunca chega a olhar admissão).
+  vagaId: string | null;
   // candidatos_vagas.etapa da candidatura criada na aprovação (null = não encontrada).
   etapa: string | null;
   admissoes: AdmissaoResumo[];

@@ -14,7 +14,8 @@ interface Opts {
   candidatoId: string | null;
   // null só se nem a indicação nem a vaga têm unidade (não deveria existir): sem filtro de unidade.
   unidadeId: string | null;
-  vagaId: string;
+  // Nulos na indicação SEM vaga.
+  vagaId: string | null;
   vagaTitulo: string;
   clienteNome: string;
   candidatoNome: string;
@@ -67,11 +68,11 @@ async function enviarEmails(o: Opts): Promise<void> {
   let attempted = 0;
   let succeeded = 0;
   if (r.modo === "configurado") {
-    const resultados = await Promise.all(r.emails.map((d) => sendEmail({ to: d.email, subject, html, tipo: "indicacao_candidato_editada", vaga_id: o.vagaId })));
+    const resultados = await Promise.all(r.emails.map((d) => sendEmail({ to: d.email, subject, html, tipo: "indicacao_candidato_editada", vaga_id: o.vagaId ?? undefined })));
     attempted = resultados.length;
     succeeded = resultados.filter((x) => x.success).length;
   } else {
-    const res = await notifyAllAnalysts({ subject, html, tipo: "indicacao_candidato_editada", vaga_id: o.vagaId, unidadeId: o.unidadeId });
+    const res = await notifyAllAnalysts({ subject, html, tipo: "indicacao_candidato_editada", vaga_id: o.vagaId ?? undefined, unidadeId: o.unidadeId });
     attempted = res.attempted;
     succeeded = res.succeeded;
   }

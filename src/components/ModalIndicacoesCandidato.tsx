@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { BotaoCurriculo } from "./BotaoCurriculo";
+import IndicacaoSemVagaAcoes from "./IndicacaoSemVagaAcoes";
 import { textoDiasTesteParaRH } from "@/lib/diasTeste";
 import { DIAS_AUXILIAR_PRORROGACAO, MAX_DIAS_CONTRATO, erroDataTermino, somarDiasIso } from "@/lib/dataTerminoContrato";
 
@@ -41,6 +42,10 @@ interface Indicacao {
   decidido_em: string | null;
   created_at: string;
   vagas: { titulo: string; tipo_servico: string } | null;
+  // Indicação SEM vaga: vaga_id nulo e o tipo de serviço vem da própria indicação (sem_vaga_origem: nasceu sem vaga).
+  vaga_id: string | null;
+  tipo_servico?: string | null;
+  sem_vaga_origem?: boolean;
   admissao_data_inicio: string | null;
   admissao_salario: number | null;
   admissao_salario_hora: number | null;
@@ -101,6 +106,8 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
   const [riscoEntendido, setRiscoEntendido] = useState(false);
   // Data de término por indicação (só MOT). Sempre começa vazia: nunca vem de admissao_tempo_contrato.
   const [datasFim, setDatasFim] = useState<Record<string, string>>({});
+  // Fila "Sem vaga" (aguardando direcionamento): filtro da lista e aviso que pede ação da analista.
+  const [filtroSemVaga, setFiltroSemVaga] = useState(false);
 
   const buscarDuplicados = async (indicacaoId: string) => {
     setCarregandoDuplicados((prev) => new Set(prev).add(indicacaoId));
@@ -217,6 +224,16 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
     }
   };
 
+  // Direcionar / criar vaga / completar dados: o item continua na lista (agora com vaga, quando for o caso) e pode ser aprovado.
+  const handleAtualizadoSemVaga = (id: string, novo: Record<string, unknown>, mensagem: string, aviso?: string | null) => {
+    setItems((prev) => prev.map((x) => (x.id === id ? ({ ...x, ...novo, vagas: (novo.vagas as Indicacao["vagas"]) ?? x.vagas } as Indicacao) : x)));
+    setFiltroSemVaga(false);
+    showToast(aviso ? `${mensagem} ${aviso}` : mensagem, aviso ? 10000 : 5000);
+  };
+
+  const semVagaPendentes = items.filter((x) => x.status === "pendente" && !x.vaga_id);
+  const itemsVisiveis = filtroSemVaga ? semVagaPendentes : items;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
@@ -241,6 +258,17 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
             </button>
           )}
 
+          {!focoId && !loading && semVagaPendentes.length > 0 && (
+            <div className="flex gap-2 mb-4">
+              <button onClick={() => setFiltroSemVaga(false)} className={`text-xs font-semibold rounded-full px-3 py-1 border ${!filtroSemVaga ? "bg-black text-[#FFD700] border-black" : "border-gray-300 text-gray-600"}`}>
+                Todas ({items.length})
+              </button>
+              <button onClick={() => setFiltroSemVaga(true)} className={`text-xs font-semibold rounded-full px-3 py-1 border ${filtroSemVaga ? "bg-amber-500 text-black border-amber-500" : "border-amber-400 text-amber-800 bg-amber-50"}`}>
+                Sem vaga ({semVagaPendentes.length})
+              </button>
+            </div>
+          )}
+
           {loading ? (
             <div className="text-center py-12">
               <p className="text-gray-400 text-sm">Carregando...</p>
@@ -254,10 +282,12 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
             </div>
           ) : (
             <div className="space-y-4">
-              {items.map((it) => {
-                const tipo = it.vagas
-                  ? TIPO_LABEL[it.vagas.tipo_servico] ?? { label: it.vagas.tipo_servico, bg: "#6B7280", color: "#fff" }
+              {itemsVisiveis.map((it) => {
+                const tipoDaIndicacao = it.vagas?.tipo_servico ?? it.tipo_servico ?? null;
+                const tipo = tipoDaIndicacao
+                  ? TIPO_LABEL[tipoDaIndicacao] ?? { label: tipoDaIndicacao, bg: "#6B7280", color: "#fff" }
                   : null;
+                const semVaga = !it.vaga_id;
                 const isRecusando = recusandoId === it.id;
                 const isLoading = actionLoading === it.id;
                 const admPreenchidos = ADM_CAMPOS.filter((c) => valorAdmissao(it, c.key));
@@ -323,9 +353,20 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                     </div>
 
                     <div className="text-xs text-gray-500">
-                      <span className="font-medium text-gray-700">{it.cliente_nome}</span> indicou pra vaga{" "}
-                      <span className="font-medium text-gray-700">{it.vagas?.titulo ?? "—"}</span>
+                      <span className="font-medium text-gray-700">{it.cliente_nome}</span>{" "}
+                      {semVaga ? (
+                        <>indicou <span className="font-medium text-amber-700">sem vaga (aguardando direcionamento)</span></>
+                      ) : (
+                        <>indicou pra vaga <span className="font-medium text-gray-700">{it.vagas?.titulo ?? "—"}</span></>
+                      )}
                     </div>
+
+                    {pendente && (semVaga || it.sem_vaga_origem === true) && (
+                      <IndicacaoSemVagaAcoes
+                        item={it}
+                        onAtualizado={(novo, mensagem, aviso) => handleAtualizadoSemVaga(it.id, novo, mensagem, aviso)}
+                      />
+                    )}
 
                     {it.curriculo_url && (
                       <BotaoCurriculo storagePath={it.curriculo_url} variant="link" label="Ver currículo anexado" />
@@ -515,7 +556,9 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
                           >
                             Recusar
                           </button>
-                          {vincularPara?.indicacaoId === it.id || temDuplicado ? null : (
+                          {semVaga ? (
+                            <span className="text-[11px] text-amber-800 self-center">Direcione a indicação para uma vaga para poder aprovar.</span>
+                          ) : vincularPara?.indicacaoId === it.id || temDuplicado ? null : (
                             <button
                               onClick={() => handleDecidir(it.id, "aprovar")}
                               disabled={isLoading || buscandoDuplicado || bloqueadoPorFim}

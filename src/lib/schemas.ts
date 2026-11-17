@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TIPOS_SERVICO_INDICACAO } from "@/lib/indicacaoSemVaga";
 import { conteudoRsSchema } from "@/lib/propostaModelos";
 import { validarCnpj, validarCpf } from "@/lib/documentoBr";
 import { UNIDADES_FATURAMENTO } from "@/lib/unidadeFaturamento";
@@ -1096,7 +1097,9 @@ export const portalAgendarSchema = z.object({
 // regra de negócio validada no cliente (ver IndicarCandidatoPage), não no schema. CPF/
 // e-mail do candidato não entram aqui de propósito — ficam pro RH completar depois
 // (ASSUNÇÃO DE NEGÓCIO CONFIRMADA COM O OLVER, set/2026).
-export const portalIndicarCandidatoSchema = z.object({
+// Campos da indicação COM vaga (o formato de sempre). As variantes de edição derivam daqui; a criação (abaixo) também aceita
+// indicação SEM vaga. Não vira ZodEffects de propósito: precisa continuar aceitando .partial()/.extend().
+const portalIndicarCandidatoBaseSchema = z.object({
   vaga_id: z.string().uuid(),
   candidato_nome: z.string().trim().min(1),
   candidato_telefone: z.string().trim().min(1),
@@ -1123,16 +1126,34 @@ export const portalIndicarCandidatoSchema = z.object({
 
 // Revisão do analista antes de aprovar — ele pode ajustar qualquer campo que o cliente
 // mandou (inclusive nome/telefone/vaga, se tiver digitado errado) antes de confirmar.
-export const indicacaoCandidatoEditSchema = portalIndicarCandidatoSchema.partial();
+// Criação pelo portal. COM vaga: idêntica à de antes (vaga_id uuid). SEM vaga (vaga_id ausente/nulo — "A Salmazos direciona"): o
+// cliente informa só o mínimo — tipo de serviço e cargo/função além de nome e telefone; o analista completa o resto depois.
+export const portalIndicarCandidatoSchema = portalIndicarCandidatoBaseSchema
+  .extend({
+    vaga_id: z.string().uuid().optional().nullable(),
+    tipo_servico: z.enum(TIPOS_SERVICO_INDICACAO, { message: "Tipo de serviço inválido" }).optional().nullable(),
+  })
+  .superRefine((v, ctx) => {
+    if (v.vaga_id) return;
+    if (!v.tipo_servico) ctx.addIssue({ code: "custom", path: ["tipo_servico"], message: "Informe o tipo de serviço." });
+    if (!v.admissao_funcao?.trim()) ctx.addIssue({ code: "custom", path: ["admissao_funcao"], message: "Informe o cargo/função do candidato." });
+  });
+
+export const indicacaoCandidatoEditSchema = portalIndicarCandidatoBaseSchema.extend({ tipo_servico: z.enum(TIPOS_SERVICO_INDICACAO) }).partial();
 
 // Edição da indicação pelo PRÓPRIO cliente (portal). Mesmos campos da criação, todos opcionais, e
 // `.strict()` de propósito: cliente_id, status, candidato_id e campos de decisão nunca vêm do body —
 // chave desconhecida é rejeitada em vez de ignorada em silêncio.
 // curriculo_url na edição aceita só o nome gerado pela tela (sem "/" nem ".."): a criação não muda.
-export const portalEditarIndicacaoSchema = portalIndicarCandidatoSchema
+export const portalEditarIndicacaoSchema = portalIndicarCandidatoBaseSchema
   .partial()
   .extend({ curriculo_url: z.string().refine(nomeArquivoCurriculoValido, "nome de arquivo inválido").nullable().optional() })
   .strict();
+
+// Indicação sem vaga: direcionar para uma vaga existente / criar a vaga a partir da indicação (analista).
+export const indicacaoDirecionarSchema = z.object({ vaga_id: z.string().uuid("Vaga inválida") }).strict();
+// Só o título pode vir do corpo: tipo, cliente, unidade, posições, status e visibilidade pública NUNCA vêm do cliente da requisição.
+export const indicacaoCriarVagaSchema = z.object({ titulo: z.string().trim().min(1).max(200).optional() }).strict();
 
 export const indicacaoCandidatoDecisaoSchema = z.discriminatedUnion("acao", [
   z.object({

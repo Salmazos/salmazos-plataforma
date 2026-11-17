@@ -7,6 +7,9 @@ import { resolverUnidadeCliente } from "@/lib/unidadeAuth";
 import { hojeBrasiliaISO } from "@/lib/rescisaoProgramada";
 import { validarDataInicio } from "@/lib/indicacaoEdicao";
 import { resolverDiasTeste } from "@/lib/diasTeste";
+import { ROTULO_TIPO_SERVICO, ehErroSemVagaIndisponivel, indicacoesPendentesComMesmoTelefone, MSG_SEM_VAGA_INDISPONIVEL } from "@/lib/indicacaoSemVaga";
+
+const escaparHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const TIPO_LABEL: Record<string, string> = {
   recrutamento_selecao: "Recrutamento e Seleção",
@@ -65,21 +68,31 @@ export async function POST(request: NextRequest) {
       if (erroData) return NextResponse.json({ error: erroData }, { status: 400 });
     }
 
-    // Vaga precisa ser do próprio cliente e estar aberta — nunca confia no vaga_id só porque
-    // veio no body (o mesmo cuidado de portal/avaliar com encaminhamento_id).
-    const { data: vaga } = await service
-      .from("vagas")
-      .select("id, titulo, tipo_servico, cliente_id, unidade_id, status")
-      .eq("id", dados.vaga_id)
-      .eq("cliente_id", cu.cliente_id)
-      .maybeSingle();
-    if (!vaga) return NextResponse.json({ error: "Vaga não encontrada." }, { status: 404 });
-    if (vaga.status !== "aberta") {
-      return NextResponse.json({ error: "Esta vaga não está mais aberta." }, { status: 409 });
-    }
+    // SEM vaga ("A Salmazos direciona"): o cliente só informa o mínimo (tipo de serviço, cargo/função, nome, telefone) — o schema já
+    // exigiu isso. A indicação nasce com vaga_id nulo e o analista direciona para uma vaga existente ou cria a vaga a partir dela.
+    const semVaga = !dados.vaga_id;
 
-    // MOT/Terceirização precisam responder (inclusive "não houve"); R&S ignora o campo. Vem do tipo da vaga no banco.
-    const diasTeste = resolverDiasTeste(vaga.tipo_servico, dados.admissao_qtd_dias_teste);
+    // COM vaga: precisa ser do próprio cliente e estar aberta — nunca confia no vaga_id só porque
+    // veio no body (o mesmo cuidado de portal/avaliar com encaminhamento_id).
+    let vaga: { id: string; titulo: string; tipo_servico: string; cliente_id: string | null; unidade_id: string | null; status: string } | null = null;
+    if (!semVaga) {
+      const { data } = await service
+        .from("vagas")
+        .select("id, titulo, tipo_servico, cliente_id, unidade_id, status")
+        .eq("id", dados.vaga_id as string)
+        .eq("cliente_id", cu.cliente_id)
+        .maybeSingle();
+      if (!data) return NextResponse.json({ error: "Vaga não encontrada." }, { status: 404 });
+      if (data.status !== "aberta") {
+        return NextResponse.json({ error: "Esta vaga não está mais aberta." }, { status: 409 });
+      }
+      vaga = data;
+    }
+    const tipoServico: string = vaga ? vaga.tipo_servico : (dados.tipo_servico as string);
+
+    // MOT/Terceirização precisam responder (inclusive "não houve"); R&S ignora o campo. Vem do tipo da vaga no banco. Sem vaga o
+    // cliente não responde isso agora: fica nulo e o analista completa (o RH vê "Não informado pelo cliente").
+    const diasTeste = vaga ? resolverDiasTeste(vaga.tipo_servico, dados.admissao_qtd_dias_teste) : ({ ok: true, valor: null } as const);
     if (!diasTeste.ok) return NextResponse.json({ error: diasTeste.erro }, { status: 400 });
 
     const { data: cliente } = await service
@@ -101,7 +114,9 @@ export async function POST(request: NextRequest) {
         cliente_id: cu.cliente_id,
         cliente_nome: clienteNome,
         unidade_id: unidadeId,
-        vaga_id: vaga.id,
+        // Colunas novas (sem vaga) só vão no insert da indicação sem vaga: o caminho COM vaga grava exatamente o que gravava antes,
+        // então segue funcionando mesmo se o código subir antes da migração.
+        ...(vaga ? { vaga_id: vaga.id } : { vaga_id: null, tipo_servico: tipoServico, sem_vaga_origem: true }),
         solicitado_por_user_id: user.id,
         candidato_nome: dados.candidato_nome,
         candidato_telefone: dados.candidato_telefone,
@@ -127,9 +142,30 @@ export async function POST(request: NextRequest) {
       .select("id")
       .single();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      // Código no ar antes da migração: gravar vaga_id nulo (NOT NULL) ou as colunas novas falha. Mensagem clara, nada quebra.
+      if (semVaga && ehErroSemVagaIndisponivel(error)) {
+        console.error("[portal/indicar-candidato] Indicação sem vaga indisponível (migração pendente?):", error.code ?? "", error.message);
+        return NextResponse.json({ error: MSG_SEM_VAGA_INDISPONIVEL }, { status: 503 });
+      }
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
 
-    const tipoLbl = TIPO_LABEL[vaga.tipo_servico] ?? vaga.tipo_servico;
+    // Duplicidade (só AVISA, nunca bloqueia): mesmo cliente, mesmo telefone, outra indicação ainda pendente. Falha aqui é ignorada.
+    let avisoDuplicada = false;
+    try {
+      const { data: pendentes } = await service
+        .from("solicitacoes_indicacao_candidato")
+        .select("id, candidato_telefone")
+        .eq("cliente_id", cu.cliente_id)
+        .eq("status", "pendente")
+        .neq("id", solicitacao.id);
+      avisoDuplicada = indicacoesPendentesComMesmoTelefone(pendentes ?? [], dados.candidato_telefone).length > 0;
+    } catch (e) {
+      console.error("[portal/indicar-candidato] Erro ao checar indicação duplicada:", e);
+    }
+
+    const tipoLbl = TIPO_LABEL[tipoServico] ?? tipoServico;
     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
 <div style="max-width:600px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
@@ -145,7 +181,10 @@ export async function POST(request: NextRequest) {
     </div>
     <div style="margin-bottom:20px;padding:12px 16px;background:#f9fafb;border-radius:8px">
       <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Vaga</p>
-      <p style="margin:0;font-size:14px;font-weight:600;color:#111827">${vaga.titulo}</p>
+      ${vaga
+        ? `<p style="margin:0;font-size:14px;font-weight:600;color:#111827">${vaga.titulo}</p>`
+        : `<p style="margin:0;font-size:14px;font-weight:600;color:#B45309">Sem vaga — aguardando direcionamento</p>
+      <p style="margin:2px 0 0;font-size:13px;color:#374151">Cargo/função: ${escaparHtml(dados.admissao_funcao ?? "")}</p>`}
       <p style="margin:2px 0 0;font-size:13px;color:#6B7280">${tipoLbl}</p>
     </div>
     ${dados.curriculo_url ? `<p style="margin:0 0 20px;font-size:13px;color:#374151">📎 Currículo anexado — revise a indicação no painel para baixar.</p>` : ""}
@@ -164,15 +203,16 @@ export async function POST(request: NextRequest) {
     await avisarIndicacaoRecebida({
       solicitacaoId: solicitacao.id,
       unidadeId,
-      vagaId: vaga.id,
-      vagaTitulo: vaga.titulo,
+      vagaId: vaga?.id ?? null,
+      vagaTitulo: vaga?.titulo ?? null,
+      semVaga,
       clienteNome,
       candidatoNome: dados.candidato_nome,
-      subject: `🧑‍💼 Indicação Direta de Candidato — ${clienteNome}`,
+      subject: semVaga ? `🧑‍💼 Indicação Direta de Candidato (sem vaga) — ${clienteNome}` : `🧑‍💼 Indicação Direta de Candidato — ${clienteNome}`,
       html,
     });
 
-    return NextResponse.json({ success: true, id: solicitacao.id }, { status: 201 });
+    return NextResponse.json({ success: true, id: solicitacao.id, aviso_duplicada: avisoDuplicada }, { status: 201 });
   } catch (err) {
     console.error("[POST /api/portal/indicar-candidato]", err);
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });

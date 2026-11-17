@@ -103,7 +103,7 @@ export default function PopupIndicacaoDiretaPendente() {
                 <p className="text-sm font-bold text-gray-900">{p.candidatoNome}</p>
                 <p className="text-xs text-gray-600">
                   {p.clienteNome}
-                  {p.vagaTitulo ? ` · ${p.vagaTitulo}` : ""}
+                  {p.vagaTitulo ? ` · ${p.vagaTitulo}` : " · sem vaga (aguardando direcionamento)"}
                 </p>
               </div>
             </button>

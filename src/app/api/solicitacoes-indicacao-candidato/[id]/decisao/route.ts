@@ -16,6 +16,7 @@ import { avaliarDuplicidade, buscarDuplicadosPorTelefone } from "@/lib/indicacao
 import { finalizarContratado } from "@/lib/finalizarContratacao";
 import { erroDataTermino } from "@/lib/dataTerminoContrato";
 import { criarAdmissaoSemEnvio, removerAdmissaoCriada } from "@/lib/admissaoCriacao";
+import { MSG_SEM_VAGA_APROVAR } from "@/lib/indicacaoSemVaga";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -245,6 +246,11 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
 
     // ── Aprovar ──────────────────────────────────────────────────────────────────────
+    // Indicação SEM vaga fica bloqueada até ser direcionada (a recusa acima é sempre permitida): candidatura, encaminhamento,
+    // contratação e admissão dependem da vaga.
+    if (!sol.vaga_id) {
+      return NextResponse.json({ error: MSG_SEM_VAGA_APROVAR, codigo: "sem_vaga" }, { status: 409 });
+    }
     if (!vaga || vaga.status !== "aberta") {
       return NextResponse.json({ error: "A vaga desta indicação não está mais aberta." }, { status: 409 });
     }

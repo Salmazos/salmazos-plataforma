@@ -78,7 +78,9 @@ export async function GET() {
   // candidato_id e candidatos_vaga_id são internos: não saem na resposta.
   const resultado = indicacoes.map(({ candidato_id, candidatos_vaga_id, ...ind }) => ({
     ...ind,
-    vaga_titulo: vagasMap[ind.vaga_id]?.titulo ?? null,
+    vaga_titulo: ind.vaga_id ? (vagasMap[ind.vaga_id]?.titulo ?? null) : null,
+    // Indicação SEM vaga ("A Salmazos direciona"): vaga_id nulo, sem precisar de coluna nova (funciona antes e depois da migração).
+    sem_vaga: !ind.vaga_id,
     pode_editar:
       ind.status === "pendente" ||
       (ind.status === "aprovada" &&

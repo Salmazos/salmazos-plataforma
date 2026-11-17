@@ -16,6 +16,14 @@ interface VagaAtiva {
   estado: string | null;
 }
 
+// Opção do seletor "A Salmazos direciona (sem vaga)": a indicação nasce sem vaga e o analista direciona ou cria a vaga. Sempre disponível.
+const SEM_VAGA = "__sem_vaga__";
+const TIPOS_SEM_VAGA = [
+  { valor: "mao_obra_temporaria", rotulo: "Mão de Obra Temporária (MOT)" },
+  { valor: "terceirizacao", rotulo: "Terceirização" },
+  { valor: "recrutamento_selecao", rotulo: "Recrutamento e Seleção (R&S)" },
+];
+
 const PERIODOS_EXP = ["30 dias", "45 dias", "90 dias"];
 const TURNO_OPCOES = [
   "Turno A", "Turno B", "Turno C", "Turno D",
@@ -57,6 +65,8 @@ export default function IndicarCandidatoPage() {
   const [carregando, setCarregando] = useState(true);
   const [vagas, setVagas] = useState<VagaAtiva[]>([]);
   const [vagaId, setVagaId] = useState("");
+  const [tipoSemVaga, setTipoSemVaga] = useState("");
+  const [avisoDuplicada, setAvisoDuplicada] = useState(false);
   const [candidatoNome, setCandidatoNome] = useState("");
   const [candidatoTelefone, setCandidatoTelefone] = useState("");
   const [curriculo, setCurriculo] = useState<File | null>(null);
@@ -98,12 +108,15 @@ export default function IndicarCandidatoPage() {
         const res = await fetch("/api/portal/vagas-ativas");
         const json = await res.json();
         setVagas(json.data ?? []);
+        // Sem nenhuma vaga aberta a única opção é "A Salmazos direciona": já vem selecionada.
+        if ((json.data ?? []).length === 0) setVagaId(SEM_VAGA);
       } finally {
         setCarregando(false);
       }
     })();
   }, []);
 
+  const semVaga = vagaId === SEM_VAGA;
   const vaga = vagas.find((v) => v.id === vagaId) ?? null;
   const isRS = vaga?.tipo_servico === "recrutamento_selecao";
   const isMOT = vaga?.tipo_servico === "mao_obra_temporaria";
@@ -128,6 +141,13 @@ export default function IndicarCandidatoPage() {
     if (!vagaId) return "Selecione a vaga.";
     if (!candidatoNome.trim()) return "Informe o nome do candidato.";
     if (!candidatoTelefone.trim()) return "Informe o telefone do candidato.";
+
+    // Sem vaga: só o mínimo (o analista completa o resto depois).
+    if (semVaga) {
+      if (!tipoSemVaga) return "Selecione o tipo de serviço.";
+      if (!admFuncao.trim()) return "Informe o cargo/função do candidato.";
+      return null;
+    }
 
     // Mesmas obrigatoriedades por tipo de serviço do fluxo normal de aprovação
     // (PortalAvaliacaoBtn.validateRequired) — regra de negócio, não de schema.
@@ -206,7 +226,16 @@ export default function IndicarCandidatoPage() {
       const res = await fetch("/api/portal/indicar-candidato", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(semVaga ? {
+          // Mínimo: nada de dados de admissão (o analista completa). O resto do formulário nem é enviado.
+          vaga_id: null,
+          tipo_servico: tipoSemVaga,
+          candidato_nome: candidatoNome.trim(),
+          candidato_telefone: candidatoTelefone.trim(),
+          curriculo_url,
+          admissao_funcao: admFuncao.trim(),
+          admissao_observacoes: admObservacoes.trim() || null,
+        } : {
           vaga_id: vagaId,
           candidato_nome: candidatoNome.trim(),
           candidato_telefone: candidatoTelefone.trim(),
@@ -233,6 +262,7 @@ export default function IndicarCandidatoPage() {
       });
       const json = await res.json();
       if (!res.ok) { setErro(json.error ?? "Erro ao enviar."); return; }
+      setAvisoDuplicada(json.aviso_duplicada === true);
       setSucesso(true);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao enviar. Tente novamente.");
@@ -248,9 +278,15 @@ export default function IndicarCandidatoPage() {
           <div className="text-5xl mb-4">{"✅"}</div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Indicação enviada!</h2>
           <p className="text-sm text-gray-500 mb-6">
-            A equipe Salmazos vai revisar e entrar em contato com o candidato pra completar
-            o registro.
+            {semVaga
+              ? "A equipe Salmazos vai analisar a indicação e direcionar para uma vaga. Isso não cria vaga nem garante a contratação."
+              : "A equipe Salmazos vai revisar e entrar em contato com o candidato pra completar o registro."}
           </p>
+          {avisoDuplicada && (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-6">
+              Atenção: você já tem outra indicação em análise com este mesmo telefone. A indicação foi enviada mesmo assim; a Salmazos vai conferir.
+            </p>
+          )}
           <Link href="/portal" className="inline-block px-6 py-2.5 bg-black text-[#FFD700] rounded-xl font-semibold text-sm">
             Voltar ao painel
           </Link>
@@ -281,29 +317,29 @@ export default function IndicarCandidatoPage() {
       <div className="space-y-6">
         <div className="bg-white rounded-2xl shadow-sm p-6 space-y-5">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Vaga</p>
-          {vagas.length === 0 ? (
+          {vagas.length === 0 && (
             <p className="text-sm text-gray-500">
-              Você não tem nenhuma vaga aberta no momento. Solicite uma vaga primeiro.
+              Você não tem nenhuma vaga aberta no momento. Pode indicar mesmo assim: a Salmazos direciona o candidato para uma vaga.
             </p>
-          ) : (
-            <Field label="Selecione a vaga" required>
-              <select
-                value={vagaId}
-                onChange={(e) => setVagaId(e.target.value)}
-                style={{ ...inputStyle, background: "#fff", cursor: "pointer", ...(tentouEnviar && !vagaId ? inv : {}) }}
-              >
-                <option value="">Selecione...</option>
-                {vagas.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.titulo}{v.cidade ? ` — ${v.cidade}${v.estado ? `/${v.estado}` : ""}` : ""}
-                  </option>
-                ))}
-              </select>
-            </Field>
           )}
+          <Field label="Selecione a vaga" required>
+            <select
+              value={vagaId}
+              onChange={(e) => setVagaId(e.target.value)}
+              style={{ ...inputStyle, background: "#fff", cursor: "pointer", ...(tentouEnviar && !vagaId ? inv : {}) }}
+            >
+              <option value="">Selecione...</option>
+              {vagas.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.titulo}{v.cidade ? ` — ${v.cidade}${v.estado ? `/${v.estado}` : ""}` : ""}
+                </option>
+              ))}
+              <option value={SEM_VAGA}>A Salmazos direciona (sem vaga)</option>
+            </select>
+          </Field>
         </div>
 
-        {vaga && (
+        {(vaga || semVaga) && (
           <>
             <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Candidato</p>
@@ -368,6 +404,32 @@ export default function IndicarCandidatoPage() {
               </Field>
             </div>
 
+            {semVaga && (
+              <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Sobre a indicação</p>
+                <Field label="Tipo de serviço" required>
+                  <select value={tipoSemVaga} onChange={(e) => setTipoSemVaga(e.target.value)}
+                    style={{ ...inputStyle, background: "#fff", cursor: "pointer", ...(tentouEnviar && !tipoSemVaga ? inv : {}) }}>
+                    <option value="">Selecione...</option>
+                    {TIPOS_SEM_VAGA.map((t) => <option key={t.valor} value={t.valor}>{t.rotulo}</option>)}
+                  </select>
+                </Field>
+                <Field label="Cargo / função do candidato" required>
+                  <input value={admFuncao} onChange={(e) => setAdmFuncao(e.target.value)}
+                    placeholder="Ex: Auxiliar de produção" style={{ ...inputStyle, ...(missing(admFuncao.trim() || null) ? inv : {}) }} />
+                </Field>
+                <Field label="Observações">
+                  <textarea value={admObservacoes} onChange={(e) => setAdmObservacoes(e.target.value)}
+                    rows={3} placeholder="Algo que a Salmazos precise saber sobre esta indicação..." style={{ ...inputStyle, resize: "vertical" }} />
+                </Field>
+                <p className="text-xs text-gray-500">
+                  A Salmazos vai analisar a indicação e direcionar o candidato para uma vaga. Isto não cria vaga nem garante a contratação.
+                  Os demais dados (salário, horário etc.) a Salmazos completa depois.
+                </p>
+              </div>
+            )}
+
+            {vaga && (
             <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-2">
                 <span>📋</span> Dados para Admissão
@@ -611,6 +673,7 @@ export default function IndicarCandidatoPage() {
                   rows={2} placeholder="Observações adicionais..." style={{ ...inputStyle, resize: "vertical" }} />
               </Field>
             </div>
+            )}
           </>
         )}
 
@@ -620,7 +683,7 @@ export default function IndicarCandidatoPage() {
           </div>
         )}
 
-        {vaga && (
+        {(vaga || semVaga) && (
           <button
             onClick={handleEnviar}
             disabled={enviando}

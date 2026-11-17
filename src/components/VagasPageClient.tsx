@@ -34,11 +34,13 @@ interface Props {
   vagas: Vaga[];
   pendingCount: number;
   indicacoesPendentes?: number;
+  // Das pendentes, quantas estão sem vaga (aguardando direcionamento).
+  indicacoesSemVaga?: number;
   // Só vem pra quem tem acesso a todas as unidades (ver painel/vagas/page.tsx).
   unidades?: { id: string; nome: string; ativa: boolean }[];
 }
 
-export default function VagasPageClient({ vagas: inicial, pendingCount, indicacoesPendentes = 0, unidades }: Props) {
+export default function VagasPageClient({ vagas: inicial, pendingCount, indicacoesPendentes = 0, indicacoesSemVaga = 0, unidades }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const solicitacaoFocoId = searchParams.get("solicitacao");
@@ -221,6 +223,14 @@ export default function VagasPageClient({ vagas: inicial, pendingCount, indicaco
             style={{ position: "relative" }}
           >
             {"🧑‍💼"} Indicações
+            {indicacoesSemVaga > 0 && (
+              <span
+                title={`${indicacoesSemVaga} indicação(ões) sem vaga, aguardando direcionamento`}
+                style={{ backgroundColor: "#FEF3C7", color: "#92400E", fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "1px 8px" }}
+              >
+                {indicacoesSemVaga} sem vaga
+              </span>
+            )}
             {indicacoesPendentes > 0 && (
               <span
                 style={{

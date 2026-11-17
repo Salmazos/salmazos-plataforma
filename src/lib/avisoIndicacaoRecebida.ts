@@ -9,8 +9,10 @@ export const EVENTO_INDICACAO_RECEBIDA = "indicacao_candidato_recebida";
 interface Opts {
   solicitacaoId: string;
   unidadeId: string;
-  vagaId: string;
-  vagaTitulo: string;
+  // Nulos na indicação SEM vaga (aguardando direcionamento).
+  vagaId: string | null;
+  vagaTitulo: string | null;
+  semVaga?: boolean;
   clienteNome: string;
   candidatoNome: string;
   subject: string;
@@ -39,7 +41,9 @@ async function gravarSino(o: Opts): Promise<void> {
   const base = {
     tipo: "nova_indicacao_candidato",
     titulo: "Indicação direta de candidato",
-    mensagem: `${o.clienteNome} indicou ${o.candidatoNome} para a vaga ${o.vagaTitulo}`,
+    mensagem: o.semVaga
+      ? `${o.clienteNome} indicou ${o.candidatoNome}, sem vaga: aguardando direcionamento`
+      : `${o.clienteNome} indicou ${o.candidatoNome} para a vaga ${o.vagaTitulo}`,
     solicitacao_indicacao_id: o.solicitacaoId,
     unidade_id: o.unidadeId,
   };
@@ -62,13 +66,13 @@ async function enviarEmails(o: Opts): Promise<void> {
   let succeeded = 0;
   if (r.modo === "configurado") {
     const resultados = await Promise.all(
-      r.emails.map((d) => sendEmail({ to: d.email, subject: o.subject, html: o.html, tipo: "indicacao_candidato", vaga_id: o.vagaId }))
+      r.emails.map((d) => sendEmail({ to: d.email, subject: o.subject, html: o.html, tipo: "indicacao_candidato", vaga_id: o.vagaId ?? undefined }))
     );
     attempted = resultados.length;
     succeeded = resultados.filter((x) => x.success).length;
   } else {
     // Sem configuração: comportamento antigo (todos os analistas ativos da unidade).
-    const res = await notifyAllAnalysts({ subject: o.subject, html: o.html, tipo: "indicacao_candidato", vaga_id: o.vagaId, unidadeId: o.unidadeId });
+    const res = await notifyAllAnalysts({ subject: o.subject, html: o.html, tipo: "indicacao_candidato", vaga_id: o.vagaId ?? undefined, unidadeId: o.unidadeId });
     attempted = res.attempted;
     succeeded = res.succeeded;
   }

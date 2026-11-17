@@ -6,8 +6,10 @@ import ModalEditarIndicacaoCliente from "@/components/ModalEditarIndicacaoClient
 interface Indicacao {
   id: string;
   candidato_nome: string;
-  vaga_id: string;
+  vaga_id: string | null;
   vaga_titulo: string | null;
+  // Indicação sem vaga: a Salmazos ainda vai direcionar (sem prometer vaga).
+  sem_vaga?: boolean;
   status: string;
   motivo_recusa: string | null;
   decidido_em: string | null;
@@ -85,13 +87,15 @@ export default function MinhasIndicacoesPage() {
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Minhas Indicações</h1>
       {aviso && <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{aviso}</p>}
       {indicacoes.map((ind) => {
-        const statusInfo = STATUS_BADGE[ind.status] || { label: ind.status, bg: "bg-gray-100", text: "text-gray-800" };
+        const baseBadge = STATUS_BADGE[ind.status] || { label: ind.status, bg: "bg-gray-100", text: "text-gray-800" };
+        const semVagaPendente = ind.sem_vaga === true && ind.status === "pendente";
+        const statusInfo = semVagaPendente ? { ...baseBadge, label: "Em análise pela Salmazos" } : baseBadge;
         return (
           <div key={ind.id} className="border border-gray-200 rounded-lg p-4 bg-white hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-gray-900 text-sm truncate">{ind.candidato_nome}</p>
-                <p className="text-gray-600 text-xs mt-1">{ind.vaga_titulo || "Vaga não disponível"}</p>
+                <p className="text-gray-600 text-xs mt-1">{ind.vaga_titulo || (ind.sem_vaga ? "Sem vaga definida — a Salmazos vai analisar e direcionar" : "Vaga não disponível")}</p>
                 <p className="text-gray-400 text-xs mt-2">Enviado em {formatarDataPT(ind.created_at)}</p>
               </div>
               <div className="flex flex-col items-end gap-2">

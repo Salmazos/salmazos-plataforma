@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { obterContextoUnidade, podeVerUnidade } from "@/lib/unidadeAuth";
 import { parseBody, indicacaoCandidatoEditSchema } from "@/lib/schemas";
 import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
+import { ehErroSemVagaIndisponivel, MSG_SEM_VAGA_INDISPONIVEL } from "@/lib/indicacaoSemVaga";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -64,6 +65,15 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Esta indicação já foi decidida." }, { status: 409 });
     }
 
+    // Indicação SEM vaga só ganha vaga por "Direcionar" / "Criar vaga" (que conferem tipo, unidade e vaga aberta): por aqui seria
+    // um atalho sem essas conferências. O tipo de serviço só é editável enquanto não há vaga (com vaga ele vem dela).
+    if (!atual.vaga_id && parsed.data.vaga_id) {
+      return NextResponse.json({ error: "Use \"Direcionar para vaga existente\" ou \"Criar vaga a partir da indicação\" para dar uma vaga a esta indicação." }, { status: 400 });
+    }
+    if (atual.vaga_id && parsed.data.tipo_servico !== undefined) {
+      return NextResponse.json({ error: "O tipo de serviço desta indicação vem da vaga." }, { status: 400 });
+    }
+
     // Vaga é revalidada só se o analista trocou (precisa continuar sendo do mesmo cliente).
     if (parsed.data.vaga_id && parsed.data.vaga_id !== atual.vaga_id) {
       const { data: vaga } = await service
@@ -83,6 +93,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       .select("*")
       .single();
 
+    if (error && ehErroSemVagaIndisponivel(error) && parsed.data.tipo_servico !== undefined) {
+      console.error("[PATCH /api/solicitacoes-indicacao-candidato/[id]] Coluna nova ausente (migração pendente?):", error.code ?? "", error.message);
+      return NextResponse.json({ error: MSG_SEM_VAGA_INDISPONIVEL }, { status: 503 });
+    }
     if (error || !data) {
       return NextResponse.json({ error: "A indicação mudou de status enquanto era editada." }, { status: 409 });
     }

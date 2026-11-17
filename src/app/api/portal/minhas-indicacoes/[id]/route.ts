@@ -96,7 +96,8 @@ export async function GET(_request: NextRequest, { params }: Params) {
   if (!sol) return NextResponse.json({ error: "Indicação não encontrada." }, { status: 404 });
   if (!(await avaliarEdicao(service, sol)).pode) return NextResponse.json({ error: MSG_EM_ANDAMENTO }, { status: 409 });
 
-  const { data: vaga } = await service.from("vagas").select("id, titulo, tipo_servico").eq("id", sol.vaga_id).maybeSingle();
+  // Indicação SEM vaga ("A Salmazos direciona"): sem vaga para ler; o tipo de serviço vem da própria indicação.
+  const { data: vaga } = sol.vaga_id ? await service.from("vagas").select("id, titulo, tipo_servico").eq("id", sol.vaga_id).maybeSingle() : { data: null };
   const campos: Linha = {};
   for (const c of ["candidato_nome", "candidato_telefone", ...CAMPOS_ADMISSAO]) campos[c] = sol[c] ?? null;
 
@@ -106,9 +107,11 @@ export async function GET(_request: NextRequest, { params }: Params) {
       status: sol.status,
       vaga_id: sol.vaga_id,
       vaga_titulo: vaga?.titulo ?? null,
-      vaga_tipo_servico: vaga?.tipo_servico ?? null,
+      vaga_tipo_servico: vaga?.tipo_servico ?? sol.tipo_servico ?? null,
+      sem_vaga: !sol.vaga_id,
       tem_curriculo: !!sol.curriculo_url,
-      pode_trocar_vaga: sol.status === "pendente",
+      // Sem vaga quem direciona é a Salmazos (o cliente não escolhe vaga por aqui).
+      pode_trocar_vaga: sol.status === "pendente" && !!sol.vaga_id,
       ...campos,
     },
   });
@@ -137,7 +140,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     // O cliente não pode APAGAR a resposta de dias de teste em MOT/Terceirização (null explícito). Registros antigos com
     // null seguem editáveis: a regra só olha o que veio no corpo, nunca o valor salvo.
-    if (entrada.admissao_qtd_dias_teste === null) {
+    if (entrada.admissao_qtd_dias_teste === null && sol.vaga_id) {
       const { data: vagaDaIndicacao } = await service.from("vagas").select("tipo_servico").eq("id", sol.vaga_id).maybeSingle();
       if (exigeRespostaDiasTeste(vagaDaIndicacao?.tipo_servico)) return NextResponse.json({ error: MSG_INFORME_DIAS_TESTE }, { status: 400 });
     }
@@ -155,6 +158,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     // Vaga: só enquanto pendente; depois de aprovada ela já foi copiada para candidatura e encaminhamento.
     const trocouVaga = alteracoes.some((a) => a.campo === "vaga_id");
+    if (trocouVaga && !sol.vaga_id) {
+      return NextResponse.json({ error: "Esta indicação está aguardando direcionamento: a Salmazos escolhe a vaga." }, { status: 400 });
+    }
     let vagaAntes: Linha | null = null;
     let vagaDepois: Linha | null = null;
     if (trocouVaga) {
@@ -302,7 +308,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       let unidadeDaVaga: string | null = vagaDepois?.unidade_id ?? null;
       // A coluna unidade_id da indicação é NOT NULL, mas se vier vazia o resolvedor trataria "sem unidade" como
       // "todas as unidades" (e-mail a analistas de qualquer unidade): cai na unidade da vaga, em try/catch próprio.
-      if (!vagaTitulo || (!sol.unidade_id && !unidadeDaVaga)) {
+      if (atualizada.vaga_id && (!vagaTitulo || (!sol.unidade_id && !unidadeDaVaga))) {
         try {
           const { data: v } = await service.from("vagas").select("titulo, unidade_id").eq("id", atualizada.vaga_id).maybeSingle();
           vagaTitulo = vagaTitulo || (v?.titulo ?? "");

@@ -15,7 +15,9 @@ import CampoDiasTeste, { ESTADO_DIAS_TESTE_VAZIO, estadoDiasTesteDeValor, diasTe
 interface Detalhe {
   id: string;
   status: string;
-  vaga_id: string;
+  vaga_id: string | null;
+  // Indicação sem vaga: a Salmazos direciona; o cliente não escolhe vaga.
+  sem_vaga: boolean;
   vaga_titulo: string | null;
   vaga_tipo_servico: string | null;
   tem_curriculo: boolean;
@@ -181,13 +183,13 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
             {inicial.pode_trocar_vaga ? (
               <Campo label="Vaga">
                 <select value={(form.vaga_id as string) ?? ""} onChange={(e) => set("vaga_id", e.target.value)} style={inputStyle}>
-                  {!vagas.some((v) => v.id === inicial.vaga_id) && <option value={inicial.vaga_id}>{inicial.vaga_titulo ?? "Vaga atual"}</option>}
+                  {!vagas.some((v) => v.id === inicial.vaga_id) && <option value={inicial.vaga_id ?? ""}>{inicial.vaga_titulo ?? "Vaga atual"}</option>}
                   {vagas.map((v) => <option key={v.id} value={v.id}>{v.titulo}</option>)}
                 </select>
               </Campo>
             ) : (
               <Campo label="Vaga">
-                <p className="text-sm text-gray-700">{inicial.vaga_titulo ?? "—"}</p>
+                <p className="text-sm text-gray-700">{inicial.vaga_titulo ?? (inicial.sem_vaga ? "Sem vaga definida — a Salmazos vai analisar e direcionar" : "—")}</p>
               </Campo>
             )}
 
