@@ -1,6 +1,6 @@
 import type { createServiceClient } from "@/lib/supabase/server";
 import { registrarHistorico } from "@/lib/registrarHistorico";
-import { registrarAuditoria } from "@/lib/audit";
+import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { gerarCobrancaRSSeAplicavel } from "@/lib/cobrancaRS";
 import { resolverTipoServicoVigente } from "@/lib/tipoServicoVigente";
 import { sincronizarEncaminhamentoComEtapa } from "@/lib/sincronizarEncaminhamento";
@@ -26,9 +26,14 @@ export interface FinalizarContratadoInput {
   admissao_salario?: number | null;
   fee_ausente_justificativa?: string | null;
   gerar_cobranca_rs?: boolean | null;
-  // Só atribui a autoria da cobrança R&S (cobrancas_rs.gerado_por_user_id); nunca bloqueia a finalização.
+  // Quem está contratando. OBRIGATÓRIO: sem sessão a contratação não acontece (antes seguia sem dono e gravava auditoria/histórico sem
+  // autor — caso real de 17/11: cobrança R&S "não gerar" sem como saber quem decidiu). Também atribui cobrancas_rs.gerado_por_user_id.
   userId?: string | null;
+  // De onde veio a chamada, gravado na auditoria e no histórico: "kanban_modal" (PATCH /finalizar) ou "aprovacao_indicacao".
+  canal?: CanalFinalizacao;
 }
+
+export type CanalFinalizacao = "kanban_modal" | "aprovacao_indicacao";
 
 export type ResultadoFinalizarContratado =
   | { ok: true; vagaEncerrada: boolean; cobrancaRsId: string | null }
@@ -42,6 +47,12 @@ export type ResultadoFinalizarContratado =
 // (e-mail de fechamento, alocação, histórico); os passos depois do update da candidatura não lançam.
 export async function finalizarContratado(supabase: Service, input: FinalizarContratadoInput): Promise<ResultadoFinalizarContratado> {
   const { cvId, data_inicio, data_fim, renovavel, observacoes, admissao_salario, fee_ausente_justificativa, gerar_cobranca_rs, userId } = input;
+  const canal: CanalFinalizacao = input.canal ?? "kanban_modal";
+
+  // Primeira coisa, antes de ler ou gravar qualquer coisa: sem usuário identificado não há contratação.
+  if (!userId) {
+    return { ok: false, status: 401, error: "Sessão expirada ou usuário não identificado. Entre novamente para contratar o candidato." };
+  }
 
   const { data: cv, error: cvErr } = await supabase
     .from("candidatos_vagas")
@@ -59,6 +70,9 @@ export async function finalizarContratado(supabase: Service, input: FinalizarCon
   } | null;
   const vagaTitulo = vaga?.titulo ?? "vaga";
   const clienteNome = vaga?.clientes?.nome ?? null;
+  // Nome para auditoria/histórico; cai para null (nunca falha a contratação por causa disso).
+  const usuarioNome = await resolverNomeUsuario(userId, null, supabase).catch(() => null);
+  const autoria = { usuario_id: userId, usuario_nome: usuarioNome };
   // Nunca confia no tipo_servico que o client mandou no body — resolve aqui o "vigente"
   // de verdade (encaminhamento mais recente daquele candidato+vaga, com fallback pra
   // vagas.tipo_servico), mesma fonte usada pro Kanban (ver tipoServicoVigente.ts). Client
@@ -172,7 +186,8 @@ export async function finalizarContratado(supabase: Service, input: FinalizarCon
       acao: "cobranca_rs_decisao",
       entidade: "candidatos_vagas",
       entidade_id: cvId,
-      detalhes: { candidato_id: cv.candidato_id, vaga_id: cv.vaga_id, gerar_cobranca_rs: gerar_cobranca_rs === true },
+      ...autoria,
+      detalhes: { candidato_id: cv.candidato_id, vaga_id: cv.vaga_id, gerar_cobranca_rs: gerar_cobranca_rs === true, canal },
     });
 
     // Gera na hora, não espera a vaga fechar — cada contratação decide por si.
@@ -191,11 +206,13 @@ export async function finalizarContratado(supabase: Service, input: FinalizarCon
       acao: "admissao_finalizada_sem_fee_rs",
       entidade: "candidatos_vagas",
       entidade_id: cvId,
+      ...autoria,
       detalhes: {
         candidato_id: cv.candidato_id,
         vaga_id: cv.vaga_id,
         vaga_titulo: vagaTitulo,
         justificativa: fee_ausente_justificativa!.trim(),
+        canal,
       },
     });
   }
@@ -235,14 +252,17 @@ export async function finalizarContratado(supabase: Service, input: FinalizarCon
     candidato_id: cv.candidato_id,
     tipo: "contratado",
     descricao: `Candidato contratado para ${vagaTitulo}${clienteNome ? ` (${clienteNome})` : ""}. Início em ${dataFmt}${dataFimFmt}.${observacoes ? ` Obs: ${observacoes}` : ""}`,
-    metadata: { cv_id: cvId, vaga_id: cv.vaga_id, data_inicio, data_fim, tipo_servico: tipoServicoFinal, observacoes },
+    // criado_por é texto e a tela do histórico o exibe: guarda o nome (cai para o id); o id e o canal ficam no metadata.
+    criado_por: usuarioNome ?? userId,
+    metadata: { cv_id: cvId, vaga_id: cv.vaga_id, data_inicio, data_fim, tipo_servico: tipoServicoFinal, observacoes, usuario_id: userId, usuario_nome: usuarioNome, canal },
   });
 
   registrarAuditoria({
     acao: "candidato_finalizado",
     entidade: "candidatos_vagas",
     entidade_id: cvId,
-    detalhes: { resultado: "contratado", candidato_id: cv.candidato_id, vaga_id: cv.vaga_id, data_inicio },
+    ...autoria,
+    detalhes: { resultado: "contratado", candidato_id: cv.candidato_id, vaga_id: cv.vaga_id, data_inicio, canal },
   });
 
   return { ok: true, vagaEncerrada, cobrancaRsId };

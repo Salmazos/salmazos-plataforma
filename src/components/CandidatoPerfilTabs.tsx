@@ -28,6 +28,8 @@ export interface GarantiaInfo {
   admissao_fee_valor: number | null;
   admissao_fee_prazo: string | null;
   fee_status: string | null;
+  // false = a contratação foi registrada como "não gerar cobrança" (candidatos_vagas.gerar_cobranca_rs); null = sem decisão registrada.
+  gerar_cobranca_rs?: boolean | null;
 }
 
 export interface MelhorRetencao {

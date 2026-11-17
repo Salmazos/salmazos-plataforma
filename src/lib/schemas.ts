@@ -1597,6 +1597,12 @@ export const cobrancaRsCorrigirTaxaSchema = z.object({
 // ── Cobrança R&S — cancelamento via justificativa (rota dedicada, ver POST
 // /api/cobrancas-rs/[id]/cancelar). Caso de negociação com a diretoria em que a cobrança
 // deixa de ser cobrada — sempre exige justificativa registrada, nunca cancelamento silencioso.
+// Gerar cobrança R&S DEPOIS de a contratação ter sido registrada como "não gerar" (POST /api/candidatos-vagas/[id]/gerar-cobranca-retroativa).
+// A justificativa é obrigatória: fica na auditoria junto com a decisão anterior.
+export const cobrancaRsRetroativaSchema = z.object({
+  justificativa: z.string().trim().min(5, "Informe a justificativa (mín. 5 caracteres)").max(1000),
+}).strict();
+
 export const cobrancaRsCancelarSchema = z.object({
   justificativa: z.string().trim().min(1, "Justificativa é obrigatória"),
 });

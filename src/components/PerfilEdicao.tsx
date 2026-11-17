@@ -116,6 +116,10 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
   const [garantiaSaving, setGarantiaSaving] = useState(false);
   const [garantiaToast, setGarantiaToast] = useState("");
   const [feeStatus, setFeeStatus] = useState(garantiaInfo?.fee_status ?? "pendente");
+  // Cobrança R&S registrada como "não gerar": diretoria/superuser pode gerar depois (POST .../gerar-cobranca-retroativa).
+  const [retroJustificativa, setRetroJustificativa] = useState("");
+  const [retroEnviando, setRetroEnviando] = useState(false);
+  const [retroErro, setRetroErro] = useState("");
   const [feeSaving, setFeeSaving] = useState(false);
   const [feeToast, setFeeToast] = useState("");
 
@@ -927,6 +931,50 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
               <div><strong>Prazo de cobrança:</strong> {garantiaInfo.admissao_fee_prazo}</div>
             )}
           </div>
+          {garantiaInfo.gerar_cobranca_rs === false && garantiaInfo.etapa === "contratado" && (
+            <div style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#991B1B", margin: "0 0 4px" }}>Cobrança R&S não gerada</p>
+              <p style={{ fontSize: 12, color: "#7F1D1D", margin: 0, lineHeight: 1.5 }}>Esta contratação foi registrada como &quot;não gerar cobrança&quot;.</p>
+              {podeRemoverReprovacao && (
+                <div style={{ marginTop: 10 }}>
+                  <textarea
+                    value={retroJustificativa}
+                    onChange={(e) => setRetroJustificativa(e.target.value)}
+                    rows={2}
+                    placeholder="Justificativa para gerar a cobrança agora (obrigatória)"
+                    className="input-field resize-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={retroEnviando || retroJustificativa.trim().length < 5}
+                    onClick={async () => {
+                      setRetroEnviando(true);
+                      setRetroErro("");
+                      try {
+                        const res = await fetch(`/api/candidatos-vagas/${garantiaInfo.cv_id}/gerar-cobranca-retroativa`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ justificativa: retroJustificativa.trim() }),
+                        });
+                        const json = await res.json().catch(() => ({}));
+                        if (!res.ok) { setRetroErro(json.error ?? "Não foi possível gerar a cobrança."); return; }
+                        window.location.href = json.cobranca_rs_id ? `/painel/cobrancas-rs?abrir=${json.cobranca_rs_id}` : "/painel/cobrancas-rs";
+                      } catch {
+                        setRetroErro("Erro de conexão. Tente novamente.");
+                      } finally {
+                        setRetroEnviando(false);
+                      }
+                    }}
+                    className="btn-primary"
+                    style={{ marginTop: 8, padding: "6px 14px", fontSize: 13, opacity: retroEnviando || retroJustificativa.trim().length < 5 ? 0.5 : 1 }}
+                  >
+                    {retroEnviando ? "Gerando..." : "Gerar cobrança retroativa"}
+                  </button>
+                  {retroErro && <p style={{ fontSize: 12, color: "#B91C1C", margin: "6px 0 0" }}>{retroErro}</p>}
+                </div>
+              )}
+            </div>
+          )}
           <div>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 8 }}>
               Status do Fee {feeSaving && <span style={{ fontWeight: 400, fontStyle: "italic", textTransform: "none" }}>— Salvando...</span>}

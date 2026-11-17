@@ -709,6 +709,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         data_inicio: dataInicioContratacao,
         data_fim: dataFimContratacao,
         userId: user.id,
+        canal: "aprovacao_indicacao",
       });
       if (!fin.ok) {
         console.error("[decisao indicacao] Erro ao finalizar contratação:", fin.error);

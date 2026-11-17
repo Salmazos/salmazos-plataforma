@@ -27,16 +27,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     const supabase = createServiceClient();
 
-    // Autenticação — só usada pra atribuir a autoria da cobrança R&S (cobrancas_rs.
-    // gerado_por_user_id), que decide quem além do acesso amplo pode revisar essa
-    // pendência específica depois (ver podeRevisarCobranca). Nunca bloqueia a
-    // finalização em si por falta de user — se por algum motivo não resolver, a
-    // cobrança simplesmente nasce sem "dono" e só quem tem acesso amplo revisa.
+    // Autenticação — para "contratado" é OBRIGATÓRIA (finalizarContratado devolve 401 sem usuário): a decisão de cobrança R&S e a
+    // contratação precisam ter autor na auditoria e no histórico. Também atribui cobrancas_rs.gerado_por_user_id (quem além do acesso
+    // amplo pode revisar essa pendência, ver podeRevisarCobranca). O encerramento (reprovado_final) segue como antes.
     const authClient = await createClient();
     const { data: { user } } = await authClient.auth.getUser();
 
-    // Trava de unidade só quando há usuário — mantém a regra acima de nunca bloquear a
-    // finalização por falta de sessão resolvida.
+    // Trava de unidade quando há usuário; sem usuário, o "contratado" já é recusado por finalizarContratado.
     if (user) {
       const bloqueio = await checarAcessoCandidatoVaga(user, id);
       if (bloqueio) return bloqueio;
@@ -46,7 +43,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       // Regra de contratação compartilhada com a aprovação de indicação direta (ver finalizarContratacao.ts).
       const r = await finalizarContratado(supabase, {
         cvId: id, data_inicio, data_fim, renovavel, observacoes, admissao_salario,
-        fee_ausente_justificativa, gerar_cobranca_rs, userId: user?.id ?? null,
+        fee_ausente_justificativa, gerar_cobranca_rs, userId: user?.id ?? null, canal: "kanban_modal",
       });
       if (!r.ok) return NextResponse.json({ error: r.error, ...r.extra }, { status: r.status });
       return NextResponse.json({ resultado: "contratado", vaga_encerrada: r.vagaEncerrada, cobranca_rs_id: r.cobrancaRsId });

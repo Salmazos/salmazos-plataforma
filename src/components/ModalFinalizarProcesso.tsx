@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { MOTIVOS_REPROVACAO_INTERNA, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
 import { TIPOS_SERVICO } from "@/lib/constants";
+import DecisaoCobrancaRS from "@/components/DecisaoCobrancaRS";
+import { feeDaContratacao, rotuloBotaoContratar } from "@/lib/decisaoCobrancaRS";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 
 interface Props {
@@ -567,7 +569,7 @@ export default function ModalFinalizarProcesso({
 
               {/* Decisão de cobrança R&S — por contratação, capturada aqui */}
               {tipoServico === "recrutamento_selecao" && (
-                <div style={{ background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 8, padding: "12px 14px" }}>
+                <div>
                   {reaberturaInfo?.reaberturaRecente && (
                     <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 8, padding: "10px 12px", marginBottom: 10 }}>
                       <p style={{ fontSize: 12, color: "#92400E", margin: 0, lineHeight: 1.5 }}>
@@ -577,38 +579,13 @@ export default function ModalFinalizarProcesso({
                       </p>
                     </div>
                   )}
-                  <p style={{ fontSize: 12, fontWeight: 700, color: "#374151", margin: "0 0 8px" }}>
-                    Gerar cobrança de R&S para esta contratação? *
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setGerarCobrancaRS(false)}
-                      className="text-sm px-3 py-1.5 rounded-lg font-semibold transition-colors"
-                      style={
-                        gerarCobrancaRS === false
-                          ? { background: "#374151", color: "#fff" }
-                          : { background: "#fff", color: "#374151", border: "1px solid #D1D5DB" }
-                      }
-                    >
-                      Não
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setGerarCobrancaRS(true)}
-                      className="text-sm px-3 py-1.5 rounded-lg font-semibold transition-colors"
-                      style={
-                        gerarCobrancaRS === true
-                          ? { background: "#16A34A", color: "#fff" }
-                          : { background: "#fff", color: "#374151", border: "1px solid #D1D5DB" }
-                      }
-                    >
-                      Sim
-                    </button>
-                  </div>
-                  {tentouEnviar && gerarCobrancaRS === null && (
-                    <p className="text-red-500 text-xs mt-1">Responda se deve gerar cobrança de R&S.</p>
-                  )}
+                  <DecisaoCobrancaRS
+                    valor={gerarCobrancaRS}
+                    onChange={setGerarCobrancaRS}
+                    fee={feeDaContratacao({ feeJaLancado: feeInfo?.admissaoFeeValor ?? null, salario: admSalario ? parseFloat(admSalario) : null, percentual: feeInfo?.admissaoFeePercentual ?? feeInfo?.feeRsPercentual ?? null })}
+                    percentual={feeInfo?.admissaoFeePercentual ?? feeInfo?.feeRsPercentual ?? null}
+                    mostrarErro={tentouEnviar}
+                  />
                 </div>
               )}
 
@@ -826,7 +803,7 @@ export default function ModalFinalizarProcesso({
               className="flex-1 py-2.5 rounded-xl font-semibold text-white transition-opacity disabled:opacity-50"
               style={{ backgroundColor: isContratado ? "#16A34A" : "#374151" }}
             >
-              {enviando ? "Salvando..." : isContratado ? cfg.btnLabel : "Encerrar Processo"}
+              {enviando ? "Salvando..." : isContratado ? rotuloBotaoContratar({ rs: tipoServico === "recrutamento_selecao", gerar: gerarCobrancaRS, padrao: cfg.btnLabel }) : "Encerrar Processo"}
             </button>
           </div>
         </div>
