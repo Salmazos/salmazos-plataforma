@@ -75,7 +75,11 @@ export default function BotaoUsarModeloJornada({ onAplicar, onSalvar, abertoInic
             type="button"
             disabled={!texto || salvando}
             onClick={aplicar}
-            className="text-xs font-semibold border border-gray-300 rounded-lg px-3 py-1.5 bg-white hover:bg-gray-50 disabled:opacity-50"
+            className={onSalvar
+              // "Salvar horário" (telas do RH): azul sólido de destaque (blue-700 = #1D4ED8, o azul já usado nas telas; hover blue-800 como o link "+ Usar modelo").
+              // Borda transparente mantém o tamanho idêntico ao do botão neutro.
+              ? "text-xs font-semibold border border-transparent rounded-lg px-3 py-1.5 bg-blue-700 text-white hover:bg-blue-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              : "text-xs font-semibold border border-gray-300 rounded-lg px-3 py-1.5 bg-white hover:bg-gray-50 disabled:opacity-50"}
           >
             {onSalvar ? (salvando ? "Salvando..." : "Salvar horário") : "Aplicar no campo"}
           </button>
