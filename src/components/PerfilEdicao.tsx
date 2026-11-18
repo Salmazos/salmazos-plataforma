@@ -18,6 +18,7 @@ import TriagemBadge from "@/components/TriagemBadge";
 import type { Candidato } from "@/types";
 import type { GarantiaInfo, AdmissaoInfo, MelhorRetencao } from "@/components/CandidatoPerfilTabs";
 import { MOTIVOS_REPROVACAO_INTERNA, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
+import { fundoDeFormulario, fundoSoLeitura } from "@/lib/fundoDaJanela";
 
 interface Props {
   candidato: Candidato;
@@ -399,7 +400,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
                   <>
                     <div
                       style={{ position: "fixed", inset: 0, zIndex: 10 }}
-                      onClick={() => setWaDropdownOpen(false)}
+                      {...fundoSoLeitura(() => setWaDropdownOpen(false))}
                     />
                     <div
                       style={{
@@ -491,7 +492,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
                   <>
                     <div
                       style={{ position: "fixed", inset: 0, zIndex: 10 }}
-                      onClick={() => setRemoverReprovacaoAberto(false)}
+                      {...fundoSoLeitura(() => setRemoverReprovacaoAberto(false))}
                     />
                     <div
                       style={{
@@ -1357,7 +1358,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.6)" }}
-          onClick={(e) => { if (e.target === e.currentTarget) setEmailModalOpen(false); }}
+          {...fundoDeFormulario()}
         >
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-5">
@@ -1442,7 +1443,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.6)" }}
-          onClick={(e) => { if (e.target === e.currentTarget && !reprovarSalvando) setReprovarModalOpen(false); }}
+          {...fundoDeFormulario()}
         >
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-4">

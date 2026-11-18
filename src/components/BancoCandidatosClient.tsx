@@ -7,6 +7,7 @@ import { ORIGEM_LABELS } from "@/lib/constants";
 import ModalCadastroRapido from "./ModalCadastroRapido";
 import BarraScrollFlutuante from "./BarraScrollFlutuante";
 import { useScrollHorizontalSincronizado } from "@/hooks/useScrollHorizontalSincronizado";
+import { fundoDeFormulario, fundoSoLeitura } from "@/lib/fundoDaJanela";
 
 const GENERO_OPCOES = ["Masculino", "Feminino", "Outro", "Prefiro não informar"];
 
@@ -1428,7 +1429,7 @@ export default function BancoCandidatosClient({
             justifyContent: "center",
             zIndex: 100,
           }}
-          onClick={(e) => { if (e.target === e.currentTarget && !modal.loading) setModal(null); }}
+          {...fundoDeFormulario()}
         >
           <div
             style={{
@@ -1674,7 +1675,7 @@ export default function BancoCandidatosClient({
             justifyContent: "center",
             zIndex: 110,
           }}
-          onClick={(e) => { if (e.target === e.currentTarget) setAlertaProcesso(null); }}
+          {...fundoSoLeitura(() => setAlertaProcesso(null))}
         >
           <div
             style={{
@@ -1772,7 +1773,7 @@ export default function BancoCandidatosClient({
             justifyContent: "center",
             zIndex: 100,
           }}
-          onClick={(e) => { if (e.target === e.currentTarget && !interesseModal.loading) setInteresseModal(null); }}
+          {...fundoSoLeitura(() => { if (!interesseModal.loading) setInteresseModal(null); })}
         >
           <div
             style={{

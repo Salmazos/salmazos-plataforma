@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import type { FuncionarioDetalhe } from "./FuncionarioDetalheClient";
 import { TURNOS_FUNCIONARIO } from "@/lib/constants";
 import { salvarHorarioFuncionario } from "@/lib/salvarHorarioJornada";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 interface ClienteOption {
   id: string;
@@ -113,7 +114,7 @@ export default function ModalEditarFuncionario({ isOpen, funcionario, clientes, 
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.6)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      {...fundoDeFormulario()}
     >
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[85vh] overflow-y-auto">
         <h2 className="text-lg font-bold text-gray-900 mb-1">Editar funcionário</h2>

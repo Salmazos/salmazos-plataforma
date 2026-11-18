@@ -5,6 +5,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { ROTULO_RESULTADO_CONTATO, rotuloEtapa } from "@/lib/comercialRotulos";
 import CampoTelefone from "@/components/ui/CampoTelefone";
 import { exibirTelefone, emailContatoValido, MSG_EMAIL_INVALIDO } from "@/lib/utils";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 interface Analista {
   id: string;
@@ -459,7 +460,7 @@ function ModalRegistro({ empresa, contatos, onClose, onSalvo }: { empresa: Empre
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} {...fundoDeFormulario()}>
       <div style={{ background: "#fff", borderRadius: 14, padding: 22, width: "100%", maxWidth: 480, maxHeight: "90vh", overflowY: "auto" }} onClick={(x) => x.stopPropagation()}>
         <h2 style={{ margin: "0 0 14px", fontSize: 18, fontWeight: 800, color: "#111827" }}>Registrar contato · {empresa.nome}</h2>
         <div style={{ display: "grid", gap: 10 }}>

@@ -22,6 +22,7 @@ import { formatarData } from "@/lib/utils";
 import { getProximasEtapas, getComportamentoEtapa, getEtapaInfo, getEtapaLabel, getEtapaAnterior } from "@/lib/etapasCandidatura";
 import { MOTIVOS_REPROVACAO_CLIENTE } from "@/lib/motivos-reprovacao";
 import type { Vaga, CandidatoVaga, Candidato, MatchDetalhes } from "@/types";
+import { fundoSoLeitura } from "@/lib/fundoDaJanela";
 
 type HistoricoModalidade = {
   id: string;
@@ -785,7 +786,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
       {modalEncerrar && (
         <div
           style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: "16px" }}
-          onClick={() => !encerrando && setModalEncerrar(false)}
+          {...fundoSoLeitura(() => !encerrando && setModalEncerrar(false))}
         >
           <div
             style={{ backgroundColor: "#fff", borderRadius: "16px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", width: "100%", maxWidth: "480px" }}
@@ -888,7 +889,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
       {modalAtivar && (
         <div
           style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: "16px" }}
-          onClick={() => !encerrando && setModalAtivar(false)}
+          {...fundoSoLeitura(() => !encerrando && setModalAtivar(false))}
         >
           <div
             style={{ backgroundColor: "#fff", borderRadius: "16px", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)", width: "100%", maxWidth: "400px" }}

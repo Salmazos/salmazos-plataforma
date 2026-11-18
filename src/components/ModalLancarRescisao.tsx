@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import CamposRescisaoForm, { VALORES_RESCISAO_VAZIOS, valoresRescisaoValidos, type ValoresRescisao } from "@/components/CamposRescisaoForm";
 import type { FuncionarioRow } from "./FuncionariosPageClient";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 // Só os campos que o modal usa — assim o ModalContratoMot (popup do aviso MOT) abre este mesmo fluxo de
 // rescisão sem precisar montar uma linha completa de FuncionarioRow.
@@ -96,7 +97,7 @@ export default function ModalLancarRescisao({ isOpen, funcionario, onClose, onLa
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.6)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      {...fundoDeFormulario()}
     >
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">

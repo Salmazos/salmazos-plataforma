@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { TIPOS_SERVICO } from "@/lib/constants";
 import { formatarCPF } from "@/lib/utils";
 import type { CandidatoElegivel } from "./ModalIniciarAdmissao";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 // Só MOT e Terceirização — R&S "vaga casada" não faz sentido (cliente contrata direto, sem
 // fee/garantia de uma seleção que nunca existiu) e Avaliação Psicológica não gera admissão.
@@ -117,7 +118,7 @@ export default function ModalAdmissaoRapida({ isOpen, onClose, onCriado }: Props
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.6)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      {...fundoDeFormulario()}
     >
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-1">

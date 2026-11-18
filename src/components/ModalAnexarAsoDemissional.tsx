@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { RescisaoRow } from "./RescisoesPageClient";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 interface Props {
   rescisao: RescisaoRow;
@@ -58,7 +59,7 @@ export default function ModalAnexarAsoDemissional({ rescisao, onClose, onAnexado
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.6)" }}
-      onClick={(e) => { if (e.target === e.currentTarget && !enviando) onClose(); }}
+      {...fundoDeFormulario()}
     >
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-4">

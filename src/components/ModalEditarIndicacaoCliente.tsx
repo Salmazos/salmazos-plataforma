@@ -9,6 +9,7 @@ import { colunasDeDados, colunasVisiveis, comHorario, dadosDeColunas, dadosVazio
 import CampoTelefone from "@/components/ui/CampoTelefone";
 import { MOSTRAR_DIA_TESTE_NO_PORTAL } from "@/lib/diaTestePortal";
 import { diasTesteParaEnvio, erroDiasTeste } from "@/components/CampoDiasTeste";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 // Edição de uma indicação já enviada (portal > Minhas Indicações). Pré-preenche com o que foi enviado e
 // manda ao servidor SÓ os campos que mudaram; o servidor refaz o diff e revalida tudo (quem pode editar,
@@ -191,7 +192,7 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" {...fundoDeFormulario()}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="bg-black text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
           <h2 className="font-bold text-lg">Editar indicação</h2>

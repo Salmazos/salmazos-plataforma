@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import SeletorHorarioIniciarAdmissao from "@/components/admissao/SeletorHorarioIniciarAdmissao";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 // Admissão pode começar com o candidato ainda em aprovado_cliente, mas "contratado" só é gravado por
 // "Finalizar processo" no Kanban (api/candidatos-vagas/[id]/finalizar) — sem isso o candidato fica
@@ -273,7 +274,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.6)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      {...fundoDeFormulario()}
     >
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">

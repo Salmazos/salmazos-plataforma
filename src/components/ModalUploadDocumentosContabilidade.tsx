@@ -10,6 +10,7 @@ import {
 } from "@/lib/contabilidadeDocumentosMatch";
 import { calcularEstadoUpload, type StatusLinha } from "@/lib/contabilidadeUploadEstado";
 import type { AdmissaoDocumentoContabilidade } from "@/types";
+import { fundoDeFormulario, fundoSoLeitura } from "@/lib/fundoDaJanela";
 
 interface Props {
   isOpen: boolean;
@@ -307,7 +308,7 @@ export default function ModalUploadDocumentosContabilidade({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" {...fundoDeFormulario()}>
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
@@ -452,7 +453,7 @@ export default function ModalUploadDocumentosContabilidade({
         {confirmacaoPendente && (
           <div
             className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
-            onClick={() => setConfirmacaoPendente(null)}
+            {...fundoSoLeitura(() => setConfirmacaoPendente(null))}
           >
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
               <p className="text-sm text-gray-800 mb-2">

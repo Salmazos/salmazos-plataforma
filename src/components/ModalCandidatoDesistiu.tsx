@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { DisponivelAdmissao } from "./AdmissoesClient";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 export interface ResultadoDesistencia {
   vagaReaberta: boolean;
@@ -66,7 +67,7 @@ export default function ModalCandidatoDesistiu({ item, onClose, onConcluido }: P
   return (
     <div
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}
-      onClick={(e) => { if (e.target === e.currentTarget && !enviando) onClose(); }}
+      {...fundoDeFormulario()}
     >
       <div role="dialog" aria-modal="true" aria-label="Candidato desistiu" style={{ background: "#fff", borderRadius: 12, padding: "24px 28px", width: 440, maxWidth: "90vw", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
         <h2 style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: "0 0 4px" }}>Candidato desistiu</h2>

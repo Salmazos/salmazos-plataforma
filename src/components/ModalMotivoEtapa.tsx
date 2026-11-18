@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 interface Props {
   isOpen: boolean;
@@ -73,7 +74,7 @@ export default function ModalMotivoEtapa({
         justifyContent: "center",
         zIndex: 100,
       }}
-      onClick={(e) => { if (e.target === e.currentTarget && !enviando) onClose(); }}
+      {...fundoDeFormulario()}
     >
       <div
         style={{

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useNotificacoes, type Notificacao } from "@/components/NotificacoesProvider";
+import { fundoSoLeitura } from "@/lib/fundoDaJanela";
 
 function tempoAtras(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime();
@@ -114,7 +115,7 @@ export default function NotificacoesBell() {
         <>
           <div
             style={{ position: "fixed", inset: 0, zIndex: 9998 }}
-            onClick={() => setAberto(false)}
+            {...fundoSoLeitura(() => setAberto(false))}
           />
           <div
             style={{

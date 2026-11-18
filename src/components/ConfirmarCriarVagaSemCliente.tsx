@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { devolverFocoAoFechar, type MotivoDeFechamento } from "@/lib/clienteDaSolicitacao";
 import { devolverFocoSeExistir, prenderTabNoModal } from "@/components/focoDosModais";
+import { fundoSoLeitura } from "@/lib/fundoDaJanela";
 
 interface Props {
   // Botão que abriu o diálogo (o "Criar Vaga" do cartão). Sem ele, vale quem tinha o foco ao abrir.
@@ -41,7 +42,7 @@ export default function ConfirmarCriarVagaSemCliente({ origem, onCadastrarPrimei
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) cancelar(); }}
+      {...fundoSoLeitura(cancelar)}
       onKeyDown={aoTeclar}
     >
       <div

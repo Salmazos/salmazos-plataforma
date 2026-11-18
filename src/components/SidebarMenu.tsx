@@ -42,6 +42,7 @@ import {
   FileSpreadsheet,
   FileText,
 } from "lucide-react";
+import { fundoSoLeitura } from "@/lib/fundoDaJanela";
 
 interface Props {
   userEmail: string;
@@ -765,7 +766,7 @@ export default function SidebarMenu({
       {mobileOpen && (
         <div
           className="md:hidden fixed inset-0 z-40 bg-black/60"
-          onClick={() => setMobileOpen(false)}
+          {...fundoSoLeitura(() => setMobileOpen(false))}
         />
       )}
 

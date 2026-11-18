@@ -16,6 +16,7 @@ import FormularioEdicaoSolicitacao, {
   formDeSolicitacao,
   type FormEdicaoSolicitacao,
 } from "@/components/FormularioEdicaoSolicitacao";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 const TIPO_LABEL: Record<string, { label: string; bg: string; color: string }> = {
   recrutamento_selecao: { label: "R&S", bg: "#1D6FA4", color: "#fff" },
@@ -339,7 +340,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
     <>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      {...fundoDeFormulario()}
       // Com o cadastro, o vincular ou a confirmação abertos, nada deste modal recebe foco nem clique: Enter/Espaço nunca acionam um botão escondido atrás.
       inert={cadastrandoCliente !== null || vinculandoCliente !== null || confirmandoVagaSemCliente !== null}
     >

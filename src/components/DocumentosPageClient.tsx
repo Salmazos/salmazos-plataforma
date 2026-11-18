@@ -17,6 +17,7 @@ import {
   Search,
 } from "lucide-react";
 import { CLIENTE_CATEGORIAS } from "@/lib/documentosCategorias";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -1001,7 +1002,7 @@ export default function DocumentosPageClient({
             justifyContent: "center",
             background: "rgba(0,0,0,0.5)",
           }}
-          onClick={() => !uploading && setShowUpload(false)}
+          {...fundoDeFormulario()}
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -1175,7 +1176,7 @@ export default function DocumentosPageClient({
             justifyContent: "center",
             background: "rgba(0,0,0,0.5)",
           }}
-          onClick={() => !criandoCategoria && setShowCriarCategoria(false)}
+          {...fundoDeFormulario()}
         >
           <div
             onClick={(e) => e.stopPropagation()}

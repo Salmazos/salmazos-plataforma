@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import ContratoMotPainel from "./ContratoMotPainel";
+import { fundoSoLeitura } from "@/lib/fundoDaJanela";
 
 interface Props {
   funcionarioId: string | null;
@@ -22,7 +23,7 @@ export default function ModalContratoMot({ funcionarioId, nome, modalidade, onCl
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.6)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      {...fundoSoLeitura(onClose)}
     >
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[85vh] overflow-y-auto">
         <div className="flex items-start justify-between mb-4">

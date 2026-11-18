@@ -2,6 +2,7 @@
 
 import React from "react";
 import { diasRestantes, ROTULO_SITUACAO, type SituacaoProposta } from "@/lib/propostas";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 export interface PropostaResumo {
   id: string;
@@ -71,7 +72,7 @@ export function ValidadeTexto({ validadeAte, situacao, hoje }: { validadeAte: st
 export function Modal({ titulo, onClose, children, largo, bloqueado }: { titulo: string; onClose: () => void; children: React.ReactNode; largo?: boolean; bloqueado?: boolean }) {
   const fechar = () => { if (!bloqueado) onClose(); };
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={fechar}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} {...fundoDeFormulario()}>
       <div style={{ background: "#fff", borderRadius: 14, padding: 22, width: "100%", maxWidth: largo ? 720 : 520, maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#111827" }}>{titulo}</h2>

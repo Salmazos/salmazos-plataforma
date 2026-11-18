@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useUsuarioLogado } from "./UsuarioLogadoProvider";
 import { nomesCompletosDaUnidade } from "@/lib/responsaveis";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 interface Cliente { id: string; nome: string; ativo: boolean; unidade_id: string | null }
 interface Supervisor { id: string; nome_completo: string; unidade_id: string | null }
@@ -213,7 +214,7 @@ export default function SupervisaoConfigClient() {
       {modalOpen && (
         <div
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}
-          onClick={(e) => { if (e.target === e.currentTarget && !submitting) setModalOpen(false); }}
+          {...fundoDeFormulario()}
         >
           <div style={{ background: "#fff", borderRadius: 12, padding: "24px 28px", width: 460, maxWidth: "95vw", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
             <h2 style={{ fontSize: 16, fontWeight: 700, color: "#111827", margin: "0 0 20px" }}>

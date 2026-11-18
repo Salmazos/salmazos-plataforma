@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
 import { Home, ClipboardList, Calendar, IdCard, FolderOpen, LogOut, Menu, Clock, CheckSquare } from "lucide-react";
+import { fundoSoLeitura } from "@/lib/fundoDaJanela";
 
 interface Props {
   userEmail: string;
@@ -241,7 +242,7 @@ export default function SidebarPortal({ userEmail, mostrarFuncionarios, mostrarV
 
       {/* Mobile overlay */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-40 bg-black/60" onClick={() => setMobileOpen(false)} />
+        <div className="md:hidden fixed inset-0 z-40 bg-black/60" {...fundoSoLeitura(() => setMobileOpen(false))} />
       )}
 
       {/* Sidebar - desktop */}

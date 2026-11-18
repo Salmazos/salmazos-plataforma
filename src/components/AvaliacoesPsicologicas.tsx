@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 interface DadosQuantitativos {
   acertos: number | null;
@@ -691,9 +692,7 @@ export default function AvaliacoesPsicologicas({ candidatoId }: Props) {
             justifyContent: "center",
             padding: "16px",
           }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setModalAberto(false);
-          }}
+          {...fundoDeFormulario()}
         >
           <div
             className="card"

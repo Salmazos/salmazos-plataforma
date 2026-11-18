@@ -6,6 +6,7 @@ import {
 } from "@/lib/propostaModelos";
 import { itensDasCondicoes } from "@/lib/solicitacaoVagaCondicoes";
 import { MAX_USOS_LINK, ROTULO_STATUS_LINK, VALIDADES_LINK_DIAS, VALIDADE_LINK_PADRAO_DIAS, type StatusLink } from "@/lib/solicitacaoVagaLink";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 // Link público de solicitação de vaga para cliente novo (sem acesso ao portal). O analista define as condições comerciais
 // (as mesmas cláusulas da proposta R&S), gera o link, copia para o WhatsApp e acompanha/revoga os links da unidade.
@@ -260,7 +261,7 @@ export default function ModalLinkSolicitacaoVaga({ isOpen, onClose }: Props) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      {...fundoDeFormulario()}
     >
       <div role="dialog" aria-modal="true" aria-labelledby="titulo-link-solicitacao" className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
         <div className="bg-black text-white px-6 py-4 rounded-t-2xl flex items-center justify-between shrink-0">

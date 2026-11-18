@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ContratoRow } from "./FuncionarioDetalheClient";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 interface Props {
   isOpen: boolean;
@@ -78,7 +79,7 @@ export default function ModalRegistrarContrato({ isOpen, funcionarioId, onClose,
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.6)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      {...fundoDeFormulario()}
     >
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">Registrar novo contrato</h2>

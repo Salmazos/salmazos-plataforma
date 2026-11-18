@@ -6,6 +6,7 @@ import { BotaoAprovarIndicacao, CartaoIndicacaoTopo } from "./CartaoIndicacaoAna
 import { estadoIndicacaoAnalista } from "@/lib/indicacaoSemVaga";
 import { textoDiasTesteParaRH } from "@/lib/diasTeste";
 import { DIAS_AUXILIAR_PRORROGACAO, MAX_DIAS_CONTRATO, dataFimEfetiva, erroDataTermino, somarDiasIso } from "@/lib/dataTerminoContrato";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 
 const ADM_CAMPOS: { key: string; label: string }[] = [
@@ -233,7 +234,7 @@ export default function ModalIndicacoesCandidato({ isOpen, onClose, onAprovado, 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      {...fundoDeFormulario()}
     >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="bg-black text-white px-6 py-4 rounded-t-2xl flex items-center justify-between shrink-0">

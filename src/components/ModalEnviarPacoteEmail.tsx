@@ -7,6 +7,7 @@ import {
   montarLinhasDeCampos, nomeArquivoAnexo, numeroParaBR, validarCamposEmail,
   type CamposEmailContabilidade, type NomeCampoEmail,
 } from "@/lib/emailPacoteContabilidade";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 interface Preview {
   assunto: string;
@@ -150,7 +151,7 @@ export default function ModalEnviarPacoteEmail({ admissaoId, onClose, onEnviado 
   const rotulo = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1";
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" {...fundoDeFormulario()}>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900">Enviar pacote por e-mail</h2>

@@ -5,6 +5,7 @@ import CampoTelefone from "@/components/ui/CampoTelefone";
 import { dataAdiamentoValida, diasDeAtraso } from "@/lib/lembretesRegras";
 import { exibirTelefone, emailContatoValido, MSG_EMAIL_INVALIDO } from "@/lib/utils";
 import { ROTULO_RESULTADO_CONTATO, ROTULO_MOTIVO_PERDA, ROTULO_ORIGEM, rotuloEtapa, ehAberta } from "@/lib/comercialRotulos";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 interface Vendedor { id: string; nome_completo: string; unidade_nome: string | null }
 interface Props { vendedor: boolean; gestor: boolean; meuAnalistaId: string; vendedores: Vendedor[] }
@@ -87,7 +88,7 @@ function descricaoHistorico(h: { tipo: string; descricao: string | null }): stri
 
 function Modal({ titulo, onClose, children, largo }: { titulo: string; onClose: () => void; children: React.ReactNode; largo?: boolean }) {
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} {...fundoDeFormulario()}>
       <div style={{ background: "#fff", borderRadius: 14, padding: 22, width: "100%", maxWidth: largo ? 720 : 480, maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#111827" }}>{titulo}</h2>

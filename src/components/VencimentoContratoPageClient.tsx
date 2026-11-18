@@ -8,6 +8,7 @@ import { ehTerceirizacao, ordenarPorDiasTrabalhados, rotuloModalidadeContrato, t
 import type { SeloMot } from "@/lib/contratoMotEventos";
 import { useScrollHorizontalSincronizado } from "@/hooks/useScrollHorizontalSincronizado";
 import BarraScrollFlutuante from "./BarraScrollFlutuante";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 export interface VencimentoContratoRow {
   id: string;
@@ -328,7 +329,7 @@ export default function VencimentoContratoPageClient({ linhasIniciais: linhasDoS
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.6)" }}
-          onClick={(e) => { if (e.target === e.currentTarget && !salvando) setAlvoEfetivar(null); }}
+          {...fundoDeFormulario()}
         >
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6" role="dialog" aria-modal="true" aria-label="Efetivar funcionário">
             <h2 className="text-lg font-bold text-gray-900">Efetivar funcionário</h2>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 type ClienteOpcao = { id: string; nome: string };
 
@@ -61,7 +62,7 @@ export default function ModalEntrevistaSalmazos({ isOpen, candidato, onClose, on
         justifyContent: "center",
         zIndex: 100,
       }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      {...fundoDeFormulario()}
     >
       <div
         style={{

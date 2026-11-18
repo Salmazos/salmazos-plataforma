@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import type { AniversarianteContato, Cliente } from "@/types";
 import { obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
 import CampoTelefone from "@/components/ui/CampoTelefone";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 const MESES = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -365,7 +366,7 @@ export default function AniversariantesPageClient() {
       )}
 
       {modalAberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={(e) => { if (e.target === e.currentTarget) setModalAberto(false); }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" {...fundoDeFormulario()}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="bg-black text-white px-6 py-4 rounded-t-2xl">
               <div className="flex items-center justify-between">
@@ -500,7 +501,7 @@ export default function AniversariantesPageClient() {
       )}
 
       {modalFelicitacaoAberto && contatoFelicitacao && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={(e) => { if (e.target === e.currentTarget && !enviandoFelicitacao) setModalFelicitacaoAberto(false); }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" {...fundoDeFormulario()}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="bg-black px-6 py-4 rounded-t-2xl">
               <div className="flex items-center justify-between">

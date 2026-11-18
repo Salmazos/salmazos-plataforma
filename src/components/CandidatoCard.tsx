@@ -14,6 +14,7 @@ import { useUsuarioLogado, unidadeDaTela } from "./UsuarioLogadoProvider";
 import { nomesResponsaveisCandidatoDaUnidade, opcoesResponsavel } from "@/lib/responsaveis";
 import { Pencil } from "lucide-react";
 import { horaEntrevistaReal, dataEntrevistaParaCliente } from "@/lib/horaEntrevista";
+import { fundoDeFormulario } from "@/lib/fundoDaJanela";
 
 type Analista = { id: string; nome_completo: string; email: string };
 
@@ -332,7 +333,7 @@ export default function CandidatoCard({ card, onMover, onVoltar, movendo }: Prop
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.6)" }}
-          onClick={() => !salvarRemarcar && setModalRemarcar(false)}
+          {...fundoDeFormulario()}
         >
           <div className="bg-white rounded-lg shadow-lg w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-gray-900 mb-4">Remarcar entrevista com cliente</h3>
