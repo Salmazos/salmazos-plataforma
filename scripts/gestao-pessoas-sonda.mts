@@ -3,7 +3,7 @@
 // @ts-expect-error módulo .mjs do harness, sem tipos
 import { congelarData } from "./harness-mot/ambiente.mjs";
 import { formatarDataISO, obterDataHojeBrasil } from "../src/lib/dataHojeBrasil";
-import { aniversariantesDoMes, idadeNaData, mesesDeCasa, admitidoNoMes, type PessoaAtiva } from "../src/lib/gestaoPessoas";
+import { aniversariantesDoMes, aniversariantesPorMes, idadeNaData, mesesDeCasa, admitidoNoMes, type PessoaAtiva } from "../src/lib/gestaoPessoas";
 
 congelarData(process.env.AGORA);
 const hoje = formatarDataISO(obterDataHojeBrasil());
@@ -13,6 +13,8 @@ console.log(JSON.stringify({
   hoje,
   idadeBia: idadeNaData("2000-02-29", hoje),
   aniversariantes: aniversariantesDoMes(pessoas, hoje).map((a) => `${a.diaMes}|${a.ordem}|${a.nome}|${a.completaAnos}`),
+  rotulosDosMeses: aniversariantesPorMes(pessoas, hoje).map((m) => m.rotulo),
+  meses: aniversariantesPorMes(pessoas, hoje).filter((m) => m.aniversariantes.length > 0).map((m) => `${m.rotulo}=${m.aniversariantes.map((a) => `${a.diaMes}|${a.ordem}|${a.nome}|${a.completaAnos}`).join(",")}`),
   tempoDeCasa: mesesDeCasa("2026-06-15", hoje),
   admitidoNoMes: admitidoNoMes("2026-11-30", hoje),
 }));

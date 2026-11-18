@@ -34,6 +34,8 @@ export interface LinhaFaixa extends ContagemPorSexo { faixa: FaixaEtaria; rotulo
 export interface LinhaEscolaridade { grau: string; rotulo: string; total: number; naoInformado: boolean }
 export interface LinhaCargo { cargo: string; total: number }
 export interface Aniversariante { diaMes: string; ordem: number; nome: string; cargo: string | null; completaAnos: number }
+// Um dos 12 meses a partir do mês corrente: `ano` é o da PRÓXIMA ocorrência (mês já passado neste ano = ano seguinte) e `rotulo` já traz o ano quando é o seguinte.
+export interface MesAniversariantes { mes: number; ano: number; rotulo: string; aniversariantes: Aniversariante[] }
 
 export interface GestaoPessoas {
   cliente: { id: string; nome: string };
@@ -42,7 +44,8 @@ export interface GestaoPessoas {
   faixaPorSexo: LinhaFaixa[];
   escolaridade: LinhaEscolaridade[];
   cargos: LinhaCargo[];
-  aniversariantesDoMes: Aniversariante[];
+  // 12 itens: o mês corrente (America/Sao_Paulo) primeiro, até o mesmo mês do ano seguinte menos um; cada pessoa aparece em exatamente um mês.
+  aniversariantesPorMes: MesAniversariantes[];
   mesDeReferencia: number; // 1 a 12 (America/Sao_Paulo)
   tempoMedioDeCasaMeses: number | null;
   admitidosNoMes: number;
@@ -173,21 +176,41 @@ export function agruparEscolaridade(graus: (string | null | undefined)[]): Linha
   return [...linhas, ni];
 }
 
-// ── Aniversariantes do mês ───────────────────────────────────────────────────
-// Quem nasceu em 29/02 aparece no dia 28 (ordem) nos anos comuns, exibindo "29/02"; "completa N anos" = ano de hoje − ano de nascimento.
-export function aniversariantesDoMes(pessoas: PessoaAtiva[], hojeISO: string): Aniversariante[] {
+// ── Aniversariantes (12 meses a partir do mês corrente) ──────────────────────
+// Ordem dos meses: começa no mês corrente e segue até o mesmo mês do ano seguinte MENOS UM (ex.: hoje em novembro/2026 = novembro/2026, dezembro/2026,
+// janeiro/2027 ... outubro/2027). O "completa N anos" é o da PRÓXIMA ocorrência: ano dessa ocorrência − ano de nascimento; no mês corrente quem já fez
+// aniversário continua listado, com a idade que completou. Quem nasceu em 29/02 aparece no dia 28 (ordem) quando o ano da ocorrência é comum,
+// exibindo "29/02". Entra só quem tem idade ATUAL plausível (14 a 90, a mesma regra das faixas): cadastro inconsistente fica de fora, então as 12 listas
+// somam exatamente o número de ativos com nascimento plausível.
+export const NOMES_DOS_MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+export function rotuloDoMes(mes: number, ano: number, anoAtual: number): string {
+  const nome = NOMES_DOS_MESES[mes - 1] ?? "";
+  return ano > anoAtual ? `${nome} de ${ano}` : nome;
+}
+
+export function aniversariantesPorMes(pessoas: PessoaAtiva[], hojeISO: string): MesAniversariantes[] {
   const h = partes(hojeISO);
   if (!h) return [];
-  const lista: Aniversariante[] = [];
+  const meses: MesAniversariantes[] = Array.from({ length: 12 }, (_, k) => {
+    const mes = ((h.m - 1 + k) % 12) + 1;
+    const ano = h.m - 1 + k >= 12 ? h.a + 1 : h.a;
+    return { mes, ano, rotulo: rotuloDoMes(mes, ano, h.a), aniversariantes: [] };
+  });
   for (const p of pessoas) {
     const n = partes(p.dataNascimento);
-    if (!n || n.m !== h.m) continue;
-    const completaAnos = h.a - n.a;
-    if (completaAnos < IDADE_MINIMA_PLAUSIVEL || completaAnos > IDADE_MAXIMA_PLAUSIVEL) continue; // inconsistente: fica fora da lista
-    const ordem = n.m === 2 && n.d === 29 && !bissexto(h.a) ? 28 : n.d;
-    lista.push({ diaMes: dataBR(p.dataNascimento).slice(0, 5), ordem, nome: p.nome, cargo: (p.cargo ?? "").trim() || null, completaAnos });
+    if (!n || classificarIdade(p.dataNascimento, hojeISO).idade === null) continue; // sem data ou inconsistente: fora da lista
+    const destino = meses[(n.m - h.m + 12) % 12];
+    const ordem = n.m === 2 && n.d === 29 && !bissexto(destino.ano) ? 28 : n.d;
+    destino.aniversariantes.push({ diaMes: dataBR(p.dataNascimento).slice(0, 5), ordem, nome: p.nome, cargo: (p.cargo ?? "").trim() || null, completaAnos: destino.ano - n.a });
   }
-  return lista.sort((x, y) => x.ordem - y.ordem || x.nome.localeCompare(y.nome, "pt-BR"));
+  for (const m of meses) m.aniversariantes.sort((x, y) => x.ordem - y.ordem || x.nome.localeCompare(y.nome, "pt-BR"));
+  return meses;
+}
+
+// Só o mês corrente (o primeiro dos 12).
+export function aniversariantesDoMes(pessoas: PessoaAtiva[], hojeISO: string): Aniversariante[] {
+  return aniversariantesPorMes(pessoas, hojeISO)[0]?.aniversariantes ?? [];
 }
 
 // ── Montagem dos agregados ───────────────────────────────────────────────────
@@ -215,7 +238,7 @@ export function montarGestaoPessoas(cliente: { id: string; nome: string }, pesso
     faixaPorSexo: faixas,
     escolaridade: agruparEscolaridade(pessoas.map((p) => p.grauInstrucao)),
     cargos: agruparCargos(pessoas.map((p) => p.cargo)),
-    aniversariantesDoMes: aniversariantesDoMes(pessoas, hojeISO),
+    aniversariantesPorMes: aniversariantesPorMes(pessoas, hojeISO),
     mesDeReferencia: h?.m ?? 0,
     tempoMedioDeCasaMeses: comTempo > 0 ? Math.round((somaMeses / comTempo) * 10) / 10 : null,
     admitidosNoMes: admitidos,

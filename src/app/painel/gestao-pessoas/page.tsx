@@ -36,5 +36,6 @@ export default async function GestaoPessoasPage({ searchParams }: Props) {
     if (!dados) notFound();
   }
 
-  return <GestaoPessoasClient clientes={clientes} selecionadoId={dados?.cliente.id ?? null} dados={dados} />;
+  // key = empresa: trocar de empresa remonta a tela e o seletor de mês dos aniversariantes volta para o mês corrente.
+  return <GestaoPessoasClient key={dados?.cliente.id ?? "nenhuma"} clientes={clientes} selecionadoId={dados?.cliente.id ?? null} dados={dados} />;
 }

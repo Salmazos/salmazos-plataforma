@@ -15,7 +15,7 @@ import { congelarData } from "./harness-mot/ambiente.mjs";
 // @ts-expect-error módulo .mjs do harness, sem tipos
 import { criarDb, criarClienteServico } from "./harness-mot/memdb.mjs";
 import {
-  admitidoNoMes, agruparCargos, agruparEscolaridade, aniversariantesDoMes, carregarGestaoPessoas, classificarIdade, faixaEtaria, idadeNaData, limitarCargos,
+  admitidoNoMes, agruparCargos, agruparEscolaridade, aniversariantesDoMes, aniversariantesPorMes, rotuloDoMes, carregarGestaoPessoas, classificarIdade, faixaEtaria, idadeNaData, limitarCargos,
   listarClientesComAtivos, mesesDeCasa, montarGestaoPessoas, normalizarCargo, type GestaoPessoas, type PessoaAtiva,
 } from "../src/lib/gestaoPessoas";
 import { podeAcessarFuncionarios } from "../src/lib/funcionariosAuth";
@@ -255,7 +255,7 @@ await ok("tempo real: completar sexo e nascimento de quem estava 'não informado
   const depois = await carregarGestaoPessoas(svcDe(db), { clienteId: CA, unidadeRH: U1, hojeISO: HOJE });
   assert.deepEqual(depois!.porSexo, { masculino: 2, feminino: 1, naoInformado: 0 });
   assert.equal(depois!.faixaPorSexo.find((f) => f.faixa === "nao_informada")!.total, 0);
-  assert.deepEqual(depois!.aniversariantesDoMes.map((a) => [a.diaMes, a.nome, a.completaAnos]), [["02/11", "Carla", 46], ["20/11", "Ana", 36]]);
+  assert.deepEqual(depois!.aniversariantesPorMes[0].aniversariantes.map((a) => [a.diaMes, a.nome, a.completaAnos]), [["02/11", "Carla", 46], ["20/11", "Ana", 36]]);
 });
 
 // ── Provas de falha: os mesmos testes reprovam carregadores errados ──
@@ -314,7 +314,7 @@ await ok("tela: aniversariantes em dd/mm, nada de data em ISO, avisos de poucos 
   assert.ok(!/\d{4}-\d{2}-\d{2}/.test(html), "nenhuma data em ISO na tela");
   assert.ok(html.includes("Agregado de poucas pessoas, uso interno do RH"), "3 ativos = poucos");
   assert.ok(html.includes("1 cadastro com data de nascimento inconsistente") && !html.includes("Bebê"), "só a contagem, sem o nome da pessoa");
-  assert.ok(html.includes("Gestão de Pessoas") && html.includes("Funcionários ativos") && html.includes("Admitidos no mês") && html.includes("Tempo médio de casa") && html.includes("Aniversariantes do mês"));
+  assert.ok(html.includes("Gestão de Pessoas") && html.includes("Funcionários ativos") && html.includes("Admitidos no mês") && html.includes("Tempo médio de casa") && html.includes("Aniversariantes de novembro"));
   for (const t of ["Distribuição por sexo", "Faixa etária por sexo", "Grau de escolaridade", "Cargos", "Aniversariantes de novembro", "Idade não informada", "Abaixo de 18", "Acima de 40"]) assert.ok(html.includes(t), t);
   assert.ok(!/cor\/raça|cpf|salário|endereço/i.test(html), "nada de cor/raça, CPF, salário nem endereço");
   const total = html.match(/<td[^>]*>Total<\/td>(?:<td[^>]*>\d+<\/td>){4}/);
@@ -330,6 +330,130 @@ await ok("tela: estados vazio (empresa sem ativos / nenhuma empresa / nada escol
   assert.ok(tela({ dados: null, selecionadoId: null, clientes: [] }).includes("Nenhuma empresa com funcionários ativos."));
   const html = tela();
   assert.ok(html.includes("Escolha uma empresa…") && html.includes("Alfa Indústria") && html.includes('aria-label="Empresa"'));
+});
+
+
+// ── Aniversariantes dos 12 meses (filtro de mês) ─────────────────────────────
+const pp = (nome: string, nasc: string | null, cargo: string | null = "Auxiliar"): PessoaAtiva => ({ nome, cargo, dataAdmissao: null, sexo: "M", dataNascimento: nasc, grauInstrucao: null });
+const lista = (r: ReturnType<typeof aniversariantesPorMes>, k: number) => r[k].aniversariantes.map((a) => [a.diaMes, a.nome, a.completaAnos]);
+
+await ok("12 meses: começam no mês corrente e vão até o mesmo mês do ano seguinte menos um; rótulo traz o ano só nos meses do ano seguinte", () => {
+  const r = aniversariantesPorMes([], HOJE);
+  assert.equal(r.length, 12);
+  assert.deepEqual(r.map((m) => m.rotulo), ["novembro", "dezembro", "janeiro de 2027", "fevereiro de 2027", "março de 2027", "abril de 2027", "maio de 2027", "junho de 2027", "julho de 2027", "agosto de 2027", "setembro de 2027", "outubro de 2027"]);
+  assert.deepEqual(r.map((m) => [m.mes, m.ano]).slice(0, 4), [[11, 2026], [12, 2026], [1, 2027], [2, 2027]]);
+  assert.equal(r[0].mes, 11, "abre no mês corrente (hoje de Brasília)");
+  const janeiro = aniversariantesPorMes([], "2026-01-10");
+  assert.deepEqual(janeiro.map((m) => m.rotulo), ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"], "em janeiro todos são do ano corrente");
+  assert.equal(rotuloDoMes(12, 2026, 2026), "dezembro");
+  assert.equal(rotuloDoMes(1, 2027, 2026), "janeiro de 2027");
+});
+
+await ok("'completa N anos' é o da PRÓXIMA ocorrência: mês já passado neste ano vira o ano seguinte; o mês corrente mantém quem já fez aniversário (idade que completou)", () => {
+  const r = aniversariantesPorMes([pp("Corrente", "1990-11-02"), pp("Dez", "1990-12-20"), pp("Jan", "1990-01-15"), pp("Mar", "1990-03-05"), pp("Out", "1990-10-31")], HOJE);
+  assert.deepEqual(lista(r, 0), [["02/11", "Corrente", 36]], "2 de novembro já passou, continua listado com a idade que completou (2026 − 1990)");
+  assert.deepEqual(lista(r, 1), [["20/12", "Dez", 36]]);
+  assert.deepEqual(lista(r, 2), [["15/01", "Jan", 37]], "janeiro de 2027: 2027 − 1990");
+  assert.deepEqual(lista(r, 4), [["05/03", "Mar", 37]]);
+  assert.deepEqual(lista(r, 11), [["31/10", "Out", 37]], "outubro já passou neste ano: vira outubro de 2027");
+  assert.equal(r[11].rotulo, "outubro de 2027");
+});
+
+await ok("virada de ano (dezembro → janeiro): a lista de janeiro é do ano seguinte e o último mês é novembro do ano seguinte", () => {
+  const r = aniversariantesPorMes([pp("Jan", "1990-01-15"), pp("Dez", "1985-12-30"), pp("Nov", "2000-11-01")], "2026-12-10");
+  assert.deepEqual(r.map((m) => m.rotulo).slice(0, 3), ["dezembro", "janeiro de 2027", "fevereiro de 2027"]);
+  assert.equal(r[11].rotulo, "novembro de 2027");
+  assert.deepEqual(lista(r, 0), [["30/12", "Dez", 41]]);
+  assert.deepEqual(lista(r, 1), [["15/01", "Jan", 37]]);
+  assert.deepEqual(lista(r, 11), [["01/11", "Nov", 27]], "novembro já passou: 2027 − 2000");
+});
+
+await ok("29/02: em ano comum aparece no dia 28 exibindo '29/02'; quando a próxima ocorrência cai em ano bissexto fica no dia 29 e completa a idade daquele ano", () => {
+  const pessoas = [pp("Bia", "2000-02-29"), pp("Cris", "1995-02-28"), pp("Dani", "1996-02-29")];
+  const comum = aniversariantesPorMes(pessoas, "2027-01-20")[1];
+  assert.equal(comum.rotulo, "fevereiro");
+  assert.deepEqual(comum.aniversariantes.map((a) => [a.diaMes, a.ordem, a.nome, a.completaAnos]), [["29/02", 28, "Bia", 27], ["28/02", 28, "Cris", 32], ["29/02", 28, "Dani", 31]]);
+  const proximoBissexto = aniversariantesPorMes(pessoas, "2027-11-18")[3];
+  assert.equal(proximoBissexto.rotulo, "fevereiro de 2028");
+  assert.deepEqual(proximoBissexto.aniversariantes.map((a) => [a.diaMes, a.ordem, a.nome, a.completaAnos]), [["28/02", 28, "Cris", 33], ["29/02", 29, "Bia", 28], ["29/02", 29, "Dani", 32]], "2028 é bissexto: 29/02 fica no dia 29");
+  assert.deepEqual(aniversariantesPorMes(pessoas, "2028-02-15")[0].aniversariantes.map((a) => a.ordem), [28, 29, 29]);
+});
+
+await ok("as 12 listas somam EXATAMENTE os ativos com nascimento plausível (cada pessoa em um só mês); inconsistente, nulo e futuro ficam fora de todas", () => {
+  const pessoas = [
+    pp("P1", "1990-01-10"), pp("P2", "1991-02-11"), pp("P3", "1992-03-12"), pp("P4", "1993-04-13"), pp("P5", "1994-05-14"), pp("P6", "1995-06-15"),
+    pp("P7", "1996-07-16"), pp("P8", "1997-08-17"), pp("P9", "1998-09-18"), pp("P10", "1999-10-19"), pp("P11", "2000-11-20"), pp("P12", "2001-12-21"),
+    pp("P13", "2000-02-29"), pp("P14", "2012-11-18"), pp("P15", "1936-11-18"),
+    pp("Bebê", "2026-05-01"), pp("Treze", "2013-11-19"), pp("Noventa e um", "1935-11-18"), pp("Futuro", "2030-01-01"), pp("Inexistente", "1990-02-30"), pp("Nulo", null), pp("Vazio", ""),
+  ];
+  const plausiveis = pessoas.filter((p) => classificarIdade(p.dataNascimento, HOJE).idade !== null).map((p) => p.nome);
+  assert.equal(plausiveis.length, 15);
+  const r = aniversariantesPorMes(pessoas, HOJE);
+  const todos = r.flatMap((m) => m.aniversariantes.map((a) => a.nome));
+  assert.equal(todos.length, 15, "soma das 12 listas");
+  assert.deepEqual([...todos].sort(), [...plausiveis].sort());
+  assert.equal(new Set(todos).size, todos.length, "ninguém aparece em dois meses");
+  for (const fora of ["Bebê", "Treze", "Noventa e um", "Futuro", "Inexistente", "Nulo", "Vazio"]) assert.ok(!todos.includes(fora), fora);
+  const g = montarGestaoPessoas({ id: "c", nome: "C" }, pessoas, HOJE);
+  assert.equal(g.aniversariantesPorMes.reduce((s, m) => s + m.aniversariantes.length, 0), 15);
+  assert.equal(g.faixaPorSexo.filter((f) => f.faixa !== "nao_informada").reduce((s, f) => s + f.total, 0), 15, "mesma regra de plausibilidade das faixas etárias");
+  assert.equal(aniversariantesDoMes(pessoas, HOJE).length, r[0].aniversariantes.length, "aniversariantesDoMes = o primeiro dos 12");
+});
+
+await ok("virada de ano em UTC e em Brasília: 31/12 às 23h30 de Brasília (já é 01/01 em UTC) abre em DEZEMBRO e a lista de janeiro é a do ano seguinte; igual nos dois fusos", () => {
+  const dezSP = sonda("America/Sao_Paulo", "2027-01-01T02:30:00Z"), dezUTC = sonda("UTC", "2027-01-01T02:30:00Z");
+  assert.deepEqual(dezSP, dezUTC);
+  assert.equal(dezSP.hoje, "2026-12-31");
+  assert.deepEqual(dezSP.rotulosDosMeses.slice(0, 3), ["dezembro", "janeiro de 2027", "fevereiro de 2027"]);
+  assert.equal(dezSP.rotulosDosMeses[11], "novembro de 2027");
+  assert.ok(dezSP.meses.includes("dezembro=01/12|1|Flavia|34,31/12|31|Gil|46"), "dezembro de 2026: 2026 − 1992 e 2026 − 1980");
+  assert.ok(dezSP.meses.includes("novembro de 2027=30/11|30|Edu|36"), "novembro já passou: vira novembro de 2027 (2027 − 1991)");
+  const janSP = sonda("America/Sao_Paulo", "2027-01-01T05:00:00Z"), janUTC = sonda("UTC", "2027-01-01T05:00:00Z");
+  assert.deepEqual(janSP, janUTC);
+  assert.equal(janSP.hoje, "2027-01-01");
+  assert.equal(janSP.rotulosDosMeses[0], "janeiro", "já é janeiro de 2027: sem sufixo de ano");
+  assert.equal(janSP.rotulosDosMeses[11], "dezembro");
+  const fevSP = sonda("America/Sao_Paulo", "2027-03-01T02:00:00Z"), fevUTC = sonda("UTC", "2027-03-01T02:00:00Z");
+  assert.deepEqual(fevSP, fevUTC);
+  assert.equal(fevSP.rotulosDosMeses[0], "fevereiro", "28/02 às 23h em Brasília ainda é fevereiro");
+});
+
+const tela2 = (indiceMesInicial: number, pessoas: PessoaAtiva[] = [pp("Ana", "1990-11-20"), pp("Bia", "2000-02-29"), pp("Caio", "1988-01-15", "Motorista")]) =>
+  renderToStaticMarkup(createElement(GestaoPessoasClient, { clientes: [{ id: CA, nome: "Alfa" }], selecionadoId: CA, dados: montarGestaoPessoas({ id: CA, nome: "Alfa" }, pessoas, HOJE), indiceMesInicial }));
+await ok("tela: abre no mês corrente; cartão e lista seguem o mês escolhido; seletor com os 12 meses (ano nos do ano seguinte); mês vazio; acessível; sem ISO", () => {
+  const padrao = tela2(0);
+  assert.ok(padrao.includes("Aniversariantes de novembro") && padrao.includes("20/11") && padrao.includes("completa 36 anos"), "mês corrente por padrão");
+  assert.ok(padrao.includes("mês atual"));
+  assert.ok(/<option value="0" selected[^>]*>novembro<\/option>/.test(padrao), "a opção do mês corrente vem selecionada");
+  for (const rotulo of ["novembro", "dezembro", "janeiro de 2027", "fevereiro de 2027", "outubro de 2027"]) assert.ok(padrao.includes(`>${rotulo}</option>`), rotulo);
+  assert.equal((padrao.match(/<option value="\d+"/g) ?? []).length, 12, "12 opções de mês (o seletor de empresa usa value de uuid)");
+  assert.ok(padrao.includes('<label for="mes-aniversariantes"') && padrao.includes('<select id="mes-aniversariantes"'), "rótulo associado ao select: acessível por teclado e leitor de tela");
+  assert.equal((padrao.match(/id="mes-aniversariantes"/g) ?? []).length, 1, "um único seletor de mês (a lista não tem outro)");
+  // o seletor está DENTRO do cartão "Aniversariantes de {mês}" e a lista (seção abaixo) só segue o mês escolhido
+  const cartao = padrao.slice(padrao.indexOf("Aniversariantes de novembro"), padrao.indexOf("Distribuição por sexo"));
+  assert.ok(cartao.includes('<select id="mes-aniversariantes"') && cartao.includes("mês atual"), "seletor dentro do cartão");
+  const secaoLista = padrao.slice(padrao.indexOf("<section", padrao.indexOf("Grau de escolaridade")));
+  const aposCartao = padrao.slice(padrao.indexOf("Distribuição por sexo"));
+  assert.ok(!aposCartao.includes("<select"), "nenhum seletor depois do cartão (a lista não tem o seu)");
+  assert.ok(secaoLista.includes("Aniversariantes de novembro"), "o título da lista segue o mês escolhido");
+  const jan = tela2(2);
+  assert.ok(jan.includes("Aniversariantes de janeiro de 2027") && jan.includes("15/01") && jan.includes("completa 39 anos") && !jan.includes("20/11"), "o cartão e a lista seguem o mês escolhido, com a idade do ano seguinte");
+  assert.ok(!jan.includes("escolha o mês na lista abaixo") && !jan.includes("mês atual"), "sem a antiga mensagem; 'mês atual' só no mês corrente");
+  const vazio = tela2(3);
+  assert.ok(vazio.includes("Nenhum aniversariante em fevereiro de 2027.") === false, "fevereiro de 2027 tem a Bia (29/02 no dia 28)");
+  const mesVazio = tela2(5);
+  assert.ok(mesVazio.includes("Nenhum aniversariante em abril de 2027."), "mês sem ninguém");
+  assert.ok(mesVazio.includes("Aniversariantes de abril de 2027"), "o rótulo do cartão diz o mês escolhido");
+  for (const h of [padrao, jan, vazio, mesVazio]) assert.ok(!/\d{4}-\d{2}-\d{2}/.test(h), "nada em ISO");
+  assert.ok(vazio.includes("29/02") && vazio.includes("completa 27 anos"), "29/02 exibido como 29/02");
+});
+
+await ok("trocar de empresa volta para o mês corrente: a página remonta a tela com key = empresa", () => {
+  const p = fonte("src/app/painel/gestao-pessoas/page.tsx");
+  assert.ok(p.includes('<GestaoPessoasClient key={dados?.cliente.id ?? "nenhuma"}'));
+  const c = fonte("src/components/GestaoPessoasClient.tsx");
+  assert.ok(c.includes("useState(indiceMesInicial)") && c.includes("indiceMesInicial = 0"), "o padrão é 0 = mês corrente");
+  assert.ok(!/localStorage|sessionStorage/.test(c), "o mês escolhido não é guardado entre aberturas");
 });
 
 console.log(`\n${n} verificações OK`);

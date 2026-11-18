@@ -1,9 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArcElement, BarElement, CategoryScale, Chart as ChartJS, Legend, LinearScale, Tooltip } from "chart.js";
 import { Bar, Pie } from "react-chartjs-2";
-import { limitarCargos, LIMITE_POUCOS_ATIVOS, type ClienteOpcao, type GestaoPessoas } from "@/lib/gestaoPessoas";
+import { limitarCargos, LIMITE_POUCOS_ATIVOS, NOMES_DOS_MESES, type ClienteOpcao, type GestaoPessoas } from "@/lib/gestaoPessoas";
 
 ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -11,21 +12,24 @@ const COR_MASCULINO = "#111827";
 const COR_FEMININO = "#FFB800";
 const COR_NAO_INFORMADO = "#D1D5DB";
 const COR_BARRA = "#7F77DD";
-const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const MAX_CARGOS_NO_GRAFICO = 12;
 
 interface Props {
   clientes: ClienteOpcao[];
   selecionadoId: string | null;
   dados: GestaoPessoas | null;
+  // Posição (0 a 11) do mês aberto nos aniversariantes; 0 = o mês corrente, que é o padrão. A página troca a `key` do componente ao mudar de empresa, então
+  // trocar a empresa sempre volta para o mês corrente.
+  indiceMesInicial?: number;
 }
 
-function Cartao({ titulo, valor, detalhe }: { titulo: string; valor: string; detalhe?: string }) {
+function Cartao({ titulo, valor, detalhe, controle }: { titulo: string; valor: string; detalhe?: string; controle?: React.ReactNode }) {
   return (
     <div className="card" style={{ padding: "14px 16px" }}>
       <p style={{ fontSize: 28, fontWeight: 700, color: "#111827", margin: 0, lineHeight: 1.1 }}>{valor}</p>
       <p style={{ fontSize: 12, fontWeight: 600, color: "#6B7280", margin: "4px 0 0" }}>{titulo}</p>
       {detalhe && <p style={{ fontSize: 11, color: "#9CA3AF", margin: "2px 0 0" }}>{detalhe}</p>}
+      {controle && <div style={{ marginTop: 10 }}>{controle}</div>}
     </div>
   );
 }
@@ -41,8 +45,9 @@ function Secao({ titulo, children }: { titulo: string; children: React.ReactNode
 
 const pct = (parte: number, total: number) => (total > 0 ? `${Math.round((parte / total) * 100)}%` : "0%");
 
-export default function GestaoPessoasClient({ clientes, selecionadoId, dados }: Props) {
+export default function GestaoPessoasClient({ clientes, selecionadoId, dados, indiceMesInicial = 0 }: Props) {
   const router = useRouter();
+  const [indiceMes, setIndiceMes] = useState(indiceMesInicial);
   // A empresa escolhida pode não estar na lista (cliente sem ativo): ela é incluída para o seletor não ficar em branco.
   const opcoes = dados && !clientes.some((c) => c.id === dados.cliente.id) ? [...clientes, { id: dados.cliente.id, nome: dados.cliente.nome }] : clientes;
 
@@ -88,9 +93,12 @@ export default function GestaoPessoasClient({ clientes, selecionadoId, dados }: 
     );
   }
 
-  const { porSexo, faixaPorSexo, escolaridade, aniversariantesDoMes, totalAtivos } = dados;
+  const { porSexo, faixaPorSexo, escolaridade, totalAtivos } = dados;
+  const mesesAniversario = dados.aniversariantesPorMes;
+  const mesEscolhido = mesesAniversario[indiceMes] ?? mesesAniversario[0];
+  const aniversariantes = mesEscolhido?.aniversariantes ?? [];
   const cargos = limitarCargos(dados.cargos, MAX_CARGOS_NO_GRAFICO);
-  const nomeDoMes = MESES[dados.mesDeReferencia - 1] ?? "";
+  const nomeDoMes = NOMES_DOS_MESES[dados.mesDeReferencia - 1] ?? "";
   const opcoesBarraHorizontal = { indexAxis: "y" as const, responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } };
 
   return (
@@ -112,7 +120,19 @@ export default function GestaoPessoasClient({ clientes, selecionadoId, dados }: 
         <Cartao titulo="Funcionários ativos" valor={String(totalAtivos)} detalhe={dados.cliente.nome} />
         <Cartao titulo="Admitidos no mês" valor={String(dados.admitidosNoMes)} detalhe={nomeDoMes} />
         <Cartao titulo="Tempo médio de casa" valor={dados.tempoMedioDeCasaMeses === null ? "—" : `${String(dados.tempoMedioDeCasaMeses).replace(".", ",")} meses`} />
-        <Cartao titulo="Aniversariantes do mês" valor={String(aniversariantesDoMes.length)} detalhe={nomeDoMes} />
+        <Cartao
+          titulo={`Aniversariantes de ${mesEscolhido?.rotulo ?? nomeDoMes}`}
+          valor={String(aniversariantes.length)}
+          detalhe={indiceMes === 0 ? "mês atual" : undefined}
+          controle={
+            <>
+              <label htmlFor="mes-aniversariantes" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 4 }}>Mês</label>
+              <select id="mes-aniversariantes" value={indiceMes} onChange={(e) => setIndiceMes(Number(e.target.value))} className="input-field" style={{ width: "100%" }}>
+                {mesesAniversario.map((m, i) => <option key={`${m.mes}-${m.ano}`} value={i}>{m.rotulo}</option>)}
+              </select>
+            </>
+          }
+        />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16, marginBottom: 16 }}>
@@ -201,12 +221,12 @@ export default function GestaoPessoasClient({ clientes, selecionadoId, dados }: 
         </Secao>
       </div>
 
-      <Secao titulo={`Aniversariantes de ${nomeDoMes}`}>
-        {aniversariantesDoMes.length === 0 ? (
-          <p style={{ fontSize: 13, color: "#9CA3AF", margin: 0 }}>Ninguém faz aniversário neste mês (entre quem tem a data de nascimento informada).</p>
+      <Secao titulo={`Aniversariantes de ${mesEscolhido?.rotulo ?? nomeDoMes}`}>
+        {aniversariantes.length === 0 ? (
+          <p style={{ fontSize: 13, color: "#9CA3AF", margin: 0 }}>Nenhum aniversariante em {mesEscolhido?.rotulo ?? nomeDoMes}.</p>
         ) : (
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {aniversariantesDoMes.map((a, i) => (
+            {aniversariantes.map((a, i) => (
               <li key={`${a.nome}-${i}`} style={{ display: "flex", gap: 12, alignItems: "baseline", padding: "8px 0", borderTop: i === 0 ? "none" : "1px solid #F3F4F6", fontSize: 13 }}>
                 <strong style={{ width: 48, color: "#111827" }}>{a.diaMes}</strong>
                 <span style={{ flex: 1, color: "#111827", fontWeight: 600 }}>{a.nome}{a.cargo && <span style={{ fontWeight: 400, color: "#6B7280" }}> · {a.cargo}</span>}</span>
