@@ -8,6 +8,7 @@ import { criarAdmissaoSemEnvio } from "@/lib/admissaoCriacao";
 import { sendEmail } from "@/lib/sendEmail";
 import { getEmailTemplate } from "@/lib/emailTemplates";
 import { linkAdmissaoWhatsapp } from "@/lib/waLinks";
+import { funcaoParaExibirNaAdmissao } from "@/lib/admissaoFuncao";
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
   // cair no DEFAULT do banco (Monte Mor); o único formulário que cria admissão
   // (ModalIniciarAdmissao) sempre manda a vaga.
   if (!vaga_id) return NextResponse.json({ error: "Admissão precisa estar vinculada a uma vaga." }, { status: 400 });
-  const { data: vaga } = await svc.from("vagas").select("unidade_id").eq("id", vaga_id).maybeSingle();
+  const { data: vaga } = await svc.from("vagas").select("unidade_id, titulo").eq("id", vaga_id).maybeSingle();
   if (!vaga) return NextResponse.json({ error: "Vaga não encontrada." }, { status: 400 });
   // RH por unidade: supervisor só inicia admissão em vaga da própria unidade.
   const ctxRH = await contextoRH(user);
@@ -50,16 +51,19 @@ export async function POST(request: NextRequest) {
   if (!criada.ok) return NextResponse.json({ error: criada.error }, { status: 400 });
   const { admissao, url } = criada;
 
+  // Função que o candidato lê na mensagem e no e-mail: a da admissão, depois o título da vaga (cargo_pretendido no cadastro rápido é só a área).
+  const funcaoExibida = funcaoParaExibirNaAdmissao({ funcao: parsed.data.funcao, vagaTitulo: vaga.titulo, cargoPretendido: candidato?.cargo_pretendido });
+
   // Envio (e-mail + link de WhatsApp) é só deste endpoint: a criação em si não envia nada.
   let whatsappUrl: string | null = null;
   if (candidato?.telefone) {
-    whatsappUrl = linkAdmissaoWhatsapp(candidato.nome_completo, candidato.telefone, candidato.cargo_pretendido, url);
+    whatsappUrl = linkAdmissaoWhatsapp(candidato.nome_completo, candidato.telefone, funcaoExibida, url);
   }
 
   if (candidato?.email) {
     const { subject, html } = getEmailTemplate("admissao_link", {
       nome: candidato.nome_completo,
-      cargo: candidato.cargo_pretendido,
+      cargo: funcaoExibida,
       admissaoUrl: url,
     });
     try {

@@ -7,6 +7,7 @@ import { formatarData } from "@/lib/utils";
 import { seloDiasTeste } from "@/lib/diasTeste";
 import { ADMISSAO_STATUS_BADGE, MODALIDADE_LABEL } from "@/lib/admissaoStatus";
 import { linkAdmissaoWhatsapp } from "@/lib/waLinks";
+import { funcaoParaExibirNaAdmissao } from "@/lib/admissaoFuncao";
 import ModalIniciarAdmissao, { type CandidatoElegivel } from "./ModalIniciarAdmissao";
 import ModalAdmissaoRapida from "./ModalAdmissaoRapida";
 import ModalCandidatoDesistiu, { type ResultadoDesistencia } from "./ModalCandidatoDesistiu";
@@ -148,7 +149,7 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
   const handleReenviarWhatsapp = (row: AdmissaoRow) => {
     if (!row.candidatos?.telefone) { showToast("Candidato sem telefone cadastrado."); return; }
     const url = `${window.location.origin}/admissao/${row.token}`;
-    const wa = linkAdmissaoWhatsapp(row.candidatos.nome_completo, row.candidatos.telefone, row.candidatos.cargo_pretendido, url);
+    const wa = linkAdmissaoWhatsapp(row.candidatos.nome_completo, row.candidatos.telefone, funcaoParaExibirNaAdmissao({ funcao: row.funcao, vagaTitulo: row.vagas?.titulo, cargoPretendido: row.candidatos.cargo_pretendido }), url);
     window.open(wa, "_blank");
   };
 

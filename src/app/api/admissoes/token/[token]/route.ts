@@ -17,7 +17,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
 
   const { data: admissao, error } = await svc
     .from("admissoes")
-    .select("id, candidato_id, vaga_id, modalidade, status, token_expira_em, token_usado_em, criado_em, candidatos(nome_completo, cargo_pretendido), vagas(titulo)")
+    .select("id, candidato_id, vaga_id, modalidade, funcao, status, token_expira_em, token_usado_em, criado_em, candidatos(nome_completo, cargo_pretendido), vagas(titulo)")
     .eq("token", token)
     .maybeSingle();
 

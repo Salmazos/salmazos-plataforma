@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import type { AdmissaoDependente } from "@/types";
 import ProgressBar from "./ProgressBar";
+import CabecalhoMarca from "./CabecalhoMarca";
+import { funcaoParaExibirNaAdmissao } from "@/lib/admissaoFuncao";
 import PassoBoasVindas from "./PassoBoasVindas";
 import PassoDadosPessoais from "./PassoDadosPessoais";
 import PassoDocumentosProfissionais from "./PassoDocumentosProfissionais";
@@ -154,6 +156,7 @@ export interface DocumentoToken {
 interface AdmissaoTokenData {
   id: string;
   modalidade: string;
+  funcao: string | null;
   status: string;
   candidatos: { nome_completo: string; cargo_pretendido: string } | null;
   vagas: { titulo: string } | null;
@@ -635,11 +638,13 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
   }
 
   const nome = admissao?.candidatos?.nome_completo ?? "";
-  const cargo = admissao?.candidatos?.cargo_pretendido ?? admissao?.vagas?.titulo ?? "";
+  // Função real da admissão primeiro; cargo_pretendido (no cadastro rápido é só a área, ex.: "Operacional") só como último recurso.
+  const cargo = funcaoParaExibirNaAdmissao({ funcao: admissao?.funcao, vagaTitulo: admissao?.vagas?.titulo, cargoPretendido: admissao?.candidatos?.cargo_pretendido });
 
   if (!iniciado) {
     return (
       <div style={{ minHeight: "100vh", background: "#F9FAFB", paddingBottom: 32 }}>
+        <CabecalhoMarca />
         <div style={{ maxWidth: 560, margin: "0 auto", padding: "20px 16px" }}>
           <div style={{ marginBottom: 16 }}>
             <p style={{ fontSize: 13, color: "#9CA3AF", margin: 0 }}>Olá, {nome || "candidato(a)"}!</p>
@@ -653,6 +658,7 @@ export default function AdmissaoFormClient({ token }: { token: string }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F9FAFB", paddingBottom: 32 }}>
+      <CabecalhoMarca />
       <ProgressBar passoAtual={passo} />
 
       <div style={{ maxWidth: 560, margin: "0 auto", padding: "20px 16px" }}>
