@@ -256,7 +256,7 @@ caso("experiência é INTERNA: nunca vira texto da vaga nem aparece na página p
   for (const arq of ["src/app/vagas/page.tsx", "src/app/vagas/[slug]/page.tsx", "src/lib/vagaPcdPublica.ts"]) assert.ok(!/experiencia_minima|perfil_extra/.test(lerFonte(arq)), arq);
   const rota = lerFonte("src/app/api/portal/solicitar-vaga/route.ts");
   assert.ok(rota.includes("...(parsed.data.perfil_extra ? { perfil_extra: parsed.data.perfil_extra } : {})"), "a chave vai pelo perfil_extra validado");
-  assert.ok(rota.includes('detailRow("Tempo de experiência", experienciaMinimaHtml)') && rota.includes("escaparHtml(parsed.data.perfil_extra.experiencia_minima)"), "e-mail: só quando preenchido e escapado");
+  assert.ok(rota.includes('detailRow("Tempo de experiência", experienciaMinima)') && rota.includes("${escaparHtml(value)}</td></tr>") && !rota.includes("escaparHtml(parsed.data.perfil_extra"), "e-mail: só quando preenchido; o escape é feito UMA vez, no detailRow");
 });
 
 console.log(`\n${total} casos OK`);

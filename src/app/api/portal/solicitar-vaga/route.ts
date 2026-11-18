@@ -135,38 +135,38 @@ export async function POST(request: NextRequest) {
       : "";
 
     const detailRow = (label: string, value: string | null | undefined) =>
-      value ? `<tr><td style="padding:8px 14px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap;vertical-align:top">${label}</td><td style="padding:8px 14px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${value}</td></tr>` : "";
+      value ? `<tr><td style="padding:8px 14px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap;vertical-align:top">${label}</td><td style="padding:8px 14px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${escaparHtml(value)}</td></tr>` : "";
 
     const requisitosHtml = body.requisitos
       ? `<div style="margin:20px 0">
           <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Requisitos</p>
-          <div style="background:#f9fafb;border-radius:8px;padding:12px 16px;font-size:13px;color:#374151;line-height:1.7;white-space:pre-wrap">${body.requisitos}</div>
+          <div style="background:#f9fafb;border-radius:8px;padding:12px 16px;font-size:13px;color:#374151;line-height:1.7;white-space:pre-wrap">${escaparHtml(body.requisitos)}</div>
         </div>`
       : "";
 
     const beneficiosHtml = body.beneficios
       ? `<div style="margin:20px 0">
           <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Benefícios</p>
-          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;font-size:13px;color:#166534;line-height:1.7;white-space:pre-wrap">${body.beneficios}</div>
+          <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px 16px;font-size:13px;color:#166534;line-height:1.7;white-space:pre-wrap">${escaparHtml(body.beneficios)}</div>
         </div>`
       : "";
 
     const atividadesHtml = body.principais_atividades
       ? `<div style="margin:20px 0">
           <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Principais Atividades</p>
-          <div style="background:#f9fafb;border-radius:8px;padding:12px 16px;font-size:13px;color:#374151;line-height:1.7;white-space:pre-wrap">${body.principais_atividades}</div>
+          <div style="background:#f9fafb;border-radius:8px;padding:12px 16px;font-size:13px;color:#374151;line-height:1.7;white-space:pre-wrap">${escaparHtml(body.principais_atividades)}</div>
         </div>`
       : "";
 
     const observacoesHtml = body.observacoes
       ? `<div style="margin:20px 0">
           <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Observações</p>
-          <div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;font-size:13px;color:#92400E;line-height:1.6">${body.observacoes}</div>
+          <div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;font-size:13px;color:#92400E;line-height:1.6">${escaparHtml(body.observacoes)}</div>
         </div>`
       : "";
 
-    // Texto digitado pelo cliente em "Outro": escapado (as demais linhas deste e-mail seguem como estavam). Só aparece quando preenchido.
-    const experienciaMinimaHtml = parsed.data.perfil_extra?.experiencia_minima ? escaparHtml(parsed.data.perfil_extra.experiencia_minima) : null;
+    // Texto digitado pelo cliente em "Outro". Só aparece quando preenchido. O escape é feito por detailRow, como nas demais linhas.
+    const experienciaMinima = parsed.data.perfil_extra?.experiencia_minima || null;
 
     const previsaoFormatted = body.previsao_inicio
       ? body.previsao_inicio.split("-").reverse().join("/")
@@ -181,10 +181,10 @@ export async function POST(request: NextRequest) {
   </div>
   <div style="padding:28px 32px">
     ${bannerConfidencialHtml}
-    <p style="margin:0 0 16px;font-size:14px;color:#374151">Nova solicitação recebida de <strong style="color:#111827">${clienteNome}</strong>:</p>
+    <p style="margin:0 0 16px;font-size:14px;color:#374151">Nova solicitação recebida de <strong style="color:#111827">${escaparHtml(clienteNome)}</strong>:</p>
     <div style="margin-bottom:20px;padding:14px 16px;background:#DBEAFE;border-radius:10px;border:1px solid #93C5FD">
-      <p style="margin:0;font-size:16px;font-weight:700;color:#1D4ED8">${body.cargo}</p>
-      <p style="margin:4px 0 0;font-size:13px;color:#1E40AF">${numPos} posição${numPos !== 1 ? "ões" : ""} · ${tipoLbl}</p>
+      <p style="margin:0;font-size:16px;font-weight:700;color:#1D4ED8">${escaparHtml(body.cargo)}</p>
+      <p style="margin:4px 0 0;font-size:13px;color:#1E40AF">${escaparHtml(numPos)} posição${numPos !== 1 ? "ões" : ""} · ${escaparHtml(tipoLbl)}</p>
     </div>
     <table style="width:100%;border-collapse:collapse">
       ${detailRow("Cargo", body.cargo)}
@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
       ${detailRow("Salário", body.salario)}
       ${detailRow("Adicionais Salariais", body.adicionais_salariais)}
       ${detailRow("Horário", body.horario_texto || rotuloHorarioTipo(body.horario_tipo))}
-      ${detailRow("Tempo de experiência", experienciaMinimaHtml)}
+      ${detailRow("Tempo de experiência", experienciaMinima)}
     </table>
     ${requisitosHtml}
     ${beneficiosHtml}

@@ -16,6 +16,9 @@ import { registrarAuditoria } from "@/lib/audit";
 import { detectarClienteNoTextoPublico, mensagemDepoisDeSalvar } from "@/lib/clienteNoTextoPublico";
 
 export async function POST(request: NextRequest) {
+  // Preenchida só entre a reserva da solicitação e o vínculo com a vaga criada: qualquer falha nesse intervalo devolve a solicitação para
+  // "pendente" (nunca fica "aprovada" sem vaga).
+  let devolverReserva: (() => Promise<void>) | null = null;
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -52,6 +55,30 @@ export async function POST(request: NextRequest) {
       .single();
 
     const analistaNome = perfil?.nome_completo ?? user.email ?? "";
+
+    // RESERVA ATÔMICA: dois cliques (ou dois analistas) ao mesmo tempo passam pela conferência de status acima, então quem decide é o UPDATE
+    // condicionado a status = 'pendente': o banco aplica a um só, e só quem afetou a linha segue para criar a vaga. Sem migration nem índice.
+    // Enquanto a vaga não existe a solicitação fica "aprovada" sem vaga_id; se a criação falhar, devolverReserva() a devolve para "pendente".
+    const agora = new Date().toISOString();
+    const { data: reservada, error: reservaErr } = await service
+      .from("solicitacoes_vagas")
+      .update({ status: "aprovada", aprovada_por: analistaNome, aprovada_em: agora, updated_at: agora })
+      .eq("id", solicitacao_id)
+      .eq("status", "pendente")
+      .select("id");
+    if (reservaErr) return NextResponse.json({ error: reservaErr.message }, { status: 400 });
+    if (!reservada || reservada.length === 0) {
+      return NextResponse.json({ error: "Esta solicitação já foi processada." }, { status: 409 });
+    }
+    devolverReserva = async () => {
+      const { error: devolverErr } = await service
+        .from("solicitacoes_vagas")
+        .update({ status: "pendente", aprovada_por: null, aprovada_em: null, vaga_id: null, updated_at: new Date().toISOString() })
+        .eq("id", solicitacao_id)
+        .eq("status", "aprovada")
+        .is("vaga_id", null);
+      if (devolverErr) console.error("[POST /api/vagas/from-solicitacao] Falha ao devolver a solicitação para pendente:", devolverErr.message);
+    };
 
     // Slug e posições abertas igual ao POST /api/vagas — sem o slug a vaga aprovada pelo
     // portal ficava sem link amigável e o "Ver vaga publicada" nem aparecia pro cliente (caso
@@ -109,18 +136,25 @@ export async function POST(request: NextRequest) {
       .select("id")
       .single();
 
-    if (vagaErr) return NextResponse.json({ error: vagaErr.message }, { status: 400 });
+    if (vagaErr || !vaga) {
+      await devolverReserva();
+      devolverReserva = null;
+      return NextResponse.json({ error: vagaErr?.message ?? "Não foi possível criar a vaga." }, { status: 400 });
+    }
 
-    await service
+    const { error: vinculoErr } = await service
       .from("solicitacoes_vagas")
-      .update({
-        status: "aprovada",
-        vaga_id: vaga.id,
-        aprovada_por: analistaNome,
-        aprovada_em: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", solicitacao_id);
+      .update({ vaga_id: vaga.id, updated_at: new Date().toISOString() })
+      .eq("id", solicitacao_id)
+      .eq("status", "aprovada");
+    if (vinculoErr) {
+      // Sem o vínculo a solicitação aprovada ficaria sem vaga: desfaz a vaga recém-criada (sem nenhum dependente ainda) e devolve a solicitação.
+      await service.from("vagas").delete().eq("id", vaga.id);
+      await devolverReserva();
+      devolverReserva = null;
+      return NextResponse.json({ error: vinculoErr.message }, { status: 400 });
+    }
+    devolverReserva = null;
 
     // Auditoria do que foi copiado do link para a vaga: só números e o texto do prazo, nunca dados do cliente nem o token. Isolada: a
     // vaga já foi criada e nada aqui pode derrubar a resposta.
@@ -188,6 +222,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, vaga_id: vaga.id, avisos }, { status: 201 });
   } catch (err) {
+    if (devolverReserva) {
+      try { await devolverReserva(); } catch (e) { console.error("[POST /api/vagas/from-solicitacao] Falha ao devolver a reserva:", e instanceof Error ? e.name : "erro"); }
+    }
     console.error("[POST /api/vagas/from-solicitacao]", err);
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });
   }

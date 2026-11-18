@@ -80,6 +80,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Solicitacao[]>([]);
   const [toast, setToast] = useState("");
+  const [toastErro, setToastErro] = useState(false);
   const [avisosVaga, setAvisosVaga] = useState<string[]>([]);
   const [expandedReq, setExpandedReq] = useState<string | null>(null);
   const [expandedAtiv, setExpandedAtiv] = useState<string | null>(null);
@@ -145,9 +146,10 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
 
   if (!isOpen) return null;
 
-  const showToast = (msg: string) => {
+  const showToast = (msg: string, erro = false) => {
     setToast(msg);
-    setTimeout(() => setToast(""), 4000);
+    setToastErro(erro);
+    setTimeout(() => setToast(""), erro ? 6000 : 4000);
   };
 
   const handleCriarVaga = async (id: string) => {
@@ -167,7 +169,15 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
         if (Array.isArray(json?.avisos) && json.avisos.length > 0) setAvisosVaga(json.avisos as string[]);
         onVagaCriada();
         if (focoId) onVerTodas?.();
+      } else {
+        // 409 (outra pessoa/clique já decidiu) e demais erros: mostra a mensagem do servidor e destrava o botão; a lista recarrega no fechamento.
+        const json = await res.json().catch(() => null);
+        showToast(typeof json?.error === "string" && json.error ? json.error : "Não foi possível criar a vaga.", true);
+        // 409: já foi decidida (outro clique/analista); sai da lista de pendentes para não convidar a um novo clique.
+        if (res.status === 409) setItems((prev) => prev.filter((s) => s.id !== id));
       }
+    } catch {
+      showToast("Erro de conexão. Tente novamente.", true);
     } finally {
       setActionLoading(null);
     }
@@ -190,7 +200,14 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
         setAvisoCliente((a) => avisoAposDecisaoDaSolicitacao(a, id, "recusada"));
         showToast("Solicitação recusada.");
         if (focoId) onVerTodas?.();
+      } else {
+        const json = await res.json().catch(() => null);
+        showToast(typeof json?.error === "string" && json.error ? json.error : "Não foi possível recusar a solicitação.", true);
+        // 409: já foi decidida (por exemplo, aprovada ao mesmo tempo); sai da lista de pendentes.
+        if (res.status === 409) { setItems((prev) => prev.filter((s) => s.id !== id)); setRecusandoId(null); setMotivoRecusa(""); }
       }
+    } catch {
+      showToast("Erro de conexão. Tente novamente.", true);
     } finally {
       setActionLoading(null);
     }
@@ -800,9 +817,10 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
         {toast && (
           <div
             className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-6 py-3 rounded-xl shadow-lg text-sm font-semibold"
-            style={{ backgroundColor: "#065F46", color: "#fff" }}
+            style={{ backgroundColor: toastErro ? "#991B1B" : "#065F46", color: "#fff" }}
+            role={toastErro ? "alert" : "status"}
           >
-            {"✅"} {toast}
+            {toastErro ? "⚠️" : "✅"} {toast}
           </div>
         )}
 

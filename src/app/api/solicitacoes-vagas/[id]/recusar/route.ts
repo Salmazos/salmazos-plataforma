@@ -61,10 +61,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
+      // Decisão atômica: a conferência de status acima não basta (um "Criar Vaga" simultâneo pode aprovar entre a leitura e esta gravação).
+      // Só recusa quem ainda encontra a solicitação pendente; nunca sobrescreve uma já aprovada (que tem vaga) nem outra recusa.
+      .eq("status", "pendente")
       .select("cliente_id, cliente_nome, cargo")
-      .single();
+      .maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (!sol) return NextResponse.json({ error: "Esta solicitação já foi processada." }, { status: 409 });
 
     // Interruptor "E-mail" (Configurações > Avisos) e destinatários = login de cada usuário do portal (sem
     // usuário, contato_email). cliente_id vem da solicitação gravada acima.
