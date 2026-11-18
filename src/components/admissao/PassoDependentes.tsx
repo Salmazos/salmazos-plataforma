@@ -1,5 +1,6 @@
 "use client";
 
+import { dataBR } from "@/lib/dataBR";
 import { useState } from "react";
 import type { AdmissaoDependente } from "@/types";
 import Campo from "./Campo";
@@ -117,7 +118,7 @@ export default function PassoDependentes({ token, possuiDependentes, setPossuiDe
                 <div>
                   <p style={{ fontSize: 15, fontWeight: 700, color: "#111827", margin: 0 }}>{dep.nome}</p>
                   <p style={{ fontSize: 13, color: "#6B7280", margin: "2px 0 0" }}>
-                    {parentescoLabel(dep.parentesco)} · Nascimento: {dep.data_nascimento || "—"}
+                    {parentescoLabel(dep.parentesco)} · Nascimento: {dep.data_nascimento ? dataBR(dep.data_nascimento) : "—"}
                   </p>
                   {dep.cpf && <p style={{ fontSize: 13, color: "#6B7280", margin: "2px 0 0" }}>CPF: {dep.cpf}</p>}
                 </div>

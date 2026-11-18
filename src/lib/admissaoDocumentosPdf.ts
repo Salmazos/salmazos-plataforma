@@ -445,7 +445,7 @@ export function desenharSolicitacaoValeTransporte(w: PdfWriter, d: ValeTransport
     { label: "CTPS série", value: d.carteira_trabalho_serie },
   ]);
   w.formFieldRow([
-    { label: "Data do início", value: d.data_admissao },
+    { label: "Data do início", value: d.data_admissao && dataBR(d.data_admissao) },
     { label: "Empresa/Cliente", value: d.empresa_cliente },
   ]);
   w.formFieldRow([

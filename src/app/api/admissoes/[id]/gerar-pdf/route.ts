@@ -1,3 +1,4 @@
+import { dataBR } from "@/lib/dataBR";
 import { avisarFuncionarioNaoCriado } from "@/lib/avisarCandidatoEventos";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
@@ -124,14 +125,14 @@ export async function POST(request: NextRequest, { params }: Params) {
   // ── Dados pessoais ─────────────────────────────────────────
   w.sectionTitle("Dados Pessoais");
   w.drawField("Nome completo", dp.nome_completo);
-  w.drawField("Data de nascimento", dp.data_nascimento);
+  w.drawField("Data de nascimento", dp.data_nascimento && dataBR(dp.data_nascimento));
   w.drawField("Sexo", dp.sexo === "M" ? "Masculino" : dp.sexo === "F" ? "Feminino" : "");
   w.drawField("Estado civil", dp.estado_civil);
   w.drawField("Nacionalidade", dp.nacionalidade);
   w.drawField("Naturalidade", dp.naturalidade);
   w.drawField("CPF", dp.cpf);
   w.drawField("RG", [dp.rg_numero, dp.rg_orgao_emissor, dp.rg_uf].filter(Boolean).join(" / "));
-  w.drawField("RG - Data emissão", dp.rg_data_emissao);
+  w.drawField("RG - Data emissão", dp.rg_data_emissao && dataBR(dp.rg_data_emissao));
   w.drawField("Nome da mãe", dp.nome_mae);
   w.drawField("Nome do pai", dp.nome_pai);
   w.drawField("Grau de instrução", dp.grau_instrucao);
@@ -143,7 +144,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   w.drawField("Título de eleitor", dp.titulo_eleitor);
   w.drawField("Zona / Seção eleitoral", [dp.zona_eleitoral, dp.secao_eleitoral].filter(Boolean).join(" / "));
   w.drawField("Reservista", dp.reservista);
-  w.drawField("CNH", dp.cnh_numero ? `${dp.cnh_numero} — Cat. ${dp.cnh_categoria ?? "—"} — Val. ${dp.cnh_validade ?? "—"}` : "");
+  w.drawField("CNH", dp.cnh_numero ? `${dp.cnh_numero} — Cat. ${dp.cnh_categoria ?? "—"} — Val. ${dp.cnh_validade ? dataBR(dp.cnh_validade) : "—"}` : "");
 
   // ── Endereço e contato ─────────────────────────────────────
   w.sectionTitle("Endereço e Contato");
@@ -165,7 +166,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     w.sectionTitle("Dependentes");
     for (const dep of deps) {
       w.drawText(`${dep.nome} (${dep.parentesco ?? "—"})`, w.bold, 10, DARK);
-      w.drawField("Data de nascimento", dep.data_nascimento);
+      w.drawField("Data de nascimento", dep.data_nascimento && dataBR(dep.data_nascimento));
       w.drawField("CPF", dep.cpf);
       if (dep.nome_mae) w.drawField("Nome da mãe", dep.nome_mae);
       w.y -= 6;

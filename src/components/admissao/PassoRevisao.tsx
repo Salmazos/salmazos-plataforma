@@ -1,5 +1,6 @@
 "use client";
 
+import { dataBR } from "@/lib/dataBR";
 import { useState } from "react";
 import type { AdmissaoDependente } from "@/types";
 import type { FormState, DocumentoToken, ValeTransporteState, SituacaoTrabalhistaState } from "./AdmissaoFormClient";
@@ -82,7 +83,7 @@ export default function PassoRevisao({ form, dependentes, documentos, valeTransp
 
       <Secao titulo="Dados Pessoais">
         <Linha label="Nome completo" value={form.nome_completo} />
-        <Linha label="Data de nascimento" value={form.data_nascimento} />
+        <Linha label="Data de nascimento" value={form.data_nascimento ? dataBR(form.data_nascimento) : ""} />
         <Linha label="Sexo" value={form.sexo === "M" ? "Masculino" : form.sexo === "F" ? "Feminino" : ""} />
         <Linha label="Estado civil" value={estadoCivilLabel} />
         <Linha label="CPF" value={form.cpf} />

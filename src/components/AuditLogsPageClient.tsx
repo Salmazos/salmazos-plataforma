@@ -1,5 +1,6 @@
 "use client";
 
+import { formatarDatasParaExibicao } from "@/lib/dataBR";
 import { Fragment, useState, useMemo } from "react";
 import type { AuditLog } from "@/app/painel/audit-logs/page";
 
@@ -358,7 +359,7 @@ export default function AuditLogsPageClient({ logs }: { logs: AuditLog[] }) {
                                 wordBreak: "break-all",
                               }}
                             >
-                              {JSON.stringify(log.detalhes, null, 2)}
+                              {JSON.stringify(formatarDatasParaExibicao(log.detalhes), null, 2)}
                             </pre>
                           </td>
                         </tr>

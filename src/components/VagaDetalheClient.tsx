@@ -18,7 +18,7 @@ import VagaIndicadoresSection from "./painel/VagaIndicadoresSection";
 import BlocoDadosOriginaisSolicitacao from "./BlocoDadosOriginaisSolicitacao";
 import type { SolicitacaoOriginalDaVaga } from "@/lib/solicitacaoOriginalDaVaga";
 import { TIPOS_SERVICO } from "@/lib/constants";
-import { formatarData } from "@/lib/utils";
+import { dataBR } from "@/lib/dataBR";
 import { getProximasEtapas, getComportamentoEtapa, getEtapaInfo, getEtapaLabel, getEtapaAnterior } from "@/lib/etapasCandidatura";
 import { MOTIVOS_REPROVACAO_CLIENTE } from "@/lib/motivos-reprovacao";
 import type { Vaga, CandidatoVaga, Candidato, MatchDetalhes } from "@/types";
@@ -552,7 +552,7 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
               </DetalheItem>
               <DetalheItem label="Nº de posições">{String(vaga.num_posicoes)}</DetalheItem>
               {vaga.prazo && (
-                <DetalheItem label="Prazo">{formatarData(vaga.prazo)}</DetalheItem>
+                <DetalheItem label="Prazo">{dataBR(vaga.prazo)}</DetalheItem>
               )}
               {vaga.salario && (
                 <DetalheItem label="Salário">

@@ -6,6 +6,7 @@ import BlocoDiasTesteRH from "@/components/BlocoDiasTesteRH";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatarData, formatarDataSemFuso } from "@/lib/utils";
+import { dataBR } from "@/lib/dataBR";
 import { ADMISSAO_STATUS_BADGE, ADMISSAO_STATUS_OPTIONS, MODALIDADE_LABEL, STATUS_JA_ENVIADO } from "@/lib/admissaoStatus";
 import { MOTIVOS_REJEICAO_DOCUMENTO } from "@/lib/admissaoConstants";
 import { OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
@@ -1973,7 +1974,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
             onSalvar={handleSalvarDP} onCancelar={cancelarEdicaoDP}
           >
             <Linha label="Nome completo" value={dp?.nome_completo} />
-            <Linha label="Data de nascimento" value={dp?.data_nascimento} />
+            <Linha label="Data de nascimento" value={dp?.data_nascimento ? dataBR(dp.data_nascimento) : ""} />
             <Linha label="Sexo" value={dp?.sexo === "M" ? "Masculino" : dp?.sexo === "F" ? "Feminino" : ""} />
             <Linha label="Estado civil" value={ESTADO_CIVIL_OPTIONS.find((o) => o.value === dp?.estado_civil)?.label} />
             <Linha label="Nacionalidade" value={dp?.nacionalidade} />
@@ -1998,7 +1999,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
             <Linha label="CTPS Física" value={[dp?.carteira_trabalho_numero, dp?.carteira_trabalho_serie, dp?.carteira_trabalho_uf].filter(Boolean).join(" / ")} />
             <Linha label="Título de eleitor" value={[dp?.titulo_eleitor, dp?.zona_eleitoral, dp?.secao_eleitoral].filter(Boolean).join(" / ")} />
             <Linha label="Reservista" value={dp?.reservista} />
-            <Linha label="CNH" value={dp?.cnh_numero ? `${dp.cnh_numero} — Cat. ${dp.cnh_categoria ?? "—"} — Val. ${dp.cnh_validade ?? "—"}` : ""} />
+            <Linha label="CNH" value={dp?.cnh_numero ? `${dp.cnh_numero} — Cat. ${dp.cnh_categoria ?? "—"} — Val. ${dp.cnh_validade ? dataBR(dp.cnh_validade) : "—"}` : ""} />
           </SecaoEditavelDP>
 
           <SecaoEditavelDP
@@ -2175,7 +2176,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
               dependentesAtuais.map((d) => (
                 <div key={d.id} className="py-2 border-b border-gray-50 last:border-0">
                   <p className="text-sm font-semibold text-gray-900">{d.nome} <span className="text-gray-400 font-normal">({d.parentesco})</span></p>
-                  <p className="text-xs text-gray-500">Nascimento: {d.data_nascimento || "—"} {d.cpf ? `· CPF: ${d.cpf}` : ""}</p>
+                  <p className="text-xs text-gray-500">Nascimento: {d.data_nascimento ? dataBR(d.data_nascimento) : "—"} {d.cpf ? `· CPF: ${d.cpf}` : ""}</p>
                   {d.nome_mae && <p className="text-xs text-gray-500">Mãe: {d.nome_mae}</p>}
                 </div>
               ))
