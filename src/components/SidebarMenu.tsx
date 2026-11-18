@@ -41,6 +41,7 @@ import {
   KeyRound,
   FileSpreadsheet,
   FileText,
+  PieChart,
 } from "lucide-react";
 import { fundoSoLeitura } from "@/lib/fundoDaJanela";
 
@@ -159,6 +160,7 @@ const menuItems: MenuItemDef[] = [
     submenu: [
       { label: "Admissões", href: "/painel/admissoes", icon: FileCheck, requireAdmissoes: true },
       { label: "Funcionários", href: "/painel/funcionarios", icon: IdCard, requireFuncionarios: true },
+      { label: "Gestão de Pessoas", href: "/painel/gestao-pessoas", icon: PieChart, requireFuncionarios: true },
       { label: "Espelho de Ponto", href: "/painel/ponto", icon: FileSpreadsheet, requirePonto: true },
       { label: "Vencimento de Contrato", href: "/painel/vencimento-contrato", icon: Clock, requireFuncionarios: true },
       { label: "Rescisões", href: "/painel/rescisoes", icon: UserMinus, requireFuncionarios: true },
