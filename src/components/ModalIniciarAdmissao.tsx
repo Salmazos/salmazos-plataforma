@@ -3,6 +3,7 @@
 import BlocoDiasTesteRH from "@/components/BlocoDiasTesteRH";
 import CampoDiasTeste, { ESTADO_DIAS_TESTE_VAZIO, estadoDiasTesteDeValor, diasTesteParaEnvio, erroDiasTeste, type EstadoDiasTeste } from "@/components/CampoDiasTeste";
 import { useEffect, useState } from "react";
+import { useJanelaComFormulario } from "@/components/useJanelaComFormulario";
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import SeletorHorarioIniciarAdmissao from "@/components/admissao/SeletorHorarioIniciarAdmissao";
@@ -122,6 +123,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
   const [diasTesteAlterado, setDiasTesteAlterado] = useState(false);
   const [entidadeContratante, setEntidadeContratante] = useState("");
   const [adicionais, setAdicionais] = useState<AdicionalForm[]>([]);
+  const j = useJanelaComFormulario({ aberta: isOpen, onClose, ocupado: enviando });
   const [nomeSindicato, setNomeSindicato] = useState("");
   const [autorizaAssistencial, setAutorizaAssistencial] = useState<"" | "sim" | "nao">("");
   const [autorizaSindical, setAutorizaSindical] = useState<"" | "sim" | "nao">("");
@@ -199,11 +201,14 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
       && (!diasTesteAlterado || !erroDiasTeste(diasTeste))
   );
 
+  // "Adicionar"/remover linha não emitem input/change: marcam "sujo" na mão.
   const adicionarLinhaAdicional = () => {
+    j.marcarSujo();
     setAdicionais((prev) => [...prev, { tipo: "", valor: "", formato_valor: "percentual" }]);
   };
 
   const removerLinhaAdicional = (idx: number) => {
+    j.marcarSujo();
     setAdicionais((prev) => prev.filter((_, i) => i !== idx));
   };
 
@@ -254,6 +259,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
       });
       const json = await res.json();
       if (!res.ok) { setErro(json.error || "Erro ao criar admissão."); return; }
+      j.limpar();
       setResultado({ url: json.url, whatsappUrl: json.whatsappUrl ?? null });
     } catch {
       setErro("Erro de conexão. Tente novamente.");
@@ -275,11 +281,12 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.6)" }}
       {...fundoDeFormulario()}
+      {...j.propsDoContainer}
     >
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900">Iniciar admissão</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+          <button onClick={j.fechar} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
         </div>
 
         {resultado ? (
@@ -309,7 +316,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
           <>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Candidato aprovado (MOT/Terceirização)</label>
             <input
-              type="text" placeholder="Buscar por nome..." value={busca}
+              type="text" placeholder="Buscar por nome..." value={busca} data-sujo-ignorar
               onChange={(e) => setBusca(e.target.value)}
               className="input-field mb-3"
             />
@@ -352,7 +359,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
             {erro && <p className="text-red-600 text-sm mb-3">{erro}</p>}
 
             <div className="flex gap-3">
-              <button onClick={onClose} className="btn-outline flex-1" disabled={enviando}>Cancelar</button>
+              <button onClick={j.fechar} className="btn-outline flex-1" disabled={enviando}>Cancelar</button>
               <button onClick={handleContinuar} disabled={!selecionado} className="btn-primary flex-1 disabled:opacity-50">
                 Continuar
               </button>
@@ -552,6 +559,7 @@ export default function ModalIniciarAdmissao({ isOpen, onClose, onCriado, preSel
           </>
         )}
       </div>
+      {j.dialogo}
     </div>
   );
 }

@@ -19,6 +19,7 @@ import type { Candidato } from "@/types";
 import type { GarantiaInfo, AdmissaoInfo, MelhorRetencao } from "@/components/CandidatoPerfilTabs";
 import { MOTIVOS_REPROVACAO_INTERNA, OUTRO_MOTIVO_REPROVACAO } from "@/lib/motivos-reprovacao";
 import { fundoDeFormulario, fundoSoLeitura } from "@/lib/fundoDaJanela";
+import { useJanelaComFormulario } from "@/components/useJanelaComFormulario";
 
 interface Props {
   candidato: Candidato;
@@ -131,6 +132,9 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
   const [reprovarErro, setReprovarErro] = useState("");
   const [removerReprovacaoAberto, setRemoverReprovacaoAberto] = useState(false);
   const [removendoReprovacao, setRemovendoReprovacao] = useState(false);
+  // Uma regra por janela (a tela tem duas): enviar e-mail e reprovar internamente.
+  const jEmail = useJanelaComFormulario({ aberta: emailModalOpen, onClose: () => setEmailModalOpen(false), ocupado: emailEnviando });
+  const jReprovar = useJanelaComFormulario({ aberta: reprovarModalOpen, onClose: () => setReprovarModalOpen(false), ocupado: reprovarSalvando });
 
   const WA_OPCOES = [
     {
@@ -212,6 +216,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
         setEmailMensagem({ ok: false, texto: json.error || "Erro ao enviar e-mail." });
       } else {
         setEmailMensagem({ ok: true, texto: "E-mail enviado com sucesso!" });
+        jEmail.limpar();
         setTimeout(() => setEmailModalOpen(false), 1500);
       }
     } catch {
@@ -244,6 +249,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
         setReprovarErro(json.error || "Erro ao reprovar candidato.");
         return;
       }
+      jReprovar.limpar();
       setReprovarModalOpen(false);
       setReprovarMotivoSelecionado("");
       setReprovarMotivoOutro("");
@@ -1359,12 +1365,13 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.6)" }}
           {...fundoDeFormulario()}
+          {...jEmail.propsDoContainer}
         >
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-gray-900">✉️ Enviar E-mail</h2>
               <button
-                onClick={() => setEmailModalOpen(false)}
+                onClick={jEmail.fechar}
                 className="text-gray-400 hover:text-gray-600 text-xl leading-none"
               >
                 ✕
@@ -1410,7 +1417,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
 
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => setEmailModalOpen(false)}
+                onClick={jEmail.fechar}
                 className="btn-outline"
                 disabled={emailEnviando}
               >
@@ -1435,6 +1442,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
               </button>
             </div>
           </div>
+          {jEmail.dialogo}
         </div>
       )}
 
@@ -1444,12 +1452,13 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.6)" }}
           {...fundoDeFormulario()}
+          {...jReprovar.propsDoContainer}
         >
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-900">Reprovar candidato internamente</h2>
               <button
-                onClick={() => setReprovarModalOpen(false)}
+                onClick={jReprovar.fechar}
                 disabled={reprovarSalvando}
                 className="text-gray-400 hover:text-gray-600 text-xl leading-none"
               >
@@ -1503,7 +1512,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
 
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => setReprovarModalOpen(false)}
+                onClick={jReprovar.fechar}
                 className="btn-outline"
                 disabled={reprovarSalvando}
               >
@@ -1528,6 +1537,7 @@ export default function PerfilEdicao({ candidato, garantiaInfo, admissaoInfo, me
               </button>
             </div>
           </div>
+          {jReprovar.dialogo}
         </div>
       )}
     </>

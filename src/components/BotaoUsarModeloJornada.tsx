@@ -74,6 +74,8 @@ export default function BotaoUsarModeloJornada({ onAplicar, onSalvar, abertoInic
           <button
             type="button"
             disabled={!texto || salvando}
+            // "Aplicar no campo" muda o texto do campo da janela sem emitir input/change; "Salvar horário" grava direto e não suja.
+            data-sujo-botao={onSalvar ? undefined : true}
             onClick={aplicar}
             className={onSalvar
               // "Salvar horário" (telas do RH): azul sólido de destaque (blue-700 = #1D4ED8, o azul já usado nas telas; hover blue-800 como o link "+ Usar modelo").

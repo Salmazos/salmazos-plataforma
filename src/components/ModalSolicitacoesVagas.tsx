@@ -17,6 +17,7 @@ import FormularioEdicaoSolicitacao, {
   type FormEdicaoSolicitacao,
 } from "@/components/FormularioEdicaoSolicitacao";
 import { fundoDeFormulario } from "@/lib/fundoDaJanela";
+import { useJanelaComFormulario } from "@/components/useJanelaComFormulario";
 
 const TIPO_LABEL: Record<string, { label: string; bg: string; color: string }> = {
   recrutamento_selecao: { label: "R&S", bg: "#1D6FA4", color: "#fff" },
@@ -103,6 +104,14 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
   const [vinculandoCliente, setVinculandoCliente] = useState<{ s: Solicitacao; clienteIdInicial: string | null; origem: HTMLElement | null } | null>(null);
   // Resultado do último cadastro/vínculo de cliente: fica no topo da lista mesmo se o cartão sair dela (solicitação aprovada não é "pendente").
   const [avisoCliente, setAvisoCliente] = useState<AvisoDoCliente | null>(null);
+  // Esc só age na janela do topo: com o cadastro de cliente, o vincular, a confirmação ou o aviso de vaga criada por cima, esta janela não reage.
+  // Os formulários inline dos cartões (editar, recusar, decidir pedido) sujam a janela inteira; cada um limpa ao concluir ou cancelar.
+  const j = useJanelaComFormulario({
+    aberta: isOpen,
+    onClose,
+    ocupado: actionLoading !== null,
+    escFecha: cadastrandoCliente === null && vinculandoCliente === null && confirmandoVagaSemCliente === null && avisosVaga.length === 0,
+  });
 
   useEffect(() => {
     if (!isOpen) {
@@ -177,6 +186,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
         setItems((prev) => prev.filter((s) => s.id !== id));
         setRecusandoId(null);
         setMotivoRecusa("");
+        j.limpar();
         setAvisoCliente((a) => avisoAposDecisaoDaSolicitacao(a, id, "recusada"));
         showToast("Solicitação recusada.");
         if (focoId) onVerTodas?.();
@@ -194,6 +204,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
   };
 
   const fecharEdicao = () => {
+    j.limpar();
     setEditandoId(null);
     setFormEdicao(null);
     setErroEdicao("");
@@ -251,6 +262,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
       );
       setRecusandoAlteracaoId(null);
       setMotivoRecusaAlteracao("");
+      j.limpar();
       showToast(
         acao === "aprovar"
           ? json.vaga_atualizada
@@ -290,6 +302,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
       );
       setRecusandoStatusId(null);
       setMotivoRecusaStatus("");
+      j.limpar();
       const pausando = s.status_pendente?.acao !== "reabrir";
       showToast(
         acao === "aprovar"
@@ -341,8 +354,10 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
       {...fundoDeFormulario()}
+      {...j.propsDoContainer}
       // Com o cadastro, o vincular ou a confirmação abertos, nada deste modal recebe foco nem clique: Enter/Espaço nunca acionam um botão escondido atrás.
-      inert={cadastrandoCliente !== null || vinculandoCliente !== null || confirmandoVagaSemCliente !== null}
+      // (Também fica inert enquanto a pergunta "dados não salvos" está aberta.)
+      inert={cadastrandoCliente !== null || vinculandoCliente !== null || confirmandoVagaSemCliente !== null || j.confirmando}
     >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
         {/* Header */}
@@ -350,7 +365,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
           <h2 className="font-bold text-lg">
             {"📬"} {focoId ? "Solicitação de Vaga" : aba === "aprovadas_sem_cliente" ? "Solicitações de Vagas" : "Solicitações de Vagas Pendentes"}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+          <button onClick={j.fechar} className="text-gray-400 hover:text-white transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -566,7 +581,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                             />
                             <div className="flex gap-2 justify-end">
                               <button
-                                onClick={() => { setRecusandoAlteracaoId(null); setMotivoRecusaAlteracao(""); }}
+                                onClick={() => { setRecusandoAlteracaoId(null); setMotivoRecusaAlteracao(""); j.limpar(); }}
                                 className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 bg-white"
                               >
                                 Cancelar
@@ -636,7 +651,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                               />
                               <div className="flex gap-2 justify-end">
                                 <button
-                                  onClick={() => { setRecusandoStatusId(null); setMotivoRecusaStatus(""); }}
+                                  onClick={() => { setRecusandoStatusId(null); setMotivoRecusaStatus(""); j.limpar(); }}
                                   className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 bg-white"
                                 >
                                   Cancelar
@@ -712,7 +727,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
                         />
                         <div className="flex gap-2 justify-end">
                           <button
-                            onClick={() => { setRecusandoId(null); setMotivoRecusa(""); }}
+                            onClick={() => { setRecusandoId(null); setMotivoRecusa(""); j.limpar(); }}
                             className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600"
                           >
                             Cancelar
@@ -809,6 +824,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
             </div>
           </div>
         )}
+        {j.dialogo}
       </div>
     </div>
 

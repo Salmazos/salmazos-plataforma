@@ -9,6 +9,7 @@ import CampoMoeda from "@/components/ui/CampoMoeda";
 import { useUsuarioLogado } from "@/components/UsuarioLogadoProvider";
 import { responsaveisDaUnidade, opcoesResponsavel } from "@/lib/responsaveis";
 import AvisoClienteNoTextoPublico from "@/components/AvisoClienteNoTextoPublico";
+import { useJanelaComFormulario } from "@/components/useJanelaComFormulario";
 import { detectarClienteNoTextoPublico, type ClienteNoTexto } from "@/lib/clienteNoTextoPublico";
 
 const IMPACTO_TIPO: Record<string, string> = {
@@ -192,6 +193,8 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
 
   const [confirmModalidade, setConfirmModalidade] = useState(false);
   const [motivoAlteracao, setMotivoAlteracao] = useState("");
+  // Esc não fecha a janela enquanto a confirmação de modalidade ou o aviso de cliente no texto estão abertos por cima dela.
+  const j = useJanelaComFormulario({ aberta: isOpen, onClose, ocupado: salvando, escFecha: !confirmModalidade && !avisoCliente });
   const tipoServicoOriginal = useRef("");
 
   useEffect(() => {
@@ -252,20 +255,27 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
   const set = (field: string, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
 
+  // Chips, "Adicionar" e botões de modo não emitem input/change: cada um marca "sujo" na mão (j.marcarSujo).
   const handleSalarioModoChange = (modo: SalarioModo) => {
+    j.marcarSujo();
     setSalarioModo(modo);
     if (modo === "a_combinar") set("salario", SALARIO_A_COMBINAR);
     else if (modo === "pretensao") set("salario", SALARIO_ENVIAR_PRETENSAO);
     else set("salario", "");
   };
 
-  const toggleHabilidade = (h: string) =>
+  const toggleHabilidade = (h: string) => {
+    j.marcarSujo();
     setHabilidades((prev) => prev.includes(h) ? prev.filter((x) => x !== h) : [...prev, h]);
+  };
 
-  const toggleBen = (chip: string) =>
+  const toggleBen = (chip: string) => {
+    j.marcarSujo();
     setBenChips((prev) => prev.includes(chip) ? prev.filter((x) => x !== chip) : [...prev, chip]);
+  };
 
   const toggleReq = (chip: string) => {
+    j.marcarSujo();
     setReqChips((prev) => {
       if (prev.includes(chip)) {
         setReqTexto((t) => { const copy = { ...t }; delete copy[chip]; return copy; });
@@ -306,6 +316,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
   const adicionarBenCustom = () => {
     const val = benInput.trim();
     if (!val || benCustom.includes(val)) return;
+    j.marcarSujo();
     setBenCustom((prev) => [...prev, val]);
     setBenInput("");
   };
@@ -313,6 +324,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
   const adicionarReqCustom = () => {
     const val = reqInput.trim();
     if (!val || reqCustom.includes(val)) return;
+    j.marcarSujo();
     setReqCustom((prev) => [...prev, val]);
     setReqInput("");
   };
@@ -369,6 +381,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
       const json = await res.json();
       if (!res.ok) { setErro(json.error ?? "Erro ao salvar."); return; }
       onSalvo(json.data);
+      j.limpar();
       onClose();
     } finally {
       setSalvando(false);
@@ -377,13 +390,13 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" {...j.propsDoContainer}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
 
         {/* Header */}
         <div className="bg-black text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
           <h2 className="font-bold text-lg">Editar vaga</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+          <button onClick={j.fechar} className="text-gray-400 hover:text-white transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -439,7 +452,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
                   : { backgroundColor: "#FFFFFF", color: "#374151", border: "2px solid #D1D5DB" };
                 const checkColor = ativo ? cores.color : "#9CA3AF";
                 return (
-                  <button key={tipo.id} type="button" onClick={() => set("tipo_servico", tipo.id)}
+                  <button key={tipo.id} type="button" onClick={() => { j.marcarSujo(); set("tipo_servico", tipo.id); }}
                     className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-left text-sm font-medium transition-all"
                     style={btnStyle}>
                     <span className="flex items-center justify-center shrink-0 rounded-full"
@@ -661,7 +674,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Horário de trabalho</p>
             <div className="flex flex-wrap gap-2 mb-3">
               {HORARIO_TIPOS.map((t) => (
-                <button key={t} type="button" onClick={() => setHorTipo((prev) => prev === t ? "" : t)}
+                <button key={t} type="button" onClick={() => { j.marcarSujo(); setHorTipo((prev) => prev === t ? "" : t); }}
                   className="text-xs px-3 py-1.5 rounded-full font-medium transition-all"
                   style={horTipo === t ? CHIP_ON : CHIP_OFF}>
                   {t}
@@ -740,7 +753,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
                   <span key={chip} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium"
                     style={{ backgroundColor: "#000000", color: "#ffffff" }}>
                     {chip}
-                    <button type="button" onClick={() => setReqCustom((prev) => prev.filter((c) => c !== chip))}
+                    <button type="button" onClick={() => { j.marcarSujo(); setReqCustom((prev) => prev.filter((c) => c !== chip)); }}
                       className="opacity-60 hover:opacity-100 leading-none">×</button>
                   </span>
                 ))}
@@ -776,7 +789,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
                   <span key={chip} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full font-medium"
                     style={{ backgroundColor: "#000000", color: "#ffffff" }}>
                     {chip}
-                    <button type="button" onClick={() => setBenCustom((prev) => prev.filter((c) => c !== chip))}
+                    <button type="button" onClick={() => { j.marcarSujo(); setBenCustom((prev) => prev.filter((c) => c !== chip)); }}
                       className="opacity-60 hover:opacity-100 leading-none">×</button>
                   </span>
                 ))}
@@ -839,7 +852,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
 
           {/* Ações */}
           <div className="flex justify-end gap-3 pt-2 border-t">
-            <button onClick={onClose} className="btn-outline" disabled={salvando}>Cancelar</button>
+            <button onClick={j.fechar} className="btn-outline" disabled={salvando}>Cancelar</button>
             <button onClick={() => handleSalvar()} disabled={salvando} className="btn-primary disabled:opacity-50">
               {salvando ? "Salvando..." : "Salvar alterações"}
             </button>
@@ -924,6 +937,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
           onSalvarMesmoAssim={() => handleSalvar(true)}
         />
       )}
+      {j.dialogo}
     </div>
   );
 }

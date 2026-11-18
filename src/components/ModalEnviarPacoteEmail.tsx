@@ -8,6 +8,7 @@ import {
   type CamposEmailContabilidade, type NomeCampoEmail,
 } from "@/lib/emailPacoteContabilidade";
 import { fundoDeFormulario } from "@/lib/fundoDaJanela";
+import { useJanelaComFormulario } from "@/components/useJanelaComFormulario";
 
 interface Preview {
   assunto: string;
@@ -79,6 +80,7 @@ export default function ModalEnviarPacoteEmail({ admissaoId, onClose, onEnviado 
   const [confirmou, setConfirmou] = useState(false);
   const [reenviar, setReenviar] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const j = useJanelaComFormulario({ onClose, ocupado: enviando });
 
   useEffect(() => {
     let cancelado = false;
@@ -140,6 +142,7 @@ export default function ModalEnviarPacoteEmail({ admissaoId, onClose, onEnviado 
         setErro(json.error || "Não foi possível enviar o e-mail.");
         return;
       }
+      j.limpar();
       onEnviado(json.aviso ? `⚠️ ${json.aviso}` : "✅ Pacote enviado por e-mail para a contabilidade.");
     } catch {
       setErro("Erro de conexão ao enviar. Verifique antes de tentar de novo — o e-mail pode ter saído.");
@@ -151,11 +154,11 @@ export default function ModalEnviarPacoteEmail({ admissaoId, onClose, onEnviado 
   const rotulo = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1";
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" {...fundoDeFormulario()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" {...fundoDeFormulario()} {...j.propsDoContainer}>
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900">Enviar pacote por e-mail</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Fechar">×</button>
+          <button onClick={j.fechar} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Fechar">×</button>
         </div>
 
         {carregando ? (
@@ -285,21 +288,21 @@ export default function ModalEnviarPacoteEmail({ admissaoId, onClose, onEnviado 
                   {preview.ultimoEnvio.para ? ` para ${preview.ultimoEnvio.para}` : ""}.
                 </p>
                 <label className="flex items-center gap-2 mt-2 font-semibold">
-                  <input type="checkbox" checked={reenviar} onChange={(e) => setReenviar(e.target.checked)} />
+                  <input type="checkbox" data-sujo-ignorar checked={reenviar} onChange={(e) => setReenviar(e.target.checked)} />
                   Reenviar mesmo assim
                 </label>
               </div>
             )}
 
             <label className="flex items-start gap-2 text-sm font-semibold text-gray-800">
-              <input type="checkbox" className="mt-1" checked={confirmou} onChange={(e) => setConfirmou(e.target.checked)} />
+              <input type="checkbox" data-sujo-ignorar className="mt-1" checked={confirmou} onChange={(e) => setConfirmou(e.target.checked)} />
               Confirmo que os destinatários estão corretos e quero enviar este pacote por e-mail.
             </label>
 
             {erro && <p className="text-red-600 text-sm">{erro}</p>}
 
             <div className="flex justify-end gap-2 pt-1">
-              <button onClick={onClose} className="btn-outline">Cancelar</button>
+              <button onClick={j.fechar} className="btn-outline">Cancelar</button>
               <button onClick={enviar} disabled={!podeEnviar} className="btn-primary disabled:opacity-50">
                 {enviando ? "Enviando..." : "Enviar e-mail"}
               </button>
@@ -307,6 +310,7 @@ export default function ModalEnviarPacoteEmail({ admissaoId, onClose, onEnviado 
           </div>
         )}
       </div>
+      {j.dialogo}
     </div>
   );
 }

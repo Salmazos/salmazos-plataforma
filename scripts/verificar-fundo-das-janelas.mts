@@ -80,6 +80,8 @@ const INVENTARIO: Record<string, [number, number, number]> = {
   "components/CandidatoCard.tsx": [1, 0, 0],
   "components/ComercialClient.tsx": [1, 0, 0],
   "components/ConfirmarCriarVagaSemCliente.tsx": [0, 1, 0],
+  // Fase 2: confirmação "dados não salvos" (portal no body). Sem clique no fundo: é a janela que PROTEGE o que foi digitado.
+  "components/ConfirmarDescartar.tsx": [0, 0, 1],
   "components/DocumentosPageClient.tsx": [2, 0, 0],
   "components/EmpresasVisitadasClient.tsx": [1, 0, 0],
   "components/KmTab.tsx": [0, 0, 1],

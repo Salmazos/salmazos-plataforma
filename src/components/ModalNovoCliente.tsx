@@ -7,8 +7,9 @@ import { useUsuarioLogado } from "@/components/UsuarioLogadoProvider";
 import { responsaveisDaUnidade, responsavelPadrao, opcoesResponsavel } from "@/lib/responsaveis";
 import type { Cliente } from "@/types";
 import CampoTelefone from "@/components/ui/CampoTelefone";
-import { MENSAGEM_AVISO_PREFILL, campoParaFocoInicial, escapeDeveFecharModal, rotularCampos, solicitacaoFicouIndisponivel, type AvisoPrefill, type PrefillCliente, type SituacaoDaVaga } from "@/lib/clienteDaSolicitacao";
+import { MENSAGEM_AVISO_PREFILL, campoParaFocoInicial, rotularCampos, solicitacaoFicouIndisponivel, type AvisoPrefill, type PrefillCliente, type SituacaoDaVaga } from "@/lib/clienteDaSolicitacao";
 import { PerguntaVincularEmpresa } from "@/components/VinculoCarteiraCliente";
+import { useJanelaComFormulario } from "@/components/useJanelaComFormulario";
 import type { EmpresaCandidata } from "@/lib/carteiraVinculo";
 import { devolverFocoSeExistir, prenderTabNoModal } from "@/components/focoDosModais";
 import { ROTULO_BUCKET_FATURAMENTO, UNIDADES_FATURAMENTO, MSG_UNIDADE_FATURAMENTO_OBRIGATORIA, usaUnidadeFaturamento } from "@/lib/unidadeFaturamento";
@@ -208,6 +209,9 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
   // botão que o abriu, se ele ainda estiver na página.
   const caixaRef = useRef<HTMLDivElement>(null);
   const origemDoFoco = useRef<HTMLElement | null>(null);
+  // Esc: só no cadastro a partir de uma solicitação (decisão de cbff952: em Clientes, tela em produção, o Esc continua não fazendo nada). X e
+  // Cancelar perguntam nos dois modos, se houver dado digitado. Sem Esc enquanto a pergunta "vincular empresa" substitui a janela.
+  const j = useJanelaComFormulario({ aberta: isOpen, onClose, ocupado: salvando, escFecha: !!solicitacao && !posCriacao });
   useEffect(() => {
     if (!isOpen) return;
     origemDoFoco.current = elementoDeOrigem ?? (document.activeElement as HTMLElement | null);
@@ -228,13 +232,9 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
   if (!isOpen) return null;
   if (posCriacao) return <PerguntaVincularEmpresa cliente={posCriacao.cliente} candidatas={posCriacao.candidatas} onFechar={() => { setPosCriacao(null); onClose(); }} />;
 
+  // O Esc agora é do hook (document, só a janela do topo, com a pergunta se houver dado digitado; ignora o Esc de <select>/popup aberto).
   const aoTeclar = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") {
-      // Em Clientes (tela em produção, sem solicitação) o Esc continua não fazendo nada; no cadastro por solicitação fecha, menos o Esc que fecha a
-      // lista de um <select>.
-      if (solicitacao && !salvando && escapeDeveFecharModal({ key: e.key, alvo: e.target as Element })) { e.stopPropagation(); onClose(); }
-      return;
-    }
+    if (e.key === "Escape") return;
     prenderTabNoModal(e, caixaRef.current);
   };
 
@@ -256,10 +256,13 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
     faltaPreencher(campo) ? { "aria-invalid": true as const, style: { borderColor: "#DC2626", backgroundColor: "#FEF2F2" } } : {};
   const pessoaFisica = form.tipo_pessoa === "pf";
 
-  const toggleServico = (id: string) =>
+  // Chip de serviço não emite input/change: marca "sujo" na mão.
+  const toggleServico = (id: string) => {
+    j.marcarSujo();
     setServicos((prev) =>
       prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
     );
+  };
 
   // Upload do logo — só disponível editando (precisa de cliente.id pra saber onde salvar);
   // sobe direto ao selecionar o arquivo, não espera o "Salvar alterações" do resto do form.
@@ -353,6 +356,7 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
           return;
         }
         solicitacao.onCriado({ clienteId: json.data.cliente.id, clienteNome: json.data.cliente.nome, vaga: json.data.vaga });
+        j.limpar();
         onClose();
         return;
       }
@@ -380,6 +384,7 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
       }
       if (!res.ok) { setErro(json.error ?? "Erro ao salvar."); return; }
       onSalvo(json.data);
+      j.limpar();
       if (!editando) {
         // Cliente novo: se a Carteira tem empresa (prospect) de nome parecido, pergunta antes de fechar. Falha na consulta não atrapalha o cadastro.
         const candidatas = await fetch(`/api/clientes/${json.data.id}/empresas-candidatas`)
@@ -515,14 +520,14 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onKeyDown={aoTeclar}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onKeyDown={aoTeclar} {...j.propsDoContainer}>
       <div ref={caixaRef} role="dialog" aria-modal="true" aria-labelledby="titulo-novo-cliente" className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="bg-black text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
           <h2 id="titulo-novo-cliente" className="font-bold text-lg">
             {editando ? "Editar cliente" : solicitacao ? "Cadastrar cliente a partir da solicitação" : "Novo cliente"}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+          <button onClick={j.fechar} className="text-gray-400 hover:text-white transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -921,7 +926,8 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
 
           {/* Usuários do Portal */}
           {editando && (
-            <div className="border-t pt-4">
+            // data-sujo-ignorar: usuários do portal têm botões próprios que gravam na hora (adicionar, trocar e-mail ou senha); não sujam o cadastro.
+            <div className="border-t pt-4" data-sujo-ignorar>
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                   Usuários do Portal ({usuariosPortal.length}/{MAX_USUARIOS_PORTAL})
@@ -1118,7 +1124,7 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
               </button>
             )}
             <div className="flex gap-3 ml-auto">
-              <button onClick={onClose} className="btn-outline" disabled={salvando}>
+              <button onClick={j.fechar} className="btn-outline" disabled={salvando}>
                 Cancelar
               </button>
               <button
@@ -1132,6 +1138,7 @@ export default function ModalNovoCliente({ isOpen, cliente, valoresIniciais, sol
           </div>
         </div>
       </div>
+      {j.dialogo}
     </div>
   );
 }

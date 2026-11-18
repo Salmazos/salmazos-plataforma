@@ -10,6 +10,7 @@ import CampoTelefone from "@/components/ui/CampoTelefone";
 import { MOSTRAR_DIA_TESTE_NO_PORTAL } from "@/lib/diaTestePortal";
 import { diasTesteParaEnvio, erroDiasTeste } from "@/components/CampoDiasTeste";
 import { fundoDeFormulario } from "@/lib/fundoDaJanela";
+import { useJanelaComFormulario } from "@/components/useJanelaComFormulario";
 
 // Edição de uma indicação já enviada (portal > Minhas Indicações). Pré-preenche com o que foi enviado e
 // manda ao servidor SÓ os campos que mudaram; o servidor refaz o diff e revalida tudo (quem pode editar,
@@ -69,6 +70,7 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
   const [tentouSalvar, setTentouSalvar] = useState(false);
   const [curriculo, setCurriculo] = useState<File | null>(null);
   const inputCurriculoRef = useRef<HTMLInputElement>(null);
+  const j = useJanelaComFormulario({ onClose, ocupado: salvando });
 
   useEffect(() => {
     (async () => {
@@ -183,6 +185,7 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
         if (res.status === 409) setTimeout(() => onSalvo(""), 2500);
         return;
       }
+      j.limpar();
       onSalvo(json.alterado ? "Indicação atualizada. A Salmazos foi avisada das alterações." : "Nenhuma alteração para salvar.");
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao salvar. Tente novamente.");
@@ -192,11 +195,11 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" {...fundoDeFormulario()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" {...fundoDeFormulario()} {...j.propsDoContainer}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="bg-black text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
           <h2 className="font-bold text-lg">Editar indicação</h2>
-          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">×</button>
+          <button onClick={j.fechar} className="text-white/70 hover:text-white text-xl leading-none">×</button>
         </div>
 
         {carregando && <p className="p-6 text-sm text-gray-400">Carregando...</p>}
@@ -252,7 +255,7 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
             {erro && <p className="text-sm text-red-600">{erro}</p>}
 
             <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-              <button onClick={onClose} className="btn-outline" disabled={salvando}>Cancelar</button>
+              <button onClick={j.fechar} className="btn-outline" disabled={salvando}>Cancelar</button>
               <button onClick={salvar} disabled={salvando} className="btn-primary" style={{ opacity: salvando ? 0.6 : 1 }}>
                 {salvando ? "Salvando..." : "Salvar alterações"}
               </button>
@@ -260,6 +263,7 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
           </div>
         )}
       </div>
+      {j.dialogo}
     </div>
   );
 }

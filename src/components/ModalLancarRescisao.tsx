@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import CamposRescisaoForm, { VALORES_RESCISAO_VAZIOS, valoresRescisaoValidos, type ValoresRescisao } from "@/components/CamposRescisaoForm";
 import type { FuncionarioRow } from "./FuncionariosPageClient";
 import { fundoDeFormulario } from "@/lib/fundoDaJanela";
+import { useJanelaComFormulario } from "@/components/useJanelaComFormulario";
 
 // Só os campos que o modal usa — assim o ModalContratoMot (popup do aviso MOT) abre este mesmo fluxo de
 // rescisão sem precisar montar uma linha completa de FuncionarioRow.
@@ -21,6 +22,7 @@ export default function ModalLancarRescisao({ isOpen, funcionario, onClose, onLa
   const [asoFile, setAsoFile] = useState<File | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
+  const j = useJanelaComFormulario({ aberta: isOpen, onClose, ocupado: enviando });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -85,6 +87,7 @@ export default function ModalLancarRescisao({ isOpen, funcionario, onClose, onLa
       });
       const json = await res.json();
       if (!res.ok) { setErro(json.error || "Erro ao lançar rescisão."); return; }
+      j.limpar();
       onLancado();
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Erro de conexão. Tente novamente.");
@@ -98,11 +101,12 @@ export default function ModalLancarRescisao({ isOpen, funcionario, onClose, onLa
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.6)" }}
       {...fundoDeFormulario()}
+      {...j.propsDoContainer}
     >
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900">Lançar rescisão</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+          <button onClick={j.fechar} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
         </div>
 
         <div className="rounded-lg p-3 mb-4 text-sm bg-gray-50 border border-gray-200">
@@ -120,12 +124,13 @@ export default function ModalLancarRescisao({ isOpen, funcionario, onClose, onLa
         {erro && <p className="text-red-600 text-sm mb-3">{erro}</p>}
 
         <div className="flex gap-3">
-          <button onClick={onClose} className="btn-outline flex-1" disabled={enviando}>Cancelar</button>
+          <button onClick={j.fechar} className="btn-outline flex-1" disabled={enviando}>Cancelar</button>
           <button onClick={handleSalvar} disabled={!valido || enviando} className="btn-primary flex-1 disabled:opacity-50">
             {enviando ? "Salvando..." : "Lançar rescisão"}
           </button>
         </div>
       </div>
+      {j.dialogo}
     </div>
   );
 }

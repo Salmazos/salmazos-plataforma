@@ -135,6 +135,7 @@ export default function SeletorHorarioIniciarAdmissao({ value, onChange }: Props
           <button
             key={t}
             type="button"
+            data-sujo-botao
             onClick={() => selecionarTipo(t)}
             className="text-xs px-3 py-1.5 rounded-full font-medium transition-all"
             style={tipo === t ? CHIP_ON : CHIP_OFF}
@@ -168,6 +169,7 @@ export default function SeletorHorarioIniciarAdmissao({ value, onChange }: Props
 
           <button
             type="button"
+            data-sujo-botao
             onClick={() => setComExcecao((v) => !v)}
             className="text-xs font-semibold text-blue-600 hover:text-blue-800"
           >
@@ -234,6 +236,7 @@ export default function SeletorHorarioIniciarAdmissao({ value, onChange }: Props
                 <button
                   key={o}
                   type="button"
+                  data-sujo-botao
                   onClick={() => setTurno1236(o)}
                   className="text-sm px-4 py-2 rounded-lg font-medium transition-all"
                   style={turno1236 === o ? { background: "#000", color: "#FFD700", border: "2px solid #000" } : { background: "#fff", color: "#374151", border: "2px solid #E5E7EB" }}

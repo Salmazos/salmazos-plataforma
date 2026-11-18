@@ -11,6 +11,7 @@ import {
 import { calcularEstadoUpload, type StatusLinha } from "@/lib/contabilidadeUploadEstado";
 import type { AdmissaoDocumentoContabilidade } from "@/types";
 import { fundoDeFormulario, fundoSoLeitura } from "@/lib/fundoDaJanela";
+import { useJanelaComFormulario } from "@/components/useJanelaComFormulario";
 
 interface Props {
   isOpen: boolean;
@@ -147,6 +148,9 @@ export default function ModalUploadDocumentosContabilidade({
   const [souDiretor, setSouDiretor] = useState<boolean | null>(null);
   const [diretores, setDiretores] = useState<{ id: string; nome_completo: string; cargo: string }[]>([]);
   const [diretorSelecionadoId, setDiretorSelecionadoId] = useState("");
+  // Cada linha sobe o arquivo na hora (j.limpar() após o upload ok): o que fica "sujo" é arquivo escolhido e ainda não enviado, e nome/e-mail da etapa 2.
+  // Esc não fecha a janela enquanto a confirmação de tipo de arquivo está aberta por cima.
+  const j = useJanelaComFormulario({ aberta: isOpen, onClose, ocupado: enviandoTipo !== null || enviandoFinal, escFecha: !confirmacaoPendente });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -222,6 +226,7 @@ export default function ModalUploadDocumentosContabilidade({
     if (!resultado.ok) {
       setErroPorTipo((prev) => ({ ...prev, [tipo]: resultado.erro }));
     } else {
+      j.limpar();
       setDocumentos((prev) => {
         const semEsseTipo = prev.filter((d) => d.tipo_documento !== tipo);
         return [...semEsseTipo, resultado.documento];
@@ -298,6 +303,7 @@ export default function ModalUploadDocumentosContabilidade({
         setErroFinal(json.error || "Erro ao montar e enviar o pacote da contabilidade.");
         return;
       }
+      j.limpar();
       onEnviado();
       onClose();
     } catch {
@@ -308,7 +314,7 @@ export default function ModalUploadDocumentosContabilidade({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" {...fundoDeFormulario()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" {...fundoDeFormulario()} {...j.propsDoContainer}>
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
@@ -317,7 +323,7 @@ export default function ModalUploadDocumentosContabilidade({
           <h2 className="font-bold text-lg flex items-center gap-2">
             <span>📑</span> Documentos da Contabilidade
           </h2>
-          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">×</button>
+          <button onClick={j.fechar} className="text-white/70 hover:text-white text-xl leading-none">×</button>
         </div>
 
         {etapa === 1 && (
@@ -437,7 +443,7 @@ export default function ModalUploadDocumentosContabilidade({
             </div>
 
             <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-              <button onClick={onClose} className="btn-outline">Cancelar</button>
+              <button onClick={j.fechar} className="btn-outline">Cancelar</button>
               <button
                 onClick={() => setEtapa(2)}
                 disabled={!podeAvancarEtapa1}
@@ -568,6 +574,7 @@ export default function ModalUploadDocumentosContabilidade({
           </div>
         )}
       </div>
+      {j.dialogo}
     </div>
   );
 }
