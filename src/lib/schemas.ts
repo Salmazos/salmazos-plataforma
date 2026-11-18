@@ -4,7 +4,7 @@ import { erroCentroCusto, erroEscala, erroHorario, erroSalarioHora, erroSalarioM
 import { conteudoRsSchema } from "@/lib/propostaModelos";
 import { validarCnpj, validarCpf } from "@/lib/documentoBr";
 import { UNIDADES_FATURAMENTO } from "@/lib/unidadeFaturamento";
-import { ESTADOS, CATEGORIAS_HABILITACAO, LIMITE_EXPERIENCIA_MINIMA, experienciaMinimaDoCorpo } from "@/lib/solicitacaoVagaCampos";
+import { ESTADOS, CATEGORIAS_HABILITACAO, LIMITE_EXPERIENCIA_MINIMA, erroHorarioGravado, experienciaMinimaDoCorpo } from "@/lib/solicitacaoVagaCampos";
 import { VALIDADES_LINK_DIAS, VALIDADE_LINK_PADRAO_DIAS } from "@/lib/solicitacaoVagaLink";
 import { salarioPublicoValido } from "@/lib/solicitacaoVagaPublicaForm";
 import { TURNOS_FUNCIONARIO, SEGMENTOS_CLIENTE, TIPOS_SERVICO } from "@/lib/constants";
@@ -997,6 +997,9 @@ export const portalSolicitarVagaSchema = z.object({
   horario_padrao: horarioPadraoSchema.optional().nullable(),
   confidencial: z.boolean().optional().default(false),
   perfil_extra: perfilExtraPortalSchema.optional().nullable(),
+}).superRefine((d, ctx) => {
+  const erro = erroHorarioGravado(d.horario_tipo, d.horario_texto);
+  if (erro) ctx.addIssue({ code: "custom", path: ["horario_texto"], message: erro });
 });
 
 // ── Link público de solicitação de vaga (R&S) ──────────────────────────────────────────────────────────────────────────
@@ -1078,6 +1081,8 @@ export const publicoSolicitarVagaSchema = z
     aceite_condicoes: z.literal(true, "Para enviar, é preciso concordar com as condições comerciais."),
   })
   .superRefine((d, ctx) => {
+    const erroDoHorario = erroHorarioGravado(d.horario_tipo, d.horario_texto);
+    if (erroDoHorario) ctx.addIssue({ code: "custom", path: ["horario_texto"], message: erroDoHorario });
     const documentoValido = d.tipo_pessoa === "pj" ? validarCnpj(d.documento) : validarCpf(d.documento);
     if (!documentoValido) {
       ctx.addIssue({ code: "custom", path: ["documento"], message: d.tipo_pessoa === "pj" ? "CNPJ inválido." : "CPF inválido." });

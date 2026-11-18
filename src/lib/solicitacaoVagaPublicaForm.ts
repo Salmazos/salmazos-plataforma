@@ -10,6 +10,7 @@ import {
   experienciaMinimaGravada,
   gerarBeneficiosChips,
   gerarBeneficiosTexto,
+  erroHorarioSolicitacao,
   gerarHorarioTexto,
   gerarRequisitosTexto,
   listarBeneficios,
@@ -279,7 +280,8 @@ export function validarEtapa(etapa: Etapa, form: FormPublico): ErrosForm {
     if (excede(form.salario, 100)) erros.salario = "Use no máximo 100 caracteres.";
     if (excede(form.adicionais_salariais, 300)) erros.adicionais_salariais = "Use no máximo 300 caracteres.";
 
-    if (form.horario.tipo === "personalizado" && !form.horario.custom.trim()) erros.horario = "Descreva o horário ou a jornada.";
+    const erroDoHorario = erroHorarioSolicitacao(form.horario);
+    if (erroDoHorario) erros.horario = erroDoHorario;
     else if (gerarHorarioTexto(form.horario).length > 300) erros.horario = "Use no máximo 300 caracteres.";
   }
 

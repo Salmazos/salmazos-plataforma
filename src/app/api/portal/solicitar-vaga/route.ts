@@ -7,6 +7,7 @@ import { parseBody, portalSolicitarVagaSchema } from "@/lib/schemas";
 import { resolverUnidadeCliente } from "@/lib/unidadeAuth";
 import { resolverAvisoVaga, gravarSinoAvisoVaga } from "@/lib/avisosVagas";
 import { escaparHtml } from "@/lib/escaparHtml";
+import { rotuloHorarioTipo } from "@/lib/solicitacaoVagaCampos";
 
 const TIPO_LABEL: Record<string, string> = {
   recrutamento_selecao: "Recrutamento e Seleção",
@@ -193,7 +194,7 @@ export async function POST(request: NextRequest) {
       ${detailRow("Previsão de Início", previsaoFormatted)}
       ${detailRow("Salário", body.salario)}
       ${detailRow("Adicionais Salariais", body.adicionais_salariais)}
-      ${detailRow("Horário", body.horario_texto || body.horario_tipo)}
+      ${detailRow("Horário", body.horario_texto || rotuloHorarioTipo(body.horario_tipo))}
       ${detailRow("Tempo de experiência", experienciaMinimaHtml)}
     </table>
     ${requisitosHtml}

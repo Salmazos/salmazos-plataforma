@@ -12,7 +12,7 @@ import {
 } from "../src/lib/solicitacaoVagaLink";
 import * as campos from "../src/lib/solicitacaoVagaCampos";
 import {
-  gerarBeneficiosChips, gerarBeneficiosTexto, gerarHorarioTexto, gerarRequisitosTexto, listarRequisitos, requisitosPublicaveis, HORARIO_VAZIO,
+  erroHorarioSolicitacao, gerarBeneficiosChips, gerarBeneficiosTexto, gerarHorarioTexto, gerarRequisitosTexto, listarRequisitos, requisitosPublicaveis, HORARIO_VAZIO,
   REQ_CNH, REQ_CONHECIMENTOS, REQ_ESCOLARIDADE, REQ_EXPERIENCIA, REQ_NR, BEN_ALIMENTACAO, BEN_QUALIDADE, BEN_SAUDE, BEN_TRANSPORTE,
 } from "../src/lib/solicitacaoVagaCampos";
 import {
@@ -31,7 +31,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { itensDasCondicoes, condicoesPersonalizadas, lerCondicoesDoLink, montarSnapshotCondicoes } from "../src/lib/solicitacaoVagaCondicoes";
 import { SALARIO_A_COMBINAR as CONST_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO as CONST_PRETENSAO, formatarSalarioHora } from "../src/lib/constants";
 import { PADROES_RS } from "../src/lib/propostaModelos";
-import { publicoSolicitarVagaSchema, solicitacaoLinkCreateSchema } from "../src/lib/schemas";
+import { portalSolicitarVagaSchema, publicoSolicitarVagaSchema, solicitacaoLinkCreateSchema } from "../src/lib/schemas";
+import { gerarTextoJornada } from "../src/lib/jornadaTrabalho";
 import * as rotaPublica from "../src/app/api/solicitacao-vaga-publica/[token]/route";
 import * as rotaLinks from "../src/app/api/solicitacoes-vagas/links/route";
 import {
@@ -1553,6 +1554,154 @@ caso("e-mail do link: linha 'Tempo de experiência' só quando preenchida e com 
   assert.ok(com.includes("Tempo de experiência") && com.includes("6 meses"));
   const perigoso = montarHtmlSolicitacaoPublica({ ...base, experienciaMinima: "<script>alert(1)</script>" });
   assert.ok(!perigoso.includes("<script>") && perigoso.includes("&lt;script&gt;"));
+});
+
+// ── Horário incompleto: regra única (erroHorarioSolicitacao), link, portal e servidor ────────────────────────────────────────────────
+// Bug de produção: "Segunda a Sexta" sem entrada/saída seguia até o e-mail e o painel como "Segunda a Sexta, — às —".
+const SEM_TRAVESSAO_NA_HORA = /—h|às —|— às/;
+const tiposDoLink = campos.HORARIO_TIPOS.map((t) => t.id);
+const hor = (parcial: Partial<typeof HORARIO_VAZIO>) => ({ ...HORARIO_VAZIO, ...parcial });
+const erroEtapa2 = (horario: typeof HORARIO_VAZIO) => validarEtapa(2, baseForm({ horario })).horario ?? null;
+
+caso("horário no link: modelo que depende de horas, sem horas, BLOQUEIA a etapa 2 com mensagem no campo do horário", () => {
+  for (const tipo of ["seg_sex", "6x1", "6x2", "turno_fixo"] as const) {
+    assert.equal(erroEtapa2(hor({ tipo })), campos.MSG_HORARIO_ENTRADA_SAIDA, `${tipo} vazio`);
+    assert.equal(erroEtapa2(hor({ tipo, entrada: "08:00" })), campos.MSG_HORARIO_ENTRADA_SAIDA, `${tipo} só entrada`);
+    assert.equal(erroEtapa2(hor({ tipo, saida: "17:00" })), campos.MSG_HORARIO_ENTRADA_SAIDA, `${tipo} só saída`);
+  }
+  assert.equal(campos.MSG_HORARIO_ENTRADA_SAIDA, "Informe a entrada e a saída do horário.");
+  assert.equal(erroEtapa2(hor({ tipo: "turno_fixo", turnoNome: "Turno A" })), campos.MSG_HORARIO_ENTRADA_SAIDA, "o nome do turno sozinho não basta");
+});
+
+caso("horário no link: modelo completo passa (intervalo é opcional) e o texto não tem travessão", () => {
+  for (const tipo of ["seg_sex", "6x1", "6x2", "turno_fixo"] as const) {
+    for (const intervalo of ["", "1h", "sem intervalo"]) {
+      const h = hor({ tipo, entrada: "08:00", saida: "17:00", intervalo, turnoNome: "Turno A" });
+      assert.equal(erroEtapa2(h), null, `${tipo} / ${intervalo}`);
+      assert.ok(!SEM_TRAVESSAO_NA_HORA.test(gerarHorarioTexto(h)) && gerarHorarioTexto(h).includes("08h00 às 17h00"));
+    }
+  }
+  assert.equal(gerarHorarioTexto(hor({ tipo: "seg_sex", entrada: "08:00", saida: "17:00" })), "Segunda a Sexta, 08h00 às 17h00");
+});
+
+caso("horário no link: a_combinar passa; 12x36 passa sem horas, mas não com só uma delas; personalizado vazio bloqueia", () => {
+  assert.equal(erroEtapa2(hor({ tipo: "a_combinar" })), null);
+  assert.equal(erroEtapa2(hor({ tipo: "" })), null, "sem modelo escolhido continua sendo campo opcional");
+  assert.equal(erroEtapa2(hor({ tipo: "12x36" })), null);
+  assert.equal(gerarHorarioTexto(hor({ tipo: "12x36", diurnoNoturno: "noturno" })), "Escala 12x36 — Turno Noturno");
+  assert.equal(erroEtapa2(hor({ tipo: "12x36", entrada: "19:00", saida: "07:00" })), null);
+  assert.equal(erroEtapa2(hor({ tipo: "12x36", entrada: "19:00" })), campos.MSG_HORARIO_12X36);
+  assert.equal(erroEtapa2(hor({ tipo: "12x36", saida: "07:00" })), campos.MSG_HORARIO_12X36);
+  assert.ok(!SEM_TRAVESSAO_NA_HORA.test(gerarHorarioTexto(hor({ tipo: "12x36", entrada: "19:00" }))), "uma hora só não vira '19h00 às —'");
+  assert.equal(erroEtapa2(hor({ tipo: "personalizado" })), campos.MSG_HORARIO_PERSONALIZADO);
+  assert.equal(erroEtapa2(hor({ tipo: "personalizado", custom: "   " })), campos.MSG_HORARIO_PERSONALIZADO);
+  assert.equal(erroEtapa2(hor({ tipo: "personalizado", custom: "Plantão aos sábados" })), null);
+});
+
+caso("horário no link: reduzidos exigem a hora de sexta (sexta reduzida) ou de sábado (sábado reduzido), além de entrada e saída", () => {
+  const sexta = { tipo: "seg_qui_sex_reduzida" as const, entrada: "08:00", saida: "17:00" };
+  assert.equal(erroEtapa2(hor({ ...sexta })), campos.MSG_HORARIO_SEXTA);
+  assert.equal(erroEtapa2(hor({ tipo: sexta.tipo })), campos.MSG_HORARIO_ENTRADA_SAIDA);
+  assert.equal(erroEtapa2(hor({ ...sexta, sextaSaida: "16:00" })), null);
+  const sab = { tipo: "seg_sex_sab_reduzido" as const, entrada: "08:00", saida: "17:00" };
+  assert.equal(erroEtapa2(hor({ ...sab })), campos.MSG_HORARIO_SABADO);
+  assert.equal(erroEtapa2(hor({ ...sab, sabadoEntrada: "08:00" })), campos.MSG_HORARIO_SABADO);
+  assert.equal(erroEtapa2(hor({ ...sab, sabadoSaida: "12:00" })), campos.MSG_HORARIO_SABADO);
+  assert.equal(erroEtapa2(hor({ ...sab, sabadoEntrada: "08:00", sabadoSaida: "12:00" })), null);
+  assert.equal(gerarHorarioTexto(hor({ ...sexta })), "", "sem a sexta não há texto (nunca meio texto)");
+});
+
+caso("horário: nenhuma combinação de campos vazios/parciais gera travessão no lugar de hora (link)", () => {
+  const horas = ["", "08:00"], extras = ["", "16:00"], intervalos = ["", "1h", "sem intervalo", "personalizado"];
+  let n = 0;
+  for (const tipo of tiposDoLink) for (const entrada of horas) for (const saida of horas) for (const sextaSaida of extras) for (const sabadoEntrada of extras) for (const intervalo of intervalos) for (const custom of ["", "Livre"]) {
+    const h = hor({ tipo, entrada, saida, sextaSaida, sabadoEntrada, sabadoSaida: sabadoEntrada, intervalo, custom, turnoNome: "", intervaloInicio: "", intervaloFim: "12:00" });
+    const texto = gerarHorarioTexto(h);
+    assert.ok(!SEM_TRAVESSAO_NA_HORA.test(texto), `${JSON.stringify(h)} → ${texto}`);
+    if (erroHorarioSolicitacao(h) && tipo !== "personalizado") assert.equal(texto, "", "sem as horas não há texto");
+    n++;
+  }
+  assert.ok(n > 1000);
+});
+
+const portalHorario = (() => {
+  const codigo = trecho(FONTE_PORTAL, "const fmtTime = ", '\n    return "";\n  };\n');
+  const js = ts.transpileModule(
+    `const executar = (gerarTextoJornada, erroHorarioSolicitacao, horarioTipo, horEntrada, horSaida, horIntervalo, horIntervaloInicio, horIntervaloFim, hor1236, horTurnoNome, horCustom, horSextaSaida, horSabadoEntrada, horSabadoSaida) => { ${codigo}; return { texto: gerarHorarioTexto(), fmtVazio: fmtTime("") }; }; module.exports = executar;`,
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } },
+  ).outputText;
+  const m: any = { exports: {} };
+  new Function("module", "exports", js)(m, m.exports);
+  return (h: typeof HORARIO_VAZIO) => m.exports(gerarTextoJornada, erroHorarioSolicitacao, h.tipo, h.entrada, h.saida, h.intervalo, h.intervaloInicio, h.intervaloFim, h.diurnoNoturno, h.turnoNome, h.custom, h.sextaSaida, h.sabadoEntrada, h.sabadoSaida) as { texto: string; fmtVazio: string };
+})();
+
+caso("horário no portal: o gerador EXTRAÍDO da página dá o mesmo texto do link em todas as combinações, e fmtTime nunca devolve travessão", () => {
+  const horas = ["", "08:00"], extras = ["", "16:00"];
+  let n = 0;
+  for (const tipo of tiposDoLink) for (const entrada of horas) for (const saida of horas) for (const sextaSaida of extras) for (const sabadoEntrada of extras) for (const intervalo of ["", "1h", "sem intervalo"]) for (const custom of ["", "Livre"]) {
+    const h = hor({ tipo, entrada, saida, sextaSaida, sabadoEntrada, sabadoSaida: sabadoEntrada, intervalo, custom, turnoNome: "Turno A" });
+    const r = portalHorario(h);
+    assert.equal(r.texto, gerarHorarioTexto(h), JSON.stringify(h));
+    assert.ok(!SEM_TRAVESSAO_NA_HORA.test(r.texto) && r.fmtVazio === "");
+    n++;
+  }
+  assert.ok(n > 500);
+});
+
+caso("horário no portal: a página usa a MESMA regra (erroHorarioSolicitacao), avisa no próprio bloco e abre o bloco recolhido do template", () => {
+  assert.ok(FONTE_PORTAL.includes("erroHorarioSolicitacao(horarioAtual())"), "revisar() chama a regra única");
+  assert.ok(!/return "—"/.test(FONTE_PORTAL), "fmtTime não devolve mais travessão");
+  const revisar = trecho(FONTE_PORTAL, "const revisar = () => {", "const errosDoPerfil");
+  assert.ok(revisar.indexOf("erroHorarioSolicitacao") > revisar.indexOf('setError("")') && revisar.includes("setUsarHorarioPadrao(false)") && revisar.includes("return;"));
+  assert.ok(FONTE_PORTAL.includes('id="campo-horario"') && FONTE_PORTAL.includes('{erroHorario && <p role="alert"'));
+  // Template/rascunho que reabre com o tipo mas sem horas: cai no erro claro (não no texto com travessão).
+  for (const tipo of ["seg_sex", "6x1", "6x2", "turno_fixo", "seg_qui_sex_reduzida", "seg_sex_sab_reduzido"] as const) {
+    assert.ok(erroHorarioSolicitacao(hor({ tipo })), tipo);
+  }
+});
+
+caso("horário no servidor (link): recusa 'Segunda a Sexta, — às —' e modelo com horas sem hora nenhuma; aceita o que o formulário gera", () => {
+  const corpo = montarCorpoEnvio(baseForm({ principais_atividades: "Atender clientes", horario: hor({ tipo: "seg_sex", entrada: "08:00", saida: "17:00" }) })) as Record<string, unknown>;
+  assert.ok(publicoSolicitarVagaSchema.safeParse(corpo).success);
+  const falha = (parcial: Record<string, unknown>) => {
+    const r = publicoSolicitarVagaSchema.safeParse({ ...corpo, ...parcial });
+    return !r.success && r.error.issues.some((i) => i.path[0] === "horario_texto" && i.message === campos.MSG_HORARIO_ENTRADA_SAIDA);
+  };
+  assert.ok(falha({ horario_texto: "Segunda a Sexta, — às —" }));
+  assert.ok(falha({ horario_texto: "Escala 6x1, 08h00 às —", horario_tipo: "6x1" }));
+  assert.ok(falha({ horario_texto: "Escala 6x1, — às 17h00", horario_tipo: "6x1" }));
+  assert.ok(falha({ horario_texto: "Turno A, —h às 17h00", horario_tipo: "turno_fixo" }));
+  assert.ok(falha({ horario_tipo: "6x2", horario_texto: null }));
+  assert.ok(falha({ horario_tipo: "seg_qui_sex_reduzida", horario_texto: "" }));
+  assert.ok(falha({ horario_tipo: "seg_sex_sab_reduzido", horario_texto: null }));
+  assert.ok(falha({ horario_tipo: "turno_fixo", horario_texto: "Turno A" }));
+  const ok = (parcial: Record<string, unknown>) => publicoSolicitarVagaSchema.safeParse({ ...corpo, ...parcial }).success;
+  assert.ok(ok({ horario_tipo: "a_combinar", horario_texto: "A combinar" }));
+  assert.ok(ok({ horario_tipo: "12x36", horario_texto: "Escala 12x36 — Turno Diurno" }));
+  assert.ok(ok({ horario_tipo: "personalizado", horario_texto: "Plantão aos sábados" }));
+  assert.ok(ok({ horario_tipo: null, horario_texto: null }), "sem horário continua aceito");
+  assert.ok(!ok({ horario_tipo: "personalizado", horario_texto: "" }));
+  assert.ok(ok({ horario_tipo: "seg_qui_sex_reduzida", horario_texto: "Segunda a quinta-feira, das 08h00 às 17h00; sexta-feira, até as 16h00" }));
+});
+
+caso("horário no servidor (portal): mesma recusa do link; e-mail do portal mostra o RÓTULO do modelo, nunca o código cru", () => {
+  const base = { cargo: "Auxiliar", tipo_servico: "recrutamento_selecao", cidade: "Campinas", estado: "SP", principais_atividades: "Atender clientes" };
+  const r = (parcial: Record<string, unknown>) => portalSolicitarVagaSchema.safeParse({ ...base, ...parcial });
+  assert.ok(r({}).success && r({ horario_tipo: "a_combinar", horario_texto: "A combinar" }).success && r({ horario_tipo: "12x36", horario_texto: "Escala 12x36 — Turno Noturno" }).success);
+  assert.ok(r({ horario_tipo: "seg_sex", horario_texto: "Segunda a Sexta, 08h00 às 17h00 (intervalo de 1h)" }).success);
+  for (const parcial of [
+    { horario_tipo: "seg_sex", horario_texto: "Segunda a Sexta, — às —" }, { horario_tipo: "6x1", horario_texto: "Escala 6x1, 08h00 às —" },
+    { horario_tipo: "seg_qui_sex_reduzida", horario_texto: null }, { horario_tipo: "seg_sex_sab_reduzido", horario_texto: "" }, { horario_tipo: "turno_fixo", horario_texto: "Turno A" },
+  ]) {
+    const x = r(parcial);
+    assert.ok(!x.success && x.error.issues.some((i) => i.path[0] === "horario_texto"), JSON.stringify(parcial));
+  }
+  assert.equal(campos.rotuloHorarioTipo("seg_qui_sex_reduzida"), "Segunda a quinta-feira + sexta reduzida");
+  assert.equal(campos.rotuloHorarioTipo("a_combinar"), "A combinar");
+  assert.equal(campos.rotuloHorarioTipo(null), "");
+  assert.equal(campos.rotuloHorarioTipo("modelo_novo"), "modelo_novo");
+  const rota = fs.readFileSync("src/app/api/portal/solicitar-vaga/route.ts", "utf8");
+  assert.ok(rota.includes('detailRow("Horário", body.horario_texto || rotuloHorarioTipo(body.horario_tipo))') && !rota.includes("body.horario_texto || body.horario_tipo)"));
 });
 
 console.error = silencio;

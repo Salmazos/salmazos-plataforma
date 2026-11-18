@@ -4,7 +4,7 @@
 // versões PURAS (recebem os valores por parâmetro) que scripts/verificar-solicitacao-link.mts compara, em teste, com as do portal.
 // Só importa o módulo puro jornadaTrabalho (sem imports de servidor nem de tela), para rodar nesse script.
 
-import { gerarTextoJornada } from "@/lib/jornadaTrabalho";
+import { gerarTextoJornada, normalizarHora } from "@/lib/jornadaTrabalho";
 
 export const ESTADOS = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG",
@@ -76,10 +76,50 @@ export const HORARIO_VAZIO: HorarioForm = {
   tipo: "", entrada: "", saida: "", intervalo: "", intervaloInicio: "", intervaloFim: "", diurnoNoturno: "diurno", turnoNome: "", custom: "", sextaSaida: "", sabadoEntrada: "", sabadoSaida: "",
 };
 
+// Nunca devolve travessão: hora vazia vira "" (quem monta o texto só chega aqui depois de erroHorarioSolicitacao confirmar as horas).
 function fmtHora(t: string): string {
-  if (!t) return "—";
+  if (!t) return "";
   const [h, m] = t.split(":");
   return `${h}h${m}`;
+}
+
+export function rotuloHorarioTipo(tipo: string | null | undefined): string {
+  return HORARIO_TIPOS.find((t) => t.id === tipo)?.label ?? (tipo ?? "");
+}
+
+// Regra do horário, em UM lugar (link público, portal e servidor). Modelos que dependem de horas não podem sair sem elas: o texto
+// final nunca pode ter "—" no lugar de uma hora. 12x36 aceita sem horas (escala por turno), mas não com só uma delas.
+// Intervalo é sempre opcional. a_combinar não exige nada; personalizado exige o texto.
+const TIPOS_HORAS_OBRIGATORIAS: ReadonlySet<string> = new Set(["seg_sex", "seg_qui_sex_reduzida", "seg_sex_sab_reduzido", "6x1", "6x2", "turno_fixo"]);
+export const MSG_HORARIO_ENTRADA_SAIDA = "Informe a entrada e a saída do horário.";
+export const MSG_HORARIO_SEXTA = "Informe a entrada, a saída e a saída de sexta-feira do horário.";
+export const MSG_HORARIO_SABADO = "Informe a entrada, a saída e o horário de sábado do horário.";
+export const MSG_HORARIO_12X36 = "Informe a entrada e a saída do horário, ou deixe as duas em branco.";
+export const MSG_HORARIO_PERSONALIZADO = "Descreva o horário ou a jornada.";
+
+export function horarioExigeHoras(tipo: string | null | undefined): boolean {
+  return TIPOS_HORAS_OBRIGATORIAS.has(tipo ?? "");
+}
+
+export function erroHorarioSolicitacao(h: HorarioForm): string | null {
+  if (h.tipo === "personalizado") return h.custom.trim() ? null : MSG_HORARIO_PERSONALIZADO;
+  const entrada = normalizarHora(h.entrada), saida = normalizarHora(h.saida);
+  if (h.tipo === "12x36") return !entrada !== !saida ? MSG_HORARIO_12X36 : null;
+  if (!horarioExigeHoras(h.tipo)) return null;
+  if (!entrada || !saida) return MSG_HORARIO_ENTRADA_SAIDA;
+  if (h.tipo === "seg_qui_sex_reduzida" && !normalizarHora(h.sextaSaida)) return MSG_HORARIO_SEXTA;
+  if (h.tipo === "seg_sex_sab_reduzido" && (!normalizarHora(h.sabadoEntrada) || !normalizarHora(h.sabadoSaida))) return MSG_HORARIO_SABADO;
+  return null;
+}
+
+// Servidor: o corpo traz só tipo e texto gerado. Recusa travessão no lugar de hora e modelo com horas cujo texto não tem hora nenhuma.
+const HORA_NO_TEXTO = /\d{1,2}[h:]\d{2}/;
+export function erroHorarioGravado(tipo: string | null | undefined, texto: string | null | undefined): string | null {
+  const t = (texto ?? "").trim();
+  if (/—h|às —|— às/.test(t)) return MSG_HORARIO_ENTRADA_SAIDA;
+  if (horarioExigeHoras(tipo) && !HORA_NO_TEXTO.test(t)) return MSG_HORARIO_ENTRADA_SAIDA;
+  if (tipo === "personalizado" && !t) return MSG_HORARIO_PERSONALIZADO;
+  return null;
 }
 
 function sufixoIntervalo(h: HorarioForm): string {
@@ -94,6 +134,8 @@ function sufixoIntervalo(h: HorarioForm): string {
 
 export function gerarHorarioTexto(h: HorarioForm): string {
   if (!h.tipo) return "";
+  // Sem as horas do modelo não há texto: melhor vazio (a validação barra o envio) do que um travessão no lugar da hora.
+  if (h.tipo !== "personalizado" && erroHorarioSolicitacao(h)) return "";
   if (h.tipo === "a_combinar") return "A combinar";
   if (h.tipo === "personalizado") return h.custom.trim();
   const intervalo = sufixoIntervalo(h);
@@ -109,7 +151,7 @@ export function gerarHorarioTexto(h: HorarioForm): string {
   if (h.tipo === "6x2") return comIntervalo(`Escala 6x2, ${horas}`);
   if (h.tipo === "12x36") {
     const rotulo = h.diurnoNoturno === "diurno" ? "Turno Diurno" : "Turno Noturno";
-    const base = h.entrada || h.saida ? `Escala 12x36 — ${rotulo}, ${horas}` : `Escala 12x36 — ${rotulo}`;
+    const base = h.entrada && h.saida ? `Escala 12x36 — ${rotulo}, ${horas}` : `Escala 12x36 — ${rotulo}`;
     return comIntervalo(base);
   }
   return comIntervalo(`${h.turnoNome.trim() || "Turno Fixo"}, ${horas}`);

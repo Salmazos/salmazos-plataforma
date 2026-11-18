@@ -13,7 +13,7 @@ import { montarCorpoSolicitacaoPortal, resumoDaSolicitacaoPortal } from "@/lib/r
 import { SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, detectarModoSalario, extrairSalarioHora, formatarSalarioHora, type SalarioModo } from "@/lib/constants";
 // Listas de chips, estados e horários vêm de UM só lugar, compartilhado com o link público de solicitação de vaga.
 import {
-  BEN_ALIMENTACAO, BEN_QUALIDADE, BEN_SAUDE, BEN_TRANSPORTE, CONDICOES_SIMPLES, CONDICOES_SUPERIOR, CONDICOES_TECNICO, ESTADOS,
+  BEN_ALIMENTACAO, BEN_QUALIDADE, BEN_SAUDE, BEN_TRANSPORTE, CONDICOES_SIMPLES, CONDICOES_SUPERIOR, CONDICOES_TECNICO, ESTADOS, erroHorarioSolicitacao, type HorarioForm,
   HORARIO_TIPOS, REQ_CNH, REQ_COM_CONDICAO_SIMPLES, REQ_COM_CURSO, REQ_CONHECIMENTOS, REQ_ESCOLARIDADE, REQ_EXPERIENCIA, REQ_NR,
 } from "@/lib/solicitacaoVagaCampos";
 
@@ -120,6 +120,7 @@ export default function SolicitarVagaPage() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+  const [erroHorario, setErroHorario] = useState("");
   // Conferência antes de enviar: o estado do formulário continua todo aqui, só a tela muda.
   const [revisando, setRevisando] = useState(false);
   const [perfil, setPerfil] = useState<PerfilPortal>(PERFIL_VAZIO);
@@ -291,8 +292,9 @@ export default function SolicitarVagaPage() {
     setBenInput("");
   };
 
+  // Nunca devolve travessão: o texto só é montado com as horas completas (erroHorarioSolicitacao barra o envio antes).
   const fmtTime = (t: string) => {
-    if (!t) return "—";
+    if (!t) return "";
     const [h, m] = t.split(":");
     return `${h}h${m}`;
   };
@@ -307,8 +309,14 @@ export default function SolicitarVagaPage() {
     return `intervalo de ${horIntervalo}`;
   };
 
+  const horarioAtual = (): HorarioForm => ({
+    tipo: horarioTipo, entrada: horEntrada, saida: horSaida, intervalo: horIntervalo, intervaloInicio: horIntervaloInicio, intervaloFim: horIntervaloFim,
+    diurnoNoturno: hor1236, turnoNome: horTurnoNome, custom: horCustom, sextaSaida: horSextaSaida, sabadoEntrada: horSabadoEntrada, sabadoSaida: horSabadoSaida,
+  });
+
   const gerarHorarioTexto = (): string => {
     if (!horarioTipo) return "";
+    if (horarioTipo !== "personalizado" && erroHorarioSolicitacao(horarioAtual())) return "";
     if (horarioTipo === "a_combinar") return "A combinar";
     if (horarioTipo === "personalizado") return horCustom.trim();
     const times = `${fmtTime(horEntrada)} às ${fmtTime(horSaida)}`;
@@ -322,7 +330,7 @@ export default function SolicitarVagaPage() {
     if (horarioTipo === "6x2") return comIntervalo(`Escala 6x2, ${times}`);
     if (horarioTipo === "12x36") {
       const label = hor1236 === "diurno" ? "Turno Diurno" : "Turno Noturno";
-      const base = horEntrada || horSaida ? `Escala 12x36 — ${label}, ${times}` : `Escala 12x36 — ${label}`;
+      const base = horEntrada && horSaida ? `Escala 12x36 — ${label}, ${times}` : `Escala 12x36 — ${label}`;
       return comIntervalo(base);
     }
     if (horarioTipo === "turno_fixo") {
@@ -366,6 +374,8 @@ export default function SolicitarVagaPage() {
     return result;
   };
 
+  useEffect(() => { setErroHorario(""); }, [horarioTipo, horEntrada, horSaida, horSextaSaida, horSabadoEntrada, horSabadoSaida, horCustom]);
+
   const horarioTexto = useMemo(gerarHorarioTexto, [horarioTipo, horEntrada, horSaida, horIntervalo, horIntervaloInicio, horIntervaloFim, hor1236, horTurnoNome, horCustom, horSextaSaida, horSabadoEntrada, horSabadoSaida]);
 
   const montarHorarioPadrao = () => horarioTipo ? {
@@ -408,6 +418,15 @@ export default function SolicitarVagaPage() {
     if (!tipoServico) { setError("Tipo de serviço é obrigatório."); return; }
     if (!cidade.trim()) { setError("Cidade é obrigatória."); return; }
     if (!estado) { setError("Estado é obrigatório."); return; }
+    const erroDoHorario = erroHorarioSolicitacao(horarioAtual());
+    if (erroDoHorario) {
+      // Template com horário padrão deixa o bloco recolhido: abre para o cliente completar (não trava a tela, só mostra o que falta).
+      setUsarHorarioPadrao(false);
+      setErroHorario(erroDoHorario);
+      setError(erroDoHorario);
+      setTimeout(() => document.getElementById("campo-horario")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
+      return;
+    }
     if (!principaisAtividades.trim()) {
       setError("Informe as principais atividades do cargo.");
       document.getElementById("campo-principais_atividades")?.focus();
@@ -818,7 +837,7 @@ export default function SolicitarVagaPage() {
             </p>
           )}
 
-          <div className="flex flex-wrap gap-2">
+          <div id="campo-horario" className="flex flex-wrap gap-2">
             {HORARIO_TIPOS.map((h) => (
               <button key={h.id} type="button" onClick={() => setHorarioTipo(horarioTipo === h.id ? "" : h.id)}
                 className="text-xs px-3 py-1.5 rounded-full font-medium transition-all"
@@ -827,6 +846,8 @@ export default function SolicitarVagaPage() {
               </button>
             ))}
           </div>
+
+          {erroHorario && <p role="alert" className="text-xs font-medium text-red-600">{erroHorario}</p>}
 
           {horarioTipo === "seg_sex" && (
             <div className="flex items-start gap-3 flex-wrap">
