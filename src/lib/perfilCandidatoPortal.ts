@@ -1,4 +1,4 @@
-import { CATEGORIAS_HABILITACAO, REQ_CNH, type PerfilExtra } from "./solicitacaoVagaCampos";
+import { CATEGORIAS_HABILITACAO, REQ_CNH, erroExperienciaMinima, experienciaMinimaGravada, type PerfilExtra } from "./solicitacaoVagaCampos";
 
 // "Perfil do candidato" da solicitação de vaga do portal: estado do formulário, validação, conversão para perfil_extra (a mesma coluna jsonb e as
 // mesmas chaves do link público, mais idade_min e idade_max) e leitura para o resumo e o cartão do painel. Funções puras, sem I/O.
@@ -15,11 +15,15 @@ export interface PerfilPortal {
   habilitacaoCategoria: string;
   veiculoProprio: SimNaoPerfil;
   localTrabalho: string;
+  // Tempo de experiência: opção da lista (OPCOES_EXPERIENCIA_MINIMA; "" = não escolheu) e o texto do "Outro".
+  experienciaOpcao: string;
+  experienciaOutro: string;
 }
 
-// Mesmos padrões do link: Indiferente, PCD Não, CNH Não, veículo Não.
+// Mesmos padrões do link: Indiferente, PCD Não, CNH Não, veículo Não, experiência sem escolha.
 export const PERFIL_VAZIO: PerfilPortal = {
   sexo: "indiferente", idadeMin: "", idadeMax: "", pcd: "nao", habilitacao: "nao", habilitacaoCategoria: "", veiculoProprio: "nao", localTrabalho: "",
+  experienciaOpcao: "", experienciaOutro: "",
 };
 
 export const IDADE_MINIMA_PERMITIDA = 14;
@@ -45,6 +49,8 @@ export function validarPerfilPortal(p: PerfilPortal): Record<string, string> {
   if (!erros.idade_min && !erros.idade_max && min !== null && max !== null && min > max) erros.idade_max = "A idade máxima não pode ser menor que a mínima.";
   if (p.habilitacao === "sim" && !(CATEGORIAS_HABILITACAO as readonly string[]).includes(p.habilitacaoCategoria)) erros.habilitacao_categoria = "Escolha a categoria da habilitação.";
   if (p.localTrabalho.length > LIMITE_LOCAL_TRABALHO) erros.local_trabalho = `Use no máximo ${LIMITE_LOCAL_TRABALHO} caracteres.`;
+  const erroExperiencia = erroExperienciaMinima(p.experienciaOpcao, p.experienciaOutro);
+  if (erroExperiencia) erros.experiencia_minima = erroExperiencia;
   return erros;
 }
 
@@ -56,10 +62,13 @@ export interface PerfilExtraPortal {
   idade_min: number | null;
   idade_max: number | null;
   local_trabalho: string | null;
+  // Só existe quando há exigência ("Sem exigência" e vazio não gravam a chave).
+  experiencia_minima?: string;
 }
 
 // O que vai no corpo do POST (e é gravado em solicitacoes_vagas.perfil_extra). Categoria só vale com "Habilitação: Sim".
 export function perfilExtraDoFormulario(p: PerfilPortal): PerfilExtraPortal {
+  const experiencia = experienciaMinimaGravada(p.experienciaOpcao, p.experienciaOutro);
   return {
     sexo: p.sexo,
     pcd: p.pcd,
@@ -68,6 +77,7 @@ export function perfilExtraDoFormulario(p: PerfilPortal): PerfilExtraPortal {
     idade_min: inteiroOuNulo(p.idadeMin),
     idade_max: inteiroOuNulo(p.idadeMax),
     local_trabalho: p.localTrabalho.trim() || null,
+    ...(experiencia ? { experiencia_minima: experiencia } : {}),
   };
 }
 
@@ -110,6 +120,7 @@ export function linhasDoPerfilExtra(p: PerfilExtra | null | undefined): LinhaPer
   return [
     { rotulo: "Sexo", valor: e.sexo ? ROTULO_SEXO[e.sexo] ?? e.sexo : null },
     { rotulo: "Idade", valor: idadeLegivel(e) },
+    { rotulo: "Tempo de experiência", valor: e.experiencia_minima?.trim() || null },
     { rotulo: "PCD", valor: sim(e.pcd) },
     { rotulo: "Habilitação", valor: e.habilitacao_categoria ? `Categoria ${e.habilitacao_categoria}` : null },
     { rotulo: "Veículo próprio", valor: sim(e.veiculo_proprio) },

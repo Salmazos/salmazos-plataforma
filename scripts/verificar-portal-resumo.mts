@@ -222,4 +222,27 @@ caso("acessibilidade: um único h1 na tela do resumo; foco no título ao abrir e
   assert.ok(pagina.includes("ref={botaoRevisarRef}") && pagina.includes("Revisar solicitação →"));
 });
 
+caso("tempo de experiência: aparece em 'Perfil do candidato' do resumo só quando há exigência (lista ou 'Outro'); 'Sem exigência', vazio e 'Outro' vazio somem; vale nos três tipos", () => {
+  for (const tipoServico of ["recrutamento_selecao", "mao_obra_temporaria", "terceirizacao"]) {
+    assert.equal(valor(entradaResumo({ tipoServico, perfil: { ...PERFIL_VAZIO, experienciaOpcao: "6 meses" } }), "Tempo de experiência"), "6 meses", tipoServico);
+    assert.equal(valor(entradaResumo({ tipoServico, perfil: { ...PERFIL_VAZIO, experienciaOpcao: "Outro", experienciaOutro: " mínimo 1 ano em câmara fria " } }), "Tempo de experiência"), "mínimo 1 ano em câmara fria", tipoServico);
+  }
+  for (const perfil of [PERFIL_VAZIO, { ...PERFIL_VAZIO, experienciaOpcao: "Sem exigência" }, { ...PERFIL_VAZIO, experienciaOpcao: "Outro", experienciaOutro: "  " }]) {
+    assert.equal(valor(entradaResumo({ perfil }), "Tempo de experiência"), undefined, JSON.stringify(perfil));
+  }
+  const secao = resumoDaSolicitacaoPortal(entradaResumo({ perfil: { ...PERFIL_VAZIO, experienciaOpcao: "2 anos" } })).find((s) => s.titulo === "Perfil do candidato")!;
+  assert.deepEqual(secao.linhas.map((l) => l.rotulo), ["Sexo", "Tempo de experiência", "PCD", "Habilitação", "Veículo próprio"], "logo depois de Idade (sem idade informada, depois de Sexo)");
+  assert.ok(secao.linhas.some((l) => l.rotulo === "Tempo de experiência" && l.valor === "2 anos"));
+});
+caso("corpo do POST com experiência: perfil_extra leva experiencia_minima só quando há exigência; as demais chaves do corpo continuam iguais às de antes", () => {
+  const e = estadoBase();
+  const comExp = corpoNovo(e, { ...PERFIL_VAZIO, experienciaOpcao: "1 ano" }) as { perfil_extra: Record<string, unknown> } & Record<string, unknown>;
+  assert.equal(comExp.perfil_extra.experiencia_minima, "1 ano");
+  const { perfil_extra: _pe, ...resto } = comExp;
+  assert.deepEqual(resto, corpoDeAntes(e));
+  const semExp = corpoNovo(e, { ...PERFIL_VAZIO, experienciaOpcao: "Sem exigência" }) as { perfil_extra: Record<string, unknown> };
+  assert.equal("experiencia_minima" in semExp.perfil_extra, false);
+  assert.deepEqual(semExp.perfil_extra, perfilExtraDoFormulario(PERFIL_VAZIO));
+});
+
 console.log(`\n${total} casos OK`);

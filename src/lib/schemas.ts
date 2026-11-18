@@ -4,7 +4,7 @@ import { erroCentroCusto, erroEscala, erroHorario, erroSalarioHora, erroSalarioM
 import { conteudoRsSchema } from "@/lib/propostaModelos";
 import { validarCnpj, validarCpf } from "@/lib/documentoBr";
 import { UNIDADES_FATURAMENTO } from "@/lib/unidadeFaturamento";
-import { ESTADOS, CATEGORIAS_HABILITACAO } from "@/lib/solicitacaoVagaCampos";
+import { ESTADOS, CATEGORIAS_HABILITACAO, LIMITE_EXPERIENCIA_MINIMA, experienciaMinimaDoCorpo } from "@/lib/solicitacaoVagaCampos";
 import { VALIDADES_LINK_DIAS, VALIDADE_LINK_PADRAO_DIAS } from "@/lib/solicitacaoVagaLink";
 import { salarioPublicoValido } from "@/lib/solicitacaoVagaPublicaForm";
 import { TURNOS_FUNCIONARIO, SEGMENTOS_CLIENTE, TIPOS_SERVICO } from "@/lib/constants";
@@ -963,11 +963,17 @@ export const perfilExtraPortalSchema = z
     idade_min: z.number("Idade mínima inválida.").int("Idade mínima inválida.").min(14, "A idade mínima é 14 anos.").max(90, "A idade máxima permitida é 90 anos.").optional().nullable(),
     idade_max: z.number("Idade máxima inválida.").int("Idade máxima inválida.").min(14, "A idade mínima é 14 anos.").max(90, "A idade máxima permitida é 90 anos.").optional().nullable(),
     local_trabalho: z.string().trim().max(300, "Use no máximo 300 caracteres.").optional().nullable().transform((v) => v || null),
+    // Tempo de experiência (uso interno): texto de até 80 caracteres. Vazio ou "Sem exigência" = a chave nem existe no resultado (ver transform abaixo).
+    experiencia_minima: z.string().trim().max(LIMITE_EXPERIENCIA_MINIMA, `Use no máximo ${LIMITE_EXPERIENCIA_MINIMA} caracteres.`).optional().nullable(),
   })
   .superRefine((d, ctx) => {
     if (typeof d.idade_min === "number" && typeof d.idade_max === "number" && d.idade_min > d.idade_max) {
       ctx.addIssue({ code: "custom", path: ["idade_max"], message: "A idade máxima não pode ser menor que a mínima." });
     }
+  })
+  .transform(({ experiencia_minima, ...resto }): typeof resto & { experiencia_minima?: string } => {
+    const experiencia = experienciaMinimaDoCorpo(experiencia_minima);
+    return experiencia ? { ...resto, experiencia_minima: experiencia } : resto;
   });
 
 export const portalSolicitarVagaSchema = z.object({
@@ -1060,6 +1066,8 @@ export const publicoSolicitarVagaSchema = z
     observacoes: textoOpcionalPublico(2000),
     sexo: z.enum(["masc", "fem", "indiferente"]).default("indiferente"),
     idade: textoOpcionalPublico(60),
+    // Tempo de experiência (uso interno), mesma regra do portal: a rota só grava a chave quando há exigência.
+    experiencia_minima: textoOpcionalPublico(LIMITE_EXPERIENCIA_MINIMA),
     pcd: z.enum(["sim", "nao"]).default("nao"),
     habilitacao_categoria: z
       .union([z.enum(CATEGORIAS_HABILITACAO), z.literal("")])

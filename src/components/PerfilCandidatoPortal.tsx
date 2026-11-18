@@ -1,7 +1,9 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { CATEGORIAS_HABILITACAO } from "@/lib/solicitacaoVagaCampos";
+import {
+  CATEGORIAS_HABILITACAO, EXPERIENCIA_OUTRO, LIMITE_EXPERIENCIA_MINIMA, OPCOES_EXPERIENCIA_MINIMA, TEXTO_AJUDA_EXPERIENCIA_MINIMA,
+} from "@/lib/solicitacaoVagaCampos";
 import {
   IDADE_MAXIMA_PERMITIDA, IDADE_MINIMA_PERMITIDA, LIMITE_LOCAL_TRABALHO, type PerfilPortal, type SexoPerfil, type SimNaoPerfil,
 } from "@/lib/perfilCandidatoPortal";
@@ -105,6 +107,37 @@ export default function PerfilCandidatoPortal({
           />
           {erros.idade_max && <p id="campo-idade_max-erro" role="alert" className="text-xs text-red-600 mt-1">{erros.idade_max}</p>}
         </div>
+      </div>
+
+      <div>
+        <label htmlFor="campo-experiencia_minima" style={labelStyle}>Tempo de experiência</label>
+        <select
+          id="campo-experiencia_minima"
+          value={valor.experienciaOpcao}
+          onChange={(e) => onChange({ ...valor, experienciaOpcao: e.target.value, experienciaOutro: e.target.value === EXPERIENCIA_OUTRO ? valor.experienciaOutro : "" })}
+          aria-invalid={erros.experiencia_minima ? true : undefined}
+          aria-describedby="campo-experiencia_minima-ajuda"
+          style={erros.experiencia_minima ? inputComErro : inputStyle}
+        >
+          <option value="">Selecione</option>
+          {OPCOES_EXPERIENCIA_MINIMA.map((o) => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </select>
+        {valor.experienciaOpcao === EXPERIENCIA_OUTRO && (
+          <input
+            id="campo-experiencia_outro"
+            value={valor.experienciaOutro}
+            onChange={(e) => atualizar("experienciaOutro", e.target.value)}
+            maxLength={LIMITE_EXPERIENCIA_MINIMA}
+            placeholder="Ex.: mínimo 6 meses na função"
+            aria-label="Tempo de experiência (outro)"
+            aria-invalid={erros.experiencia_minima ? true : undefined}
+            style={{ ...(erros.experiencia_minima ? inputComErro : inputStyle), marginTop: 8 }}
+          />
+        )}
+        <p id="campo-experiencia_minima-ajuda" className="text-xs text-gray-400 mt-1">{TEXTO_AJUDA_EXPERIENCIA_MINIMA}</p>
+        {erros.experiencia_minima && <p role="alert" className="text-xs text-red-600 mt-1">{erros.experiencia_minima}</p>}
       </div>
 
       <Opcoes id="campo-pcd" rotulo="Vaga para pessoa com deficiência (PCD)?" opcoes={SIM_NAO} valor={valor.pcd} onChange={(v) => atualizar("pcd", v)} />

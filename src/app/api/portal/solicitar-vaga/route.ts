@@ -6,6 +6,7 @@ import { sendEmail } from "@/lib/sendEmail";
 import { parseBody, portalSolicitarVagaSchema } from "@/lib/schemas";
 import { resolverUnidadeCliente } from "@/lib/unidadeAuth";
 import { resolverAvisoVaga, gravarSinoAvisoVaga } from "@/lib/avisosVagas";
+import { escaparHtml } from "@/lib/escaparHtml";
 
 const TIPO_LABEL: Record<string, string> = {
   recrutamento_selecao: "Recrutamento e Seleção",
@@ -97,7 +98,8 @@ export async function POST(request: NextRequest) {
         principais_atividades: body.principais_atividades || null,
         observacoes: body.observacoes || null,
         confidencial: body.confidencial === true,
-        // Perfil do candidato (opcional): sem ele a linha é gravada como sempre foi. Vem do corpo já validado.
+        // Perfil do candidato (opcional): sem ele a linha é gravada como sempre foi. Vem do corpo já validado; é ele que leva
+        // experiencia_minima (o schema só deixa a chave quando há exigência).
         ...(parsed.data.perfil_extra ? { perfil_extra: parsed.data.perfil_extra } : {}),
       })
       .select("id")
@@ -162,6 +164,9 @@ export async function POST(request: NextRequest) {
         </div>`
       : "";
 
+    // Texto digitado pelo cliente em "Outro": escapado (as demais linhas deste e-mail seguem como estavam). Só aparece quando preenchido.
+    const experienciaMinimaHtml = parsed.data.perfil_extra?.experiencia_minima ? escaparHtml(parsed.data.perfil_extra.experiencia_minima) : null;
+
     const previsaoFormatted = body.previsao_inicio
       ? body.previsao_inicio.split("-").reverse().join("/")
       : null;
@@ -189,6 +194,7 @@ export async function POST(request: NextRequest) {
       ${detailRow("Salário", body.salario)}
       ${detailRow("Adicionais Salariais", body.adicionais_salariais)}
       ${detailRow("Horário", body.horario_texto || body.horario_tipo)}
+      ${detailRow("Tempo de experiência", experienciaMinimaHtml)}
     </table>
     ${requisitosHtml}
     ${beneficiosHtml}

@@ -171,8 +171,39 @@ export function gerarBeneficiosChips(sel: BeneficiosSel): Record<string, boolean
 
 // ── O que vira público na vaga ───────────────────────────────────────────────
 
+// "Tempo de experiência" do perfil (perfil_extra.experiencia_minima): lista única compartilhada pelo portal e pelo link. Uso interno, nunca publicado.
+// "Sem exigência" e vazio não gravam a chave; "Outro" grava o texto digitado (até 80 caracteres); as demais opções gravam o próprio rótulo.
+export const EXPERIENCIA_SEM_EXIGENCIA = "Sem exigência";
+export const EXPERIENCIA_OUTRO = "Outro";
+export const OPCOES_EXPERIENCIA_MINIMA = [EXPERIENCIA_SEM_EXIGENCIA, "3 meses", "6 meses", "1 ano", "2 anos", "3 anos ou mais", EXPERIENCIA_OUTRO] as const;
+export const LIMITE_EXPERIENCIA_MINIMA = 80;
+export const TEXTO_AJUDA_EXPERIENCIA_MINIMA =
+  "Tempo mínimo de experiência na função. Ajuda a Salmazos a buscar candidatos. Fica só para uso interno e não é publicado na vaga.";
+
+// Valor a gravar em perfil_extra.experiencia_minima, ou null (chave ausente) quando não há exigência. Escolher "Outro" e não digitar nada também
+// resulta em null aqui; a tela avisa antes de enviar (erroExperienciaMinima).
+export function experienciaMinimaGravada(opcao: string, outro: string): string | null {
+  if (!opcao || opcao === EXPERIENCIA_SEM_EXIGENCIA) return null;
+  if (opcao === EXPERIENCIA_OUTRO) return outro.trim() || null;
+  return (OPCOES_EXPERIENCIA_MINIMA as readonly string[]).includes(opcao) ? opcao : null;
+}
+
+// Mesma regra para o que chega no corpo de uma rota: vazio ou "Sem exigência" = sem chave.
+export function experienciaMinimaDoCorpo(valor: string | null | undefined): string | null {
+  const v = valor?.trim();
+  return v && v !== EXPERIENCIA_SEM_EXIGENCIA ? v : null;
+}
+
+export function erroExperienciaMinima(opcao: string, outro: string): string | null {
+  if (opcao === EXPERIENCIA_OUTRO && !outro.trim()) return "Escreva o tempo de experiência ou escolha outra opção.";
+  if (outro.length > LIMITE_EXPERIENCIA_MINIMA) return `Use no máximo ${LIMITE_EXPERIENCIA_MINIMA} caracteres.`;
+  return null;
+}
+
 export interface PerfilExtra {
   sexo?: string | null;
+  // Tempo mínimo de experiência na função (texto: rótulo da lista ou o que foi digitado em "Outro"). Só interno.
+  experiencia_minima?: string | null;
   // "idade" é o texto livre do link; idade_min e idade_max são a faixa numérica do portal.
   idade?: string | null;
   idade_min?: number | null;

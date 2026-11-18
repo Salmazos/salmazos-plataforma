@@ -23,6 +23,8 @@ export interface PerfilExtraLink {
   idade?: string | null;
   idade_min?: number | null;
   idade_max?: number | null;
+  // Tempo mínimo de experiência (só existe quando o cliente indicou uma exigência).
+  experiencia_minima?: string | null;
   pcd?: string | null;
   habilitacao_categoria?: string | null;
   veiculo_proprio?: string | null;
@@ -92,7 +94,7 @@ export function BlocoPerfilInformado({ perfil }: { perfil: { rotulo: string; val
           </div>
         ))}
       </dl>
-      <p className="text-[11px] text-amber-800">Ao criar a vaga, só habilitação e veículo próprio entram nos requisitos. Sexo e idade nunca são publicados.</p>
+      <p className="text-[11px] text-amber-800">Ao criar a vaga, só habilitação e veículo próprio entram nos requisitos. Sexo, idade e tempo de experiência nunca são publicados.</p>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import {
-  CATEGORIAS_HABILITACAO, REQ_COM_CONDICAO_SIMPLES, REQ_COM_CURSO, REQ_CONHECIMENTOS, REQ_ESCOLARIDADE, REQ_EXPERIENCIA, REQ_NR,
+  CATEGORIAS_HABILITACAO, EXPERIENCIA_OUTRO, LIMITE_EXPERIENCIA_MINIMA, OPCOES_EXPERIENCIA_MINIMA, REQ_COM_CONDICAO_SIMPLES, REQ_COM_CURSO,
+  REQ_CONHECIMENTOS, REQ_ESCOLARIDADE, REQ_EXPERIENCIA, REQ_NR, TEXTO_AJUDA_EXPERIENCIA_MINIMA,
   gerarRequisitosTexto,
 } from "@/lib/solicitacaoVagaCampos";
 import ChipGroupPublico from "./ChipGroupPublico";
@@ -50,6 +51,29 @@ export default function EtapaPerfil({ form, atualizar, erros }: PropsEtapa) {
           maxLength={60}
           erro={erros.idade}
         />
+        <CampoSelecao
+          id="campo-experiencia_minima"
+          rotulo="Tempo de experiência"
+          valor={form.experiencia_opcao}
+          onChange={(v) => {
+            atualizar("experiencia_opcao", v);
+            if (v !== EXPERIENCIA_OUTRO) atualizar("experiencia_outro", "");
+          }}
+          opcoes={OPCOES_EXPERIENCIA_MINIMA.map((o) => ({ id: o, label: o }))}
+          ajuda={TEXTO_AJUDA_EXPERIENCIA_MINIMA}
+          erro={form.experiencia_opcao === EXPERIENCIA_OUTRO ? undefined : erros.experiencia_minima}
+        />
+        {form.experiencia_opcao === EXPERIENCIA_OUTRO && (
+          <CampoTexto
+            id="campo-experiencia_outro"
+            rotulo="Qual o tempo de experiência?"
+            valor={form.experiencia_outro}
+            onChange={(v) => atualizar("experiencia_outro", v)}
+            placeholder="Ex.: mínimo 6 meses na função"
+            maxLength={LIMITE_EXPERIENCIA_MINIMA}
+            erro={erros.experiencia_minima}
+          />
+        )}
         <Segmentado id="campo-pcd" rotulo="Vaga para pessoa com deficiência (PCD)?" opcoes={SIM_NAO} valor={form.pcd} onChange={(v) => atualizar("pcd", v)} />
         <Segmentado
           id="campo-habilitacao"

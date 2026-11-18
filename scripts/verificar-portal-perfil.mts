@@ -5,7 +5,10 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
 import { parseBody, portalSolicitarVagaSchema } from "../src/lib/schemas";
-import { CATEGORIAS_HABILITACAO, REQ_CNH, requisitosPublicaveis } from "../src/lib/solicitacaoVagaCampos";
+import {
+  CATEGORIAS_HABILITACAO, EXPERIENCIA_OUTRO, EXPERIENCIA_SEM_EXIGENCIA, LIMITE_EXPERIENCIA_MINIMA, OPCOES_EXPERIENCIA_MINIMA, REQ_CNH, TEXTO_AJUDA_EXPERIENCIA_MINIMA,
+  requisitosPublicaveis,
+} from "../src/lib/solicitacaoVagaCampos";
 import {
   PERFIL_VAZIO, converterChipsDeTemplate, idadeLegivel, linhasDoPerfilExtra, perfilExtraDoFormulario, validarPerfilPortal, type PerfilPortal,
 } from "../src/lib/perfilCandidatoPortal";
@@ -23,7 +26,7 @@ const perfil = (extra: Partial<PerfilPortal> = {}): PerfilPortal => ({ ...PERFIL
 
 // ── Validação do formulário (as mesmas regras do servidor) ───────────────────
 caso("padrões do link: Indiferente, PCD Não, CNH Não, veículo Não, sem idade nem local; perfil vazio é válido", () => {
-  assert.deepEqual(PERFIL_VAZIO, { sexo: "indiferente", idadeMin: "", idadeMax: "", pcd: "nao", habilitacao: "nao", habilitacaoCategoria: "", veiculoProprio: "nao", localTrabalho: "" });
+  assert.deepEqual(PERFIL_VAZIO, { sexo: "indiferente", idadeMin: "", idadeMax: "", pcd: "nao", habilitacao: "nao", habilitacaoCategoria: "", veiculoProprio: "nao", localTrabalho: "", experienciaOpcao: "", experienciaOutro: "" });
   assert.deepEqual(validarPerfilPortal(PERFIL_VAZIO), {});
 });
 caso("idade: inteiros de 14 a 90; fora disso, decimal ou texto dão erro no campo certo", () => {
@@ -169,6 +172,91 @@ caso("vaga criada: no portal vale a mesma conversão do link ('Habilitação cat
   const rota = lerFonte("src/app/api/vagas/from-solicitacao/route.ts");
   assert.ok(rota.includes('sol.origem === "link_publico" || sol.perfil_extra ? requisitosPublicaveis(sol.requisitos, sol.perfil_extra) : sol.requisitos ?? null'), "portal sem perfil_extra segue como antes");
   assert.ok(!/perfil_extra\.(sexo|idade|pcd|local)/.test(rota));
+});
+
+// ── Tempo de experiência (perfil_extra.experiencia_minima; uso interno, sem coluna nova) ─────────────────────────────
+caso("experiência: lista única de 7 opções, limite 80 e texto de ajuda do pedido", () => {
+  assert.deepEqual([...OPCOES_EXPERIENCIA_MINIMA], ["Sem exigência", "3 meses", "6 meses", "1 ano", "2 anos", "3 anos ou mais", "Outro"]);
+  assert.equal(LIMITE_EXPERIENCIA_MINIMA, 80);
+  assert.equal(TEXTO_AJUDA_EXPERIENCIA_MINIMA, "Tempo mínimo de experiência na função. Ajuda a Salmazos a buscar candidatos. Fica só para uso interno e não é publicado na vaga.");
+});
+caso("experiência no formulário: valor da lista grava o rótulo; 'Outro' grava o texto digitado (aparado); 'Sem exigência', vazio e 'Outro' vazio NÃO gravam a chave", () => {
+  for (const o of OPCOES_EXPERIENCIA_MINIMA.filter((x) => x !== EXPERIENCIA_SEM_EXIGENCIA && x !== EXPERIENCIA_OUTRO)) {
+    assert.equal(perfilExtraDoFormulario(perfil({ experienciaOpcao: o })).experiencia_minima, o, o);
+    assert.equal(perfilExtraDoFormulario(perfil({ experienciaOpcao: o, experienciaOutro: "lixo" })).experiencia_minima, o, "o texto do Outro não vaza para as demais opções");
+  }
+  assert.equal(perfilExtraDoFormulario(perfil({ experienciaOpcao: EXPERIENCIA_OUTRO, experienciaOutro: "  mínimo 6 meses na função  " })).experiencia_minima, "mínimo 6 meses na função");
+  for (const p of [perfil({ experienciaOpcao: EXPERIENCIA_SEM_EXIGENCIA, experienciaOutro: "x" }), perfil({ experienciaOpcao: "" }), perfil({ experienciaOpcao: EXPERIENCIA_OUTRO, experienciaOutro: "   " }), perfil({ experienciaOpcao: "10 anos" })]) {
+    assert.equal("experiencia_minima" in perfilExtraDoFormulario(p), false, JSON.stringify([p.experienciaOpcao, p.experienciaOutro]));
+  }
+  assert.deepEqual(Object.keys(perfilExtraDoFormulario(PERFIL_VAZIO)).sort(), ["habilitacao_categoria", "idade_max", "idade_min", "local_trabalho", "pcd", "sexo", "veiculo_proprio"], "perfil sem experiência: as mesmas chaves de antes");
+});
+caso("experiência, validação da tela: 'Outro' vazio pede o texto; 80 caracteres passam; 'Sem exigência' e as opções da lista passam", () => {
+  assert.deepEqual(validarPerfilPortal(perfil({ experienciaOpcao: EXPERIENCIA_OUTRO })), { experiencia_minima: "Escreva o tempo de experiência ou escolha outra opção." });
+  assert.ok("experiencia_minima" in validarPerfilPortal(perfil({ experienciaOpcao: EXPERIENCIA_OUTRO, experienciaOutro: "   " })));
+  assert.deepEqual(validarPerfilPortal(perfil({ experienciaOpcao: EXPERIENCIA_OUTRO, experienciaOutro: "x".repeat(80) })), {});
+  assert.ok("experiencia_minima" in validarPerfilPortal(perfil({ experienciaOpcao: EXPERIENCIA_OUTRO, experienciaOutro: "x".repeat(81) })));
+  for (const o of OPCOES_EXPERIENCIA_MINIMA.filter((x) => x !== EXPERIENCIA_OUTRO)) assert.deepEqual(validarPerfilPortal(perfil({ experienciaOpcao: o })), {}, o);
+});
+caso("experiência, schema da rota do portal: valor da lista e 'Outro' com texto são aceitos (aparados); acima de 80 é recusado; vazio, espaços, nulo e 'Sem exigência' não deixam a chave", () => {
+  for (const o of OPCOES_EXPERIENCIA_MINIMA.filter((x) => x !== EXPERIENCIA_SEM_EXIGENCIA)) {
+    const r = valida({ experiencia_minima: o });
+    assert.ok(r.success, o);
+    assert.equal((r.data.perfil_extra as { experiencia_minima?: string }).experiencia_minima, o);
+  }
+  const outro = valida({ experiencia_minima: "  mínimo 6 meses na função  " });
+  assert.ok(outro.success);
+  assert.equal((outro.data.perfil_extra as { experiencia_minima?: string }).experiencia_minima, "mínimo 6 meses na função");
+  assert.ok(valida({ experiencia_minima: "x".repeat(80) }).success);
+  const longo = valida({ experiencia_minima: "x".repeat(81) });
+  assert.ok(!longo.success && /80 caracteres/.test(longo.error), "acima de 80 é recusado com mensagem");
+  for (const vazio of ["", "   ", null, undefined, EXPERIENCIA_SEM_EXIGENCIA, ` ${EXPERIENCIA_SEM_EXIGENCIA} `]) {
+    const r = valida({ sexo: "fem", experiencia_minima: vazio });
+    assert.ok(r.success, String(vazio));
+    assert.equal("experiencia_minima" in (r.data.perfil_extra as object), false, `sem chave para ${JSON.stringify(vazio)}`);
+  }
+  assert.equal(valida({ experiencia_minima: 5 }).success, false, "número não é texto");
+  // Solicitação antiga / corpo sem a chave: o perfil_extra é exatamente o de antes.
+  const antigo = valida({ sexo: "masc", pcd: "sim", habilitacao_categoria: "E", veiculo_proprio: "sim", idade_min: 18, idade_max: 50, local_trabalho: "Fábrica 2" });
+  assert.ok(antigo.success);
+  assert.deepEqual(antigo.data.perfil_extra, { sexo: "masc", pcd: "sim", habilitacao_categoria: "E", veiculo_proprio: "sim", idade_min: 18, idade_max: 50, local_trabalho: "Fábrica 2" });
+});
+caso("experiência, tela do portal: select com as 7 opções e a ajuda; o campo do 'Outro' só aparece com 'Outro' (máx. 80); erro no campo", () => {
+  const tela = (v: PerfilPortal, erros: Record<string, string> = {}) => renderToStaticMarkup(createElement(PerfilCandidatoPortal, { valor: v, onChange: () => undefined, erros }));
+  const base = tela(PERFIL_VAZIO);
+  assert.ok(base.includes("Tempo de experiência") && base.includes(TEXTO_AJUDA_EXPERIENCIA_MINIMA));
+  for (const o of OPCOES_EXPERIENCIA_MINIMA) assert.ok(base.includes(`<option value="${o}">${o}</option>`), o);
+  assert.ok(!base.includes('id="campo-experiencia_outro"'), "sem 'Outro' não há campo de texto");
+  const outro = tela(perfil({ experienciaOpcao: EXPERIENCIA_OUTRO }));
+  assert.ok(outro.includes('id="campo-experiencia_outro"') && outro.includes('maxLength="80"') || outro.includes('maxlength="80"'));
+  const comErro = tela(perfil({ experienciaOpcao: EXPERIENCIA_OUTRO }), { experiencia_minima: "Escreva o tempo de experiência ou escolha outra opção." });
+  assert.ok(comErro.includes("Escreva o tempo de experiência ou escolha outra opção.") && comErro.includes('role="alert"'));
+  assert.equal((base.match(/id="campo-experiencia_minima"/g) ?? []).length, 1, "o foco de erro do portal acha o campo pelo id campo-experiencia_minima");
+});
+caso("experiência, painel e resumo: linha 'Tempo de experiência' só quando há valor; perfil antigo sem a chave não quebra nada", () => {
+  const com = linhasDoPerfilExtra({ sexo: "fem", experiencia_minima: "6 meses" });
+  assert.deepEqual(com.filter((l) => l.valor).map((l) => [l.rotulo, l.valor]), [["Sexo", "Feminino"], ["Tempo de experiência", "6 meses"]]);
+  const antigoSemChave = linhasDoPerfilExtra({ sexo: "fem", pcd: "nao", habilitacao_categoria: "B", veiculo_proprio: "sim", idade_min: 21, idade_max: 35, local_trabalho: "Rua A" });
+  assert.equal(antigoSemChave.find((l) => l.rotulo === "Tempo de experiência")?.valor, null);
+  assert.ok(!renderToStaticMarkup(createElement(BlocoPerfilInformado, { perfil: antigoSemChave })).includes("Tempo de experiência"));
+  assert.ok(renderToStaticMarkup(createElement(BlocoPerfilInformado, { perfil: com })).includes("Tempo de experiência:"));
+  assert.equal(linhasDoPerfilExtra(null).find((l) => l.rotulo === "Tempo de experiência")?.valor, null, "perfil_extra nulo (solicitação sem perfil)");
+  assert.equal(linhasDoPerfilExtra({ experiencia_minima: "   " }).find((l) => l.rotulo === "Tempo de experiência")?.valor, null);
+  const modal = lerFonte("src/components/ModalSolicitacoesVagas.tsx");
+  assert.ok(modal.includes('s.origem !== "link_publico" && s.perfil_extra && <BlocoPerfilInformado'), "ModalSolicitacoesVagas:459 segue protegido contra perfil_extra nulo");
+  const resumo = lerFonte("src/lib/resumoDaSolicitacaoPortal.ts");
+  assert.ok(resumo.includes('{ rotulo: "Tempo de experiência", valor: perfilExtraDoFormulario(e.perfil).experiencia_minima }'));
+});
+caso("experiência é INTERNA: nunca vira texto da vaga nem aparece na página pública; a rota do portal grava o perfil validado e escapa o e-mail", () => {
+  const texto = requisitosPublicaveis("• Ensino Médio", { experiencia_minima: "6 meses", habilitacao_categoria: "B", veiculo_proprio: "sim" })!;
+  assert.equal(texto, "• Ensino Médio\n• Habilitação categoria B\n• Veículo próprio");
+  assert.ok(!texto.includes("6 meses") && !/experi/i.test(texto.replace("• Ensino Médio", "")));
+  const rotaVaga = lerFonte("src/app/api/vagas/from-solicitacao/route.ts");
+  assert.ok(!/experiencia_minima|experienciaMinima/.test(rotaVaga), "from-solicitacao não copia o campo para vagas");
+  for (const arq of ["src/app/vagas/page.tsx", "src/app/vagas/[slug]/page.tsx", "src/lib/vagaPcdPublica.ts"]) assert.ok(!/experiencia_minima|perfil_extra/.test(lerFonte(arq)), arq);
+  const rota = lerFonte("src/app/api/portal/solicitar-vaga/route.ts");
+  assert.ok(rota.includes("...(parsed.data.perfil_extra ? { perfil_extra: parsed.data.perfil_extra } : {})"), "a chave vai pelo perfil_extra validado");
+  assert.ok(rota.includes('detailRow("Tempo de experiência", experienciaMinimaHtml)') && rota.includes("escaparHtml(parsed.data.perfil_extra.experiencia_minima)"), "e-mail: só quando preenchido e escapado");
 });
 
 console.log(`\n${total} casos OK`);

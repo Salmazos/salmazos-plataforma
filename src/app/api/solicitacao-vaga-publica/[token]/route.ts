@@ -6,6 +6,7 @@ import { devolverUsoDoLink, reservarUsoDoLink, resolverLinkPorToken } from "@/li
 import { itensDasCondicoes, lerCondicoesDoLink, montarSnapshotCondicoes } from "@/lib/solicitacaoVagaCondicoes";
 import { mascararCnpj, mascararCpf } from "@/lib/documentoBr";
 import { notificarSolicitacaoPublica } from "@/lib/solicitacaoVagaLinkNotificacao";
+import { experienciaMinimaDoCorpo } from "@/lib/solicitacaoVagaCampos";
 
 export const dynamic = "force-dynamic";
 
@@ -123,6 +124,8 @@ export async function POST(request: NextRequest, { params }: Contexto) {
         perfil_extra: {
           sexo: d.sexo,
           idade: d.idade,
+          // Só com exigência ("Sem exigência" e vazio não gravam a chave). Uso interno: nunca vai para a vaga.
+          ...(experienciaMinimaDoCorpo(d.experiencia_minima) ? { experiencia_minima: experienciaMinimaDoCorpo(d.experiencia_minima) } : {}),
           pcd: d.pcd,
           habilitacao_categoria: d.habilitacao_categoria,
           veiculo_proprio: d.veiculo_proprio,
@@ -158,6 +161,7 @@ export async function POST(request: NextRequest, { params }: Contexto) {
       beneficios: d.beneficios,
       principaisAtividades: d.principais_atividades,
       observacoes: d.observacoes,
+      experienciaMinima: experienciaMinimaDoCorpo(d.experiencia_minima),
     });
 
     return NextResponse.json({ success: true }, { status: 201 });

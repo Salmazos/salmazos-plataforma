@@ -107,6 +107,7 @@ export function resumoDaSolicitacaoPortal(e: EntradaResumoPortal): SecaoResumo[]
       linhas: preenchidas([
         { rotulo: "Sexo", valor: ROTULO_SEXO[e.perfil.sexo] },
         { rotulo: "Idade", valor: idadeLegivel(perfilExtraDoFormulario(e.perfil)) },
+        { rotulo: "Tempo de experiência", valor: perfilExtraDoFormulario(e.perfil).experiencia_minima },
         { rotulo: "PCD", valor: e.perfil.pcd === "sim" ? "Sim" : "Não" },
         { rotulo: "Habilitação", valor: e.perfil.habilitacao === "sim" ? `Categoria ${e.perfil.habilitacaoCategoria}` : "Não" },
         { rotulo: "Veículo próprio", valor: e.perfil.veiculoProprio === "sim" ? "Sim" : "Não" },

@@ -6,6 +6,8 @@ import { SALARIO_A_COMBINAR, SALARIO_ENVIAR_PRETENSAO, formatarSalarioHora, type
 import {
   ESTADOS,
   HORARIO_VAZIO,
+  erroExperienciaMinima,
+  experienciaMinimaGravada,
   gerarBeneficiosChips,
   gerarBeneficiosTexto,
   gerarHorarioTexto,
@@ -55,6 +57,9 @@ export interface FormPublico {
   beneficios: BeneficiosSel;
   sexo: Sexo;
   idade: string;
+  // Tempo de experiência (uso interno): opção da lista ("" = não escolheu) e o texto do "Outro".
+  experiencia_opcao: string;
+  experiencia_outro: string;
   pcd: SimNao;
   habilitacao: SimNao;
   habilitacao_categoria: string;
@@ -91,6 +96,8 @@ export function formularioInicial(nomeEmpresa: string | null | undefined): FormP
     beneficios: { chips: {}, custom: [] },
     sexo: "indiferente",
     idade: "",
+    experiencia_opcao: "",
+    experiencia_outro: "",
     pcd: "nao",
     habilitacao: "nao",
     habilitacao_categoria: "",
@@ -132,7 +139,7 @@ export function formularioPreenchido(form: FormPublico, nomeEmpresaDoLink: strin
   const inicial = formularioInicial(nomeEmpresaDoLink);
   const textos: (keyof FormPublico)[] = [
     "nome", "documento", "contato_nome", "telefone", "endereco", "email", "email_nf", "cargo", "cidade", "estado", "local_trabalho",
-    "previsao_inicio", "salario", "adicionais_salariais", "idade", "habilitacao_categoria", "principais_atividades", "observacoes",
+    "previsao_inicio", "salario", "adicionais_salariais", "idade", "experiencia_opcao", "experiencia_outro", "habilitacao_categoria", "principais_atividades", "observacoes",
   ];
   if (textos.some((k) => String(form[k]).trim() !== String(inicial[k]).trim())) return true;
   if (form.horario.tipo !== "") return true;
@@ -278,6 +285,8 @@ export function validarEtapa(etapa: Etapa, form: FormPublico): ErrosForm {
 
   if (etapa === 3) {
     if (excede(form.idade, 60)) erros.idade = "Use no máximo 60 caracteres.";
+    const erroExperiencia = erroExperienciaMinima(form.experiencia_opcao, form.experiencia_outro);
+    if (erroExperiencia) erros.experiencia_minima = erroExperiencia;
     if (form.habilitacao === "sim" && !form.habilitacao_categoria) erros.habilitacao_categoria = "Escolha a categoria da habilitação.";
     if (!form.principais_atividades.trim()) erros.principais_atividades = "Informe as principais atividades do cargo.";
     else if (excede(form.principais_atividades, 3000)) erros.principais_atividades = "Use no máximo 3000 caracteres.";
@@ -333,6 +342,7 @@ export function montarCorpoEnvio(form: FormPublico) {
     observacoes: vazioParaNulo(form.observacoes),
     sexo: form.sexo,
     idade: vazioParaNulo(form.idade),
+    experiencia_minima: experienciaMinimaGravada(form.experiencia_opcao, form.experiencia_outro),
     pcd: form.pcd,
     habilitacao_categoria: form.habilitacao === "sim" ? form.habilitacao_categoria || null : null,
     veiculo_proprio: form.veiculo_proprio,
@@ -384,6 +394,7 @@ export function resumoDaSolicitacao(form: FormPublico): SecaoResumo[] {
       linhas: preenchidas([
         { rotulo: "Sexo", valor: ROTULO_SEXO[form.sexo] },
         { rotulo: "Idade", valor: form.idade },
+        { rotulo: "Tempo de experiência", valor: experienciaMinimaGravada(form.experiencia_opcao, form.experiencia_outro) },
         { rotulo: "PCD", valor: form.pcd === "sim" ? "Sim" : "Não" },
         { rotulo: "Habilitação", valor: form.habilitacao === "sim" ? `Categoria ${form.habilitacao_categoria}` : "Não" },
         { rotulo: "Veículo próprio", valor: form.veiculo_proprio === "sim" ? "Sim" : "Não" },

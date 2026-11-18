@@ -23,6 +23,8 @@ export interface DadosNotificacaoSolicitacaoPublica {
   beneficios: string | null;
   principaisAtividades: string | null;
   observacoes: string | null;
+  // Tempo mínimo de experiência (perfil_extra.experiencia_minima); só entra no e-mail quando preenchido.
+  experienciaMinima?: string | null;
 }
 
 // Cabeçalho de e-mail não pode ter quebra de linha vinda de texto do cliente.
@@ -65,6 +67,7 @@ export function montarHtmlSolicitacaoPublica(d: DadosNotificacaoSolicitacaoPubli
       ${linha("Salário", d.salario)}
       ${linha("Adicionais Salariais", d.adicionaisSalariais)}
       ${linha("Horário", d.horario)}
+      ${linha("Tempo de experiência", d.experienciaMinima)}
     </table>
     ${bloco("Requisitos", d.requisitos)}
     ${bloco("Benefícios", d.beneficios)}

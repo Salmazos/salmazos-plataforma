@@ -6,6 +6,7 @@ import fs from "node:fs";
 import ts from "typescript";
 import { validarCnpj, validarCpf, mascararCnpj, mascararCpf, mascararTelefone } from "../src/lib/documentoBr";
 import { escaparHtml } from "../src/lib/escaparHtml";
+import { montarHtmlSolicitacaoPublica } from "../src/lib/solicitacaoVagaLinkNotificacao";
 import {
   MAX_USOS_LINK, MENSAGEM_LINK_INDISPONIVEL, calcularExpiraEm, statusDoLink, validarLink,
 } from "../src/lib/solicitacaoVagaLink";
@@ -645,7 +646,7 @@ await casoRota("link antigo de 32 caracteres continua funcionando (GET e POST) e
 });
 await casoRota("POST público: grava na fila (cliente_id nulo, R&S fixo, origem link, snapshot do LINK, IP do 1º x-forwarded-for) e conta o uso", async () => {
   const db = novoBanco();
-  const r = await postPublico(db, corpoValido({ tipo_servico: "terceirizacao", unidade_id: U2, condicoes: { taxa_sem_reposicao_pct: 1 }, condicoes_aceitas: { forjado: true } }), { ip: "203.0.113.7, 10.0.0.1" });
+  const r = await postPublico(db, corpoValido({ tipo_servico: "terceirizacao", unidade_id: U2, condicoes: { taxa_sem_reposicao_pct: 1 }, condicoes_aceitas: { forjado: true }, experiencia_minima: "6 meses" }), { ip: "203.0.113.7, 10.0.0.1" });
   assert.equal(r.status, 201);
   const sol = db.tabelas.solicitacoes_vagas;
   assert.equal(sol.length, 1);
@@ -666,8 +667,9 @@ await casoRota("POST público: grava na fila (cliente_id nulo, R&S fixo, origem 
   assert.equal(s.condicoes_aceitas.itens.at(-1).numero, "1.7");
   assert.equal(s.dados_empresa.cnpj_cpf, CNPJ_OK, "documento gravado com máscara");
   assert.equal(s.dados_empresa.tipo_pessoa, "pj");
-  assert.deepEqual(Object.keys(s.perfil_extra).sort(), ["habilitacao_categoria", "idade", "local_trabalho", "pcd", "sexo", "veiculo_proprio"]);
+  assert.deepEqual(Object.keys(s.perfil_extra).sort(), ["experiencia_minima", "habilitacao_categoria", "idade", "local_trabalho", "pcd", "sexo", "veiculo_proprio"]);
   assert.equal(s.perfil_extra.sexo, "masc");
+  assert.equal(s.perfil_extra.experiencia_minima, "6 meses");
   assert.equal(db.tabelas.solicitacao_vaga_links[0].usos, 1);
 });
 await casoRota("POST público: PF sem contato grava; honeypot responde 201 mas NÃO grava nem conta uso", async () => {
@@ -1395,7 +1397,7 @@ caso("formularioProximaVaga: ZERA tudo que descreve a vaga (valores de formulari
   const fabrica = formularioInicial(null);
   for (const k of [
     "cargo", "num_posicoes", "previsao_inicio", "salario", "salario_modo", "salario_periodo", "adicionais_salariais", "sexo", "idade", "pcd", "habilitacao",
-    "habilitacao_categoria", "veiculo_proprio", "requisitos", "principais_atividades", "observacoes", "website",
+    "habilitacao_categoria", "veiculo_proprio", "requisitos", "principais_atividades", "observacoes", "website", "experiencia_opcao", "experiencia_outro",
   ] as const) assert.deepEqual(prox[k], fabrica[k], k);
   assert.equal(prox.num_posicoes, "1");
   assert.equal(prox.salario_modo, "fixo");
@@ -1464,6 +1466,93 @@ caso("formulário público: o botão leva de volta à etapa da vaga, limpa erros
   assert.ok(fonte.includes("onAdicionarOutra={adicionarOutraVaga}"));
   // 404/410 e 429 seguem como estavam.
   assert.ok(fonte.includes('res.status === 404 || res.status === 410') && fonte.includes('setFase("indisponivel")') && fonte.includes("res.status === 429"));
+});
+
+// ── Tempo de experiência (perfil_extra.experiencia_minima): uso interno, só R&S no link, sem coluna nova e sem cópia para a vaga ──
+caso("link, tempo de experiência no formulário: lista grava o rótulo; 'Outro' grava o texto aparado; 'Sem exigência', vazio e 'Outro' vazio vão como null", () => {
+  const corpo = (opcao: string, outro = "") => montarCorpoEnvio(baseForm({ experiencia_opcao: opcao, experiencia_outro: outro }));
+  for (const o of campos.OPCOES_EXPERIENCIA_MINIMA.filter((x) => x !== "Sem exigência" && x !== "Outro")) assert.equal(corpo(o).experiencia_minima, o, o);
+  assert.equal(corpo("Outro", "  mínimo 6 meses na função ").experiencia_minima, "mínimo 6 meses na função");
+  for (const [o, t] of [["Sem exigência", "x"], ["", ""], ["Outro", ""], ["Outro", "   "]] as const) assert.equal(corpo(o, t).experiencia_minima, null, `${o}/${t}`);
+  assert.equal(formularioInicial(null).experiencia_opcao, "");
+  assert.equal(formularioInicial(null).experiencia_outro, "");
+});
+caso("link, validação da etapa 3: 'Outro' vazio pede o texto; 80 caracteres passam; 81 não; 'Sem exigência' e a lista passam", () => {
+  const erros = (opcao: string, outro = "") => validarEtapa(3, baseForm({ experiencia_opcao: opcao, experiencia_outro: outro, principais_atividades: "Atender clientes" }));
+  assert.deepEqual(erros("Outro"), { experiencia_minima: "Escreva o tempo de experiência ou escolha outra opção." });
+  assert.deepEqual(erros("Outro", "x".repeat(80)), {});
+  assert.ok("experiencia_minima" in erros("Outro", "x".repeat(81)));
+  for (const o of campos.OPCOES_EXPERIENCIA_MINIMA.filter((x) => x !== "Outro")) assert.deepEqual(erros(o), {}, o);
+});
+caso("link, resumo e aviso de saída: linha 'Tempo de experiência' só com exigência; escolher uma opção conta como formulário preenchido; a vaga seguinte volta ao vazio", () => {
+  const linhas = (f: FormPublico) => resumoDaSolicitacao(f).flatMap((s) => s.linhas);
+  assert.equal(linhas(baseForm({ experiencia_opcao: "1 ano" })).find((l) => l.rotulo === "Tempo de experiência")?.valor, "1 ano");
+  assert.equal(linhas(baseForm({ experiencia_opcao: "Outro", experiencia_outro: " 18 meses " })).find((l) => l.rotulo === "Tempo de experiência")?.valor, "18 meses");
+  for (const f of [baseForm(), baseForm({ experiencia_opcao: "Sem exigência" }), baseForm({ experiencia_opcao: "Outro", experiencia_outro: " " })]) {
+    assert.equal(linhas(f).some((l) => l.rotulo === "Tempo de experiência"), false);
+  }
+  assert.equal(formularioPreenchido({ ...formularioInicial(null), experiencia_opcao: "6 meses" }, null), true);
+  assert.equal(formularioPreenchido({ ...formularioInicial(null), experiencia_outro: "x" }, null), true);
+  const prox = formularioProximaVaga(baseForm({ experiencia_opcao: "Outro", experiencia_outro: "x" }));
+  assert.equal(prox.experiencia_opcao, "");
+  assert.equal(prox.experiencia_outro, "");
+});
+caso("link, tela da etapa de perfil: select com as 7 opções e a ajuda; campo do 'Outro' só com 'Outro' (máx. 80); erro no campo certo", () => {
+  const tela = (form: FormPublico, erros: Record<string, string> = {}) => renderToStaticMarkup(createElement(EtapaPerfil, { form, atualizar: () => undefined, erros }));
+  const base = tela(formularioInicial(null));
+  assert.ok(base.includes("Tempo de experiência") && base.includes(campos.TEXTO_AJUDA_EXPERIENCIA_MINIMA));
+  for (const o of campos.OPCOES_EXPERIENCIA_MINIMA) assert.ok(base.includes(`>${o}</option>`), o);
+  assert.ok(base.includes('id="campo-experiencia_minima"') && !base.includes('id="campo-experiencia_outro"'));
+  const outro = tela({ ...formularioInicial(null), experiencia_opcao: "Outro" }, { experiencia_minima: "Escreva o tempo de experiência ou escolha outra opção." });
+  assert.ok(outro.includes('id="campo-experiencia_outro"') && /maxLength="80"|maxlength="80"/.test(outro));
+  assert.ok(outro.includes("Escreva o tempo de experiência ou escolha outra opção."));
+  const naLista = tela({ ...formularioInicial(null), experiencia_opcao: "6 meses" }, { experiencia_minima: "erro qualquer" });
+  assert.ok(naLista.includes("erro qualquer"), "sem 'Outro', o erro aparece no select");
+});
+await casoRota("POST público com experiência: a chave entra em perfil_extra só quando há exigência ('Sem exigência'/vazio/espaços não gravam); 81 caracteres → 400 e nada grava", async () => {
+  for (const [enviado, esperado] of [["3 anos ou mais", "3 anos ou mais"], ["  mínimo 6 meses  ", "mínimo 6 meses"], ["Sem exigência", undefined], ["", undefined], ["   ", undefined], [null, undefined]] as const) {
+    const db = novoBanco();
+    const r = await postPublico(db, corpoValido({ experiencia_minima: enviado }));
+    assert.equal(r.status, 201, JSON.stringify(enviado));
+    const perfil = db.tabelas.solicitacoes_vagas[0].perfil_extra;
+    if (esperado === undefined) assert.equal("experiencia_minima" in perfil, false, JSON.stringify(enviado));
+    else assert.equal(perfil.experiencia_minima, esperado);
+  }
+  const semCampo = novoBanco();
+  assert.equal((await postPublico(semCampo, corpoValido())).status, 201);
+  assert.deepEqual(Object.keys(semCampo.tabelas.solicitacoes_vagas[0].perfil_extra).sort(), ["habilitacao_categoria", "idade", "local_trabalho", "pcd", "sexo", "veiculo_proprio"], "sem o campo: as mesmas chaves de antes");
+  const longo = novoBanco();
+  const r = await postPublico(longo, corpoValido({ experiencia_minima: "x".repeat(81) }));
+  assert.equal(r.status, 400);
+  assert.equal(longo.tabelas.solicitacoes_vagas.length, 0);
+});
+await casoRota("Criar Vaga: perfil_extra.experiencia_minima NÃO vai para a vaga (link e portal): nenhuma coluna nova, requisitos e demais campos iguais aos de antes", async () => {
+  for (const origem of ["link_publico", "portal"]) {
+    const perfil = { sexo: "fem", veiculo_proprio: "nao", experiencia_minima: "6 meses" };
+    const comExp = bancoDeAprovacao(solicitacaoLinha({ origem, cliente_id: origem === "portal" ? "cliente-1" : null, requisitos: "• Ensino Médio", perfil_extra: perfil }));
+    const semExp = bancoDeAprovacao(solicitacaoLinha({ origem, cliente_id: origem === "portal" ? "cliente-1" : null, requisitos: "• Ensino Médio", perfil_extra: { sexo: "fem", veiculo_proprio: "nao" } }));
+    const rc = await aprovar(comExp);
+    assert.equal(rc.status, 201, `${origem}: ${JSON.stringify(rc.body)}`);
+    assert.equal((await aprovar(semExp)).status, 201);
+    const vaga = comExp.tabelas.vagas[0];
+    assert.equal(JSON.stringify(vaga).includes("6 meses"), false, `${origem}: a vaga não leva o texto`);
+    assert.equal(Object.keys(vaga).some((k) => /experi/i.test(k)), false, `${origem}: nenhuma coluna de experiência na vaga`);
+    assert.equal(vaga.requisitos, "• Ensino Médio", `${origem}: requisitos iguais aos de antes`);
+    const base = semExp.tabelas.vagas[0];
+    for (const k of Object.keys(base)) if (!/^(id|slug)$|(_em|_at)$|^data_/.test(k)) assert.deepEqual(vaga[k], base[k], `${origem}: ${k}`);
+  }
+  const rota = readFileSync(new URL("../src/app/api/vagas/from-solicitacao/route.ts", import.meta.url), "utf8");
+  assert.ok(!/experiencia_minima|experienciaMinima/.test(rota));
+});
+caso("e-mail do link: linha 'Tempo de experiência' só quando preenchida e com o texto escapado; sem o campo o e-mail é exatamente o de antes", () => {
+  const base = { solicitacaoId: "s1", unidadeId: U1, nome: "Cliente SA", cargo: "Auxiliar", numPosicoes: 1, cidade: "Hortolândia", estado: "SP", previsaoInicio: null, salario: "2500", adicionaisSalariais: null, horario: "08h às 17h", requisitos: null, beneficios: null, principaisAtividades: "Atender", observacoes: null };
+  const sem = montarHtmlSolicitacaoPublica(base);
+  assert.ok(!sem.includes("Tempo de experiência"));
+  assert.equal(montarHtmlSolicitacaoPublica({ ...base, experienciaMinima: null }), sem);
+  const com = montarHtmlSolicitacaoPublica({ ...base, experienciaMinima: "6 meses" });
+  assert.ok(com.includes("Tempo de experiência") && com.includes("6 meses"));
+  const perigoso = montarHtmlSolicitacaoPublica({ ...base, experienciaMinima: "<script>alert(1)</script>" });
+  assert.ok(!perigoso.includes("<script>") && perigoso.includes("&lt;script&gt;"));
 });
 
 console.error = silencio;
