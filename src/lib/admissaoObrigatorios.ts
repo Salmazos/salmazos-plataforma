@@ -69,7 +69,10 @@ export const CAMPOS_QUE_ATIVAM_EXIGENCIA: readonly string[] = [
   "admissao_exame_responsavel", "admissao_local_integracao", "admissao_qtd_dias_teste",
 ];
 
-export const mexeNosDadosDeAdmissao = (chaves: readonly string[]): boolean => chaves.some((c) => CAMPOS_QUE_ATIVAM_EXIGENCIA.includes(c));
+// Em MOT e Terceirização o gestor é só opcional: mexer SOMENTE nele não ativa a exigência dos demais campos (indicação antiga segue editável).
+// Em R&S, e sem informar o tipo, tudo igual a antes.
+export const mexeNosDadosDeAdmissao = (chaves: readonly string[], tipoServico?: string | null): boolean =>
+  chaves.some((c) => CAMPOS_QUE_ATIVAM_EXIGENCIA.includes(c) && !(c === "admissao_gestor" && (tipoServico === TIPO_MOT || tipoServico === TIPO_TERC)));
 
 // Quais dos 7 campos padronizados (CamposAdmissaoPadrao) o tipo exige — só para marcar o rótulo com "*" na tela; a exigência em si continua em
 // faltandoObrigatorios acima (mesma lista, não há segunda regra).

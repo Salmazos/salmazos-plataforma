@@ -155,7 +155,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
     // Indicação SEM vaga: mexeu nos dados de admissão, o resultado precisa estar completo para o tipo (mesmo módulo da tela). A indicação antiga,
     // que só tem a função, segue editável em nome, telefone, currículo e função sem essa exigência.
-    if (!sol.vaga_id && mexeNosDadosDeAdmissao(Object.keys(entrada))) {
+    if (!sol.vaga_id && mexeNosDadosDeAdmissao(Object.keys(entrada), tipoDaIndicacao)) {
       const final = { ...sol, ...entrada } as Linha;
       const falta = faltandoObrigatorios(tipoDaIndicacao, final as Parameters<typeof faltandoObrigatorios>[1]);
       if (falta.length > 0) return NextResponse.json({ error: falta.join(" ") }, { status: 400 });

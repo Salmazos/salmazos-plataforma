@@ -139,7 +139,7 @@ export default function ModalEditarIndicacaoCliente({ indicacaoId, onClose, onSa
     if (comHorario(tipo) && integracaoPreenchidaParcialmente(dados)) { setErro("Preencha local, data e hora da integração, ou deixe os três em branco."); return; }
     // Indicação SEM vaga: mexeu nos dados de admissão, precisa deixá-los completos para o tipo (mesma regra do servidor). Indicação antiga que
     // só teve nome, telefone, currículo ou função editados segue sem exigência.
-    const semVagaMexeu = inicial.sem_vaga && mexeNosDadosDeAdmissao([...Object.keys(mudou), ...(diasTesteAlterado ? ["admissao_qtd_dias_teste"] : [])]);
+    const semVagaMexeu = inicial.sem_vaga && mexeNosDadosDeAdmissao([...Object.keys(mudou), ...(diasTesteAlterado ? ["admissao_qtd_dias_teste"] : [])], tipo);
     if (semVagaMexeu) {
       const falta = faltandoObrigatorios(tipo, colunas as Parameters<typeof faltandoObrigatorios>[1]);
       if (falta.length > 0) { setErro(falta[0]); return; }

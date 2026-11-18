@@ -622,6 +622,68 @@ await ok("EDIÇÃO do cliente (sem vaga completa): campo editado vale; APAGAR ob
   assert.equal(sol(antiga, idAntiga).admissao_setor, "Expedição");
 });
 
+await ok("GESTOR DIRETO opcional (MOT e Terceirização): tela mostra sem asterisco; payload grava (vazio = null); R&S igual; só o gestor em indicação antiga NÃO ativa a exigência; servidor nunca exige", async () => {
+  const { createRequire } = await import("node:module");
+  const req = createRequire(import.meta.url);
+  const { renderToStaticMarkup } = req("react-dom/server");
+  const React = req("react");
+  const Bloco = (await import("../src/components/BlocoDadosAdmissao")).default;
+  const { dadosVazios, colunasDeDados, colunasVisiveis } = await import("../src/lib/admissaoForm");
+  const { faltandoObrigatorios, mexeNosDadosDeAdmissao } = await import("../src/lib/admissaoObrigatorios");
+  const html = (tipo: string) => renderToStaticMarkup(React.createElement(Bloco, { tipoServico: tipo, valores: dadosVazios(tipo), onChange: () => {}, ocultarFuncao: true }));
+  // (a) tela
+  for (const tipo of [MOT, TERC]) {
+    const h = html(tipo);
+    assert.ok(h.includes("Gestor direto (opcional)") && h.includes("Nome de quem vai coordenar o candidato") && h.includes("Ajuda a Salmazos a alinhar o início do trabalho com a pessoa certa."), tipo);
+    assert.equal(/Gestor direto \(opcional\) \*/.test(h), false, `${tipo}: sem asterisco`);
+    assert.ok(h.indexOf("Setor *") < h.indexOf("Gestor direto (opcional)"), `${tipo}: junto do setor, depois dele`);
+  }
+  const rs = html(RS);
+  assert.ok(rs.includes("Gestor Direto") && rs.includes("Nome do gestor") && !rs.includes("(opcional)") && !rs.includes("Nome de quem vai coordenar"), "R&S inalterado");
+  // (b) payload
+  for (const tipo of [MOT, TERC, RS]) {
+    assert.ok(colunasVisiveis(tipo).includes("admissao_gestor"), `${tipo}: coluna visível`);
+    const com = { ...dadosVazios(tipo), gestor: "  Carlos Souza " };
+    assert.equal(colunasDeDados(com, tipo).admissao_gestor, "Carlos Souza", `${tipo}: grava aparado`);
+    assert.equal(colunasDeDados({ ...dadosVazios(tipo), gestor: "   " }, tipo).admissao_gestor, null, `${tipo}: vazio vira null`);
+  }
+  assert.equal(colunasVisiveis("outro").includes("admissao_gestor"), false);
+  // (d) regra pura + servidor na edição de indicação antiga
+  assert.equal(mexeNosDadosDeAdmissao(["admissao_gestor"], MOT), false);
+  assert.equal(mexeNosDadosDeAdmissao(["admissao_gestor"], TERC), false);
+  assert.equal(mexeNosDadosDeAdmissao(["admissao_gestor"], RS), true, "R&S igual a hoje");
+  assert.equal(mexeNosDadosDeAdmissao(["admissao_gestor"]), true, "sem tipo = igual a hoje");
+  assert.equal(mexeNosDadosDeAdmissao(["admissao_gestor", "admissao_setor"], MOT), true, "gestor + outro campo: o outro ativa");
+  assert.equal(mexeNosDadosDeAdmissao(["admissao_setor"], MOT), true);
+  for (const tipo of [MOT, TERC]) {
+    const antiga = cenario();
+    await indicarAntiga(antiga, semVagaDe(tipo));
+    const idA = ultima(antiga).id;
+    logar(antiga, "dir"); logarPortal(antiga, "cli");
+    const edita = (corpo: Record<string, unknown>) => chamar(R.minhasId.PATCH, { metodo: "PATCH", params: { id: idA }, corpo });
+    const soGestor = await edita({ admissao_gestor: "Carlos Souza" });
+    assert.equal(soGestor.status, 200, `${tipo}: ${JSON.stringify(soGestor.corpo)}`);
+    assert.equal(sol(antiga, idA).admissao_gestor, "Carlos Souza", `${tipo}: gravado`);
+    assert.equal((await edita({ admissao_setor: "Expedição" })).status, 400, `${tipo}: outro campo continua ativando a exigência`);
+  }
+  const antigaRs = cenario();
+  await indicarAntiga(antigaRs, semVagaDe(RS));
+  logar(antigaRs, "dir"); logarPortal(antigaRs, "cli");
+  assert.equal((await chamar(R.minhasId.PATCH, { metodo: "PATCH", params: { id: ultima(antigaRs).id }, corpo: { admissao_gestor: "Carlos" } })).status, 400, "R&S: igual a hoje (gestor ativa a exigência)");
+  // (e) o servidor nunca exige o gestor: nenhum tipo o cobra e o bloco completo sem gestor é aceito; com gestor, é gravado
+  assert.deepEqual(faltandoObrigatorios(MOT, { ...BLOCO[MOT], admissao_funcao: "x" } as never), []);
+  assert.deepEqual(faltandoObrigatorios(TERC, { ...BLOCO[TERC], admissao_funcao: "x" } as never), []);
+  assert.deepEqual(faltandoObrigatorios(RS, { ...BLOCO[RS], admissao_funcao: "x" } as never), []);
+  for (const tipo of [MOT, TERC, RS]) {
+    const db = cenario();
+    assert.equal((await indicar(db, semVagaDe(tipo))).status, 201, `${tipo}: sem gestor aceito`);
+    assert.equal(sol(db, ultima(db).id).admissao_gestor ?? null, null);
+    const db2 = cenario();
+    assert.equal((await indicar(db2, semVagaDe(tipo, { admissao_gestor: "Carlos Souza" }))).status, 201);
+    assert.equal(sol(db2, ultima(db2).id).admissao_gestor, "Carlos Souza", `${tipo}: gestor gravado na indicação`);
+  }
+});
+
 await ok("INDICAÇÃO ANTIGA (só o mínimo) continua funcionando: aparece na fila do analista, segue sem vaga, aprovar = 409, recusar funciona", async () => {
   const db = cenario();
   await indicarAntiga(db);

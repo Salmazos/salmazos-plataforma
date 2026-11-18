@@ -64,6 +64,14 @@ export default function BlocoDadosAdmissao({ tipoServico, valores, onChange, ten
         </Campo>
       )}
 
+      {/* MOT e Terceirização: gestor é OPCIONAL (nunca exigido, sem asterisco). Em R&S ele já existe mais abaixo, ao lado do departamento. */}
+      {horario && (
+        <Campo rotulo="Gestor direto (opcional)">
+          <input className={INPUT} value={valores.gestor} onChange={(e) => onChange({ gestor: e.target.value })} placeholder="Nome de quem vai coordenar o candidato" />
+          <p className="text-[11px] text-gray-400 mt-1">Ajuda a Salmazos a alinhar o início do trabalho com a pessoa certa.</p>
+        </Campo>
+      )}
+
       {/* Salário, centro de custo, horário, turno, escala e tempo de contrato: o componente padronizado. key: trocar o tipo refaz as listas. */}
       <CamposAdmissaoPadrao
         key={tipoServico ?? "sem-tipo"}

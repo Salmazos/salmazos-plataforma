@@ -67,12 +67,12 @@ export function colunasVisiveis(tipo: string | null | undefined): string[] {
   const base = ["admissao_data_inicio", "admissao_funcao", "admissao_setor", "admissao_salario", "admissao_observacoes"];
   if (tipo === TIPO_RS) return [...base, "admissao_gestor", "admissao_periodo_experiencia"];
   if (tipo === TIPO_MOT) {
-    return [...base, "admissao_salario_hora", "admissao_centro_custo", "admissao_horario", "admissao_turno", "admissao_escala", "admissao_tempo_contrato",
+    return [...base, "admissao_gestor", "admissao_salario_hora", "admissao_centro_custo", "admissao_horario", "admissao_turno", "admissao_escala", "admissao_tempo_contrato",
       "admissao_vt", "admissao_exame_responsavel", "admissao_local_integracao"];
   }
   if (tipo === TIPO_TERC) {
     // admissao_escala na Terceirização: só a jornada com compensação (opcional); vazio = como sempre.
-    return [...base, "admissao_centro_custo", "admissao_horario", "admissao_turno", "admissao_escala", "admissao_vt", "admissao_exame_responsavel", "admissao_local_integracao"];
+    return [...base, "admissao_gestor", "admissao_centro_custo", "admissao_horario", "admissao_turno", "admissao_escala", "admissao_vt", "admissao_exame_responsavel", "admissao_local_integracao"];
   }
   return base;
 }
@@ -89,7 +89,8 @@ export function colunasDeDados(d: DadosAdmissaoForm, tipo: string | null | undef
     admissao_data_inicio: d.data_inicio || null,
     admissao_funcao: d.funcao.trim() || null,
     admissao_setor: d.setor.trim() || null,
-    admissao_gestor: rs ? d.gestor.trim() || null : null,
+    // Opcional em todos os tipos (R&S sempre teve; MOT e Terceirização ganharam): vazio vira null.
+    admissao_gestor: d.gestor.trim() || null,
     admissao_periodo_experiencia: rs ? d.periodo_exp || null : null,
     admissao_salario: p.admissao_salario ?? null,
     admissao_salario_hora: mot ? p.admissao_salario_hora ?? null : null,
