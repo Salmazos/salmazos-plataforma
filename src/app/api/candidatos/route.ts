@@ -301,7 +301,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Enviar e-mails (confirmação ao candidato + notificação à equipe)
+    // E-mail de confirmação ao candidato (só quando informou e-mail); a equipe não recebe e-mail de candidatura nova
     waitUntil(
       enviarEmailsVaga({
         body,

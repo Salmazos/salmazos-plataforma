@@ -13,7 +13,7 @@ import ts from "typescript";
 import { congelarData, importar } from "./harness-mot/ambiente.mjs";
 import { escaparHtml } from "../src/lib/escaparHtml";
 import { getEmailTemplate } from "../src/lib/emailTemplates";
-import { montarHtmlConfirmacao, montarHtmlNotificacaoEquipe } from "../src/lib/email";
+import { montarHtmlConfirmacao } from "../src/lib/email";
 import { linhaTabelaAdmissao, montarHtmlAlertaSla, montarHtmlCandidatoAprovado, montarHtmlIndicacaoAprovada } from "../src/lib/emailsEquipe";
 
 congelarData();
@@ -38,14 +38,6 @@ function provaDeEscape<T extends Record<string, unknown>>(nome: string, campos: 
   assert.equal(htmlHostil, esperado, `${nome}: o HTML só difere pelo escape`);
   for (const c of campos) assert.ok(htmlHostil.includes(escaparHtml(hostil[c as string])), `${nome}: ${String(c)} escapado presente`);
 }
-
-await ok("e-mail da candidatura (formulário público) → equipe: nome, cargo, e-mail, telefone, cidade e estado escapados; HTML igual ao de antes", () => {
-  provaDeEscape("equipe", ["nomeCandidato", "cargoPretendido", "email", "telefone", "cidade", "estado"], { nomeCandidato: "", cargoPretendido: "", email: "", telefone: "", cidade: "", estado: "" }, montarHtmlNotificacaoEquipe);
-  const comum = montarHtmlNotificacaoEquipe({ nomeCandidato: "João da Silva", cargoPretendido: "Auxiliar de Produção", email: "joao@exemplo.com.br", telefone: "(19) 99999-8888", cidade: "Hortolândia", estado: "SP" });
-  assert.ok(comum.includes("João da Silva") && comum.includes("Hortolândia – SP") && comum.includes("(19) 99999-8888") && !comum.includes("&amp;"));
-  const minimo = montarHtmlNotificacaoEquipe({ nomeCandidato: "A", cargoPretendido: "B" });
-  assert.ok(!minimo.includes("E-mail</td>") && !minimo.includes("Telefone</td>") && !minimo.includes("Localização</td>"), "linhas opcionais continuam só quando preenchidas");
-});
 
 await ok("e-mail de confirmação ao candidato: nome e cargo escapados; HTML igual ao de antes", () => {
   provaDeEscape("confirmacao", ["nomeCandidato", "cargoPretendido"], { nomeCandidato: "", cargoPretendido: "" }, montarHtmlConfirmacao);

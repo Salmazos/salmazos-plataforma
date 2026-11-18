@@ -7,16 +7,6 @@ interface EmailOpts {
   cargoPretendido: string;
 }
 
-interface NotificacaoEquipeOpts {
-  nomeCandidato: string;
-  cargoPretendido: string;
-  vagaTitulo?: string;
-  email?: string;
-  telefone?: string;
-  cidade?: string;
-  estado?: string;
-}
-
 function criarTransporter() {
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -30,50 +20,7 @@ function criarTransporter() {
   });
 }
 
-// Texto do formulário público de candidatura (qualquer pessoa da internet): tudo que é digitado passa por escaparHtml.
-export function montarHtmlNotificacaoEquipe({ nomeCandidato, cargoPretendido, email, telefone, cidade, estado }: NotificacaoEquipeOpts): string {
-  const localInfo = [cidade, estado].filter(Boolean).join(" – ");
-
-  return `
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif;">
-  <div style="max-width:600px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08);">
-    <div style="background:linear-gradient(135deg,#111827,#1F2937);padding:28px 32px;text-align:center;">
-      <h1 style="color:#FFD700;margin:0;font-size:20px;font-weight:700;">Nova Candidatura Recebida</h1>
-    </div>
-    <div style="padding:28px 32px;">
-      <table style="width:100%;border-collapse:collapse;font-size:14px;color:#374151;">
-        <tr><td style="padding:8px 0;font-weight:700;width:140px;">Candidato</td><td style="padding:8px 0;">${escaparHtml(nomeCandidato)}</td></tr>
-        <tr><td style="padding:8px 0;font-weight:700;">Vaga / Cargo</td><td style="padding:8px 0;">${escaparHtml(cargoPretendido)}</td></tr>
-        ${email ? `<tr><td style="padding:8px 0;font-weight:700;">E-mail</td><td style="padding:8px 0;">${escaparHtml(email)}</td></tr>` : ""}
-        ${telefone ? `<tr><td style="padding:8px 0;font-weight:700;">Telefone</td><td style="padding:8px 0;">${escaparHtml(telefone)}</td></tr>` : ""}
-        ${localInfo ? `<tr><td style="padding:8px 0;font-weight:700;">Localização</td><td style="padding:8px 0;">${escaparHtml(localInfo)}</td></tr>` : ""}
-      </table>
-      <p style="font-size:13px;color:#9CA3AF;margin:20px 0 0;text-align:center;">Acesse o painel para visualizar o perfil completo.</p>
-    </div>
-  </div>
-</body>
-</html>`;
-}
-
-export async function enviarNotificacaoEquipe(opts: NotificacaoEquipeOpts) {
-  const { nomeCandidato, cargoPretendido } = opts;
-  const destino = process.env.NOTIFY_EMAIL || process.env.SMTP_USER;
-  if (!destino) return;
-
-  const transporter = criarTransporter();
-  const html = montarHtmlNotificacaoEquipe(opts);
-
-  await transporter.sendMail({
-    from: process.env.SMTP_FROM || `"Salmazos RH" <${process.env.SMTP_USER}>`,
-    to: destino,
-    subject: `📋 Nova candidatura: ${nomeCandidato} → ${cargoPretendido}`,
-    html,
-  });
-}
-
+// Nome e cargo vêm do formulário público de candidatura (qualquer pessoa da internet): passam por escaparHtml.
 export function montarHtmlConfirmacao({ nomeCandidato, cargoPretendido }: Pick<EmailOpts, "nomeCandidato" | "cargoPretendido">): string {
   return `
 <!DOCTYPE html>
