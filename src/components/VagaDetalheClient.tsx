@@ -15,6 +15,8 @@ import ModalMotivoEtapa from "./ModalMotivoEtapa";
 import MatchScoreBadge from "./MatchScoreBadge";
 import RetencaoBadge from "./RetencaoBadge";
 import VagaIndicadoresSection from "./painel/VagaIndicadoresSection";
+import BlocoDadosOriginaisSolicitacao from "./BlocoDadosOriginaisSolicitacao";
+import type { SolicitacaoOriginalDaVaga } from "@/lib/solicitacaoOriginalDaVaga";
 import { TIPOS_SERVICO } from "@/lib/constants";
 import { formatarData } from "@/lib/utils";
 import { getProximasEtapas, getComportamentoEtapa, getEtapaInfo, getEtapaLabel, getEtapaAnterior } from "@/lib/etapasCandidatura";
@@ -66,9 +68,11 @@ const VOLTAR_PADRAO = { href: "/painel/vagas", label: "Voltar às vagas" };
 interface Props {
   vaga: Vaga;
   candidatosVaga: CandidatoVaga[];
+  // Solicitação do cliente que originou a vaga (ligação por solicitacoes_vagas.vaga_id); nula quando a vaga não veio de uma solicitação.
+  solicitacaoOriginal?: SolicitacaoOriginalDaVaga | null;
 }
 
-export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inicialCv }: Props) {
+export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inicialCv, solicitacaoOriginal }: Props) {
   useAutoRefresh(30000);
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -581,6 +585,9 @@ export default function VagaDetalheClient({ vaga: inicial, candidatosVaga: inici
               )}
             </dl>
           </div>
+
+          {/* Dados originais da solicitação do cliente: só leitura, uso interno (a página lê pelo vaga_id; vaga sem solicitação não mostra o bloco). */}
+          <BlocoDadosOriginaisSolicitacao solicitacao={solicitacaoOriginal} />
 
           {/* Requisitos */}
           {vaga.requisitos && (
