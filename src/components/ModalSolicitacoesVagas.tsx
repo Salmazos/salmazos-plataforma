@@ -78,6 +78,7 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<Solicitacao[]>([]);
   const [toast, setToast] = useState("");
+  const [avisosVaga, setAvisosVaga] = useState<string[]>([]);
   const [expandedReq, setExpandedReq] = useState<string | null>(null);
   const [expandedAtiv, setExpandedAtiv] = useState<string | null>(null);
   const [recusandoId, setRecusandoId] = useState<string | null>(null);
@@ -151,6 +152,9 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
         setItems((prev) => prev.filter((s) => s.id !== id));
         setAvisoCliente((a) => avisoAposDecisaoDaSolicitacao(a, id, "vaga_criada"));
         showToast("Vaga criada com sucesso!");
+        // Vaga confidencial cujo texto público cita o cliente: a vaga já está criada, o aviso só informa (resposta sem corpo válido = sem aviso).
+        const json = await res.json().catch(() => null);
+        if (Array.isArray(json?.avisos) && json.avisos.length > 0) setAvisosVaga(json.avisos as string[]);
         onVagaCriada();
         if (focoId) onVerTodas?.();
       }
@@ -783,6 +787,25 @@ export default function ModalSolicitacoesVagas({ isOpen, onClose, onVagaCriada, 
             style={{ backgroundColor: "#065F46", color: "#fff" }}
           >
             {"✅"} {toast}
+          </div>
+        )}
+
+        {avisosVaga.length > 0 && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" role="alertdialog" aria-label="Aviso sobre a vaga criada">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{"⚠️"}</span>
+                <h3 className="text-lg font-bold text-gray-900">Vaga criada, mas confira o texto</h3>
+              </div>
+              {avisosVaga.map((a, i) => (
+                <div key={i} className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-sm text-amber-800">{a}</p>
+                </div>
+              ))}
+              <div className="flex justify-end pt-2">
+                <button type="button" onClick={() => setAvisosVaga([])} className="btn-primary">Entendi</button>
+              </div>
+            </div>
           </div>
         )}
       </div>

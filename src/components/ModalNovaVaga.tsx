@@ -9,6 +9,8 @@ import type { Vaga } from "@/types";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import { useUsuarioLogado } from "@/components/UsuarioLogadoProvider";
 import { responsaveisDaUnidade, responsavelPadrao, opcoesResponsavel } from "@/lib/responsaveis";
+import AvisoClienteNoTextoPublico from "@/components/AvisoClienteNoTextoPublico";
+import { detectarClienteNoTextoPublico, type ClienteNoTexto } from "@/lib/clienteNoTextoPublico";
 
 interface ClienteOpcao {
   id: string;
@@ -150,6 +152,8 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades
   const [clientes, setClientes]   = useState<ClienteOpcao[]>([]);
   const [salvando, setSalvando]   = useState(false);
   const [erro, setErro]           = useState("");
+  // Aviso (não bloqueia): vaga confidencial cujo texto público cita o cliente. Abre antes de salvar; "Salvar mesmo assim" salva.
+  const [avisoCliente, setAvisoCliente] = useState<ClienteNoTexto[] | null>(null);
   const [salarioModo, setSalarioModo] = useState<SalarioModo>("fixo");
 
   // benefícios
@@ -323,7 +327,26 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades
     setReqInput("");
   };
 
-  const handleSalvar = async () => {
+  const handleSalvar = async (ignorarAviso = false) => {
+    if (!ignorarAviso) {
+      const achados = detectarClienteNoTextoPublico({
+        confidencial: form.confidencial,
+        visivelPublicamente: form.visivel_publicamente,
+        campos: {
+          titulo: form.titulo, cidade: form.cidade, estado: form.estado, salario: form.salario, adicionais_salariais: form.adicionais_salariais,
+          horario: assembleHorario(), requisitos: assembleRequisitos(), beneficios: assembleBeneficios(), principais_atividades: form.principais_atividades,
+        },
+        // Cliente escolhido na tela; sem ele, o nome provisório que a vaga já tinha (cliente_nome_temp).
+        nomesDoCliente: form.cliente_id
+          ? [clientes.find((c) => c.id === form.cliente_id)?.nome, vaga && vaga.cliente_id === form.cliente_id ? vaga.clientes?.nome : null]
+          : [vaga?.cliente_nome_temp],
+      });
+      if (achados.length > 0) {
+        setAvisoCliente(achados);
+        return;
+      }
+    }
+    setAvisoCliente(null);
     setSalvando(true);
     setErro("");
     try {
@@ -909,13 +932,21 @@ export default function ModalNovaVaga({ isOpen, vaga, onClose, onSalvo, unidades
           {/* Ações */}
           <div className="flex justify-end gap-3 pt-2 border-t">
             <button onClick={onClose} className="btn-outline" disabled={salvando}>Cancelar</button>
-            <button onClick={handleSalvar} disabled={salvando} className="btn-primary disabled:opacity-50">
+            <button onClick={() => handleSalvar()} disabled={salvando} className="btn-primary disabled:opacity-50">
               {salvando ? "Salvando..." : editando ? "Salvar alterações" : "Cadastrar vaga"}
             </button>
           </div>
 
         </div>
       </div>
+      {avisoCliente && (
+        <AvisoClienteNoTextoPublico
+          achados={avisoCliente}
+          salvando={salvando}
+          onRevisar={() => setAvisoCliente(null)}
+          onSalvarMesmoAssim={() => handleSalvar(true)}
+        />
+      )}
     </div>
   );
 }

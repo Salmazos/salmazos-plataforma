@@ -8,6 +8,8 @@ import type { Vaga } from "@/types";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import { useUsuarioLogado } from "@/components/UsuarioLogadoProvider";
 import { responsaveisDaUnidade, opcoesResponsavel } from "@/lib/responsaveis";
+import AvisoClienteNoTextoPublico from "@/components/AvisoClienteNoTextoPublico";
+import { detectarClienteNoTextoPublico, type ClienteNoTexto } from "@/lib/clienteNoTextoPublico";
 
 const IMPACTO_TIPO: Record<string, string> = {
   recrutamento_selecao: "Fee será aplicado conforme contrato. Garantia de 30 dias.",
@@ -163,6 +165,8 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
   const [clientes, setClientes]       = useState<ClienteOpcao[]>([]);
   const [salvando, setSalvando]       = useState(false);
   const [erro, setErro]               = useState("");
+  // Aviso (não bloqueia): vaga confidencial cujo texto público cita o cliente. Abre antes de salvar; "Salvar mesmo assim" salva.
+  const [avisoCliente, setAvisoCliente] = useState<ClienteNoTexto[] | null>(null);
   const [salarioModo, setSalarioModo] = useState<SalarioModo>("fixo");
 
   // benefícios
@@ -313,12 +317,32 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
     setReqInput("");
   };
 
-  const handleSalvar = async () => {
+  const handleSalvar = async (ignorarAviso = false) => {
     const tipoMudou = form.tipo_servico !== tipoServicoOriginal.current;
     if (tipoMudou && !confirmModalidade) {
       setConfirmModalidade(true);
       return;
     }
+
+    if (!ignorarAviso) {
+      const achados = detectarClienteNoTextoPublico({
+        confidencial: form.confidencial,
+        visivelPublicamente: form.visivel_publicamente,
+        campos: {
+          titulo: form.titulo, cidade: form.cidade, estado: form.estado, salario: form.salario, adicionais_salariais: form.adicionais_salariais,
+          horario: assembleHorario(), requisitos: assembleRequisitos(), beneficios: assembleBeneficios(), principais_atividades: form.principais_atividades,
+        },
+        // Cliente escolhido na tela; sem ele, o nome provisório que a vaga já tinha (cliente_nome_temp).
+        nomesDoCliente: form.cliente_id
+          ? [clientes.find((c) => c.id === form.cliente_id)?.nome, vaga.cliente_id === form.cliente_id ? vaga.clientes?.nome : null]
+          : [vaga.cliente_nome_temp],
+      });
+      if (achados.length > 0) {
+        setAvisoCliente(achados);
+        return;
+      }
+    }
+    setAvisoCliente(null);
 
     setSalvando(true);
     setErro("");
@@ -816,7 +840,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
           {/* Ações */}
           <div className="flex justify-end gap-3 pt-2 border-t">
             <button onClick={onClose} className="btn-outline" disabled={salvando}>Cancelar</button>
-            <button onClick={handleSalvar} disabled={salvando} className="btn-primary disabled:opacity-50">
+            <button onClick={() => handleSalvar()} disabled={salvando} className="btn-primary disabled:opacity-50">
               {salvando ? "Salvando..." : "Salvar alterações"}
             </button>
           </div>
@@ -877,7 +901,7 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
                   Cancelar
                 </button>
                 <button
-                  onClick={handleSalvar}
+                  onClick={() => handleSalvar()}
                   disabled={!motivoAlteracao.trim() || salvando}
                   className="btn-primary disabled:opacity-50"
                 >
@@ -887,6 +911,18 @@ export default function ModalEditarVaga({ isOpen, vaga, onClose, onSalvo }: Prop
             </div>
           </div>
         </div>
+      )}
+
+      {avisoCliente && (
+        <AvisoClienteNoTextoPublico
+          achados={avisoCliente}
+          salvando={salvando}
+          onRevisar={() => {
+            setAvisoCliente(null);
+            setConfirmModalidade(false);
+          }}
+          onSalvarMesmoAssim={() => handleSalvar(true)}
+        />
       )}
     </div>
   );

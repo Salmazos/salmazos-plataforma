@@ -13,6 +13,7 @@ import { enviarEmailAoCliente } from "@/lib/enviarEmailAoCliente";
 import { requisitosPublicaveis } from "@/lib/solicitacaoVagaCampos";
 import { condicoesParaVaga } from "@/lib/solicitacaoVagaCondicoesVaga";
 import { registrarAuditoria } from "@/lib/audit";
+import { detectarClienteNoTextoPublico, mensagemDepoisDeSalvar } from "@/lib/clienteNoTextoPublico";
 
 export async function POST(request: NextRequest) {
   try {
@@ -64,6 +65,8 @@ export async function POST(request: NextRequest) {
     const copiaCondicoes = sol.origem === "link_publico" && sol.tipo_servico === "recrutamento_selecao";
     const condicoesVaga = copiaCondicoes ? condicoesParaVaga(sol.condicoes_aceitas) : null;
 
+    const requisitosDaVaga = sol.origem === "link_publico" || sol.perfil_extra ? requisitosPublicaveis(sol.requisitos, sol.perfil_extra) : sol.requisitos ?? null;
+
     const { data: vaga, error: vagaErr } = await service
       .from("vagas")
       .insert({
@@ -80,7 +83,7 @@ export async function POST(request: NextRequest) {
         horario: sol.horario_texto ?? null,
         // Solicitação do link público ou do portal com perfil do candidato: além do que o cliente pediu, só habilitação e veículo próprio
         // (ligados à função) entram nos requisitos. Sexo, idade, PCD e local de trabalho ficam em perfil_extra, uso interno, e NUNCA são publicados.
-        requisitos: sol.origem === "link_publico" || sol.perfil_extra ? requisitosPublicaveis(sol.requisitos, sol.perfil_extra) : sol.requisitos ?? null,
+        requisitos: requisitosDaVaga,
         beneficios: sol.beneficios ?? null,
         principais_atividades: sol.principais_atividades ?? null,
         habilidades_desejadas: [],
@@ -161,7 +164,29 @@ export async function POST(request: NextRequest) {
     // Aviso no sino/popup do portal: extra, isolado (nunca lança), depois de a solicitação já estar aprovada.
     await avisarSolicitacaoDecidida(service, solicitacao_id, "aprovada");
 
-    return NextResponse.json({ success: true, vaga_id: vaga.id }, { status: 201 });
+    // Aviso (só informa, nunca desfaz nada): vaga que já nasce confidencial mas cujo texto público cita o cliente. Isolado: a vaga já está criada e a
+    // resposta de sucesso não pode depender disto.
+    const avisos: string[] = [];
+    try {
+      if (sol.confidencial === true) {
+        const { data: clienteDaSol } = sol.cliente_id
+          ? await service.from("clientes").select("nome").eq("id", sol.cliente_id).maybeSingle()
+          : { data: null };
+        const achados = detectarClienteNoTextoPublico({
+          confidencial: true,
+          campos: {
+            titulo: sol.cargo, cidade: sol.cidade, estado: sol.estado, salario: sol.salario, adicionais_salariais: sol.adicionais_salariais,
+            horario: sol.horario_texto, requisitos: requisitosDaVaga, beneficios: sol.beneficios, principais_atividades: sol.principais_atividades,
+          },
+          nomesDoCliente: [clienteDaSol?.nome, sol.cliente_nome],
+        });
+        if (achados.length > 0) avisos.push(mensagemDepoisDeSalvar(achados));
+      }
+    } catch (err) {
+      console.error("[POST /api/vagas/from-solicitacao] Erro ao conferir o nome do cliente no texto público:", err instanceof Error ? err.name : "erro");
+    }
+
+    return NextResponse.json({ success: true, vaga_id: vaga.id, avisos }, { status: 201 });
   } catch (err) {
     console.error("[POST /api/vagas/from-solicitacao]", err);
     return NextResponse.json({ error: "Erro interno." }, { status: 500 });

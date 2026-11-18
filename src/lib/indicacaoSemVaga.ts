@@ -85,7 +85,8 @@ export function dadosVagaDaIndicacao(o: {
   cidade?: string | null;
   estado?: string | null;
   // Dados que o cliente já informou na indicação: viram o pré-preenchimento da vaga (salário e horário). O setor NÃO entra: a vaga não tem campo
-  // interno para ele e `observacoes` aparece na página pública /vagas/[slug]. Opcionais: indicação antiga sem eles gera a vaga como antes.
+  // interno para ele (`observacoes` NÃO aparece na página pública /vagas/[slug]: ela só mostra título, local, salário, horário, requisitos, benefícios e
+  // principais atividades; mesmo assim o setor não vira texto da vaga). Opcionais: indicação antiga sem eles gera a vaga como antes.
   salario?: number | string | null;
   salarioHora?: number | string | null;
   horario?: string | null;
