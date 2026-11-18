@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { escaparHtml } from "@/lib/escaparHtml";
 
 interface EmailOpts {
   to: string;
@@ -29,21 +30,11 @@ function criarTransporter() {
   });
 }
 
-export async function enviarNotificacaoEquipe({
-  nomeCandidato,
-  cargoPretendido,
-  email,
-  telefone,
-  cidade,
-  estado,
-}: NotificacaoEquipeOpts) {
-  const destino = process.env.NOTIFY_EMAIL || process.env.SMTP_USER;
-  if (!destino) return;
-
-  const transporter = criarTransporter();
+// Texto do formulário público de candidatura (qualquer pessoa da internet): tudo que é digitado passa por escaparHtml.
+export function montarHtmlNotificacaoEquipe({ nomeCandidato, cargoPretendido, email, telefone, cidade, estado }: NotificacaoEquipeOpts): string {
   const localInfo = [cidade, estado].filter(Boolean).join(" – ");
 
-  const html = `
+  return `
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -54,17 +45,26 @@ export async function enviarNotificacaoEquipe({
     </div>
     <div style="padding:28px 32px;">
       <table style="width:100%;border-collapse:collapse;font-size:14px;color:#374151;">
-        <tr><td style="padding:8px 0;font-weight:700;width:140px;">Candidato</td><td style="padding:8px 0;">${nomeCandidato}</td></tr>
-        <tr><td style="padding:8px 0;font-weight:700;">Vaga / Cargo</td><td style="padding:8px 0;">${cargoPretendido}</td></tr>
-        ${email ? `<tr><td style="padding:8px 0;font-weight:700;">E-mail</td><td style="padding:8px 0;">${email}</td></tr>` : ""}
-        ${telefone ? `<tr><td style="padding:8px 0;font-weight:700;">Telefone</td><td style="padding:8px 0;">${telefone}</td></tr>` : ""}
-        ${localInfo ? `<tr><td style="padding:8px 0;font-weight:700;">Localização</td><td style="padding:8px 0;">${localInfo}</td></tr>` : ""}
+        <tr><td style="padding:8px 0;font-weight:700;width:140px;">Candidato</td><td style="padding:8px 0;">${escaparHtml(nomeCandidato)}</td></tr>
+        <tr><td style="padding:8px 0;font-weight:700;">Vaga / Cargo</td><td style="padding:8px 0;">${escaparHtml(cargoPretendido)}</td></tr>
+        ${email ? `<tr><td style="padding:8px 0;font-weight:700;">E-mail</td><td style="padding:8px 0;">${escaparHtml(email)}</td></tr>` : ""}
+        ${telefone ? `<tr><td style="padding:8px 0;font-weight:700;">Telefone</td><td style="padding:8px 0;">${escaparHtml(telefone)}</td></tr>` : ""}
+        ${localInfo ? `<tr><td style="padding:8px 0;font-weight:700;">Localização</td><td style="padding:8px 0;">${escaparHtml(localInfo)}</td></tr>` : ""}
       </table>
       <p style="font-size:13px;color:#9CA3AF;margin:20px 0 0;text-align:center;">Acesse o painel para visualizar o perfil completo.</p>
     </div>
   </div>
 </body>
 </html>`;
+}
+
+export async function enviarNotificacaoEquipe(opts: NotificacaoEquipeOpts) {
+  const { nomeCandidato, cargoPretendido } = opts;
+  const destino = process.env.NOTIFY_EMAIL || process.env.SMTP_USER;
+  if (!destino) return;
+
+  const transporter = criarTransporter();
+  const html = montarHtmlNotificacaoEquipe(opts);
 
   await transporter.sendMail({
     from: process.env.SMTP_FROM || `"Salmazos RH" <${process.env.SMTP_USER}>`,
@@ -74,14 +74,8 @@ export async function enviarNotificacaoEquipe({
   });
 }
 
-export async function enviarEmailConfirmacao({
-  to,
-  nomeCandidato,
-  cargoPretendido,
-}: EmailOpts) {
-  const transporter = criarTransporter();
-
-  const html = `
+export function montarHtmlConfirmacao({ nomeCandidato, cargoPretendido }: Pick<EmailOpts, "nomeCandidato" | "cargoPretendido">): string {
+  return `
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -92,9 +86,9 @@ export async function enviarEmailConfirmacao({
       <p style="color:rgba(255,255,255,.85);margin:8px 0 0;font-size:15px;">Candidatura recebida com sucesso!</p>
     </div>
     <div style="padding:36px 32px;">
-      <p style="font-size:16px;color:#111;margin:0 0 12px;">Olá, <strong>${nomeCandidato}</strong>!</p>
+      <p style="font-size:16px;color:#111;margin:0 0 12px;">Olá, <strong>${escaparHtml(nomeCandidato)}</strong>!</p>
       <p style="font-size:15px;color:#555;line-height:1.7;margin:0 0 20px;">
-        Recebemos sua candidatura para a vaga de <strong style="color:#534AB7;">${cargoPretendido}</strong>.
+        Recebemos sua candidatura para a vaga de <strong style="color:#534AB7;">${escaparHtml(cargoPretendido)}</strong>.
         Nossa equipe analisará seu perfil e entrará em contato em breve.
       </p>
       <div style="background:#f5f4ff;border-left:4px solid #534AB7;border-radius:4px;padding:18px 20px;margin:0 0 24px;">
@@ -113,6 +107,15 @@ export async function enviarEmailConfirmacao({
   </div>
 </body>
 </html>`;
+}
+
+export async function enviarEmailConfirmacao({
+  to,
+  nomeCandidato,
+  cargoPretendido,
+}: EmailOpts) {
+  const transporter = criarTransporter();
+  const html = montarHtmlConfirmacao({ nomeCandidato, cargoPretendido });
 
   await transporter.sendMail({
     from: process.env.SMTP_FROM || `"Salmazos RH" <${process.env.SMTP_USER}>`,

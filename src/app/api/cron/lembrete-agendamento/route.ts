@@ -117,7 +117,7 @@ export async function GET(request: Request) {
   <div style="padding:28px 32px">
     <p style="margin:0 0 16px;font-size:14px;color:#374151">Olá! Passando pra lembrar que temos um candidato aguardando você definir a data e o horário da entrevista:</p>
     <div style="margin-bottom:20px;padding:14px 16px;background:#DBEAFE;border-radius:10px;border:1px solid #93C5FD">
-      <p style="margin:0;font-size:16px;font-weight:700;color:#1D4ED8">${candidatoNome}</p>
+      <p style="margin:0;font-size:16px;font-weight:700;color:#1D4ED8">${escaparHtml(candidatoNome)}</p>
     </div>
     <p style="margin:0 0 20px;font-size:14px;color:#374151">Assim que você confirmar, avisamos o candidato e seguimos com o processo. Leva menos de um minuto:</p>
     <div style="text-align:center">

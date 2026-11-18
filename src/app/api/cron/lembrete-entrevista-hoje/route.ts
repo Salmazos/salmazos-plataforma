@@ -98,9 +98,9 @@ export async function GET(request: Request) {
       const linhas = itens
         .map(
           (it) => `<tr>
-            <td style="padding:8px 14px;font-weight:600;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${it.candidato_nome}</td>
-            <td style="padding:8px 14px;color:#374151;font-size:13px;border-bottom:1px solid #f3f4f6">${it.cargo ?? "—"}</td>
-            <td style="padding:8px 14px;color:#1D4ED8;font-weight:700;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">${it.hora ?? "—"}</td>
+            <td style="padding:8px 14px;font-weight:600;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${escaparHtml(it.candidato_nome)}</td>
+            <td style="padding:8px 14px;color:#374151;font-size:13px;border-bottom:1px solid #f3f4f6">${escaparHtml(it.cargo ?? "—")}</td>
+            <td style="padding:8px 14px;color:#1D4ED8;font-weight:700;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">${escaparHtml(it.hora ?? "—")}</td>
             <td style="padding:8px 14px;color:#374151;font-size:13px;border-bottom:1px solid #f3f4f6">${it.local ? escaparHtml(it.local) : "—"}</td>
           </tr>`
         )

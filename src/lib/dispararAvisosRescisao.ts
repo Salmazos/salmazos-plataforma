@@ -1,3 +1,4 @@
+import { escaparHtml } from "@/lib/escaparHtml";
 import { SITE_URL } from "@/lib/siteUrl";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
@@ -61,7 +62,7 @@ interface DadosFinanceirosRescisao {
   dataPagamentoGuia: string | null;
 }
 
-function montarHtmlEmail(
+export function montarHtmlEmail(
   tituloEmail: string,
   corDestaque: string,
   nome: string,
@@ -85,8 +86,8 @@ function montarHtmlEmail(
   </div>
   <div style="padding:24px 28px">
     <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Funcionário</td><td style="padding:6px 0;color:#111827">${nome}</td></tr>
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Empresa</td><td style="padding:6px 0;color:#111827">${empresa}</td></tr>
+      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Funcionário</td><td style="padding:6px 0;color:#111827">${escaparHtml(nome)}</td></tr>
+      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Empresa</td><td style="padding:6px 0;color:#111827">${escaparHtml(empresa)}</td></tr>
       <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Modalidade</td><td style="padding:6px 0;color:#111827">${modalidadeLabel}</td></tr>
       <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Valor da rescisão</td><td style="padding:6px 0;color:${corDestaque};font-weight:700">${moeda(valorRescisao)}</td></tr>
       <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Data de pagamento</td><td style="padding:6px 0;color:#111827">${formatarData(dataPagamentoRescisao)}</td></tr>

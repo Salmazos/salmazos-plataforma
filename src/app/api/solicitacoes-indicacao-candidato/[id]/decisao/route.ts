@@ -1,4 +1,3 @@
-import { SITE_URL } from "@/lib/siteUrl";
 import { resolverDestinatarios } from "@/lib/avisos";
 import { emailsOuPadrao } from "@/lib/avisosResolucao";
 import { NextRequest, NextResponse } from "next/server";
@@ -17,6 +16,7 @@ import { finalizarContratado } from "@/lib/finalizarContratacao";
 import { erroDataTermino } from "@/lib/dataTerminoContrato";
 import { criarAdmissaoSemEnvio, removerAdmissaoCriada } from "@/lib/admissaoCriacao";
 import { MSG_SEM_VAGA_APROVAR } from "@/lib/indicacaoSemVaga";
+import { linhaTabelaAdmissao, montarHtmlIndicacaoAprovada } from "@/lib/emailsEquipe";
 import { mensagemErrosAdmissao, validarCamposAdmissao } from "@/lib/admissaoCamposPadrao";
 
 interface Params {
@@ -803,9 +803,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     try {
       let admRows = "";
       if (sol.admissao_salario_hora != null) {
-        admRows += `<tr><td style="padding:6px 12px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">Salário</td><td style="padding:6px 12px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">R$ ${Number(sol.admissao_salario_hora).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/hora (Horista)</td></tr>`;
+        admRows += linhaTabelaAdmissao("Salário", `R$ ${Number(sol.admissao_salario_hora).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/hora (Horista)`);
       } else if (sol.admissao_salario != null) {
-        admRows += `<tr><td style="padding:6px 12px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">Salário</td><td style="padding:6px 12px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">R$ ${Number(sol.admissao_salario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês</td></tr>`;
+        admRows += linhaTabelaAdmissao("Salário", `R$ ${Number(sol.admissao_salario).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês`);
       }
       for (const [key, label] of Object.entries(ADM_LABELS)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -813,45 +813,26 @@ export async function POST(request: NextRequest, { params }: Params) {
         if (key === "admissao_qtd_dias_teste") {
           // 0 ("não houve") também aparece: é uma resposta do cliente, diferente de não informado (null).
           const texto = formatarDiasTeste(val);
-          if (texto !== null) admRows += `<tr><td style="padding:6px 12px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">${label}</td><td style="padding:6px 12px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${texto}</td></tr>`;
+          if (texto !== null) admRows += linhaTabelaAdmissao(label, `${texto}`);
           continue;
         }
         if (val != null && val !== "" && val !== false) {
           const display = typeof val === "boolean" ? (val ? "Sim" : "Não")
             : key === "admissao_data_inicio" ? String(val).split("-").reverse().join("/")
             : String(val);
-          admRows += `<tr><td style="padding:6px 12px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">${label}</td><td style="padding:6px 12px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${display}</td></tr>`;
+          admRows += linhaTabelaAdmissao(label, `${display}`);
         }
       }
 
-      const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
-<div style="max-width:600px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
-  <div style="background:#000;padding:28px 32px;text-align:center">
-    <h1 style="color:#FFD700;margin:0;font-size:20px">🧑‍💼 Indicação Direta Aprovada</h1>
-  </div>
-  <div style="padding:28px 32px">
-    <div style="margin-bottom:20px">
-      <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Candidato</p>
-      <p style="margin:0;font-size:16px;font-weight:700;color:#111827">${sol.candidato_nome}</p>
-      <p style="margin:2px 0 0;font-size:13px;color:#6B7280">${sol.candidato_telefone} · CPF/e-mail a completar pelo RH</p>
-    </div>
-    <div style="margin-bottom:20px;padding:12px 16px;background:#f9fafb;border-radius:8px">
-      <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Vaga</p>
-      <p style="margin:0;font-size:14px;font-weight:600;color:#111827">${vaga.titulo}</p>
-      <p style="margin:2px 0 0;font-size:13px;color:#6B7280">${sol.cliente_nome ?? ""}</p>
-    </div>
-    ${admRows ? `<div style="margin-bottom:20px"><p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">📋 Dados para Admissão</p><table style="width:100%;border-collapse:collapse">${admRows}</table></div>` : ""}
-    ${sol.curriculo_url ? `<p style="margin:0 0 20px;font-size:13px;color:#374151">📎 Currículo anexado no perfil do candidato.</p>` : ""}
-    <div style="text-align:center;padding-top:16px;border-top:1px solid #f3f4f6">
-      <a href="${SITE_URL}/painel/candidato/${candidato.id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil completo</a>
-    </div>
-  </div>
-  <div style="background:#f9fafb;padding:16px 32px;text-align:center">
-    <p style="margin:0;font-size:11px;color:#9CA3AF">Salmazos RH &amp; Serviços — Notificação automática</p>
-  </div>
-</div>
-</body></html>`;
+      const html = montarHtmlIndicacaoAprovada({
+        candidatoNome: sol.candidato_nome,
+        candidatoTelefone: sol.candidato_telefone,
+        vagaTitulo: vaga.titulo,
+        clienteNome: sol.cliente_nome,
+        admRows,
+        temCurriculo: !!sol.curriculo_url,
+        candidatoId: candidato.id,
+      });
 
       // Padrão antigo (fixo) vale enquanto não houver config em Configurações > Avisos
       // (evento indicacao_decisao_cliente).

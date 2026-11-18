@@ -11,6 +11,7 @@ import { emailsOuPadrao, emailsSomenteConfigurado } from "@/lib/avisosResolucao"
 import { avisarDecisaoClienteCandidato } from "@/lib/avisarDecisaoClienteCandidato";
 import { avisarFeeRSNaoConfigurado } from "@/lib/avisarFeeRS";
 import { resolverDiasTeste, formatarDiasTeste } from "@/lib/diasTeste";
+import { linhaTabelaAdmissao, montarHtmlCandidatoAprovado } from "@/lib/emailsEquipe";
 
 
 export async function PATCH(request: NextRequest) {
@@ -306,8 +307,7 @@ export async function PATCH(request: NextRequest) {
           admissao_observacoes: "Observações",
         };
 
-        const linhaTabela = (label: string, display: string) =>
-          `<tr><td style="padding:6px 12px;font-weight:600;color:#6B7280;font-size:13px;border-bottom:1px solid #f3f4f6;white-space:nowrap">${label}</td><td style="padding:6px 12px;color:#111827;font-size:13px;border-bottom:1px solid #f3f4f6">${display}</td></tr>`;
+        const linhaTabela = linhaTabelaAdmissao;
 
         let admRows = "";
 
@@ -353,48 +353,25 @@ export async function PATCH(request: NextRequest) {
               <p style="margin:0 0 4px;font-weight:700;color:#92400E;font-size:14px">Informações Financeiras</p>
               <p style="margin:0;color:#92400E;font-size:13px;line-height:1.7">
                 <strong>Fee:</strong> ${pct}% = R$ ${feeVal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}<br>
-                <strong>Prazo de cobrança:</strong> ${v.fee_rs_prazo_cobranca ?? "A definir"}<br>
+                <strong>Prazo de cobrança:</strong> ${escaparHtml(v.fee_rs_prazo_cobranca ?? "A definir")}<br>
                 <strong>Garantia de reposição:</strong> até ${garantiaFim}
               </p>
             </div>`;
         }
 
-        const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,sans-serif">
-<div style="max-width:600px;margin:40px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.08)">
-  <div style="background:#000;padding:28px 32px;text-align:center">
-    <h1 style="color:#FFD700;margin:0;font-size:20px">✅ Candidato Aprovado pelo Cliente</h1>
-  </div>
-  <div style="padding:28px 32px">
-    <div style="margin-bottom:20px">
-      <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Candidato</p>
-      <p style="margin:0;font-size:16px;font-weight:700;color:#111827">${candidatoNome}</p>
-      <p style="margin:2px 0 0;font-size:13px;color:#6B7280">${c?.cargo_pretendido ?? "—"} · ${c?.cidade ?? ""}${c?.estado ? ` – ${c.estado}` : ""}</p>
-    </div>
-    <div style="margin-bottom:20px;padding:12px 16px;background:#f9fafb;border-radius:8px">
-      <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Vaga</p>
-      <p style="margin:0;font-size:14px;font-weight:600;color:#111827">${v?.titulo ?? "—"}</p>
-      <p style="margin:2px 0 0;font-size:13px;color:#6B7280">${clienteNome} · ${tipoLabel[v?.tipo_servico] ?? v?.tipo_servico ?? "—"}</p>
-    </div>
-    ${admRows ? `
-    <div style="margin-bottom:20px">
-      <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">📋 Dados para Admissão</p>
-      <table style="width:100%;border-collapse:collapse">${admRows}</table>
-    </div>` : ""}
-    ${feeSection}
-    <div style="margin-bottom:20px;padding:12px 16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0">
-      <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:.07em">💬 Feedback do Cliente</p>
-      <p style="margin:0;font-size:13px;color:#374151;line-height:1.6">${feedback_cliente}</p>
-    </div>
-    <div style="text-align:center;padding-top:16px;border-top:1px solid #f3f4f6">
-      <a href="${SITE_URL}/painel/candidato/${enc.candidato_id}" style="display:inline-block;padding:10px 24px;background:#000;color:#FFD700;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700">Ver perfil completo</a>
-    </div>
-  </div>
-  <div style="background:#f9fafb;padding:16px 32px;text-align:center">
-    <p style="margin:0;font-size:11px;color:#9CA3AF">Salmazos RH &amp; Serviços — Notificação automática</p>
-  </div>
-</div>
-</body></html>`;
+        const html = montarHtmlCandidatoAprovado({
+          candidatoNome,
+          cargoPretendido: c?.cargo_pretendido,
+          cidade: c?.cidade,
+          estado: c?.estado,
+          vagaTitulo: v?.titulo,
+          clienteNome,
+          tipoServicoRotulo: tipoLabel[v?.tipo_servico] ?? v?.tipo_servico ?? "—",
+          admRows,
+          feeSection,
+          feedbackCliente: feedback_cliente,
+          candidatoId: enc.candidato_id,
+        });
 
         // Padrão antigo (fixo no código) — vale enquanto não houver configuração em Configurações >
         // Avisos (evento portal_candidato_aprovado). rh@ nunca esteve nessa lista até set/2026:

@@ -1,3 +1,4 @@
+import { escaparHtml } from "@/lib/escaparHtml";
 import { SITE_URL } from "@/lib/siteUrl";
 import { NextRequest, NextResponse } from "next/server";
 import { createPortalClient, createServiceClient } from "@/lib/supabase/server";
@@ -11,7 +12,6 @@ import { mensagemErrosAdmissao, validarCamposAdmissao } from "@/lib/admissaoCamp
 import { faltandoObrigatorios } from "@/lib/admissaoObrigatorios";
 import { ROTULO_TIPO_SERVICO, ehErroSemVagaIndisponivel, indicacoesPendentesComMesmoTelefone, MSG_SEM_VAGA_INDISPONIVEL } from "@/lib/indicacaoSemVaga";
 
-const escaparHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const TIPO_LABEL: Record<string, string> = {
   recrutamento_selecao: "Recrutamento e Seleção",
@@ -187,18 +187,18 @@ export async function POST(request: NextRequest) {
     <h1 style="color:#FFD700;margin:0;font-size:20px">🧑‍💼 Indicação Direta de Candidato</h1>
   </div>
   <div style="padding:28px 32px">
-    <p style="margin:0 0 16px;font-size:14px;color:#374151"><strong style="color:#111827">${clienteNome}</strong> indicou um candidato direto pra registro, sem passar pela triagem:</p>
+    <p style="margin:0 0 16px;font-size:14px;color:#374151"><strong style="color:#111827">${escaparHtml(clienteNome)}</strong> indicou um candidato direto pra registro, sem passar pela triagem:</p>
     <div style="margin-bottom:20px;padding:14px 16px;background:#DBEAFE;border-radius:10px;border:1px solid #93C5FD">
-      <p style="margin:0;font-size:16px;font-weight:700;color:#1D4ED8">${dados.candidato_nome}</p>
-      <p style="margin:4px 0 0;font-size:13px;color:#1E40AF">${dados.candidato_telefone}</p>
+      <p style="margin:0;font-size:16px;font-weight:700;color:#1D4ED8">${escaparHtml(dados.candidato_nome)}</p>
+      <p style="margin:4px 0 0;font-size:13px;color:#1E40AF">${escaparHtml(dados.candidato_telefone)}</p>
     </div>
     <div style="margin-bottom:20px;padding:12px 16px;background:#f9fafb;border-radius:8px">
       <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#FFB800;text-transform:uppercase;letter-spacing:.07em">Vaga</p>
       ${vaga
-        ? `<p style="margin:0;font-size:14px;font-weight:600;color:#111827">${vaga.titulo}</p>`
+        ? `<p style="margin:0;font-size:14px;font-weight:600;color:#111827">${escaparHtml(vaga.titulo)}</p>`
         : `<p style="margin:0;font-size:14px;font-weight:600;color:#B45309">Sem vaga — aguardando direcionamento</p>
       <p style="margin:2px 0 0;font-size:13px;color:#374151">Cargo/função: ${escaparHtml(dados.admissao_funcao ?? "")}</p>`}
-      <p style="margin:2px 0 0;font-size:13px;color:#6B7280">${tipoLbl}</p>
+      <p style="margin:2px 0 0;font-size:13px;color:#6B7280">${escaparHtml(tipoLbl)}</p>
     </div>
     ${dados.curriculo_url ? `<p style="margin:0 0 20px;font-size:13px;color:#374151">📎 Currículo anexado — revise a indicação no painel para baixar.</p>` : ""}
     <div style="text-align:center;padding-top:24px;border-top:1px solid #f3f4f6;margin-top:20px">

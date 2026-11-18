@@ -1,3 +1,4 @@
+import { escaparHtml } from "@/lib/escaparHtml";
 import { SITE_URL } from "@/lib/siteUrl";
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/sendEmail";
@@ -40,7 +41,7 @@ function conteudo(momento: MomentoAvisoAso, nome: string, empresa: string, dataV
   }
 }
 
-function montarHtmlEmail(
+export function montarHtmlEmail(
   tituloEmail: string,
   corDestaque: string,
   nome: string,
@@ -57,8 +58,8 @@ function montarHtmlEmail(
   </div>
   <div style="padding:24px 28px">
     <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Funcionário</td><td style="padding:6px 0;color:#111827">${nome}</td></tr>
-      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Empresa</td><td style="padding:6px 0;color:#111827">${empresa}</td></tr>
+      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Funcionário</td><td style="padding:6px 0;color:#111827">${escaparHtml(nome)}</td></tr>
+      <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Empresa</td><td style="padding:6px 0;color:#111827">${escaparHtml(empresa)}</td></tr>
       <tr><td style="padding:6px 0;color:#6B7280;font-weight:600">Vencimento do ASO periódico</td><td style="padding:6px 0;color:${corDestaque};font-weight:700">${vencimentoFormatado}</td></tr>
     </table>
     <div style="text-align:center;margin-top:20px">
