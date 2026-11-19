@@ -63,8 +63,16 @@ async function rodar(mod: typeof real, arquivos: { tipo: string; bytes: Uint8Arr
   return { resultado, logs, texto, desenhou };
 }
 
+// Texto do ÍNDICE do pacote (desenharIndice) para as entradas de um resultado.
+async function textoDoIndice(mod: typeof real, entradas: Parameters<typeof real.desenharIndice>[1]) {
+  const doc = await PDFDocument.create();
+  const w = await PdfWriter.create(doc, false);
+  mod.desenharIndice(w, entradas);
+  return (await extractText(await getDocumentProxy(new Uint8Array(await doc.save())), { mergePages: true })).text.replace(/\s+/g, " ");
+}
+
 // Provas (falha ou null): as mesmas rodam no módulo real e nos sabotados.
-type Prova = { categoria: "motivo" | "pagina" | "diagnostico"; roda: (mod: typeof real) => Promise<string | null> };
+type Prova = { categoria: "motivo" | "pagina" | "diagnostico" | "indice"; roda: (mod: typeof real) => Promise<string | null> };
 const PROVAS: Prova[] = [
   { categoria: "motivo", roda: async (mod) => {
     const r = await rodar(mod, [{ tipo: "ctps_todas_paginas", bytes: pdfCriptografado() }, { tipo: "cpf", bytes: await pdfNormal() }, { tipo: "rg", bytes: pdfCorrompido() }]);
@@ -89,6 +97,15 @@ const PROVAS: Prova[] = [
     const nenhum = await rodar(mod, [{ tipo: "cpf", bytes: await pdfNormal() }]);
     return nenhum.desenhou === false ? null : "sem documento de fora não deveria criar a página";
   } },
+  { categoria: "indice", roda: async (mod) => {
+    const r = await rodar(mod, [{ tipo: "ctps_todas_paginas", bytes: pdfCriptografado() }, { tipo: "cpf", bytes: await pdfNormal() }, { tipo: "rg", bytes: pdfCorrompido() }]);
+    // quem foi incorporado ganha o número da página (é o que inserirIndiceEBookmarks faz na rota); quem ficou de fora segue com paginaInicial null
+    const texto = await textoDoIndice(mod, r.resultado.entradas.map((e) => ({ ...e, paginaInicial: e.motivo ? null : 5 })));
+    if (!/Carteira de Trabalho Digital protegido por senha/.test(texto)) return `o índice não diz 'protegido por senha' na linha da CTPS: "${texto.slice(0, 220)}"`;
+    if (!/Identidade RG não incorporado/.test(texto)) return "o PDF corrompido deveria seguir como 'não incorporado' no índice";
+    if (/CPF\/CIC (protegido|não incorporado)/.test(texto)) return "o documento incorporado não deveria aparecer como de fora";
+    return null;
+  } },
   { categoria: "diagnostico", roda: async (mod) => {
     const r = await rodar(mod, [{ tipo: "ctps_todas_paginas", bytes: pdfCriptografado({ p: -44 }) }]);
     const log = r.logs.find((l) => l.includes("Diagnóstico /Encrypt"));
@@ -110,6 +127,10 @@ await ok("documento criptografado vira 'pdf_protegido' (PDF corrompido segue com
 
 await ok("página 'Documentos não incorporados automaticamente': texto próprio para PDF protegido, texto de sempre para os outros e os dois quando há os dois; sem página se nada ficou de fora", async () => {
   assert.equal(await PROVAS[1].roda(real), null);
+});
+
+await ok("índice do pacote: a linha do documento protegido diz 'protegido por senha' (os demais, 'não incorporado'); o documento incorporado segue com o número da página", async () => {
+  assert.equal(await PROVAS.find((p) => p.categoria === "indice")!.roda(real), null);
 });
 
 await ok("diagnóstico no log: versão, revisão, tamanho da chave, método, flags de permissão e se abre com senha vazia; NENHUM nome, CPF, caminho ou conteúdo", async () => {
@@ -186,6 +207,7 @@ const SAB_LIB: SabLib[] = [
   { nome: "sem a detecção de PDF protegido (volta ao motivo genérico)", categoria: "motivo", trocas: [['if (ext === "pdf" && ehPdfProtegido(err, bytes)) {', 'if (false && ext === "pdf" && ehPdfProtegido(err, bytes)) {']] },
   { nome: "página do protegido com o texto antigo ('formato não suportado')", categoria: "pagina", trocas: [["grupo(TEXTO_PDF_PROTEGIDO, lista.filter((m) => m.motivo === MOTIVO_PDF_PROTEGIDO));", "grupo(TEXTO_FORMATO_NAO_SUPORTADO, lista.filter((m) => m.motivo === MOTIVO_PDF_PROTEGIDO));"]] },
   { nome: "diagnóstico que vaza conteúdo do documento no log", categoria: "diagnostico", trocas: [["abre_com_senha_vazia=${abreComSenhaVazia}`,", "abre_com_senha_vazia=${abreComSenhaVazia} conteudo=${Buffer.from(bytes).toString(\"latin1\").slice(0, 1200)}`,"]] },
+  { nome: "índice sem o motivo (volta a escrever só 'não incorporado')", categoria: "indice", trocas: [['e.motivo === MOTIVO_PDF_PROTEGIDO ? "protegido por senha" : "não incorporado"', '"não incorporado"']] },
   { nome: "sem o diagnóstico /Encrypt", categoria: "diagnostico", trocas: [["        await diagnosticarCriptografia(bytes, admissaoId, doc.tipo_documento);\n", ""]] },
 ];
 type SabTexto = { nome: string; tipo: "rota" | "tela"; arquivo: string; trocas: [string, string][] };

@@ -328,7 +328,8 @@ export function desenharIndice(w: PdfWriter, entradas: readonly EntradaIndice[])
     w.y -= 8;
     garantir(ALTURA_LINHA * 2);
     w.drawText("Não incorporados automaticamente", w.bold, 10, GRAY);
-    for (const e of naoIncorporados) linha(e.rotulo, "não incorporado", GRAY);
+    // PDF protegido por senha diz isso na própria linha (o motivo vem de anexarDocumentosAoPacote); os demais seguem "não incorporado".
+    for (const e of naoIncorporados) linha(e.rotulo, e.motivo === MOTIVO_PDF_PROTEGIDO ? "protegido por senha" : "não incorporado", GRAY);
   }
   return paginas;
 }
