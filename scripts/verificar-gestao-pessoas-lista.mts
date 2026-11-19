@@ -433,7 +433,30 @@ await ok("CSV: injeção de fórmula (= + - @) ganha apóstrofo; célula com ';'
   assert.equal(nomeArquivoCsv("Açaí & Cia. Ltda", "2026-11-18"), "gestao-pessoas-acai-cia-ltda-18-11-2026.csv");
   assert.equal(nomeArquivoCsv("###", "2026-01-05"), "gestao-pessoas-empresa-05-01-2026.csv");
   const csv = montarCsvRH([{ nome: "Ana", cargo: null, dataAdmissao: "01/01/2026", tempoDeCasa: "1 mês", idade: null, sexo: "Feminino", escolaridade: "Não informado", filhos: "Sem filhos declarados" }], false);
-  assert.equal(csv, "﻿Nome;Cargo;Data de admissão;Tempo de casa;Idade;Sexo;Escolaridade;Filhos\r\nAna;;01/01/2026;1 mês;;Feminino;Não informado;Sem filhos declarados\r\n");
+  assert.equal(csv, "﻿Nome;Cargo;Data de admissão;Tempo de casa;Idade;Sexo;Escolaridade;Filhos\r\nAna;;01/01/2026;1 mês;Não informado;Feminino;Não informado;Sem filhos declarados\r\n", "idade indisponível = 'Não informado' no CSV (não fica vazio)");
+});
+
+await ok("CSV e lista: Idade 'Não informado' para legado sem nascimento e para idade fora de 14 a 90; idade válida continua número; nomes com espaços nas pontas saem aparados (RH, portal e CSV)", () => {
+  const base = { cargo: "Auxiliar", dataAdmissao: "2025-03-10", grauInstrucao: "medio_completo", sexo: "M" };
+  const pessoas: PessoaAtiva[] = [
+    { ...base, nome: "  Com Idade  ", dataNascimento: "1990-05-05" }, // 36
+    { ...base, nome: "Legado Sem Nascimento ", dataNascimento: null },
+    { ...base, nome: " Idade Absurda", dataNascimento: "2026-05-01" }, // 0 ano: fora de 14 a 90 => idade indisponível
+  ];
+  const linhas = filtrarFuncionariosGestao(pessoas, {}, HOJE);
+  const rh = linhasParaRH(linhas, {}), po = linhasParaPortal(linhas, {});
+  const idadeDe = (nome: string) => rh.find((l) => l.nome === nome)!.idade;
+  assert.equal(idadeDe("Com Idade"), 36);
+  assert.equal(idadeDe("Legado Sem Nascimento"), null);
+  assert.equal(idadeDe("Idade Absurda"), null);
+  assert.deepEqual(rh.map((l) => l.nome).sort(), ["Com Idade", "Idade Absurda", "Legado Sem Nascimento"], "RH sem espaços nas pontas");
+  assert.deepEqual(po.map((l) => l.nome).sort(), ["Com Idade", "Idade Absurda", "Legado Sem Nascimento"], "portal sem espaços nas pontas");
+  const csv = montarCsvRH(rh, false).slice(1).split("\r\n").filter(Boolean);
+  const cel = (nome: string) => csv.find((l) => l.startsWith(`${nome};`))!.split(";");
+  assert.equal(cel("Com Idade")[4], "36");
+  assert.equal(cel("Legado Sem Nascimento")[4], "Não informado");
+  assert.equal(cel("Idade Absurda")[4], "Não informado");
+  assert.ok(csv.slice(1).every((l) => !/^\s|;\s|\s;/.test(l.split(";")[0] ?? "") && l.split(";")[0] === l.split(";")[0].trim()), "nome do CSV sem espaços nas pontas");
 });
 
 await ok("CSV: bloqueado para papel sem acesso, sem login e para o portal (sem rota de exportação no portal); auditoria gravada com quem, empresa, quantidade e filtros", async () => {

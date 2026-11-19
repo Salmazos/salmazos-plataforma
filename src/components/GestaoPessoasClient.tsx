@@ -51,6 +51,8 @@ const ESTILO = `
 .gp-btn[aria-pressed="true"]{box-shadow:0 0 0 2px #111827}
 .gp-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid #D1D5DB;border-radius:999px;background:#fff;padding:3px 10px;font-size:12px;color:#111827}
 .gp-chip[aria-pressed="true"]{background:#111827;color:#fff;border-color:#111827}
+/* Celular: atalhos, chips das legendas, legenda de sexo e "Ver todos" com área de toque de pelo menos 44px (no desktop ficam como estão). */
+@media (max-width: 768px){.gp-chip,.gp-toque{min-height:44px}.gp-toque{align-items:center}}
 .card.gp-cartao{background:#f1f5f9;border:1px solid #cbd5e1;padding:0}
 .card.gp-cartao:hover{background:#e2e8f0}
 .card.gp-cartao[data-pressionado="true"]{border-color:#111827;box-shadow:0 0 0 2px #111827}
@@ -229,7 +231,7 @@ export default function GestaoPessoasClient({ clientes, selecionadoId, dados, mo
   const haFiltro = temFiltroAtivo(filtros);
   // Em cada gráfico: o mesmo efeito do cartão "Funcionários ativos" (limpa TODOS os filtros e a ordem e volta à lista cheia), sempre visível.
   const zerar = (
-    <button type="button" className="gp-btn btn-outline" onClick={limpar} aria-label="Ver todos os funcionários e limpar os filtros" title="Voltar à lista completa, sem filtros" style={{ fontSize: 12, padding: "4px 10px", whiteSpace: "nowrap" }}>
+    <button type="button" className="gp-btn gp-toque btn-outline" onClick={limpar} aria-label="Ver todos os funcionários e limpar os filtros" title="Voltar à lista completa, sem filtros" style={{ fontSize: 12, padding: "4px 10px", whiteSpace: "nowrap" }}>
       Ver todos
     </button>
   );
@@ -362,7 +364,7 @@ export default function GestaoPessoasClient({ clientes, selecionadoId, dados, mo
           <ul style={{ listStyle: "none", padding: 0, margin: "12px 0 0", fontSize: 13, color: "#374151" }}>
             {itensSexo.map(([chave, rotulo, n, cor]) => (
               <li key={chave}>
-                <button type="button" className="gp-btn" aria-pressed={filtros.sexo === chave} onClick={() => aplicar(par("sexo", chave))} style={{ display: "flex", justifyContent: "space-between", width: "100%", border: 0, background: "transparent", padding: "3px 4px", font: "inherit", color: "inherit", borderRadius: 4, opacity: filtros.sexo !== undefined && filtros.sexo !== chave ? 0.55 : 1 }}>
+                <button type="button" className="gp-btn gp-toque" aria-pressed={filtros.sexo === chave} onClick={() => aplicar(par("sexo", chave))} style={{ display: "flex", justifyContent: "space-between", width: "100%", border: 0, background: "transparent", padding: "3px 4px", font: "inherit", color: "inherit", borderRadius: 4, opacity: filtros.sexo !== undefined && filtros.sexo !== chave ? 0.55 : 1 }}>
                   <span><span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: cor, marginRight: 8 }} />{rotulo}</span>
                   <span>{n} ({pct(n, totalAtivos)})</span>
                 </button>

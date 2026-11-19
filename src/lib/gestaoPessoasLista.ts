@@ -136,7 +136,8 @@ const cargoDe = (l: Linha) => (l.pessoa.cargo ?? "").trim() || null;
 
 export function linhasParaPortal(linhas: LinhaFiltrada[], filtros: FiltrosGestao): LinhaListaPortal[] {
   return linhas.map((l) => ({
-    nome: l.pessoa.nome, cargo: cargoDe(l), dataAdmissao: dataBR(l.pessoa.dataAdmissao), tempoDeCasa: formatarTempoDeCasa(l.meses), filhos: textoDosFilhos(l.filhos, "portal"),
+    // trim só na EXIBIÇÃO (lista e CSV, RH e portal): o banco não é alterado
+    nome: l.pessoa.nome.trim(), cargo: cargoDe(l), dataAdmissao: dataBR(l.pessoa.dataAdmissao), tempoDeCasa: formatarTempoDeCasa(l.meses), filhos: textoDosFilhos(l.filhos, "portal"),
     ...(filtros.aniversario !== undefined && l.aniversario ? { diaMes: l.aniversario.diaMes, completaAnos: l.aniversario.completaAnos } : {}),
   }));
 }
@@ -158,7 +159,7 @@ export function celulaCsv(valor: string | number | null | undefined): string {
 
 export function montarCsvRH(linhas: LinhaListaRH[], comAniversario: boolean): string {
   const cab = ["Nome", "Cargo", "Data de admissão", "Tempo de casa", "Idade", "Sexo", "Escolaridade", "Filhos", ...(comAniversario ? ["Aniversário", "Completa (anos)"] : [])];
-  const corpo = linhas.map((l) => [l.nome, l.cargo ?? "", l.dataAdmissao, l.tempoDeCasa, l.idade ?? "", l.sexo, l.escolaridade, l.filhos, ...(comAniversario ? [l.diaMes ?? "", l.completaAnos ?? ""] : [])]);
+  const corpo = linhas.map((l) => [l.nome, l.cargo ?? "", l.dataAdmissao, l.tempoDeCasa, l.idade ?? "Não informado", l.sexo, l.escolaridade, l.filhos, ...(comAniversario ? [l.diaMes ?? "", l.completaAnos ?? ""] : [])]);
   return "﻿" + [cab, ...corpo].map((l) => l.map(celulaCsv).join(";")).join("\r\n") + "\r\n";
 }
 

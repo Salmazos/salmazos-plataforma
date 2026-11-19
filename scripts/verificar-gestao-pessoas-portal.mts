@@ -313,6 +313,11 @@ await ok("tela: cartões e legendas são <button> com aria-pressed; região aria
     assert.ok(new RegExp('<button[^>]*aria-pressed="(true|false)"[^>]*>(?:(?!</button>).)*' + cartao).test(portalHtml), "cartão como botão: " + cartao);
   }
   assert.ok(/<button[^>]*aria-pressed="false"[^>]*>(?:(?!<\/button>).)*Masculino/.test(portalHtml), "legenda de sexo como botão");
+  // celular: atalhos/chips (gp-chip), legenda de sexo e "Ver todos" (gp-toque) com área de toque de 44px; no desktop nada muda (só dentro do @media)
+  assert.ok(/@media \(max-width: 768px\)\{\.gp-chip,\.gp-toque\{min-height:44px\}\.gp-toque\{align-items:center\}\}/.test(portalHtml), "regra de 44px só no celular");
+  assert.equal((portalHtml.match(/class="gp-btn gp-toque btn-outline"/g) ?? []).length, 4, "'Ver todos' dos 4 gráficos com a classe de toque");
+  assert.ok(/class="gp-btn gp-toque"[^>]*aria-pressed="false"/.test(portalHtml), "legenda de sexo com a classe de toque");
+  assert.equal((portalHtml.match(/class="gp-btn gp-chip"/g) ?? []).length >= 10, true, "atalhos do cartão de filhos e chips de escolaridade/cargos usam gp-chip (44px no celular)");
   // visual dos cartões-botão: fundo claro + borda (classe gp-cartao), e o seletor de mês FORA do <button> (mexer nele não dispara o clique do cartão)
   assert.equal((portalHtml.match(/class="card gp-cartao"/g) ?? []).length, 5, "os 5 cartões de cima (inclusive Com filhos menores de 14) têm o visual de clicável");
   assert.ok(/\.card\.gp-cartao\{background:#f1f5f9;border:1px solid #cbd5e1/.test(portalHtml) && /\.card\.gp-cartao:hover\{background:#e2e8f0\}/.test(portalHtml) && /\[data-pressionado="true"\]\{border-color:#111827/.test(portalHtml));
