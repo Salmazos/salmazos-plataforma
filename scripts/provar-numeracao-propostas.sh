@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Prova de numeração de propostas (número = SIGLA-seq/ano; a sigla vem do app) num Postgres 16 descartável (nada toca o Supabase real).
+# Prova de numeração de propostas (R&S = SIGLA-seq/ano; MOT/TS = SIGLA-MODELO-seq/ano; a sigla vem do app) e dos percentuais da proposta MOT
+# num Postgres 16 descartável (nada toca o Supabase real). Aplica migration_propostas.sql e depois migration_propostas_mot.sql.
 # Precisa de initdb/pg_ctl/psql do Postgres 16 e de um usuário que não seja root (usa "postgres" se rodar como root).
 # Uso: bash scripts/provar-numeracao-propostas.sh
 set -euo pipefail
@@ -7,6 +8,7 @@ set -euo pipefail
 BIN=${PG_BIN:-/usr/lib/postgresql/16/bin}
 RAIZ=$(cd "$(dirname "$0")/.." && pwd)
 MIGRATION="$RAIZ/supabase/migration_propostas.sql"
+MIGRATION_MOT="$RAIZ/supabase/migration_propostas_mot.sql"
 DIR=$(mktemp -d /tmp/pgprova.XXXXXX)
 PORTA=54329
 SESSOES=${SESSOES:-50}
@@ -52,6 +54,18 @@ echo "== aplica a migration (1ª vez) e de novo (idempotência)"
 $PSQL -f "$MIGRATION"
 $PSQL -f "$MIGRATION"
 echo "ok: duas aplicações sem erro"
+
+echo "== aplica a migration do MOT (1ª vez) e de novo (idempotência); criar_proposta de produção antes x depois"
+SQL_META_FN="select p.prosecdef || '|' || coalesce(p.proconfig::text,'') || '|' || coalesce(p.proacl::text,'') || '|' || p.prorettype::regtype || '|' || pg_get_function_identity_arguments(p.oid) from pg_proc p where p.proname='criar_proposta' and p.pronargs=11"
+META_ANTES=$($PSQL -c "$SQL_META_FN")
+$PSQL -f "$MIGRATION_MOT"
+$PSQL -f "$MIGRATION_MOT"
+META_DEPOIS=$($PSQL -c "$SQL_META_FN")
+echo "ok: duas aplicações sem erro"
+echo "criar_proposta(11 args) antes : $META_ANTES"
+echo "criar_proposta(11 args) depois: $META_DEPOIS"
+[ "$META_ANTES" = "$META_DEPOIS" ] || { echo "FALHOU: assinatura/retorno/search_path/security definer/grants mudaram"; exit 1; }
+echo "ok: assinatura, retorno, search_path, security definer e grants idênticos"
 
 UNI=$($PSQL -c "insert into unidades default values returning id")
 VEND=$($PSQL -c "insert into analistas_perfil (user_id, nivel_acesso) values (gen_random_uuid(),'analista') returning id")
@@ -100,8 +114,11 @@ if $PSQL -c "set role service_role; update propostas set numero = (select numero
 echo "numero duplicado recusado: $(head -1 "$DIR/e.txt")"
 
 echo
-echo "== 5) outro modelo e ano começam do 0001 (MOT)"
-$PSQL -c "set role service_role; select numero from criar_proposta('MOT','MM','$UNI','$VEND',null,null,'M',null,'{}'::jsonb,1,15)" | tail -1
+echo "== 5) MOT: contador próprio começando em 71 (próximo = 72), número com o modelo"
+esperar_cedo() { if [ "$2" = "$3" ]; then echo "ok  $1: $2"; else echo "FALHOU $1: obtido=$2 esperado=$3"; exit 1; fi; }
+esperar_cedo "contador MOT/2026 inicial" "$($PSQL -c "select ultimo from proposta_contadores where modelo='MOT' and ano=2026")" 71
+esperar_cedo "primeira proposta MOT" "$($PSQL -c "set role service_role; select numero from criar_proposta('MOT','MM','$UNI','$VEND',null,null,'M',null,'{}'::jsonb,1,15)" | tail -1)" "MM-MOT-0072/26"
+esperar_cedo "contador MOT depois" "$($PSQL -c "select ultimo from proposta_contadores where modelo='MOT' and ano=2026")" 72
 
 echo
 echo "== 6) imutabilidade de revisões/histórico (vale também para o service role)"
@@ -184,13 +201,61 @@ ANTES=$($PSQL -c "select ultimo from proposta_contadores where modelo='RS'")
 esperar "contador RS não andou com sigla inválida" "$ANTES" "$ANTES"
 ANTIGA=$($PSQL -c "set role service_role; select numero from criar_proposta('RS','$UNI','$VEND',null,null,'Antiga',null,'{}'::jsonb,1,15)" | tail -1)
 esperar "sobrecarga antiga (sem sigla) continua funcionando e usa o modelo no prefixo" "$ANTIGA" "$(printf 'RS-%04d/26' $((ANTES + 1)))"
-# Força o mesmo sequencial do R&S no contador do MOT e usa a MESMA sigla: o texto do número colide com o do R&S.
+# Antes (só o prefixo de sigla) o texto do número colidia em propostas_numero_uq quando R&S e MOT tinham a MESMA sigla e o MESMO
+# sequencial. Agora o MOT leva o modelo no número: força o mesmo sequencial do R&S no contador do MOT, com a MESMA sigla, e confirma que NÃO colide.
 SEQ_RS=$ANTES # último R&S criado com sigla (a chamada pela sobrecarga antiga, logo acima, tem prefixo RS)
-$PSQL -c "update proposta_contadores set ultimo = $((SEQ_RS - 1)) where modelo='MOT'"
 NUM_RS=$($PSQL -c "select numero from propostas where modelo='RS' and sequencial=$SEQ_RS")
-if $PSQL -c "set role service_role; select criar_proposta('MOT','OS','$UNI','$VEND',null,null,'Colisao',null,'{}'::jsonb,1,15)" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: colisão aceita"; exit 1; fi
-echo "colisão RS/MOT (mesma sigla e mesmo sequencial, $NUM_RS) recusada: $(head -1 "$DIR/e.txt")"
-esperar "contador MOT voltou (a criação inteira reverteu)" "$($PSQL -c "select ultimo from proposta_contadores where modelo='MOT'")" "$((SEQ_RS - 1))"
+SIGLA_RS="${NUM_RS%%-*}"
+$PSQL -c "update proposta_contadores set ultimo = $((SEQ_RS - 1)) where modelo='MOT'"
+NUM_MOT=$($PSQL -c "set role service_role; select numero from criar_proposta('MOT','$SIGLA_RS','$UNI','$VEND',null,null,'MesmaSigla',null,'{}'::jsonb,1,15)" | tail -1)
+echo "R&S: $NUM_RS  |  MOT (mesma sigla $SIGLA_RS, mesmo sequencial $SEQ_RS): $NUM_MOT"
+[ "$NUM_RS" != "$NUM_MOT" ] || { echo "FALHOU: números iguais"; exit 1; }
+esperar "R&S mantém o formato antigo (SIGLA-seq/aa)" "$NUM_RS" "$(printf '%s-%04d/26' "$SIGLA_RS" "$SEQ_RS")"
+esperar "MOT com a mesma sigla e o mesmo sequencial: número diferente e sem colisão" "$NUM_MOT" "$(printf '%s-MOT-%04d/26' "$SIGLA_RS" "$SEQ_RS")"
+TS_NUM=$($PSQL -c "set role service_role; select numero from criar_proposta('TS','$SIGLA_RS','$UNI','$VEND',null,null,'TsMesma',null,'{}'::jsonb,1,15)" | tail -1)
+esperar "TS também leva o modelo no número" "$TS_NUM" "$(printf '%s-TS-%04d/26' "$SIGLA_RS" "$($PSQL -c "select ultimo from proposta_contadores where modelo='TS' and ano=2026")")"
+esperar "contador MOT avançou normalmente" "$($PSQL -c "select ultimo from proposta_contadores where modelo='MOT'")" "$SEQ_RS"
+esperar "nenhum número repetido na tabela" "$($PSQL -c "select count(*) - count(distinct numero) from propostas")" 0
+esperar "nenhum número de MOT/TS tem o formato do R&S" "$($PSQL -c "select count(*) from propostas where modelo <> 'RS' and numero !~ '^[A-Z]{1,4}-(MOT|TS)-[0-9]{4}/[0-9]{2}$'")" 0
+esperar "todo número de R&S criado com sigla tem o formato antigo" "$($PSQL -c "select count(*) from propostas where modelo = 'RS' and numero !~ '^[A-Z]{1,4}-[0-9]{4}/[0-9]{2}$' and numero !~ '^RS-[0-9]{4}/[0-9]{2}$'")" 0
+
+echo
+echo "== 9) proposta_mot_parametros: linha inicial, CHECK 0..10000, só inserção, sem acesso de authenticated/anon, regra de vigência"
+esperar "linha inicial única" "$($PSQL -c "select count(*) from proposta_mot_parametros")" 1
+esperar "linha inicial = PARAMETROS_MOT_INICIAIS, vigente desde 2026-11-19" "$($PSQL -c "select vigente_desde || ' ' || taxa_administrativa_bp || ' ' || encargos_tributarios_bp || ' ' || inss_patronal_bp || ' ' || fgts_bp || ' ' || ret_iss_bp || ' ' || ret_inss_bp || ' ' || ret_ir_bp || ' ' || ret_cofins_bp || ' ' || ret_csll_bp || ' ' || ret_pis_bp || ' ' || coalesce(alterado_por::text,'sem-autor') from proposta_mot_parametros")" "2026-11-19 1000 3200 3120 800 200 1100 100 300 100 65 sem-autor"
+INS_BASE="insert into proposta_mot_parametros (vigente_desde, taxa_administrativa_bp, encargos_tributarios_bp, inss_patronal_bp, fgts_bp, ret_iss_bp, ret_inss_bp, ret_ir_bp, ret_cofins_bp, ret_csll_bp, ret_pis_bp, alterado_por)"
+for ruim in "-1" "10001"; do
+  if $PSQL -c "set role service_role; $INS_BASE values ('2027-01-01', $ruim, 3200, 3120, 800, 200, 1100, 100, 300, 100, 65, '$G')" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: percentual $ruim aceito"; exit 1; fi
+  echo "percentual $ruim recusado: $(head -1 "$DIR/e.txt")"
+done
+esperar "a linha com percentual inválido não foi gravada" "$($PSQL -c "select count(*) from proposta_mot_parametros")" 1
+if $PSQL -c "set role service_role; insert into proposta_mot_parametros (taxa_administrativa_bp,encargos_tributarios_bp,inss_patronal_bp,fgts_bp,ret_iss_bp,ret_inss_bp,ret_ir_bp,ret_cofins_bp,ret_csll_bp,ret_pis_bp) values (1,1,1,1,1,1,1,1,1,1)" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: vigente_desde nulo aceito"; exit 1; fi
+echo "vigente_desde obrigatório: $(head -1 "$DIR/e.txt")"
+# Duas vigências novas: 2027-01-01 (taxa 1200) e, no MESMO dia, outra criada depois (taxa 1300): vale a última.
+$PSQL -c "set role service_role; $INS_BASE values ('2027-01-01', 1200, 3200, 3120, 800, 200, 1100, 100, 300, 100, 65, '$G')"
+$PSQL -c "set role service_role; $INS_BASE values ('2027-01-01', 1300, 3200, 3120, 800, 200, 1100, 100, 300, 100, 65, '$G')"
+vigente() { $PSQL -c "set role service_role; select coalesce((select taxa_administrativa_bp::text from parametros_mot_vigentes('$1')), 'nenhuma')"; }
+esperar "vigência: antes da primeira (2026-11-18) não há linha vigente" "$(vigente 2026-11-18)" nenhuma
+esperar "vigência: no dia da primeira (2026-11-19) vale a inicial" "$(vigente 2026-11-19)" 1000
+esperar "vigência: véspera da nova (2026-12-31) ainda vale a inicial" "$(vigente 2026-12-31)" 1000
+esperar "vigência: no dia da nova (2027-01-01), empate no dia: vale a criada por último" "$(vigente 2027-01-01)" 1300
+esperar "vigência: depois (2030-01-01) continua a última" "$(vigente 2030-01-01)" 1300
+esperar "vigência: sem argumento usa a data de hoje (Brasília) e devolve exatamente uma linha" "$($PSQL -c "set role service_role; select count(*) from parametros_mot_vigentes()")" 1
+for cmd in "update proposta_mot_parametros set fgts_bp = 1" "delete from proposta_mot_parametros"; do
+  esperar "service_role '$cmd': barrado pelo gatilho" "$(erro_de service_role "$A_U" "$cmd")" "ERROR:  registro imutável: $(echo "${cmd%% *}" | tr a-z A-Z) em proposta_mot_parametros não é permitido"
+done
+for papel in authenticated anon; do
+  esperar "$papel não lê a tabela" "$(erro_de $papel "$A_U" "select count(*) from proposta_mot_parametros")" "ERROR:  permission denied for table proposta_mot_parametros"
+  esperar "$papel não insere" "$(erro_de $papel "$A_U" "$INS_BASE values ('2028-01-01',1,1,1,1,1,1,1,1,1,1,'$A')")" "ERROR:  permission denied for table proposta_mot_parametros"
+  esperar "$papel não altera" "$(erro_de $papel "$A_U" "update proposta_mot_parametros set fgts_bp = 1")" "ERROR:  permission denied for table proposta_mot_parametros"
+  esperar "$papel não apaga" "$(erro_de $papel "$A_U" "delete from proposta_mot_parametros")" "ERROR:  permission denied for table proposta_mot_parametros"
+  esperar "$papel não executa parametros_mot_vigentes" "$(erro_de $papel "$A_U" "select * from parametros_mot_vigentes('2026-12-01')")" "ERROR:  permission denied for function parametros_mot_vigentes"
+done
+esperar "gestor (diretoria) também não lê direto: leitura só pela API com service role" "$(erro_de authenticated "$G_U" "select count(*) from proposta_mot_parametros")" "ERROR:  permission denied for table proposta_mot_parametros"
+esperar "RLS ligada na tabela nova" "$($PSQL -c "select relrowsecurity from pg_class where oid='public.proposta_mot_parametros'::regclass")" t
+esperar "authenticated/anon sem nenhum privilégio na tabela (has_table_privilege)" "$($PSQL -c "select bool_or(has_table_privilege(r, 'public.proposta_mot_parametros', p)) from unnest(array['anon','authenticated']) r, unnest(array['select','insert','update','delete','truncate','references','trigger']) p")" f
+esperar "criar_proposta(11 args) continua sem execute para anon/authenticated" "$($PSQL -c "select bool_or(has_function_privilege(r, 'public.criar_proposta(text,text,uuid,uuid,uuid,uuid,text,text,jsonb,int,int)', 'execute')) from unnest(array['anon','authenticated']) r")" f
+esperar "criar_proposta(11 args) executável pelo service_role" "$($PSQL -c "select has_function_privilege('service_role', 'public.criar_proposta(text,text,uuid,uuid,uuid,uuid,text,text,jsonb,int,int)', 'execute')")" t
 
 echo
 echo "PROVA CONCLUÍDA"
