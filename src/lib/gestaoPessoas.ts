@@ -53,6 +53,15 @@ export interface GestaoPessoas {
   poucosAtivos: boolean;
 }
 
+// O que o navegador do CLIENTE (portal) recebe: o mesmo quadro, mas só com o nome da empresa (sem o id) e sem os dois sinais internos do RH
+// (cadastro inconsistente e "poucos ativos"), que lá não viram aviso. Os inconsistentes continuam contados em "Idade não informada".
+export type GestaoPessoasPortal = Omit<GestaoPessoas, "cliente"> & { cliente: { nome: string } };
+
+export function paraPortal(g: GestaoPessoas): GestaoPessoasPortal {
+  const { cliente, ...resto } = g;
+  return { ...resto, cliente: { nome: cliente.nome }, dadosInconsistentes: 0, poucosAtivos: false };
+}
+
 // Linha já "achatada" (funcionário + dados pessoais), o que as funções puras recebem.
 export interface PessoaAtiva {
   nome: string;
