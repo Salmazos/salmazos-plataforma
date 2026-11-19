@@ -332,7 +332,7 @@ await ok("tela: quinto cartão 'Com filhos menores de 14' com os atalhos fora do
 // ── Provas de falha ──────────────────────────────────────────────────────────
 type Sabotagem = { nome: string; categoria: Prova["categoria"]; gp?: [string, string][]; lista?: [string, string][] };
 const SABOTAGENS: Sabotagem[] = [
-  { nome: "legado tratado como 'sem filhos' (array vazio em vez de null)", categoria: "estados", gp: [["filhos: f.admissao_id ? (filhosPorAdmissao.get(f.admissao_id) ?? []) : null", "filhos: filhosPorAdmissao.get(f.admissao_id ?? \"\") ?? []"]] },
+  { nome: "legado tratado como 'sem filhos' (array vazio em vez de null)", categoria: "estados", gp: [["filhos: p?.filhos_informado_em || manuais.length > 0 ? manuais : null", "filhos: manuais"]] },
   { nome: "sem o corte de 14 anos (filho de 14+ aparece)", categoria: "estados", gp: [["if (idade === null || idade < IDADE_LIMITE_FILHO) menores.push", "if (true) menores.push"]] },
   { nome: "cônjuge e outros parentes entram como filho (sem o filtro de parentesco)", categoria: "estados", gp: [['.in("parentesco", ["filho", "filha"]);', ";"]] },
   { nome: "portal com a data de nascimento do filho", categoria: "payload", lista: [["filhos: textoDosFilhos(l.filhos, \"portal\"),", "filhos: textoDosFilhos(l.filhos, \"portal\") + \" \" + (l.pessoa.filhos ?? []).map((x) => x.dataNascimento).join(\",\"),"]] },

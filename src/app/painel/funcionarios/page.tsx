@@ -5,6 +5,7 @@ import { podeAcessarFuncionarios } from "@/lib/funcionariosAuth";
 import { contextoRH } from "@/lib/rhUnidadeAuth";
 import SemAcessoPainel from "@/components/SemAcessoPainel";
 import { resolverFotosFuncionarios } from "@/lib/funcionarioFoto";
+import { faltasDoCadastro, type PerfilFuncionario } from "@/lib/funcionarioPerfil";
 
 export const dynamic = "force-dynamic";
 
@@ -61,8 +62,22 @@ export default async function FuncionariosPage() {
     (funcionarios ?? []).map((f) => ({ id: f.id, foto_path: f.foto_path, admissao_id: f.admissao_id }))
   );
 
+  // "Cadastro incompleto": só ATIVO sem admissão (a admissão é a fonte dos demais). Duas consultas no total, só quando há legado; tabela ausente = vazio.
+  const legadosAtivos = (funcionarios ?? []).filter((f) => f.status === "ativo" && !f.admissao_id).map((f) => f.id);
+  const perfilPorFuncionario = new Map<string, PerfilFuncionario>();
+  const filhosPorFuncionario = new Map<string, number>();
+  if (legadosAtivos.length > 0) {
+    const [{ data: perfis }, { data: filhos }] = await Promise.all([
+      svc.from("funcionario_perfil").select("funcionario_id, sexo, data_nascimento, grau_instrucao, filhos_informado_em").in("funcionario_id", legadosAtivos),
+      svc.from("funcionario_filhos").select("funcionario_id").in("funcionario_id", legadosAtivos),
+    ]);
+    for (const p of (perfis ?? []) as (PerfilFuncionario & { funcionario_id: string })[]) perfilPorFuncionario.set(p.funcionario_id, p);
+    for (const c of (filhos ?? []) as { funcionario_id: string }[]) filhosPorFuncionario.set(c.funcionario_id, (filhosPorFuncionario.get(c.funcionario_id) ?? 0) + 1);
+  }
+
   const funcionariosComAso = (funcionarios ?? []).map((f) => ({
     ...f,
+    faltas_cadastro: f.status === "ativo" ? faltasDoCadastro(f.admissao_id, perfilPorFuncionario.get(f.id), filhosPorFuncionario.get(f.id) ?? 0) : [],
     aso_data_exame_mais_recente: asoMaisRecentePorFuncionario.get(f.id) ?? null,
     tem_contrato: funcionarioIdsComContrato.has(f.id),
     foto_url: fotoUrlPorFuncionario.get(f.id) ?? null,

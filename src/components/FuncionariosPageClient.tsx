@@ -28,6 +28,8 @@ export interface FuncionarioRow {
   turno: string | null;
   tem_contrato: boolean;
   foto_url: string | null;
+  // O que falta no cadastro de um ATIVO sem admissão (sexo, nascimento, instrução, filhos); vazio = completo ou não se aplica.
+  faltas_cadastro: string[];
 }
 
 // Avatar circular — foto (própria ou reaproveitada da Foto 3x4 da admissão, resolvida no
@@ -110,6 +112,7 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
   const [filtroStatus, setFiltroStatus] = useState<string>("ativo");
   const [filtroClienteId, setFiltroClienteId] = useState<string>("");
   const [filtroModalidade, setFiltroModalidade] = useState<string>("");
+  const [filtroIncompleto, setFiltroIncompleto] = useState(false);
   const [busca, setBusca] = useState("");
   const [modalAberto, setModalAberto] = useState(false);
   const [funcionarioRescisao, setFuncionarioRescisao] = useState<FuncionarioRow | null>(null);
@@ -167,6 +170,7 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
   const totalMot = useMemo(() => ativos.filter((f) => f.tipo_servico === "mao_obra_temporaria").length, [ativos]);
   const totalTerc = useMemo(() => ativos.filter((f) => f.tipo_servico === "terceirizacao").length, [ativos]);
   const totalSemModalidade = useMemo(() => ativos.filter((f) => !f.tipo_servico).length, [ativos]);
+  const totalIncompletos = useMemo(() => ativos.filter((f) => f.faltas_cadastro.length > 0).length, [ativos]);
 
   // Filtros de status/empresa/modalidade (sem o texto da busca): a janela de nomes do campo de busca mostra só quem passa por eles, para
   // nunca oferecer um nome que a lista não vai exibir (ex.: um desligado com o filtro em "Ativo").
@@ -177,9 +181,10 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
       if (filtroModalidade === SEM_MODALIDADE) {
         if (f.tipo_servico) return false;
       } else if (filtroModalidade && f.tipo_servico !== filtroModalidade) return false;
+      if (filtroIncompleto && f.faltas_cadastro.length === 0) return false;
       return true;
     });
-  }, [funcionariosIniciais, filtroStatus, filtroClienteId, filtroModalidade]);
+  }, [funcionariosIniciais, filtroStatus, filtroClienteId, filtroModalidade, filtroIncompleto]);
 
   // Lista sempre em ordem alfabética (sem diferenciar maiúscula nem acento); a busca também ignora acento.
   const filtrados = useMemo(() => ordenarPorNome(passaFiltros.filter((f) => nomeContem(f.nome_completo, busca))), [passaFiltros, busca]);
@@ -239,6 +244,17 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
           <p style={{ fontSize: 26, fontWeight: 800, color: MODALIDADE_BADGE.terceirizacao.text, margin: 0 }}>{totalTerc}</p>
           <p style={{ fontSize: 12, fontWeight: 600, color: MODALIDADE_BADGE.terceirizacao.text, margin: "2px 0 0" }}>Terceirização</p>
         </button>
+        {totalIncompletos > 0 && (
+          <button
+            type="button"
+            aria-pressed={filtroIncompleto}
+            onClick={() => setFiltroIncompleto(!filtroIncompleto)}
+            style={{ textAlign: "left", background: "#FFFBEB", border: filtroIncompleto ? "2px solid #B45309" : "2px solid transparent", borderRadius: 12, padding: "14px 16px", cursor: "pointer" }}
+          >
+            <p style={{ fontSize: 26, fontWeight: 800, color: "#B45309", margin: 0 }}>⚠ {totalIncompletos}</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: "#B45309", margin: "2px 0 0" }}>Cadastro incompleto · {totalIncompletos}</p>
+          </button>
+        )}
         {totalSemModalidade > 0 && (
           <button
             onClick={() => setFiltroModalidade(filtroModalidade === SEM_MODALIDADE ? "" : SEM_MODALIDADE)}
@@ -306,6 +322,15 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
                     >
                       {f.nome_completo}
                     </p>
+                    {f.faltas_cadastro.length > 0 && (
+                      <Link
+                        href={`/painel/funcionarios/${f.id}#dados-pessoais`}
+                        title={`Faltam: ${f.faltas_cadastro.join(", ")}`}
+                        style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "#FEF3C7", color: "#92400E", textDecoration: "none", whiteSpace: "nowrap" }}
+                      >
+                        Completar cadastro
+                      </Link>
+                    )}
                   </div>
                   <div className="flex gap-2" style={{ flexShrink: 0 }}>
                     <Link

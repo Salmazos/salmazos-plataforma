@@ -13,6 +13,8 @@ import ModalExcluirDocumento from "./ModalExcluirDocumento";
 import ContratoMotPainel from "./ContratoMotPainel";
 import BlocoDiasTesteRH from "./BlocoDiasTesteRH";
 import { AvatarFuncionario } from "./FuncionariosPageClient";
+import FuncionarioDadosPessoais from "./FuncionarioDadosPessoais";
+import type { FilhoFuncionario, PerfilFuncionario } from "@/lib/funcionarioPerfil";
 
 export interface FuncionarioDetalhe {
   id: string;
@@ -67,6 +69,10 @@ interface Props {
   desligamentoProgramadoEm: string | null;
   // Dias de teste da candidatura de origem da admissão (null = cadastro manual ou origem não encontrada).
   diasTeste?: { qtd: number | null; legado: string | null } | null;
+  // Dados pessoais e filhos completados pelo RH (só funcionário sem admissão; vazio/null quando não há ou a migração ainda não foi aplicada).
+  perfilManual?: PerfilFuncionario | null;
+  filhosManuais?: FilhoFuncionario[];
+  hojeISO: string;
 }
 
 const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
@@ -74,7 +80,7 @@ const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> 
   desligado: { label: "Desligado", bg: "#FEE2E2", text: "#991B1B" },
 };
 
-export default function FuncionarioDetalheClient({ funcionario: funcionarioInicial, asosIniciais, contratosIniciais, clientes, podeExcluirDocumento, desligamentoProgramadoEm, diasTeste }: Props) {
+export default function FuncionarioDetalheClient({ funcionario: funcionarioInicial, asosIniciais, contratosIniciais, clientes, podeExcluirDocumento, desligamentoProgramadoEm, diasTeste, perfilManual = null, filhosManuais = [], hojeISO }: Props) {
   const router = useRouter();
   const [funcionario, setFuncionario] = useState(funcionarioInicial);
   const [modalEditarAberto, setModalEditarAberto] = useState(false);
@@ -281,6 +287,8 @@ export default function FuncionarioDetalheClient({ funcionario: funcionarioInici
           </div>
         </div>
       </div>
+
+      <FuncionarioDadosPessoais funcionarioId={funcionario.id} admissaoId={funcionario.admissao_id} perfilInicial={perfilManual} filhosIniciais={filhosManuais} hojeISO={hojeISO} />
 
       {diasTeste && (
         <BlocoDiasTesteRH className="mb-6" qtd={diasTeste.qtd} legado={diasTeste.legado} tipo={funcionario.tipo_servico} />

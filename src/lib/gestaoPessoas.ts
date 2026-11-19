@@ -368,9 +368,34 @@ export async function carregarPessoasAtivas(svc: Svc, o: { clienteId: string; un
     }
   }
 
+  // Legados (sem admissão): os dados completados pelo RH na tela do funcionário (funcionario_perfil / funcionario_filhos). NUNCA para quem tem admissão: as duas fontes não
+  // se misturam. Duas consultas no total (não por pessoa) e só quando há legado; tabela ausente (migração pendente) ou erro = vazio, a página nunca quebra.
+  type PerfilManual = { sexo: string | null; data_nascimento: string | null; grau_instrucao: string | null; filhos_informado_em: string | null };
+  const perfilManual = new Map<string, PerfilManual>();
+  const filhosManuais = new Map<string, FilhoCadastrado[]>();
+  const legadoIds = funcionarios.filter((fu) => !fu.admissao_id).map((fu) => fu.id);
+  if (legadoIds.length > 0) {
+    const [{ data: perfis }, { data: filhos }] = await Promise.all([
+      svc.from("funcionario_perfil").select("funcionario_id, sexo, data_nascimento, grau_instrucao, filhos_informado_em").in("funcionario_id", legadoIds),
+      svc.from("funcionario_filhos").select("funcionario_id, nome, data_nascimento").in("funcionario_id", legadoIds),
+    ]);
+    for (const p of (perfis ?? []) as (PerfilManual & { funcionario_id: string })[]) perfilManual.set(p.funcionario_id, p);
+    for (const c of (filhos ?? []) as { funcionario_id: string; nome: string; data_nascimento: string | null }[]) {
+      const lista = filhosManuais.get(c.funcionario_id) ?? [];
+      lista.push({ nome: c.nome, dataNascimento: c.data_nascimento });
+      filhosManuais.set(c.funcionario_id, lista);
+    }
+  }
+
   const pessoas: PessoaAtiva[] = funcionarios.map((f) => {
-    const d = f.admissao_id ? dados.get(f.admissao_id) : undefined;
-    return { nome: f.nome_completo, cargo: f.cargo, dataAdmissao: f.data_admissao, sexo: d?.sexo ?? null, dataNascimento: d?.data_nascimento ?? null, grauInstrucao: d?.grau_instrucao ?? null, filhos: f.admissao_id ? (filhosPorAdmissao.get(f.admissao_id) ?? []) : null };
+    if (!f.admissao_id) {
+      const p = perfilManual.get(f.id);
+      const manuais = filhosManuais.get(f.id) ?? [];
+      // filhos: informado (confirmação explícita ou ao menos um filho cadastrado) = a lista (pode ser vazia = "sem filhos declarados"); senão null = "não informado"
+      return { nome: f.nome_completo, cargo: f.cargo, dataAdmissao: f.data_admissao, sexo: p?.sexo ?? null, dataNascimento: p?.data_nascimento ?? null, grauInstrucao: p?.grau_instrucao ?? null, filhos: p?.filhos_informado_em || manuais.length > 0 ? manuais : null };
+    }
+    const d = dados.get(f.admissao_id);
+    return { nome: f.nome_completo, cargo: f.cargo, dataAdmissao: f.data_admissao, sexo: d?.sexo ?? null, dataNascimento: d?.data_nascimento ?? null, grauInstrucao: d?.grau_instrucao ?? null, filhos: filhosPorAdmissao.get(f.admissao_id) ?? [] };
   });
   return { cliente: { id: cliente.id, nome: cliente.nome }, pessoas };
 }

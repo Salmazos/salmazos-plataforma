@@ -2018,3 +2018,22 @@ export const gestaoPessoasFiltrosSchema = z.object({
 // RH: a empresa escolhida na tela (validada contra a unidade no servidor). Portal: SÓ os filtros; a empresa vem da sessão.
 export const gestaoPessoasListaRHSchema = z.object({ clienteId: z.string().uuid(), filtros: gestaoPessoasFiltrosSchema.default({}) });
 export const gestaoPessoasListaPortalSchema = z.object({ filtros: gestaoPessoasFiltrosSchema.default({}) });
+
+// ── Editor de dados pessoais e filhos de funcionários sem admissão digital ────
+// sexo e instrução: os mesmos valores (CHECK) de admissao_dados_pessoais. Nascimento: data real entre 1900 e hoje (dataNascimentoSchema); idade de funcionário fora de
+// 14 a 90 NÃO bloqueia: a rota responde 422 com aviso e só salva com confirmado:true.
+export const funcionarioPerfilSchema = z.object({
+  sexo: z.enum(["M", "F"]).optional().nullable(),
+  data_nascimento: dataNascimentoSchema,
+  grau_instrucao: admissaoDadosPessoaisSchema.shape.grau_instrucao,
+  confirmado: z.boolean().optional(),
+});
+const nascimentoDoFilho = dataNascimentoSchema.refine((v) => typeof v === "string", "Informe a data de nascimento do filho.");
+export const funcionarioFilhoCreateSchema = z.object({
+  nome: z.string().trim().min(1, "Informe o nome do filho.").max(120, "Nome do filho muito longo."),
+  data_nascimento: nascimentoDoFilho,
+});
+export const funcionarioFilhoUpdateSchema = z.object({
+  nome: z.string().trim().min(1, "Informe o nome do filho.").max(120, "Nome do filho muito longo.").optional(),
+  data_nascimento: nascimentoDoFilho.optional(),
+});

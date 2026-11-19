@@ -8,6 +8,8 @@ import SemAcessoPainel from "@/components/SemAcessoPainel";
 import { podeVerUnidade } from "@/lib/unidadeAuth";
 import { resolverFotosFuncionarios } from "@/lib/funcionarioFoto";
 import { buscarDiasTestePorAdmissao, type DiasTesteDaAdmissao } from "@/lib/diasTesteAdmissao";
+import { formatarDataISO, obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
+import type { FilhoFuncionario, PerfilFuncionario } from "@/lib/funcionarioPerfil";
 
 export const dynamic = "force-dynamic";
 
@@ -84,9 +86,24 @@ export default async function FuncionarioDetalhePage({ params }: Params) {
     if (admissaoOrigem) diasTeste = (await buscarDiasTestePorAdmissao(svc, [admissaoOrigem])).get(admissaoOrigem.id) ?? null;
   }
 
+  // Dados pessoais e filhos manuais (só quem NÃO tem admissão). Tabela ausente (migração pendente) ou erro = vazio: a tela abre normalmente.
+  let perfilManual: PerfilFuncionario | null = null;
+  let filhosManuais: FilhoFuncionario[] = [];
+  if (!funcionario.admissao_id) {
+    const [{ data: perfil }, { data: filhos }] = await Promise.all([
+      svc.from("funcionario_perfil").select("sexo, data_nascimento, grau_instrucao, filhos_informado_em").eq("funcionario_id", id).maybeSingle(),
+      svc.from("funcionario_filhos").select("id, nome, data_nascimento").eq("funcionario_id", id).order("data_nascimento", { ascending: true }),
+    ]);
+    perfilManual = (perfil as PerfilFuncionario | null) ?? null;
+    filhosManuais = (filhos ?? []) as FilhoFuncionario[];
+  }
+
   return (
     <FuncionarioDetalheClient
       funcionario={funcionarioComFoto}
+      perfilManual={perfilManual}
+      filhosManuais={filhosManuais}
+      hojeISO={formatarDataISO(obterDataHojeBrasil())}
       asosIniciais={asosComNome}
       contratosIniciais={contratosComNome}
       clientes={clientes ?? []}
