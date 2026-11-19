@@ -248,6 +248,7 @@ export default function GestaoPessoasClient({ clientes, selecionadoId, dados, mo
   if (filtros.faixa) etiquetas.push({ chave: "faixa", texto: `Faixa: ${faixaPorSexo.find((f) => f.faixa === filtros.faixa)?.rotulo ?? filtros.faixa}`, remover: () => aplicar(par("faixa", filtros.faixa)) });
   if (filtros.escolaridade) etiquetas.push({ chave: "escolaridade", texto: `Escolaridade: ${rotuloEscolaridade(filtros.escolaridade)}`, remover: () => aplicar(par("escolaridade", filtros.escolaridade)) });
   if (filtros.cargo) etiquetas.push({ chave: "cargo", texto: `Cargo: ${filtros.cargo === CARGO_DEMAIS ? (cargos.find((c) => c.cargo.startsWith("Demais cargos ("))?.cargo ?? "Demais cargos") : filtros.cargo}`, remover: () => aplicar(par("cargo", filtros.cargo)) });
+  if (filtros.filhos) etiquetas.push({ chave: "filhos", texto: `Filhos: ${filtros.filhos === "com" ? "Com filhos menores de 14" : filtros.filhos === "sem" ? "Sem filhos declarados" : T.naoInformado}`, remover: () => aplicar(par("filhos", filtros.filhos)) });
   if (filtros.admitidoNoMes) etiquetas.push({ chave: "admitido", texto: "Admitidos no mês", remover: () => aplicar(par("admitidoNoMes", true)) });
   if (filtros.aniversario !== undefined) etiquetas.push({ chave: "aniversario", texto: `Aniversariantes de ${mesEscolhido?.rotulo ?? nomeDoMes}`, remover: () => aplicar(par("aniversario", filtros.aniversario)) });
   if (filtros.ordenarPorTempoDeCasa) etiquetas.push({ chave: "ordem", texto: "Ordenado por tempo de casa (maior primeiro)", remover: () => aplicar(par("ordenarPorTempoDeCasa", true)) });
@@ -324,6 +325,22 @@ export default function GestaoPessoasClient({ clientes, selecionadoId, dados, mo
                 {mesesAniversario.map((m, i) => <option key={`${m.mes}-${m.ano}`} value={i}>{m.rotulo}</option>)}
               </select>
             </>
+          }
+        />
+        <Cartao
+          titulo="Com filhos menores de 14"
+          valor={String(dados.filhos.com)}
+          onClick={() => aplicar(par("filhos", "com"))}
+          pressionado={filtros.filhos === "com"}
+          dica="Listar quem tem filho menor de 14 anos"
+          controle={
+            // Atalhos fora do botão principal (como o seletor de mês): cada um aplica os filtros pelo mesmo alternarFiltros.
+            <div role="group" aria-label="Atalhos de filhos" style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              <button type="button" className="gp-btn gp-chip" aria-pressed={filtros.sexo === "feminino" && filtros.filhos === "com"} onClick={() => aplicar(par("sexo", "feminino"), par("filhos", "com"))}>Dia das Mães <strong>{dados.filhos.comPorSexo.feminino}</strong></button>
+              <button type="button" className="gp-btn gp-chip" aria-pressed={filtros.sexo === "masculino" && filtros.filhos === "com"} onClick={() => aplicar(par("sexo", "masculino"), par("filhos", "com"))}>Dia dos Pais <strong>{dados.filhos.comPorSexo.masculino}</strong></button>
+              <button type="button" className="gp-btn gp-chip" aria-pressed={filtros.filhos === "sem"} onClick={() => aplicar(par("filhos", "sem"))}>Sem filhos declarados <strong>{dados.filhos.sem}</strong></button>
+              {(!portal || dados.filhos.naoInformado > 0) && <button type="button" className="gp-btn gp-chip" aria-pressed={filtros.filhos === "naoInformado"} onClick={() => aplicar(par("filhos", "naoInformado"))}>{T.naoInformado} <strong>{dados.filhos.naoInformado}</strong></button>}
+            </div>
           }
         />
       </div>
@@ -485,11 +502,12 @@ export default function GestaoPessoasClient({ clientes, selecionadoId, dados, mo
           <p style={{ fontSize: 13, color: "#9CA3AF", margin: 0 }}>Nenhum funcionário com esses filtros</p>
         ) : (
           <div style={{ overflowX: "auto", opacity: carregando ? 0.6 : 1 }} aria-busy={carregando}>
-            <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse", minWidth: portal ? 420 : 760 }}>
+            <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse", minWidth: portal ? 560 : 980 }}>
               <thead>
                 <tr>
                   <th style={th}>Nome</th><th style={th}>Cargo</th><th style={th}>Admissão</th><th style={th}>Tempo de casa</th>
                   {!portal && <><th style={th}>Idade</th><th style={th}>Sexo</th><th style={th}>Escolaridade</th></>}
+                  <th style={th}>Filhos</th>
                   {comAniversario && <><th style={th}>Aniversário</th><th style={th}>Completa</th></>}
                 </tr>
               </thead>
@@ -503,6 +521,7 @@ export default function GestaoPessoasClient({ clientes, selecionadoId, dados, mo
                       <td style={{ ...td, whiteSpace: "nowrap" }}>{l.dataAdmissao}</td>
                       <td style={{ ...td, whiteSpace: "nowrap" }}>{l.tempoDeCasa}</td>
                       {!portal && <><td style={td}>{rh.idade ?? "—"}</td><td style={td}>{rh.sexo}</td><td style={td}>{rh.escolaridade}</td></>}
+                      <td style={td}>{l.filhos}</td>
                       {comAniversario && <><td style={{ ...td, whiteSpace: "nowrap" }}>{l.diaMes ?? "—"}</td><td style={{ ...td, whiteSpace: "nowrap" }}>{l.completaAnos === undefined ? "—" : `completa ${l.completaAnos} anos`}</td></>}
                     </tr>
                   );

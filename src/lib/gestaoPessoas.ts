@@ -9,6 +9,9 @@
 //  - idade é calculada por TEXTO (AAAA-MM-DD) contra o "hoje" de America/Sao_Paulo, sem new Date em data pura; quem nasceu em 29/02 completa
 //    a idade em 01/03 nos anos comuns, e aparece na lista de aniversariantes no dia 28 (exibindo "29/02");
 //  - admissão futura não conta em tempo de casa nem em "admitidos no mês";
+//  - filhos: só admissao_dependentes com parentesco filho/filha (nome e nascimento; nunca CPF, mãe, cartório, cônjuge). Menor de 14 anos completos entra; 14 ou mais não
+//    aparece; nascimento vazio/inválido/futuro conta como filho com "idade não informada". Quem veio por admissão e não tem filho = "sem"; sem admissão (legado) =
+//    "não informado", NUNCA "sem filhos";
 //  - cada gráfico fecha com totalAtivos (balde "Não informado" explícito).
 // Nada de cor/raça, CPF, endereço nem salário: o carregador só seleciona as colunas listadas abaixo.
 import { GRAU_INSTRUCAO_OPTIONS } from "@/lib/admissaoConstants";
@@ -38,6 +41,10 @@ export interface Aniversariante { diaMes: string; ordem: number; nome: string; c
 // Um dos 12 meses a partir do mês corrente: `ano` é o da PRÓXIMA ocorrência (mês já passado neste ano = ano seguinte) e `rotulo` já traz o ano quando é o seguinte.
 export interface MesAniversariantes { mes: number; ano: number; rotulo: string; aniversariantes: Aniversariante[] }
 
+// com = tem ao menos um filho menor de 14 (inclui nascimento sem idade conhecida); sem = veio por admissão e não tem filho menor de 14; naoInformado = legado. Os três somam totalAtivos.
+export type EstadoFilhos = "com" | "sem" | "naoInformado";
+export interface ResumoFilhos { com: number; sem: number; naoInformado: number; comPorSexo: ContagemPorSexo }
+
 export interface GestaoPessoas {
   cliente: { id: string; nome: string };
   totalAtivos: number;
@@ -52,6 +59,7 @@ export interface GestaoPessoas {
   admitidosNoMes: number;
   dadosInconsistentes: number; // nascimento preenchido mas inválido, futuro ou com idade fora de 14 a 90
   poucosAtivos: boolean;
+  filhos: ResumoFilhos; // só contagens
 }
 
 // O que o navegador do CLIENTE (portal) recebe: o mesmo quadro, mas só com o nome da empresa (sem o id) e sem os dois sinais internos do RH
@@ -71,7 +79,10 @@ export interface PessoaAtiva {
   sexo: string | null;
   dataNascimento: string | null;
   grauInstrucao: string | null;
+  // Filhos cadastrados na admissão (só filho/filha). null/ausente = sem admissão (legado): não informado. Array vazio = veio por admissão e não tem filho cadastrado.
+  filhos?: FilhoCadastrado[] | null;
 }
+export interface FilhoCadastrado { nome: string; dataNascimento: string | null }
 
 // ── Datas por texto (nunca new Date em data pura) ───────────────────────────
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -134,6 +145,43 @@ export function admitidoNoMes(dataAdmissaoISO: string | null | undefined, hojeIS
   const a = partes(dataAdmissaoISO), h = partes(hojeISO);
   if (!a || !h) return false;
   return a.a === h.a && a.m === h.m && a.d <= h.d;
+}
+
+// ── Filhos ───────────────────────────────────────────────────────────────────
+export const IDADE_LIMITE_FILHO = 14; // 14 anos completos ou mais não aparece
+// Decisão do Ölver: o portal mostra nome e idade. Para trocar por "só idade, sem nome", mude esta constante (o texto é montado por textoDosFilhos).
+export const PORTAL_MOSTRA_NOME_DO_FILHO = true;
+
+export interface FilhoMenor { nome: string; idade: number | null } // idade null = nascimento vazio, inválido ou futuro
+export interface SituacaoFilhos { estado: EstadoFilhos; menores: FilhoMenor[]; cadastrados: number }
+
+// Idade do filho com a MESMA conta dos funcionários (idadeNaData: texto AAAA-MM-DD contra o "hoje" de Brasília, 29/02 completa em 01/03). Não usa a regra de
+// plausibilidade de 14 a 90 (essa é de funcionário): para filho vale 0 <= idade < 14; nascimento que não vira idade (vazio, inválido, futuro, 2979) fica na lista
+// como "idade não informada" e conta como tendo filho (não dá para provar que tem 14 ou mais).
+export function situacaoDosFilhos(filhos: FilhoCadastrado[] | null | undefined, hojeISO: string): SituacaoFilhos {
+  if (filhos === null || filhos === undefined) return { estado: "naoInformado", menores: [], cadastrados: 0 };
+  const menores: FilhoMenor[] = [];
+  for (const fi of filhos) {
+    const idade = idadeNaData(fi.dataNascimento, hojeISO);
+    if (idade === null || idade < IDADE_LIMITE_FILHO) menores.push({ nome: (fi.nome ?? "").replace(/\s+/g, " ").trim(), idade });
+  }
+  // do mais velho ao mais novo; idade desconhecida por último; empate por nome
+  menores.sort((a, b) => (b.idade ?? -1) - (a.idade ?? -1) || a.nome.localeCompare(b.nome, "pt-BR"));
+  return { estado: menores.length > 0 ? "com" : "sem", menores, cadastrados: filhos.length };
+}
+
+export function formatarIdadeFilho(idade: number | null): string {
+  if (idade === null) return "idade não informada";
+  if (idade < 1) return "menos de 1 ano";
+  return idade === 1 ? "1 ano" : `${idade} anos`;
+}
+
+// O texto da coluna "Filhos" (lista, CSV e portal) sai SEMPRE desta função.
+export function textoDosFilhos(s: SituacaoFilhos, modo: "rh" | "portal"): string {
+  if (s.estado === "naoInformado") return modo === "portal" ? "Dado não cadastrado" : "Não informado";
+  if (s.estado === "sem") return s.cadastrados > 0 ? "Sem filhos menores de 14" : "Sem filhos declarados";
+  const comNome = modo === "rh" || PORTAL_MOSTRA_NOME_DO_FILHO;
+  return s.menores.map((m) => (comNome && m.nome ? `${m.nome} (${formatarIdadeFilho(m.idade)})` : formatarIdadeFilho(m.idade))).join(", ");
 }
 
 // ── Cargos ───────────────────────────────────────────────────────────────────
@@ -239,6 +287,7 @@ export function montarGestaoPessoas(cliente: { id: string; nome: string }, pesso
   const porSexo: ContagemPorSexo = { masculino: 0, feminino: 0, naoInformado: 0 };
   const faixas: LinhaFaixa[] = FAIXAS_ETARIAS.map((f) => ({ faixa: f.id, rotulo: f.rotulo, masculino: 0, feminino: 0, naoInformado: 0, total: 0 }));
   let inconsistentes = 0, admitidos = 0, somaMeses = 0, comTempo = 0;
+  const filhos: ResumoFilhos = { com: 0, sem: 0, naoInformado: 0, comPorSexo: { masculino: 0, feminino: 0, naoInformado: 0 } };
   for (const p of pessoas) {
     const sx = bucketSexo(p.sexo);
     porSexo[sx]++;
@@ -247,6 +296,9 @@ export function montarGestaoPessoas(cliente: { id: string; nome: string }, pesso
     const linha = faixas.find((f) => f.faixa === c.faixa)!;
     linha[sx]++;
     linha.total++;
+    const sf = situacaoDosFilhos(p.filhos, hojeISO);
+    filhos[sf.estado]++;
+    if (sf.estado === "com") filhos.comPorSexo[sx]++;
     if (admitidoNoMes(p.dataAdmissao, hojeISO)) admitidos++;
     const meses = mesesDeCasa(p.dataAdmissao, hojeISO);
     if (meses !== null) { somaMeses += meses; comTempo++; }
@@ -264,6 +316,7 @@ export function montarGestaoPessoas(cliente: { id: string; nome: string }, pesso
     admitidosNoMes: admitidos,
     dadosInconsistentes: inconsistentes,
     poucosAtivos: pessoas.length > 0 && pessoas.length < LIMITE_POUCOS_ATIVOS,
+    filhos,
   };
 }
 
@@ -304,9 +357,20 @@ export async function carregarPessoasAtivas(svc: Svc, o: { clienteId: string; un
     for (const d of (dp ?? []) as { admissao_id: string; sexo: string | null; data_nascimento: string | null; grau_instrucao: string | null }[]) dados.set(d.admissao_id, d);
   }
 
+  // Filhos: só admissao_dependentes com parentesco filho/filha e SÓ estas colunas (nunca CPF, mãe, cartório, cônjuge).
+  const filhosPorAdmissao = new Map<string, FilhoCadastrado[]>();
+  if (admissaoIds.length > 0) {
+    const { data: deps } = await svc.from("admissao_dependentes").select("admissao_id, nome, parentesco, data_nascimento").in("admissao_id", admissaoIds).in("parentesco", ["filho", "filha"]);
+    for (const d of (deps ?? []) as { admissao_id: string; nome: string; data_nascimento: string | null }[]) {
+      const lista = filhosPorAdmissao.get(d.admissao_id) ?? [];
+      lista.push({ nome: d.nome, dataNascimento: d.data_nascimento });
+      filhosPorAdmissao.set(d.admissao_id, lista);
+    }
+  }
+
   const pessoas: PessoaAtiva[] = funcionarios.map((f) => {
     const d = f.admissao_id ? dados.get(f.admissao_id) : undefined;
-    return { nome: f.nome_completo, cargo: f.cargo, dataAdmissao: f.data_admissao, sexo: d?.sexo ?? null, dataNascimento: d?.data_nascimento ?? null, grauInstrucao: d?.grau_instrucao ?? null };
+    return { nome: f.nome_completo, cargo: f.cargo, dataAdmissao: f.data_admissao, sexo: d?.sexo ?? null, dataNascimento: d?.data_nascimento ?? null, grauInstrucao: d?.grau_instrucao ?? null, filhos: f.admissao_id ? (filhosPorAdmissao.get(f.admissao_id) ?? []) : null };
   });
   return { cliente: { id: cliente.id, nome: cliente.nome }, pessoas };
 }

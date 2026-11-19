@@ -9,8 +9,8 @@
 import { GRAU_INSTRUCAO_OPTIONS } from "@/lib/admissaoConstants";
 import { dataBR } from "@/lib/dataBR";
 import {
-  agruparCargos, bucketSexo, classificarIdade, FAIXAS_ETARIAS, MAX_CARGOS_NO_GRAFICO, admitidoNoMes, mesesDeCasa, normalizarCargo, ocorrenciaDeAniversario,
-  ROTULO_CARGO_NAO_INFORMADO, type FaixaEtaria, type OcorrenciaAniversario, type PessoaAtiva,
+  agruparCargos, bucketSexo, classificarIdade, FAIXAS_ETARIAS, MAX_CARGOS_NO_GRAFICO, admitidoNoMes, mesesDeCasa, normalizarCargo, ocorrenciaDeAniversario, situacaoDosFilhos, textoDosFilhos,
+  ROTULO_CARGO_NAO_INFORMADO, type EstadoFilhos, type FaixaEtaria, type OcorrenciaAniversario, type PessoaAtiva, type SituacaoFilhos,
 } from "@/lib/gestaoPessoas";
 
 export type SexoFiltro = "masculino" | "feminino" | "naoInformado";
@@ -19,6 +19,7 @@ export const ROTULO_SEXO: Record<SexoFiltro, string> = { masculino: "Masculino",
 export const ESCOLARIDADE_NAO_INFORMADO = "nao_informado";
 export const ESCOLARIDADES_FILTRO = [...GRAU_INSTRUCAO_OPTIONS.map((o) => o.value), ESCOLARIDADE_NAO_INFORMADO];
 export const FAIXAS_FILTRO = FAIXAS_ETARIAS.map((f) => f.id);
+export const FILHOS_FILTRO: EstadoFilhos[] = ["com", "sem", "naoInformado"];
 // Valor especial do filtro de cargo: a barra "Demais cargos (N)" do gráfico (o servidor sabe quais são, pela mesma regra do gráfico).
 export const CARGO_DEMAIS = "__demais__";
 
@@ -27,6 +28,7 @@ export interface FiltrosGestao {
   faixa?: FaixaEtaria;
   escolaridade?: string;
   cargo?: string; // rótulo da barra do gráfico de cargos, ou CARGO_DEMAIS
+  filhos?: EstadoFilhos; // com = ao menos um filho menor de 14; sem = veio por admissão e não tem; naoInformado = legado (sem admissão)
   admitidoNoMes?: true;
   aniversario?: number; // posição (0 a 11) do mês, na lista de 12 meses a partir do mês corrente
   ordenarPorTempoDeCasa?: true; // não filtra: só ordena
@@ -59,6 +61,7 @@ interface Linha {
   meses: number | null;
   admitidoNoMes: boolean;
   aniversario: OcorrenciaAniversario | null;
+  filhos: SituacaoFilhos;
 }
 
 const GRAUS_CONHECIDOS = new Set(GRAU_INSTRUCAO_OPTIONS.map((o) => o.value));
@@ -76,6 +79,7 @@ function classificar(p: PessoaAtiva, hojeISO: string): Linha {
     meses: mesesDeCasa(p.dataAdmissao, hojeISO),
     admitidoNoMes: admitidoNoMes(p.dataAdmissao, hojeISO),
     aniversario: ocorrenciaDeAniversario(p.dataNascimento, hojeISO),
+    filhos: situacaoDosFilhos(p.filhos, hojeISO),
   };
 }
 
@@ -96,6 +100,7 @@ export function filtrarFuncionariosGestao(pessoas: PessoaAtiva[], filtros: Filtr
     (filtros.escolaridade === undefined || l.escolaridade === filtros.escolaridade) &&
     (demais === null || demais.has(l.cargoChave)) &&
     (chaveCargo === null || l.cargoChave === chaveCargo) &&
+    (filtros.filhos === undefined || l.filhos.estado === filtros.filhos) &&
     (!filtros.admitidoNoMes || l.admitidoNoMes) &&
     (filtros.aniversario === undefined || l.aniversario?.indiceMes === filtros.aniversario));
   const porNome = (a: Linha, b: Linha) => a.pessoa.nome.localeCompare(b.pessoa.nome, "pt-BR");
@@ -123,21 +128,22 @@ export function formatarTempoDeCasa(meses: number | null): string {
 }
 
 // ── Linhas que vão para o navegador ──────────────────────────────────────────
-export interface LinhaListaPortal { nome: string; cargo: string | null; dataAdmissao: string; tempoDeCasa: string; diaMes?: string; completaAnos?: number }
+// `filhos` é o texto pronto (textoDosFilhos): nome e idade de menores de 14, nunca a data de nascimento do filho.
+export interface LinhaListaPortal { nome: string; cargo: string | null; dataAdmissao: string; tempoDeCasa: string; filhos: string; diaMes?: string; completaAnos?: number }
 export interface LinhaListaRH extends LinhaListaPortal { idade: number | null; sexo: string; escolaridade: string }
 
 const cargoDe = (l: Linha) => (l.pessoa.cargo ?? "").trim() || null;
 
 export function linhasParaPortal(linhas: LinhaFiltrada[], filtros: FiltrosGestao): LinhaListaPortal[] {
   return linhas.map((l) => ({
-    nome: l.pessoa.nome, cargo: cargoDe(l), dataAdmissao: dataBR(l.pessoa.dataAdmissao), tempoDeCasa: formatarTempoDeCasa(l.meses),
+    nome: l.pessoa.nome, cargo: cargoDe(l), dataAdmissao: dataBR(l.pessoa.dataAdmissao), tempoDeCasa: formatarTempoDeCasa(l.meses), filhos: textoDosFilhos(l.filhos, "portal"),
     ...(filtros.aniversario !== undefined && l.aniversario ? { diaMes: l.aniversario.diaMes, completaAnos: l.aniversario.completaAnos } : {}),
   }));
 }
 
 export function linhasParaRH(linhas: LinhaFiltrada[], filtros: FiltrosGestao): LinhaListaRH[] {
   const base = linhasParaPortal(linhas, filtros);
-  return linhas.map((l, i) => ({ ...base[i], idade: l.idade, sexo: l.rotuloSexo, escolaridade: l.rotuloEscolaridade }));
+  return linhas.map((l, i) => ({ ...base[i], filhos: textoDosFilhos(l.filhos, "rh"), idade: l.idade, sexo: l.rotuloSexo, escolaridade: l.rotuloEscolaridade }));
 }
 
 // ── CSV (só o RH) ────────────────────────────────────────────────────────────
@@ -151,8 +157,8 @@ export function celulaCsv(valor: string | number | null | undefined): string {
 }
 
 export function montarCsvRH(linhas: LinhaListaRH[], comAniversario: boolean): string {
-  const cab = ["Nome", "Cargo", "Data de admissão", "Tempo de casa", "Idade", "Sexo", "Escolaridade", ...(comAniversario ? ["Aniversário", "Completa (anos)"] : [])];
-  const corpo = linhas.map((l) => [l.nome, l.cargo ?? "", l.dataAdmissao, l.tempoDeCasa, l.idade ?? "", l.sexo, l.escolaridade, ...(comAniversario ? [l.diaMes ?? "", l.completaAnos ?? ""] : [])]);
+  const cab = ["Nome", "Cargo", "Data de admissão", "Tempo de casa", "Idade", "Sexo", "Escolaridade", "Filhos", ...(comAniversario ? ["Aniversário", "Completa (anos)"] : [])];
+  const corpo = linhas.map((l) => [l.nome, l.cargo ?? "", l.dataAdmissao, l.tempoDeCasa, l.idade ?? "", l.sexo, l.escolaridade, l.filhos, ...(comAniversario ? [l.diaMes ?? "", l.completaAnos ?? ""] : [])]);
   return "﻿" + [cab, ...corpo].map((l) => l.map(celulaCsv).join(";")).join("\r\n") + "\r\n";
 }
 

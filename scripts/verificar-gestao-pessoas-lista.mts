@@ -187,13 +187,13 @@ await ok("linhas: RH com nome, cargo, admissão dd/mm/aaaa, tempo de casa, idade
   const f: FiltrosGestao = {};
   const l = filtrarFuncionariosGestao(PESSOAS_NOVACKI, f, HOJE);
   const rh = linhasParaRH(l, f)[0], po = linhasParaPortal(l, f)[0];
-  assert.deepEqual(Object.keys(rh).sort(), ["cargo", "dataAdmissao", "escolaridade", "idade", "nome", "sexo", "tempoDeCasa"]);
-  assert.deepEqual(Object.keys(po).sort(), ["cargo", "dataAdmissao", "nome", "tempoDeCasa"]);
+  assert.deepEqual(Object.keys(rh).sort(), ["cargo", "dataAdmissao", "escolaridade", "filhos", "idade", "nome", "sexo", "tempoDeCasa"]);
+  assert.deepEqual(Object.keys(po).sort(), ["cargo", "dataAdmissao", "filhos", "nome", "tempoDeCasa"]);
   assert.match(rh.dataAdmissao, /^\d{2}\/\d{2}\/\d{4}$/);
   const fa: FiltrosGestao = { aniversario: 0 };
   const la = filtrarFuncionariosGestao(PESSOAS_NOVACKI, fa, HOJE);
-  assert.deepEqual(Object.keys(linhasParaPortal(la, fa)[0]).sort(), ["cargo", "completaAnos", "dataAdmissao", "diaMes", "nome", "tempoDeCasa"]);
-  assert.deepEqual(Object.keys(linhasParaRH(la, fa)[0]).sort(), ["cargo", "completaAnos", "dataAdmissao", "diaMes", "escolaridade", "idade", "nome", "sexo", "tempoDeCasa"]);
+  assert.deepEqual(Object.keys(linhasParaPortal(la, fa)[0]).sort(), ["cargo", "completaAnos", "dataAdmissao", "diaMes", "filhos", "nome", "tempoDeCasa"]);
+  assert.deepEqual(Object.keys(linhasParaRH(la, fa)[0]).sort(), ["cargo", "completaAnos", "dataAdmissao", "diaMes", "escolaridade", "filhos", "idade", "nome", "sexo", "tempoDeCasa"]);
 });
 
 // ── Banco em memória + rotas ─────────────────────────────────────────────────
@@ -206,13 +206,16 @@ const rhUser = (uid: string, role?: string) => ({ id: uid, email: `${uid}@teste.
 
 type Func = { id: string; cliente_id: string; status: string; nome_completo: string; cargo: string | null; data_admissao: string | null; admissao_id: string | null; unidade_id: string };
 const funcsDe = (cli: string, un: string, base: number, pessoas: PessoaAtiva[]) => {
-  const funcs: Func[] = [], dps: Record<string, unknown>[] = [];
+  const funcs: Func[] = [], dps: Record<string, unknown>[] = [], deps: Record<string, unknown>[] = [];
   pessoas.forEach((p, i) => {
     const adm = p.sexo || p.dataNascimento || p.grauInstrucao ? id(base * 100 + 5000 + i) : null;
     funcs.push({ id: id(base * 100 + 3000 + i), cliente_id: cli, status: "ativo", nome_completo: p.nome, cargo: p.cargo, data_admissao: p.dataAdmissao, admissao_id: adm, unidade_id: un });
+    // filhos cadastrados na admissão, com os campos sensíveis que NUNCA podem sair (CPF, mãe, cartório) e um cônjuge, que não entra
+    (p.filhos ?? []).forEach((fi, j) => deps.push({ id: id(base * 100 + 7000 + i * 10 + j), admissao_id: adm, nome: fi.nome, parentesco: j % 2 === 0 ? "filha" : "filho", data_nascimento: fi.dataNascimento, cpf: `CPFFILHO${base}${i}${j}`, nome_mae: `MAE${base}${i}${j}`, cpf_mae: `CPFMAE${base}${i}${j}`, cartorio: `CARTORIO${base}${i}${j}`, num_registro: `REG${base}${i}${j}` }));
+    if (adm && i === 0) deps.push({ id: id(base * 100 + 7900), admissao_id: adm, nome: "Conjuge Teste", parentesco: "conjuge", data_nascimento: "1990-01-01", cpf: `CPFCONJ${base}`, nome_mae: null, cpf_mae: null, cartorio: null, num_registro: null });
     if (adm) dps.push({ admissao_id: adm, sexo: p.sexo, data_nascimento: p.dataNascimento, grau_instrucao: p.grauInstrucao, cpf: `${900 + i}.${base}11.222-33`, rg_numero: `RG${base}${700 + i}`, pis_pasep: `PIS${base}${600 + i}`, cor_raca: "parda", salario: 3000 });
   });
-  return { funcs, dps };
+  return { funcs, dps, deps };
 };
 const PESSOAS_X: PessoaAtiva[] = [0, 1, 2].map((i) => ({ nome: `Outro ${i + 1}`, cargo: "Soldador", dataAdmissao: "2025-03-10", sexo: "F", dataNascimento: "1991-05-05", grauInstrucao: "superior_completo" }));
 const PESSOAS_I: PessoaAtiva[] = [
@@ -225,8 +228,11 @@ const NOVACKI_NOME = "Novacki Indústria & Cia";
 const ALL = [funcsDe(CLI_N, UN1, 1, PESSOAS_NOVACKI), funcsDe(CLI_X, UN2, 2, PESSOAS_X), funcsDe(CLI_I, UN1, 4, PESSOAS_I)];
 const FUNCS: Func[] = [...ALL.flatMap((a) => a.funcs), { id: id(9999), cliente_id: CLI_N, status: "desligado", nome_completo: "Desligado Antigo", cargo: "Vigia", data_admissao: "2020-01-01", admissao_id: null, unidade_id: UN1 }];
 const DPS = ALL.flatMap((a) => a.dps);
-const IDS_PROIBIDOS = [...FUNCS.flatMap((f) => [f.id, f.admissao_id ?? ""]), CLI_N, CLI_X, CLI_S, CLI_I, UN1, UN2, ...[P_N, P_X, P_SEM, P_DOIS, P_SUSP, P_INTERNO, U_SUP1, U_SUP2, U_SOCIO, U_ANALISTA], ...DPS.flatMap((d) => [String(d.cpf), String(d.rg_numero), String(d.pis_pasep)])].filter(Boolean);
-const CHAVES_PROIBIDAS = /"(funcionario_id|admissao_id|cliente_id|clienteId|id|cpf|rg_numero|pis_pasep|cor_raca|salario|endereco|unidade_id)"\s*:/i;
+const DEPS = ALL.flatMap((a) => a.deps);
+const IDS_PROIBIDOS = [...FUNCS.flatMap((f) => [f.id, f.admissao_id ?? ""]), CLI_N, CLI_X, CLI_S, CLI_I, UN1, UN2, ...[P_N, P_X, P_SEM, P_DOIS, P_SUSP, P_INTERNO, U_SUP1, U_SUP2, U_SOCIO, U_ANALISTA], ...DPS.flatMap((d) => [String(d.cpf), String(d.rg_numero), String(d.pis_pasep)]),
+  // do filho: id, CPF, mãe, cartório, registro e a DATA DE NASCIMENTO exata (só a idade pode sair)
+  ...DEPS.flatMap((d) => [String(d.id), String(d.cpf), String(d.cpf_mae ?? ""), String(d.nome_mae ?? ""), String(d.cartorio ?? ""), String(d.num_registro ?? ""), String(d.data_nascimento ?? "")])].filter(Boolean);
+const CHAVES_PROIBIDAS = /"(funcionario_id|admissao_id|cliente_id|clienteId|id|cpf|rg_numero|pis_pasep|cor_raca|salario|endereco|unidade_id|data_nascimento|dataNascimento|nome_mae|cpf_mae|cartorio|num_registro|parentesco)"\s*:/i;
 
 function novoDb() {
   const db = criarDb({
@@ -237,7 +243,7 @@ function novoDb() {
     cliente_usuarios: [
       { user_id: P_N, cliente_id: CLI_N }, { user_id: P_X, cliente_id: CLI_X }, { user_id: P_DOIS, cliente_id: CLI_N }, { user_id: P_DOIS, cliente_id: CLI_X }, { user_id: P_SUSP, cliente_id: CLI_S },
     ],
-    funcionarios: FUNCS, admissao_dados_pessoais: DPS,
+    funcionarios: FUNCS, admissao_dados_pessoais: DPS, admissao_dependentes: DEPS,
     analistas_perfil: [
       { id: id(301), user_id: U_SUP1, unidade_id: UN1, acesso_todas_unidades: false, nome_completo: "Supervisora Um", ativo: true },
       { id: id(302), user_id: U_SUP2, unidade_id: UN2, acesso_todas_unidades: false, nome_completo: "Supervisor Dois", ativo: true },
@@ -354,7 +360,7 @@ await ok("RH: a lista de cada elemento (sexo, faixa, escolaridade, cargo, cartõ
   const o = await pedir({ ordenarPorTempoDeCasa: true });
   assert.equal(o.linhas[o.linhas.length - 1].tempoDeCasa, "—");
   const rh = (await pedir({})).linhas[0];
-  assert.deepEqual(Object.keys(rh).sort(), ["cargo", "dataAdmissao", "escolaridade", "idade", "nome", "sexo", "tempoDeCasa"]);
+  assert.deepEqual(Object.keys(rh).sort(), ["cargo", "dataAdmissao", "escolaridade", "filhos", "idade", "nome", "sexo", "tempoDeCasa"]);
 });
 
 await ok("RH: papel sem acesso (analista) e sem login são barrados; corpo inválido = 400; empresa inexistente = 404; desligado não entra", async () => {
@@ -376,7 +382,7 @@ await ok("portal: lista só da empresa da sessão (corpo forjado ignorado) com 2
   const j = await json(r);
   assert.equal(r.status, 200);
   assert.equal(j.total, 29);
-  assert.deepEqual(Object.keys(j.linhas[0]).sort(), ["cargo", "dataAdmissao", "nome", "tempoDeCasa"]);
+  assert.deepEqual(Object.keys(j.linhas[0]).sort(), ["cargo", "dataAdmissao", "filhos", "nome", "tempoDeCasa"]);
   const a = await json(await chamar(REAIS.portalLista, { filtros: { aniversario: 0, sexo: "feminino" } }, { portal: P_N }));
   assert.ok(a.total >= 0 && a.linhas.every((l) => "diaMes" in l && "completaAnos" in l));
   const outro = await json(await chamar(REAIS.portalLista, { filtros: {} }, { portal: P_X }));
@@ -407,11 +413,11 @@ await ok("CSV: ';' e BOM UTF-8, datas dd/mm/aaaa, fórmula neutralizada, quebra 
   const bruto = await csvTexto(resp);
   assert.ok(bruto.startsWith("﻿"), "BOM");
   const linhas = bruto.slice(1).split("\r\n").filter(Boolean);
-  assert.equal(linhas[0], "Nome;Cargo;Data de admissão;Tempo de casa;Idade;Sexo;Escolaridade");
+  assert.equal(linhas[0], "Nome;Cargo;Data de admissão;Tempo de casa;Idade;Sexo;Escolaridade;Filhos");
   const lista = await json(await chamar(REAIS.rhLista, { clienteId: CLI_N, filtros }, { rh: "socio" }));
   assert.equal(linhas.length - 1, lista.total, "mesmo número de linhas da lista filtrada");
   assert.ok(linhas.slice(1).every((l) => /;\d{2}\/\d{2}\/\d{4};/.test(l) && !/\d{4}-\d{2}-\d{2}/.test(l)), "datas dd/mm/aaaa");
-  assert.ok(linhas.slice(1).every((l) => l.split(";").length === 7 && l.includes(";Feminino;")));
+  assert.ok(linhas.slice(1).every((l) => l.split(";").length === 8 && l.includes(";Feminino;")));
   // com filtro de aniversariantes, as duas colunas extras
   const a = (await (await chamar(REAIS.rhExportar, { clienteId: CLI_N, filtros: { aniversario: 0 } }, { rh: "socio" })).text()).slice(1).split("\r\n");
   assert.ok(a[0].endsWith(";Aniversário;Completa (anos)"));
@@ -426,8 +432,8 @@ await ok("CSV: injeção de fórmula (= + - @) ganha apóstrofo; célula com ';'
   assert.equal(neutralizarFormula("Maria"), "Maria");
   assert.equal(nomeArquivoCsv("Açaí & Cia. Ltda", "2026-11-18"), "gestao-pessoas-acai-cia-ltda-18-11-2026.csv");
   assert.equal(nomeArquivoCsv("###", "2026-01-05"), "gestao-pessoas-empresa-05-01-2026.csv");
-  const csv = montarCsvRH([{ nome: "Ana", cargo: null, dataAdmissao: "01/01/2026", tempoDeCasa: "1 mês", idade: null, sexo: "Feminino", escolaridade: "Não informado" }], false);
-  assert.equal(csv, "﻿Nome;Cargo;Data de admissão;Tempo de casa;Idade;Sexo;Escolaridade\r\nAna;;01/01/2026;1 mês;;Feminino;Não informado\r\n");
+  const csv = montarCsvRH([{ nome: "Ana", cargo: null, dataAdmissao: "01/01/2026", tempoDeCasa: "1 mês", idade: null, sexo: "Feminino", escolaridade: "Não informado", filhos: "Sem filhos declarados" }], false);
+  assert.equal(csv, "﻿Nome;Cargo;Data de admissão;Tempo de casa;Idade;Sexo;Escolaridade;Filhos\r\nAna;;01/01/2026;1 mês;;Feminino;Não informado;Sem filhos declarados\r\n");
 });
 
 await ok("CSV: bloqueado para papel sem acesso, sem login e para o portal (sem rota de exportação no portal); auditoria gravada com quem, empresa, quantidade e filtros", async () => {

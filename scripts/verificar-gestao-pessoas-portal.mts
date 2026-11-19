@@ -98,6 +98,12 @@ const DPS_BASE = [
   dp(21, "M", "1970-01-01", "medio_completo"),
 ];
 
+// Dependentes com os campos sensíveis que nunca podem chegar ao navegador do cliente (nome e nascimento do filho, CPF, mãe, cartório) e um cônjuge.
+const DEPS_BASE = [
+  { id: id(7001), admissao_id: id(2001), nome: "Filho Secreto Um", parentesco: "filho", data_nascimento: "2019-05-05", cpf: "CPFFILHOA1", nome_mae: "MAEFILHOA1", cpf_mae: "CPFMAEA1", cartorio: "CARTORIOA1", num_registro: "REGA1" },
+  { id: id(7002), admissao_id: id(2002), nome: "Filha Secreta Dois", parentesco: "filha", data_nascimento: "2030-01-01", cpf: "CPFFILHOA2", nome_mae: "MAEFILHOA2", cpf_mae: "CPFMAEA2", cartorio: "CARTORIOA2", num_registro: "REGA2" },
+  { id: id(7003), admissao_id: id(2001), nome: "Conjuge Secreto", parentesco: "conjuge", data_nascimento: "1990-02-02", cpf: "CPFCONJA1", nome_mae: null, cpf_mae: null, cartorio: null, num_registro: null },
+];
 function novoDb(funcs: Func[] = FUNCS_BASE, dps: unknown[] = DPS_BASE) {
   const db = criarDb({
     clientes: [
@@ -108,7 +114,7 @@ function novoDb(funcs: Func[] = FUNCS_BASE, dps: unknown[] = DPS_BASE) {
       { user_id: U_A, cliente_id: CLI_A }, { user_id: U_B, cliente_id: CLI_B }, { user_id: U_DOIS, cliente_id: CLI_A }, { user_id: U_DOIS, cliente_id: CLI_B },
       { user_id: U_INATIVO, cliente_id: CLI_C }, { user_id: U_D, cliente_id: CLI_D },
     ],
-    funcionarios: funcs, admissao_dados_pessoais: dps,
+    funcionarios: funcs, admissao_dados_pessoais: dps, admissao_dependentes: DEPS_BASE,
   });
   (globalThis as unknown as { __DB__: unknown }).__DB__ = db;
   return db;
@@ -117,7 +123,7 @@ function novoDb(funcs: Func[] = FUNCS_BASE, dps: unknown[] = DPS_BASE) {
 const pessoasDe = (cli: string, funcs: Func[], dps: { admissao_id: string; sexo: string | null; data_nascimento: string | null; grau_instrucao: string | null }[]): PessoaAtiva[] =>
   funcs.filter((f) => f.cliente_id === cli && f.status === "ativo").map((f) => {
     const d = dps.find((x) => x.admissao_id === f.admissao_id);
-    return { nome: f.nome_completo, cargo: f.cargo, dataAdmissao: f.data_admissao, sexo: d?.sexo ?? null, dataNascimento: d?.data_nascimento ?? null, grauInstrucao: d?.grau_instrucao ?? null };
+    return { nome: f.nome_completo, cargo: f.cargo, dataAdmissao: f.data_admissao, sexo: d?.sexo ?? null, dataNascimento: d?.data_nascimento ?? null, grauInstrucao: d?.grau_instrucao ?? null, filhos: f.admissao_id ? DEPS_BASE.filter((x) => x.admissao_id === f.admissao_id && (x.parentesco === "filho" || x.parentesco === "filha")).map((x) => ({ nome: x.nome, dataNascimento: x.data_nascimento })) : null };
   });
 
 // ── A página do portal ───────────────────────────────────────────────────────
@@ -167,6 +173,8 @@ const PROVAS: Prova[] = [
     const json = JSON.stringify(r.el.props);
     const proibidos = [
       ...FUNCS_BASE.flatMap((f) => [f.id, f.admissao_id ?? ""]), CLI_A, CLI_B, CLI_C, CLI_D, U_A, U_B, ...DPS_BASE.flatMap((d) => [d.cpf, d.rg_numero, d.pis_pasep]),
+      // a página do portal só leva CONTAGENS de filhos: nenhum nome, nascimento, CPF, mãe, cartório nem id de dependente
+      ...DEPS_BASE.flatMap((d) => [d.id, d.nome, d.data_nascimento, d.cpf, d.nome_mae ?? "", d.cpf_mae ?? "", d.cartorio ?? "", d.num_registro ?? ""]),
     ].filter(Boolean);
     const achado = proibidos.find((v) => json.includes(v));
     if (achado) return `o payload contém um valor proibido (${achado.slice(0, 12)}…)`;
@@ -301,12 +309,12 @@ await ok("tela: cartões e legendas são <button> com aria-pressed; região aria
   const portalHtml = htmlDe(await abrir(real, U_A));
   assert.ok(portalHtml.includes("Funcionários · …") && portalHtml.includes('aria-live="polite"') && portalHtml.includes('role="status"'));
   assert.ok(!portalHtml.includes("Exportar") && !portalHtml.includes("exportar"), "o portal não tem exportação");
-  for (const cartao of ["Funcionários ativos", "Admitidos no mês", "Tempo médio de casa", "Aniversariantes de novembro"]) {
+  for (const cartao of ["Funcionários ativos", "Admitidos no mês", "Tempo médio de casa", "Aniversariantes de novembro", "Com filhos menores de 14"]) {
     assert.ok(new RegExp('<button[^>]*aria-pressed="(true|false)"[^>]*>(?:(?!</button>).)*' + cartao).test(portalHtml), "cartão como botão: " + cartao);
   }
   assert.ok(/<button[^>]*aria-pressed="false"[^>]*>(?:(?!<\/button>).)*Masculino/.test(portalHtml), "legenda de sexo como botão");
   // visual dos cartões-botão: fundo claro + borda (classe gp-cartao), e o seletor de mês FORA do <button> (mexer nele não dispara o clique do cartão)
-  assert.equal((portalHtml.match(/class="card gp-cartao"/g) ?? []).length, 4, "os 4 cartões de cima têm o visual de clicável");
+  assert.equal((portalHtml.match(/class="card gp-cartao"/g) ?? []).length, 5, "os 5 cartões de cima (inclusive Com filhos menores de 14) têm o visual de clicável");
   assert.ok(/\.card\.gp-cartao\{background:#f1f5f9;border:1px solid #cbd5e1/.test(portalHtml) && /\.card\.gp-cartao:hover\{background:#e2e8f0\}/.test(portalHtml) && /\[data-pressionado="true"\]\{border-color:#111827/.test(portalHtml));
   const botoes = [...portalHtml.matchAll(/<button\b[\s\S]*?<\/button>/g)].map((m) => m[0]);
   assert.ok(!botoes.some((b) => b.includes("<select") || b.includes("mes-aniversariantes")), "nenhum <button> contém o seletor de mês");
@@ -340,7 +348,7 @@ await ok("fonte da tela: tudo clicável é <button>; o portal não manda cliente
   assert.ok(c.includes("{!portal && <><td style={td}>{rh.idade ?? \"—\"}</td><td style={td}>{rh.sexo}</td><td style={td}>{rh.escolaridade}</td></>}"), "linhas: idem");
   const cliques = [
     "onClick={limpar} aria-label=\"Ver todos os funcionários e limpar os filtros\"",
-    'aplicar(par("admitidoNoMes", true))', 'aplicar(par("ordenarPorTempoDeCasa", true))', 'aplicar(par("aniversario", indiceMes))', "onClick={limpar}",
+    'aplicar(par("admitidoNoMes", true))', 'aplicar(par("filhos", "com"))', 'aplicar(par("sexo", "feminino"), par("filhos", "com"))', 'aplicar(par("sexo", "masculino"), par("filhos", "com"))', 'aplicar(par("filhos", "sem"))', 'aplicar(par("filhos", "naoInformado"))', 'aplicar(par("ordenarPorTempoDeCasa", true))', 'aplicar(par("aniversario", indiceMes))', "onClick={limpar}",
     'aplicar(par("sexo", chave))', 'aplicar(par("sexo", itensSexo[els[0].index][0]))',
     'aplicar(par("faixa", faixasMostradas[els[0].index].faixa), par("sexo", (["masculino", "feminino", "naoInformado"] as SexoFiltro[])[els[0].datasetIndex]))',
     'aplicar(par("faixa", f.faixa), par("sexo", "masculino"))', 'aplicar(par("faixa", f.faixa), par("sexo", "feminino"))', 'aplicar(par("faixa", f.faixa), par("sexo", "naoInformado"))', 'aplicar(par("faixa", f.faixa))',

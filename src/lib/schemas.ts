@@ -12,8 +12,8 @@ import { nomeArquivoCurriculoValido } from "@/lib/indicacaoEdicao";
 import { qtdDiasTesteSchema } from "@/lib/diasTeste";
 import { validarSenhaPortal, mensagemSenhaPortalInvalida } from "@/lib/senhaPortal";
 import { normalizarLocalEntrevista, LOCAL_ENTREVISTA_MAX } from "@/lib/localEntrevista";
-import { ESCOLARIDADES_FILTRO, FAIXAS_FILTRO, SEXOS_FILTRO, type SexoFiltro } from "@/lib/gestaoPessoasLista";
-import type { FaixaEtaria } from "@/lib/gestaoPessoas";
+import { ESCOLARIDADES_FILTRO, FAIXAS_FILTRO, FILHOS_FILTRO, SEXOS_FILTRO, type SexoFiltro } from "@/lib/gestaoPessoasLista";
+import type { EstadoFilhos, FaixaEtaria } from "@/lib/gestaoPessoas";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1993,6 +1993,7 @@ export const gestaoPessoasFiltrosSchema = z.object({
   faixa: z.enum(FAIXAS_FILTRO as [FaixaEtaria, ...FaixaEtaria[]]).optional(),
   escolaridade: z.string().refine((v) => ESCOLARIDADES_FILTRO.includes(v), "Escolaridade inválida.").optional(),
   cargo: z.string().trim().min(1).max(200).optional(),
+  filhos: z.enum(FILHOS_FILTRO as [EstadoFilhos, ...EstadoFilhos[]]).optional(),
   admitidoNoMes: z.literal(true).optional(),
   aniversario: z.number().int().min(0).max(11).optional(),
   ordenarPorTempoDeCasa: z.literal(true).optional(),
