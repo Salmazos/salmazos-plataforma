@@ -20,6 +20,7 @@ import { textoDesenhavel, caracteresOmitidos, paragrafosDesenhaveis } from "@/li
 import { execFileSync } from "node:child_process";
 import { decodePDFRawStream, PDFRef, PDFDict, PDFArray } from "pdf-lib";
 import { hojeSaoPaulo } from "@/lib/comercial";
+import { decidirEfeitoFunil } from "@/lib/propostaFunil";
 import { ENDERECOS_RODAPE_PROPOSTA } from "@/lib/propostaAssets";
 import { ENDERECO_FISCAL_SALMAZOS } from "@/lib/admissaoConstants";
 import { gerarPdfProposta, calcularGrade, carregarLogosClientes, prepararLogoCliente, quebrar, CAIXA_LOGO_W, CAIXA_LOGO_H } from "@/lib/propostaPdf";
@@ -2103,6 +2104,343 @@ await caso("(q) recusada: sem motivo e com oportunidade própria aberta → 400 
   assert.equal(proposta(db, id).situacao, "enviada");
   assert.equal(JSON.stringify(opps(db)), antes);
   assert.equal((await situacao(db, id, { para: "recusada", motivo_perda_categoria: "sem_retorno" })).status, 200);
+});
+
+
+// ── Várias propostas na mesma oportunidade (R&S, MOT): a oportunidade é a DA PRÓPRIA proposta (fix/funil-propostas-multiplas) ───────────
+// Regra (decidida com o Ölver): ganha com qualquer aceita; só perde quando ninguém mais está ativo/aceito e há uma recusada; valor da oportunidade
+// aberta = soma das propostas ATIVAS, ao ganhar = soma das ACEITAS. O MOT ainda não pode ser criado pela API (modelo inativo): as propostas MOT destes
+// casos são semeadas como rascunho direto na tabela e percorrem as MESMAS rotas de situação das R&S.
+const RELATAR = !!process.env.FUNIL_RELATAR;
+const O1 = (db: any) => opps(db)[0];
+const relatar = (rotulo: string, db: any) => {
+  if (!RELATAR) return;
+  const o = O1(db);
+  console.log(`RELATO|${rotulo}|opps=${opps(db).length}|etapa=${o?.etapa}|valor=${o?.valor_estimado}|servico=${o?.servico_interesse}|motivo=${o?.motivo_perda_categoria ?? "-"}|fechada=${o?.fechada_em ? "sim" : "nao"}|reconectar=${db.tabelas.lembretes.filter((l: any) => l.tipo === "reconectar" && l.status === "pendente").length}`);
+};
+function semearMot(db: any, oppId: string | null, extra: Record<string, unknown> = {}): string {
+  const n = 72 + db.tabelas.propostas.length;
+  const agora = new Date().toISOString();
+  const linha = {
+    id: crypto.randomUUID(), numero: `VE-MOT-${String(n).padStart(4, "0")}/${AA}`, modelo: "MOT", ano: ANO, sequencial: n, revisao_atual: 0, situacao: "rascunho",
+    unidade_id: U, vendedor_id: V, empresa_visitada_id: EMP, oportunidade_id: oppId, cliente_nome: "Empresa X", aos_cuidados: null, conteudo: {},
+    template_versao: TEMPLATE_VERSAO_ATUAL, validade_dias: 15, validade_ate: null, valor_estimado: null, enviada_em: null, created_at: agora, updated_at: agora, ...extra,
+  };
+  db.tabelas.propostas.push(linha);
+  return linha.id as string;
+}
+// A (R&S, 1.000) cria a oportunidade ao ser enviada; B (MOT semeado ou outra R&S, 500) entra na MESMA oportunidade.
+async function duasEnviadas(db: any, segundo: "MOT" | "RS" = "MOT", vA = 1000, vB = 500) {
+  const a = await enviar(db, vA);
+  assert.equal(a.r.status, 200, JSON.stringify(a.r.body));
+  const bId = segundo === "MOT" ? semearMot(db, O1(db).id) : ((await criar(db)).body.data.id as string);
+  assert.equal(proposta(db, bId).oportunidade_id, O1(db).id, "B nasce ligada à oportunidade de A");
+  const rb = await situacao(db, bId, { para: "enviada", valor_estimado: vB });
+  assert.equal(rb.status, 200, JSON.stringify(rb.body));
+  assert.equal(opps(db).length, 1, "uma só oportunidade");
+  return { a: a.id as string, b: bId, numA: a.numero as string, numB: proposta(db, bId).numero as string };
+}
+const estado = (db: any) => { const o = O1(db); return { etapa: o.etapa, valor: Number(o.valor_estimado) }; };
+const interacoesDeFase = (db: any) => db.tabelas.oportunidade_interacoes.filter((i: any) => i.tipo === "mudanca_etapa").length;
+
+await caso("funil/várias: duas ENVIADAS (R&S + MOT) na mesma oportunidade → valor = SOMA; serviço já preenchido é mantido; próxima ação é a da mais recente", async () => {
+  const db = novoDb();
+  const { a, b, numB } = await duasEnviadas(db, "MOT");
+  assert.deepEqual(estado(db), { etapa: "proposta_enviada", valor: 1500 });
+  assert.equal(O1(db).servico_interesse, "Recrutamento e Seleção", "o serviço que já estava preenchido (R&S) não é sobrescrito pelo do MOT");
+  assert.equal(O1(db).proxima_acao, `Follow-up da proposta ${numB}`);
+  assert.equal(proposta(db, a).oportunidade_id, O1(db).id);
+  assert.equal(proposta(db, b).oportunidade_id, O1(db).id);
+  assert.equal(db.tabelas.lembretes.filter((l: any) => l.tipo === "retorno" && l.status === "pendente").length, 2, "um follow-up por proposta");
+  relatar("duas_enviadas", db);
+});
+await caso("funil/várias: oportunidade SEM serviço preenchido recebe o da proposta enviada (só quando vazio)", async () => {
+  const o = SEMENTE_OPP({ etapa: "reuniao_visita", servico_interesse: null });
+  const db = novoDb({ oportunidades: [o] });
+  const { id } = await enviar(db, 1000);
+  assert.equal(O1(db).servico_interesse, "Recrutamento e Seleção");
+  const m = semearMot(db, o.id);
+  assert.equal((await situacao(db, m, { para: "enviada", valor_estimado: 200 })).status, 200);
+  assert.equal(O1(db).servico_interesse, "Recrutamento e Seleção");
+  assert.ok(id);
+  const o2 = SEMENTE_OPP({ etapa: "proposta_enviada", servico_interesse: "   ", valor_estimado: 10 });
+  const db2 = novoDb({ oportunidades: [o2] });
+  assert.equal((await enviar(db2, 300)).r.status, 200);
+  assert.equal(O1(db2).servico_interesse, "Recrutamento e Seleção", "texto só com espaços conta como vazio");
+});
+await caso("funil/várias: R&S ACEITA e MOT RECUSADA — ordem 1 (aceita primeiro): oportunidade ganha; a recusa que chega depois não muda nada", async () => {
+  const db = novoDb();
+  const { a, b } = await duasEnviadas(db, "MOT");
+  const r1 = await situacao(db, a, { para: "aceita" });
+  assert.equal(r1.status, 200, JSON.stringify(r1.body));
+  assert.deepEqual(estado(db), { etapa: "ganho", valor: 1000 }, "ao ganhar, valor = soma das aceitas");
+  const fechada = O1(db).fechada_em;
+  assert.ok(fechada);
+  const r2 = await situacao(db, b, { para: "recusada" });
+  assert.equal(r2.status, 200, JSON.stringify(r2.body));
+  assert.equal(proposta(db, b).situacao, "recusada");
+  assert.deepEqual(estado(db), { etapa: "ganho", valor: 1000 });
+  assert.equal(O1(db).fechada_em, fechada);
+  assert.equal(O1(db).motivo_perda, null);
+  assert.equal(O1(db).motivo_perda_categoria, null);
+  assert.equal(db.tabelas.lembretes.filter((l: any) => l.tipo === "reconectar").length, 0, "recusa depois de ganho não agenda reconexão");
+  relatar("aceita_depois_recusada", db);
+});
+await caso("funil/várias: MOT RECUSADA primeiro e R&S ACEITA depois — ordem 2: a oportunidade fica GANHA (não perdida)", async () => {
+  const db = novoDb();
+  const { a, b, numA, numB } = await duasEnviadas(db, "MOT");
+  const r1 = await situacao(db, b, { para: "recusada" });
+  assert.equal(r1.status, 200, "recusar enquanto OUTRA ainda está ativa não exige motivo do Funil: " + JSON.stringify(r1.body));
+  assert.equal(proposta(db, b).situacao, "recusada");
+  assert.deepEqual(estado(db), { etapa: "proposta_enviada", valor: 1000 }, "continua aberta; valor = soma das ativas (só a R&S)");
+  assert.ok(O1(db).fechada_em == null);
+  assert.equal(db.tabelas.lembretes.filter((l: any) => l.tipo === "reconectar").length, 0);
+  const lemb = (num: string) => db.tabelas.lembretes.find((l: any) => l.texto === `Follow-up da proposta ${num}`);
+  assert.equal(lemb(numB).status, "cancelado", "o follow-up da proposta recusada é cancelado");
+  assert.equal(lemb(numA).status, "pendente", "o da outra continua pendente");
+  const r2 = await situacao(db, a, { para: "aceita" });
+  assert.equal(r2.status, 200, JSON.stringify(r2.body));
+  assert.deepEqual(estado(db), { etapa: "ganho", valor: 1000 });
+  assert.equal(O1(db).motivo_perda_categoria, null);
+  assert.equal(lemb(numA).status, "cancelado");
+  relatar("recusada_depois_aceita", db);
+});
+await caso("funil/várias: DUAS RECUSADAS → perdida, com o motivo da ÚLTIMA (a que fechou); sem motivo nessa última, o Funil barra e nada muda", async () => {
+  const db = novoDb();
+  const { a, b } = await duasEnviadas(db, "MOT");
+  assert.equal((await situacao(db, a, { para: "recusada", motivo_perda_categoria: "valor_acima_orcamento" })).status, 200);
+  assert.deepEqual(estado(db), { etapa: "proposta_enviada", valor: 500 }, "a 1ª recusa não fecha: a MOT ainda está ativa");
+  assert.ok(O1(db).motivo_perda_categoria == null, "o motivo da 1ª recusa não vai para a oportunidade");
+  const antes = JSON.stringify(opps(db));
+  const barrada = await situacao(db, b, { para: "recusada" });
+  assert.equal(barrada.status, 400);
+  assert.equal(barrada.body.error, "Escolha o motivo de a oportunidade não ter avançado desta vez.");
+  assert.equal(proposta(db, b).situacao, "enviada");
+  assert.equal(JSON.stringify(opps(db)), antes);
+  const r = await situacao(db, b, { para: "recusada", motivo_perda_categoria: "sem_retorno" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(O1(db).etapa, "perdido");
+  assert.equal(O1(db).motivo_perda_categoria, "sem_retorno");
+  assert.ok(O1(db).fechada_em);
+  const reconectar = db.tabelas.lembretes.filter((l: any) => l.tipo === "reconectar" && l.status === "pendente");
+  assert.equal(reconectar.length, 1);
+  assert.equal(reconectar[0].data_lembrete, calcularValidadeAte(HOJE, 90));
+  relatar("duas_recusadas", db);
+});
+await caso("funil/várias: recusada com OUTRA em negociação continua aberta (fase não muda, valor = soma das ativas)", async () => {
+  const db = novoDb();
+  const { a, b } = await duasEnviadas(db, "MOT");
+  assert.equal((await situacao(db, b, { para: "em_negociacao" })).status, 200);
+  const etapaNeg = O1(db).etapa;
+  assert.equal(etapaNeg, "negociacao");
+  assert.equal((await situacao(db, a, { para: "recusada", motivo_perda_categoria: "sem_retorno" })).status, 200);
+  assert.deepEqual(estado(db), { etapa: "negociacao", valor: 500 });
+  assert.equal(db.tabelas.lembretes.filter((l: any) => l.tipo === "reconectar").length, 0);
+});
+await caso("funil/várias: cancelada ou vencida NÃO contam como ativas nem fecham a oportunidade sozinhas; rascunho ignorado", async () => {
+  const db = novoDb();
+  const { a, b } = await duasEnviadas(db, "MOT");
+  const rascunho = semearMot(db, O1(db).id);
+  assert.ok(rascunho);
+  assert.equal((await situacao(db, b, { para: "cancelada" })).status, 200);
+  assert.equal(O1(db).etapa, "proposta_enviada", "cancelar não mexe no Funil");
+  const r = await situacao(db, a, { para: "recusada", motivo_perda_categoria: "sem_retorno" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(O1(db).etapa, "perdido", "A recusada + B cancelada + rascunho: ninguém ativo/aceito e há uma recusada → perdida");
+  const db2 = novoDb();
+  const x = await enviar(db2, 800);
+  assert.equal(x.r.status, 200);
+  const venc = proposta(db2, x.id);
+  venc.validade_ate = "2000-01-01";
+  await detalhe(db2, x.id);
+  assert.equal(proposta(db2, x.id).situacao, "vencida");
+  assert.equal(O1(db2).etapa, "proposta_enviada", "vencimento continua sem mexer no Funil");
+});
+await caso("funil/várias: ACEITA e depois OUTRA ACEITA → soma o valor, NÃO reabre e NÃO muda de fase", async () => {
+  const db = novoDb();
+  const { a, b } = await duasEnviadas(db, "MOT");
+  assert.equal((await situacao(db, a, { para: "aceita" })).status, 200);
+  assert.deepEqual(estado(db), { etapa: "ganho", valor: 1000 });
+  const fechada = O1(db).fechada_em;
+  const fases = interacoesDeFase(db);
+  assert.equal(fases, 1);
+  assert.equal((await situacao(db, b, { para: "aceita" })).status, 200);
+  assert.deepEqual(estado(db), { etapa: "ganho", valor: 1500 }, "valor = soma das aceitas");
+  assert.equal(O1(db).fechada_em, fechada, "continua fechada na mesma data");
+  assert.equal(interacoesDeFase(db), fases, "sem nova mudança de fase");
+  assert.equal(opps(db).length, 1);
+  relatar("duas_aceitas", db);
+});
+await caso("funil/várias: valor — editar o valor de UMA proposta substitui o DELA; Rev. 1 da mesma proposta não duplica; valor nulo conta 0", async () => {
+  const db = novoDb();
+  const { a, b } = await duasEnviadas(db, "MOT");
+  assert.equal(estado(db).valor, 1500);
+  const rev = await patchProposta(db, a, "u-v", { validade_dias: 20 });
+  assert.equal(rev.status, 200, JSON.stringify(rev.body));
+  assert.equal(proposta(db, a).revisao_atual, 1);
+  assert.equal(estado(db).valor, 1500, "Rev. 1 não mexe no valor da oportunidade");
+  // O valor da proposta só é gravado ao enviar; trocar o da B aqui imita a correção dele. A próxima decisão conta B UMA vez, com o valor novo.
+  proposta(db, b).valor_estimado = 700;
+  const c = (await criar(db)).body.data.id as string;
+  assert.equal((await situacao(db, c, { para: "enviada", valor_estimado: 100 })).status, 200);
+  assert.equal(estado(db).valor, 1800, "A (1.000, uma vez, mesmo com Rev. 1) + B (700, o valor novo) + C (100)");
+  proposta(db, b).valor_estimado = null;
+  assert.equal((await situacao(db, c, { para: "em_negociacao" })).status, 200);
+  assert.equal(estado(db).valor, 1100, "valor nulo conta como 0: A 1.000 + C 100");
+  relatar("tres_enviadas_valor_editado", db);
+});
+await caso("funil/várias: duas propostas R&S (sem MOT) na mesma oportunidade seguem a MESMA regra", async () => {
+  const db = novoDb();
+  const { a, b } = await duasEnviadas(db, "RS");
+  assert.equal(proposta(db, a).modelo, "RS");
+  assert.equal(proposta(db, b).modelo, "RS");
+  assert.deepEqual(estado(db), { etapa: "proposta_enviada", valor: 1500 });
+  assert.equal((await situacao(db, b, { para: "recusada" })).status, 200);
+  assert.deepEqual(estado(db), { etapa: "proposta_enviada", valor: 1000 });
+  assert.equal((await situacao(db, a, { para: "aceita" })).status, 200);
+  assert.deepEqual(estado(db), { etapa: "ganho", valor: 1000 });
+  const db2 = novoDb();
+  const d2 = await duasEnviadas(db2, "RS");
+  assert.equal((await situacao(db2, d2.a, { para: "recusada", motivo_perda_categoria: "sem_retorno" })).status, 200);
+  assert.equal((await situacao(db2, d2.b, { para: "recusada", motivo_perda_categoria: "outro", motivo_perda: "Fechou com outra empresa" })).status, 200);
+  assert.equal(O1(db2).etapa, "perdido");
+  assert.equal(O1(db2).motivo_perda_categoria, "outro");
+  assert.equal(O1(db2).motivo_perda, "Fechou com outra empresa");
+  relatar("duas_rs", db);
+});
+await caso("funil/várias: oportunidade de OUTRO vendedor → enviar dá 409 (proposta segue rascunho, nada gravado); aceitar/recusar só avisa e não toca no Funil", async () => {
+  const db = novoDb();
+  const { a, b } = await duasEnviadas(db, "MOT");
+  const c = semearMot(db, O1(db).id);
+  O1(db).vendedor_id = V2;
+  const antes = JSON.stringify({ o: opps(db), l: db.tabelas.lembretes, i: db.tabelas.oportunidade_interacoes });
+  const r = await situacao(db, c, { para: "enviada", valor_estimado: 300 });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(proposta(db, c).situacao, "rascunho");
+  assert.equal(JSON.stringify({ o: opps(db), l: db.tabelas.lembretes, i: db.tabelas.oportunidade_interacoes }), antes);
+  const ra = await situacao(db, a, { para: "aceita" });
+  assert.equal(ra.status, 200);
+  assert.match(ra.body.aviso, /outro vendedor/);
+  assert.equal(O1(db).etapa, "proposta_enviada");
+  assert.equal(proposta(db, a).situacao, "aceita");
+  assert.ok(b);
+});
+await caso("funil/várias: falha ao gravar no Funil → a proposta NÃO fica enviada/aceita (compensação): enviar, aceitar e a última recusa", async () => {
+  const db = novoDb();
+  const { a, b } = await duasEnviadas(db, "MOT");
+  const c = semearMot(db, O1(db).id);
+  const antes = estado(db);
+  const proximaAntes = O1(db).proxima_acao;
+  db.falhas["lembretes.insert"] = "boom";
+  const r1 = await situacao(db, c, { para: "enviada", valor_estimado: 300 });
+  assert.equal(r1.status, 500);
+  assert.equal(proposta(db, c).situacao, "rascunho");
+  assert.deepEqual(estado(db), antes, "valor/fase da oportunidade voltam ao que eram");
+  assert.equal(O1(db).proxima_acao, proximaAntes);
+  assert.equal(proposta(db, c).oportunidade_id, O1(db).id);
+  delete db.falhas["lembretes.insert"];
+  db.falhas["oportunidades.update"] = "boom";
+  const r2 = await situacao(db, a, { para: "aceita" });
+  assert.ok(r2.status >= 400, JSON.stringify(r2.body));
+  assert.equal(proposta(db, a).situacao, "enviada");
+  assert.deepEqual(estado(db), antes);
+  delete db.falhas["oportunidades.update"];
+  assert.equal((await situacao(db, a, { para: "recusada", motivo_perda_categoria: "sem_retorno" })).status, 200);
+  db.falhas["lembretes.insert"] = "boom";
+  const r3 = await situacao(db, b, { para: "recusada", motivo_perda_categoria: "sem_retorno" });
+  assert.equal(r3.status, 500, "a última recusa agenda o 'reconectar': se falhar, desfaz");
+  assert.equal(proposta(db, b).situacao, "enviada");
+  assert.equal(O1(db).etapa, "proposta_enviada");
+  assert.ok(O1(db).motivo_perda_categoria == null);
+});
+await caso("funil/várias: proposta SEM oportunidade cria uma ao enviar (como hoje); com oportunidade já FECHADA cria outra sem reabrir e religa a proposta", async () => {
+  const db = novoDb();
+  const semOpp = semearMot(db, null);
+  const r = await situacao(db, semOpp, { para: "enviada", valor_estimado: 400 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(opps(db).length, 1);
+  assert.deepEqual(estado(db), { etapa: "proposta_enviada", valor: 400 });
+  assert.equal(O1(db).servico_interesse, "Mão de Obra Temporária");
+  assert.equal(proposta(db, semOpp).oportunidade_id, O1(db).id);
+  assert.ok(db.tabelas.oportunidade_interacoes.some((i: any) => i.tipo === "anotacao"));
+  // Oportunidade da proposta já fechada (perdida): não reabre; abre outra e religa.
+  const fechada = SEMENTE_OPP({ etapa: "perdido", fechada_em: "2026-10-01T00:00:00.000Z", motivo_perda_categoria: "sem_retorno" });
+  const db2 = novoDb({ oportunidades: [fechada] });
+  const p2 = semearMot(db2, fechada.id);
+  assert.equal((await situacao(db2, p2, { para: "enviada", valor_estimado: 250 })).status, 200);
+  assert.equal(opps(db2).length, 2);
+  assert.equal(opps(db2).find((o: any) => o.id === fechada.id).etapa, "perdido", "a antiga continua perdida");
+  const nova = opps(db2).find((o: any) => o.id !== fechada.id);
+  assert.deepEqual({ etapa: nova.etapa, valor: Number(nova.valor_estimado) }, { etapa: "proposta_enviada", valor: 250 });
+  assert.equal(proposta(db2, p2).oportunidade_id, nova.id);
+  relatar("sem_oportunidade", db);
+});
+await caso("funil/várias: aceitar/recusar usam a oportunidade DA PROPOSTA — sem oportunidade_id não mexem no Funil; oportunidade já perdida não reabre", async () => {
+  const db = novoDb();
+  const { a, b } = await duasEnviadas(db, "MOT");
+  proposta(db, b).oportunidade_id = null; // enviada antes de ter Funil/ligação: não há oportunidade própria a acompanhar
+  const antes = JSON.stringify(opps(db));
+  assert.equal((await situacao(db, b, { para: "aceita" })).status, 200);
+  assert.equal(JSON.stringify(opps(db)), antes, "sem oportunidade_id o Funil não é tocado");
+  O1(db).etapa = "perdido"; // o vendedor fechou a oportunidade à mão
+  const perdido = JSON.stringify(opps(db));
+  assert.equal((await situacao(db, a, { para: "aceita" })).status, 200);
+  assert.equal(JSON.stringify(opps(db)), perdido, "oportunidade perdida não é reaberta por uma aceita");
+});
+await caso("funil/várias: só a proposta que muda tem o follow-up cancelado (aceita e recusada); o da outra segue pendente", async () => {
+  const db = novoDb();
+  const { a, b, numA, numB } = await duasEnviadas(db, "RS");
+  const lemb = (num: string) => db.tabelas.lembretes.find((l: any) => l.texto === `Follow-up da proposta ${num}`);
+  assert.equal((await situacao(db, a, { para: "aceita" })).status, 200);
+  assert.equal(lemb(numA).status, "cancelado");
+  assert.equal(lemb(numB).status, "pendente", "hoje o follow-up da outra proposta continua pendente mesmo com a oportunidade ganha (não alterado)");
+  assert.equal((await situacao(db, b, { para: "recusada" })).status, 200);
+  assert.equal(lemb(numB).status, "cancelado");
+  relatar("lembretes", db);
+});
+
+await caso("decidirEfeitoFunil (função pura): tabela de decisões por evento, etapa e conjunto de propostas", () => {
+  const P = (id: string, situacao: any, valor: any = null) => ({ id, situacao, valor_estimado: valor });
+  const d = (para: any, etapaAtual: string, propostas: any[], id = "x") => decidirEfeitoFunil({ evento: { propostaId: id, para }, etapaAtual, propostas });
+  // enviada / em negociação
+  assert.deepEqual(d("enviada", "contato_feito", [P("x", "enviada", 1000)]), { etapa: "proposta_enviada", valorEstimado: 1000 });
+  assert.deepEqual(d("enviada", "proposta_enviada", [P("a", "enviada", 1000), P("x", "enviada", 500)]), { etapa: null, valorEstimado: 1500 });
+  assert.deepEqual(d("enviada", "ganho", [P("a", "aceita", 1000), P("x", "enviada", 500)]), { etapa: null, valorEstimado: undefined });
+  assert.deepEqual(d("em_negociacao", "proposta_enviada", [P("x", "em_negociacao", 700)]), { etapa: "negociacao", valorEstimado: 700 });
+  // aceita
+  assert.deepEqual(d("aceita", "proposta_enviada", [P("x", "aceita", 1000), P("b", "enviada", 500)]), { etapa: "ganho", valorEstimado: 1000 });
+  assert.deepEqual(d("aceita", "negociacao", [P("x", "aceita", 1000)]), { etapa: "ganho", valorEstimado: 1000 });
+  assert.deepEqual(d("aceita", "ganho", [P("a", "aceita", 1000), P("x", "aceita", 500)]), { etapa: null, valorEstimado: 1500 });
+  assert.deepEqual(d("aceita", "perdido", [P("x", "aceita", 1000)]), { etapa: null, valorEstimado: undefined });
+  // recusada
+  assert.deepEqual(d("recusada", "proposta_enviada", [P("x", "recusada", 1000)]), { etapa: "perdido", valorEstimado: undefined });
+  assert.deepEqual(d("recusada", "proposta_enviada", [P("x", "recusada", 1000), P("b", "enviada", 500)]), { etapa: null, valorEstimado: 500 });
+  assert.deepEqual(d("recusada", "proposta_enviada", [P("x", "recusada", 1000), P("b", "em_negociacao", 500)]), { etapa: null, valorEstimado: 500 });
+  assert.deepEqual(d("recusada", "proposta_enviada", [P("x", "recusada", 1000), P("b", "recusada", 500)]), { etapa: "perdido", valorEstimado: undefined });
+  assert.deepEqual(d("recusada", "proposta_enviada", [P("x", "recusada", 1000), P("b", "cancelada", 500), P("c", "vencida", 1), P("r", "rascunho", 9)]), { etapa: "perdido", valorEstimado: undefined });
+  assert.deepEqual(d("recusada", "proposta_enviada", [P("x", "recusada", 1000), P("b", "aceita", 500)]), { etapa: null, valorEstimado: undefined }, "com uma aceita na oportunidade não fecha como perdida");
+  assert.deepEqual(d("recusada", "ganho", [P("a", "aceita", 1000), P("x", "recusada", 500)]), { etapa: null, valorEstimado: undefined });
+  assert.deepEqual(d("recusada", "perdido", [P("x", "recusada", 500)]), { etapa: null, valorEstimado: undefined });
+  // sem efeito no Funil
+  for (const para of ["rascunho", "cancelada", "vencida"]) assert.deepEqual(d(para, "proposta_enviada", [P("x", para, 100), P("b", "enviada", 5)]), { etapa: null, valorEstimado: undefined });
+  // valores: nulo/ausente/inválido/negativo = 0; texto numérico do banco (numeric) vale; soma em centavos (sem 0,1 + 0,2)
+  assert.deepEqual(d("enviada", "proposta_enviada", [P("a", "enviada", null), P("b", "enviada", "1000.00"), P("x", "enviada", undefined), P("c", "enviada", -5), P("e", "enviada", "abc")]), { etapa: null, valorEstimado: 1000 });
+  assert.deepEqual(d("enviada", "proposta_enviada", [P("a", "enviada", 0.1), P("x", "enviada", 0.2)]), { etapa: null, valorEstimado: 0.3 });
+  assert.deepEqual(d("enviada", "proposta_enviada", [P("x", "enviada", null)]), { etapa: null, valorEstimado: undefined }, "soma zero nunca é gravada");
+  // cada proposta conta uma vez: a mesma proposta repetida em outra revisão não existe no conjunto (uma linha por proposta)
+  const conjunto = [P("a", "enviada", 1000), P("b", "enviada", 500)];
+  assert.deepEqual(d("enviada", "proposta_enviada", conjunto, "b"), d("enviada", "proposta_enviada", conjunto, "a"));
+  // editar o valor de uma troca só o dela
+  assert.deepEqual(d("enviada", "proposta_enviada", [P("a", "enviada", 1000), P("b", "enviada", 700)]), { etapa: null, valorEstimado: 1700 });
+  // não altera a entrada
+  const copia = JSON.stringify(conjunto);
+  d("aceita", "proposta_enviada", conjunto);
+  assert.equal(JSON.stringify(conjunto), copia);
+});
+await caso("propostaFunil.ts é pura: sem import de servidor, banco, rede ou data/aleatório", () => {
+  const fonte = fs.readFileSync("src/lib/propostaFunil.ts", "utf8");
+  assert.deepEqual([...fonte.matchAll(/^import .* from "(.*)";$/gm)].map((m) => m[1]), ["@/lib/propostas"]);
+  assert.doesNotMatch(fonte, /supabase|process\.env|fetch\(|Math\.random|Date\.now|new Date/);
 });
 
 fs.rmSync(tmp, { recursive: true, force: true });
