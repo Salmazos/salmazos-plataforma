@@ -2,12 +2,13 @@ import type { z } from "zod";
 import type { createServiceClient } from "@/lib/supabase/server";
 import type { propostaCreateSchema, propostaSituacaoSchema, propostaUpdateSchema } from "@/lib/schemas";
 import { hojeSaoPaulo, mensagemOportunidadeAberta, type ContextoComercial } from "@/lib/comercial";
-import { ROTULO_MOTIVO_PERDA } from "@/lib/comercialRotulos";
+import { ROTULO_MOTIVO_PERDA, ehAberta } from "@/lib/comercialRotulos";
 import { MSG_SO_ACOMPANHA_PROPOSTAS, type ContextoPropostas } from "@/lib/propostasAcesso";
 import { atualizarOportunidade, type OportunidadeLinha } from "@/lib/oportunidadeEtapa";
+import { decidirEfeitoFunil, type PropostaDoFunil } from "@/lib/propostaFunil";
 import {
   FOLLOWUP_DIAS_UTEIS, MSG_NOME_INCOMPLETO, ROTULO_SITUACAO, SERVICO_POR_MODELO, SITUACOES_ESCOLHIDAS_PELO_VENDEDOR, VALIDADE_PADRAO_DIAS,
-  calcularValidadeAte, etapaAposSituacao, modeloDisponivel, modoEdicao, podeTransicionar, siglaDoVendedor, somarDiasUteis, textoFollowUp,
+  calcularValidadeAte, modeloDisponivel, modoEdicao, podeTransicionar, siglaDoVendedor, somarDiasUteis, textoFollowUp,
   type ModeloProposta, type SituacaoProposta,
 } from "@/lib/propostas";
 import { MENSAGEM_MODELO_INDISPONIVEL, MODELOS_PROPOSTA, montarSnapshot, validarConteudo, type SnapshotProposta } from "@/lib/propostaModelos";
@@ -273,8 +274,19 @@ interface EfeitoFunil {
   desfazer: () => Promise<void>;
 }
 
-// Marcar como enviada: acha a oportunidade ABERTA da empresa (não confia só no oportunidade_id da proposta),
-// move/atualiza ou cria, e agenda o follow-up. Qualquer falha desfaz o que foi feito aqui.
+// Todas as propostas ligadas a uma oportunidade (qualquer modelo), com a proposta do evento já na situação/valor novos. É a entrada da
+// decisão pura (propostaFunil.ts): a soma de valores e o "ninguém mais ativo" dependem do conjunto inteiro, não só desta proposta.
+async function propostasDaOportunidade(svc: Svc, oportunidadeId: string, atual: PropostaDoFunil): Promise<PropostaDoFunil[]> {
+  const { data } = await svc.from("propostas").select("id, situacao, valor_estimado").eq("oportunidade_id", oportunidadeId);
+  return [...(data ?? []).filter((x) => x.id !== atual.id), atual] as PropostaDoFunil[];
+}
+
+// Serviço de interesse é texto livre que o vendedor também edita: o que já estiver preenchido fica; só se preenche quando vazio.
+const servicoVazio = (o: OportunidadeLinha) => !o.servico_interesse || !String(o.servico_interesse).trim();
+
+// Marcar como enviada: usa a oportunidade DA PRÓPRIA proposta (propostas.oportunidade_id) enquanto ela estiver aberta; sem ela (ou se já
+// fechou, sem reabrir) cai na oportunidade aberta da empresa, como sempre; sem nenhuma, cria uma. Move/atualiza ou cria e agenda o
+// follow-up. O valor da oportunidade passa a ser a soma das propostas ativas dela. Qualquer falha desfaz o que foi feito aqui.
 async function efeitoEnviada(
   svc: Svc, ctx: ContextoComercial, p: PropostaLinha, valor: number
 ): Promise<{ ok: true; efeito: EfeitoFunil } | { ok: false; status: number; error: string }> {
@@ -284,7 +296,12 @@ async function efeitoEnviada(
   const acao = textoFollowUp(p.numero);
   const servico = SERVICO_POR_MODELO[p.modelo as ModeloProposta];
 
-  const aberta = await buscarOportunidadeAberta(svc, p.empresa_visitada_id);
+  let aberta: OportunidadeLinha | null = null;
+  if (p.oportunidade_id) {
+    const { data: propria } = await svc.from("oportunidades").select("*").eq("id", p.oportunidade_id).maybeSingle();
+    if (propria && ehAberta(propria.etapa)) aberta = propria;
+  }
+  if (!aberta) aberta = await buscarOportunidadeAberta(svc, p.empresa_visitada_id);
   if (aberta && aberta.vendedor_id !== ctx.analistaId) {
     return falha(409, (await mensagemOportunidadeAberta(svc, p.empresa_visitada_id)) ?? "Já existe uma oportunidade aberta para esta empresa.");
   }
@@ -292,11 +309,14 @@ async function efeitoEnviada(
   let oportunidade: OportunidadeLinha;
   let desfazerOportunidade: () => Promise<void>;
   if (aberta) {
-    const etapaAlvo = etapaAposSituacao("enviada", aberta.etapa);
-    const r = await atualizarOportunidade(svc, ctx.analistaId, aberta, {
-      ...(etapaAlvo ? { etapa: etapaAlvo } : {}),
-      valor_estimado: valor,
-      servico_interesse: servico,
+    const aSerAtualizada: OportunidadeLinha = aberta;
+    const todas = await propostasDaOportunidade(svc, aSerAtualizada.id, { id: p.id, situacao: "enviada", valor_estimado: valor });
+    const decisao = decidirEfeitoFunil({ evento: { propostaId: p.id, para: "enviada" }, etapaAtual: aSerAtualizada.etapa, propostas: todas });
+    const r = await atualizarOportunidade(svc, ctx.analistaId, aSerAtualizada, {
+      ...(decisao.etapa ? { etapa: decisao.etapa } : {}),
+      valor_estimado: decisao.valorEstimado ?? valor,
+      ...(servicoVazio(aSerAtualizada) ? { servico_interesse: servico } : {}),
+      // A próxima ação é sempre a da proposta enviada mais recente.
       proxima_acao: acao,
       proxima_acao_em: proximaEm,
     });
@@ -304,9 +324,9 @@ async function efeitoEnviada(
     oportunidade = r.data;
     desfazerOportunidade = async () => {
       await svc.from("oportunidades").update({
-        etapa: aberta.etapa, valor_estimado: aberta.valor_estimado ?? null, servico_interesse: aberta.servico_interesse ?? null,
-        proxima_acao: aberta.proxima_acao ?? null, proxima_acao_em: aberta.proxima_acao_em ?? null, updated_at: aberta.updated_at,
-      }).eq("id", aberta.id);
+        etapa: aSerAtualizada.etapa, valor_estimado: aSerAtualizada.valor_estimado ?? null, servico_interesse: aSerAtualizada.servico_interesse ?? null,
+        proxima_acao: aSerAtualizada.proxima_acao ?? null, proxima_acao_em: aSerAtualizada.proxima_acao_em ?? null, updated_at: aSerAtualizada.updated_at,
+      }).eq("id", aSerAtualizada.id);
     };
   } else {
     // Só havia oportunidade ganha/perdida (ou nenhuma): abre uma nova, sem reabrir a antiga.
@@ -376,41 +396,51 @@ async function efeitoEnviada(
   };
 }
 
-// Negociação, aceita e recusada acompanham a oportunidade aberta da empresa, se for do próprio vendedor.
+// Negociação, aceita e recusada acompanham a oportunidade DA PRÓPRIA proposta (propostas.oportunidade_id), se for do próprio vendedor.
+// O que fazer com etapa e valor sai de decidirEfeitoFunil (regra de várias propostas na mesma oportunidade); aqui só se aplica.
 async function efeitoAcompanhamento(
-  svc: Svc, ctx: ContextoComercial, p: PropostaLinha, para: SituacaoProposta, d: z.infer<typeof propostaSituacaoSchema>
+  svc: Svc, ctx: ContextoComercial, p: PropostaLinha, para: SituacaoProposta, d: z.infer<typeof propostaSituacaoSchema>, de?: SituacaoProposta
 ): Promise<{ ok: true; efeito: EfeitoFunil } | { ok: false; status: number; error: string }> {
   const nada: EfeitoFunil = { oportunidadeId: null, desfazer: async () => {} };
-  if (!p.empresa_visitada_id) return { ok: true, efeito: nada };
-  const aberta = await buscarOportunidadeAberta(svc, p.empresa_visitada_id);
-  if (!aberta) return { ok: true, efeito: nada };
-  if (aberta.vendedor_id !== ctx.analistaId) {
+  if (!p.oportunidade_id) return { ok: true, efeito: nada };
+  const { data: opp } = await svc.from("oportunidades").select("*").eq("id", p.oportunidade_id).maybeSingle();
+  if (!opp) return { ok: true, efeito: nada };
+  const atual: OportunidadeLinha = opp;
+  // Cancelar nunca avisa nem mexe quando a oportunidade é de outro vendedor: o cancelamento sempre foi silencioso com o Funil.
+  if (atual.vendedor_id !== ctx.analistaId && para === "cancelada") return { ok: true, efeito: nada };
+  if (atual.vendedor_id !== ctx.analistaId) {
     return { ok: true, efeito: { ...nada, aviso: "A oportunidade aberta desta empresa é de outro vendedor e não foi alterada no Funil." } };
   }
-  const etapa = etapaAposSituacao(para, aberta.etapa);
-  if (!etapa) return { ok: true, efeito: { ...nada, oportunidadeId: aberta.id } };
 
-  const r = await atualizarOportunidade(svc, ctx.analistaId, aberta, {
-    etapa,
-    ...(etapa === "ganho" && !(Number(aberta.valor_estimado) > 0) ? { valor_estimado: p.valor_estimado ?? undefined } : {}),
-    ...(etapa === "ganho" && !aberta.servico_interesse ? { servico_interesse: SERVICO_POR_MODELO[p.modelo as ModeloProposta] } : {}),
-    ...(etapa === "perdido" ? { motivo_perda_categoria: d.motivo_perda_categoria, motivo_perda: d.motivo_perda ?? null } : {}),
+  const todas = await propostasDaOportunidade(svc, atual.id, { id: p.id, situacao: para, valor_estimado: p.valor_estimado ?? null });
+  const decisao = decidirEfeitoFunil({ evento: { propostaId: p.id, para, de }, etapaAtual: atual.etapa, propostas: todas });
+  const valorMudou = decisao.valorEstimado !== undefined && Number(atual.valor_estimado) !== decisao.valorEstimado;
+  // Oportunidade aberta sem próxima ação (legado) não pode travar a recusa/aceite só por causa do valor: aí o valor não é regravado.
+  const valorSeguro = valorMudou && (decisao.etapa !== null || !ehAberta(atual.etapa) || (!!atual.proxima_acao && !!atual.proxima_acao_em));
+  if (!decisao.etapa && !valorSeguro) return { ok: true, efeito: { ...nada, oportunidadeId: atual.id } };
+
+  const r = await atualizarOportunidade(svc, ctx.analistaId, atual, {
+    ...(decisao.etapa ? { etapa: decisao.etapa } : {}),
+    ...(valorSeguro ? { valor_estimado: decisao.valorEstimado } : {}),
+    ...(decisao.etapa === "ganho" && servicoVazio(atual) ? { servico_interesse: SERVICO_POR_MODELO[p.modelo as ModeloProposta] } : {}),
+    // O motivo de perda obrigatório do Funil vem da recusa que FECHOU a oportunidade.
+    ...(decisao.etapa === "perdido" ? { motivo_perda_categoria: d.motivo_perda_categoria, motivo_perda: d.motivo_perda ?? null } : {}),
   });
   if (!r.ok) return falha(r.status, r.error);
   return {
     ok: true,
     efeito: {
-      oportunidadeId: aberta.id,
+      oportunidadeId: atual.id,
       desfazer: async () => {
         await svc.from("oportunidades").update({
-          etapa: aberta.etapa, fechada_em: aberta.fechada_em ?? null, motivo_perda: aberta.motivo_perda ?? null,
-          motivo_perda_categoria: aberta.motivo_perda_categoria ?? null, valor_estimado: aberta.valor_estimado ?? null,
-          servico_interesse: aberta.servico_interesse ?? null, updated_at: aberta.updated_at,
-        }).eq("id", aberta.id);
+          etapa: atual.etapa, fechada_em: atual.fechada_em ?? null, motivo_perda: atual.motivo_perda ?? null,
+          motivo_perda_categoria: atual.motivo_perda_categoria ?? null, valor_estimado: atual.valor_estimado ?? null,
+          servico_interesse: atual.servico_interesse ?? null, updated_at: atual.updated_at,
+        }).eq("id", atual.id);
         // Perda agenda um "reconectar": se a proposta voltar atrás, esse lembrete não faz mais sentido.
         const agora = new Date().toISOString();
         await svc.from("lembretes").update({ status: "cancelado", concluido_em: agora, updated_at: agora })
-          .eq("oportunidade_id", aberta.id).eq("tipo", "reconectar").eq("status", "pendente");
+          .eq("oportunidade_id", atual.id).eq("tipo", "reconectar").eq("status", "pendente");
       },
     },
   };
@@ -451,8 +481,10 @@ export async function mudarSituacao(svc: Svc, ctx: ContextoPropostas, p: Propost
   // 2) Funil e follow-up. Se falhar, a proposta volta ao que era (nunca fica "enviada" sem follow-up/oportunidade).
   // Sem Funil (acesso só por liberação) a proposta apenas se registra: nada de oportunidade, interação ou lembrete.
   let efeito: EfeitoFunil = { oportunidadeId: null, desfazer: async () => {} };
-  if (ctx.temFunil && (para === "enviada" || para === "em_negociacao" || para === "aceita" || para === "recusada")) {
-    const r = para === "enviada" ? await efeitoEnviada(svc, ctx, p, d.valor_estimado as number) : await efeitoAcompanhamento(svc, ctx, p, para, d);
+  // Cancelar proposta que estava ATIVA recalcula só o valor da oportunidade (soma das ativas que restaram); cancelar rascunho não mexe no Funil.
+  const cancelaAtiva = para === "cancelada" && (de === "enviada" || de === "em_negociacao");
+  if (ctx.temFunil && (para === "enviada" || para === "em_negociacao" || para === "aceita" || para === "recusada" || cancelaAtiva)) {
+    const r = para === "enviada" ? await efeitoEnviada(svc, ctx, p, d.valor_estimado as number) : await efeitoAcompanhamento(svc, ctx, p, para, d, de);
     if (!r.ok) {
       await reverter();
       return falha(r.status, r.error);
