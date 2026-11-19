@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { PDFDocument, PDFHexString, PDFName, PDFPage, PageSizes } from "pdf-lib";
+import { getDocumentProxy } from "unpdf";
 import { PdfWriter, PW, PH, ML, CW, safe, DARK, GRAY, LIGHT_GRAY, embutirImagemComprimida } from "@/lib/pdfWriter";
+import { MOTIVO_PDF_PROTEGIDO } from "@/lib/pacoteNaoIncorporados";
 
 // Ordem, índice e bookmarks dos documentos do candidato dentro do pacote da contabilidade
 // (gerar-pdf). A ordem vinha de `.order("created_at")`, mas a semeadura da admissão é um
@@ -67,7 +69,7 @@ export function rotularDocumentos<T extends { tipo_documento: string }>(docs: re
 export const ROTULO_RG_FRENTE_E_VERSO = "Identidade RG (frente e verso)";
 export const ROTULO_CERTIDAO_FRENTE_E_VERSO = "Certidão de Nascimento/Casamento/União Estável (frente e verso)";
 
-export type MotivoNaoIncorporado = "download_falhou" | "formato_nao_suportado" | "pdf_sem_paginas" | `erro_ao_embutir:${string}`;
+export type MotivoNaoIncorporado = "download_falhou" | "formato_nao_suportado" | "pdf_sem_paginas" | "pdf_protegido" | `erro_ao_embutir:${string}`;
 
 export interface EntradaIndice {
   rotulo: string;
@@ -85,7 +87,8 @@ export interface ResultadoAnexos {
   paginasAntes: number;
   // Rótulos na mesma ordem dos documentos — alimenta a página "não incorporados".
   naoEmbutidos: string[];
-  motivosNaoIncorporados: { tipo_documento: string; motivo: MotivoNaoIncorporado }[];
+  // `rotulo` acompanha o motivo (mesma ordem de naoEmbutidos): a tela e a auditoria mostram QUAL documento ficou de fora e por quê.
+  motivosNaoIncorporados: { tipo_documento: string; rotulo: string; motivo: MotivoNaoIncorporado }[];
 }
 
 interface AnexarArgs {
@@ -150,7 +153,7 @@ export async function anexarDocumentosAoPacote({ pdfDoc, w, admissaoId, docs, la
     const falhar = (motivo: MotivoNaoIncorporado) => {
       entrada.motivo = motivo;
       resultado.naoEmbutidos.push(rotulo);
-      resultado.motivosNaoIncorporados.push({ tipo_documento: doc.tipo_documento, motivo });
+      resultado.motivosNaoIncorporados.push({ tipo_documento: doc.tipo_documento, rotulo, motivo });
     };
 
     const bytes = baixados.get(doc) ?? (await baixar(doc.storage_path!));
@@ -189,10 +192,103 @@ export async function anexarDocumentosAoPacote({ pdfDoc, w, admissaoId, docs, la
       const nome = err instanceof Error ? err.name : "Error";
       const mensagem = err instanceof Error ? err.message : String(err);
       console.error(`[gerar-pdf] Falha ao incorporar documento — admissao_id=${admissaoId} tipo_documento=${doc.tipo_documento} erro=${nome}: ${mensagem}`);
+      // PDF protegido (criptografado): motivo próprio. O nome do erro do pdf-lib vem como "Error", então "erro_ao_embutir:Error" não dizia a causa.
+      if (ext === "pdf" && ehPdfProtegido(err, bytes)) {
+        await diagnosticarCriptografia(bytes, admissaoId, doc.tipo_documento);
+        falhar(MOTIVO_PDF_PROTEGIDO);
+        continue;
+      }
       falhar(`erro_ao_embutir:${nome}`);
     }
   }
   return resultado;
+}
+
+// ── PDF protegido (criptografado) ────────────────────────────────────────────
+// O pdf-lib não descriptografa: PDFDocument.load lança "Input document to `PDFDocument.load` is encrypted". Detecta pelo texto do erro OU por /Encrypt nos bytes (o
+// texto da mensagem pode mudar entre versões; a chamada só acontece depois de a abertura já ter falhado).
+export function ehPdfProtegido(err: unknown, bytes: Uint8Array): boolean {
+  const mensagem = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  if (mensagem.includes("encrypted")) return true;
+  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).includes("/Encrypt");
+}
+
+export interface ParametrosEncrypt {
+  versao: number | null; // /V
+  revisao: number | null; // /R
+  tamanhoChaveBits: number | null; // /Length (ausente = 40 por padrão em V1)
+  filtro: string | null; // /Filter
+  metodo: string | null; // /CFM (V2 = RC4, AESV2 = AES-128, AESV3 = AES-256)
+  permissoes: Record<string, boolean> | null; // flags de /P
+}
+
+// Lê SÓ os números do dicionário /Encrypt (nada do conteúdo, nome ou texto do documento). Retorna null se não achar o dicionário.
+export function lerParametrosEncrypt(bytes: Uint8Array): ParametrosEncrypt | null {
+  if (bytes.byteLength > 60 * 1024 * 1024) return null;
+  const texto = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("latin1");
+  const ref = /\/Encrypt\s+(\d+)\s+(\d+)\s+R/.exec(texto);
+  let dicionario: string | null = null;
+  if (ref) {
+    const inicio = new RegExp(`(?:^|[\\s>])${ref[1]}\\s+${ref[2]}\\s+obj`).exec(texto);
+    if (inicio) dicionario = texto.slice(inicio.index, texto.indexOf("endobj", inicio.index) + 6);
+  } else {
+    const direto = /\/Encrypt\s*<</.exec(texto);
+    if (direto) dicionario = texto.slice(direto.index, direto.index + 2000);
+  }
+  if (!dicionario) return null;
+  const numero = (chave: string) => { const m = new RegExp(`/${chave}\\s+(-?\\d+)`).exec(dicionario!); return m ? Number(m[1]) : null; };
+  const nome = (chave: string) => { const m = new RegExp(`/${chave}\\s*/(\\w+)`).exec(dicionario!); return m ? m[1] : null; };
+  const p = numero("P");
+  const bit = (n: number) => p !== null && (((p >>> 0) >> (n - 1)) & 1) === 1;
+  return {
+    versao: numero("V"), revisao: numero("R"), tamanhoChaveBits: numero("Length"), filtro: nome("Filter"), metodo: nome("CFM"),
+    permissoes: p === null ? null : { imprimir: bit(3), modificar: bit(4), copiar: bit(5), anotar: bit(6), preencherFormulario: bit(9), acessibilidade: bit(10), montar: bit(11), imprimirAltaQualidade: bit(12) },
+  };
+}
+
+// Diagnóstico para decidir a correção (senha de proprietário x senha de abertura): registra só a versão/revisão/tamanho da chave/flags de permissão do /Encrypt e se o
+// unpdf (pdf.js) abre o arquivo com SENHA VAZIA. Nenhum conteúdo, nome ou texto do documento vai para o log. Nunca lança.
+export async function diagnosticarCriptografia(bytes: Uint8Array, admissaoId: string, tipoDocumento: string): Promise<void> {
+  try {
+    const p = lerParametrosEncrypt(bytes);
+    let abreComSenhaVazia: string;
+    try {
+      const doc = await getDocumentProxy(bytes.slice()); // cópia: o pdf.js pode "consumir" o buffer
+      abreComSenhaVazia = "sim";
+      void doc;
+    } catch (e) {
+      abreComSenhaVazia = `nao(${e instanceof Error ? e.name : "erro"})`;
+    }
+    console.error(
+      `[gerar-pdf] Diagnóstico /Encrypt — admissao_id=${admissaoId} tipo_documento=${tipoDocumento} v=${p?.versao ?? "?"} r=${p?.revisao ?? "?"} length=${p?.tamanhoChaveBits ?? "?"} filtro=${p?.filtro ?? "?"} metodo=${p?.metodo ?? "?"} permissoes=${p?.permissoes ? JSON.stringify(p.permissoes) : "?"} abre_com_senha_vazia=${abreComSenhaVazia}`,
+    );
+  } catch {
+    console.error(`[gerar-pdf] Diagnóstico /Encrypt indisponível — admissao_id=${admissaoId} tipo_documento=${tipoDocumento}`);
+  }
+}
+
+// ── Página "Documentos não incorporados" ─────────────────────────────────────
+export const TEXTO_PDF_PROTEGIDO = "Documento protegido por senha. Não foi possível incorporá-lo ao pacote. Baixe o original no painel.";
+export const TEXTO_FORMATO_NAO_SUPORTADO = "(formato não suportado — baixe o arquivo original no painel)";
+
+// Uma página com os documentos que ficaram de fora, agrupados pelo motivo: protegido por senha tem o texto próprio; os demais mantêm o texto de sempre.
+export function desenharPaginaNaoIncorporados(w: PdfWriter, anexos: Pick<ResultadoAnexos, "motivosNaoIncorporados">): boolean {
+  const lista = anexos.motivosNaoIncorporados;
+  if (lista.length === 0) return false;
+  w.newPage();
+  w.drawText("Documentos não incorporados automaticamente", w.bold, 12, DARK);
+  const grupo = (texto: string, itens: typeof lista) => {
+    if (itens.length === 0) return;
+    w.y -= 6;
+    // o texto não quebra linha sozinho: se passar da largura útil, vai uma frase por linha
+    const partes = w.regular.widthOfTextAtSize(safe(texto), 9) > CW ? texto.split(/(?<=\.) /) : [texto];
+    for (const parte of partes) w.drawText(parte, w.regular, 9, GRAY);
+    w.y -= 6;
+    for (const it of itens) w.drawText(`• ${it.rotulo}`, w.regular, 10, DARK);
+  };
+  grupo(TEXTO_PDF_PROTEGIDO, lista.filter((m) => m.motivo === MOTIVO_PDF_PROTEGIDO));
+  grupo(TEXTO_FORMATO_NAO_SUPORTADO, lista.filter((m) => m.motivo !== MOTIVO_PDF_PROTEGIDO));
+  return true;
 }
 
 // ── Índice ────────────────────────────────────────────────────────────────

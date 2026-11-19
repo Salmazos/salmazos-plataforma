@@ -22,6 +22,7 @@ import ModalUploadDocumentosContabilidade from "@/components/ModalUploadDocument
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import CampoTelefone from "@/components/ui/CampoTelefone";
 import ModalEnviarPacoteEmail from "@/components/ModalEnviarPacoteEmail";
+import { ACOES_PACOTE_GERADO, CABECALHO_NAO_INCORPORADOS, descreverDocumentoFora, lerNaoIncorporados, mensagemPacoteSemDocumentos, naoIncorporadosDaAuditoria, type DocumentoForaDoPacote } from "@/lib/pacoteNaoIncorporados";
 import { formatarDataHoraBR } from "@/lib/emailPacoteContabilidade";
 import type { AdmissaoAdicional, AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento, AdmissaoEnvelopeAssinatura, AdmissaoDocumentoContabilidade } from "@/types";
 
@@ -486,6 +487,9 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [modalEmailAberto, setModalEmailAberto] = useState(false);
   const [toast, setToast] = useState("");
   const [erroPacote, setErroPacote] = useState("");
+  // Documentos que ficaram FORA do último pacote gerado (null = ainda não gerou nesta sessão: vale o que a auditoria do último pacote registrou).
+  const [naoIncorporadosRecentes, setNaoIncorporadosRecentes] = useState<DocumentoForaDoPacote[] | null>(null);
+  const [confirmarEnvioFaltando, setConfirmarEnvioFaltando] = useState(false);
   const [solicitandoCorrecao, setSolicitandoCorrecao] = useState(false);
   const [notaCorrecao, setNotaCorrecao] = useState("");
   const [enviandoCorrecao, setEnviandoCorrecao] = useState(false);
@@ -550,7 +554,7 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const [formVT, setFormVT] = useState<ValeTransporteForm>({ opcao: "", dias_semana: "", bairro_cidade_trabalho: "", termos_aceitos: "", linhas: [] });
   const [salvandoVT, setSalvandoVT] = useState(false);
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 4000); };
+  const showToast = (msg: string, ms = 4000) => { setToast(msg); setTimeout(() => setToast(""), ms); };
 
   const iniciarEdicaoDP = (secao: string) => {
     setFormDP(dpParaFormulario(dp));
@@ -1209,7 +1213,11 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       // NÃO baixa o PDF automaticamente (decisão do Olver): o pacote fica guardado e segue por "Enviar por e-mail" (o RH vai em cópia).
       // O download é opcional, pelo botão "Baixar PDF", para um envio manual.
       setStatus("enviado_contabilidade");
-      showToast("Pacote gerado e guardado. Envie por e-mail; se precisar de envio manual, use \"Baixar PDF\".");
+      // A rota informa (cabeçalho) quais documentos ficaram de fora: em vez do "gerado" de sempre, o aviso diz QUAIS e o cartão do pacote fica em destaque.
+      const fora = lerNaoIncorporados(res.headers.get(CABECALHO_NAO_INCORPORADOS));
+      setNaoIncorporadosRecentes(fora);
+      if (fora.length > 0) showToast(mensagemPacoteSemDocumentos(fora), 15000);
+      else showToast("Pacote gerado e guardado. Envie por e-mail; se precisar de envio manual, use \"Baixar PDF\".");
       router.refresh();
     } catch {
       const msg = "Erro de conexão ao gerar o PDF.";
@@ -1273,7 +1281,10 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       setStatus("enviado_contabilidade");
       setForcandoPacote(false);
       setJustificativaForcar("");
-      showToast("⚠️ Pacote gerado com pendências e guardado. Envie por e-mail; se precisar de envio manual, use \"Baixar PDF\".");
+      const fora = lerNaoIncorporados(res.headers.get(CABECALHO_NAO_INCORPORADOS));
+      setNaoIncorporadosRecentes(fora);
+      if (fora.length > 0) showToast(mensagemPacoteSemDocumentos(fora), 15000);
+      else showToast("⚠️ Pacote gerado com pendências e guardado. Envie por e-mail; se precisar de envio manual, use \"Baixar PDF\".");
       router.refresh();
     } catch {
       const msg = "Erro de conexão ao gerar o PDF.";
@@ -1380,6 +1391,10 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
     : !docRgAprovadoContaSalario || !docComprovanteAprovadoContaSalario
     ? `Aprove antes: ${[!docRgAprovadoContaSalario && "RG", !docComprovanteAprovadoContaSalario && "Comprovante de endereço"].filter(Boolean).join(", ")}`
     : undefined;
+  // Pacote gerado SEM algum documento (ex.: PDF protegido por senha): vale o aviso da geração desta sessão; ao abrir a tela, o registro do último pacote gerado.
+  const docsForaDoPacote: DocumentoForaDoPacote[] = admissao.pdf_pacote_path
+    ? (naoIncorporadosRecentes ?? naoIncorporadosDaAuditoria(auditLogs.find((l) => ACOES_PACOTE_GERADO.includes(l.acao))?.detalhes))
+    : [];
   const logCartaBanco = auditLogs.find(
     (l) => l.acao === "admissao_carta_conta_salario_enviada" || l.acao === "admissao_carta_conta_salario_reenviada_forcada"
   );
@@ -1526,15 +1541,39 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
               <p className="text-sm text-gray-600 mb-2">
                 ✅ Gerado em {admissao.pdf_pacote_gerado_em ? formatarData(admissao.pdf_pacote_gerado_em) : "—"}
               </p>
+              {docsForaDoPacote.length > 0 && (
+                <div role="alert" className="rounded-lg p-3 mb-3 text-sm" style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#991B1B" }}>
+                  <p style={{ fontWeight: 700, margin: "0 0 4px" }}>⚠️ Faltam documentos neste pacote</p>
+                  <ul style={{ margin: 0, paddingLeft: 18 }}>
+                    {docsForaDoPacote.map((d, i) => <li key={`${d.rotulo}-${i}`}>{descreverDocumentoFora(d)}</li>)}
+                  </ul>
+                  <p style={{ margin: "6px 0 0", fontSize: 12 }}>Baixe o original no painel e junte ao pacote antes de enviar, ou gere o pacote de novo depois de corrigir.</p>
+                </div>
+              )}
               <button onClick={handleVerPacote} disabled={abrindoPacote} className="btn-outline w-full">
                 {abrindoPacote ? "Abrindo..." : "Visualizar"}
               </button>
               <button onClick={handleBaixarPacote} disabled={baixandoPacote} className="btn-outline w-full mt-2" title="Opcional — para envio manual à contabilidade">
                 {baixandoPacote ? "Baixando..." : "Baixar PDF"}
               </button>
-              <button onClick={() => setModalEmailAberto(true)} className="btn-outline w-full mt-2">
+              <button onClick={() => (docsForaDoPacote.length > 0 ? setConfirmarEnvioFaltando(true) : setModalEmailAberto(true))} className="btn-outline w-full mt-2">
                 Enviar por e-mail
               </button>
+              {confirmarEnvioFaltando && docsForaDoPacote.length > 0 && (
+                // Confirmação NA PRÓPRIA tela (sem janela por cima): lista o que falta e deixa enviar mesmo assim (não bloqueia).
+                <div role="alertdialog" aria-labelledby="titulo-envio-incompleto" className="rounded-lg p-3 mt-2 text-sm" style={{ background: "#FEF2F2", border: "1px solid #FCA5A5", color: "#991B1B" }}>
+                  <p id="titulo-envio-incompleto" style={{ fontWeight: 700, margin: "0 0 4px" }}>⚠️ O pacote está incompleto</p>
+                  <p style={{ margin: "0 0 4px" }}>Estes documentos NÃO estão no PDF que será enviado:</p>
+                  <ul style={{ margin: "0 0 6px", paddingLeft: 18 }}>
+                    {docsForaDoPacote.map((d, i) => <li key={`${d.rotulo}-${i}`}>{descreverDocumentoFora(d)}</li>)}
+                  </ul>
+                  <p style={{ margin: "0 0 8px" }}>Quer enviar mesmo assim?</p>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button className="btn-primary" style={{ minHeight: 44 }} onClick={() => { setConfirmarEnvioFaltando(false); setModalEmailAberto(true); }}>Enviar mesmo assim</button>
+                    <button className="btn-outline" style={{ minHeight: 44 }} onClick={() => setConfirmarEnvioFaltando(false)}>Cancelar</button>
+                  </div>
+                </div>
+              )}
               {admissao.pacote_enviado_email_em && (
                 <p className="text-xs text-gray-500 mt-2">
                   ✉️ Enviado por e-mail em {formatarDataHoraBR(admissao.pacote_enviado_email_em)}

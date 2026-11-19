@@ -7,7 +7,8 @@ import { registrarAuditoria } from "@/lib/audit";
 import { checarPapelAdmissoes } from "@/lib/admissaoAuth";
 import { parseBody, admissaoGerarPdfSchema } from "@/lib/schemas";
 import { DOCUMENTOS_ADMISSAO, documentoEntraNoPacote } from "@/lib/admissaoDocumentos";
-import { ordenarDocumentosPacote, anexarDocumentosAoPacote, inserirIndiceEBookmarks } from "@/lib/pacoteOrdem";
+import { ordenarDocumentosPacote, anexarDocumentosAoPacote, inserirIndiceEBookmarks, desenharPaginaNaoIncorporados } from "@/lib/pacoteOrdem";
+import { CABECALHO_NAO_INCORPORADOS, serializarNaoIncorporados } from "@/lib/pacoteNaoIncorporados";
 import { PdfWriter, PW, PH, ML, safe, BLACK, YELLOW, DARK, GRAY } from "@/lib/pdfWriter";
 import { desenharFichaCadastral, desenharAutorizacaoSindical, desenharSolicitacaoValeTransporte } from "@/lib/admissaoDocumentosPdf";
 import { ENTIDADES_CONTRATANTES } from "@/lib/constants";
@@ -257,13 +258,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   });
   const { naoEmbutidos, motivosNaoIncorporados } = anexos;
 
-  if (naoEmbutidos.length > 0) {
-    w.newPage();
-    w.drawText("Documentos não incorporados automaticamente", w.bold, 12, DARK);
-    w.drawText("(formato não suportado — baixe o arquivo original no painel)", w.regular, 9, GRAY);
-    w.y -= 6;
-    for (const label of naoEmbutidos) w.drawText(`• ${label}`, w.regular, 10, DARK);
-  }
+  // Página dos documentos que ficaram de fora (texto próprio para PDF protegido por senha; ver desenharPaginaNaoIncorporados).
+  desenharPaginaNaoIncorporados(w, anexos);
 
   await inserirIndiceEBookmarks(pdfDoc, w, anexos);
 
@@ -391,6 +387,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="admissao-${slug}.pdf"`,
       "Content-Length": String(pdfBytes.length),
+      // A tela avisa QUAIS documentos ficaram de fora (o download do PDF não muda). Só vem quando algum ficou.
+      ...(motivosNaoIncorporados.length > 0 ? { [CABECALHO_NAO_INCORPORADOS]: serializarNaoIncorporados(motivosNaoIncorporados) } : {}),
     },
   });
 }
