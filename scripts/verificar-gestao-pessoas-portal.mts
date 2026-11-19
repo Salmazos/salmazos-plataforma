@@ -305,6 +305,12 @@ await ok("tela: cartões e legendas são <button> com aria-pressed; região aria
     assert.ok(new RegExp('<button[^>]*aria-pressed="(true|false)"[^>]*>(?:(?!</button>).)*' + cartao).test(portalHtml), "cartão como botão: " + cartao);
   }
   assert.ok(/<button[^>]*aria-pressed="false"[^>]*>(?:(?!<\/button>).)*Masculino/.test(portalHtml), "legenda de sexo como botão");
+  // visual dos cartões-botão: fundo claro + borda (classe gp-cartao), e o seletor de mês FORA do <button> (mexer nele não dispara o clique do cartão)
+  assert.equal((portalHtml.match(/class="card gp-cartao"/g) ?? []).length, 4, "os 4 cartões de cima têm o visual de clicável");
+  assert.ok(/\.card\.gp-cartao\{background:#f1f5f9;border:1px solid #cbd5e1/.test(portalHtml) && /\.card\.gp-cartao:hover\{background:#e2e8f0\}/.test(portalHtml) && /\[data-pressionado="true"\]\{border-color:#111827/.test(portalHtml));
+  const botoes = [...portalHtml.matchAll(/<button\b[\s\S]*?<\/button>/g)].map((m) => m[0]);
+  assert.ok(!botoes.some((b) => b.includes("<select") || b.includes("mes-aniversariantes")), "nenhum <button> contém o seletor de mês");
+  assert.ok(/<\/button><div[^>]*><label for="mes-aniversariantes"/.test(portalHtml), "o seletor é irmão do botão do cartão, não filho");
   assert.ok(/aria-label="Filtrar por cargo"/.test(portalHtml) && /aria-label="Filtrar por escolaridade"/.test(portalHtml), "alternativa em botões para os gráficos de barras");
   assert.ok(/aria-label="[^"]*, masculino: \d+"/.test(portalHtml), "células da tabela como botões com nome acessível");
   const rhHtml = renderToStaticMarkup(createElement(GestaoPessoasClient, { clientes: [{ id: CLI_A, nome: "Alfa Indústria" }], selecionadoId: CLI_A, dados: montarGestaoPessoas({ id: CLI_A, nome: "Alfa Indústria" }, pessoasDe(CLI_A, FUNCS_BASE, DPS_BASE), HOJE) } as never));

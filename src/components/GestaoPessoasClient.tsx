@@ -51,6 +51,11 @@ const ESTILO = `
 .gp-btn[aria-pressed="true"]{box-shadow:0 0 0 2px #111827}
 .gp-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid #D1D5DB;border-radius:999px;background:#fff;padding:3px 10px;font-size:12px;color:#111827}
 .gp-chip[aria-pressed="true"]{background:#111827;color:#fff;border-color:#111827}
+.card.gp-cartao{background:#f1f5f9;border:1px solid #cbd5e1;padding:0}
+.card.gp-cartao:hover{background:#e2e8f0}
+.card.gp-cartao[data-pressionado="true"]{border-color:#111827;box-shadow:0 0 0 2px #111827}
+.gp-cartao-btn{cursor:pointer}
+.gp-cartao-btn:focus-visible{outline:3px solid #2563EB;outline-offset:-3px}
 .gp-celula{border:0;background:transparent;padding:4px 6px;font:inherit;color:inherit;border-radius:4px}
 .gp-celula[aria-pressed="true"]{background:#111827;color:#fff}
 `;
@@ -67,13 +72,15 @@ function Cartao({ titulo, valor, detalhe, controle, onClick, pressionado, dica }
     </>
   );
   return (
-    <div className="card" style={{ padding: "14px 16px" }}>
+    // Cartão clicável: fundo cinza-azulado claro e borda fina (indica que é botão), mais escuro no hover; selecionado = borda escura com o mesmo fundo.
+    // O botão ocupa o cartão todo; o seletor de mês (controle) fica FORA do botão, então mexer nele não dispara o clique do cartão.
+    <div className={onClick ? "card gp-cartao" : "card"} data-pressionado={onClick ? String(!!pressionado) : undefined} style={onClick ? undefined : { padding: "14px 16px" }}>
       {onClick ? (
-        <button type="button" className="gp-btn" onClick={onClick} aria-pressed={pressionado} title={dica} style={{ display: "block", width: "100%", textAlign: "left", border: 0, background: "transparent", padding: 0, borderRadius: 6 }}>
+        <button type="button" className="gp-cartao-btn" onClick={onClick} aria-pressed={pressionado} title={dica} style={{ display: "block", width: "100%", textAlign: "left", border: 0, background: "transparent", padding: controle ? "14px 16px 0" : "14px 16px", borderRadius: "inherit" }}>
           {conteudo}
         </button>
       ) : <div>{conteudo}</div>}
-      {controle && <div style={{ marginTop: 10 }}>{controle}</div>}
+      {controle && <div style={{ padding: onClick ? "10px 16px 14px" : undefined, marginTop: onClick ? 0 : 10 }}>{controle}</div>}
     </div>
   );
 }
