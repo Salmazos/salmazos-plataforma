@@ -51,6 +51,16 @@ export default async function PortalAppLayout({
     .limit(1)
     .maybeSingle();
 
+  // Item "Gestão de Pessoas" só aparece pra quem tem pelo menos 1 funcionário ATIVO (a consulta de cima também conta desligado, então não serve:
+  // o quadro só considera ativos e, sem nenhum, a tela só diria que não há ninguém).
+  const { data: ativoGestao } = await service
+    .from("funcionarios")
+    .select("id")
+    .eq("cliente_id", clienteUsuario.cliente_id)
+    .eq("status", "ativo")
+    .limit(1)
+    .maybeSingle();
+
   // Item "Vencimento de Contrato" só aparece pra quem tem pelo menos 1 funcionário MOT
   // ativo — é a única modalidade com o limite legal de 90/180/270 dias (Lei 6.019/74).
   // Flag própria e mais estreita que mostrarFuncionarios (que também conta Terceirização e
@@ -76,6 +86,7 @@ export default async function PortalAppLayout({
       <SidebarPortal
         userEmail={user.email ?? ""}
         mostrarFuncionarios={!!funcionarioAtivo}
+        mostrarGestaoPessoas={!!ativoGestao}
         mostrarVencimentoContrato={!!funcionarioMotAtivo}
       />
       <main className="flex-1 min-w-0 px-4 py-8">

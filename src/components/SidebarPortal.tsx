@@ -4,12 +4,13 @@ import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { createPortalBrowserClient } from "@/lib/supabase/client";
-import { Home, ClipboardList, Calendar, IdCard, FolderOpen, LogOut, Menu, Clock, CheckSquare } from "lucide-react";
+import { Home, ClipboardList, Calendar, IdCard, FolderOpen, LogOut, Menu, Clock, CheckSquare, PieChart } from "lucide-react";
 import { fundoSoLeitura } from "@/lib/fundoDaJanela";
 
 interface Props {
   userEmail: string;
   mostrarFuncionarios: boolean;
+  mostrarGestaoPessoas: boolean;
   mostrarVencimentoContrato: boolean;
 }
 
@@ -29,6 +30,7 @@ interface MenuItemDef {
 
 const INICIO_ITEM: MenuItemDef = { label: "Início", href: "/portal", icon: Home };
 const FUNCIONARIOS_ITEM: MenuItemDef = { label: "Funcionários", href: "/portal/funcionarios", icon: IdCard };
+const GESTAO_PESSOAS_ITEM: MenuItemDef = { label: "Gestão de Pessoas", href: "/portal/gestao-pessoas", icon: PieChart };
 const VENCIMENTO_CONTRATO_ITEM: MenuItemDef = { label: "Vencimento de Contrato", href: "/portal/vencimento-contrato", icon: Clock };
 const RESTANTE_ITEMS: MenuItemDef[] = [
   { label: "Minhas Solicitações", href: "/portal/solicitacoes", icon: ClipboardList },
@@ -39,7 +41,7 @@ const RESTANTE_ITEMS: MenuItemDef[] = [
   { label: "Agenda", href: "/portal/agenda", icon: Calendar },
 ];
 
-export default function SidebarPortal({ userEmail, mostrarFuncionarios, mostrarVencimentoContrato }: Props) {
+export default function SidebarPortal({ userEmail, mostrarFuncionarios, mostrarGestaoPessoas, mostrarVencimentoContrato }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
@@ -80,6 +82,7 @@ export default function SidebarPortal({ userEmail, mostrarFuncionarios, mostrarV
   const items = [
     INICIO_ITEM,
     ...(mostrarFuncionarios ? [FUNCIONARIOS_ITEM] : []),
+    ...(mostrarGestaoPessoas ? [GESTAO_PESSOAS_ITEM] : []),
     ...(mostrarVencimentoContrato ? [VENCIMENTO_CONTRATO_ITEM] : []),
     ...RESTANTE_ITEMS,
   ];
