@@ -17,7 +17,8 @@ export interface PropostaDoFunil {
 
 export interface EntradaDecisaoFunil {
   // A proposta que acabou de mudar e a situação para a qual foi.
-  evento: { propostaId: string; para: SituacaoProposta };
+  // `de` (situação anterior) só importa ao cancelar: cancelar proposta que estava ATIVA recalcula o valor; cancelar rascunho não mexe em nada.
+  evento: { propostaId: string; para: SituacaoProposta; de?: SituacaoProposta };
   etapaAtual: string;
   // TODAS as propostas da oportunidade, com a do evento JÁ na situação nova (e, no envio, já com o valor informado).
   propostas: PropostaDoFunil[];
@@ -68,8 +69,13 @@ export function decidirEfeitoFunil(e: EntradaDecisaoFunil): DecisaoFunil {
       // Fecha como perdida só se não sobrou ninguém ativo nem aceito (e a recusa do evento é, no mínimo, uma recusada).
       if (ativas.length === 0 && aceitas.length === 0 && recusadas.length > 0) return { etapa: "perdido", valorEstimado: undefined };
       return { etapa: null, valorEstimado: valorOuNada(somaEmReais(ativas)) };
+    case "cancelada":
+      // Só o VALOR: soma das ativas que restaram, com a oportunidade ainda aberta. Nunca muda a etapa nem fecha a oportunidade; sem ativa
+      // restante (soma zero) o valor atual é mantido. Cancelar rascunho (ou algo que não estava ativo) não mexe no Funil.
+      if (etapaFechada || !e.evento.de || !ATIVAS.includes(e.evento.de)) return SEM_EFEITO;
+      return { etapa: null, valorEstimado: valorOuNada(somaEmReais(ativas)) };
     default:
-      // Rascunho, vencida e cancelada não mexem no Funil (vencimento continua assim, como hoje).
+      // Rascunho e vencida não mexem no Funil (vencimento continua assim, como hoje).
       return SEM_EFEITO;
   }
 }

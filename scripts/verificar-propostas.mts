@@ -2399,6 +2399,124 @@ await caso("funil/várias: só a proposta que muda tem o follow-up cancelado (ac
   relatar("lembretes", db);
 });
 
+await caso("funil/cancelar: cancelar UMA de duas enviadas → valor cai para o da outra; etapa não muda; o follow-up da cancelada é cancelado", async () => {
+  const db = novoDb();
+  const { a, b, numA, numB } = await duasEnviadas(db, "MOT");
+  assert.deepEqual(estado(db), { etapa: "proposta_enviada", valor: 1500 });
+  const r = await situacao(db, b, { para: "cancelada", observacao: "Cliente desistiu da MOT" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(proposta(db, b).situacao, "cancelada");
+  assert.deepEqual(estado(db), { etapa: "proposta_enviada", valor: 1000 }, "valor = só a R&S que continua ativa");
+  assert.ok(O1(db).fechada_em == null);
+  assert.equal(interacoesDeFase(db), 0, "nenhuma mudança de fase");
+  const lemb = (num: string) => db.tabelas.lembretes.find((l: any) => l.texto === `Follow-up da proposta ${num}`);
+  assert.equal(lemb(numB).status, "cancelado");
+  assert.equal(lemb(numA).status, "pendente");
+  // Cancelar uma em negociação também conta como ativa.
+  const db2 = novoDb();
+  const d2 = await duasEnviadas(db2, "RS");
+  assert.equal((await situacao(db2, d2.a, { para: "em_negociacao" })).status, 200);
+  assert.equal((await situacao(db2, d2.a, { para: "cancelada" })).status, 200);
+  assert.deepEqual(estado(db2), { etapa: "negociacao", valor: 500 }, "fase atual (negociacao) preservada; valor = a outra");
+  relatar("cancelar_uma_de_duas", db);
+});
+await caso("funil/cancelar: cancelar a ÚNICA ativa mantém o valor atual (nunca grava zero) e NÃO fecha a oportunidade", async () => {
+  const db = novoDb();
+  const { id } = await enviar(db, 800);
+  assert.deepEqual(estado(db), { etapa: "proposta_enviada", valor: 800 });
+  const r = await situacao(db, id, { para: "cancelada" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(estado(db), { etapa: "proposta_enviada", valor: 800 });
+  assert.ok(O1(db).fechada_em == null);
+  assert.equal(db.tabelas.lembretes.filter((l: any) => l.tipo === "reconectar").length, 0, "cancelar não vira perda");
+  // Duas enviadas, cancela as duas: a segunda cancelada também mantém o valor que sobrou.
+  const db2 = novoDb();
+  const d2 = await duasEnviadas(db2, "MOT");
+  assert.equal((await situacao(db2, d2.b, { para: "cancelada" })).status, 200);
+  assert.equal((await situacao(db2, d2.a, { para: "cancelada" })).status, 200);
+  assert.deepEqual(estado(db2), { etapa: "proposta_enviada", valor: 1000 });
+  relatar("cancelar_unica_ativa", db);
+});
+await caso("funil/cancelar: cancelar RASCUNHO não mexe no Funil (nenhuma leitura nem escrita de oportunidade)", async () => {
+  const db = novoDb();
+  const { a } = await duasEnviadas(db, "MOT");
+  const rascunho = semearMot(db, O1(db).id);
+  const antes = estadoFunil(db);
+  const consultasAntes = db.consultas.length;
+  const r = await situacao(db, rascunho, { para: "cancelada" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(proposta(db, rascunho).situacao, "cancelada");
+  assert.deepEqual(estadoFunil(db), antes, "oportunidade, interações e lembretes intactos");
+  assert.equal(db.consultas.slice(consultasAntes).filter((q: any) => q.tabela === "oportunidades").length, 0, "nem lê a oportunidade");
+  assert.ok(a);
+});
+await caso("funil/cancelar: oportunidade GANHA ou PERDIDA não é mexida ao cancelar outra proposta ativa", async () => {
+  const db = novoDb();
+  const { a, b } = await duasEnviadas(db, "MOT");
+  assert.equal((await situacao(db, a, { para: "aceita" })).status, 200);
+  assert.deepEqual(estado(db), { etapa: "ganho", valor: 1000 });
+  const antes = estadoFunil(db);
+  const r = await situacao(db, b, { para: "cancelada" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(proposta(db, b).situacao, "cancelada");
+  assert.deepEqual(estado(db), { etapa: "ganho", valor: 1000 });
+  assert.deepEqual(estado(db), { etapa: antes.o[0].etapa, valor: Number(antes.o[0].valor_estimado) });
+  const db2 = novoDb();
+  const d2 = await duasEnviadas(db2, "RS");
+  O1(db2).etapa = "perdido";
+  const valorPerdida = O1(db2).valor_estimado;
+  assert.equal((await situacao(db2, d2.b, { para: "cancelada" })).status, 200);
+  assert.equal(O1(db2).etapa, "perdido");
+  assert.equal(O1(db2).valor_estimado, valorPerdida, "perdida: valor intacto");
+});
+await caso("funil/cancelar: vencimento continua sem mexer no Funil (valor e etapa intactos)", async () => {
+  const db = novoDb();
+  const { a, b } = await duasEnviadas(db, "MOT");
+  proposta(db, b).validade_ate = "2000-01-01";
+  await detalhe(db, b);
+  assert.equal(proposta(db, b).situacao, "vencida");
+  assert.deepEqual(estado(db), { etapa: "proposta_enviada", valor: 1500 }, "a vencida continua somada até o próximo evento: vencimento não mexe no Funil");
+  assert.ok(a);
+});
+await caso("funil/cancelar: falha na escrita do Funil → o cancelamento é DESFEITO (proposta volta a enviada, valor e etapa intactos)", async () => {
+  const db = novoDb();
+  const { b } = await duasEnviadas(db, "MOT");
+  const antes = estado(db);
+  const histAntes = db.tabelas.proposta_historico.length;
+  db.falhas["oportunidades.update"] = "boom";
+  const r = await situacao(db, b, { para: "cancelada" });
+  assert.ok(r.status >= 400, JSON.stringify(r.body));
+  assert.equal(proposta(db, b).situacao, "enviada", "o cancelamento não vale se o Funil falhou");
+  assert.deepEqual(estado(db), antes);
+  assert.equal(db.tabelas.proposta_historico.length, histAntes, "nenhum histórico de cancelamento gravado");
+  delete db.falhas["oportunidades.update"];
+  assert.equal((await situacao(db, b, { para: "cancelada" })).status, 200);
+  assert.equal(estado(db).valor, 1000);
+});
+await caso("funil/cancelar: oportunidade de OUTRO vendedor: cancelar não toca na oportunidade e não avisa", async () => {
+  const db = novoDb();
+  const { b } = await duasEnviadas(db, "MOT");
+  O1(db).vendedor_id = V2;
+  const antes = JSON.stringify(opps(db));
+  const r = await situacao(db, b, { para: "cancelada" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.aviso ?? null, null);
+  assert.equal(JSON.stringify(opps(db)), antes);
+});
+await caso("decidirEfeitoFunil: cancelada recalcula só o valor e só quando a cancelada ESTAVA ativa", () => {
+  const P = (id: string, situacao: any, valor: any = null) => ({ id, situacao, valor_estimado: valor });
+  const c = (de: any, etapaAtual: string, propostas: any[]) => decidirEfeitoFunil({ evento: { propostaId: "x", para: "cancelada", de }, etapaAtual, propostas });
+  assert.deepEqual(c("enviada", "proposta_enviada", [P("x", "cancelada", 500), P("a", "enviada", 1000)]), { etapa: null, valorEstimado: 1000 });
+  assert.deepEqual(c("em_negociacao", "negociacao", [P("x", "cancelada", 500), P("a", "em_negociacao", 300), P("b", "enviada", 200)]), { etapa: null, valorEstimado: 500 });
+  assert.deepEqual(c("enviada", "proposta_enviada", [P("x", "cancelada", 500)]), { etapa: null, valorEstimado: undefined }, "sem ativa: mantém o valor atual");
+  assert.deepEqual(c("enviada", "proposta_enviada", [P("x", "cancelada", 500), P("a", "recusada", 9)]), { etapa: null, valorEstimado: undefined }, "recusada não é ativa e cancelar nunca fecha");
+  assert.deepEqual(c("rascunho", "proposta_enviada", [P("x", "cancelada", null), P("a", "enviada", 1000)]), { etapa: null, valorEstimado: undefined });
+  assert.deepEqual(c(undefined, "proposta_enviada", [P("x", "cancelada", 500), P("a", "enviada", 1000)]), { etapa: null, valorEstimado: undefined });
+  assert.deepEqual(c("enviada", "ganho", [P("x", "cancelada", 500), P("a", "aceita", 1000)]), { etapa: null, valorEstimado: undefined });
+  assert.deepEqual(c("enviada", "perdido", [P("x", "cancelada", 500), P("a", "enviada", 1000)]), { etapa: null, valorEstimado: undefined });
+  for (const etapa of ["prospeccao", "contato_feito", "reuniao_visita", "proposta_enviada", "negociacao"]) assert.equal(c("enviada", etapa, [P("x", "cancelada", 5), P("a", "enviada", 7)]).etapa, null, `nunca muda a etapa (${etapa})`);
+});
+
 await caso("decidirEfeitoFunil (função pura): tabela de decisões por evento, etapa e conjunto de propostas", () => {
   const P = (id: string, situacao: any, valor: any = null) => ({ id, situacao, valor_estimado: valor });
   const d = (para: any, etapaAtual: string, propostas: any[], id = "x") => decidirEfeitoFunil({ evento: { propostaId: id, para }, etapaAtual, propostas });

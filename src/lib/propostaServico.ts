@@ -399,19 +399,21 @@ async function efeitoEnviada(
 // Negociação, aceita e recusada acompanham a oportunidade DA PRÓPRIA proposta (propostas.oportunidade_id), se for do próprio vendedor.
 // O que fazer com etapa e valor sai de decidirEfeitoFunil (regra de várias propostas na mesma oportunidade); aqui só se aplica.
 async function efeitoAcompanhamento(
-  svc: Svc, ctx: ContextoComercial, p: PropostaLinha, para: SituacaoProposta, d: z.infer<typeof propostaSituacaoSchema>
+  svc: Svc, ctx: ContextoComercial, p: PropostaLinha, para: SituacaoProposta, d: z.infer<typeof propostaSituacaoSchema>, de?: SituacaoProposta
 ): Promise<{ ok: true; efeito: EfeitoFunil } | { ok: false; status: number; error: string }> {
   const nada: EfeitoFunil = { oportunidadeId: null, desfazer: async () => {} };
   if (!p.oportunidade_id) return { ok: true, efeito: nada };
   const { data: opp } = await svc.from("oportunidades").select("*").eq("id", p.oportunidade_id).maybeSingle();
   if (!opp) return { ok: true, efeito: nada };
   const atual: OportunidadeLinha = opp;
+  // Cancelar nunca avisa nem mexe quando a oportunidade é de outro vendedor: o cancelamento sempre foi silencioso com o Funil.
+  if (atual.vendedor_id !== ctx.analistaId && para === "cancelada") return { ok: true, efeito: nada };
   if (atual.vendedor_id !== ctx.analistaId) {
     return { ok: true, efeito: { ...nada, aviso: "A oportunidade aberta desta empresa é de outro vendedor e não foi alterada no Funil." } };
   }
 
   const todas = await propostasDaOportunidade(svc, atual.id, { id: p.id, situacao: para, valor_estimado: p.valor_estimado ?? null });
-  const decisao = decidirEfeitoFunil({ evento: { propostaId: p.id, para }, etapaAtual: atual.etapa, propostas: todas });
+  const decisao = decidirEfeitoFunil({ evento: { propostaId: p.id, para, de }, etapaAtual: atual.etapa, propostas: todas });
   const valorMudou = decisao.valorEstimado !== undefined && Number(atual.valor_estimado) !== decisao.valorEstimado;
   // Oportunidade aberta sem próxima ação (legado) não pode travar a recusa/aceite só por causa do valor: aí o valor não é regravado.
   const valorSeguro = valorMudou && (decisao.etapa !== null || !ehAberta(atual.etapa) || (!!atual.proxima_acao && !!atual.proxima_acao_em));
@@ -479,8 +481,10 @@ export async function mudarSituacao(svc: Svc, ctx: ContextoPropostas, p: Propost
   // 2) Funil e follow-up. Se falhar, a proposta volta ao que era (nunca fica "enviada" sem follow-up/oportunidade).
   // Sem Funil (acesso só por liberação) a proposta apenas se registra: nada de oportunidade, interação ou lembrete.
   let efeito: EfeitoFunil = { oportunidadeId: null, desfazer: async () => {} };
-  if (ctx.temFunil && (para === "enviada" || para === "em_negociacao" || para === "aceita" || para === "recusada")) {
-    const r = para === "enviada" ? await efeitoEnviada(svc, ctx, p, d.valor_estimado as number) : await efeitoAcompanhamento(svc, ctx, p, para, d);
+  // Cancelar proposta que estava ATIVA recalcula só o valor da oportunidade (soma das ativas que restaram); cancelar rascunho não mexe no Funil.
+  const cancelaAtiva = para === "cancelada" && (de === "enviada" || de === "em_negociacao");
+  if (ctx.temFunil && (para === "enviada" || para === "em_negociacao" || para === "aceita" || para === "recusada" || cancelaAtiva)) {
+    const r = para === "enviada" ? await efeitoEnviada(svc, ctx, p, d.valor_estimado as number) : await efeitoAcompanhamento(svc, ctx, p, para, d, de);
     if (!r.ok) {
       await reverter();
       return falha(r.status, r.error);
