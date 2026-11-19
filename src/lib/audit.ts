@@ -30,6 +30,8 @@ interface AuditoriaParams {
   entidade_id?: string | null;
   detalhes?: Record<string, unknown> | null;
   ip_address?: string | null;
+  // Opcional: sem ele o banco usa unidade_padrao() (audit_logs.unidade_id é NOT NULL). Quem conhece a unidade do fato (a da vaga) deve passar.
+  unidade_id?: string | null;
 }
 
 // Compara só as chaves presentes em `depois` (o patch enviado) contra o valor
@@ -69,6 +71,7 @@ export function registrarAuditoria(params: AuditoriaParams): void {
         entidade_id: params.entidade_id ?? null,
         detalhes: params.detalhes ?? null,
         ip_address: params.ip_address ?? null,
+        ...(params.unidade_id ? { unidade_id: params.unidade_id } : {}),
       });
     } catch (err) {
       console.error("[audit]", err);

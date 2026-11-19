@@ -153,3 +153,17 @@ export function getComportamentoEtapa(etapaDestino: string): ComportamentoEtapa 
       return "direto";
   }
 }
+
+// Reativação de candidata na MESMA vaga (POST /api/candidatos-vagas/[id]/reativar). Decisão do Ölver (nov/2026): só quem saiu por
+// desistência/ausência pode voltar; reprovado, reprovado_cliente e reprovado_final NÃO são reativáveis. O destino é Triagem (padrão) ou Entrevista
+// Salmazos: ir ao cliente passa pelo "Encaminhar ao cliente" já existente (que reaproveita o encaminhamento), nunca por aqui.
+export const ETAPAS_REATIVAVEIS = ["nao_tem_interesse", "nao_compareceu"] as const;
+export const DESTINOS_REATIVACAO = ["triagem", "entrevista_salmazos"] as const;
+export type DestinoReativacao = (typeof DESTINOS_REATIVACAO)[number];
+
+export function ehEtapaReativavel(etapa: string | null | undefined): boolean {
+  return (ETAPAS_REATIVAVEIS as readonly string[]).includes(etapa ?? "");
+}
+// Saídas que NÃO se reativam por aqui (a mensagem do POST diz só em que etapa a candidata está). Lista própria, e não ETAPAS_SAIDA_VAGA, porque
+// reprovado_cliente não está naquela (ela só descreve o que some do Kanban).
+export const ETAPAS_SAIDA_NAO_REATIVAVEIS = ["reprovado", "reprovado_cliente", "reprovado_final", "bloqueado"] as const;

@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ETAPAS_KANBAN } from "@/lib/constants";
 import type { CandidatoVaga } from "@/types";
+import ModalReativarCandidatura, { type ResultadoReativacao } from "./ModalReativarCandidatura";
+import { getEtapaLabel } from "@/lib/etapasCandidatura";
 
 interface CandidatoBusca {
   id: string;
@@ -40,6 +42,8 @@ export default function ModalAdicionarCandidatoVaga({
   const [adicionando, setAdicionando] = useState<string | null>(null);
   const [erro, setErro]               = useState("");
   const [sucesso, setSucesso]         = useState("");
+  // Candidata que já tem vínculo em etapa final (Não tem interesse / Não compareceu) NESTA vaga: oferece "Reativar" em vez do erro.
+  const [reativar, setReativar]       = useState<{ candidato: CandidatoBusca; cvId: string; etapaLabel: string; dataEntrevistaSalmazos: string | null } | null>(null);
   const debounceRef                   = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch on open (empty search shows first 30 active candidates)
@@ -85,6 +89,10 @@ export default function ModalAdicionarCandidatoVaga({
     const json = await res.json();
     setAdicionando(null);
     if (!res.ok) {
+      if (json.codigo === "vinculo_em_etapa_final" && json.cv_id) {
+        setReativar({ candidato, cvId: json.cv_id, etapaLabel: json.etapa_label ?? getEtapaLabel(json.etapa), dataEntrevistaSalmazos: json.data_entrevista_salmazos ?? null });
+        return;
+      }
       setErro(json.error ?? "Erro ao adicionar.");
       return;
     }
@@ -102,11 +110,41 @@ export default function ModalAdicionarCandidatoVaga({
     setTimeout(onClose, 1200);
   };
 
+  // Depois de reativar, o cartão volta para a lista da vaga: a linha completa vem da própria API de vínculos da vaga.
+  const aoReativar = async (r: ResultadoReativacao) => {
+    if (!reativar) return;
+    const { candidato, cvId } = reativar;
+    setReativar(null);
+    try {
+      const res = await fetch(`/api/candidatos-vagas?vaga_id=${vagaId}`);
+      const json = await res.json();
+      const linha = (json.data ?? []).find((x: { id: string }) => x.id === cvId);
+      if (linha) onAdicionado(linha as CandidatoVaga);
+    } catch {
+      // sem a linha, o router.refresh() abaixo recarrega a vaga
+    }
+    router.refresh();
+    setSucesso(`${candidato.nome_completo} reativada em ${getEtapaLabel(r.data.etapa)}.`);
+    setTimeout(onClose, 1500);
+  };
+
   if (!isOpen) return null;
 
   const disponiveis = resultados.filter((c) => !candidatosVinculadosIds.includes(c.id));
 
   return (
+    <>
+    {reativar && (
+      <ModalReativarCandidatura
+        candidatoId={reativar.candidato.id}
+        candidatoNome={reativar.candidato.nome_completo}
+        cvId={reativar.cvId}
+        etapaLabel={reativar.etapaLabel}
+        dataEntrevistaSalmazos={reativar.dataEntrevistaSalmazos}
+        onClose={() => setReativar(null)}
+        onReativado={aoReativar}
+      />
+    )}
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[82vh] flex flex-col">
 
@@ -220,5 +258,6 @@ export default function ModalAdicionarCandidatoVaga({
         </div>
       </div>
     </div>
+    </>
   );
 }

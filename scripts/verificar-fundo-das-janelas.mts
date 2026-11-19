@@ -116,6 +116,7 @@ const INVENTARIO: Record<string, [number, number, number]> = {
   "components/ModalNovaVaga.tsx": [0, 0, 1],
   "components/ModalNovoCliente.tsx": [0, 0, 1],
   "components/ModalRegistrarAso.tsx": [1, 0, 0],
+  "components/ModalReativarCandidatura.tsx": [1, 0, 0],
   "components/ModalRegistrarContrato.tsx": [1, 0, 0],
   "components/ModalReprovacao.tsx": [0, 0, 1],
   "components/ModalRevisaoCobrancaRS.tsx": [0, 0, 1],
@@ -240,7 +241,7 @@ caso("(c) inventário FECHADO: janela nova, a mais ou com tipo trocado quebra es
   const esperado = INVENTARIO;
   assert.deepEqual(Object.keys(atual).sort(), Object.keys(esperado).sort(), "arquivo com overlay novo ou que deixou de ter");
   assert.deepEqual(atual, esperado);
-  assert.equal(Object.values(atual).reduce((s, v) => s + v[0], 0), 35, "35 fundos de formulário");
+  assert.equal(Object.values(atual).reduce((s, v) => s + v[0], 0), 36, "36 fundos de formulário");
   assert.equal(Object.values(atual).reduce((s, v) => s + v[1], 0), 12, "12 fundos só de leitura");
 });
 caso("(d) os 18 popups automáticos de login e as janelas que já não fechavam no fundo não mudaram: continuam sem fundo clicável e sem o helper", () => {
@@ -287,7 +288,7 @@ caso("toda janela com formulário segue com saída: dentro de cada fundo de form
     };
     visita(sf);
   }
-  assert.equal(verificadas, 35);
+  assert.equal(verificadas, 36);
 });
 caso("janelas empilhadas: a solicitação de vaga (formulário) não fecha no fundo; a confirmação de criar vaga fecha só com o gesto inteiro no seu fundo; as demais (novo cliente, vincular) seguem sem fundo clicável", () => {
   const sol = todos.filter((o) => o.arq === "src/components/ModalSolicitacoesVagas.tsx");
