@@ -3,6 +3,7 @@ import { PDFDocument, PDFHexString, PDFName, PDFPage, PageSizes } from "pdf-lib"
 import { getDocumentProxy } from "unpdf";
 import { PdfWriter, PW, PH, ML, CW, safe, DARK, GRAY, LIGHT_GRAY, embutirImagemComprimida } from "@/lib/pdfWriter";
 import { MOTIVO_PDF_PROTEGIDO } from "@/lib/pacoteNaoIncorporados";
+import { limparProtecaoPdf } from "@/lib/pdfLimpezaProtecao";
 
 // Ordem, índice e bookmarks dos documentos do candidato dentro do pacote da contabilidade
 // (gerar-pdf). A ordem vinha de `.order("created_at")`, mas a semeadura da admissão é um
@@ -89,6 +90,8 @@ export interface ResultadoAnexos {
   naoEmbutidos: string[];
   // `rotulo` acompanha o motivo (mesma ordem de naoEmbutidos): a tela e a auditoria mostram QUAL documento ficou de fora e por quê.
   motivosNaoIncorporados: { tipo_documento: string; rotulo: string; motivo: MotivoNaoIncorporado }[];
+  // PDFs protegidos que a limpeza (senha vazia) abriu e entraram no pacote. Vai para a auditoria: só tipo, rótulo do tipo e nº de páginas, nenhum dado pessoal.
+  protecaoRemovida: { tipo_documento: string; rotulo: string; motivo: "pdf_protegido_limpo"; paginas: number }[];
 }
 
 interface AnexarArgs {
@@ -134,6 +137,7 @@ export async function anexarDocumentosAoPacote({ pdfDoc, w, admissaoId, docs, la
     paginasAntes: pdfDoc.getPageCount(),
     naoEmbutidos: [],
     motivosNaoIncorporados: [],
+    protecaoRemovida: [],
   };
 
   const baixados = new Map<DocumentoOrdenavel, Uint8Array>();
@@ -174,7 +178,25 @@ export async function anexarDocumentosAoPacote({ pdfDoc, w, admissaoId, docs, la
         docPage.drawImage(img, { x: ML, y: ML, width: img.width * scale, height: img.height * scale });
         resultado.paginasIniciais.set(entrada, docPage);
       } else if (ext === "pdf") {
-        const subDoc = await PDFDocument.load(bytes);
+        let subDoc: PDFDocument;
+        try {
+          subDoc = await PDFDocument.load(bytes);
+        } catch (aberturaErr) {
+          // Só o PDF protegido passa pela limpeza (senha vazia, ver pdfLimpezaProtecao.ts); corrompido e demais erros seguem para o catch de sempre.
+          if (!ehPdfProtegido(aberturaErr, bytes)) throw aberturaErr;
+          const limpeza = await limparProtecaoPdf(bytes);
+          if (!limpeza.ok) {
+            console.error(`[gerar-pdf] Limpeza de PDF protegido não aplicada — admissao_id=${admissaoId} tipo_documento=${doc.tipo_documento} motivo=${limpeza.motivo}`);
+            throw aberturaErr; // cai na página "protegido por senha"
+          }
+          subDoc = await PDFDocument.load(limpeza.bytes); // o pdf-lib de sempre tenta de novo, agora com o PDF sem proteção
+          if (subDoc.getPageCount() !== limpeza.paginas) {
+            console.error(`[gerar-pdf] Limpeza de PDF protegido não aplicada — admissao_id=${admissaoId} tipo_documento=${doc.tipo_documento} motivo=paginas_diferentes`);
+            throw aberturaErr;
+          }
+          resultado.protecaoRemovida.push({ tipo_documento: doc.tipo_documento, rotulo, motivo: "pdf_protegido_limpo", paginas: limpeza.paginas });
+          console.warn(`[gerar-pdf] Proteção de PDF removida (senha vazia) — admissao_id=${admissaoId} tipo_documento=${doc.tipo_documento} paginas=${limpeza.paginas}`);
+        }
         const copiedPages = await pdfDoc.copyPages(subDoc, subDoc.getPageIndices());
         if (copiedPages.length === 0) {
           falhar("pdf_sem_paginas");

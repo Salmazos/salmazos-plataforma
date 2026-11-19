@@ -373,6 +373,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       storage_path: uploadPath,
       documentos_nao_incorporados: naoEmbutidos,
       motivos_nao_incorporados: motivosNaoIncorporados,
+      // PDFs protegidos (senha vazia) cuja proteção foi removida para entrar no pacote: só tipo, rótulo e nº de páginas (motivo pdf_protegido_limpo).
+      documentos_protecao_removida: anexos.protecaoRemovida,
       ...(geradoComPendencias
         ? { forcado: true, justificativa, documentos_pendentes: labelsPendentes }
         : {}),
