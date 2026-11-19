@@ -310,14 +310,15 @@ const g: GestaoPessoas = montarGestaoPessoas({ id: CA, nome: "Alfa Indústria" }
 const tela = (props: Partial<Parameters<typeof GestaoPessoasClient>[0]> = {}) => renderToStaticMarkup(createElement(GestaoPessoasClient, { clientes: [{ id: CA, nome: "Alfa Indústria" }], selecionadoId: CA, dados: g, ...props }));
 await ok("tela: aniversariantes em dd/mm, nada de data em ISO, avisos de poucos ativos (< 5) e de dado inconsistente (só a quantidade, sem nome)", () => {
   const html = tela();
-  assert.ok(html.includes("20/11") && html.includes("completa 36 anos"), "aniversariante de novembro em dd/mm");
+  // a lista de pessoas (nomes, dd/mm, "completa N anos") não vem no HTML da página: o navegador a pede ao servidor (ver verificar-gestao-pessoas-lista.mts)
+  assert.ok(html.includes("Carregando a lista…") && html.includes("Funcionários · …") && !html.includes("Ana") && !html.includes("Bia"), "o HTML inicial só tem agregados, sem nome de pessoa");
   assert.ok(!/\d{4}-\d{2}-\d{2}/.test(html), "nenhuma data em ISO na tela");
   assert.ok(html.includes("Agregado de poucas pessoas, uso interno do RH"), "3 ativos = poucos");
   assert.ok(html.includes("1 cadastro com data de nascimento inconsistente") && !html.includes("Bebê"), "só a contagem, sem o nome da pessoa");
   assert.ok(html.includes("Gestão de Pessoas") && html.includes("Funcionários ativos") && html.includes("Admitidos no mês") && html.includes("Tempo médio de casa") && html.includes("Aniversariantes de novembro"));
-  for (const t of ["Distribuição por sexo", "Faixa etária por sexo", "Grau de escolaridade", "Cargos", "Aniversariantes de novembro", "Idade não informada", "Abaixo de 18", "Acima de 40"]) assert.ok(html.includes(t), t);
+  for (const t of ["Distribuição por sexo", "Faixa etária por sexo", "Grau de escolaridade", "Cargos", "Idade não informada", "Abaixo de 18", "Acima de 40"]) assert.ok(html.includes(t), t);
   assert.ok(!/cor\/raça|cpf|salário|endereço/i.test(html), "nada de cor/raça, CPF, salário nem endereço");
-  const total = html.match(/<td[^>]*>Total<\/td>(?:<td[^>]*>\d+<\/td>){4}/);
+  const total = html.match(/<td[^>]*>Total<\/td>(?:<td[^>]*><button[^>]*>\d+<\/button><\/td>){3}<td[^>]*>\d+<\/td>/);
   assert.ok(total, "linha Total da tabela de faixa etária");
   const muitos = montarGestaoPessoas({ id: CA, nome: "Alfa" }, Array.from({ length: 5 }, (_, i) => ({ nome: `P${i}`, cargo: "X", dataAdmissao: null, sexo: "M", dataNascimento: null, grauInstrucao: null })), HOJE);
   assert.ok(!tela({ dados: muitos }).includes("Agregado de poucas pessoas"), "5 ativos: sem o aviso");
@@ -422,7 +423,7 @@ const tela2 = (indiceMesInicial: number, pessoas: PessoaAtiva[] = [pp("Ana", "19
   renderToStaticMarkup(createElement(GestaoPessoasClient, { clientes: [{ id: CA, nome: "Alfa" }], selecionadoId: CA, dados: montarGestaoPessoas({ id: CA, nome: "Alfa" }, pessoas, HOJE), indiceMesInicial }));
 await ok("tela: abre no mês corrente; cartão e lista seguem o mês escolhido; seletor com os 12 meses (ano nos do ano seguinte); mês vazio; acessível; sem ISO", () => {
   const padrao = tela2(0);
-  assert.ok(padrao.includes("Aniversariantes de novembro") && padrao.includes("20/11") && padrao.includes("completa 36 anos"), "mês corrente por padrão");
+  assert.ok(padrao.includes("Aniversariantes de novembro"), "mês corrente por padrão");
   assert.ok(padrao.includes("mês atual"));
   assert.ok(/<option value="0" selected[^>]*>novembro<\/option>/.test(padrao), "a opção do mês corrente vem selecionada");
   for (const rotulo of ["novembro", "dezembro", "janeiro de 2027", "fevereiro de 2027", "outubro de 2027"]) assert.ok(padrao.includes(`>${rotulo}</option>`), rotulo);
@@ -432,20 +433,18 @@ await ok("tela: abre no mês corrente; cartão e lista seguem o mês escolhido; 
   // o seletor está DENTRO do cartão "Aniversariantes de {mês}" e a lista (seção abaixo) só segue o mês escolhido
   const cartao = padrao.slice(padrao.indexOf("Aniversariantes de novembro"), padrao.indexOf("Distribuição por sexo"));
   assert.ok(cartao.includes('<select id="mes-aniversariantes"') && cartao.includes("mês atual"), "seletor dentro do cartão");
-  const secaoLista = padrao.slice(padrao.indexOf("<section", padrao.indexOf("Grau de escolaridade")));
   const aposCartao = padrao.slice(padrao.indexOf("Distribuição por sexo"));
   assert.ok(!aposCartao.includes("<select"), "nenhum seletor depois do cartão (a lista não tem o seu)");
-  assert.ok(secaoLista.includes("Aniversariantes de novembro"), "o título da lista segue o mês escolhido");
+  assert.ok(padrao.includes("Funcionários · …"), "a lista de baixo é a de funcionários (filtrada pelos cliques), não a de aniversariantes");
   const jan = tela2(2);
-  assert.ok(jan.includes("Aniversariantes de janeiro de 2027") && jan.includes("15/01") && jan.includes("completa 39 anos") && !jan.includes("20/11"), "o cartão e a lista seguem o mês escolhido, com a idade do ano seguinte");
+  assert.ok(jan.includes("Aniversariantes de janeiro de 2027"), "o cartão segue o mês escolhido");
   assert.ok(!jan.includes("escolha o mês na lista abaixo") && !jan.includes("mês atual"), "sem a antiga mensagem; 'mês atual' só no mês corrente");
   const vazio = tela2(3);
-  assert.ok(vazio.includes("Nenhum aniversariante em fevereiro de 2027.") === false, "fevereiro de 2027 tem a Bia (29/02 no dia 28)");
   const mesVazio = tela2(5);
-  assert.ok(mesVazio.includes("Nenhum aniversariante em abril de 2027."), "mês sem ninguém");
   assert.ok(mesVazio.includes("Aniversariantes de abril de 2027"), "o rótulo do cartão diz o mês escolhido");
   for (const h of [padrao, jan, vazio, mesVazio]) assert.ok(!/\d{4}-\d{2}-\d{2}/.test(h), "nada em ISO");
-  assert.ok(vazio.includes("29/02") && vazio.includes("completa 27 anos"), "29/02 exibido como 29/02");
+  // 29/02 ("29/02", completa 27 anos), janeiro e mês sem ninguém: a lista vem do servidor; conferidos em verificar-gestao-pessoas-lista.mts
+  assert.equal(aniversariantesPorMes([{ nome: "Bia", cargo: "Motorista", dataAdmissao: null, sexo: "F", dataNascimento: "2000-02-29", grauInstrucao: null }], HOJE)[3].aniversariantes[0].diaMes, "29/02");
 });
 
 await ok("trocar de empresa volta para o mês corrente: a página remonta a tela com key = empresa", () => {

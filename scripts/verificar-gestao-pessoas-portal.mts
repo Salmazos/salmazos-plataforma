@@ -1,5 +1,6 @@
 // Gestão de Pessoas no portal do cliente.
-//  - RH idêntico: o HTML do RH (para os mesmos dados) é igual ao congelado ANTES do refactor `modo` (fixtures/gestao-pessoas-rh.golden.json);
+//  - RH estável: o HTML do RH (para os mesmos dados) é igual ao congelado (fixtures/gestao-pessoas-rh.golden.json). Foi congelado ANTES do refactor `modo` (e provou RH idêntico
+//    naquela etapa) e REGERADO na etapa interativa, em que o RH ganhou botões, a lista e a exportação; mudar o HTML do RH sem querer reprova;
 //  - portal: o cliente_id vem SÓ da sessão (?cliente=B ignorado; sem vínculo, usuário do painel, cliente inativo e vínculo duplo saem para o login);
 //  - payload ao navegador sem ids (funcionario/admissão/cliente) nem CPF/RG/PIS; só ativos; mesmos números do RH para o mesmo cliente;
 //  - textos: "Dado não cadastrado" só quando há legado, nota, aviso por gráfico sem nenhum dado, nenhum texto interno do RH, gráficos para 1 a 4 ativos;
@@ -52,7 +53,7 @@ if (process.env.GERAR_GOLDEN === "1") {
 }
 
 // ── RH idêntico ──────────────────────────────────────────────────────────────
-await ok("RH idêntico: o HTML renderizado dos 9 casos é igual ao de antes do refactor (sem a prop modo e com modo=\"rh\")", () => {
+await ok("RH estável: o HTML renderizado dos 9 casos é igual ao congelado (sem a prop modo e com modo=\"rh\")", () => {
   const golden = JSON.parse(fonte(GOLDEN)) as Record<string, string>;
   assert.equal(Object.keys(golden).length, CASOS_RH.length);
   for (const [nome, props] of CASOS_RH) {
@@ -292,6 +293,51 @@ await ok("empresa sem ativos: 'Sua empresa não tem funcionários ativos no mome
   assert.ok(html.includes("Sua empresa não tem funcionários ativos no momento."));
   assert.ok(html.includes("Gestão de Pessoas") && html.includes("Delta Serviços"));
   assert.ok(!html.includes("Delta Serviços não tem") && !html.includes("Escolha uma empresa"));
+});
+
+// ── Interface interativa (botões, lista, acessibilidade) ─────────────────────
+await ok("tela: cartões e legendas são <button> com aria-pressed; região aria-live; lista 'Funcionários · …'; RH com 'Exportar lista' e portal SEM exportação", async () => {
+  novoDb();
+  const portalHtml = htmlDe(await abrir(real, U_A));
+  assert.ok(portalHtml.includes("Funcionários · …") && portalHtml.includes('aria-live="polite"') && portalHtml.includes('role="status"'));
+  assert.ok(!portalHtml.includes("Exportar") && !portalHtml.includes("exportar"), "o portal não tem exportação");
+  for (const cartao of ["Funcionários ativos", "Admitidos no mês", "Tempo médio de casa", "Aniversariantes de novembro"]) {
+    assert.ok(new RegExp('<button[^>]*aria-pressed="(true|false)"[^>]*>(?:(?!</button>).)*' + cartao).test(portalHtml), "cartão como botão: " + cartao);
+  }
+  assert.ok(/<button[^>]*aria-pressed="false"[^>]*>(?:(?!<\/button>).)*Masculino/.test(portalHtml), "legenda de sexo como botão");
+  assert.ok(/aria-label="Filtrar por cargo"/.test(portalHtml) && /aria-label="Filtrar por escolaridade"/.test(portalHtml), "alternativa em botões para os gráficos de barras");
+  assert.ok(/aria-label="[^"]*, masculino: \d+"/.test(portalHtml), "células da tabela como botões com nome acessível");
+  const rhHtml = renderToStaticMarkup(createElement(GestaoPessoasClient, { clientes: [{ id: CLI_A, nome: "Alfa Indústria" }], selecionadoId: CLI_A, dados: montarGestaoPessoas({ id: CLI_A, nome: "Alfa Indústria" }, pessoasDe(CLI_A, FUNCS_BASE, DPS_BASE), HOJE) } as never));
+  assert.ok(rhHtml.includes("Exportar lista") && rhHtml.includes("Funcionários · …"));
+});
+
+await ok("fonte da tela: tudo clicável é <button>; o portal não manda cliente e não tem exportação; colunas do portal sem sexo/idade/escolaridade; cada clique chama o filtro certo", () => {
+  const c = fonte("src/components/GestaoPessoasClient.tsx");
+  for (let i = c.indexOf("onClick="); i >= 0; i = c.indexOf("onClick=", i + 1)) {
+    const abre = c.lastIndexOf("<", i);
+    const tag = /^<([A-Za-z][A-Za-z0-9]*)/.exec(c.slice(abre))?.[1];
+    assert.ok(tag === "button" || tag === "Cartao", `onClick em <${tag}> (só <button> ou o Cartao, que renderiza <button>): ${c.slice(i, i + 40)}`);
+  }
+  assert.ok(!/<(div|span|li|td|tr|p)\b[^>]*onClick=/.test(c), "nenhum onClick em div/span/li/td/tr/p");
+  assert.ok(c.includes("portal ? { filtros } : { clienteId: selecionadoId, filtros }"), "o portal manda só os filtros");
+  assert.ok(c.includes('portal ? "/api/portal/gestao-pessoas/lista" : "/api/gestao-pessoas/lista"'));
+  assert.ok(c.includes("{!portal && <button") && c.includes("Exportar lista") && c.includes("/api/gestao-pessoas/exportar"), "exportação só no RH");
+  assert.ok(c.includes("{!portal && <><th style={th}>Idade</th><th style={th}>Sexo</th><th style={th}>Escolaridade</th></>}"), "cabeçalho: sexo, idade e escolaridade só no RH");
+  assert.ok(c.includes("{!portal && <><td style={td}>{rh.idade ?? \"—\"}</td><td style={td}>{rh.sexo}</td><td style={td}>{rh.escolaridade}</td></>}"), "linhas: idem");
+  const cliques = [
+    'aplicar(par("admitidoNoMes", true))', 'aplicar(par("ordenarPorTempoDeCasa", true))', 'aplicar(par("aniversario", indiceMes))', "onClick={limpar}",
+    'aplicar(par("sexo", chave))', 'aplicar(par("sexo", itensSexo[els[0].index][0]))',
+    'aplicar(par("faixa", faixasMostradas[els[0].index].faixa), par("sexo", (["masculino", "feminino", "naoInformado"] as SexoFiltro[])[els[0].datasetIndex]))',
+    'aplicar(par("faixa", f.faixa), par("sexo", "masculino"))', 'aplicar(par("faixa", f.faixa), par("sexo", "feminino"))', 'aplicar(par("faixa", f.faixa), par("sexo", "naoInformado"))', 'aplicar(par("faixa", f.faixa))',
+    'aplicar(par("sexo", "masculino"))', 'aplicar(par("sexo", "feminino"))', 'aplicar(par("sexo", "naoInformado"))',
+    'aplicar(par("escolaridade", escolaridadeMostrada[i].grau))', 'aplicar(par("escolaridade", e.grau))',
+    'aplicar(par("cargo", chaveDaBarraDeCargo(cargos[i].cargo)))', 'aplicar(par("cargo", chaveDaBarraDeCargo(c.cargo)))',
+  ];
+  for (const x of cliques) assert.ok(c.includes(x), "clique: " + x);
+  assert.ok(c.includes("focus-visible") && c.includes('aria-label={`Remover filtro ${e.texto}`}') && c.includes("Nenhum funcionário com esses filtros") && c.includes("Limpar filtros"));
+  assert.ok(c.includes("scrollIntoView") && c.includes("window.innerWidth < 768"), "rola até a lista em tela pequena");
+  assert.ok(c.includes("URL.createObjectURL(await r.blob())"), "o download usa blob: preserva o BOM do CSV");
+  assert.ok(!/cliente_id|clienteId/.test(c.replace(/clienteId: selecionadoId/g, "")), "o componente não manipula cliente_id além da empresa do RH");
 });
 
 // ── Varredura estática, menu e layout ────────────────────────────────────────
