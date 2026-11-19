@@ -12,6 +12,7 @@ import { nomeArquivoCurriculoValido } from "@/lib/indicacaoEdicao";
 import { qtdDiasTesteSchema } from "@/lib/diasTeste";
 import { validarSenhaPortal, mensagemSenhaPortalInvalida } from "@/lib/senhaPortal";
 import { normalizarLocalEntrevista, LOCAL_ENTREVISTA_MAX } from "@/lib/localEntrevista";
+import { formatarDataISO, obterDataHojeBrasil } from "@/lib/dataHojeBrasil";
 import { ESCOLARIDADES_FILTRO, FAIXAS_FILTRO, FILHOS_FILTRO, SEXOS_FILTRO, type SexoFiltro } from "@/lib/gestaoPessoasLista";
 import type { EstadoFilhos, FaixaEtaria } from "@/lib/gestaoPessoas";
 
@@ -609,9 +610,25 @@ export const admissaoCancelarSchema = z.object({
 
 const optStr = z.string().optional().nullable();
 
+// Data de nascimento (titular ou dependente da admissão): data REAL entre 01/01/1900 e hoje em Brasília; "" vira vazio (null). Antes era texto livre e só o tipo date
+// do banco barrava formato inválido, então um ano absurdo (ex.: 2979) passava. Comparação por texto AAAA-MM-DD, sem new Date em data pura.
+export const NASCIMENTO_MINIMO = "1900-01-01";
+const MENSAGEM_NASCIMENTO = "Data de nascimento inválida: use uma data real entre 01/01/1900 e hoje.";
+export function dataRealISO(v: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (!m) return false;
+  const a = Number(m[1]), mes = Number(m[2]), d = Number(m[3]);
+  const t = new Date(Date.UTC(a, mes - 1, d));
+  return t.getUTCFullYear() === a && t.getUTCMonth() === mes - 1 && t.getUTCDate() === d;
+}
+export const dataNascimentoSchema = z.preprocess(
+  (v) => (typeof v === "string" ? (v.trim() === "" ? null : v.trim()) : v),
+  z.string().refine((v) => dataRealISO(v) && v >= NASCIMENTO_MINIMO && v <= formatarDataISO(obterDataHojeBrasil()), MENSAGEM_NASCIMENTO).optional().nullable(),
+);
+
 export const admissaoDadosPessoaisSchema = z.object({
   nome_completo: optStr,
-  data_nascimento: optStr,
+  data_nascimento: dataNascimentoSchema,
   sexo: z.enum(["M", "F"]).optional().nullable(),
   estado_civil: z.enum(["solteiro", "casado", "divorciado", "viuvo", "uniao_estavel"]).optional().nullable(),
   nacionalidade: optStr,
@@ -726,7 +743,7 @@ export const admissaoTokenUpdateSchema = z.object({
 export const admissaoDependenteCreateSchema = z.object({
   nome: z.string().min(1),
   parentesco: z.enum(["filho", "filha", "conjuge", "outro"]).optional().nullable(),
-  data_nascimento: optStr,
+  data_nascimento: dataNascimentoSchema,
   cpf: optStr,
   nome_mae: optStr,
   cpf_mae: optStr,
