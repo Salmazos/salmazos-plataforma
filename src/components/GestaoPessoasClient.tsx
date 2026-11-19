@@ -85,10 +85,13 @@ function Cartao({ titulo, valor, detalhe, controle, onClick, pressionado, dica }
   );
 }
 
-function Secao({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+function Secao({ titulo, acao, children }: { titulo: string; acao?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="card" style={{ padding: 16 }}>
-      <h2 style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: "0 0 12px" }}>{titulo}</h2>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, margin: "0 0 12px" }}>
+        <h2 style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: 0 }}>{titulo}</h2>
+        {acao}
+      </div>
       {children}
     </section>
   );
@@ -224,6 +227,12 @@ export default function GestaoPessoasClient({ clientes, selecionadoId, dados, mo
   ] as [SexoFiltro, string, number, string][]).filter(([chave, , n]) => !(portal && chave === "naoInformado" && n === 0));
   const nomeDoMes = NOMES_DOS_MESES[dados.mesDeReferencia - 1] ?? "";
   const haFiltro = temFiltroAtivo(filtros);
+  // Em cada gráfico: o mesmo efeito do cartão "Funcionários ativos" (limpa TODOS os filtros e a ordem e volta à lista cheia), sempre visível.
+  const zerar = (
+    <button type="button" className="gp-btn btn-outline" onClick={limpar} aria-label="Ver todos os funcionários e limpar os filtros" title="Voltar à lista completa, sem filtros" style={{ fontSize: 12, padding: "4px 10px", whiteSpace: "nowrap" }}>
+      Ver todos
+    </button>
+  );
   const haFiltroDeSexoOuFaixa = filtros.sexo !== undefined || filtros.faixa !== undefined;
   const segmentoAtivo = (faixa: FaixaEtaria, sexo: SexoFiltro) => (filtros.faixa === undefined || filtros.faixa === faixa) && (filtros.sexo === undefined || filtros.sexo === sexo);
   const rotuloEscolaridade = (grau: string) => (grau === ESCOLARIDADE_NAO_INFORMADO ? T.naoInformado : escolaridade.find((e) => e.grau === grau)?.rotulo ?? grau);
@@ -320,7 +329,7 @@ export default function GestaoPessoasClient({ clientes, selecionadoId, dados, mo
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16, marginBottom: 16 }}>
-        <Secao titulo="Distribuição por sexo">
+        <Secao titulo="Distribuição por sexo" acao={zerar}>
           {semSexo ? semDado : <>
           <div style={{ height: 220 }}>
             <Pie
@@ -347,7 +356,7 @@ export default function GestaoPessoasClient({ clientes, selecionadoId, dados, mo
           </>}
         </Secao>
 
-        <Secao titulo="Faixa etária por sexo">
+        <Secao titulo="Faixa etária por sexo" acao={zerar}>
           {semFaixa ? semDado : <>
           <div style={{ height: 240 }}>
             <Bar
@@ -405,7 +414,7 @@ export default function GestaoPessoasClient({ clientes, selecionadoId, dados, mo
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16, marginBottom: 16 }}>
-        <Secao titulo="Grau de escolaridade">
+        <Secao titulo="Grau de escolaridade" acao={zerar}>
           {semEscolaridade ? semDado : <>
           <div style={{ height: 280 }}>
             <Bar
@@ -429,7 +438,7 @@ export default function GestaoPessoasClient({ clientes, selecionadoId, dados, mo
           </>}
         </Secao>
 
-        <Secao titulo="Cargos">
+        <Secao titulo="Cargos" acao={zerar}>
           <div style={{ height: Math.max(220, cargos.length * 28 + 40) }}>
             <Bar
               role="img"

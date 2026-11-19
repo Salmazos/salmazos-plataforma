@@ -311,6 +311,14 @@ await ok("tela: cartões e legendas são <button> com aria-pressed; região aria
   const botoes = [...portalHtml.matchAll(/<button\b[\s\S]*?<\/button>/g)].map((m) => m[0]);
   assert.ok(!botoes.some((b) => b.includes("<select") || b.includes("mes-aniversariantes")), "nenhum <button> contém o seletor de mês");
   assert.ok(/<\/button><div[^>]*><label for="mes-aniversariantes"/.test(portalHtml), "o seletor é irmão do botão do cartão, não filho");
+  // botão "Ver todos" em cada um dos 4 gráficos: mesma função do cartão "Funcionários ativos" (limpar), sempre visível
+  for (const secao of ["Distribuição por sexo", "Faixa etária por sexo", "Grau de escolaridade", "Cargos"]) {
+    const i = portalHtml.indexOf(">" + secao + "</h2>");
+    assert.ok(i > 0, secao);
+    const cabeca = portalHtml.slice(i, i + 400);
+    assert.ok(/<button[^>]*aria-label="Ver todos os funcionários e limpar os filtros"[^>]*>Ver todos<\/button>/.test(cabeca), "botão Ver todos em " + secao);
+  }
+  assert.equal((portalHtml.match(/>Ver todos<\/button>/g) ?? []).length, 4);
   assert.ok(/aria-label="Filtrar por cargo"/.test(portalHtml) && /aria-label="Filtrar por escolaridade"/.test(portalHtml), "alternativa em botões para os gráficos de barras");
   assert.ok(/aria-label="[^"]*, masculino: \d+"/.test(portalHtml), "células da tabela como botões com nome acessível");
   const rhHtml = renderToStaticMarkup(createElement(GestaoPessoasClient, { clientes: [{ id: CLI_A, nome: "Alfa Indústria" }], selecionadoId: CLI_A, dados: montarGestaoPessoas({ id: CLI_A, nome: "Alfa Indústria" }, pessoasDe(CLI_A, FUNCS_BASE, DPS_BASE), HOJE) } as never));
@@ -331,6 +339,7 @@ await ok("fonte da tela: tudo clicável é <button>; o portal não manda cliente
   assert.ok(c.includes("{!portal && <><th style={th}>Idade</th><th style={th}>Sexo</th><th style={th}>Escolaridade</th></>}"), "cabeçalho: sexo, idade e escolaridade só no RH");
   assert.ok(c.includes("{!portal && <><td style={td}>{rh.idade ?? \"—\"}</td><td style={td}>{rh.sexo}</td><td style={td}>{rh.escolaridade}</td></>}"), "linhas: idem");
   const cliques = [
+    "onClick={limpar} aria-label=\"Ver todos os funcionários e limpar os filtros\"",
     'aplicar(par("admitidoNoMes", true))', 'aplicar(par("ordenarPorTempoDeCasa", true))', 'aplicar(par("aniversario", indiceMes))', "onClick={limpar}",
     'aplicar(par("sexo", chave))', 'aplicar(par("sexo", itensSexo[els[0].index][0]))',
     'aplicar(par("faixa", faixasMostradas[els[0].index].faixa), par("sexo", (["masculino", "feminino", "naoInformado"] as SexoFiltro[])[els[0].datasetIndex]))',
