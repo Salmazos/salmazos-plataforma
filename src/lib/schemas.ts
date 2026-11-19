@@ -12,6 +12,8 @@ import { nomeArquivoCurriculoValido } from "@/lib/indicacaoEdicao";
 import { qtdDiasTesteSchema } from "@/lib/diasTeste";
 import { validarSenhaPortal, mensagemSenhaPortalInvalida } from "@/lib/senhaPortal";
 import { normalizarLocalEntrevista, LOCAL_ENTREVISTA_MAX } from "@/lib/localEntrevista";
+import { ESCOLARIDADES_FILTRO, FAIXAS_FILTRO, SEXOS_FILTRO, type SexoFiltro } from "@/lib/gestaoPessoasLista";
+import type { FaixaEtaria } from "@/lib/gestaoPessoas";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1983,3 +1985,18 @@ export const comissaoFecharSchema = z.object({
   esperado_total: z.number().optional(),
 });
 export const comissaoPagarSchema = z.object({ pago_em: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe a data do pagamento.") });
+
+// ── Gestão de Pessoas interativa ─────────────────────────────────────────────
+// Só os FILTROS vêm do navegador. Chave desconhecida (ex.: cliente_id forjado no corpo do portal) é descartada pelo zod, nunca lida.
+export const gestaoPessoasFiltrosSchema = z.object({
+  sexo: z.enum(SEXOS_FILTRO as [SexoFiltro, ...SexoFiltro[]]).optional(),
+  faixa: z.enum(FAIXAS_FILTRO as [FaixaEtaria, ...FaixaEtaria[]]).optional(),
+  escolaridade: z.string().refine((v) => ESCOLARIDADES_FILTRO.includes(v), "Escolaridade inválida.").optional(),
+  cargo: z.string().trim().min(1).max(200).optional(),
+  admitidoNoMes: z.literal(true).optional(),
+  aniversario: z.number().int().min(0).max(11).optional(),
+  ordenarPorTempoDeCasa: z.literal(true).optional(),
+});
+// RH: a empresa escolhida na tela (validada contra a unidade no servidor). Portal: SÓ os filtros; a empresa vem da sessão.
+export const gestaoPessoasListaRHSchema = z.object({ clienteId: z.string().uuid(), filtros: gestaoPessoasFiltrosSchema.default({}) });
+export const gestaoPessoasListaPortalSchema = z.object({ filtros: gestaoPessoasFiltrosSchema.default({}) });

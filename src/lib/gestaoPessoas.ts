@@ -28,6 +28,7 @@ export const IDADE_MINIMA_PLAUSIVEL = 14;
 export const IDADE_MAXIMA_PLAUSIVEL = 90;
 export const LIMITE_POUCOS_ATIVOS = 5;
 export const ROTULO_CARGO_NAO_INFORMADO = "Cargo não informado";
+export const MAX_CARGOS_NO_GRAFICO = 12; // barras do gráfico de cargos; o resto vira "Demais cargos (N)"
 
 export interface ContagemPorSexo { masculino: number; feminino: number; naoInformado: number }
 export interface LinhaFaixa extends ContagemPorSexo { faixa: FaixaEtaria; rotulo: string; total: number }
@@ -198,6 +199,18 @@ export function rotuloDoMes(mes: number, ano: number, anoAtual: number): string 
   return ano > anoAtual ? `${nome} de ${ano}` : nome;
 }
 
+// A próxima ocorrência do aniversário de UMA pessoa: em qual dos 12 meses (índice 0 = mês corrente), o dia (ordem), o "dd/mm" e a idade que completa.
+// Fonte única: aniversariantesPorMes (a lista de aniversariantes) e o filtro "aniversariante do mês" da lista de funcionários usam esta função.
+export interface OcorrenciaAniversario { indiceMes: number; ordem: number; diaMes: string; completaAnos: number }
+export function ocorrenciaDeAniversario(dataNascimento: string | null | undefined, hojeISO: string): OcorrenciaAniversario | null {
+  const h = partes(hojeISO), n = partes(dataNascimento);
+  if (!h || !n || classificarIdade(dataNascimento, hojeISO).idade === null) return null; // sem data ou inconsistente: fora da lista
+  const indiceMes = (n.m - h.m + 12) % 12;
+  const anoDaOcorrencia = h.m - 1 + indiceMes >= 12 ? h.a + 1 : h.a;
+  const ordem = n.m === 2 && n.d === 29 && !bissexto(anoDaOcorrencia) ? 28 : n.d;
+  return { indiceMes, ordem, diaMes: dataBR(dataNascimento).slice(0, 5), completaAnos: anoDaOcorrencia - n.a };
+}
+
 export function aniversariantesPorMes(pessoas: PessoaAtiva[], hojeISO: string): MesAniversariantes[] {
   const h = partes(hojeISO);
   if (!h) return [];
@@ -207,11 +220,9 @@ export function aniversariantesPorMes(pessoas: PessoaAtiva[], hojeISO: string): 
     return { mes, ano, rotulo: rotuloDoMes(mes, ano, h.a), aniversariantes: [] };
   });
   for (const p of pessoas) {
-    const n = partes(p.dataNascimento);
-    if (!n || classificarIdade(p.dataNascimento, hojeISO).idade === null) continue; // sem data ou inconsistente: fora da lista
-    const destino = meses[(n.m - h.m + 12) % 12];
-    const ordem = n.m === 2 && n.d === 29 && !bissexto(destino.ano) ? 28 : n.d;
-    destino.aniversariantes.push({ diaMes: dataBR(p.dataNascimento).slice(0, 5), ordem, nome: p.nome, cargo: (p.cargo ?? "").trim() || null, completaAnos: destino.ano - n.a });
+    const o = ocorrenciaDeAniversario(p.dataNascimento, hojeISO);
+    if (!o) continue;
+    meses[o.indiceMes].aniversariantes.push({ diaMes: o.diaMes, ordem: o.ordem, nome: p.nome, cargo: (p.cargo ?? "").trim() || null, completaAnos: o.completaAnos });
   }
   for (const m of meses) m.aniversariantes.sort((x, y) => x.ordem - y.ordem || x.nome.localeCompare(y.nome, "pt-BR"));
   return meses;
@@ -275,7 +286,8 @@ export async function listarClientesComAtivos(svc: Svc, o: { unidadeRH: string |
 }
 
 // null = cliente_id inválido, inexistente ou de outra unidade (a página responde 404, sem confirmar que o id existe).
-export async function carregarGestaoPessoas(svc: Svc, o: { clienteId: string; unidadeRH: string | null; hojeISO: string }): Promise<GestaoPessoas | null> {
+// As pessoas (linhas achatadas) são a base única dos gráficos E da lista filtrada: a contagem da lista é igual à dos gráficos por construção.
+export async function carregarPessoasAtivas(svc: Svc, o: { clienteId: string; unidadeRH: string | null }): Promise<{ cliente: { id: string; nome: string }; pessoas: PessoaAtiva[] } | null> {
   if (!UUID.test(o.clienteId)) return null;
   const { data: cliente } = await svc.from("clientes").select("id, nome, unidade_id").eq("id", o.clienteId).maybeSingle();
   if (!cliente || (o.unidadeRH && cliente.unidade_id !== o.unidadeRH)) return null;
@@ -296,5 +308,10 @@ export async function carregarGestaoPessoas(svc: Svc, o: { clienteId: string; un
     const d = f.admissao_id ? dados.get(f.admissao_id) : undefined;
     return { nome: f.nome_completo, cargo: f.cargo, dataAdmissao: f.data_admissao, sexo: d?.sexo ?? null, dataNascimento: d?.data_nascimento ?? null, grauInstrucao: d?.grau_instrucao ?? null };
   });
-  return montarGestaoPessoas({ id: cliente.id, nome: cliente.nome }, pessoas, o.hojeISO);
+  return { cliente: { id: cliente.id, nome: cliente.nome }, pessoas };
+}
+
+export async function carregarGestaoPessoas(svc: Svc, o: { clienteId: string; unidadeRH: string | null; hojeISO: string }): Promise<GestaoPessoas | null> {
+  const base = await carregarPessoasAtivas(svc, { clienteId: o.clienteId, unidadeRH: o.unidadeRH });
+  return base ? montarGestaoPessoas(base.cliente, base.pessoas, o.hojeISO) : null;
 }
