@@ -1,6 +1,6 @@
 // Janelas com formulário (Fase 2): quem digitou e fecha por X, Cancelar ou Esc recebe "Você tem dados não salvos. Sair e perder o que digitou?"; sem dado digitado, fecha
 // direto. Prova: o controlador puro (src/lib/janelaComFormulario.ts), a confirmação (ConfirmarDescartar) e, por varredura das fontes (AST), que as janelas
-// migradas usam o hook e que o inventário fechado das 57 janelas de formulário só muda com revisão (as "pendentes" são as do segundo commit).
+// migradas usam o hook e que o inventário fechado das 58 janelas de formulário só muda com revisão (as "pendentes" são as do segundo commit).
 // Rodar: node --no-warnings --import ./scripts/harness-mot/register.mjs scripts/verificar-janelas-com-formulario.mts
 //   GERAR=1 ... imprime o inventário atual (para atualizar JANELAS depois de uma revisão deliberada).
 import assert from "node:assert/strict";
@@ -117,6 +117,7 @@ const JANELAS: Record<string, number> = {
   "ModalNovaVaga.tsx": 1,
   "ModalNovoCliente.tsx": 1,
   "ModalRegistrarAso.tsx": 1,
+  "ModalReativarCandidatura.tsx": 1,
   "ModalRegistrarContrato.tsx": 1,
   "ModalReprovacao.tsx": 1,
   "ModalRevisaoCobrancaRS.tsx": 1,
@@ -319,11 +320,11 @@ caso("(c) hook: confirmação num portal no body, janela de baixo inert, Esc no 
 });
 
 // ── Varredura das fontes ──────────────────────────────────────────────────────────────────────────────────────────────
-caso("(b) inventário FECHADO: 57 janelas de formulário; janela nova, a mais ou a menos quebra o teste e pede revisão", () => {
+caso("(b) inventário FECHADO: 58 janelas de formulário; janela nova, a mais ou a menos quebra o teste e pede revisão", () => {
   const sem = Object.fromEntries(Object.entries(atuais).filter(([k]) => !SO_EXIBE.includes(k)));
   assert.deepEqual(Object.keys(sem).sort(), Object.keys(JANELAS).filter((k) => !SO_EXIBE.includes(k)).sort());
   assert.deepEqual(sem, Object.fromEntries(Object.entries(JANELAS).filter(([k]) => !SO_EXIBE.includes(k))));
-  assert.equal(Object.values(sem).reduce((s, v) => s + v, 0), 57, "57 overlays com formulário");
+  assert.equal(Object.values(sem).reduce((s, v) => s + v, 0), 58, "58 overlays com formulário");
   assert.equal(Object.keys(MIGRADAS).length, 10);
   assert.ok(PENDENTES.length > 0 && PENDENTES.length + Object.keys(MIGRADAS).length === Object.keys(sem).length, "migradas + pendentes = inventário");
 });

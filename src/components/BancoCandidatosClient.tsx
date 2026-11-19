@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ORIGEM_LABELS } from "@/lib/constants";
 import ModalCadastroRapido from "./ModalCadastroRapido";
+import ModalReativarCandidatura, { type ResultadoReativacao } from "./ModalReativarCandidatura";
+import { getEtapaLabel } from "@/lib/etapasCandidatura";
 import BarraScrollFlutuante from "./BarraScrollFlutuante";
 import { useScrollHorizontalSincronizado } from "@/hooks/useScrollHorizontalSincronizado";
 import { fundoDeFormulario, fundoSoLeitura } from "@/lib/fundoDaJanela";
@@ -536,7 +538,9 @@ export default function BancoCandidatosClient({
   const [checkingProcessos, setCheckingProcessos] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [modalCadastroAberto, setModalCadastroAberto] = useState(false);
-  const [interesseModal, setInteresseModal] = useState<{ candidato: CandidatoRow; loading: string | null } | null>(null);
+  const [interesseModal, setInteresseModal] = useState<{ candidato: CandidatoRow; loading: string | null; erro?: string | null } | null>(null);
+  // Candidata que já tem vínculo em etapa final (Não tem interesse / Não compareceu) na vaga escolhida: em vez do erro, oferece "Reativar".
+  const [reativar, setReativar] = useState<{ candidatoId: string; candidatoNome: string; cvId: string; etapaLabel: string; dataEntrevistaSalmazos: string | null } | null>(null);
   const [escavadorMap, setEscavadorMap] = useState<Record<string, string | null>>({});
   const [escavadorSaving, setEscavadorSaving] = useState<Record<string, boolean>>({});
   const [scoreOverrides, setScoreOverrides] = useState<Record<string, { score: number; label: string }>>({});
@@ -670,7 +674,7 @@ export default function BancoCandidatosClient({
   const handleInteresseEncaminhar = useCallback(async (vagaId: string) => {
     if (!interesseModal) return;
     const { candidato } = interesseModal;
-    setInteresseModal((m) => m ? { ...m, loading: vagaId } : m);
+    setInteresseModal((m) => m ? { ...m, loading: vagaId, erro: null } : m);
 
     try {
       const res = await fetch("/api/candidatos-vagas", {
@@ -680,8 +684,13 @@ export default function BancoCandidatosClient({
       });
       const json = await res.json();
       if (!res.ok) {
-        console.error("[interesse encaminhar]", json.error);
-        setInteresseModal((m) => m ? { ...m, loading: null } : m);
+        if (json.codigo === "vinculo_em_etapa_final" && json.cv_id) {
+          setInteresseModal(null);
+          setReativar({ candidatoId: candidato.id, candidatoNome: candidato.nome_completo, cvId: json.cv_id, etapaLabel: json.etapa_label ?? getEtapaLabel(json.etapa), dataEntrevistaSalmazos: json.data_entrevista_salmazos ?? null });
+          return;
+        }
+        // Antes só ia para o console e a tela ficava parada, sem explicação.
+        setInteresseModal((m) => m ? { ...m, loading: null, erro: json.error ?? "Não foi possível encaminhar." } : m);
         return;
       }
       setEncaminhadoIds((prev) => { const next = new Set(prev); next.add(candidato.id); return next; });
@@ -690,7 +699,7 @@ export default function BancoCandidatosClient({
       setTimeout(() => setSuccessMsg(null), 4000);
       setTimeout(() => { setEncaminhadoIds((prev) => { const next = new Set(prev); next.delete(candidato.id); return next; }); }, 3000);
     } catch {
-      setInteresseModal((m) => m ? { ...m, loading: null } : m);
+      setInteresseModal((m) => m ? { ...m, loading: null, erro: "Erro de conexão." } : m);
     }
   }, [interesseModal, analista]);
 
@@ -715,6 +724,11 @@ export default function BancoCandidatosClient({
       const json = await res.json();
 
       if (!res.ok) {
+        if (json.codigo === "vinculo_em_etapa_final" && json.cv_id) {
+          setReativar({ candidatoId, candidatoNome: modal.candidatoNome, cvId: json.cv_id, etapaLabel: json.etapa_label ?? getEtapaLabel(json.etapa), dataEntrevistaSalmazos: json.data_entrevista_salmazos ?? null });
+          setModal(null);
+          return;
+        }
         setModal((m) => m ? { ...m, loading: false, error: json.error ?? "Erro ao encaminhar." } : m);
         return;
       }
@@ -738,6 +752,17 @@ export default function BancoCandidatosClient({
       setModal((m) => m ? { ...m, loading: false, error: "Erro de conexão." } : m);
     }
   }, [modal, analista]);
+
+  function aoReativar(r: ResultadoReativacao) {
+    if (!reativar) return;
+    const candidatoId = reativar.candidatoId;
+    const outros = r.avisos?.outros_processos?.length ?? 0;
+    setReativar(null);
+    setEncaminhadoIds((prev) => { const next = new Set(prev); next.add(candidatoId); return next; });
+    setSuccessMsg(`Candidata reativada em ${getEtapaLabel(r.data.etapa)}.${outros > 0 ? " Atenção: ela também tem processo ativo em outra vaga." : ""}`);
+    setTimeout(() => setSuccessMsg(null), 6000);
+    setTimeout(() => { setEncaminhadoIds((prev) => { const next = new Set(prev); next.delete(candidatoId); return next; }); }, 3000);
+  }
 
   const handleEscavadorChange = useCallback(async (candidatoId: string, value: string) => {
     if (value === "") return;
@@ -1762,6 +1787,18 @@ export default function BancoCandidatosClient({
         </div>
       )}
 
+      {reativar && (
+        <ModalReativarCandidatura
+          candidatoId={reativar.candidatoId}
+          candidatoNome={reativar.candidatoNome}
+          cvId={reativar.cvId}
+          etapaLabel={reativar.etapaLabel}
+          dataEntrevistaSalmazos={reativar.dataEntrevistaSalmazos}
+          onClose={() => setReativar(null)}
+          onReativado={aoReativar}
+        />
+      )}
+
       {interesseModal && (
         <div
           style={{
@@ -1828,6 +1865,10 @@ export default function BancoCandidatosClient({
                 );
               })}
             </div>
+
+            {interesseModal.erro && (
+              <p role="alert" style={{ fontSize: 12, color: "#B91C1C", margin: "0 0 12px" }}>{interesseModal.erro}</p>
+            )}
 
             <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <button

@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { nomesCompletosDaUnidade } from "@/lib/responsaveis";
 import { parseBody, candidatoVagaCreateSchema } from "@/lib/schemas";
 import { exigirAcessoCandidatoVaga, exigirAcessoVaga, exigirContextoUnidade } from "@/lib/unidadeAuth";
+import { ETAPAS_SAIDA_NAO_REATIVAVEIS, ehEtapaReativavel, getEtapaLabel } from "@/lib/etapasCandidatura";
 
 export async function GET(request: NextRequest) {
   const vagaId = request.nextUrl.searchParams.get("vaga_id");
@@ -86,16 +87,24 @@ export async function POST(request: NextRequest) {
 
     const { data: existente } = await supabase
       .from("candidatos_vagas")
-      .select("id")
+      .select("id, etapa, data_entrevista_salmazos")
       .eq("vaga_id", vaga_id)
       .eq("candidato_id", candidato_id)
       .maybeSingle();
 
+    // Nunca cria segundo vínculo (índice único vaga+candidato). O que muda é a resposta: diz em que etapa o vínculo está e, se a candidata saiu
+    // por desistência/ausência, devolve o código que a tela usa para oferecer "Reativar" (POST /api/candidatos-vagas/[id]/reativar).
     if (existente) {
-      return NextResponse.json(
-        { error: "Candidato já vinculado a esta vaga." },
-        { status: 409 }
-      );
+      const etapa = existente.etapa as string;
+      const rotulo = getEtapaLabel(etapa);
+      const base = { etapa, etapa_label: rotulo, cv_id: existente.id, data_entrevista_salmazos: (existente.data_entrevista_salmazos as string | null) ?? null };
+      if (ehEtapaReativavel(etapa)) {
+        return NextResponse.json({ ...base, codigo: "vinculo_em_etapa_final", error: `Esta candidata está como ${rotulo} nesta vaga.` }, { status: 409 });
+      }
+      if ((ETAPAS_SAIDA_NAO_REATIVAVEIS as readonly string[]).includes(etapa)) {
+        return NextResponse.json({ ...base, error: `A candidata está como ${rotulo} nesta vaga.` }, { status: 409 });
+      }
+      return NextResponse.json({ ...base, error: `A candidata já está em ${rotulo} nesta vaga.` }, { status: 409 });
     }
 
     const insertPayload: Record<string, unknown> = { vaga_id, candidato_id, etapa };

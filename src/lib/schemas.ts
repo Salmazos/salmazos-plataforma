@@ -2,6 +2,7 @@ import { z } from "zod";
 import { TIPOS_SERVICO_INDICACAO } from "@/lib/indicacaoSemVaga";
 import { erroCentroCusto, erroEscala, erroHorario, erroSalarioHora, erroSalarioMensal, erroTempoContrato, erroTurno } from "@/lib/admissaoCamposPadrao";
 import { conteudoRsSchema } from "@/lib/propostaModelos";
+import { DESTINOS_REATIVACAO } from "@/lib/etapasCandidatura";
 import { validarCnpj, validarCpf } from "@/lib/documentoBr";
 import { UNIDADES_FATURAMENTO } from "@/lib/unidadeFaturamento";
 import { ESTADOS, CATEGORIAS_HABILITACAO, LIMITE_EXPERIENCIA_MINIMA, erroHorarioGravado, experienciaMinimaDoCorpo } from "@/lib/solicitacaoVagaCampos";
@@ -518,6 +519,11 @@ export const candidatoVagaFinalizarSchema = z.object({
 export const candidatoVagaDesistenciaSchema = z.object({
   motivo: z.string().trim().min(5, "Informe o motivo da desistência (mínimo de 5 caracteres).").max(500, "O motivo vai até 500 caracteres."),
   reabrir_vaga: z.boolean().optional(),
+});
+
+// Reativar candidata que saiu do processo (Não tem interesse / Não compareceu) na mesma vaga. O destino é sempre escolhido: nunca assumido no servidor.
+export const candidatoVagaReativarSchema = z.object({
+  destino: z.enum(DESTINOS_REATIVACAO, { error: "Escolha para onde a candidata volta: Triagem ou Entrevista Salmazos." }),
 });
 
 // ── Admissão Digital ─────────────────────────────────────────────────────────

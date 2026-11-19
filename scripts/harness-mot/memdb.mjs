@@ -17,7 +17,7 @@ const RELACOES = {
   // Desistência antes da admissão (scripts/verificar-candidato-desistiu.mts): escopo de unidade via vagas!candidatos_vagas_vaga_id_fkey.
   candidatos_vagas: { vagas: { alvo: "vagas", local: "vaga_id" }, candidatos: { alvo: "candidatos", local: "candidato_id" } },
   // Cobrança R&S de cancelamento (scripts/verificar-solicitacao-link.mts): a vaga traz o cliente cadastrado.
-  vagas: { clientes: { alvo: "clientes", local: "cliente_id" } },
+  vagas: { clientes: { alvo: "clientes", local: "cliente_id" }, unidades: { alvo: "unidades", local: "unidade_id" } },
   // Cobrança R&S (scripts/verificar-cobranca-rs-pf.mts): GET /api/cobrancas-rs/[id] e aprovar leem a cobrança com vaga e cliente.
   cobrancas_rs: { vagas: { alvo: "vagas", local: "vaga_id" }, clientes: { alvo: "clientes", local: "cliente_id" } },
   // E-mail do pacote para a contabilidade (scripts/verificar-email-pacote-contabilidade.mts): a admissão lê o candidato e a vaga (com o cliente).
