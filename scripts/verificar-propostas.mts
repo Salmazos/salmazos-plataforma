@@ -2119,11 +2119,14 @@ const relatar = (rotulo: string, db: any) => {
   const o = O1(db);
   console.log(`RELATO|${rotulo}|opps=${opps(db).length}|etapa=${o?.etapa}|valor=${o?.valor_estimado}|servico=${o?.servico_interesse}|motivo=${o?.motivo_perda_categoria ?? "-"}|fechada=${o?.fechada_em ? "sim" : "nao"}|reconectar=${db.tabelas.lembretes.filter((l: any) => l.tipo === "reconectar" && l.status === "pendente").length}`);
 };
+// Segunda proposta semeada para os casos de Funil abaixo, que provam uma regra INDEPENDENTE DO MODELO (vale para R&S, MOT e TS). Antes do MOT existir,
+// a semente era um MOT com conteúdo vazio e valor digitado; agora o MOT (modelo ativo só no harness) calcula o valor pela planilha e exige funções, então
+// a semente é uma R&S. A cobertura do MOT no Funil (valor = planilha, soma com R&S, teste sem Funil) está em scripts/verificar-propostas-mot-api.mts.
 function semearMot(db: any, oppId: string | null, extra: Record<string, unknown> = {}): string {
   const n = 72 + db.tabelas.propostas.length;
   const agora = new Date().toISOString();
   const linha = {
-    id: crypto.randomUUID(), numero: `VE-MOT-${String(n).padStart(4, "0")}/${AA}`, modelo: "MOT", ano: ANO, sequencial: n, revisao_atual: 0, situacao: "rascunho",
+    id: crypto.randomUUID(), numero: `VE-${String(n).padStart(4, "0")}/${AA}`, modelo: "RS", ano: ANO, sequencial: n, revisao_atual: 0, situacao: "rascunho",
     unidade_id: U, vendedor_id: V, empresa_visitada_id: EMP, oportunidade_id: oppId, cliente_nome: "Empresa X", aos_cuidados: null, conteudo: {},
     template_versao: TEMPLATE_VERSAO_ATUAL, validade_dias: 15, validade_ate: null, valor_estimado: null, enviada_em: null, created_at: agora, updated_at: agora, ...extra,
   };
@@ -2144,7 +2147,7 @@ async function duasEnviadas(db: any, segundo: "MOT" | "RS" = "MOT", vA = 1000, v
 const estado = (db: any) => { const o = O1(db); return { etapa: o.etapa, valor: Number(o.valor_estimado) }; };
 const interacoesDeFase = (db: any) => db.tabelas.oportunidade_interacoes.filter((i: any) => i.tipo === "mudanca_etapa").length;
 
-await caso("funil/várias: duas ENVIADAS (R&S + MOT) na mesma oportunidade → valor = SOMA; serviço já preenchido é mantido; próxima ação é a da mais recente", async () => {
+await caso("funil/várias: duas ENVIADAS na mesma oportunidade → valor = SOMA; serviço já preenchido é mantido; próxima ação é a da mais recente", async () => {
   const db = novoDb();
   const { a, b, numB } = await duasEnviadas(db, "MOT");
   assert.deepEqual(estado(db), { etapa: "proposta_enviada", valor: 1500 });
@@ -2169,7 +2172,7 @@ await caso("funil/várias: oportunidade SEM serviço preenchido recebe o da prop
   assert.equal((await enviar(db2, 300)).r.status, 200);
   assert.equal(O1(db2).servico_interesse, "Recrutamento e Seleção", "texto só com espaços conta como vazio");
 });
-await caso("funil/várias: R&S ACEITA e MOT RECUSADA — ordem 1 (aceita primeiro): oportunidade ganha; a recusa que chega depois não muda nada", async () => {
+await caso("funil/várias: uma ACEITA e a OUTRA RECUSADA — ordem 1 (aceita primeiro): oportunidade ganha; a recusa que chega depois não muda nada", async () => {
   const db = novoDb();
   const { a, b } = await duasEnviadas(db, "MOT");
   const r1 = await situacao(db, a, { para: "aceita" });
@@ -2187,7 +2190,7 @@ await caso("funil/várias: R&S ACEITA e MOT RECUSADA — ordem 1 (aceita primeir
   assert.equal(db.tabelas.lembretes.filter((l: any) => l.tipo === "reconectar").length, 0, "recusa depois de ganho não agenda reconexão");
   relatar("aceita_depois_recusada", db);
 });
-await caso("funil/várias: MOT RECUSADA primeiro e R&S ACEITA depois — ordem 2: a oportunidade fica GANHA (não perdida)", async () => {
+await caso("funil/várias: uma RECUSADA primeiro e a OUTRA ACEITA depois — ordem 2: a oportunidade fica GANHA (não perdida)", async () => {
   const db = novoDb();
   const { a, b, numA, numB } = await duasEnviadas(db, "MOT");
   const r1 = await situacao(db, b, { para: "recusada" });
@@ -2290,7 +2293,7 @@ await caso("funil/várias: valor — editar o valor de UMA proposta substitui o 
   assert.equal(estado(db).valor, 1100, "valor nulo conta como 0: A 1.000 + C 100");
   relatar("tres_enviadas_valor_editado", db);
 });
-await caso("funil/várias: duas propostas R&S (sem MOT) na mesma oportunidade seguem a MESMA regra", async () => {
+await caso("funil/várias: duas propostas R&S criadas pela API na mesma oportunidade seguem a MESMA regra", async () => {
   const db = novoDb();
   const { a, b } = await duasEnviadas(db, "RS");
   assert.equal(proposta(db, a).modelo, "RS");
@@ -2361,7 +2364,7 @@ await caso("funil/várias: proposta SEM oportunidade cria uma ao enviar (como ho
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(opps(db).length, 1);
   assert.deepEqual(estado(db), { etapa: "proposta_enviada", valor: 400 });
-  assert.equal(O1(db).servico_interesse, "Mão de Obra Temporária");
+  assert.equal(O1(db).servico_interesse, "Recrutamento e Seleção");
   assert.equal(proposta(db, semOpp).oportunidade_id, O1(db).id);
   assert.ok(db.tabelas.oportunidade_interacoes.some((i: any) => i.tipo === "anotacao"));
   // Oportunidade da proposta já fechada (perdida): não reabre; abre outra e religa.
