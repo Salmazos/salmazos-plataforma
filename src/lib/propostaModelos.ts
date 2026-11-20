@@ -1,8 +1,10 @@
 // Modelos de proposta: schemas Zod, padrões configuráveis, texto fixo e snapshot do documento.
 // Percentuais e prazos nunca ficam fixos no texto: vêm de `condicoes` (padrão editável por proposta).
 import { z } from "zod";
-import { MODELOS_ATIVOS, emailParaAssinatura, type ModeloProposta } from "@/lib/propostas";
+import { emailParaAssinatura, modeloDisponivel, type ModeloProposta } from "@/lib/propostas";
 import { textoDesenhavel } from "@/lib/propostaTexto";
+import { MAX_CLAUSULAS_ADICIONAIS, MAX_CLAUSULA_ADICIONAL, clausulaAdicional } from "@/lib/propostaClausulas";
+import { TEMPLATE_VERSAO_MOT, conteudoMotSchema, mensagemErroConteudoMot, montarSnapshotMot, type ConteudoMot, type ParametrosMotVigentes, type SnapshotMot } from "@/lib/propostaMot";
 
 // v2: texto introdutório editável, frase de efeito, cláusulas adicionais, marca d'água, logo maior e mais respiro antes da assinatura.
 // Revisões já emitidas guardam a versão que usaram e o PDF delas continua saindo no layout dessa versão (ver propostaPdf).
@@ -10,8 +12,8 @@ export const TEMPLATE_VERSAO_ATUAL = 2;
 export const TEMPLATE_VERSAO_COM_INTRODUCAO = 2;
 
 export const MAX_TEXTO_INTRODUTORIO = 1000;
-export const MAX_CLAUSULAS_ADICIONAIS = 10;
-export const MAX_CLAUSULA_ADICIONAL = 600;
+// Limites e schema das cláusulas adicionais: definição única em propostaClausulas.ts (compartilhada com o MOT); reexportados aqui para quem já importa daqui.
+export { MAX_CLAUSULAS_ADICIONAIS, MAX_CLAUSULA_ADICIONAL };
 
 // Campo apagado de propósito ("", só espaços, null) é erro: z.coerce.number() o transformaria em 0 e o PDF do cliente
 // sairia com "Taxa de 0%". Só `undefined` (campo ausente) usa o padrão.
@@ -63,12 +65,6 @@ const textoIntroducao = z
   .refine((t) => t === "" || textoDesenhavel(t) !== "", "O texto introdutório só tem caracteres que o PDF não consegue imprimir.")
   .optional()
   .nullable();
-const clausulaAdicional = z
-  .string()
-  .trim()
-  .min(1, "Preencha a cláusula adicional ou remova-a.")
-  .max(MAX_CLAUSULA_ADICIONAL, `Cada cláusula adicional vai até ${MAX_CLAUSULA_ADICIONAL} caracteres.`)
-  .refine((t) => textoDesenhavel(t) !== "", "A cláusula adicional só tem caracteres que o PDF não consegue imprimir.");
 
 // O que fica em propostas.conteudo (jsonb) no modelo R&S. CNPJ e endereço do cliente não têm coluna própria.
 export const conteudoRsSchema = z.object({
@@ -84,16 +80,26 @@ export const PADROES_RS: CondicoesRs = condicoesRsSchema.parse({});
 
 export const MODELOS_PROPOSTA: Record<ModeloProposta, { ativo: boolean; templateVersao: number }> = {
   RS: { ativo: true, templateVersao: TEMPLATE_VERSAO_ATUAL },
-  MOT: { ativo: false, templateVersao: TEMPLATE_VERSAO_ATUAL },
+  // O MOT tem a PRÓPRIA versão de template (começa em 1), independente da do R&S.
+  MOT: { ativo: false, templateVersao: TEMPLATE_VERSAO_MOT },
   TS: { ativo: false, templateVersao: TEMPLATE_VERSAO_ATUAL },
 };
 
 export const MENSAGEM_MODELO_INDISPONIVEL = "Modelo ainda não disponível.";
 
+// Conteúdo validado de qualquer modelo disponível (R&S ou MOT).
+export type ConteudoProposta = ConteudoRs | ConteudoMot;
+
+// Despacha por modelo. R&S: exatamente como antes (mesmo schema, mesmas mensagens). MOT: conteudoMotSchema (só quando o modelo está disponível).
 export function validarConteudo(modelo: string, bruto: unknown):
-  | { ok: true; data: ConteudoRs }
+  | { ok: true; data: ConteudoProposta }
   | { ok: false; error: string } {
-  if (!(MODELOS_ATIVOS as string[]).includes(modelo)) return { ok: false, error: MENSAGEM_MODELO_INDISPONIVEL };
+  if (!modeloDisponivel(modelo)) return { ok: false, error: MENSAGEM_MODELO_INDISPONIVEL };
+  if (modelo === "MOT") {
+    const m = conteudoMotSchema.safeParse(bruto ?? {});
+    if (!m.success) return { ok: false, error: mensagemErroConteudoMot(m.error.issues) };
+    return { ok: true, data: m.data };
+  }
   const r = conteudoRsSchema.safeParse(bruto ?? {});
   if (!r.success) return { ok: false, error: r.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
   return { ok: true, data: r.data };
@@ -195,9 +201,26 @@ export interface EntradaSnapshot {
   vendedorNome: string;
   vendedorTelefone: string | null;
   vendedorEmail?: string | null;
+  // Só o MOT: cargo do vendedor (perfil) e os percentuais vigentes na data da emissão, que o snapshot congela.
+  vendedorCargo?: string | null;
+  parametrosMot?: ParametrosMotVigentes;
 }
 
-export function montarSnapshot(e: EntradaSnapshot): SnapshotProposta {
+// Qualquer snapshot de proposta (cada modelo tem o seu formato; o campo "modelo" distingue).
+export type SnapshotQualquer = SnapshotProposta | SnapshotMot;
+
+// Despacha por modelo: o MOT monta o snapshot com a planilha calculada; o R&S segue o caminho de sempre, sem nenhuma mudança.
+export function montarSnapshot(e: EntradaSnapshot & { modelo: "MOT" }): SnapshotMot;
+export function montarSnapshot(e: EntradaSnapshot): SnapshotProposta;
+export function montarSnapshot(e: EntradaSnapshot): SnapshotQualquer {
+  if (e.modelo === "MOT") {
+    if (!e.parametrosMot) throw new Error("Percentuais do MOT ausentes: o snapshot do MOT precisa dos parâmetros vigentes.");
+    return montarSnapshotMot({
+      numero: e.numero, revisao: e.revisao, templateVersao: e.templateVersao, dataEmissao: e.dataEmissao, validadeDias: e.validadeDias, validadeAte: e.validadeAte,
+      clienteNome: e.clienteNome, aosCuidados: e.aosCuidados, conteudo: e.conteudo, vendedorNome: e.vendedorNome, vendedorCargo: e.vendedorCargo ?? null,
+      vendedorTelefone: e.vendedorTelefone, vendedorEmail: e.vendedorEmail, parametros: e.parametrosMot,
+    });
+  }
   const conteudo = conteudoRsSchema.parse(e.conteudo ?? {});
   const introducao = conteudo.texto_introdutorio?.trim();
   return {

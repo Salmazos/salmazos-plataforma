@@ -12,8 +12,18 @@ export const ROTULO_MODELO: Record<ModeloProposta, string> = {
   TS: "Terceirização de Serviços",
 };
 
+// Chave SÓ DO HARNESS para exercitar o MOT antes da tela e do PDF (etapas 2D/2E). Em produção o MOT continua desligado (MODELOS_ATIVOS = ["RS"]): a chave
+// só vale fora de produção (NODE_ENV e VERCEL_ENV), então uma variável esquecida no painel da Vercel NUNCA liga o MOT.
+export const CHAVE_HARNESS_MOT = "HARNESS_PROPOSTA_MOT";
+export function chaveHarnessMotLigada(): boolean {
+  const env = typeof process !== "undefined" ? process.env : undefined;
+  if (!env) return false;
+  return env[CHAVE_HARNESS_MOT] === "1" && env.NODE_ENV !== "production" && !env.VERCEL_ENV && !env.VERCEL;
+}
+
 export function modeloDisponivel(modelo: string): modelo is ModeloProposta {
-  return (MODELOS_ATIVOS as string[]).includes(modelo);
+  if ((MODELOS_ATIVOS as string[]).includes(modelo)) return true;
+  return modelo === "MOT" && chaveHarnessMotLigada();
 }
 
 export const SITUACOES = ["rascunho", "enviada", "em_negociacao", "aceita", "recusada", "vencida", "cancelada"] as const;

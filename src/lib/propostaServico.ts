@@ -11,7 +11,9 @@ import {
   calcularValidadeAte, modeloDisponivel, modoEdicao, podeTransicionar, siglaDoVendedor, somarDiasUteis, textoFollowUp,
   type ModeloProposta, type SituacaoProposta,
 } from "@/lib/propostas";
-import { MENSAGEM_MODELO_INDISPONIVEL, MODELOS_PROPOSTA, montarSnapshot, validarConteudo, type SnapshotProposta } from "@/lib/propostaModelos";
+import { MENSAGEM_MODELO_INDISPONIVEL, MODELOS_PROPOSTA, montarSnapshot, validarConteudo, type SnapshotProposta, type SnapshotQualquer } from "@/lib/propostaModelos";
+import type { ParametrosMotVigentes, SnapshotMot } from "@/lib/propostaMot";
+import { parametrosMotValidos } from "@/lib/propostaMotCalculo";
 
 type Svc = ReturnType<typeof createServiceClient>;
 // Linha de `propostas` (select "*"): lida sem tipagem própria, como as demais linhas do Comercial.
@@ -48,10 +50,10 @@ export async function carregarProposta(svc: Svc, id: string): Promise<PropostaLi
   return data ?? null;
 }
 
-type DadosVendedor = { nome: string; telefone: string | null; email: string | null };
+type DadosVendedor = { nome: string; telefone: string | null; email: string | null; cargo: string | null };
 async function dadosDoVendedor(svc: Svc, vendedorId: string): Promise<DadosVendedor> {
-  const { data } = await svc.from("analistas_perfil").select("nome_completo, telefone, email").eq("id", vendedorId).maybeSingle();
-  return { nome: data?.nome_completo ?? "", telefone: data?.telefone ?? null, email: data?.email ?? null };
+  const { data } = await svc.from("analistas_perfil").select("nome_completo, telefone, email, cargo").eq("id", vendedorId).maybeSingle();
+  return { nome: data?.nome_completo ?? "", telefone: data?.telefone ?? null, email: data?.email ?? null, cargo: data?.cargo ?? null };
 }
 
 export async function buscarOportunidadeAberta(svc: Svc, empresaId: string): Promise<OportunidadeLinha | null> {
@@ -146,18 +148,64 @@ function snapshotDa(p: PropostaLinha, vendedor: DadosVendedor, revisao: number, 
   });
 }
 
+// Percentuais do MOT vigentes na data (parametros_mot_vigentes: a vigência mais recente com vigente_desde <= data). Sem vigência não se inventa percentual.
+async function parametrosMotVigentes(svc: Svc, data: string): Promise<Resultado<ParametrosMotVigentes>> {
+  const { data: linhas, error } = await svc.rpc("parametros_mot_vigentes", { p_hoje: data });
+  if (error) {
+    console.error("[propostas] Percentuais do MOT não lidos:", error.message);
+    return falha(500, "Não foi possível ler os percentuais do MOT. Nada foi alterado; tente de novo.");
+  }
+  const linha = (Array.isArray(linhas) ? linhas[0] : linhas) as (Record<string, unknown> & { vigente_desde?: string; id?: string }) | null | undefined;
+  if (!linha || !linha.vigente_desde) return falha(409, "Não há percentuais do MOT vigentes para esta data. Peça à diretoria para cadastrá-los.");
+  if (!parametrosMotValidos(linha)) return falha(500, "Os percentuais do MOT cadastrados estão inválidos. Avise a diretoria.");
+  return { ok: true, data: linha as unknown as ParametrosMotVigentes };
+}
+
+// Snapshot do MOT: congela os percentuais vigentes na data da emissão e a planilha calculada de cada função (ver propostaMot.ts).
+async function snapshotMotDaProposta(svc: Svc, p: PropostaLinha, vendedor: DadosVendedor, revisao: number, emissao: string, validadeAte: string): Promise<Resultado<SnapshotMot>> {
+  const par = await parametrosMotVigentes(svc, emissao);
+  if (!par.ok) return par;
+  try {
+    return {
+      ok: true,
+      data: montarSnapshot({
+        modelo: "MOT",
+        numero: p.numero,
+        revisao,
+        templateVersao: p.template_versao,
+        dataEmissao: emissao,
+        validadeDias: p.validade_dias,
+        validadeAte,
+        clienteNome: p.cliente_nome,
+        aosCuidados: p.aos_cuidados ?? null,
+        conteudo: p.conteudo,
+        vendedorNome: vendedor.nome,
+        vendedorCargo: vendedor.cargo,
+        vendedorTelefone: vendedor.telefone,
+        vendedorEmail: vendedor.email,
+        parametrosMot: par.data,
+      }),
+    };
+  } catch (err) {
+    console.error("[propostas] Conteúdo do MOT inválido ao montar o snapshot:", err instanceof Error ? err.message : err);
+    return falha(400, "O conteúdo da proposta de Mão de Obra Temporária está incompleto ou inválido. Revise as funções e tente de novo.");
+  }
+}
+
 // Rascunho: o PDF usa o conteúdo atual, com hoje como emissão. Proposta enviada: o snapshot da revisão pedida
 // (ou da atual); reabrir uma revisão antiga nunca depende de dados vivos.
-export async function snapshotParaPdf(svc: Svc, p: PropostaLinha, revisao: number | null): Promise<Resultado<SnapshotProposta>> {
+export async function snapshotParaPdf(svc: Svc, p: PropostaLinha, revisao: number | null): Promise<Resultado<SnapshotQualquer>> {
   if (p.situacao === "rascunho" && revisao === null) {
     const hoje = hojeSaoPaulo();
     const vendedor = await dadosDoVendedor(svc, p.vendedor_id);
+    if (p.modelo === "MOT") return snapshotMotDaProposta(svc, p, vendedor, 0, hoje, calcularValidadeAte(hoje, p.validade_dias));
     return { ok: true, data: snapshotDa(p, vendedor, 0, hoje, calcularValidadeAte(hoje, p.validade_dias)) };
   }
   const alvo = revisao ?? p.revisao_atual;
   const { data: rev } = await svc.from("proposta_revisoes").select("conteudo").eq("proposta_id", p.id).eq("revisao", alvo).maybeSingle();
   if (!rev) return falha(404, "Revisão não encontrada.");
-  return { ok: true, data: rev.conteudo as SnapshotProposta };
+  // Revisão já gravada: devolve EXATAMENTE o que foi gravado (nunca recalcula; vale para R&S e MOT).
+  return { ok: true, data: rev.conteudo as SnapshotQualquer };
 }
 
 // ── Criar rascunho ───────────────────────────────────────────────────────────
@@ -249,6 +297,13 @@ export async function editarProposta(svc: Svc, ctx: ContextoPropostas, p: Propos
   const hoje = hojeSaoPaulo();
   const novaRevisao = (p.revisao_atual as number) + 1;
   const validadeAte = calcularValidadeAte(hoje, validadeDias);
+  // MOT: o snapshot (percentuais vigentes HOJE + planilha) é montado antes de gravar qualquer coisa; sem percentuais vigentes nada muda.
+  let snapMot: SnapshotMot | null = null;
+  if (p.modelo === "MOT") {
+    const s = await snapshotMotDaProposta(svc, { ...p, conteudo, aos_cuidados: aosCuidados, validade_dias: validadeDias }, await dadosDoVendedor(svc, p.vendedor_id), novaRevisao, hoje, validadeAte);
+    if (!s.ok) return s;
+    snapMot = s.data;
+  }
   const { data: atualizada } = await svc
     .from("propostas")
     .update({ ...campos, revisao_atual: novaRevisao, validade_ate: validadeAte })
@@ -263,7 +318,7 @@ export async function editarProposta(svc: Svc, ctx: ContextoPropostas, p: Propos
   const { error } = await svc.from("proposta_revisoes").insert({
     proposta_id: p.id,
     revisao: novaRevisao,
-    conteudo: snapshotDa(atualizada, vendedor, novaRevisao, hoje, validadeAte),
+    conteudo: snapMot ?? snapshotDa(atualizada, vendedor, novaRevisao, hoje, validadeAte),
     template_versao: atualizada.template_versao,
     vendedor_nome: vendedor.nome,
     vendedor_telefone: vendedor.telefone,
@@ -473,19 +528,30 @@ export async function mudarSituacao(svc: Svc, ctx: ContextoPropostas, p: Propost
   }
   if (!podeTransicionar(de, para)) return falha(409, `Não é possível passar de ${ROTULO_SITUACAO[de]} para ${ROTULO_SITUACAO[para]}.`);
 
-  if (para === "enviada" && !(d.valor_estimado != null && d.valor_estimado > 0)) return falha(400, "Informe o valor estimado (maior que zero) para marcar como enviada.");
+  // Data de emissão/validade do envio (a mesma do snapshot e da reserva abaixo).
+  const hoje = hojeSaoPaulo();
+  // R&S: o valor vem do vendedor (como sempre). MOT: o valor é calculado pelo servidor (soma dos valores mensais das funções, a partir dos percentuais
+  // vigentes) e o que o cliente mandar é ignorado: ninguém digita o valor de uma proposta cujo preço sai da planilha.
+  let valorEnvio = d.valor_estimado;
+  let snapMotEnvio: SnapshotMot | null = null;
+  if (para === "enviada" && p.modelo === "MOT") {
+    const s = await snapshotMotDaProposta(svc, p, await dadosDoVendedor(svc, p.vendedor_id), p.revisao_atual, hoje, calcularValidadeAte(hoje, p.validade_dias));
+    if (!s.ok) return s;
+    snapMotEnvio = s.data;
+    valorEnvio = s.data.total_mensal_centavos / 100;
+  }
+  if (para === "enviada" && !(valorEnvio != null && valorEnvio > 0)) return falha(400, "Informe o valor estimado (maior que zero) para marcar como enviada.");
   // O motivo da recusa é opcional na proposta; se a categoria "outro" foi escolhida, o texto continua obrigatório.
   // Com Funil e oportunidade própria aberta, quem exige o motivo é o "perdido" do Funil (atualizarOportunidade).
   if (para === "recusada" && d.motivo_perda_categoria === "outro" && !d.motivo_perda?.trim()) return falha(400, "Descreva o motivo, já que você escolheu \"Outro motivo\".");
 
   // 1) Reserva a mudança (condicional à situação e à versão lidas): quem chegar depois recebe 409.
-  const hoje = hojeSaoPaulo();
   const agora = new Date().toISOString();
   const campos: Record<string, unknown> = { situacao: para, updated_at: agora };
   let validadeAte: string | null = null;
   if (para === "enviada") {
     validadeAte = calcularValidadeAte(hoje, p.validade_dias);
-    Object.assign(campos, { enviada_em: agora, validade_ate: validadeAte, valor_estimado: d.valor_estimado });
+    Object.assign(campos, { enviada_em: agora, validade_ate: validadeAte, valor_estimado: valorEnvio });
   }
   const { data: reservada } = await svc.from("propostas").update(campos).eq("id", p.id).eq("situacao", de).eq("updated_at", p.updated_at).select().maybeSingle();
   if (!reservada) return falha(409, "A proposta foi alterada desde que você a abriu. Recarregue e tente de novo.");
@@ -505,7 +571,7 @@ export async function mudarSituacao(svc: Svc, ctx: ContextoPropostas, p: Propost
   // Cancelar proposta que estava ATIVA recalcula só o valor da oportunidade (soma das ativas que restaram); cancelar rascunho não mexe no Funil.
   const cancelaAtiva = para === "cancelada" && (de === "enviada" || de === "em_negociacao");
   if (comFunil && (para === "enviada" || para === "em_negociacao" || para === "aceita" || para === "recusada" || cancelaAtiva)) {
-    const r = para === "enviada" ? await efeitoEnviada(svc, ctx, p, d.valor_estimado as number) : await efeitoAcompanhamento(svc, ctx, p, para, d, de);
+    const r = para === "enviada" ? await efeitoEnviada(svc, ctx, p, valorEnvio as number) : await efeitoAcompanhamento(svc, ctx, p, para, d, de);
     if (!r.ok) {
       await reverter();
       return falha(r.status, r.error);
@@ -524,7 +590,7 @@ export async function mudarSituacao(svc: Svc, ctx: ContextoPropostas, p: Propost
       ? await svc.from("proposta_revisoes").insert({
           proposta_id: p.id,
           revisao: reservada.revisao_atual,
-          conteudo: snapshotDa(ligada, vendedor, reservada.revisao_atual, hoje, validadeAte as string),
+          conteudo: snapMotEnvio ?? snapshotDa(ligada, vendedor, reservada.revisao_atual, hoje, validadeAte as string),
           template_versao: reservada.template_versao,
           vendedor_nome: vendedor.nome,
           vendedor_telefone: vendedor.telefone,

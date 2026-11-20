@@ -29,6 +29,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const snap = await snapshotParaPdf(svc, proposta, revisao);
   if (!snap.ok) return NextResponse.json({ error: snap.error }, { status: snap.status });
 
+  // O PDF do MOT é a etapa 2E: até lá só o R&S gera PDF (nunca um PDF de R&S com dados de MOT).
+  if (snap.data.modelo !== "RS") return NextResponse.json({ error: "O PDF deste modelo de proposta ainda não está disponível." }, { status: 409 });
   // A marca TESTE vem da LINHA da proposta (flag fixada na criação), nunca do snapshot: o snapshot das revisões é imutável.
   const bytes = await gerarPdfProposta(snap.data, { teste: proposta.teste === true });
   const nomeArquivo = `proposta-${String(proposta.numero).replace("/", "-")}${snap.data.revisao > 0 ? `-rev${snap.data.revisao}` : ""}.pdf`;
