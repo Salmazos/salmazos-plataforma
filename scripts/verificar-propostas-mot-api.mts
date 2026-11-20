@@ -792,6 +792,42 @@ await caso("parâmetros: CORRIDA (duas chamadas ao mesmo tempo) — se o banco r
   assert.doesNotMatch(JSON.stringify(e3.body), /xyz|travada/);
   assert.equal(db3.tabelas.proposta_mot_parametros.length, 1);
 });
+await caso("migração do índice único de vigência: só o índice (nome, coluna, idempotente), sem begin/commit e sem DROP/DELETE/UPDATE/INSERT; a prova no Postgres está em provar-numeracao-propostas.sh (seção 11)", () => {
+  const sql = fs.readFileSync("supabase/migration_propostas_mot_vigencia_unica.sql", "utf8");
+  const instrucoes = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n").trim();
+  assert.equal(instrucoes, "create unique index if not exists proposta_mot_parametros_vigente_desde_uq\n  on public.proposta_mot_parametros (vigente_desde);", "uma única instrução, exatamente esta");
+  assert.match(instrucoes, /create unique index if not exists proposta_mot_parametros_vigente_desde_uq/);
+  assert.match(instrucoes, /on public\.proposta_mot_parametros \(vigente_desde\)/);
+  assert.doesNotMatch(instrucoes, /\b(drop|delete|update|insert|truncate|alter|begin|commit)\b/i);
+  assert.equal((instrucoes.match(/;/g) ?? []).length, 1);
+  assert.match(sql, /Motivo:/);
+  assert.match(sql, /Aplicar ANTES do deploy/);
+  // O que a rota faz com o 23505 do índice: o MESMO 409 (o harness do banco em memória imita o erro com db.unicos; o texto real do Postgres está na prova .sh)
+  const rota = fs.readFileSync("src/app/api/comercial/propostas/mot/parametros/route.ts", "utf8");
+  assert.match(rota, /error\?\.code === "23505"\) return NextResponse\.json\(\{ error: MSG_VIGENCIA_REPETIDA \}, \{ status: 409 \}\)/);
+  assert.ok(rota.includes('const MSG_VIGENCIA_REPETIDA = "Já existe uma vigência com esta data. Escolha outra data.";'));
+});
+await caso("com o índice único no banco: a conferência da rota é a primeira barreira (409 sem tentar inserir) e, se ela for burlada pela corrida, o 23505 do insert dá o MESMO 409, sem auditoria e sem segunda linha", async () => {
+  const db = novoDb();
+  db.unicos = { proposta_mot_parametros: ["vigente_desde"] }; // o índice proposta_mot_parametros_vigente_desde_uq
+  const dia = mais(40);
+  assert.equal((await gravarParametros(db, "u-gc", PARAMS_NOVOS({ vigente_desde: dia }))).status, 201);
+  const inserts = () => db.consultas.filter((q: any) => q.tabela === "proposta_mot_parametros" && q.op === "insert").length;
+  const antes = inserts();
+  const dup = await gravarParametros(db, "u-gc", PARAMS_NOVOS({ vigente_desde: dia }));
+  assert.equal(dup.status, 409);
+  assert.equal(dup.body.error, "Já existe uma vigência com esta data. Escolha outra data.");
+  assert.equal(inserts(), antes, "a conferência barrou antes de tentar o insert");
+  // corrida: a conferência não vê a outra linha, o índice recusa o insert
+  const dia2 = mais(41);
+  db.ganchos = { "proposta_mot_parametros.insert": async () => { db.tabelas.proposta_mot_parametros.push({ id: "outra", vigente_desde: dia2, ...INICIAIS, alterado_por: G, created_at: new Date().toISOString() }); } };
+  const auditoriaAntes = db.tabelas.audit_logs.length;
+  const corrida = await gravarParametros(db, "u-gc", PARAMS_NOVOS({ vigente_desde: dia2 }));
+  assert.equal(corrida.status, 409);
+  assert.equal(corrida.body.error, "Já existe uma vigência com esta data. Escolha outra data.");
+  assert.equal(db.tabelas.proposta_mot_parametros.filter((l: any) => l.vigente_desde === dia2).length, 1);
+  assert.equal(db.tabelas.audit_logs.length, auditoriaAntes);
+});
 await caso("parâmetros: só inserção — a rota exporta apenas GET e POST; nenhum update/delete em proposta_mot_parametros acontece (nem o imutável do harness quebra); fonte sem PATCH/PUT/DELETE", async () => {
   assert.deepEqual(Object.keys(rotaParametros).filter((k) => /^[A-Z]+$/.test(k)).sort(), ["GET", "POST"]);
   const fonte = fs.readFileSync("src/app/api/comercial/propostas/mot/parametros/route.ts", "utf8");

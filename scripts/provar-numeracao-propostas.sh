@@ -10,6 +10,7 @@ RAIZ=$(cd "$(dirname "$0")/.." && pwd)
 MIGRATION="$RAIZ/supabase/migration_propostas.sql"
 MIGRATION_MOT="$RAIZ/supabase/migration_propostas_mot.sql"
 MIGRATION_TESTE="$RAIZ/supabase/migration_propostas_teste.sql"
+MIGRATION_VIGENCIA="$RAIZ/supabase/migration_propostas_mot_vigencia_unica.sql"
 SCRIPT_DADOS_TESTE="$RAIZ/supabase/dados_propostas_teste_marcar_existentes.sql"
 DIR=$(mktemp -d /tmp/pgprova.XXXXXX)
 PORTA=54329
@@ -83,6 +84,17 @@ echo "criar_proposta(11 args) corpo (md5) depois: $CORPO_DEPOIS"
 [ "$CORPO_ANTES" = "$CORPO_DEPOIS" ] || { echo "FALHOU: o corpo de criar_proposta mudou"; exit 1; }
 [ "$META_ANTES_T" = "$META_DEPOIS_T" ] || { echo "FALHOU: assinatura/retorno/search_path/security definer/grants de criar_proposta mudaram"; exit 1; }
 echo "ok: criar_proposta (real) IDÊNTICA à anterior: mesmo corpo, assinatura, retorno, search_path, security definer e grants"
+
+echo "== aplica o índice único de vigência do MOT (1ª vez) e de novo (idempotência); os dados de proposta_mot_parametros não mudam"
+DADOS_ANTES=$($PSQL -c "select count(*) || '|' || coalesce(md5(string_agg(t::text, ',' order by t.id)), '') from proposta_mot_parametros t")
+$PSQL -f "$MIGRATION_VIGENCIA"
+$PSQL -f "$MIGRATION_VIGENCIA"
+DADOS_DEPOIS=$($PSQL -c "select count(*) || '|' || coalesce(md5(string_agg(t::text, ',' order by t.id)), '') from proposta_mot_parametros t")
+echo "ok: duas aplicações sem erro"
+echo "proposta_mot_parametros antes : $DADOS_ANTES"
+echo "proposta_mot_parametros depois: $DADOS_DEPOIS"
+[ "$DADOS_ANTES" = "$DADOS_DEPOIS" ] || { echo "FALHOU: a migration do índice alterou dados"; exit 1; }
+echo "ok: nenhuma linha alterada (mesma contagem e mesmo md5 do conteúdo)"
 
 UNI=$($PSQL -c "insert into unidades default values returning id")
 VEND=$($PSQL -c "insert into analistas_perfil (user_id, nivel_acesso) values (gen_random_uuid(),'analista') returning id")
@@ -248,15 +260,18 @@ done
 esperar "a linha com percentual inválido não foi gravada" "$($PSQL -c "select count(*) from proposta_mot_parametros")" 1
 if $PSQL -c "set role service_role; insert into proposta_mot_parametros (taxa_administrativa_bp,encargos_tributarios_bp,inss_patronal_bp,fgts_bp,ret_iss_bp,ret_inss_bp,ret_ir_bp,ret_cofins_bp,ret_csll_bp,ret_pis_bp) values (1,1,1,1,1,1,1,1,1,1)" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: vigente_desde nulo aceito"; exit 1; fi
 echo "vigente_desde obrigatório: $(head -1 "$DIR/e.txt")"
-# Duas vigências novas: 2027-01-01 (taxa 1200) e, no MESMO dia, outra criada depois (taxa 1300): vale a última.
+# Vigência nova em 2027-01-01 (taxa 1200). Com o índice único, uma SEGUNDA no mesmo dia (taxa 1300) é recusada (23505): não existe mais empate.
 $PSQL -c "set role service_role; $INS_BASE values ('2027-01-01', 1200, 3200, 3120, 800, 200, 1100, 100, 300, 100, 65, '$G')"
-$PSQL -c "set role service_role; $INS_BASE values ('2027-01-01', 1300, 3200, 3120, 800, 200, 1100, 100, 300, 100, 65, '$G')"
+if $PSQL -c "set role service_role; $INS_BASE values ('2027-01-01', 1300, 3200, 3120, 800, 200, 1100, 100, 300, 100, 65, '$G')" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: segunda vigência na mesma data aceita"; exit 1; fi
+echo "segunda vigência na mesma data recusada: $(head -1 "$DIR/e.txt")"
+esperar "o erro é a violação do índice único de vigência (23505: duplicate key ... proposta_mot_parametros_vigente_desde_uq)" "$(head -1 "$DIR/e.txt")" 'ERROR:  duplicate key value violates unique constraint "proposta_mot_parametros_vigente_desde_uq"'
+esperar "só uma linha em 2027-01-01 (a recusada não gravou)" "$($PSQL -c "select count(*) from proposta_mot_parametros where vigente_desde='2027-01-01'")" 1
 vigente() { $PSQL -c "set role service_role; select coalesce((select taxa_administrativa_bp::text from parametros_mot_vigentes('$1')), 'nenhuma')"; }
 esperar "vigência: antes da primeira (2026-11-18) não há linha vigente" "$(vigente 2026-11-18)" nenhuma
 esperar "vigência: no dia da primeira (2026-11-19) vale a inicial" "$(vigente 2026-11-19)" 1000
 esperar "vigência: véspera da nova (2026-12-31) ainda vale a inicial" "$(vigente 2026-12-31)" 1000
-esperar "vigência: no dia da nova (2027-01-01), empate no dia: vale a criada por último" "$(vigente 2027-01-01)" 1300
-esperar "vigência: depois (2030-01-01) continua a última" "$(vigente 2030-01-01)" 1300
+esperar "vigência: no dia da nova (2027-01-01) vale a nova" "$(vigente 2027-01-01)" 1200
+esperar "vigência: depois (2030-01-01) continua a última" "$(vigente 2030-01-01)" 1200
 esperar "vigência: sem argumento usa a data de hoje (Brasília) e devolve exatamente uma linha" "$($PSQL -c "set role service_role; select count(*) from parametros_mot_vigentes()")" 1
 for cmd in "update proposta_mot_parametros set fgts_bp = 1" "delete from proposta_mot_parametros"; do
   esperar "service_role '$cmd': barrado pelo gatilho" "$(erro_de service_role "$A_U" "$cmd")" "ERROR:  registro imutável: $(echo "${cmd%% *}" | tr a-z A-Z) em proposta_mot_parametros não é permitido"
@@ -365,5 +380,24 @@ $PSQL -c "set role service_role; update propostas set teste = true where id = '1
 # propostas não tem trigger de imutabilidade: o UPDATE do script é permitido; as revisões e o histórico continuam imutáveis (seção 6).
 esperar "triggers de imutabilidade só em revisões, histórico e parâmetros do MOT (propostas e contadores livres)" "$($PSQL -c "select string_agg(tgrelid::regclass::text, ',' order by tgrelid::regclass::text) from pg_trigger where not tgisinternal and tgname like '%imutavel%'")" "proposta_historico,proposta_mot_parametros,proposta_revisoes"
 
+echo
+echo "== 11) índice único de vigência do MOT (proposta_mot_parametros.vigente_desde)"
+esperar "o índice existe, é ÚNICO e é sobre vigente_desde" "$($PSQL -c "select indexdef from pg_indexes where tablename='proposta_mot_parametros' and indexname='proposta_mot_parametros_vigente_desde_uq'")" "CREATE UNIQUE INDEX proposta_mot_parametros_vigente_desde_uq ON public.proposta_mot_parametros USING btree (vigente_desde)"
+esperar "o índice não único antigo de consulta continua (a migration só ACRESCENTA)" "$($PSQL -c "select count(*) from pg_indexes where tablename='proposta_mot_parametros' and indexname='proposta_mot_parametros_vigencia_idx'")" 1
+# A linha inicial da migration do MOT ocupa 2026-11-19: repetir essa data é recusado com a violação do índice (23505), mesmo pelo service role.
+if $PSQL -c "set role service_role; $INS_BASE values ('2026-11-19', 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, '$G')" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: data repetida aceita"; exit 1; fi
+esperar "repetir a data da linha inicial (2026-11-19) é recusado com 23505 pelo índice" "$(head -1 "$DIR/e.txt")" 'ERROR:  duplicate key value violates unique constraint "proposta_mot_parametros_vigente_desde_uq"'
+# Corrida: duas inserções na MESMA data em sessões simultâneas. Uma entra, a outra leva 23505 (aqui as chamadas são serializadas; o índice vale igual).
+for i in 1 2 3 4 5 6; do EXEC "$PSQL -c \"set role service_role; $INS_BASE values ('2031-03-01', 1000, 3200, 3120, 800, 200, 1100, 100, 300, 100, 65, '$G')\" >$DIR/corrida.$i.out 2>$DIR/corrida.$i.err; echo \$? > $DIR/corrida.$i.rc" & done
+wait
+ENTRARAM=$(cat "$DIR"/corrida.*.rc | grep -c '^0$')
+RECUSADAS=$(cat "$DIR"/corrida.*.rc | grep -vc '^0$')
+esperar "corrida de 6 inserções na mesma data: exatamente 1 entra" "$ENTRARAM" 1
+esperar "corrida de 6 inserções na mesma data: 5 são recusadas" "$RECUSADAS" 5
+esperar "todas as recusadas são 23505 do índice (nenhum outro erro)" "$(cat "$DIR"/corrida.*.err | grep -c 'violates unique constraint "proposta_mot_parametros_vigente_desde_uq"')" 5
+esperar "só uma linha em 2031-03-01" "$($PSQL -c "select count(*) from proposta_mot_parametros where vigente_desde='2031-03-01'")" 1
+esperar "datas diferentes continuam aceitas" "$($PSQL -c "set role service_role; $INS_BASE values ('2031-03-02', 1000, 3200, 3120, 800, 200, 1100, 100, 300, 100, 65, '$G') returning vigente_desde::text")" "2031-03-02"
+esperar "authenticated e anon continuam sem nenhum acesso à tabela (o índice não mudou privilégio)" "$($PSQL -c "select bool_or(has_table_privilege(r, 'public.proposta_mot_parametros', p)) from unnest(array['anon','authenticated']) r, unnest(array['select','insert','update','delete','truncate','references','trigger']) p")" f
+esperar "UPDATE e DELETE continuam barrados pelo gatilho (imutável)" "$(erro_de service_role "$A_U" "update proposta_mot_parametros set fgts_bp = 1")" "ERROR:  registro imutável: UPDATE em proposta_mot_parametros não é permitido"
 echo
 echo "PROVA CONCLUÍDA"
