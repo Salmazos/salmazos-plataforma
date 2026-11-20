@@ -28,9 +28,19 @@ export function ehDonoDaProposta(ctx: ContextoPropostas, p: PropostaLinha): bool
 
 // Leitura: o vendedor vê as próprias; o gestor vê as da sua unidade (ou todas, com acesso a todas as unidades).
 export function podeVerProposta(ctx: ContextoPropostas, p: PropostaLinha): boolean {
+  // Proposta de teste só aparece para o gestor (diretoria/superuser): para o vendedor responde como inexistente.
+  if (p.teste === true && !ctx.gestor) return false;
   if (ehDonoDaProposta(ctx, p)) return true;
   if (!ctx.gestor) return false;
   return ctx.todasUnidades || !ctx.unidadeId || p.unidade_id === ctx.unidadeId;
+}
+
+// Empresa marcada como "de teste" (tabela empresas_teste, só a diretoria marca). Erro de leitura = erro: nunca se decide "no escuro", porque
+// errar para "não é teste" gastaria um número REAL com uma proposta de teste.
+export async function empresaEhDeTeste(svc: Svc, empresaId: string): Promise<{ ok: true; teste: boolean } | { ok: false; error: string }> {
+  const { data, error } = await svc.from("empresas_teste").select("empresa_id").eq("empresa_id", empresaId).maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, teste: !!data };
 }
 
 export async function carregarProposta(svc: Svc, id: string): Promise<PropostaLinha | null> {
@@ -158,12 +168,19 @@ export async function criarRascunho(svc: Svc, ctx: ContextoPropostas, d: z.infer
   if (!modeloDisponivel(d.modelo)) return falha(400, MENSAGEM_MODELO_INDISPONIVEL);
   const conteudo = validarConteudo(d.modelo, d.conteudo);
   if (!conteudo.ok) return falha(400, conteudo.error);
-  // A sigla do número sai do nome do vendedor e fica fixa na criação; sem nome aproveitável não se inventa sigla.
-  const sigla = siglaDoVendedor((await dadosDoVendedor(svc, ctx.analistaId)).nome);
-  if (!sigla) return falha(400, MSG_NOME_INCOMPLETO);
-
   const { data: empresa } = await svc.from("empresas_visitadas").select("id, nome, cliente_id, unidade_id").eq("id", d.empresa_visitada_id).maybeSingle();
   if (!empresa || empresa.unidade_id !== ctx.unidadeId) return falha(404, "Empresa não encontrada na Carteira da sua unidade.");
+
+  // Proposta de teste vem SÓ da empresa marcada (nunca do corpo da requisição). Só o gestor enxerga e usa empresa de teste.
+  const marca = await empresaEhDeTeste(svc, empresa.id);
+  if (!marca.ok) return falha(500, "Não foi possível verificar se a empresa é de teste. Nada foi criado; tente de novo.");
+  const teste = marca.teste;
+  if (teste && !ctx.gestor) return falha(404, "Empresa não encontrada na Carteira da sua unidade.");
+
+  // A sigla do número (proposta REAL) sai do nome do vendedor e fica fixa na criação; sem nome aproveitável não se inventa sigla.
+  // Proposta de teste leva TESTE no lugar da sigla e não precisa dela.
+  const sigla = teste ? null : siglaDoVendedor((await dadosDoVendedor(svc, ctx.analistaId)).nome);
+  if (!teste && !sigla) return falha(400, MSG_NOME_INCOMPLETO);
 
   let contatoNome: string | null = null;
   if (d.contato_id) {
@@ -174,12 +191,14 @@ export async function criarRascunho(svc: Svc, ctx: ContextoPropostas, d: z.infer
 
   // Aviso (não bloqueia): outra pessoa já tem oportunidade aberta nesta empresa. Só será barrado ao marcar como enviada.
   // Quem não tem Funil (acesso só por liberação) não lê nem se vincula a oportunidades.
-  const aberta = ctx.temFunil ? await buscarOportunidadeAberta(svc, empresa.id) : null;
+  // Proposta de teste nunca se liga ao Funil.
+  const aberta = ctx.temFunil && !teste ? await buscarOportunidadeAberta(svc, empresa.id) : null;
   const aviso = aberta && aberta.vendedor_id !== ctx.analistaId ? (await mensagemOportunidadeAberta(svc, empresa.id)) ?? undefined : undefined;
 
-  const { data, error } = await svc.rpc("criar_proposta", {
+  // Teste: criar_proposta_teste (contador de teste próprio, número TESTE-...). Real: criar_proposta, exatamente como antes.
+  const { data, error } = await svc.rpc(teste ? "criar_proposta_teste" : "criar_proposta", {
     p_modelo: d.modelo,
-    p_sigla: sigla,
+    ...(teste ? {} : { p_sigla: sigla }),
     p_unidade_id: ctx.unidadeId,
     p_vendedor_id: ctx.analistaId,
     p_empresa_visitada_id: empresa.id,
@@ -480,10 +499,12 @@ export async function mudarSituacao(svc: Svc, ctx: ContextoPropostas, p: Propost
 
   // 2) Funil e follow-up. Se falhar, a proposta volta ao que era (nunca fica "enviada" sem follow-up/oportunidade).
   // Sem Funil (acesso só por liberação) a proposta apenas se registra: nada de oportunidade, interação ou lembrete.
+  // Proposta de teste não dispara efeito no Funil (nem oportunidade, nem follow-up): decisão do Ölver.
+  const comFunil = ctx.temFunil && p.teste !== true;
   let efeito: EfeitoFunil = { oportunidadeId: null, desfazer: async () => {} };
   // Cancelar proposta que estava ATIVA recalcula só o valor da oportunidade (soma das ativas que restaram); cancelar rascunho não mexe no Funil.
   const cancelaAtiva = para === "cancelada" && (de === "enviada" || de === "em_negociacao");
-  if (ctx.temFunil && (para === "enviada" || para === "em_negociacao" || para === "aceita" || para === "recusada" || cancelaAtiva)) {
+  if (comFunil && (para === "enviada" || para === "em_negociacao" || para === "aceita" || para === "recusada" || cancelaAtiva)) {
     const r = para === "enviada" ? await efeitoEnviada(svc, ctx, p, d.valor_estimado as number) : await efeitoAcompanhamento(svc, ctx, p, para, d, de);
     if (!r.ok) {
       await reverter();
@@ -496,7 +517,7 @@ export async function mudarSituacao(svc: Svc, ctx: ContextoPropostas, p: Propost
   if (para === "enviada") {
     // 3) Liga a oportunidade e grava a Rev. 0 (snapshot do momento do clique). Falha aqui desfaz tudo: nada imutável foi gravado antes.
     // Sem Funil, o vínculo que a proposta já tinha (de quando o autor tinha Funil) não é sobrescrito.
-    const oportunidadeId = ctx.temFunil ? efeito.oportunidadeId : (p.oportunidade_id ?? null);
+    const oportunidadeId = comFunil ? efeito.oportunidadeId : (p.oportunidade_id ?? null);
     const { data: ligada } = await svc.from("propostas").update({ oportunidade_id: oportunidadeId }).eq("id", p.id).select().maybeSingle();
     const vendedor = await dadosDoVendedor(svc, p.vendedor_id);
     const { error } = ligada
@@ -516,7 +537,7 @@ export async function mudarSituacao(svc: Svc, ctx: ContextoPropostas, p: Propost
       return falha(500, `Não foi possível registrar a revisão inicial: ${error.message}`);
     }
     atual = ligada as PropostaLinha;
-  } else if (ctx.temFunil && (para === "aceita" || para === "recusada" || para === "cancelada")) {
+  } else if (comFunil && (para === "aceita" || para === "recusada" || para === "cancelada")) {
     // Vencida/cancelada não mexem no Funil, só no follow-up pendente desta proposta.
     const ok = await cancelarFollowUp(svc, p);
     if (!ok) efeito.aviso = "A proposta mudou de situação, mas o lembrete de follow-up não pôde ser cancelado.";

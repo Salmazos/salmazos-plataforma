@@ -9,6 +9,8 @@ BIN=${PG_BIN:-/usr/lib/postgresql/16/bin}
 RAIZ=$(cd "$(dirname "$0")/.." && pwd)
 MIGRATION="$RAIZ/supabase/migration_propostas.sql"
 MIGRATION_MOT="$RAIZ/supabase/migration_propostas_mot.sql"
+MIGRATION_TESTE="$RAIZ/supabase/migration_propostas_teste.sql"
+SCRIPT_DADOS_TESTE="$RAIZ/supabase/dados_propostas_teste_marcar_existentes.sql"
 DIR=$(mktemp -d /tmp/pgprova.XXXXXX)
 PORTA=54329
 SESSOES=${SESSOES:-50}
@@ -66,6 +68,21 @@ echo "criar_proposta(11 args) antes : $META_ANTES"
 echo "criar_proposta(11 args) depois: $META_DEPOIS"
 [ "$META_ANTES" = "$META_DEPOIS" ] || { echo "FALHOU: assinatura/retorno/search_path/security definer/grants mudaram"; exit 1; }
 echo "ok: assinatura, retorno, search_path, security definer e grants idênticos"
+
+echo "== aplica a migration das propostas de TESTE (1ª vez) e de novo (idempotência); criar_proposta real ANTES x DEPOIS (corpo e metadados idênticos)"
+SQL_CORPO_FN="select md5(pg_get_functiondef(p.oid)) from pg_proc p where p.proname='criar_proposta' and p.pronargs=11"
+CORPO_ANTES=$($PSQL -c "$SQL_CORPO_FN")
+META_ANTES_T=$($PSQL -c "$SQL_META_FN")
+$PSQL -f "$MIGRATION_TESTE"
+$PSQL -f "$MIGRATION_TESTE"
+CORPO_DEPOIS=$($PSQL -c "$SQL_CORPO_FN")
+META_DEPOIS_T=$($PSQL -c "$SQL_META_FN")
+echo "ok: duas aplicações sem erro"
+echo "criar_proposta(11 args) corpo (md5) antes : $CORPO_ANTES"
+echo "criar_proposta(11 args) corpo (md5) depois: $CORPO_DEPOIS"
+[ "$CORPO_ANTES" = "$CORPO_DEPOIS" ] || { echo "FALHOU: o corpo de criar_proposta mudou"; exit 1; }
+[ "$META_ANTES_T" = "$META_DEPOIS_T" ] || { echo "FALHOU: assinatura/retorno/search_path/security definer/grants de criar_proposta mudaram"; exit 1; }
+echo "ok: criar_proposta (real) IDÊNTICA à anterior: mesmo corpo, assinatura, retorno, search_path, security definer e grants"
 
 UNI=$($PSQL -c "insert into unidades default values returning id")
 VEND=$($PSQL -c "insert into analistas_perfil (user_id, nivel_acesso) values (gen_random_uuid(),'analista') returning id")
@@ -256,6 +273,97 @@ esperar "RLS ligada na tabela nova" "$($PSQL -c "select relrowsecurity from pg_c
 esperar "authenticated/anon sem nenhum privilégio na tabela (has_table_privilege)" "$($PSQL -c "select bool_or(has_table_privilege(r, 'public.proposta_mot_parametros', p)) from unnest(array['anon','authenticated']) r, unnest(array['select','insert','update','delete','truncate','references','trigger']) p")" f
 esperar "criar_proposta(11 args) continua sem execute para anon/authenticated" "$($PSQL -c "select bool_or(has_function_privilege(r, 'public.criar_proposta(text,text,uuid,uuid,uuid,uuid,text,text,jsonb,int,int)', 'execute')) from unnest(array['anon','authenticated']) r")" f
 esperar "criar_proposta(11 args) executável pelo service_role" "$($PSQL -c "select has_function_privilege('service_role', 'public.criar_proposta(text,text,uuid,uuid,uuid,uuid,text,text,jsonb,int,int)', 'execute')")" t
+
+echo
+echo "== 10) propostas de TESTE: contador separado, números TESTE-..., unicidade (modelo, ano, sequencial, teste), privilégios e script de dados"
+# O contador REAL não pode andar quando a proposta é de teste (RS, MOT e TS); o de teste tem linhas próprias.
+CR_ANTES="$($PSQL -c "select string_agg(modelo || ano || '=' || ultimo, ',' order by modelo) from proposta_contadores")"
+REAIS_ANTES=$($PSQL -c "select count(*) from propostas where teste = false")
+TODAS_TESTE_FALSE=$($PSQL -c "select count(*) = count(*) filter (where not teste) from propostas")
+esperar "toda proposta já existente nasceu com teste = false (default da coluna)" "$TODAS_TESTE_FALSE" t
+N_RS=$($PSQL -c "set role service_role; select numero from criar_proposta_teste('RS','$UNI','$VEND',null,null,'T1',null,'{}'::jsonb,1,15)" | tail -1)
+N_MOT=$($PSQL -c "set role service_role; select numero from criar_proposta_teste('MOT','$UNI','$VEND',null,null,'T2',null,'{}'::jsonb,1,15)" | tail -1)
+N_TS=$($PSQL -c "set role service_role; select numero from criar_proposta_teste('TS','$UNI','$VEND',null,null,'T3',null,'{}'::jsonb,1,15)" | tail -1)
+N_RS2=$($PSQL -c "set role service_role; select numero from criar_proposta_teste('RS','$UNI','$VEND',null,null,'T4',null,'{}'::jsonb,1,15)" | tail -1)
+esperar "número de teste R&S" "$N_RS" "TESTE-0001/26"
+esperar "número de teste MOT" "$N_MOT" "TESTE-MOT-0001/26"
+esperar "número de teste TS" "$N_TS" "TESTE-TS-0001/26"
+esperar "segundo teste R&S segue a sequência de teste" "$N_RS2" "TESTE-0002/26"
+esperar "o contador REAL (RS, MOT, TS) NÃO andou com as 4 propostas de teste" "$($PSQL -c "select string_agg(modelo || ano || '=' || ultimo, ',' order by modelo) from proposta_contadores")" "$CR_ANTES"
+esperar "contadores de teste: RS=2, MOT=1, TS=1" "$($PSQL -c "select string_agg(modelo || '=' || ultimo, ',' order by modelo) from proposta_contadores_teste where ano = 2026")" "MOT=1,RS=2,TS=1"
+esperar "as 4 propostas de teste gravadas com teste = true e sequencial do contador de teste" "$($PSQL -c "select count(*) from propostas where teste and ((modelo='RS' and sequencial in (1,2)) or (modelo='MOT' and sequencial=1) or (modelo='TS' and sequencial=1))")" 4
+esperar "propostas reais não aumentaram" "$($PSQL -c "select count(*) from propostas where teste = false")" "$REAIS_ANTES"
+
+# A criação REAL continua exatamente como antes (mesmo formato, contador real, teste = false), mesmo depois dos testes.
+PROX_REAL=$($PSQL -c "set role service_role; select numero || '|' || teste from criar_proposta('RS','OS','$UNI','$VEND',null,null,'Real pos-teste',null,'{}'::jsonb,1,15)" | tail -1)
+ULT_RS=$($PSQL -c "select ultimo from proposta_contadores where modelo='RS' and ano=2026")
+esperar "proposta REAL depois dos testes: mesmo formato de sempre, contador real, teste = false" "$PROX_REAL" "$(printf 'OS-%04d/26|false' "$ULT_RS")"
+MOT_REAL=$($PSQL -c "set role service_role; select numero from criar_proposta('MOT','OS','$UNI','$VEND',null,null,'Mot real',null,'{}'::jsonb,1,15)" | tail -1)
+esperar "MOT real continua SIGLA-MOT-nnnn" "$MOT_REAL" "$(printf 'OS-MOT-%04d/26' "$($PSQL -c "select ultimo from proposta_contadores where modelo='MOT' and ano=2026")")"
+
+# Unicidade (modelo, ano, sequencial, teste): sequencial 1 de TESTE e REAL no mesmo ano e modelo coexistem; duplicata dentro de cada grupo é recusada.
+esperar "a restrição antiga (modelo, ano, sequencial) foi substituída" "$($PSQL -c "select count(*) from pg_constraint where conrelid='public.propostas'::regclass and conname='propostas_modelo_ano_seq_uq'")" 0
+esperar "a restrição nova existe" "$($PSQL -c "select pg_get_constraintdef(oid) from pg_constraint where conrelid='public.propostas'::regclass and conname='propostas_modelo_ano_seq_teste_uq'")" "UNIQUE (modelo, ano, sequencial, teste)"
+esperar "sequencial 1 REAL e sequencial 1 de TESTE no mesmo modelo/ano (R&S 2026) coexistem" "$($PSQL -c "select count(*) from propostas where modelo='RS' and ano=2026 and sequencial=1")" 2
+esperar "...um real e um de teste" "$($PSQL -c "select string_agg(teste::text, ',' order by teste) from propostas where modelo='RS' and ano=2026 and sequencial=1")" "false,true"
+if $PSQL -c "set role service_role; insert into propostas (numero,modelo,ano,sequencial,teste,unidade_id,vendedor_id,cliente_nome) values ('DUP-T/26','RS',2026,1,true,'$UNI','$VEND','dup')" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: sequencial de teste duplicado aceito"; exit 1; fi
+echo "duplicata dentro de TESTE recusada: $(head -1 "$DIR/e.txt")"
+if $PSQL -c "set role service_role; insert into propostas (numero,modelo,ano,sequencial,teste,unidade_id,vendedor_id,cliente_nome) values ('DUP-R/26','RS',2026,1,false,'$UNI','$VEND','dup')" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: sequencial real duplicado aceito"; exit 1; fi
+echo "duplicata dentro das REAIS recusada: $(head -1 "$DIR/e.txt")"
+esperar "nenhum número repetido (TESTE-... nunca colide com número real)" "$($PSQL -c "select count(*) - count(distinct numero) from propostas")" 0
+esperar "nenhum número real tem o prefixo TESTE" "$($PSQL -c "select count(*) from propostas where not teste and numero like 'TESTE-%'")" 0
+if $PSQL -c "set role service_role; select criar_proposta('RS','TESTE','$UNI','$VEND',null,null,'X',null,'{}'::jsonb,1,15)" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: sigla TESTE aceita na função real"; exit 1; fi
+echo "sigla real 'TESTE' recusada (5 letras; só 1 a 4): $(head -1 "$DIR/e.txt")"
+
+# Falha no insert devolve o contador de teste; modelo inválido recusado.
+CT_ANTES=$($PSQL -c "select ultimo from proposta_contadores_teste where modelo='RS' and ano=2026")
+if $PSQL -c "set role service_role; select criar_proposta_teste('RS','$UNI','00000000-0000-0000-0000-000000000000',null,null,'X',null,'{}'::jsonb,1,15)" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: deveria falhar"; exit 1; fi
+esperar "falha no insert devolve o contador de TESTE" "$($PSQL -c "select ultimo from proposta_contadores_teste where modelo='RS' and ano=2026")" "$CT_ANTES"
+esperar "modelo inválido é recusado" "$(erro_de service_role "$A_U" "select criar_proposta_teste('XX','$UNI','$VEND',null,null,'Z',null,'{}'::jsonb,1,15)")" "ERROR:  Modelo de proposta inválido: XX"
+
+# Privilégios: só o service role. authenticated e anon não leem nem escrevem nas tabelas novas nem executam a função de teste.
+for papel in authenticated anon; do
+  for t in empresas_teste proposta_contadores_teste; do
+    esperar "$papel sem acesso a $t" "$(erro_de $papel "$A_U" "select count(*) from $t")" "ERROR:  permission denied for table $t"
+  done
+  esperar "$papel não insere em empresas_teste" "$(erro_de $papel "$A_U" "insert into empresas_teste (empresa_id) values (gen_random_uuid())")" "ERROR:  permission denied for table empresas_teste"
+  esperar "$papel não executa criar_proposta_teste" "$(erro_de $papel "$A_U" "select criar_proposta_teste('RS','$UNI','$VEND',null,null,'Z',null,'{}'::jsonb,1,15)")" "ERROR:  permission denied for function criar_proposta_teste"
+done
+esperar "gestor (diretoria, authenticated) também não lê empresas_teste direto: só a API com service role" "$(erro_de authenticated "$G_U" "select count(*) from empresas_teste")" "ERROR:  permission denied for table empresas_teste"
+esperar "RLS ligada nas duas tabelas novas e nenhuma policy" "$($PSQL -c "select count(*) filter (where relrowsecurity) || '/' || (select count(*) from pg_policies where tablename in ('empresas_teste','proposta_contadores_teste')) from pg_class where oid in ('public.empresas_teste'::regclass,'public.proposta_contadores_teste'::regclass)")" "2/0"
+esperar "authenticated/anon sem nenhum privilégio nas duas tabelas (has_table_privilege)" "$($PSQL -c "select bool_or(has_table_privilege(r, t, p)) from unnest(array['anon','authenticated']) r, unnest(array['public.empresas_teste','public.proposta_contadores_teste']) t, unnest(array['select','insert','update','delete','truncate','references','trigger']) p")" f
+esperar "criar_proposta_teste: execute só para service_role" "$($PSQL -c "select string_agg(r || '=' || has_function_privilege(r, 'public.criar_proposta_teste(text,uuid,uuid,uuid,uuid,text,text,jsonb,int,int)', 'execute')::text, ',' order by r) from unnest(array['anon','authenticated','service_role']) r")" "anon=false,authenticated=false,service_role=true"
+
+# empresas_teste: service role marca; apagar a empresa leva a marca junto (cascade).
+EMP=$($PSQL -c "insert into empresas_visitadas default values returning id")
+$PSQL -c "set role service_role; insert into empresas_teste (empresa_id, marcado_por) values ('$EMP', '$VEND')"
+esperar "service_role marca a empresa" "$($PSQL -c "select count(*) from empresas_teste where empresa_id='$EMP'")" 1
+if $PSQL -c "set role service_role; insert into empresas_teste (empresa_id) values ('$EMP')" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: marca duplicada aceita"; exit 1; fi
+echo "marca duplicada recusada (pk): $(head -1 "$DIR/e.txt")"
+$PSQL -c "delete from empresas_visitadas where id='$EMP'"
+esperar "apagar a empresa leva a marca junto (on delete cascade)" "$($PSQL -c "select count(*) from empresas_teste where empresa_id='$EMP'")" 0
+
+# Script de dados (SEPARADO da migration): marca as 3 propostas de teste existentes. Aqui, com 3 linhas iguais às de produção (id, número, empresa).
+EMPT='61cc5136-a963-484d-98ca-b895cfa3df5f'
+$PSQL -c "insert into empresas_visitadas (id) values ('$EMPT')"
+for par in "afb30844-5c3e-4277-854a-26f81611c3f2|OS-0062/26|62" "946a038c-0a4e-484b-bcdc-455ce8dccd3c|OS-0063/26|63" "16a5e1a8-d854-4bc9-95eb-42db020c13f9|OS-0064/26|64"; do
+  IFS='|' read -r pid pnum pseq <<< "$par"
+  $PSQL -c "set role service_role; insert into propostas (id, numero, modelo, ano, sequencial, unidade_id, vendedor_id, empresa_visitada_id, cliente_nome, situacao) values ('$pid','$pnum','RS',2026,$((900 + pseq)),'$UNI','$VEND','$EMPT','cliente teste','cancelada')"
+done
+esperar "antes do script: 3 linhas, todas teste = false" "$($PSQL -c "select count(*) from propostas where empresa_visitada_id='$EMPT' and not teste")" 3
+$PSQL -f "$SCRIPT_DADOS_TESTE"
+esperar "script de dados: as 3 propostas ficaram teste = true" "$($PSQL -c "select count(*) from propostas where empresa_visitada_id='$EMPT' and teste")" 3
+esperar "script de dados: os números NÃO foram renomeados" "$($PSQL -c "select string_agg(numero, ',' order by numero) from propostas where empresa_visitada_id='$EMPT'")" "OS-0062/26,OS-0063/26,OS-0064/26"
+esperar "script de dados: fora essas 3, só ficaram marcadas as TESTE-... criadas acima" "$($PSQL -c "select count(*) from propostas where teste and empresa_visitada_id is distinct from '$EMPT'")" "$($PSQL -c "select count(*) from propostas where numero like 'TESTE-%'")"
+if $PSQL -f "$SCRIPT_DADOS_TESTE" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: segunda execução do script de dados não abortou"; exit 1; fi
+echo "segunda execução aborta (esperado 3, atualizou 0): $(grep -m1 'Esperado' "$DIR/e.txt" | cut -c1-110)"
+esperar "a transação do script abortado não mudou nada" "$($PSQL -c "select count(*) from propostas where empresa_visitada_id='$EMPT' and teste")" 3
+$PSQL -c "set role service_role; update propostas set teste = false where id = '16a5e1a8-d854-4bc9-95eb-42db020c13f9'"
+if $PSQL -f "$SCRIPT_DADOS_TESTE" >/dev/null 2>"$DIR/e.txt"; then echo "ERRO: script rodou com contagem diferente de 3"; exit 1; fi
+esperar "com contagem diferente de 3 o script aborta e NADA é gravado (2 marcadas de 3)" "$($PSQL -c "select count(*) filter (where teste) || '/' || count(*) from propostas where empresa_visitada_id='$EMPT'")" "2/3"
+$PSQL -c "set role service_role; update propostas set teste = true where id = '16a5e1a8-d854-4bc9-95eb-42db020c13f9'"
+# propostas não tem trigger de imutabilidade: o UPDATE do script é permitido; as revisões e o histórico continuam imutáveis (seção 6).
+esperar "triggers de imutabilidade só em revisões, histórico e parâmetros do MOT (propostas e contadores livres)" "$($PSQL -c "select string_agg(tgrelid::regclass::text, ',' order by tgrelid::regclass::text) from pg_trigger where not tgisinternal and tgname like '%imutavel%'")" "proposta_historico,proposta_mot_parametros,proposta_revisoes"
 
 echo
 echo "PROVA CONCLUÍDA"

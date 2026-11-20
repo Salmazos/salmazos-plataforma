@@ -10,7 +10,8 @@ import { Aviso, btnPrimario, btnSecundario, cardStyle, inputStyle, labelStyle, l
 
 interface Contato { id: string; nome: string; cargo: string | null; principal: boolean }
 // oportunidade_aberta só vem para quem tem Funil; sem o campo, não há aviso de oportunidade de outro vendedor.
-interface EmpresaOpc { id: string; nome: string; contatos: Contato[]; oportunidade_aberta?: { id: string; vendedor_nome: string | null; etapa: string } | null }
+// teste só vem para o gestor (true = empresa de teste: as propostas dela saem como TESTE-..., fora das listas e sem efeito no Funil).
+interface EmpresaOpc { id: string; nome: string; contatos: Contato[]; oportunidade_aberta?: { id: string; vendedor_nome: string | null; etapa: string } | null; teste?: boolean }
 
 export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
   const router = useRouter();
@@ -27,6 +28,8 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
   const [nova, setNova] = useState({ nome: "", contato_nome: "", contato_telefone: "", contato_email: "" });
   const [criandoEmpresa, setCriandoEmpresa] = useState(false);
   const [erroNova, setErroNova] = useState("");
+  const [alternandoTeste, setAlternandoTeste] = useState(false);
+  const [erroTeste, setErroTeste] = useState("");
   const emAndamento = useRef(false);
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -58,6 +61,24 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
     setContatoId(principal?.id ?? "");
     // Recomeça do zero: A/C, CNPJ, endereço e condições da empresa anterior não podem vazar para esta.
     setCampos({ ...camposPadrao(), aos_cuidados: principal?.nome ?? "" });
+  }
+
+  // Gestor: liga/desliga "empresa de teste" (a API só aceita diretoria/superuser). Propostas antigas não mudam.
+  async function alternarTeste() {
+    if (!empresa || empresa.teste === undefined || alternandoTeste) return;
+    setAlternandoTeste(true);
+    setErroTeste("");
+    try {
+      const r = await lerResposta<{ data?: { teste: boolean } }>(await fetch(`/api/comercial/propostas/empresas/${empresa.id}/teste`, { method: empresa.teste ? "DELETE" : "POST" }));
+      if (!r.ok) { setErroTeste(r.json.error ?? "Não foi possível alterar a empresa."); return; }
+      const nova = r.json.data?.teste === true;
+      setEmpresa({ ...empresa, teste: nova });
+      setEmpresas((lista) => lista.map((x) => (x.id === empresa.id ? { ...x, teste: nova } : x)));
+    } catch {
+      setErroTeste("Não foi possível alterar a empresa.");
+    } finally {
+      setAlternandoTeste(false);
+    }
   }
 
   // Empresa que ainda não é cliente: entra na Carteira só como registro (prospect) e é escolhida como qualquer outra.
@@ -161,7 +182,7 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
         {empresa ? (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <strong style={{ fontSize: 15 }}>{empresa.nome}</strong>
-            <button type="button" style={btnSecundario} onClick={() => setEmpresa(null)}>Trocar empresa</button>
+            <button type="button" style={btnSecundario} onClick={() => { setEmpresa(null); setErroTeste(""); }}>Trocar empresa</button>
           </div>
         ) : (
           <>
@@ -170,7 +191,7 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
             <div style={{ marginTop: 8, maxHeight: 220, overflowY: "auto", border: "1px solid #E5E7EB", borderRadius: 8 }}>
               {empresas.length === 0 ? <div style={{ padding: 12, color: "#6B7280", fontSize: 13 }}>Nenhuma empresa da Carteira da sua unidade encontrada. {atalhoNova}</div> : empresas.map((e) => (
                 <button key={e.id} type="button" onClick={() => escolher(e)} style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 12px", border: "none", borderBottom: "1px solid #F3F4F6", background: "#fff", cursor: "pointer", fontSize: 14 }}>
-                  {e.nome}
+                  {e.nome}{e.teste ? " (teste)" : ""}
                 </button>
               ))}
             </div>
@@ -197,6 +218,15 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
               </div>
             )}
           </>
+        )}
+        {empresa && empresa.teste !== undefined && (
+          <div style={{ marginTop: 12 }}>
+            {empresa.teste && <Aviso tipo="alerta">Empresa de TESTE: as propostas dela saem como TESTE-..., com marca TESTE no PDF, fora das listas dos vendedores e sem efeito no Funil.</Aviso>}
+            <button type="button" style={{ ...btnSecundario, padding: "5px 12px", fontSize: 12, opacity: alternandoTeste ? 0.6 : 1 }} disabled={alternandoTeste} onClick={alternarTeste}>
+              {empresa.teste ? "Desmarcar empresa de teste" : "Marcar como empresa de teste"}
+            </button>
+            {erroTeste && <div style={{ marginTop: 8 }}><Aviso tipo="erro">{erroTeste}</Aviso></div>}
+          </div>
         )}
         {abertaDeOutro && (
           <div style={{ marginTop: 12 }}>

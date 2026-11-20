@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { hojeSaoPaulo } from "@/lib/comercial";
 import { exigirContextoPropostas } from "@/lib/propostasAcesso";
@@ -6,7 +6,7 @@ import { varrerVencidas } from "@/lib/propostaServico";
 import { calcularValidadeAte } from "@/lib/propostas";
 
 // Painel de gestão: só gestor (diretoria/superuser), somente leitura, restrito à unidade quando não tem acesso a todas.
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const { ctx, erro } = await exigirContextoPropostas(user);
@@ -18,6 +18,8 @@ export async function GET() {
   await varrerVencidas(svc, hoje);
 
   let query = svc.from("propostas").select("id, numero, cliente_nome, modelo, situacao, vendedor_id, valor_estimado, validade_ate");
+  // Testes ficam fora dos números do painel, a não ser que o gestor peça (?teste=1).
+  if (request.nextUrl.searchParams.get("teste") !== "1") query = query.eq("teste", false);
   if (!ctx.todasUnidades && ctx.unidadeId) query = query.eq("unidade_id", ctx.unidadeId);
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

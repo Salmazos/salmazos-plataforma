@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MODELOS, ROTULO_MODELO, ROTULO_SITUACAO, SITUACOES, type SituacaoProposta } from "@/lib/propostas";
 import PropostaPainelGestao from "@/components/propostas/PropostaPainelGestao";
-import { Aviso, btnPrimario, cardStyle, fmtMoeda, inputStyle, lerResposta, SituacaoBadge, ValidadeTexto, type PropostaResumo } from "@/components/propostas/propostasUi";
+import { Aviso, btnPrimario, cardStyle, fmtMoeda, inputStyle, lerResposta, SeloTeste, SituacaoBadge, ValidadeTexto, type PropostaResumo } from "@/components/propostas/propostasUi";
 
 interface Props {
   podeCriar: boolean;
@@ -23,6 +23,8 @@ export default function PropostasListaClient({ podeCriar, gestor, vendedores }: 
   const [situacao, setSituacao] = useState<SituacaoProposta | "">("");
   const [modelo, setModelo] = useState("");
   const [vendedor, setVendedor] = useState("");
+  // Só o gestor vê propostas de teste, e só quando marca "Mostrar testes".
+  const [mostrarTestes, setMostrarTestes] = useState(false);
 
   // Uma busca por mudança de filtro (modelo/vendedor); a situação filtra na tela para os chips mostrarem as contagens.
   const carregar = useCallback(async () => {
@@ -32,6 +34,7 @@ export default function PropostasListaClient({ podeCriar, gestor, vendedores }: 
       const qs = new URLSearchParams();
       if (modelo) qs.set("modelo", modelo);
       if (vendedor) qs.set("vendedor", vendedor);
+      if (gestor && mostrarTestes) qs.set("teste", "1");
       const r = await lerResposta<{ data: PropostaResumo[]; hoje: string }>(await fetch(`/api/comercial/propostas${qs.toString() ? `?${qs.toString()}` : ""}`));
       if (!r.ok) { setErro(r.json.error ?? "Não foi possível carregar as propostas."); return; }
       setPropostas(r.json.data ?? []);
@@ -41,7 +44,7 @@ export default function PropostasListaClient({ podeCriar, gestor, vendedores }: 
     } finally {
       setCarregando(false);
     }
-  }, [modelo, vendedor]);
+  }, [modelo, vendedor, gestor, mostrarTestes]);
   useEffect(() => { carregar(); }, [carregar]);
 
   const contagem = useMemo(() => {
@@ -85,6 +88,12 @@ export default function PropostasListaClient({ podeCriar, gestor, vendedores }: 
               {MODELOS.map((m) => <option key={m} value={m}>{ROTULO_MODELO[m]}</option>)}
             </select>
             {gestor && (
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#374151" }}>
+                <input type="checkbox" checked={mostrarTestes} onChange={(e) => setMostrarTestes(e.target.checked)} />
+                Mostrar testes
+              </label>
+            )}
+            {gestor && (
               <select style={{ ...inputStyle, width: 240 }} value={vendedor} onChange={(e) => setVendedor(e.target.value)} aria-label="Filtrar por vendedor">
                 <option value="">Todos os vendedores</option>
                 {vendedores.map((v) => <option key={v.id} value={v.id}>{v.nome_completo}</option>)}
@@ -116,6 +125,7 @@ export default function PropostasListaClient({ podeCriar, gestor, vendedores }: 
                     <tr key={p.id} onClick={() => router.push(`/painel/comercial/propostas/${p.id}`)} style={{ borderTop: "1px solid #F3F4F6", cursor: "pointer" }}>
                       <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>
                         <Link href={`/painel/comercial/propostas/${p.id}`} onClick={(e) => e.stopPropagation()} style={{ fontWeight: 800, color: "#111827", fontSize: 15 }}>{p.numero}</Link>
+                        {p.teste && <span style={{ marginLeft: 6 }}><SeloTeste /></span>}
                         {p.revisao_atual > 0 && <span style={{ marginLeft: 6, fontSize: 12, color: "#6B7280" }}>Rev. {p.revisao_atual}</span>}
                         <div style={{ fontSize: 11, color: "#9CA3AF" }}>{ROTULO_MODELO[p.modelo as keyof typeof ROTULO_MODELO] ?? p.modelo}</div>
                       </td>

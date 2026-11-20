@@ -5,7 +5,7 @@ import { hojeSaoPaulo } from "@/lib/comercial";
 import { exigirContextoPropostas, MSG_SO_ACOMPANHA_PROPOSTAS } from "@/lib/propostasAcesso";
 import { criarRascunho, varrerVencidas } from "@/lib/propostaServico";
 
-const COLUNAS_LISTA = "id, numero, modelo, revisao_atual, situacao, cliente_nome, aos_cuidados, vendedor_id, unidade_id, validade_ate, valor_estimado, enviada_em, created_at, updated_at";
+const COLUNAS_LISTA = "id, numero, modelo, revisao_atual, situacao, cliente_nome, aos_cuidados, vendedor_id, unidade_id, validade_ate, valor_estimado, enviada_em, created_at, updated_at, teste";
 
 // Mesma regra das oportunidades: o service client ignora RLS, então o filtro por vendedor/unidade vive aqui.
 export async function GET(request: NextRequest) {
@@ -31,6 +31,9 @@ export async function GET(request: NextRequest) {
   if (situacao) query = query.eq("situacao", situacao);
   const modelo = sp.get("modelo");
   if (modelo) query = query.eq("modelo", modelo);
+  // Propostas de teste ficam escondidas por padrão; só o gestor pode pedi-las (?teste=1). Para o vendedor o parâmetro é ignorado.
+  const incluirTestes = ctx.gestor && sp.get("teste") === "1";
+  if (!incluirTestes) query = query.eq("teste", false);
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
