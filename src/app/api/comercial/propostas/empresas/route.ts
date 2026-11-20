@@ -22,7 +22,13 @@ export async function GET(request: NextRequest) {
   if (!ctx.unidadeId) return NextResponse.json({ data: [] });
 
   const svc = createServiceClient();
+  // Empresa de teste só aparece (e só se usa) para o gestor; para o vendedor ela nem entra na busca.
+  const { data: marcadas, error: erroMarcadas } = await svc.from("empresas_teste").select("empresa_id");
+  if (erroMarcadas) return NextResponse.json({ error: "Não foi possível carregar as empresas." }, { status: 500 });
+  const idsTeste = (marcadas ?? []).map((m) => m.empresa_id as string);
+
   let query = svc.from("empresas_visitadas").select("id, nome").eq("unidade_id", ctx.unidadeId).order("nome", { ascending: true }).limit(20);
+  if (!ctx.gestor && idsTeste.length > 0) query = query.not("id", "in", `(${idsTeste.join(",")})`);
   const q = (request.nextUrl.searchParams.get("q") ?? "").trim();
   if (q) query = query.ilike("nome", `%${escapeLike(q)}%`);
 
@@ -62,6 +68,7 @@ export async function GET(request: NextRequest) {
       nome: e.nome,
       contatos: (contatos ?? []).filter((c) => c.empresa_visitada_id === e.id).map((c) => ({ id: c.id, nome: c.nome, cargo: c.cargo, principal: c.principal })),
       ...(ctx.temFunil ? { oportunidade_aberta: abertaPorEmpresa.get(e.id as string) ?? null } : {}),
+      ...(ctx.gestor ? { teste: idsTeste.includes(e.id as string) } : {}),
     })),
   });
 }

@@ -29,7 +29,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const snap = await snapshotParaPdf(svc, proposta, revisao);
   if (!snap.ok) return NextResponse.json({ error: snap.error }, { status: snap.status });
 
-  const bytes = await gerarPdfProposta(snap.data);
+  // A marca TESTE vem da LINHA da proposta (flag fixada na criação), nunca do snapshot: o snapshot das revisões é imutável.
+  const bytes = await gerarPdfProposta(snap.data, { teste: proposta.teste === true });
   const nomeArquivo = `proposta-${String(proposta.numero).replace("/", "-")}${snap.data.revisao > 0 ? `-rev${snap.data.revisao}` : ""}.pdf`;
   return new NextResponse(Buffer.from(bytes), {
     headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="${nomeArquivo}"`, "Cache-Control": "private, no-store" },

@@ -920,6 +920,7 @@ function rpcCriarProposta(a: Record<string, unknown>, db: ReturnType<typeof cria
     revisao_atual: 0, situacao: "rascunho", unidade_id: a.p_unidade_id, vendedor_id: a.p_vendedor_id, empresa_visitada_id: a.p_empresa_visitada_id, oportunidade_id: a.p_oportunidade_id,
     cliente_nome: a.p_cliente_nome, aos_cuidados: a.p_aos_cuidados, conteudo: a.p_conteudo, template_versao: a.p_template_versao, validade_dias: a.p_validade_dias,
     validade_ate: null, valor_estimado: null, enviada_em: null, created_at: agora, updated_at: agora,
+    teste: false, // coluna propostas.teste (migration_propostas_teste.sql): default false para as propostas reais
   };
   db.tabelas.propostas.push(linha);
   return { data: structuredClone(linha), error: null };

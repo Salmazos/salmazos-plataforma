@@ -19,6 +19,7 @@ export interface PropostaResumo {
   enviada_em: string | null;
   created_at: string;
   updated_at: string;
+  teste?: boolean;
 }
 
 export const inputStyle: React.CSSProperties = { padding: "9px 12px", border: "1px solid #D1D5DB", borderRadius: 8, fontSize: 14, outline: "none", background: "#fff", width: "100%", boxSizing: "border-box" };
@@ -37,6 +38,16 @@ const COR_SITUACAO: Record<SituacaoProposta, { bg: string; fg: string }> = {
   vencida: { bg: "#FFEDD5", fg: "#9A3412" },
   cancelada: { bg: "#E5E7EB", fg: "#4B5563" },
 };
+
+// Selo das propostas de teste (só o gestor as vê). Texto fixo "TESTE".
+export const TEXTO_SELO_TESTE = "TESTE";
+export function SeloTeste() {
+  return (
+    <span title="Proposta de teste: numeração separada, fora das listas dos vendedores e sem efeito no Funil." style={{ background: "#FEE2E2", color: "#B91C1C", border: "1px solid #FCA5A5", borderRadius: 6, padding: "2px 8px", fontSize: 11, fontWeight: 800, letterSpacing: "0.05em", whiteSpace: "nowrap" }}>
+      {TEXTO_SELO_TESTE}
+    </span>
+  );
+}
 
 export function SituacaoBadge({ situacao }: { situacao: SituacaoProposta }) {
   const c = COR_SITUACAO[situacao];

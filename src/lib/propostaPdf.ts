@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import sharp from "sharp";
-import { PDFDocument, PDFFont, PDFImage, PDFPage, PageSizes, StandardFonts } from "pdf-lib";
+import { PDFDocument, PDFFont, PDFImage, PDFPage, PageSizes, StandardFonts, degrees, rgb } from "pdf-lib";
 import { BLACK, CW, DARK, GRAY, ML, PH, PW, YELLOW } from "@/lib/pdfWriter";
 import { ASSINATURA_RS, FRASE_EFEITO_RS, TEMPLATE_VERSAO_COM_INTRODUCAO, TITULO_RS, itensAdicionais, itensRs, quantidadeItensFixosRs, type SnapshotProposta } from "@/lib/propostaModelos";
 import { paragrafosDesenhaveis, textoDesenhavel } from "@/lib/propostaTexto";
@@ -9,6 +9,8 @@ import { numeroComRevisao } from "@/lib/propostas";
 import { ENDERECOS_RODAPE_PROPOSTA, PASTA_CABECALHO_PROPOSTA, PASTA_CLIENTES_PROPOSTA } from "@/lib/propostaAssets";
 
 export interface OpcoesPdfProposta {
+  // Proposta de TESTE: marca diagonal "TESTE" em todas as páginas. Vem da linha da proposta (propostas.teste), nunca do snapshot imutável.
+  teste?: boolean;
   pastaCabecalho?: string;
   pastaClientes?: string;
   enderecosRodape?: string[];
@@ -33,6 +35,12 @@ const ESPACO_ACIMA_FRASE = 4 + 15;
 const ESPACO_ABAIXO_FRASE = 8 + 15;
 const LARGURA_MAX_LOGO_CABECALHO_PX = 800;
 const LADO_MAXIMO_ENTRADA_PX = 1200;
+
+// Marca diagonal das propostas de teste.
+export const TEXTO_MARCA_TESTE = "TESTE";
+const TAMANHO_MARCA_TESTE = 150;
+const OPACIDADE_MARCA_TESTE = 0.28;
+const COR_MARCA_TESTE = rgb(0.85, 0.1, 0.1);
 
 const ALTURA_CABECALHO_CHEIO = 90;
 const ALTURA_CABECALHO_COMPACTO = 32;
@@ -184,7 +192,8 @@ class Escritor {
     readonly bold: PDFFont,
     readonly logoCabecalho: PDFImage | null,
     readonly rodape: string[],
-    readonly v2 = false
+    readonly v2 = false,
+    readonly teste = false
   ) {}
 
   private get reservadoRodape(): number {
@@ -194,6 +203,7 @@ class Escritor {
   novaPagina(cheia: boolean) {
     this.page = this.doc.addPage(PageSizes.A4);
     if (this.v2 && this.logoCabecalho) this.desenharMarcaDagua(this.logoCabecalho);
+    if (this.teste) this.desenharMarcaTeste();
     const altura = cheia ? (this.v2 ? ALTURA_CABECALHO_CHEIO_V2 : ALTURA_CABECALHO_CHEIO) : ALTURA_CABECALHO_COMPACTO;
     const alturaLogo = this.v2 ? ALTURA_LOGO_CABECALHO_V2 : ALTURA_LOGO_CABECALHO;
     this.page.drawRectangle({ x: 0, y: PH - altura, width: PW, height: altura, color: BLACK });
@@ -214,6 +224,20 @@ class Escritor {
       yRodape -= TAMANHO_RODAPE + 3;
     }
     this.y = PH - altura - 24;
+  }
+
+  // "TESTE" grande, vermelho e inclinado a 45°, centralizado na página, atrás do texto (desenhado antes do conteúdo). Em todas as páginas.
+  private desenharMarcaTeste() {
+    const fonte = this.bold;
+    const tamanho = TAMANHO_MARCA_TESTE;
+    const largura = fonte.widthOfTextAtSize(TEXTO_MARCA_TESTE, tamanho);
+    const altura = fonte.heightAtSize(tamanho, { descender: false });
+    const c = Math.cos(Math.PI / 4);
+    const s = Math.sin(Math.PI / 4);
+    // O texto gira em torno do seu canto inferior esquerdo: desloca a origem para o CENTRO do texto cair no centro da página.
+    const x = PW / 2 - (largura / 2) * c + (altura / 2) * s;
+    const y = PH / 2 - (largura / 2) * s - (altura / 2) * c;
+    this.page.drawText(TEXTO_MARCA_TESTE, { x, y, size: tamanho, font: fonte, color: COR_MARCA_TESTE, opacity: OPACIDADE_MARCA_TESTE, rotate: degrees(45) });
   }
 
   // Desenhada ANTES de todo o resto da página, então fica atrás do texto. Centralizada na área útil (entre a faixa e o rodapé).
@@ -394,7 +418,7 @@ export async function gerarPdfProposta(snap: SnapshotProposta, opcoes: OpcoesPdf
   const logoCabecalho = bytesCabecalho ? await doc.embedPng(bytesCabecalho) : null;
   const rodape = (opcoes.enderecosRodape ?? ENDERECOS_RODAPE_PROPOSTA).map(limpar).filter(Boolean);
   const v2 = snap.template_versao >= TEMPLATE_VERSAO_COM_INTRODUCAO;
-  const e = new Escritor(doc, regular, bold, logoCabecalho, rodape, v2);
+  const e = new Escritor(doc, regular, bold, logoCabecalho, rodape, v2, opcoes.teste === true);
 
   e.novaPagina(true);
   e.centralizado(TITULO_RS, bold, 13);

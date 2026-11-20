@@ -7,7 +7,7 @@ import { formatarPct, oferecaReposicao, PADROES_RS, quantidadeItensFixosRs, type
 import CamposProposta, { camposDeProposta, conteudoDoForm, validadeDoForm, type CamposForm } from "@/components/propostas/CamposProposta";
 import ModalMarcarEnviada from "@/components/propostas/ModalMarcarEnviada";
 import ModalSituacaoProposta, { type AcaoSituacao } from "@/components/propostas/ModalSituacaoProposta";
-import { Aviso, btnPerigo, btnPrimario, btnSecundario, cardStyle, fmtData, fmtDataHora, fmtMoeda, lerEApagarAvisoProposta, lerResposta, SituacaoBadge, ValidadeTexto } from "@/components/propostas/propostasUi";
+import { Aviso, btnPerigo, btnPrimario, btnSecundario, cardStyle, fmtData, fmtDataHora, fmtMoeda, lerEApagarAvisoProposta, lerResposta, SeloTeste, SituacaoBadge, ValidadeTexto } from "@/components/propostas/propostasUi";
 
 interface Revisao { id: string; revisao: number; template_versao: number; vendedor_nome: string | null; created_at: string }
 interface Historico { id: string; de: string | null; para: string; autor_nome: string | null; observacao: string | null; created_at: string }
@@ -15,7 +15,7 @@ interface Detalhe {
   id: string; numero: string; modelo: string; revisao_atual: number; situacao: SituacaoProposta; cliente_nome: string; aos_cuidados: string | null;
   empresa_visitada_id: string | null; conteudo: { cliente_cnpj?: string | null; cliente_endereco?: string | null; condicoes?: CondicoesRs; texto_introdutorio?: string | null; clausulas_adicionais?: string[] } | null;
   validade_dias: number; validade_ate: string | null; valor_estimado: number | null; enviada_em: string | null; updated_at: string;
-  vendedor_nome: string | null; vendedor_telefone: string | null; revisoes: Revisao[]; historico: Historico[];
+  vendedor_nome: string | null; vendedor_telefone: string | null; revisoes: Revisao[]; historico: Historico[]; teste?: boolean;
 }
 interface Contato { id: string; nome: string; cargo: string | null }
 
@@ -163,7 +163,7 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "#111827" }}>{numeroComRevisao(d.numero, d.revisao_atual)}</h1>
+          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "#111827" }}>{numeroComRevisao(d.numero, d.revisao_atual)}{d.teste && <span style={{ marginLeft: 10, verticalAlign: "middle" }}><SeloTeste /></span>}</h1>
           <div style={{ marginTop: 6, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <SituacaoBadge situacao={d.situacao} />
             <span style={{ fontSize: 13, color: "#6B7280" }}>{ROTULO_MODELO[d.modelo as keyof typeof ROTULO_MODELO] ?? d.modelo}</span>
