@@ -238,8 +238,28 @@ await caso("PDF MOT: vermelho-escuro SÓ nas 8 linhas (rótulo + valor = 16 text
     const pgs = await paginasPdf(await gerar(snapMot(Array.from({ length: n }, () => F(100000)))));
     assert.equal(pgs.reduce((s, p) => s + (p.bruto.match(/0\.62 0\.05 0\.05 rg/g) ?? []).length, 0), 16 * n, `${n} planilha(s)`);
     const cores = new Set(pgs.flatMap((p) => [...p.bruto.matchAll(/([0-9.]+ [0-9.]+ [0-9.]+) rg/g)].map((m) => m[1])));
-    for (const c of cores) assert.ok(["0 0 0", "1 0.843 0", "0.12 0.14 0.16", "1 1 1", "0.96 0.96 0.96", "0.62 0.05 0.05", "0.85 0.1 0.1", "0.43 0.46 0.5"].includes(c), `cor fora da paleta: ${c}`);
+    for (const c of cores) assert.ok(["0 0 0", "1 0.843 0", "0.12 0.14 0.16", "0.93 0.93 0.93", "0.89 0.89 0.89", "0.96 0.96 0.96", "0.62 0.05 0.05", "0.85 0.1 0.1", "0.43 0.46 0.5"].includes(c), `cor fora da paleta: ${c}`);
+    assert.ok(!cores.has("1 1 1"), "nenhum texto branco: as faixas de valor não são mais pretas");
   }
+});
+await caso("PDF MOT: faixas de VALOR MENSAL em cinza claro com texto escuro (uma por função), o VALOR MENSAL TOTAL (ou o único VALOR MENSAL) um tom mais escuro com barra amarela e borda preta fina; as faixas pretas de título e o cabeçalho continuam pretos", async () => {
+  const largurasPretas = (bruto: string) => [...bruto.matchAll(/0 0 0 rg\n0 w\n\[\] 0 d\n1 0 0 1 [0-9.]+ [0-9.]+ cm\n1 0 0 1 0 0 cm\n1 0 0 1 0 0 cm\n0 0 m\n0 ([0-9.]+) l\n([0-9.]+) [0-9.]+ l/g)].map((m) => ({ h: Number(m[1]), w: Number(m[2]) }));
+  const conta = (pgs: { bruto: string }[], padrao: RegExp) => pgs.reduce((s, p) => s + (p.bruto.match(padrao) ?? []).length, 0);
+  for (const n of [1, 3]) {
+    const pgs = await paginasPdf(await gerar(snapMot(Array.from({ length: n }, (_, i) => F(100000, { area: `AREA${i + 1}` })))));
+    const porFuncao = n > 1 ? n : 0;
+    assert.equal(conta(pgs, /0\.93 0\.93 0\.93 rg/g), porFuncao, `${n}: uma faixa de preenchimento cinza claro por função (só quando há mais de uma; com 1 função a única faixa é a do total)`);
+    assert.equal(conta(pgs, /0\.89 0\.89 0\.89 rg/g), 1, `${n}: exatamente uma faixa de total (um tom mais escuro)`);
+    assert.equal(conta(pgs, /1 0\.843 0 rg/g) >= 1, true, "barra amarela do total e demais amarelos do R&S");
+    // faixas pretas retangulares de largura de conteúdo (495,28) só as de título: ORÇAMENTO + 1 PLANILHA DE VERBAS por função, todas com 24 pt de altura
+    const pretas = pgs.flatMap((p) => largurasPretas(p.bruto)).filter((r) => Math.abs(r.w - 495.28) < 0.01);
+    assert.ok(pretas.length >= 1 + n && pretas.every((r) => r.h === 24), `${n}: faixas pretas de título (24 pt): ${JSON.stringify(pretas)}`);
+    const t = todos(pgs);
+    assert.ok(n === 1 ? t.includes("VALOR MENSAL") : t.includes("VALOR MENSAL TOTAL"));
+  }
+  // cabeçalho preto com logo continua na página 1 (110 pt) e compacto (32 pt) nas demais, como no R&S
+  const pgs = await paginasPdf(await gerar(snapMot([F(100000), F(320000)])));
+  assert.ok(largurasPretas(pgs[0].bruto).some((r) => r.h === 110 && Math.abs(r.w - 595.28) < 0.01));
 });
 await caso("PDF MOT: layout novo SEMPRE (v2) mesmo com template_versao 1 — cabeçalho grande com logo, marca d'água, rodapé com os 4 endereços em todas as páginas, sem frase de efeito do R&S", async () => {
   const snap = snapMot([F(100000), F(320000)]);
@@ -247,6 +267,14 @@ await caso("PDF MOT: layout novo SEMPRE (v2) mesmo com template_versao 1 — cab
   const pgs = await paginasPdf(await gerar(snap));
   assert.ok(pgs.length >= 2);
   for (const p of pgs) for (const linha of ENDERECOS_RODAPE_PROPOSTA) assert.ok(p.textos.includes(linha), `rodapé: ${linha}`);
+  // rodapé aprovado: a 3ª linha tem o endereço novo de São Bernardo do Campo (as outras 3 não mudam) e o endereço antigo não aparece mais
+  assert.deepEqual(ENDERECOS_RODAPE_PROPOSTA, [
+    "Rua Hipólito Piva, nº 30 – Centro – Monte Mor | SP – Tel.: 19 – 3217-7899",
+    "Rua Zacarias Costa Camargo, nº 752 – Remanso Campineiro – Hortolândia | SP – Tel.: 19 – 3819-3919",
+    "Rua Jurubatuba, nº 292, Sala 56 – Centro – São Bernardo do Campo | SP – CEP 09725-620 – Tel.: 11 – 97345-9009",
+    "www.salmazos.com.br | @salmazosrh",
+  ]);
+  for (const p of pgs) assert.ok(!p.textos.some((x) => x.includes("336") || x.includes("96695")), "sem o endereço antigo");
   const t = todos(pgs);
   assert.ok(!norm(t.join(" ")).includes("Contrate com clareza"));
   // cabeçalho cheio v2: faixa preta de 110 pt na primeira página (842 - 110 = 732) e compacta (32 pt) nas demais
