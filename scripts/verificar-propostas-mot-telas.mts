@@ -439,7 +439,7 @@ await caso("detalhe MOT: rascunho traz a planilha calculada HOJE (sem percentuai
     assert.notEqual((await detalhe(db, "u-g", c2.body.data.id)).body.planilhaMot.previa.total_mensal_centavos, 188964);
   }, {});
 });
-await caso("detalhe: no R&S a resposta é a de sempre (nenhum campo planilhaMot); proposta de teste continua invisível para o vendedor; PDF do MOT segue 409", async () => {
+await caso("detalhe: no R&S a resposta é a de sempre (nenhum campo planilhaMot); proposta de teste continua invisível para o vendedor; o PDF do MOT de teste sai (200) para o gestor (2E)", async () => {
   const db = dbComLeitor();
   await comMot(async () => {
     const rs = await chamar(db, "u-v", rotaLista.POST, { metodo: "POST", corpo: { modelo: "RS", empresa_visitada_id: EMP, conteudo: {} } });
@@ -449,7 +449,8 @@ await caso("detalhe: no R&S a resposta é a de sempre (nenhum campo planilhaMot)
     const mot = await criar(db, "u-g", {}, EMP_TESTE);
     assert.equal((await detalhe(db, "u-v", mot.body.data.id)).status, 404);
     const pdfMot = await pdf(db, "u-g", mot.body.data.id);
-    assert.equal(pdfMot.status, 409);
+    assert.equal(pdfMot.status, 200);
+    assert.equal((await pdf(db, "u-v", mot.body.data.id)).status, 404, "o vendedor continua sem ver o teste, nem o PDF");
   }, {});
 });
 
@@ -494,11 +495,11 @@ await caso("fonte: a aba 'Percentuais do MOT' só existe dentro do bloco do gest
   assert.ok(pagina.includes("gestor={ctx.gestor}"));
   assert.match(fs.readFileSync("src/lib/propostas.ts", "utf8"), /export const MODELOS_ATIVOS: ModeloProposta\[\] = \["RS"\];/);
 });
-await caso("fonte: detalhe do MOT tem 'PDF do MOT em breve' desabilitado (sem link para a rota de PDF); o detalhe do R&S só ganhou o desvio para o MOT", () => {
+await caso("fonte (2E): o detalhe do MOT gera o PDF como o R&S (rascunho ou com revisão; link por revisão com ?rev=N) e não tem mais o 'PDF do MOT em breve'; o detalhe do R&S só ganhou o desvio para o MOT", () => {
   const mot = fs.readFileSync("src/components/propostas/PropostaDetalheMot.tsx", "utf8");
-  assert.ok(mot.includes('export const TEXTO_PDF_MOT_EM_BREVE = "PDF do MOT em breve";'));
-  assert.ok(mot.includes("disabled title={TEXTO_PDF_MOT_EM_BREVE}"));
-  assert.doesNotMatch(mot, /\/pdf|urlPdf|href=\{`\$\{url/);
+  assert.doesNotMatch(mot, /PDF do MOT em breve|TEXTO_PDF_MOT_EM_BREVE/);
+  assert.ok(mot.includes("const temPdf = d.situacao === \"rascunho\" || d.revisoes.length > 0;"));
+  assert.ok(mot.includes("`${urlPdf}?rev=${r.revisao}`") && mot.includes("Gerar PDF do rascunho") && mot.includes("Gerar PDF (Rev. "));
   const modal = fs.readFileSync("src/components/propostas/ModalMarcarEnviadaMot.tsx", "utf8");
   assert.doesNotMatch(modal, /CampoMoeda|valor_estimado/, "o envio do MOT não pede valor");
   assert.ok(modal.includes('onConfirmar={() => mudarSituacao({ para: "enviada" })}') === false);

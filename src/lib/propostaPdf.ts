@@ -162,7 +162,7 @@ export async function carregarLogosClientes(pasta: string): Promise<LogoCliente[
   return logos;
 }
 
-async function carregarLogoCabecalho(pasta: string): Promise<Buffer | null> {
+export async function carregarLogoCabecalho(pasta: string): Promise<Buffer | null> {
   const [primeiro] = await listarArquivos(pasta, [".png"]);
   if (!primeiro) return null;
   try {
@@ -183,7 +183,7 @@ async function carregarLogoCabecalho(pasta: string): Promise<Buffer | null> {
 
 // ── Desenho ──────────────────────────────────────────────────────────────────
 
-class Escritor {
+export class Escritor {
   page!: PDFPage;
   y = 0;
   constructor(
@@ -386,7 +386,7 @@ const ESPACO_ANTES_DA_GRADE = 24;
 
 // Template v2: a grade entra logo depois da assinatura, na mesma página, se couber INTEIRA (faixa + todas as linhas);
 // senão começa em página nova, como no v1. No v1 sempre começa em página nova.
-async function desenharGradeClientes(e: Escritor, logos: LogoCliente[], mesmaPaginaSeCouber = false) {
+export async function desenharGradeClientes(e: Escritor, logos: LogoCliente[], mesmaPaginaSeCouber = false) {
   if (logos.length === 0) return;
   const grade = calcularGrade(logos.length);
   const alturaTotal = ALTURA_FAIXA_TITULO + grade.linhas.length * (grade.celulaH + ESPACO_ENTRE_LOGOS);
