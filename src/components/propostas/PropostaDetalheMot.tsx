@@ -83,7 +83,7 @@ export default function PropostaDetalheMot({ d, hoje, podeEditar, somenteLeitura
     setSalvando(true);
     setErroEdicao("");
     try {
-      const r = await lerResposta(await fetch(`/api/comercial/propostas/${d.id}`, {
+      const r = await lerResposta<{ aviso?: string }>(await fetch(`/api/comercial/propostas/${d.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ updated_at: d.updated_at, aos_cuidados: form.aos_cuidados.trim() || null, validade_dias: validadeMotDoForm(form), conteudo: conteudoMotDoForm(form) }),
@@ -100,7 +100,7 @@ export default function PropostaDetalheMot({ d, hoje, podeEditar, somenteLeitura
         return;
       }
       setEditando(false);
-      onAviso(d.situacao === "rascunho" ? null : `Revisão ${d.revisao_atual + 1} emitida. O PDF do MOT ainda não está disponível.`);
+      onAviso(d.situacao === "rascunho" ? null : `Revisão ${d.revisao_atual + 1} emitida. O PDF do MOT ainda não está disponível.${r.json.aviso ? ` ${r.json.aviso}` : ""}`);
       await onRecarregar();
     } catch {
       setErroEdicao("Não foi possível salvar.");
@@ -164,7 +164,7 @@ export default function PropostaDetalheMot({ d, hoje, podeEditar, somenteLeitura
 
       {editando && form ? (
         <div style={{ ...cardStyle, marginBottom: 16 }}>
-          {d.situacao !== "rascunho" && <Aviso tipo="alerta">Isto vai gerar a Rev. {d.revisao_atual + 1}. A revisão anterior continua guardada, a validade recomeça a contar de hoje e o cálculo usa os percentuais em vigor hoje.</Aviso>}
+          {d.situacao !== "rascunho" && <Aviso tipo="alerta">Isto vai gerar a Rev. {d.revisao_atual + 1}. A revisão anterior continua guardada, a validade recomeça a contar de hoje e o cálculo usa os percentuais em vigor hoje. O valor estimado passa a ser o da nova revisão.</Aviso>}
           <CamposPropostaMot valor={form} onChange={setForm} contatos={contatos} contatoId={contatoId} onContato={setContatoId} />
           {erroEdicao && <div style={{ marginTop: 12 }}><Aviso tipo="erro">{erroEdicao}</Aviso></div>}
           <div style={{ display: "flex", gap: 10, marginTop: 14 }}>

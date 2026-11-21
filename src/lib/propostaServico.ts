@@ -312,9 +312,15 @@ export async function editarProposta(svc: Svc, ctx: ContextoPropostas, p: Propos
     if (!s.ok) return s;
     snapMot = s.data;
   }
+  // MOT: o valor estimado acompanha a revisão mais recente (soma dos valores mensais da planilha da revisão). Vai no MESMO update que grava a revisão
+  // (e é restaurado se a gravação da revisão falhar). Só chega aqui em enviada/em negociação: nas demais situações a edição já foi recusada acima.
+  // R&S não passa por aqui (snapMot é null): o valor do R&S continua sendo o digitado no envio.
+  const valorNovo = snapMot ? snapMot.total_mensal_centavos / 100 : null;
+  const valorAntigo = p.valor_estimado == null ? null : Number(p.valor_estimado);
+  const valorMudou = valorNovo !== null && (valorAntigo === null || Math.round(valorAntigo * 100) !== snapMot!.total_mensal_centavos);
   const { data: atualizada } = await svc
     .from("propostas")
-    .update({ ...campos, revisao_atual: novaRevisao, validade_ate: validadeAte })
+    .update({ ...campos, revisao_atual: novaRevisao, validade_ate: validadeAte, ...(valorMudou ? { valor_estimado: valorNovo } : {}) })
     .eq("id", p.id)
     .eq("updated_at", p.updated_at)
     .eq("situacao", p.situacao)
@@ -339,13 +345,22 @@ export async function editarProposta(svc: Svc, ctx: ContextoPropostas, p: Propos
       .update({
         conteudo: p.conteudo, aos_cuidados: p.aos_cuidados ?? null, validade_dias: p.validade_dias, revisao_atual: p.revisao_atual,
         validade_ate: p.validade_ate ?? null, updated_at: new Date().toISOString(),
+        ...(valorMudou ? { valor_estimado: p.valor_estimado ?? null } : {}),
       })
       .eq("id", p.id)
       .eq("updated_at", atualizada.updated_at);
     return error.code === "23505" ? falha(409, "Outra revisão acabou de ser criada. Recarregue e tente de novo.") : falha(500, `Não foi possível criar a revisão: ${error.message}`);
   }
-  await registrarHistorico(svc, { proposta_id: p.id, de: p.situacao, para: p.situacao, autor_id: ctx.analistaId, observacao: `Revisão ${novaRevisao} emitida.` });
-  return { ok: true, data: atualizada };
+  // A mudança de valor entra na própria linha "Revisão N emitida" (sem tipo de evento novo): "Valor: R$ A → R$ B (Rev. N)".
+  const moeda = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const observacao = valorMudou && valorAntigo !== null
+    ? `Revisão ${novaRevisao} emitida. Valor: ${moeda(valorAntigo)} → ${moeda(valorNovo as number)} (Rev. ${novaRevisao}).`
+    : valorMudou ? `Revisão ${novaRevisao} emitida. Valor: ${moeda(valorNovo as number)} (Rev. ${novaRevisao}).` : `Revisão ${novaRevisao} emitida.`;
+  await registrarHistorico(svc, { proposta_id: p.id, de: p.situacao, para: p.situacao, autor_id: ctx.analistaId, observacao });
+  // Funil: só proposta MOT real, de quem tem Funil, quando o valor mudou. A revisão já está gravada (imutável): falha aqui vira aviso, nunca erro.
+  let aviso: string | undefined;
+  if (valorMudou && ctx.temFunil && p.teste !== true && p.oportunidade_id) aviso = await recalcularValorFunil(svc, ctx, atualizada);
+  return { ok: true, data: atualizada, aviso };
 }
 
 // ── Mudar situação ───────────────────────────────────────────────────────────
@@ -354,6 +369,31 @@ interface EfeitoFunil {
   oportunidadeId: string | null;
   aviso?: string;
   desfazer: () => Promise<void>;
+}
+
+const MSG_FUNIL_NAO_ATUALIZADO = "O valor do Funil não pôde ser atualizado.";
+
+// Valor da oportunidade depois que o valor de uma proposta MOT enviada mudou numa revisão. Mesma regra de dono do efeitoAcompanhamento; usa a decisão pura
+// (soma das propostas ativas, com a proposta já no valor novo, que precisa estar gravado em propostas) e grava SÓ o valor: a etapa nunca se move.
+// Devolve o aviso a mostrar (ou undefined quando não há nada a dizer). Nunca lança: a edição já foi salva.
+async function recalcularValorFunil(svc: Svc, ctx: ContextoComercial, p: PropostaLinha): Promise<string | undefined> {
+  try {
+    const { data: opp } = await svc.from("oportunidades").select("*").eq("id", p.oportunidade_id).maybeSingle();
+    if (!opp) return undefined;
+    const atual: OportunidadeLinha = opp;
+    if (atual.vendedor_id !== ctx.analistaId) return "A oportunidade aberta desta empresa é de outro vendedor e o valor dela não foi alterado no Funil.";
+    if (!ehAberta(atual.etapa)) return undefined;
+    const todas = await propostasDaOportunidade(svc, atual.id, { id: p.id, situacao: p.situacao as SituacaoProposta, valor_estimado: p.valor_estimado ?? null });
+    const decisao = decidirEfeitoFunil({ evento: { propostaId: p.id, para: p.situacao as SituacaoProposta }, etapaAtual: atual.etapa, propostas: todas });
+    if (decisao.valorEstimado === undefined || Number(atual.valor_estimado) === decisao.valorEstimado) return undefined;
+    // Oportunidade aberta sem próxima ação (legado) não aceita regravar o valor: não se inventa ação.
+    if (!atual.proxima_acao || !atual.proxima_acao_em) return MSG_FUNIL_NAO_ATUALIZADO;
+    const r = await atualizarOportunidade(svc, ctx.analistaId, atual, { valor_estimado: decisao.valorEstimado });
+    return r.ok ? undefined : MSG_FUNIL_NAO_ATUALIZADO;
+  } catch (err) {
+    console.error("[propostas] Valor do Funil não recalculado:", err instanceof Error ? err.message : err);
+    return MSG_FUNIL_NAO_ATUALIZADO;
+  }
 }
 
 // Todas as propostas ligadas a uma oportunidade (qualquer modelo), com a proposta do evento já na situação/valor novos. É a entrada da

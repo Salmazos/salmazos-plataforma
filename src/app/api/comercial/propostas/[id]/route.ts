@@ -75,5 +75,5 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const r = await editarProposta(svc, ctx, proposta, parsed.data);
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
-  return NextResponse.json({ data: r.data });
+  return NextResponse.json({ data: r.data, ...(r.aviso ? { aviso: r.aviso } : {}) });
 }
