@@ -11,6 +11,6 @@ export const PASTA_CLIENTES_PROPOSTA = path.join(process.cwd(), "public", "propo
 export const ENDERECOS_RODAPE_PROPOSTA: string[] = [
   "Rua Hipólito Piva, nº 30 – Centro – Monte Mor | SP – Tel.: 19 – 3217-7899",
   "Rua Zacarias Costa Camargo, nº 752 – Remanso Campineiro – Hortolândia | SP – Tel.: 19 – 3819-3919",
-  "Rua Jurubatuba, nº 336 – Centro – São Bernardo do Campo | SP – Tel.: 11 – 96695-4751",
+  "Rua Jurubatuba, nº 292, Sala 56 – Centro – São Bernardo do Campo | SP – CEP 09725-620 – Tel.: 11 – 97345-9009",
   "www.salmazos.com.br | @salmazosrh",
 ];
