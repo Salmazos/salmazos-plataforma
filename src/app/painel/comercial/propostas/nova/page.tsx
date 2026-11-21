@@ -15,5 +15,5 @@ export default async function NovaPropostaPage() {
   if (!ctx.podeEscrever) redirect("/painel/comercial/propostas");
 
   const { data: perfil } = await createServiceClient().from("analistas_perfil").select("nome_completo").eq("id", ctx.analistaId).maybeSingle();
-  return <PropostaNovaClient meuNome={perfil?.nome_completo ?? ""} />;
+  return <PropostaNovaClient gestor={ctx.gestor} meuNome={perfil?.nome_completo ?? ""} />;
 }

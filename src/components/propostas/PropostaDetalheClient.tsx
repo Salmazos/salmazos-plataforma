@@ -7,6 +7,8 @@ import { formatarPct, oferecaReposicao, PADROES_RS, quantidadeItensFixosRs, type
 import CamposProposta, { camposDeProposta, conteudoDoForm, validadeDoForm, type CamposForm } from "@/components/propostas/CamposProposta";
 import ModalMarcarEnviada from "@/components/propostas/ModalMarcarEnviada";
 import ModalSituacaoProposta, { type AcaoSituacao } from "@/components/propostas/ModalSituacaoProposta";
+import PropostaDetalheMot from "@/components/propostas/PropostaDetalheMot";
+import type { PlanilhaMotDetalhe } from "@/lib/propostaServico";
 import { Aviso, btnPerigo, btnPrimario, btnSecundario, cardStyle, fmtData, fmtDataHora, fmtMoeda, lerEApagarAvisoProposta, lerResposta, SeloTeste, SituacaoBadge, ValidadeTexto } from "@/components/propostas/propostasUi";
 
 interface Revisao { id: string; revisao: number; template_versao: number; vendedor_nome: string | null; created_at: string }
@@ -45,12 +47,15 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
   const salvandoAgora = useRef(false);
   const [modalEnviada, setModalEnviada] = useState(false);
   const [acao, setAcao] = useState<AcaoSituacao | null>(null);
+  // Só vem no MOT (planilha calculada, sem percentuais); no R&S fica sempre null.
+  const [planilhaMot, setPlanilhaMot] = useState<PlanilhaMotDetalhe | null>(null);
 
   const carregar = useCallback(async () => {
     try {
-      const r = await lerResposta<{ data: Detalhe; hoje: string; podeEditar: boolean; somenteLeitura: boolean; temFunil?: boolean; oportunidadeAbertaPropria?: boolean }>(await fetch(`/api/comercial/propostas/${id}`));
+      const r = await lerResposta<{ data: Detalhe; hoje: string; podeEditar: boolean; somenteLeitura: boolean; temFunil?: boolean; oportunidadeAbertaPropria?: boolean; planilhaMot?: PlanilhaMotDetalhe }>(await fetch(`/api/comercial/propostas/${id}`));
       if (!r.ok) { setErro(r.status === 404 ? "Proposta não encontrada." : r.json.error ?? "Não foi possível carregar a proposta."); return; }
       setD(r.json.data);
+      setPlanilhaMot(r.json.planilhaMot ?? null);
       setHoje(r.json.hoje);
       setPodeEditar(r.json.podeEditar);
       setSomenteLeitura(r.json.somenteLeitura);
@@ -146,6 +151,14 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
 
   if (carregando) return <div style={{ padding: 24, color: "#6B7280" }}>Carregando…</div>;
   if (erro || !d) return <div style={{ padding: 24, maxWidth: 700, margin: "0 auto" }}><Aviso tipo="erro">{erro || "Proposta não encontrada."}</Aviso><Link href="/painel/comercial/propostas">← Propostas</Link></div>;
+
+  // MOT: tela própria (funções, planilha, envio sem digitar valor). O caminho do R&S abaixo não muda.
+  if (d.modelo === "MOT") {
+    return (
+      <PropostaDetalheMot d={{ ...d, conteudo: d.conteudo as never }} hoje={hoje} podeEditar={podeEditar} somenteLeitura={somenteLeitura} temFunil={temFunil}
+        oportunidadeAbertaPropria={oportunidadeAbertaPropria} planilha={planilhaMot} aviso={aviso} onAviso={setAviso} onRecarregar={carregar} />
+    );
+  }
 
   const condicoes: CondicoesRs = { ...PADROES_RS, ...(d.conteudo?.condicoes ?? {}) };
   const aberta = d.situacao === "enviada" || d.situacao === "em_negociacao";
