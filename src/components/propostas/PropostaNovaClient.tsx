@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { rotuloEtapa } from "@/lib/comercialRotulos";
 import { MODELOS, MODELOS_ATIVOS, ROTULO_MODELO, type ModeloProposta } from "@/lib/propostas";
 import CamposProposta, { camposPadrao, conteudoDoForm, validadeDoForm, type CamposForm } from "@/components/propostas/CamposProposta";
+import CamposPropostaMot, { camposMotPadrao, conteudoMotDoForm, validadeMotDoForm, type CamposMotForm, type EstadoPrevia } from "@/components/propostas/CamposPropostaMot";
 import { Aviso, btnPrimario, btnSecundario, cardStyle, inputStyle, labelStyle, lerResposta, guardarAvisoProposta } from "@/components/propostas/propostasUi";
 
 interface Contato { id: string; nome: string; cargo: string | null; principal: boolean }
@@ -13,7 +14,8 @@ interface Contato { id: string; nome: string; cargo: string | null; principal: b
 // teste só vem para o gestor (true = empresa de teste: as propostas dela saem como TESTE-..., fora das listas e sem efeito no Funil).
 interface EmpresaOpc { id: string; nome: string; contatos: Contato[]; oportunidade_aberta?: { id: string; vendedor_nome: string | null; etapa: string } | null; teste?: boolean }
 
-export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
+// gestor: só ele vê o modelo MOT ("Em teste"), e só o habilita com uma empresa de TESTE escolhida. O servidor confere de novo (vendedor nunca cria MOT).
+export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNome: string; gestor?: boolean }) {
   const router = useRouter();
   const [modelo, setModelo] = useState<ModeloProposta>("RS");
   const [busca, setBusca] = useState("");
@@ -21,6 +23,9 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
   const [empresa, setEmpresa] = useState<EmpresaOpc | null>(null);
   const [contatoId, setContatoId] = useState("");
   const [campos, setCampos] = useState<CamposForm>(camposPadrao());
+  const [camposMot, setCamposMot] = useState<CamposMotForm>(camposMotPadrao());
+  // Sem percentuais vigentes (ou erro no cálculo) o servidor responde com uma mensagem e o botão de criar fica bloqueado.
+  const [previaMot, setPreviaMot] = useState<EstadoPrevia>({ previa: null, erro: null, carregando: false });
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erroBusca, setErroBusca] = useState("");
@@ -55,12 +60,17 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
     };
   }, [busca]);
 
+  // MOT só vale para o gestor com empresa de teste escolhida; fora disso a tela volta sozinha para o R&S (nunca prepara um MOT que o servidor recusaria).
+  const motLiberado = gestor && empresa?.teste === true;
+  const modeloAtual: ModeloProposta = modelo === "MOT" && !motLiberado ? "RS" : modelo;
+
   function escolher(e: EmpresaOpc) {
     setEmpresa(e);
     const principal = e.contatos.find((c) => c.principal) ?? e.contatos[0];
     setContatoId(principal?.id ?? "");
     // Recomeça do zero: A/C, CNPJ, endereço e condições da empresa anterior não podem vazar para esta.
     setCampos({ ...camposPadrao(), aos_cuidados: principal?.nome ?? "" });
+    setCamposMot({ ...camposMotPadrao(), aos_cuidados: principal?.nome ?? "" });
   }
 
   // Gestor: liga/desliga "empresa de teste" (a API só aceita diretoria/superuser). Propostas antigas não mudam.
@@ -123,6 +133,7 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
   async function criar() {
     if (emAndamento.current) return;
     if (!empresa) { setErro("Escolha a empresa da Carteira."); return; }
+    if (modeloAtual === "MOT" && previaMot.erro) { setErro(previaMot.erro); return; }
     emAndamento.current = true;
     setSalvando(true);
     setErro("");
@@ -132,8 +143,15 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
       const r = await lerResposta<{ data: { id: string }; aviso: string | null }>(await fetch("/api/comercial/propostas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          modelo,
+        body: JSON.stringify(modeloAtual === "MOT" ? {
+          modelo: modeloAtual,
+          empresa_visitada_id: empresa.id,
+          contato_id: contatoId || null,
+          aos_cuidados: camposMot.aos_cuidados.trim() || null,
+          validade_dias: validadeMotDoForm(camposMot),
+          conteudo: conteudoMotDoForm(camposMot),
+        } : {
+          modelo: modeloAtual,
           empresa_visitada_id: empresa.id,
           contato_id: contatoId || null,
           aos_cuidados: campos.aos_cuidados.trim() || null,
@@ -155,6 +173,8 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
     }
   }
 
+  const bloqueadoPorCalculo = modeloAtual === "MOT" && previaMot.erro !== null;
+
   return (
     <div style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
       <div style={{ marginBottom: 14 }}><Link href="/painel/comercial/propostas" style={{ fontSize: 13, color: "#6B7280" }}>← Propostas</Link></div>
@@ -164,13 +184,14 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
         <div style={labelStyle}>Modelo</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
           {MODELOS.map((m) => {
-            const ativo = MODELOS_ATIVOS.includes(m);
-            const sel = modelo === m;
+            const noTeste = m === "MOT" && gestor && !MODELOS_ATIVOS.includes(m);
+            const ativo = MODELOS_ATIVOS.includes(m) || (noTeste && motLiberado);
+            const sel = modeloAtual === m;
             return (
-              <button key={m} type="button" disabled={!ativo} onClick={() => ativo && setModelo(m)}
+              <button key={m} type="button" disabled={!ativo} data-modelo={m} onClick={() => ativo && setModelo(m)}
                 style={{ textAlign: "left", padding: 12, borderRadius: 10, border: sel ? "2px solid #FFB800" : "1px solid #D1D5DB", background: ativo ? "#fff" : "#F9FAFB", color: ativo ? "#111827" : "#9CA3AF", cursor: ativo ? "pointer" : "not-allowed" }}>
                 <div style={{ fontWeight: 800 }}>{ROTULO_MODELO[m]}</div>
-                <div style={{ fontSize: 12 }}>{ativo ? "Disponível" : "Em breve"}</div>
+                <div style={{ fontSize: 12 }}>{noTeste ? (motLiberado ? "Em teste" : "Em teste (escolha uma empresa de teste)") : ativo ? "Disponível" : "Em breve"}</div>
               </button>
             );
           })}
@@ -240,13 +261,20 @@ export default function PropostaNovaClient({ meuNome }: { meuNome: string }) {
 
       {empresa && (
         <div style={{ ...cardStyle, marginBottom: 16 }}>
-          <CamposProposta valor={campos} onChange={setCampos} contatos={empresa.contatos} contatoId={contatoId} onContato={setContatoId} />
+          {modeloAtual === "MOT" ? (
+            <>
+              <Aviso tipo="alerta">Modelo em teste: esta proposta sai como TESTE-MOT-..., fora das listas dos vendedores e sem efeito no Funil. O PDF do MOT ainda não está disponível.</Aviso>
+              <CamposPropostaMot valor={camposMot} onChange={setCamposMot} contatos={empresa.contatos} contatoId={contatoId} onContato={setContatoId} onPrevia={setPreviaMot} />
+            </>
+          ) : (
+            <CamposProposta valor={campos} onChange={setCampos} contatos={empresa.contatos} contatoId={contatoId} onContato={setContatoId} />
+          )}
         </div>
       )}
 
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
       <div style={{ display: "flex", gap: 10 }}>
-        <button style={{ ...btnPrimario, opacity: salvando || !empresa ? 0.6 : 1 }} disabled={salvando || !empresa} onClick={criar}>{salvando ? "Criando…" : "Criar rascunho"}</button>
+        <button style={{ ...btnPrimario, opacity: salvando || !empresa || bloqueadoPorCalculo ? 0.6 : 1 }} disabled={salvando || !empresa || bloqueadoPorCalculo} onClick={criar}>{salvando ? "Criando…" : "Criar rascunho"}</button>
         <button style={btnSecundario} onClick={() => router.push("/painel/comercial/propostas")}>Cancelar</button>
       </div>
     </div>

@@ -3,7 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { parseBody, propostaUpdateSchema } from "@/lib/schemas";
 import { hojeSaoPaulo } from "@/lib/comercial";
 import { exigirContextoPropostas } from "@/lib/propostasAcesso";
-import { buscarOportunidadeAberta, carregarProposta, editarProposta, ehDonoDaProposta, podeVerProposta, varrerVencidas } from "@/lib/propostaServico";
+import { buscarOportunidadeAberta, carregarProposta, editarProposta, ehDonoDaProposta, planilhaMotDaProposta, podeVerProposta, varrerVencidas } from "@/lib/propostaServico";
 import { modoEdicao, type SituacaoProposta } from "@/lib/propostas";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -48,6 +48,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       historico: (historico ?? []).map((h) => ({ ...h, autor_nome: h.autor_id ? nomePorId.get(h.autor_id as string) ?? null : null })),
     },
     hoje,
+    // Só no MOT: a planilha calculada (sem percentuais). No R&S a resposta é a de sempre, sem este campo.
+    ...(proposta.modelo === "MOT" ? { planilhaMot: await planilhaMotDaProposta(svc, proposta) } : {}),
     podeEditar: ehDonoDaProposta(ctx, proposta) && modoEdicao(proposta.situacao as SituacaoProposta) !== null,
     somenteLeitura: !ehDonoDaProposta(ctx, proposta),
     temFunil: ctx.temFunil,

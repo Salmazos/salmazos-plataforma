@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MODELOS, ROTULO_MODELO, ROTULO_SITUACAO, SITUACOES, type SituacaoProposta } from "@/lib/propostas";
 import PropostaPainelGestao from "@/components/propostas/PropostaPainelGestao";
+import PercentuaisMotAdmin from "@/components/propostas/PercentuaisMotAdmin";
 import { Aviso, btnPrimario, cardStyle, fmtMoeda, inputStyle, lerResposta, SeloTeste, SituacaoBadge, ValidadeTexto, type PropostaResumo } from "@/components/propostas/propostasUi";
 
 interface Props {
@@ -15,7 +16,7 @@ interface Props {
 
 export default function PropostasListaClient({ podeCriar, gestor, vendedores }: Props) {
   const router = useRouter();
-  const [aba, setAba] = useState<"lista" | "painel">("lista");
+  const [aba, setAba] = useState<"lista" | "painel" | "percentuais">("lista");
   const [propostas, setPropostas] = useState<PropostaResumo[]>([]);
   const [hoje, setHoje] = useState("");
   const [carregando, setCarregando] = useState(true);
@@ -73,10 +74,11 @@ export default function PropostasListaClient({ podeCriar, gestor, vendedores }: 
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           <button style={chip(aba === "lista")} onClick={() => setAba("lista")}>Propostas</button>
           <button style={chip(aba === "painel")} onClick={() => setAba("painel")}>Painel de gestão</button>
+          <button style={chip(aba === "percentuais")} onClick={() => setAba("percentuais")}>Percentuais do MOT</button>
         </div>
       )}
 
-      {aba === "painel" && gestor ? <PropostaPainelGestao /> : (
+      {aba === "percentuais" && gestor ? <PercentuaisMotAdmin /> : aba === "painel" && gestor ? <PropostaPainelGestao /> : (
         <>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
             <button style={chip(situacao === "")} onClick={() => setSituacao("")}>Todas ({propostas.length})</button>
