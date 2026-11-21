@@ -12,7 +12,7 @@ import {
   type ModeloProposta, type SituacaoProposta,
 } from "@/lib/propostas";
 import { MENSAGEM_MODELO_INDISPONIVEL, MODELOS_PROPOSTA, montarSnapshot, validarConteudo, type SnapshotProposta, type SnapshotQualquer } from "@/lib/propostaModelos";
-import type { ParametrosMotVigentes, SnapshotMot } from "@/lib/propostaMot";
+import { montarPreviaMot, previaDeSnapshotMot, snapshotMotSchema, type ParametrosMotVigentes, type PreviaMot, type SnapshotMot } from "@/lib/propostaMot";
 import { parametrosMotValidos } from "@/lib/propostaMotCalculo";
 
 type Svc = ReturnType<typeof createServiceClient>;
@@ -213,9 +213,11 @@ export async function snapshotParaPdf(svc: Svc, p: PropostaLinha, revisao: numbe
 export async function criarRascunho(svc: Svc, ctx: ContextoPropostas, d: z.infer<typeof propostaCreateSchema>): Promise<Resultado<PropostaLinha>> {
   if (!ctx.podeEscrever) return falha(403, MSG_SO_ACOMPANHA_PROPOSTAS);
   if (!ctx.unidadeId) return falha(400, "Seu perfil não tem unidade definida.");
-  if (!modeloDisponivel(d.modelo)) return falha(400, MENSAGEM_MODELO_INDISPONIVEL);
-  const conteudo = validarConteudo(d.modelo, d.conteudo);
-  if (!conteudo.ok) return falha(400, conteudo.error);
+  // MOT fora da chave do harness: a decisão depende de ser gestor E a empresa ser de teste, então fica para depois de ler a empresa (abaixo).
+  const modeloLivre = modeloDisponivel(d.modelo);
+  if (!modeloLivre && d.modelo !== "MOT") return falha(400, MENSAGEM_MODELO_INDISPONIVEL);
+  let conteudo = modeloLivre ? validarConteudo(d.modelo, d.conteudo) : null;
+  if (conteudo && !conteudo.ok) return falha(400, conteudo.error);
   const { data: empresa } = await svc.from("empresas_visitadas").select("id, nome, cliente_id, unidade_id").eq("id", d.empresa_visitada_id).maybeSingle();
   if (!empresa || empresa.unidade_id !== ctx.unidadeId) return falha(404, "Empresa não encontrada na Carteira da sua unidade.");
 
@@ -224,6 +226,12 @@ export async function criarRascunho(svc: Svc, ctx: ContextoPropostas, d: z.infer
   if (!marca.ok) return falha(500, "Não foi possível verificar se a empresa é de teste. Nada foi criado; tente de novo.");
   const teste = marca.teste;
   if (teste && !ctx.gestor) return falha(404, "Empresa não encontrada na Carteira da sua unidade.");
+  if (!modeloLivre) {
+    if (!modeloDisponivel(d.modelo, { gestor: ctx.gestor, teste })) return falha(400, MENSAGEM_MODELO_INDISPONIVEL);
+    conteudo = validarConteudo(d.modelo, d.conteudo, { gestor: ctx.gestor, teste });
+    if (!conteudo.ok) return falha(400, conteudo.error);
+  }
+  if (!conteudo || !conteudo.ok) return falha(400, MENSAGEM_MODELO_INDISPONIVEL);
 
   // A sigla do número (proposta REAL) sai do nome do vendedor e fica fixa na criação; sem nome aproveitável não se inventa sigla.
   // Proposta de teste leva TESTE no lugar da sigla e não precisa dela.
@@ -272,7 +280,7 @@ export async function editarProposta(svc: Svc, ctx: ContextoPropostas, p: Propos
 
   let conteudo = p.conteudo;
   if (d.conteudo !== undefined) {
-    const v = validarConteudo(p.modelo, d.conteudo);
+    const v = validarConteudo(p.modelo, d.conteudo, { gestor: ctx.gestor, teste: p.teste === true });
     if (!v.ok) return falha(400, v.error);
     conteudo = v.data;
   }
@@ -615,4 +623,45 @@ export async function mudarSituacao(svc: Svc, ctx: ContextoPropostas, p: Propost
   const gravou = await registrarHistorico(svc, { proposta_id: p.id, de, para, autor_id: ctx.analistaId, observacao });
   const aviso = efeito.aviso ?? (gravou ? undefined : "A situação foi alterada, mas o histórico não pôde ser gravado.");
   return { ok: true, data: atual, aviso };
+}
+
+// ── Prévia do cálculo do MOT (não grava nada) ───────────────────────────────────────────────────────────────────────────────────
+// Quem pode escrever em Propostas vê o cálculo da função enquanto preenche. Usa os percentuais vigentes HOJE (a mesma leitura da criação/envio) e a mesma
+// montarSnapshotMot; sem percentuais vigentes devolve o mesmo 409 do servidor. Os percentuais não saem: só os valores de cada linha.
+export async function previaMot(svc: Svc, ctx: ContextoPropostas, salarios: (number | null)[]): Promise<Resultado<PreviaMot>> {
+  if (!ctx.podeEscrever) return falha(403, MSG_SO_ACOMPANHA_PROPOSTAS);
+  const par = await parametrosMotVigentes(svc, hojeSaoPaulo());
+  if (!par.ok) return par;
+  try {
+    return { ok: true, data: montarPreviaMot(salarios, par.data) };
+  } catch (err) {
+    console.error("[propostas] Prévia do MOT não calculada:", err instanceof Error ? err.message : err);
+    return falha(400, "Não foi possível calcular com os salários informados. Confira os valores.");
+  }
+}
+
+// Planilha mostrada no detalhe de uma proposta MOT (sem percentuais). Rascunho (ou proposta que nunca foi enviada): calculada com os percentuais vigentes HOJE,
+// como será no envio. Proposta com revisão gravada: o snapshot da revisão atual, exatamente como foi enviado (nunca recalcula).
+export interface PlanilhaMotDetalhe {
+  origem: "hoje" | "revisao";
+  previa: PreviaMot | null;
+  erro: string | null;
+}
+export async function planilhaMotDaProposta(svc: Svc, p: PropostaLinha): Promise<PlanilhaMotDetalhe> {
+  if (p.situacao !== "rascunho") {
+    const { data: rev } = await svc.from("proposta_revisoes").select("conteudo").eq("proposta_id", p.id).eq("revisao", p.revisao_atual).maybeSingle();
+    if (rev) {
+      const s = snapshotMotSchema.safeParse(rev.conteudo);
+      if (!s.success) return { origem: "revisao", previa: null, erro: "Não foi possível ler a planilha desta revisão." };
+      return { origem: "revisao", previa: previaDeSnapshotMot(s.data), erro: null };
+    }
+  }
+  const par = await parametrosMotVigentes(svc, hojeSaoPaulo());
+  if (!par.ok) return { origem: "hoje", previa: null, erro: par.error };
+  try {
+    const funcoes = ((p.conteudo as { funcoes?: { salario_centavos?: unknown }[] } | null)?.funcoes ?? []).map((f) => (typeof f.salario_centavos === "number" ? f.salario_centavos : null));
+    return { origem: "hoje", previa: montarPreviaMot(funcoes, par.data), erro: null };
+  } catch {
+    return { origem: "hoje", previa: null, erro: "Não foi possível calcular a planilha desta proposta." };
+  }
 }

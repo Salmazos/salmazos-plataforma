@@ -21,9 +21,17 @@ export function chaveHarnessMotLigada(): boolean {
   return env[CHAVE_HARNESS_MOT] === "1" && env.NODE_ENV !== "production" && !env.VERCEL_ENV && !env.VERCEL;
 }
 
-export function modeloDisponivel(modelo: string): modelo is ModeloProposta {
+// Trava do MOT (enquanto o PDF não está aprovado): além da chave do harness (só fora de produção), o MOT só vale para o GESTOR e em empresa de TESTE.
+// Sem o 2º argumento o comportamento é o de sempre (R&S ativo; MOT só pela chave do harness). Vendedor nunca cria MOT; proposta MOT real é impossível.
+export interface ContextoModelo {
+  gestor?: boolean;
+  teste?: boolean;
+}
+export function modeloDisponivel(modelo: string, ctx?: ContextoModelo): modelo is ModeloProposta {
   if ((MODELOS_ATIVOS as string[]).includes(modelo)) return true;
-  return modelo === "MOT" && chaveHarnessMotLigada();
+  if (modelo !== "MOT") return false;
+  if (chaveHarnessMotLigada()) return true;
+  return ctx?.gestor === true && ctx?.teste === true;
 }
 
 export const SITUACOES = ["rascunho", "enviada", "em_negociacao", "aceita", "recusada", "vencida", "cancelada"] as const;

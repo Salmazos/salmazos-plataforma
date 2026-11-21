@@ -371,7 +371,7 @@ await caso("R&S INALTERADO byte a byte: snapshot e conteúdo do PDF (v1 e v2) id
 });
 
 // ═══ 3) Modelo desligado em produção ═════════════════════════════════════════
-await caso("MODELOS_ATIVOS = [\"RS\"] e o MOT NÃO está disponível sem a chave: validarConteudo/modeloDisponivel recusam; a API recusa criar MOT (400 'Modelo ainda não disponível.')", async () => {
+await caso("MODELOS_ATIVOS = [\"RS\"] e o MOT NÃO está disponível sem a chave nem sem o contexto {gestor, teste}: validarConteudo/modeloDisponivel recusam; a API recusa criar MOT para o vendedor (400 'Modelo ainda não disponível.'); só gestor + empresa de teste cria (2D)", async () => {
   assert.deepEqual(MODELOS_ATIVOS, ["RS"]);
   const db = novoDb();
   await comMot(async () => {
@@ -385,8 +385,8 @@ await caso("MODELOS_ATIVOS = [\"RS\"] e o MOT NÃO está disponível sem a chave
     assert.equal(db.tabelas.propostas.length, 0);
     assert.equal(db.rpcChamadas.length, 0);
     assert.equal(contadorDe(db, "proposta_contadores", "MOT"), ULTIMO_MOT, "contador do MOT intacto");
-    // gestor/teste também não consegue
-    assert.equal((await criar(db, "u-g", {}, EMP_TESTE)).status, 400);
+    // Etapa 2D: a ÚNICA exceção é gestor + empresa de teste (a trava completa está em verificar-propostas-mot-telas.mts).
+    assert.equal((await criar(db, "u-g", {}, EMP_TESTE)).status, 201);
   }, {});
 });
 await caso("a chave do harness NUNCA liga o MOT em produção: NODE_ENV=production, VERCEL_ENV, VERCEL e valores diferentes de '1' mantêm o MOT desligado", async () => {
@@ -406,7 +406,7 @@ await caso("a chave do harness NUNCA liga o MOT em produção: NODE_ENV=producti
   // O TS segue desligado com a chave ligada (a chave é só do MOT).
   await comMot(() => assert.equal(modeloDisponivel("TS"), false));
 });
-await caso("fonte: MODELOS_ATIVOS continua literalmente [\"RS\"], sem ler ambiente; a tela Nova proposta ainda mostra o MOT como 'Em breve' (só MODELOS_ATIVOS)", () => {
+await caso("fonte: MODELOS_ATIVOS continua literalmente [\"RS\"], sem ler ambiente; a tela Nova proposta decide o 'Em breve' por MODELOS_ATIVOS (o 'Em teste' do gestor é a única exceção, e o servidor confere de novo)", () => {
   const propostas = fs.readFileSync("src/lib/propostas.ts", "utf8");
   assert.match(propostas, /export const MODELOS_ATIVOS: ModeloProposta\[\] = \["RS"\];/);
   assert.equal(MODELOS_PROPOSTA.MOT.ativo, false);

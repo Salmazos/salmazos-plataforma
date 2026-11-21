@@ -1,7 +1,7 @@
 // Modelos de proposta: schemas Zod, padrões configuráveis, texto fixo e snapshot do documento.
 // Percentuais e prazos nunca ficam fixos no texto: vêm de `condicoes` (padrão editável por proposta).
 import { z } from "zod";
-import { emailParaAssinatura, modeloDisponivel, type ModeloProposta } from "@/lib/propostas";
+import { emailParaAssinatura, modeloDisponivel, type ContextoModelo, type ModeloProposta } from "@/lib/propostas";
 import { textoDesenhavel } from "@/lib/propostaTexto";
 import { MAX_CLAUSULAS_ADICIONAIS, MAX_CLAUSULA_ADICIONAL, clausulaAdicional } from "@/lib/propostaClausulas";
 import { TEMPLATE_VERSAO_MOT, conteudoMotSchema, mensagemErroConteudoMot, montarSnapshotMot, type ConteudoMot, type ParametrosMotVigentes, type SnapshotMot } from "@/lib/propostaMot";
@@ -91,10 +91,10 @@ export const MENSAGEM_MODELO_INDISPONIVEL = "Modelo ainda não disponível.";
 export type ConteudoProposta = ConteudoRs | ConteudoMot;
 
 // Despacha por modelo. R&S: exatamente como antes (mesmo schema, mesmas mensagens). MOT: conteudoMotSchema (só quando o modelo está disponível).
-export function validarConteudo(modelo: string, bruto: unknown):
+export function validarConteudo(modelo: string, bruto: unknown, ctx?: ContextoModelo):
   | { ok: true; data: ConteudoProposta }
   | { ok: false; error: string } {
-  if (!modeloDisponivel(modelo)) return { ok: false, error: MENSAGEM_MODELO_INDISPONIVEL };
+  if (!modeloDisponivel(modelo, ctx)) return { ok: false, error: MENSAGEM_MODELO_INDISPONIVEL };
   if (modelo === "MOT") {
     const m = conteudoMotSchema.safeParse(bruto ?? {});
     if (!m.success) return { ok: false, error: mensagemErroConteudoMot(m.error.issues) };

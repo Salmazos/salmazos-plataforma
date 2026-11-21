@@ -316,3 +316,74 @@ export const parametrosMotCreateSchema = z.object({
   ...(Object.fromEntries(CHAVES_PARAMETROS_MOT.map((k) => [k, campoPercentual(k)])) as { [K in keyof ParametrosMot]: ReturnType<typeof campoPercentual> }),
 });
 export type ParametrosMotCreate = z.infer<typeof parametrosMotCreateSchema>;
+
+// ── Prévia do cálculo (tela de Nova proposta MOT) ───────────────────────────────────────────────────────────────────────────────
+// A tela mostra o cálculo ao vivo SEM gravar nada e SEM receber os percentuais: o servidor calcula com a MESMA montarSnapshotMot da criação (então o que a
+// tela mostra é o que a proposta vai gravar) e devolve só os VALORES de cada linha. Percentual cru (fgts_bp etc.) nunca sai daqui.
+// Cada posição pode ser null (função ainda sem salário): volta null na mesma posição, para a tela não se perder.
+export const previaMotSchema = z.object({
+  salarios_centavos: z
+    .array(salarioCentavos.nullable(), { error: "Informe os salários das funções." })
+    .min(1, "Informe pelo menos uma função.")
+    .max(MAX_FUNCOES_MOT, `Use no máximo ${MAX_FUNCOES_MOT} funções.`)
+    .refine((l) => l.some((s) => s !== null), "Informe o salário de pelo menos uma função."),
+});
+
+export interface LinhaPreviaMot {
+  chave: string;
+  rotulo: string;
+  valor_centavos: number | null;
+}
+export interface FuncaoPreviaMot {
+  salario_centavos: number;
+  linhas: LinhaPreviaMot[];
+  subtotal_centavos: number;
+  retencoes: LinhaPreviaMot[];
+  total_retencoes_centavos: number;
+  total_nf_centavos: number;
+  valor_mensal_extenso: string;
+}
+export interface PreviaMot {
+  vigente_desde: string;
+  funcoes: (FuncaoPreviaMot | null)[];
+  total_mensal_centavos: number;
+  total_mensal_extenso: string;
+}
+
+const semPercentual = (l: { chave: string; rotulo: string; valor_centavos: number | null }): LinhaPreviaMot => ({ chave: l.chave, rotulo: l.rotulo, valor_centavos: l.valor_centavos });
+const funcaoPrevia = (f: SnapshotMot["funcoes"][number]): FuncaoPreviaMot => ({
+  salario_centavos: f.salario_centavos,
+  linhas: f.planilha.linhas.map(semPercentual),
+  subtotal_centavos: f.planilha.subtotal_centavos,
+  retencoes: f.planilha.retencoes.map(semPercentual),
+  total_retencoes_centavos: f.planilha.total_retencoes_centavos,
+  total_nf_centavos: f.planilha.total_nf_centavos,
+  valor_mensal_extenso: f.valor_mensal_extenso,
+});
+
+// A mesma visão sem percentuais, a partir do snapshot JÁ GRAVADO de uma revisão (a tela de detalhe nunca recalcula o que foi enviado).
+export function previaDeSnapshotMot(snap: SnapshotMot): PreviaMot {
+  return { vigente_desde: snap.parametros.vigente_desde, funcoes: snap.funcoes.map(funcaoPrevia), total_mensal_centavos: snap.total_mensal_centavos, total_mensal_extenso: snap.total_mensal_extenso };
+}
+
+export function montarPreviaMot(salarios: (number | null)[], parametros: ParametrosMotVigentes): PreviaMot {
+  const posicoes = salarios.flatMap((s, i) => (s === null ? [] : [i]));
+  const snap = montarSnapshotMot({
+    numero: "PREVIA",
+    revisao: 0,
+    templateVersao: TEMPLATE_VERSAO_MOT,
+    dataEmissao: "2000-01-01",
+    validadeDias: 1,
+    validadeAte: "2000-01-02",
+    clienteNome: "Prévia",
+    aosCuidados: null,
+    // Só o salário importa para o cálculo; os outros campos são marcadores para passar no mesmo schema da criação.
+    conteudo: { funcoes: posicoes.map((i) => ({ ...FUNCAO_MOT_PADRAO, salario_centavos: salarios[i] as number })) },
+    vendedorNome: "Prévia",
+    vendedorTelefone: null,
+    parametros,
+  });
+  const funcoes: (FuncaoPreviaMot | null)[] = salarios.map(() => null);
+  snap.funcoes.forEach((f, k) => { funcoes[posicoes[k]] = funcaoPrevia(f); });
+  return { ...previaDeSnapshotMot(snap), funcoes };
+}
