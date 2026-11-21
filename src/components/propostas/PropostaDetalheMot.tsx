@@ -3,7 +3,7 @@
 import React, { useRef, useState } from "react";
 import Link from "next/link";
 import { ROTULO_MODELO, ROTULO_SITUACAO, numeroComRevisao, type SituacaoProposta } from "@/lib/propostas";
-import type { ConteudoMot } from "@/lib/propostaMot";
+import { numeroClausulaAdicionalMot, type ConteudoMot } from "@/lib/propostaMot";
 import type { PlanilhaMotDetalhe } from "@/lib/propostaServico";
 import { camposMotDeProposta, conteudoMotDoForm, validadeMotDoForm, type CamposMotForm } from "@/components/propostas/CamposPropostaMot";
 import CamposPropostaMot from "@/components/propostas/CamposPropostaMot";
@@ -13,7 +13,6 @@ import ModalSituacaoProposta, { type AcaoSituacao } from "@/components/propostas
 import { Aviso, btnPerigo, btnPrimario, btnSecundario, cardStyle, fmtDataHora, fmtMoeda, lerResposta, SeloTeste, SituacaoBadge, ValidadeTexto } from "@/components/propostas/propostasUi";
 
 // Detalhe da proposta de Mão de Obra Temporária (variante do detalhe do R&S: o R&S continua no PropostaDetalheClient, sem nenhuma mudança de caminho).
-export const TEXTO_PDF_MOT_EM_BREVE = "PDF do MOT em breve";
 
 interface Revisao { id: string; revisao: number; template_versao: number; vendedor_nome: string | null; created_at: string }
 interface Historico { id: string; de: string | null; para: string; autor_nome: string | null; observacao: string | null; created_at: string }
@@ -100,7 +99,7 @@ export default function PropostaDetalheMot({ d, hoje, podeEditar, somenteLeitura
         return;
       }
       setEditando(false);
-      onAviso(d.situacao === "rascunho" ? null : `Revisão ${d.revisao_atual + 1} emitida. O PDF do MOT ainda não está disponível.${r.json.aviso ? ` ${r.json.aviso}` : ""}`);
+      onAviso(d.situacao === "rascunho" ? null : `Revisão ${d.revisao_atual + 1} emitida. Gere o PDF desta revisão para enviar ao cliente.${r.json.aviso ? ` ${r.json.aviso}` : ""}`);
       await onRecarregar();
     } catch {
       setErroEdicao("Não foi possível salvar.");
@@ -131,9 +130,9 @@ export default function PropostaDetalheMot({ d, hoje, podeEditar, somenteLeitura
     }
   }
 
-  const botaoPdf = (rotulo: string) => (
-    <button type="button" disabled title={TEXTO_PDF_MOT_EM_BREVE} data-pdf-mot style={{ ...btnSecundario, opacity: 0.55, cursor: "not-allowed" }}>{rotulo}</button>
-  );
+  // Mesma regra do R&S: rascunho gera do conteúdo atual; as demais só têm PDF se foram enviadas (têm revisão). Cancelada que nunca foi enviada não tem.
+  const urlPdf = `/api/comercial/propostas/${d.id}/pdf`;
+  const temPdf = d.situacao === "rascunho" || d.revisoes.length > 0;
   const rotuloVigencia = planilha?.origem === "revisao" ? "Planilha desta revisão, com os percentuais em vigor desde" : "Cálculo de hoje, com os percentuais em vigor desde";
 
   return (
@@ -149,7 +148,7 @@ export default function PropostaDetalheMot({ d, hoje, podeEditar, somenteLeitura
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {botaoPdf(TEXTO_PDF_MOT_EM_BREVE)}
+          {temPdf && <a href={urlPdf} target="_blank" rel="noopener noreferrer" data-pdf-mot style={{ ...btnSecundario, textDecoration: "none", display: "inline-block" }}>{d.situacao === "rascunho" ? "Gerar PDF do rascunho" : `Gerar PDF (Rev. ${d.revisao_atual})`}</a>}
           {escreve && podeEditar && !editando && <button style={btnSecundario} onClick={abrirEdicao}>Editar</button>}
           {escreve && d.situacao === "rascunho" && <button style={btnPrimario} onClick={() => setModalEnviada(true)}>Marcar como enviada</button>}
           {escreve && aberta && <button style={btnPrimario} onClick={() => setAcao("aceita")}>Aceita</button>}
@@ -218,7 +217,7 @@ export default function PropostaDetalheMot({ d, hoje, podeEditar, somenteLeitura
             <div style={{ borderTop: "1px solid #F3F4F6", marginTop: 14, paddingTop: 14 }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Cláusulas adicionais</div>
               {d.conteudo?.clausulas_adicionais?.map((c, i) => (
-                <div key={i} style={{ fontSize: 14, color: "#111827", marginBottom: 6 }}><strong>{i + 1}.</strong> {c}</div>
+                <div key={i} style={{ fontSize: 14, color: "#111827", marginBottom: 6 }}><strong>{numeroClausulaAdicionalMot(i)}</strong> {c}</div>
               ))}
             </div>
           )}
@@ -231,7 +230,7 @@ export default function PropostaDetalheMot({ d, hoje, podeEditar, somenteLeitura
           {d.revisoes.length === 0 ? <span style={{ color: "#6B7280", fontSize: 14 }}>Ainda não enviada.</span> : d.revisoes.map((r) => (
             <div key={r.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, padding: "6px 0", borderTop: "1px solid #F3F4F6", fontSize: 14 }}>
               <span><strong>Rev. {r.revisao}</strong>{r.revisao === d.revisao_atual ? " (atual)" : ""} · {fmtDataHora(r.created_at)}</span>
-              <span data-pdf-mot style={{ color: "#9CA3AF", fontSize: 13 }}>{TEXTO_PDF_MOT_EM_BREVE}</span>
+              <a href={`${urlPdf}?rev=${r.revisao}`} target="_blank" rel="noopener noreferrer" data-pdf-mot style={{ color: "#B45309", fontWeight: 700 }}>Ver PDF</a>
             </div>
           ))}
         </div>

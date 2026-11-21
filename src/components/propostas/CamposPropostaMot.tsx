@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { MAX_CLAUSULAS_ADICIONAIS, MAX_CLAUSULA_ADICIONAL } from "@/lib/propostaClausulas";
-import { FUNCAO_MOT_PADRAO, MAX_FUNCOES_MOT, MAX_TEXTO_INTRODUTORIO_MOT, TEXTO_INTRODUTORIO_PADRAO_MOT, type ConteudoMot, type PreviaMot } from "@/lib/propostaMot";
+import { FUNCAO_MOT_PADRAO, MAX_FUNCOES_MOT, numeroClausulaAdicionalMot, MAX_TEXTO_INTRODUTORIO_MOT, TEXTO_INTRODUTORIO_PADRAO_MOT, type ConteudoMot, type PreviaMot } from "@/lib/propostaMot";
 import { caracteresOmitidos } from "@/lib/propostaTexto";
 import { VALIDADE_MAX_DIAS, VALIDADE_MIN_DIAS, VALIDADE_PADRAO_DIAS } from "@/lib/propostas";
 import { moverClausula } from "@/components/propostas/CamposProposta";
@@ -251,10 +251,10 @@ export default function CamposPropostaMot({ valor, onChange, contatos = [], cont
 
       <div>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Cláusulas adicionais (opcional)</div>
-        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 8 }}>Entram no PDF depois das condições fixas. Até {MAX_CLAUSULAS_ADICIONAIS} cláusulas de {MAX_CLAUSULA_ADICIONAL} caracteres.</div>
+        <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 8 }}>Entram no PDF depois das condições fixas (1.1 a 1.5), numeradas a partir de 1.6. Até {MAX_CLAUSULAS_ADICIONAIS} cláusulas de {MAX_CLAUSULA_ADICIONAL} caracteres.</div>
         {valor.clausulas_adicionais.map((texto, i) => (
-          <div key={i} data-clausula={i} style={{ display: "grid", gridTemplateColumns: "28px 1fr auto", gap: 8, alignItems: "start", marginBottom: 8 }}>
-            <strong style={{ fontSize: 14, paddingTop: 9 }}>{i + 1}.</strong>
+          <div key={i} data-clausula={i} style={{ display: "grid", gridTemplateColumns: "44px 1fr auto", gap: 8, alignItems: "start", marginBottom: 8 }}>
+            <strong style={{ fontSize: 14, paddingTop: 9 }}>{numeroClausulaAdicionalMot(i)}</strong>
             <div>
               <textarea style={{ ...inputStyle, minHeight: 64, resize: "vertical", fontFamily: "inherit" }} value={texto} maxLength={MAX_CLAUSULA_ADICIONAL} disabled={desabilitado}
                 onChange={(e) => onChange({ ...valor, clausulas_adicionais: valor.clausulas_adicionais.map((c, k) => (k === i ? e.target.value : c)) })} />

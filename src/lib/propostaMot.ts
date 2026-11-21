@@ -48,9 +48,13 @@ export const ITENS_FIXOS_MOT = {
   // "repassadosna" do Word virou "repassados na".
   encargos: "Todos os Encargos Trabalhistas (INSS, FGTS, Férias, 1/3 Férias, 13º Salário), serão devidamente pagos aos colaboradores e repassados na ocasião da rescisão.",
   adicionais:
-    "Os valores apresentados na tabela acima contemplam a jornada padrão de trabalho. Eventuais adicionais variáveis exigidos pela Convenção Coletiva de Trabalho (CCT) da categoria da Contratante ou pela legislação vigente — tais como horas extras, adicional noturno, insalubridade, periculosidade e reflexos — não estão inclusos no valor base e serão faturados conforme a efetiva ocorrência, seguindo os percentuais e critérios discriminados na tabela de encargos acima.",
+    "Os valores apresentados na tabela a seguir contemplam a jornada padrão de trabalho. Eventuais adicionais variáveis exigidos pela Convenção Coletiva de Trabalho (CCT) da categoria da Contratante ou pela legislação vigente — tais como horas extras, adicional noturno, insalubridade, periculosidade e reflexos — não estão inclusos no valor base e serão faturados conforme a efetiva ocorrência, seguindo os percentuais e critérios discriminados na tabela de encargos a seguir.",
   faltas: "No caso de faltas, será descontado da fatura e atestados serão repassados à Contratante.",
 } as const;
+
+// O PDF numera as cláusulas 1.1 a 1.5 (fixas: exames, encargos, adicionais da CCT, faltas e faturamento) e as adicionais seguem a partir de 1.6.
+export const QUANTIDADE_ITENS_FIXOS_MOT = 5;
+export const numeroClausulaAdicionalMot = (indice: number): string => `1.${QUANTIDADE_ITENS_FIXOS_MOT + 1 + indice}`;
 
 const doisDigitos = (n: number) => String(n).padStart(2, "0");
 // "dia 15 e 30" / "dia 5, 15 e 30"; antecedência com dois dígitos como no Word ("05 dias").

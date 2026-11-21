@@ -263,7 +263,7 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
         <div style={{ ...cardStyle, marginBottom: 16 }}>
           {modeloAtual === "MOT" ? (
             <>
-              <Aviso tipo="alerta">Modelo em teste: esta proposta sai como TESTE-MOT-..., fora das listas dos vendedores e sem efeito no Funil. O PDF do MOT ainda não está disponível.</Aviso>
+              <Aviso tipo="alerta">Modelo em teste: esta proposta sai como TESTE-MOT-..., fora das listas dos vendedores e sem efeito no Funil.</Aviso>
               <CamposPropostaMot valor={camposMot} onChange={setCamposMot} contatos={empresa.contatos} contatoId={contatoId} onContato={setContatoId} onPrevia={setPreviaMot} />
             </>
           ) : (

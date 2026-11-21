@@ -543,12 +543,12 @@ await caso("editar MOT já enviado cria a Rev. 1 com os percentuais VIGENTES HOJ
   assert.match(sem.body.error, /Não há percentuais do MOT vigentes/);
   assert.equal(JSON.stringify({ p: proposta(db, id), r: db.tabelas.proposta_revisoes }), antes);
 }));
-await caso("PDF do MOT ainda NÃO existe (2E): a rota responde 409 claro, sem gerar um PDF de R&S com dados de MOT; o PDF do R&S continua saindo", async () => comMot(async () => {
+await caso("PDF do MOT (2E): a rota gera o PDF do MOT (200, %PDF) a partir do snapshot, nunca um PDF de R&S com dados de MOT; o PDF do R&S continua saindo (a prova do PDF do MOT está em verificar-propostas-mot-pdf.mts)", async () => comMot(async () => {
   const db = novoDb();
   const mot = (await criar(db, "u-v")).body.data.id as string;
   const r = await pdf(db, "u-v", mot);
-  assert.equal(r.status, 409);
-  assert.match(r.body.error, /ainda não está disponível/);
+  assert.equal(r.status, 200);
+  assert.equal(Buffer.from(r.body.slice(0, 4)).toString("latin1"), "%PDF");
   const rs = (await chamar(db, "u-v", rotaLista.POST, { metodo: "POST", corpo: { modelo: "RS", empresa_visitada_id: EMP } })).body.data.id as string;
   const ok = await pdf(db, "u-v", rs);
   assert.equal(ok.status, 200);

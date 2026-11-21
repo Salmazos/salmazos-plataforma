@@ -3,6 +3,8 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { exigirContextoPropostas } from "@/lib/propostasAcesso";
 import { carregarProposta, podeVerProposta, snapshotParaPdf } from "@/lib/propostaServico";
 import { gerarPdfProposta } from "@/lib/propostaPdf";
+import { gerarPdfPropostaMot } from "@/lib/propostaPdfMot";
+import { snapshotMotSchema } from "@/lib/propostaMot";
 
 // sharp e fs só existem no runtime Node.
 export const runtime = "nodejs";
@@ -29,11 +31,23 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const snap = await snapshotParaPdf(svc, proposta, revisao);
   if (!snap.ok) return NextResponse.json({ error: snap.error }, { status: snap.status });
 
-  // O PDF do MOT é a etapa 2E: até lá só o R&S gera PDF (nunca um PDF de R&S com dados de MOT).
-  if (snap.data.modelo !== "RS") return NextResponse.json({ error: "O PDF deste modelo de proposta ainda não está disponível." }, { status: 409 });
+  // R&S e MOT geram PDF (cada um do seu snapshot); TS ainda não. Nunca um PDF de um modelo com dados de outro.
+  if (snap.data.modelo !== "RS" && snap.data.modelo !== "MOT") return NextResponse.json({ error: "O PDF deste modelo de proposta ainda não está disponível." }, { status: 409 });
   // A marca TESTE vem da LINHA da proposta (flag fixada na criação), nunca do snapshot: o snapshot das revisões é imutável.
-  const bytes = await gerarPdfProposta(snap.data, { teste: proposta.teste === true });
-  const nomeArquivo = `proposta-${String(proposta.numero).replace("/", "-")}${snap.data.revisao > 0 ? `-rev${snap.data.revisao}` : ""}.pdf`;
+  const opcoes = { teste: proposta.teste === true };
+  let bytes: Uint8Array;
+  let revisaoDoArquivo: number;
+  if (snap.data.modelo === "MOT") {
+    // O snapshot gravado é conferido antes de virar PDF (uma revisão corrompida não gera documento errado).
+    const valido = snapshotMotSchema.safeParse(snap.data);
+    if (!valido.success) return NextResponse.json({ error: "Não foi possível ler os dados desta revisão." }, { status: 500 });
+    bytes = await gerarPdfPropostaMot(valido.data, opcoes);
+    revisaoDoArquivo = valido.data.revisao;
+  } else {
+    bytes = await gerarPdfProposta(snap.data, opcoes);
+    revisaoDoArquivo = snap.data.revisao;
+  }
+  const nomeArquivo = `proposta-${String(proposta.numero).replace("/", "-")}${revisaoDoArquivo > 0 ? `-rev${revisaoDoArquivo}` : ""}.pdf`;
   return new NextResponse(Buffer.from(bytes), {
     headers: { "Content-Type": "application/pdf", "Content-Disposition": `inline; filename="${nomeArquivo}"`, "Cache-Control": "private, no-store" },
   });
