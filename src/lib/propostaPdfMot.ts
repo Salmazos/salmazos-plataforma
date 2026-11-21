@@ -16,7 +16,6 @@ import { ENDERECOS_RODAPE_PROPOSTA, PASTA_CABECALHO_PROPOSTA, PASTA_CLIENTES_PRO
 // por função, sempre INTEIRA (nunca cortada; cabem 2 por página) → grade de clientes. A tabela ORÇAMENTO pode atravessar páginas repetindo o cabeçalho.
 
 const limpar = textoDesenhavel;
-const BRANCO = rgb(1, 1, 1);
 // Vermelho-escuro só nas linhas de taxa, encargos e retenções da planilha de verbas (como no Word); o resto segue as cores do R&S.
 const VERMELHO = rgb(0.62, 0.05, 0.05);
 const FUNDO_CLARO = rgb(0.96, 0.96, 0.96);
@@ -111,19 +110,26 @@ function desenharLinhaOrcamento(e: Escritor, f: SnapshotMot["funcoes"][number]) 
   e.y = topo - altura;
 }
 
-// Faixa preta com o valor mensal: "VALOR MENSAL" à esquerda, o valor à direita e o valor por extenso embaixo.
-function desenharFaixaValor(e: Escritor, rotulo: string, centavos: number, extenso: string, corTitulo = BRANCO) {
-  const linhasExtenso = quebrar(`(${extenso})`, e.regular, 8.5, CW - 16);
+// Faixa de valor mensal em CINZA CLARO (o preto pesava): "VALOR MENSAL" à esquerda, o valor à direita e o valor por extenso embaixo, tudo em texto escuro.
+// As faixas por função são cinza-claro com filete fino; a que traz o TOTAL (o "VALOR MENSAL TOTAL", ou o único "VALOR MENSAL" de uma proposta de 1 função) fica um
+// tom mais escuro, com barra amarela na lateral, borda preta fina e valor maior, para se distinguir. As faixas pretas de título (ORÇAMENTO, PLANILHA DE VERBAS,
+// clientes) e o cabeçalho do R&S não mudam.
+export const COR_FAIXA_VALOR = rgb(0.93, 0.93, 0.93);
+export const COR_FAIXA_TOTAL = rgb(0.89, 0.89, 0.89);
+function desenharFaixaValor(e: Escritor, rotulo: string, centavos: number, extenso: string, total = false) {
+  const recuo = total ? 14 : 8;
+  const linhasExtenso = quebrar(`(${extenso})`, e.regular, 8.5, CW - recuo - 8);
   const altura = 10 + 14 + linhasExtenso.length * 10.5 + 6;
   if (!e.cabe(altura + 8)) e.novaPagina(false);
   const topo = e.y - 8;
-  e.page.drawRectangle({ x: ML, y: topo - altura, width: CW, height: altura, color: BLACK });
-  const titulo = limpar(rotulo);
-  e.page.drawText(titulo, { x: ML + 8, y: topo - 17, size: 11, font: e.bold, color: corTitulo });
+  e.page.drawRectangle({ x: ML, y: topo - altura, width: CW, height: altura, color: total ? COR_FAIXA_TOTAL : COR_FAIXA_VALOR, borderColor: total ? BLACK : LIGHT_GRAY, borderWidth: total ? 0.9 : 0.6 });
+  if (total) e.page.drawRectangle({ x: ML, y: topo - altura, width: 6, height: altura, color: YELLOW });
+  e.page.drawText(limpar(rotulo), { x: ML + recuo, y: topo - 17, size: 11, font: e.bold, color: total ? BLACK : DARK });
+  const tamanhoValor = total ? 13 : 12;
   const valor = brl(centavos);
-  const w = e.bold.widthOfTextAtSize(valor, 12);
-  e.page.drawText(valor, { x: ML + CW - 8 - w, y: topo - 17, size: 12, font: e.bold, color: corTitulo });
-  linhasExtenso.forEach((l, i) => e.page.drawText(l, { x: ML + 8, y: topo - 29 - i * 10.5, size: 8.5, font: e.regular, color: BRANCO }));
+  const w = e.bold.widthOfTextAtSize(valor, tamanhoValor);
+  e.page.drawText(valor, { x: ML + CW - 8 - w, y: topo - 17, size: tamanhoValor, font: e.bold, color: total ? BLACK : DARK });
+  linhasExtenso.forEach((l, k) => e.page.drawText(l, { x: ML + recuo, y: topo - 29 - k * 10.5, size: 8.5, font: e.regular, color: DARK }));
   e.y = topo - altura;
 }
 
@@ -212,8 +218,8 @@ export async function gerarPdfPropostaMot(snap: SnapshotMot, opcoes: OpcoesPdfPr
   desenharCabecalhoOrcamento(e);
   for (const f of snap.funcoes) desenharLinhaOrcamento(e, f);
   const varias = snap.funcoes.length > 1;
-  snap.funcoes.forEach((f, i) => desenharFaixaValor(e, varias ? `VALOR MENSAL – Função ${i + 1} (${f.area})` : "VALOR MENSAL", f.valor_mensal_centavos, f.valor_mensal_extenso));
-  if (varias) desenharFaixaValor(e, "VALOR MENSAL TOTAL", snap.total_mensal_centavos, snap.total_mensal_extenso, YELLOW);
+  snap.funcoes.forEach((f, i) => desenharFaixaValor(e, varias ? `VALOR MENSAL – Função ${i + 1} (${f.area})` : "VALOR MENSAL", f.valor_mensal_centavos, f.valor_mensal_extenso, !varias));
+  if (varias) desenharFaixaValor(e, "VALOR MENSAL TOTAL", snap.total_mensal_centavos, snap.total_mensal_extenso, true);
   e.espaco(14);
 
   // Cláusulas: 1.1 a 1.5 fixas (texto do Word) e as adicionais seguindo, 1.6, 1.7…

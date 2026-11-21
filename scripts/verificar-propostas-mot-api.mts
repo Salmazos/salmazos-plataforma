@@ -339,14 +339,16 @@ await caso("R&S INALTERADO byte a byte: snapshot e conteúdo do PDF (v1 e v2) id
     },
     vendedorNome: "Vendedor Teste", vendedorTelefone: "(19) 99999-0000", vendedorEmail: "vendedor@salmazos.com.br",
   });
+  // Os hashes do PDF (pdf_*) foram ATUALIZADOS de propósito quando a 3ª linha do rodapé (São Bernardo do Campo) mudou de endereço e telefone. Prova de que só essa
+  // linha mudou: o texto extraído e o desenho das mesmas páginas, antes e depois, são idênticos sem ela (ver o relatório da troca do rodapé). Os hashes do snapshot não mudam.
   const GOLDEN = {
     snapshot_v1: "cefa6bfd160e3837607bd95dd55fff1ccce0a3d7f31ebfb28a99663791b417cb",
     snapshot_v2: "58f3bacc0574ac0f8137d9d714662527d0037feb21e6bce6806dd396b82507aa",
-    pdf_v1: ["72a0609fa0ed26925e2e7a1cf4d268c86228b0ab6b4f85f715780a66e7196cc4", "e45bb7a69efd237e18970c7817b1e59b5e79cf9668a25c8693207d89a5ee5fb2"],
-    pdf_v2: ["c884866eb926441bc074e22c98eb8b5ab1bac80600ecf71e7247e4a9161f1b73", "2bc05f29ea2732e441fc285fea321b8c30398c5a036900b62b0d2da4a855b49d"],
+    pdf_v1: ["c5e97dec11e4a401e146f3a5376bd27bb0a46a81e65880f526504a39778a3cbe", "800d7febfec849eb87ad3257b640219ee26d6e091a18875aa05f8201f412440b"],
+    pdf_v2: ["5f3961a4f83bbf9bb517c7db4f9de12de60f11eec51675da80468cb0803302ba", "56b54d3f833efc8db9dbe638e48b37ab0a0c54bd3004122cebd03508e83cb99a"],
     // Tudo padrão (sem texto introdutório nem cláusulas): exercita os textos fixos do template v2.
     snapshot_v2_padrao: "bbb3017f2f91f42c728b68aae09f41f07e82dc019710250610006c560836f0f2",
-    pdf_v2_padrao: ["e71cf10d4d5e60085a07f8f1461273734ca18441d44df477c7da171ff7e782be", "bbdf41b9c8791759dbc9f8bcbda5ad1e128ffb76ec8653c240bb2b9330a39bfb"],
+    pdf_v2_padrao: ["b4af67f53f562e417d6eaa4c95afdc7de5d2e66437f51b0bc4068732b48ac944", "b1c3f687652c4845bcb35fed7447e1122aeadba25a20993e07ad4dd8c4ab25be"],
   };
   const hashPaginas = async (bytes: Uint8Array) => {
     const doc = await PDFDocument.load(bytes);
