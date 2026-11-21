@@ -18,7 +18,10 @@ import { hojeSaoPaulo } from "@/lib/comercial";
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 let total = 0;
+// Telas montadas por um caso (com consulta de prévia pendente) são desmontadas antes do caso seguinte: um timer de um caso anterior não pode responder no meio de outro.
+const vivos: TestRenderer.ReactTestRenderer[] = [];
 async function caso(nome: string, fn: () => Promise<void> | void) {
+  for (const v of vivos.splice(0)) { try { await act(async () => { v.unmount(); }); } catch { /* já desmontada */ } }
   try { await fn(); total++; console.log(`OK    ${nome}`); }
   catch (e) { console.log(`FALHA ${nome}\n      ${(e as Error).message.split("\n").join("\n      ")}`); process.exitCode = 1; }
 }
@@ -66,6 +69,7 @@ async function montar(inicial = camposMotPadrao(), desabilitado = false) {
   chamadas = []; ultimaPrevia = null;
   let r!: TestRenderer.ReactTestRenderer;
   await act(async () => { r = TestRenderer.create(React.createElement(Pagina, { inicial, desabilitado })); });
+  vivos.push(r);
   return r;
 }
 const salario = async (r: TestRenderer.ReactTestRenderer, i: number, reais: number) => {
@@ -306,6 +310,7 @@ async function montarAba(dados: unknown = DADOS(), postar?: (c: Chamada) => { st
   resposta = (c) => (c.metodo === "POST" ? (postar ?? (() => ({ status: 201, corpo: { data: linha({ id: "n" }) } })))(c) : { status: 200, corpo: dados });
   let r!: TestRenderer.ReactTestRenderer;
   await act(async () => { r = TestRenderer.create(React.createElement(PercentuaisMotAdmin)); });
+  vivos.push(r);
   await esperar(20);
   return r;
 }
@@ -389,6 +394,7 @@ await caso("aba de percentuais: acesso negado (não é diretoria) mostra só a m
   resposta = () => ({ status: 403, corpo: { error: "Só a diretoria acessa os percentuais do MOT." } });
   let n!: TestRenderer.ReactTestRenderer;
   await act(async () => { n = TestRenderer.create(React.createElement(PercentuaisMotAdmin)); });
+  vivos.push(n);
   await esperar(20);
   assert.match(textoDe(n), /Só a diretoria acessa os percentuais do MOT/);
   assert.equal(botoes(n).length, 0);
@@ -412,6 +418,7 @@ const propsDetalhe = (d: DetalheMot, extra: Record<string, unknown> = {}) => ({
 async function montarDetalhe(d: DetalheMot, extra: Record<string, unknown> = {}) {
   let r!: TestRenderer.ReactTestRenderer;
   await act(async () => { r = TestRenderer.create(React.createElement(PropostaDetalheMot, propsDetalhe(d, extra) as any)); });
+  vivos.push(r);
   return r;
 }
 await caso("detalhe MOT (rascunho de teste): funções, planilha com os valores calculados, condições, cláusula numerada 1., selo TESTE, SEM CNPJ/endereço; 'PDF do MOT em breve' desabilitado e nenhum link para a rota de PDF", async () => {
@@ -494,6 +501,27 @@ await caso("detalhe MOT: editar abre o formulário MOT com os dados salvos e sal
 });
 
 
+await caso("detalhe MOT enviada: ao editar o aviso diz que o valor estimado passa a ser o da nova revisão; depois de salvar, o aviso do Funil devolvido pelo servidor aparece", async () => {
+  chamadas = [];
+  resposta = (c) => (c.metodo === "PATCH" ? { status: 200, corpo: { data: {}, aviso: "O valor do Funil não pôde ser atualizado." } } : c.url.includes("previa") ? servidorPrevia(c) : { status: 200, corpo: { data: [] } });
+  const avisos: (string | null)[] = [];
+  const enviada = detalheMot({ situacao: "enviada", revisao_atual: 0, valor_estimado: 7936.57, enviada_em: "2026-11-20T12:00:00Z", validade_ate: "2026-11-30" });
+  const r = await montarDetalhe(enviada, { onAviso: (a: string | null) => avisos.push(a) });
+  await clicar(botaoPorTexto(r, "Editar"));
+  await esperar(DEBOUNCE);
+  assert.match(textoDe(r), /Isto vai gerar a Rev. 1 ?. A revisão anterior continua guardada.*O valor estimado passa a ser o da nova revisão./);
+  await clicar(botaoPorTexto(r, "Salvar e gerar Rev. 1"));
+  await esperar(40);
+  assert.equal(avisos.length, 1);
+  assert.match(String(avisos[0]), /Revisão 1 emitida. O PDF do MOT ainda não está disponível. O valor do Funil não pôde ser atualizado./);
+  // rascunho: sem o aviso de revisão
+  const rasc = await montarDetalhe(detalheMot());
+  await clicar(botaoPorTexto(rasc, "Editar"));
+  assert.doesNotMatch(textoDe(rasc), /valor estimado passa a ser/);
+  // desmonta: o formulário aberto tem consulta de prévia pendente e não pode vazar para os casos seguintes
+  await act(async () => { r.unmount(); rasc.unmount(); });
+});
+
 // ═══ Tela "Nova proposta": seletor de modelo e envio ═════════════════════════
 import PropostaNovaClient from "@/components/propostas/PropostaNovaClient";
 const EMPRESA_REAL = { id: "e-real", nome: "Pastifício Selmi", contatos: [{ id: "c1", nome: "Ana", cargo: null, principal: true }] };
@@ -511,6 +539,7 @@ async function montarNova(gestor: boolean, empresas: unknown[]) {
   };
   let r!: TestRenderer.ReactTestRenderer;
   await act(async () => { r = TestRenderer.create(React.createElement(PropostaNovaClient, { meuNome: "Olver", gestor })); });
+  vivos.push(r);
   await esperar(20);
   return { r, navegou };
 }
