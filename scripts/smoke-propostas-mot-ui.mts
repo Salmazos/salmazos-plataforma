@@ -9,7 +9,7 @@ import CamposPropostaMot, {
 } from "@/components/propostas/CamposPropostaMot";
 import PercentuaisMotAdmin, { percentualParaBp } from "@/components/propostas/PercentuaisMotAdmin";
 import ModalMarcarEnviadaMot from "@/components/propostas/ModalMarcarEnviadaMot";
-import PropostaDetalheMot, { TEXTO_PDF_MOT_EM_BREVE, type DetalheMot } from "@/components/propostas/PropostaDetalheMot";
+import PropostaDetalheMot, { type DetalheMot } from "@/components/propostas/PropostaDetalheMot";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import { FUNCAO_MOT_PADRAO, MAX_FUNCOES_MOT, TEXTO_INTRODUTORIO_PADRAO_MOT, conteudoMotSchema, montarPreviaMot, previaMotSchema, type ParametrosMotVigentes } from "@/lib/propostaMot";
 import { CHAVES_PARAMETROS_MOT, PARAMETROS_MOT_INICIAIS, calcularPlanilhaMot, formatarCentavosBRL } from "@/lib/propostaMotCalculo";
@@ -228,8 +228,9 @@ await caso("cláusulas: adicionar (até 10), digitar, reordenar (↑/↓) e remo
   await clicar(botoes(r).find((b) => b.props["aria-label"] === "Remover cláusula 1"));
   assert.equal(ultimo.clausulas_adicionais[0], "A");
   assert.equal(ultimo.clausulas_adicionais.length, 9);
-  // o texto das cláusulas MOT não usa a numeração 1.x do R&S
-  assert.doesNotMatch(textoDe(r), /1\.8|1\.9/);
+  // numeração das adicionais do MOT: continua depois das 5 fixas (1.1 a 1.5), igual ao PDF: 1.6, 1.7…, até 1.14 com 9 cláusulas
+  const rotulos = r.root.findAll((n) => n.type === "strong" && /^1\.\d+$/.test(txt(n))).map((n) => txt(n));
+  assert.deepEqual(rotulos, ["1.6", "1.7", "1.8", "1.9", "1.10", "1.11", "1.12", "1.13", "1.14"]);
 });
 await caso("edição: proposta MOT salva volta ao formulário como estava (funções, salário em reais, condições, cláusulas); campos desabilitados não têm botões", async () => {
   resposta = servidorPrevia;
@@ -271,7 +272,7 @@ await caso("'Marcar como enviada' do MOT: SEM campo de valor; mostra cada funç�
   assert.match(t, /6\.046,93/);
   assert.match(txt(porData(r, "data-total-mensal")[0]), /7\.936,57/);
   assert.match(t, /Nada vai para o Funil/);
-  assert.match(t, /O PDF do MOT ainda não está disponível/);
+  assert.match(t, /Confira o cálculo acima e que o PDF enviado foi gerado a partir desta versão/);
   await clicar(botaoPorTexto(r, "Confirmar envio"));
   assert.equal(confirmou, 1);
   assert.deepEqual(argumentos, [], "nenhum valor é enviado");
@@ -433,24 +434,37 @@ await caso("detalhe MOT (rascunho de teste): funções, planilha com os valores 
   assert.match(t, /6\.046,93/);
   assert.match(txt(porData(r, "data-total-mensal")[0]), /7\.936,57/);
   assert.match(t, /dia 15 e dia 30/);
-  assert.match(t, /1\s?\.\s?Cláusula especial\./);
+  assert.match(t, /1\.6\s?Cláusula especial\./);
   assert.doesNotMatch(t, /CNPJ|Endereço/);
   assert.doesNotMatch(t, /\d,\d+%|pontos-base/, "sem percentuais na tela do vendedor");
-  const pdf = botoes(r).filter((b) => b.props["data-pdf-mot"] !== undefined);
-  assert.equal(pdf.length, 1);
-  assert.equal(pdf[0].props.disabled, true);
-  assert.equal(pdf[0].props.title, TEXTO_PDF_MOT_EM_BREVE);
-  assert.match(txt(pdf[0]), /PDF do MOT em breve/);
-  assert.equal(r.root.findAll((n) => n.type === "a").filter((a) => String(a.props.href ?? "").includes("/pdf")).length, 0, "nenhum link para a rota de PDF");
+  assert.doesNotMatch(t, /PDF do MOT em breve/);
+  const links = r.root.findAll((n) => n.type === "a" && n.props["data-pdf-mot"] !== undefined);
+  assert.equal(links.length, 1, "rascunho: só o link do PDF do rascunho");
+  assert.equal(links[0].props.href, "/api/comercial/propostas/p1/pdf");
+  assert.match(txt(links[0]), /Gerar PDF do rascunho/);
+  assert.equal(r.root.findAll((n) => n.type === "button" && n.props["data-pdf-mot"] !== undefined).length, 0, "nenhum botão desabilitado de PDF");
   assert.ok(botaoPorTexto(r, "Marcar como enviada") && botaoPorTexto(r, "Editar") && botaoPorTexto(r, "Cancelar"));
 });
-await caso("detalhe MOT enviada: revisões mostram 'PDF do MOT em breve' (sem link); valor estimado vem do servidor; planilha é a da revisão; somente leitura esconde os botões de ação", async () => {
+await caso("detalhe MOT: PDF como o R&S — rascunho 'Gerar PDF do rascunho'; enviada 'Gerar PDF (Rev. N)' e 'Ver PDF' por revisão com ?rev=N; cancelada que nunca foi enviada não tem PDF", async () => {
+  const revs = [{ id: "r1", revisao: 1, template_versao: 1, vendedor_nome: "Olver", created_at: "2026-11-20T12:00:00Z" }, { id: "r0", revisao: 0, template_versao: 1, vendedor_nome: "Olver", created_at: "2026-11-20T11:00:00Z" }];
+  const r = await montarDetalhe(detalheMot({ situacao: "enviada", revisao_atual: 1, revisoes: revs, valor_estimado: 7936.57, enviada_em: "2026-11-20T12:00:00Z", validade_ate: "2026-11-30" }));
+  const links = r.root.findAll((n) => n.type === "a" && n.props["data-pdf-mot"] !== undefined);
+  assert.deepEqual(links.map((a) => a.props.href), ["/api/comercial/propostas/p1/pdf", "/api/comercial/propostas/p1/pdf?rev=1", "/api/comercial/propostas/p1/pdf?rev=0"]);
+  assert.match(txt(links[0]), /Gerar PDF \(Rev\. 1\)/);
+  assert.match(txt(links[1]), /Ver PDF/);
+  assert.ok(links.every((a) => a.props.target === "_blank"));
+  const cancelada = await montarDetalhe(detalheMot({ situacao: "cancelada", revisoes: [] }));
+  assert.equal(cancelada.root.findAll((n) => n.type === "a" && n.props["data-pdf-mot"] !== undefined).length, 0, "sem envio não há PDF");
+  const canceladaEnviada = await montarDetalhe(detalheMot({ situacao: "cancelada", revisoes: [revs[1]] }));
+  assert.equal(canceladaEnviada.root.findAll((n) => n.type === "a" && n.props["data-pdf-mot"] !== undefined).length, 2, "cancelada que foi enviada mantém os PDFs das revisões");
+});
+await caso("detalhe MOT enviada: valor estimado vem do servidor; planilha é a da revisão; somente leitura esconde os botões de ação", async () => {
   const enviada = detalheMot({ situacao: "enviada", revisao_atual: 1, valor_estimado: 7936.57, enviada_em: "2026-11-20T12:00:00Z", validade_ate: "2026-11-30", revisoes: [{ id: "r1", revisao: 1, template_versao: 1, vendedor_nome: "Olver", created_at: "2026-11-20T12:00:00Z" }, { id: "r0", revisao: 0, template_versao: 1, vendedor_nome: "Olver", created_at: "2026-11-20T11:00:00Z" }] });
   const r = await montarDetalhe(enviada, { planilha: { origem: "revisao", previa: PREVIA, erro: null } });
   const t = textoDe(r);
   assert.match(t, /Planilha desta revisão/);
   assert.match(t, /7\.936,57/);
-  assert.equal(porData(r, "data-pdf-mot").length, 3, "botão do topo + 2 revisões");
+  assert.equal(porData(r, "data-pdf-mot").length, 3, "link do topo + 2 revisões");
   assert.ok(botaoPorTexto(r, "Aceita") && botaoPorTexto(r, "Recusada"));
   assert.equal(botaoPorTexto(r, "Marcar como enviada"), undefined);
   const leitura = await montarDetalhe(enviada, { somenteLeitura: true });
@@ -513,7 +527,7 @@ await caso("detalhe MOT enviada: ao editar o aviso diz que o valor estimado pass
   await clicar(botaoPorTexto(r, "Salvar e gerar Rev. 1"));
   await esperar(40);
   assert.equal(avisos.length, 1);
-  assert.match(String(avisos[0]), /Revisão 1 emitida. O PDF do MOT ainda não está disponível. O valor do Funil não pôde ser atualizado./);
+  assert.match(String(avisos[0]), /Revisão 1 emitida. Gere o PDF desta revisão para enviar ao cliente. O valor do Funil não pôde ser atualizado./);
   // rascunho: sem o aviso de revisão
   const rasc = await montarDetalhe(detalheMot());
   await clicar(botaoPorTexto(rasc, "Editar"));

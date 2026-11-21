@@ -75,7 +75,7 @@ export default function ModalMarcarEnviadaMot({ numero, clienteNome, validadeDia
         {linha("Validade", `${validadeDias} dias, até ${fmtData(calcularValidadeAte(hoje, validadeDias))}`)}
       </div>
 
-      <Aviso tipo="info">O PDF do MOT ainda não está disponível. Confira o cálculo acima antes de confirmar.</Aviso>
+      <Aviso tipo="info">Confira o cálculo acima e que o PDF enviado foi gerado a partir desta versão.</Aviso>
       {!vendedorTemTelefone && (
         <Aviso tipo="alerta">Seu telefone não está no perfil e não aparecerá no PDF. <Link href="/painel/meu-perfil" style={{ fontWeight: 700, color: "inherit", textDecoration: "underline" }}>Abrir Meu Perfil</Link></Aviso>
       )}
