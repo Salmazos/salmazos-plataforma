@@ -9,14 +9,14 @@ export const dynamic = "force-dynamic";
 
 // Lista do controle de férias (a tela da 2C consome esta rota): quem entra, período atual, data-limite, dias restantes e semáforo.
 // Mesmo gate de Funcionários (sem chave nova) e recorte por unidade do RH. Garante os períodos que faltam (idempotente).
-// Filtros na query: cliente_id, unidade_id, situacao, semaforo, a_vencer=1, busca.
+// Filtros na query: cliente_id, unidade_id, situacao, semaforo, faixa (vencidos, ate30, ate90, pendente), a_vencer=1, busca.
 export async function GET(request: NextRequest) {
   const auth = await autorizarFerias();
   if ("erro" in auth) return auth.erro;
 
   const q = request.nextUrl.searchParams;
   const bruto: Record<string, unknown> = {};
-  for (const chave of ["cliente_id", "unidade_id", "situacao", "semaforo", "busca"]) {
+  for (const chave of ["cliente_id", "unidade_id", "situacao", "semaforo", "faixa", "busca"]) {
     const valor = q.get(chave);
     if (valor) bruto[chave] = valor;
   }

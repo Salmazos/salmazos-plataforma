@@ -1438,6 +1438,8 @@ export const feriasFiltrosSchema = z.object({
   unidade_id: z.string().uuid("Unidade inválida").optional(),
   situacao: z.enum(["a_programar", "programada", "em_gozo", "gozada"]).optional(),
   semaforo: z.enum(["verde", "amarelo", "vermelho", "cinza"]).optional(),
+  // Faixas do resumo da tela (vencidos, até 30 dias, de 31 a 90 dias, saldo pendente): a exportação respeita o mesmo recorte da tela.
+  faixa: z.enum(["vencidos", "ate30", "ate90", "pendente"]).optional(),
   a_vencer: z.boolean().optional(),
   busca: z.string().trim().max(100, "Busca muito longa").optional(),
 });
