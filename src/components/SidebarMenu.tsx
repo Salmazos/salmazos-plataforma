@@ -42,6 +42,7 @@ import {
   FileSpreadsheet,
   FileText,
   PieChart,
+  TreePalm,
 } from "lucide-react";
 import { fundoSoLeitura } from "@/lib/fundoDaJanela";
 
@@ -163,6 +164,7 @@ const menuItems: MenuItemDef[] = [
       { label: "Gestão de Pessoas", href: "/painel/gestao-pessoas", icon: PieChart, requireFuncionarios: true },
       { label: "Espelho de Ponto", href: "/painel/ponto", icon: FileSpreadsheet, requirePonto: true },
       { label: "Vencimento de Contrato", href: "/painel/vencimento-contrato", icon: Clock, requireFuncionarios: true },
+      { label: "Férias", href: "/painel/ferias", icon: TreePalm, requireFuncionarios: true },
       { label: "Rescisões", href: "/painel/rescisoes", icon: UserMinus, requireFuncionarios: true },
       { label: "Aniversários", href: "/painel/aniversarios", icon: Cake, requireAniversarios: true },
     ],

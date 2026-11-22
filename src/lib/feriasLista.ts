@@ -5,55 +5,15 @@ import type { createServiceClient } from "@/lib/supabase/server";
 import type { ContextoUnidade } from "@/lib/unidadeAuth";
 import { celulaCsv } from "@/lib/gestaoPessoasLista";
 import { dataBR } from "@/lib/dataBR";
-import {
-  ROTULO_ESTADO_FERIAS, ROTULO_SITUACAO_FERIAS, textoDiasRestantes, type EstadoFerias, type OrigemPeriodo, type SemaforoFerias, type SituacaoFerias,
-} from "@/lib/feriasRegras";
+import { ROTULO_ESTADO_FERIAS, ROTULO_SITUACAO_FERIAS, textoDiasRestantes, type OrigemPeriodo, type SemaforoFerias, type SituacaoFerias } from "@/lib/feriasRegras";
+import { filtrarLinhasFerias, type FiltrosFerias, type LinhaFerias } from "@/lib/feriasLinhas";
 import { carregarDadosFerias, carregarElegiveis, garantirPeriodosLote, montarEstado, respostaDeErro } from "@/lib/feriasPeriodos";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
-export interface FiltrosFerias {
-  cliente_id?: string;
-  unidade_id?: string;
-  situacao?: SituacaoFerias;
-  semaforo?: SemaforoFerias;
-  a_vencer?: boolean;
-  busca?: string;
-}
-
-export interface LinhaFerias {
-  funcionario_id: string;
-  nome_completo: string;
-  cliente_id: string | null;
-  cliente_nome: string;
-  unidade_id: string;
-  unidade_nome: string;
-  tipo_servico: string | null;
-  efetivado_em: string | null;
-  data_admissao: string | null;
-  data_base: string | null;
-  data_base_ajustada: boolean;
-  estado: EstadoFerias;
-  estado_rotulo: string;
-  semaforo: SemaforoFerias;
-  dias_restantes: number | null;
-  saldo_confirmado: boolean;
-  // Saldo não gravado mas dispensado: ainda não há período terminado (menos de 12 meses de casa), vale "nenhum" calculado na hora.
-  saldo_calculado: boolean;
-  programacao_vencida: boolean;
-  periodo: {
-    id: string;
-    numero: number;
-    aquisitivo_inicio: string;
-    aquisitivo_fim: string;
-    data_limite: string;
-    situacao: SituacaoFerias;
-    gozo_inicio: string | null;
-    gozo_fim: string | null;
-    observacao: string | null;
-    origem: OrigemPeriodo;
-  } | null;
-}
+// Tipos e filtro da linha vivem em feriasLinhas.ts (puro, usado também pela tela); reexportados aqui para quem já importava deste arquivo.
+export { filtrarLinhasFerias };
+export type { FiltrosFerias, LinhaFerias };
 
 export interface ListaFerias {
   linhas: LinhaFerias[];
@@ -65,23 +25,6 @@ export interface ListaFerias {
 
 const ORDEM_SEMAFORO: Record<SemaforoFerias, number> = { vermelho: 0, amarelo: 1, verde: 2, cinza: 3 };
 
-const MARCAS = new RegExp("[\\u0300-\\u036f]", "g");
-const normalizar = (t: string) => t.normalize("NFD").replace(MARCAS, "").toLowerCase();
-
-// Mesmo comportamento dos filtros da tela: todos combinam com AND.
-export function filtrarLinhasFerias(linhas: LinhaFerias[], f: FiltrosFerias): LinhaFerias[] {
-  const busca = f.busca ? normalizar(f.busca) : "";
-  return linhas.filter((l) => {
-    if (f.cliente_id && l.cliente_id !== f.cliente_id) return false;
-    if (f.unidade_id && l.unidade_id !== f.unidade_id) return false;
-    if (f.situacao && l.periodo?.situacao !== f.situacao) return false;
-    if (f.semaforo && l.semaforo !== f.semaforo) return false;
-    if (f.a_vencer && l.semaforo !== "amarelo" && l.semaforo !== "vermelho") return false;
-    if (busca && !normalizar(l.nome_completo).includes(busca)) return false;
-    return true;
-  });
-}
-
 // Do mais urgente para o menos: vermelho (vencidos primeiro, dias negativos), amarelo, verde; cinza no fim, por nome.
 function ordenar(linhas: LinhaFerias[]): LinhaFerias[] {
   return [...linhas].sort((a, b) => {
@@ -91,6 +34,12 @@ function ordenar(linhas: LinhaFerias[]): LinhaFerias[] {
     if (da !== db) return da - db;
     return a.nome_completo.localeCompare(b.nome_completo, "pt-BR");
   });
+}
+
+// Último período lançado pelo RH (origem "gerado", fora de "a programar"): é o único que a rota de situação aceita reabrir.
+function ultimoLancado(periodos: { id: string; numero: number; situacao: SituacaoFerias; origem: OrigemPeriodo; gozo_inicio: string | null; gozo_fim: string | null }[]): LinhaFerias["reabrivel"] {
+  const p = [...periodos].filter((x) => x.origem === "gerado" && x.situacao !== "a_programar").sort((a, b) => b.numero - a.numero)[0];
+  return p ? { id: p.id, numero: p.numero, situacao: p.situacao, gozo_inicio: p.gozo_inicio, gozo_fim: p.gozo_fim } : null;
 }
 
 // Monta a lista completa (já com os períodos garantidos) e aplica os filtros. Devolve `erroResposta` pronto quando o banco falha
@@ -136,6 +85,7 @@ export async function montarListaFerias(
       dias_restantes: e.avaliacao.diasRestantes,
       saldo_confirmado: e.saldoConfirmado,
       saldo_calculado: e.avaliacao.saldoCalculado,
+      reabrivel: ultimoLancado(e.periodos),
       programacao_vencida: e.avaliacao.programacaoVencida,
       periodo: p
         ? {

@@ -14,7 +14,8 @@ interface Params {
 
 // Programar = registrar as datas de gozo combinadas com a contabilidade: "a programar" (ou "programada", para trocar as datas) → "programada".
 // Só o período atual (o mais antigo ainda não gozado). A contabilidade faz os cálculos; aqui só valem janelas de data simples:
-//  início de hoje em diante, depois do fim do aquisitivo e até a data-limite (programar depois dela esconderia o risco de pagamento em dobro).
+//  início de hoje em diante, depois do fim do aquisitivo, e início E fim até a data-limite (dias gozados depois dela são pagos em dobro, Súmula 81 do TST;
+//  programar depois dela também esconderia o risco). Período já vencido: o RH usa "Em gozo" ou "Gozada" direto.
 // Ao programar, os registros dos avisos de 90/60/30 são zerados: os avisos só voltam se a data de início passar sem a situação mudar.
 export async function POST(request: NextRequest, { params }: Params) {
   const { funcionarioId } = await params;
@@ -55,6 +56,11 @@ export async function POST(request: NextRequest, { params }: Params) {
       { error: `A data inicial passa da data-limite (${formatarDataBR(atual.data_limite)}). Para registrar férias já em andamento ou concluídas, use "Em gozo" ou "Gozada".` },
       { status: 400 }
     );
+  }
+
+  // O FIM também não pode passar da data-limite: dias gozados depois do período concessivo são pagos em dobro (Súmula 81 do TST).
+  if (d.gozo_fim > atual.data_limite) {
+    return NextResponse.json({ error: `O fim das férias não pode passar da data-limite (${formatarDataBR(atual.data_limite)}), senão há pagamento em dobro.` }, { status: 400 });
   }
 
   const observacao = d.observacao?.trim() ? d.observacao.trim() : null;

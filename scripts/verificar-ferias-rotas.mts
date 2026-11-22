@@ -228,6 +228,16 @@ await ok("programar: grava datas, zera os avisos, audita; reprogramar troca as d
   const a = auditoria(db).filter((x: any) => x.acao === "ferias_programada");
   assert.equal(a.length, 2);
   assert.deepEqual([a[0].detalhes.reprogramacao, a[1].detalhes.reprogramacao, a[1].detalhes.anterior], [false, true, { gozo_inicio: "2026-11-10", gozo_fim: "2026-11-29" }]);
+
+  // O FIM também não pode passar da data-limite (15/08/2027): dias gozados depois do concessivo são pagos em dobro (Súmula 81 do TST).
+  const passou = await PROGRAMAR(db, id(1), { ...base, gozo_inicio: "2027-08-10", gozo_fim: "2027-08-16" });
+  assert.equal(passou.status, 400);
+  assert.equal(passou.corpo.error, "O fim das férias não pode passar da data-limite (15/08/2027), senão há pagamento em dobro.");
+  assert.deepEqual([periodosDe(db, id(1))[1].gozo_inicio, periodosDe(db, id(1))[1].gozo_fim], ["2026-12-01", "2026-12-20"], "nada mudou na tentativa recusada");
+  assert.equal(auditoria(db).filter((x: any) => x.acao === "ferias_programada").length, 2, "tentativa recusada não audita");
+  const naLimite = await PROGRAMAR(db, id(1), { ...base, gozo_inicio: "2027-08-01", gozo_fim: "2027-08-15" });
+  assert.equal(naLimite.status, 200, JSON.stringify(naLimite.corpo));
+  assert.equal(periodosDe(db, id(1))[1].gozo_fim, "2027-08-15", "fim exatamente na data-limite vale");
 });
 
 await ok("programação cujo início já passou sem virar em gozo: a lista sinaliza (os avisos voltam na 2D)", async () => {
@@ -269,6 +279,10 @@ await ok("reabrir: exige motivo, só o último período lançado, volta a 'a pro
   const [p1, p2] = periodosDe(db, id(1));
   assert.equal((await SITUACAO(db, id(1), { periodo_id: p1.id, acao: "gozada", gozo_inicio: "2025-09-01", gozo_fim: "2025-09-20" })).status, 200);
   assert.equal((await SITUACAO(db, id(1), { periodo_id: p2.id, acao: "gozada", gozo_inicio: "2026-09-01", gozo_fim: "2026-09-20" })).status, 200);
+  // A lista informa qual período a rota aceita reabrir: o último lançado pelo RH (o 2); o quitado pelo saldo inicial nunca.
+  const reab = linha(await LISTAR(db), id(1)).reabrivel;
+  assert.deepEqual([reab.id, reab.numero, reab.situacao, reab.gozo_inicio], [p2.id, 2, "gozada", "2026-09-01"]);
+  assert.equal(linha(await LISTAR(db), id(2)).reabrivel, null, "período quitado pelo saldo inicial não é reabrível");
   assert.equal((await SITUACAO(db, id(1), { periodo_id: p2.id, acao: "reabrir" })).status, 400, "sem motivo");
   assert.equal((await SITUACAO(db, id(1), { periodo_id: p2.id, acao: "reabrir", motivo: "x" })).status, 400, "motivo curto demais");
   assert.equal((await SITUACAO(db, id(1), { periodo_id: p1.id, acao: "reabrir", motivo: "Lançado errado" })).status, 409, "o 2 foi lançado depois: só o último reabre");
@@ -280,6 +294,7 @@ await ok("reabrir: exige motivo, só o último período lançado, volta a 'a pro
   assert.deepEqual([ab.detalhes.situacao_anterior, ab.detalhes.motivo, ab.detalhes.gozo_inicio], ["gozada", "Data errada, contabilidade corrigiu", "2026-09-01"]);
   assert.equal((await SITUACAO(db, id(1), { periodo_id: p2.id, acao: "reabrir", motivo: "de novo" })).status, 409, "já está a programar");
   assert.equal(periodosDe(db, id(1))[0].situacao, "gozada", "o período 1 continua gozado");
+  assert.equal(linha(await LISTAR(db), id(1)).reabrivel.numero, 1, "depois de reabrir o 2, o reabrível passa a ser o 1");
 });
 
 await ok("corrida: se outra pessoa mudou o período entre a leitura e a gravação, a rota responde 409 e não sobrescreve", async () => {
@@ -414,6 +429,12 @@ await ok("filtros e ordem da lista: vermelho (vencido primeiro) → amarelo → 
   assert.deepEqual(await nomes("?semaforo=vermelho"), ["Ana Vencida", "Bruno Vermelho"]);
   assert.deepEqual(await nomes("?a_vencer=1"), ["Ana Vencida", "Bruno Vermelho", "Carla Amarela"]);
   assert.deepEqual(await nomes("?busca=erica"), ["Érica Pendente"], "busca sem acento");
+  // Faixas do resumo da tela: cada linha cai em uma só (vencidos, até 30 dias, de 31 a 90, saldo pendente).
+  assert.deepEqual(await nomes("?faixa=vencidos"), ["Ana Vencida"]);
+  assert.deepEqual(await nomes("?faixa=ate30"), ["Bruno Vermelho"]);
+  assert.deepEqual(await nomes("?faixa=ate90"), ["Carla Amarela"]);
+  assert.deepEqual(await nomes("?faixa=pendente"), ["Érica Pendente"]);
+  assert.equal((await LISTAR(db, "dir", "?faixa=qualquer")).status, 400);
   assert.deepEqual(await nomes("?situacao=a_programar&semaforo=verde"), ["Davi Verde"]);
   assert.equal((await LISTAR(db, "dir", "?situacao=inventada")).status, 400);
 });
@@ -450,6 +471,9 @@ await ok("exportação CSV: mesma lista da tela, colunas pedidas, BOM, auditoria
   const todos = await EXPORTAR(db, {});
   assert.equal(todos.cabecalhos.get("content-disposition"), 'attachment; filename="ferias-07-10-2026.csv"');
   assert.equal(todos.texto.trim().split("\r\n").length, 5, "sem filtro: cabeçalho + 4");
+  const soVencidos = await EXPORTAR(db, { faixa: "vencidos" });
+  assert.equal(soVencidos.status, 200);
+  assert.deepEqual(soVencidos.texto.trim().split("\r\n").map((l: string) => l.split(";")[0]).slice(1), ["Ana Vencida"], "a exportação respeita a faixa da tela");
   assert.equal((await EXPORTAR(db, { a_vencer: "sim" })).status, 400);
   assert.equal((await EXPORTAR(db, {}, "ana")).status, 403);
   logar(db, null);
