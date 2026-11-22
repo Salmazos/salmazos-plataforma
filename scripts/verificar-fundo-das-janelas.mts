@@ -154,6 +154,7 @@ const INVENTARIO: Record<string, [number, number, number]> = {
   "components/VinculoCarteiraCliente.tsx": [0, 0, 1],
   "components/admissao/CapturaComEnquadramento.tsx": [0, 0, 1],
   "components/comissao/PopupComissoesPendencias.tsx": [0, 0, 1],
+  "components/ferias/ModaisFerias.tsx": [1, 0, 0],
   "components/propostas/propostasUi.tsx": [1, 0, 0],
 };
 
@@ -241,7 +242,7 @@ caso("(c) inventário FECHADO: janela nova, a mais ou com tipo trocado quebra es
   const esperado = INVENTARIO;
   assert.deepEqual(Object.keys(atual).sort(), Object.keys(esperado).sort(), "arquivo com overlay novo ou que deixou de ter");
   assert.deepEqual(atual, esperado);
-  assert.equal(Object.values(atual).reduce((s, v) => s + v[0], 0), 36, "36 fundos de formulário");
+  assert.equal(Object.values(atual).reduce((s, v) => s + v[0], 0), 37, "37 fundos de formulário");
   assert.equal(Object.values(atual).reduce((s, v) => s + v[1], 0), 12, "12 fundos só de leitura");
 });
 caso("(d) os 18 popups automáticos de login e as janelas que já não fechavam no fundo não mudaram: continuam sem fundo clicável e sem o helper", () => {
@@ -288,7 +289,7 @@ caso("toda janela com formulário segue com saída: dentro de cada fundo de form
     };
     visita(sf);
   }
-  assert.equal(verificadas, 36);
+  assert.equal(verificadas, 37);
 });
 caso("janelas empilhadas: a solicitação de vaga (formulário) não fecha no fundo; a confirmação de criar vaga fecha só com o gesto inteiro no seu fundo; as demais (novo cliente, vincular) seguem sem fundo clicável", () => {
   const sol = todos.filter((o) => o.arq === "src/components/ModalSolicitacoesVagas.tsx");
