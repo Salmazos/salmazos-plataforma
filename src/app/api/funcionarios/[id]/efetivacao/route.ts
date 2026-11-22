@@ -7,6 +7,7 @@ import { registrarAuditoria, resolverNomeUsuario } from "@/lib/audit";
 import { hojeBrasiliaISO, formatarDataBR } from "@/lib/rescisaoProgramada";
 import { TIPOS_COM_VENCIMENTO_CONTRATO } from "@/lib/contratoMotStatus";
 import { ehErroColunaAusente } from "@/lib/funcionarioEfetivacao";
+import { funcionarioTemFeriasLancadas } from "@/lib/feriasPeriodos";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -134,6 +135,17 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   }
   if (!funcionario.efetivado_em) {
     return NextResponse.json({ error: "Este funcionário não está efetivado." }, { status: 409 });
+  }
+
+  // Férias (aviso de vencimento): desfazer a efetivação tira o funcionário MOT da aba Férias; se já há período programado, em gozo ou gozado (inclui o
+  // quitado pelo saldo inicial), o histórico ficaria escondido. Decisão do Olver: bloquear. Tabela ainda inexistente (migration não aplicada) = sem férias.
+  const feriasLancadas = await funcionarioTemFeriasLancadas(svc, id);
+  if (feriasLancadas.erro) return NextResponse.json({ error: ERRO_GENERICO }, { status: 500 });
+  if (feriasLancadas.tem) {
+    return NextResponse.json(
+      { error: "Não é possível desfazer a efetivação: este funcionário já tem férias programadas, em gozo ou gozadas. Reabra as férias (ou refaça o saldo inicial) na aba Férias antes de desfazer." },
+      { status: 409 }
+    );
   }
 
   const dataAnulada = funcionario.efetivado_em as string;
