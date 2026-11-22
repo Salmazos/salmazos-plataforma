@@ -1431,6 +1431,53 @@ export const funcionarioEfetivarSchema = z.object({
   observacao: z.string().trim().max(2000, "Observação muito longa").optional().nullable(),
 });
 
+// ── Férias (aviso de vencimento) ─────────────────────────────────────────────
+// Filtros da lista e da exportação CSV. `a_vencer` = só quem está em amarelo ou vermelho (90 dias ou menos, ou vencido).
+export const feriasFiltrosSchema = z.object({
+  cliente_id: z.string().uuid("Cliente inválido").optional(),
+  unidade_id: z.string().uuid("Unidade inválida").optional(),
+  situacao: z.enum(["a_programar", "programada", "em_gozo", "gozada"]).optional(),
+  semaforo: z.enum(["verde", "amarelo", "vermelho", "cinza"]).optional(),
+  a_vencer: z.boolean().optional(),
+  busca: z.string().trim().max(100, "Busca muito longa").optional(),
+});
+
+// Programar: datas de gozo combinadas com a contabilidade. As janelas (início de hoje em diante, depois do fim do aquisitivo, até a data-limite) são
+// conferidas na rota, que precisa do período.
+export const feriasProgramarSchema = z.object({
+  periodo_id: z.string().uuid("Período inválido"),
+  gozo_inicio: dataISOValida,
+  gozo_fim: dataISOValida,
+  observacao: z.string().trim().max(2000, "Observação muito longa").optional().nullable(),
+});
+
+// Mudar situação: em_gozo, gozada ou reabrir (volta para "a programar"; exige motivo). As datas de gozo só são necessárias quando o período ainda não as tem.
+export const feriasSituacaoSchema = z
+  .object({
+    periodo_id: z.string().uuid("Período inválido"),
+    acao: z.enum(["em_gozo", "gozada", "reabrir"], { message: "Ação inválida" }),
+    gozo_inicio: dataISOValida.optional(),
+    gozo_fim: dataISOValida.optional(),
+    observacao: z.string().trim().max(2000, "Observação muito longa").optional().nullable(),
+    motivo: z.string().trim().max(1000, "Motivo muito longo").optional(),
+  })
+  .refine((d) => d.acao !== "reabrir" || (d.motivo ?? "").length >= 3, { message: "Informe o motivo da reabertura", path: ["motivo"] });
+
+// Ajuste da data-base (intervalo entre contratos, admissão divergente, legado): data nula volta a usar a data de admissão. Motivo obrigatório.
+// `confirmar_reinicio`: o ajuste apaga os períodos e zera o saldo inicial; sem a confirmação a rota responde 409 explicando.
+export const feriasDataBaseSchema = z.object({
+  data_base: dataISOValida.nullable(),
+  motivo: z.string().trim().min(3, "Informe o motivo do ajuste").max(1000, "Motivo muito longo"),
+  confirmar_reinicio: z.boolean().optional(),
+});
+
+// Saldo inicial: fim do último período aquisitivo já quitado (null = "nenhum"). `fim_confirmado`: o RH confirma o período mais próximo quando a data
+// informada não bate com o fim de nenhum período.
+export const feriasSaldoInicialSchema = z.object({
+  quitado_ate: dataISOValida.nullable(),
+  fim_confirmado: dataISOValida.optional(),
+});
+
 export const funcionarioMotEventoCreateSchema = z
   .object({
     tipo: z.enum(TIPOS_EVENTO_MOT, { message: "Tipo de evento inválido" }),
