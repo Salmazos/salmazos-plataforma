@@ -234,7 +234,7 @@ export function impedimentoParaAgir(e: EstadoFuncionarioFerias): string | null {
     case "base_alterada":
       return "A data-base mudou depois de gerar os períodos. Reconfirme a data-base antes de lançar férias.";
     case "saldo_pendente":
-      return "Informe o saldo inicial (fim do último período aquisitivo já quitado, ou \"nenhum\") antes de lançar férias.";
+      return "Informe as férias já quitadas (fim do último período aquisitivo já quitado, ou \"nenhum\") antes de lançar férias.";
     default:
       return null;
   }

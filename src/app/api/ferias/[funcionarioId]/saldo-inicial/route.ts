@@ -40,17 +40,17 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   switch (estado.avaliacao.estado) {
     case "sem_data_base":
-      return NextResponse.json({ error: "Informe a data-base deste funcionário antes do saldo inicial." }, { status: 409 });
+      return NextResponse.json({ error: "Informe a data-base deste funcionário antes de informar as férias já quitadas." }, { status: 409 });
     case "ainda_nao_iniciou":
       return NextResponse.json({ error: "A data-base deste funcionário ainda não chegou: não há período para quitar." }, { status: 409 });
     case "base_alterada":
-      return NextResponse.json({ error: "A data-base mudou depois de gerar os períodos. Reconfirme a data-base antes do saldo inicial." }, { status: 409 });
+      return NextResponse.json({ error: "A data-base mudou depois de gerar os períodos. Reconfirme a data-base antes de informar as férias já quitadas." }, { status: 409 });
     default:
       break;
   }
   const dataBase = estado.dataBase as string; // estado "ok" ou "saldo_pendente" sempre tem data-base
   if (temPeriodoOperadoPeloRH(estado.periodos)) {
-    return NextResponse.json({ error: "Já há férias programadas, em gozo ou gozadas deste funcionário. Reabra-as antes de refazer o saldo inicial." }, { status: 409 });
+    return NextResponse.json({ error: "Já há férias programadas, em férias ou tiradas deste funcionário. Reabra-as antes de refazer as férias já quitadas." }, { status: 409 });
   }
 
   const resultado = resolverSaldoInicial(dataBase, d.quitado_ate, hoje);

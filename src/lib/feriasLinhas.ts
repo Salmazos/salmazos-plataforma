@@ -49,7 +49,7 @@ export const ROTULO_FAIXA_FERIAS: Record<FaixaFerias, string> = {
   vencidos: "Vencidos",
   ate30: "Até 30 dias",
   ate90: "De 31 a 90 dias",
-  pendente: "Saldo inicial pendente",
+  pendente: "Quitadas: a informar",
 };
 
 export interface FiltrosFerias {
@@ -136,7 +136,7 @@ export function acoesDaLinha(l: LinhaFerias, hojeISO: string): AcoesDaLinha {
       case "sem_data_base": return "Informe a data-base deste funcionário primeiro.";
       case "ainda_nao_iniciou": return "A data-base deste funcionário ainda não chegou.";
       case "base_alterada": return "A data-base mudou depois de gerar os períodos. Reconfirme a data-base primeiro.";
-      case "saldo_pendente": return "Informe o saldo inicial primeiro (fim do último período já quitado, ou \"nenhum\").";
+      case "saldo_pendente": return "Informe as férias já quitadas primeiro (fim do último período já quitado, ou \"nenhum\").";
       default: return p ? null : "Não há período em aberto.";
     }
   })();
@@ -147,8 +147,8 @@ export function acoesDaLinha(l: LinhaFerias, hojeISO: string): AcoesDaLinha {
 
   if (!bloqueio && p) {
     if (p.situacao === "em_gozo") {
-      programar = negar("Este período já está em gozo.");
-      emGozo = negar("Este período já está em gozo.");
+      programar = negar("Este período já está em férias.");
+      emGozo = negar("Este período já está em férias.");
     }
     // As férias já programadas só podem virar "em gozo" quando começam, e "gozada" quando terminam (a rota recusa datas futuras).
     if (p.situacao === "programada" && p.gozo_inicio && p.gozo_inicio > hojeISO) {
@@ -194,7 +194,7 @@ export function validarProgramacao(p: PeriodoParaValidar, inicio: string, fim: s
   if (inicio < hojeISO) return { erro: "A data inicial não pode ser anterior a hoje.", aviso: null };
   if (inicio <= p.aquisitivo_fim) return { erro: `As férias só podem começar depois do fim do período aquisitivo (${formatarBR(p.aquisitivo_fim)}).`, aviso: null };
   if (inicio > p.data_limite) {
-    return { erro: `A data inicial passa da data-limite (${formatarBR(p.data_limite)}). Para registrar férias já em andamento ou concluídas, use "Em gozo" ou "Gozada".`, aviso: null };
+    return { erro: `A data inicial passa da data-limite (${formatarBR(p.data_limite)}). Para registrar férias já em andamento ou concluídas, use "Iniciou férias" ou "Concluir férias".`, aviso: null };
   }
   // O fim também é bloqueado (a rota faz o mesmo): dias gozados depois do período concessivo são pagos em dobro (Súmula 81 do TST).
   if (fim > p.data_limite) return { erro: `O fim das férias não pode passar da data-limite (${formatarBR(p.data_limite)}), senão há pagamento em dobro.`, aviso: null };
@@ -203,7 +203,7 @@ export function validarProgramacao(p: PeriodoParaValidar, inicio: string, fim: s
 
 // Em gozo / Gozada: datas do gozo. Em gozo: já começou. Gozada: já começou e já terminou.
 export function validarGozo(p: PeriodoParaValidar, acao: "em_gozo" | "gozada", inicio: string, fim: string, hojeISO: string): ResultadoValidacao {
-  if (!inicio || !fim) return { erro: "Informe as datas inicial e final do gozo.", aviso: null };
+  if (!inicio || !fim) return { erro: "Informe as datas inicial e final das férias.", aviso: null };
   if (fim < inicio) return { erro: "A data final não pode ser anterior à data inicial.", aviso: null };
   if (inicio <= p.aquisitivo_fim) return { erro: `As férias só podem começar depois do fim do período aquisitivo (${formatarBR(p.aquisitivo_fim)}).`, aviso: null };
   if (inicio > hojeISO) return { erro: "As férias ainda não começaram: a data inicial é futura. Use \"Programar\".", aviso: null };

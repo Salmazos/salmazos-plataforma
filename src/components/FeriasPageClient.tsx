@@ -41,6 +41,10 @@ const SELO: React.CSSProperties = { fontSize: 11, fontWeight: 700, padding: "2px
 const SELO_TERCEIRIZACAO = { bg: "#111827", text: "#FFD700" } as const;
 const SELO_MOT = { bg: "#DBEAFE", text: "#1D4ED8" } as const;
 
+// Ajuda do selo cinza "Quitadas: a informar" (e do card do resumo): o que falta para o funcionário entrar nos avisos.
+const TEXTO_AJUDA_QUITADAS =
+  "A contabilidade precisa informar até que período as férias já foram quitadas. Enquanto isso, o funcionário não aparece como vencido e não gera aviso.";
+
 const COR_FAIXA: Record<FaixaFerias, { bg: string; text: string; borda: string }> = {
   vencidos: { bg: "#FEE2E2", text: "#991B1B", borda: "#FCA5A5" },
   ate30: { bg: "#FFEDD5", text: "#C2410C", borda: "#FDBA74" },
@@ -185,6 +189,7 @@ export default function FeriasPageClient({ linhasIniciais, clientes: clientesDoS
                   key={f}
                   type="button"
                   aria-pressed={ativo}
+                  title={f === "pendente" ? TEXTO_AJUDA_QUITADAS : undefined}
                   onClick={() => setFaixa(ativo ? "" : f)}
                   style={{
                     background: cor.bg, color: cor.text, border: `2px solid ${ativo ? cor.text : cor.borda}`, borderRadius: 10, padding: "8px 16px", cursor: "pointer",
@@ -326,7 +331,7 @@ function LinhaTabela({ l, hojeISO, abrir }: { l: LinhaFerias; hojeISO: string; a
       <td style={{ ...TD_STYLE, color: "#374151" }}>{ehOk && p ? dataBR(p.data_limite) : "—"}</td>
       <td style={{ ...TD_STYLE, color: "#374151" }}>{ehOk ? textoDiasRestantes(l.dias_restantes) : "—"}</td>
       <td style={TD_STYLE}>
-        <span style={{ ...SELO, background: selo.bg, color: selo.text }} title={l.saldo_calculado ? "Menos de 12 meses de casa: nenhum período terminou, então não há saldo a informar." : undefined}>
+        <span style={{ ...SELO, background: selo.bg, color: selo.text }} title={l.saldo_calculado ? "Menos de 12 meses de casa: nenhum período terminou, então não há férias já quitadas a informar." : l.estado === "saldo_pendente" ? TEXTO_AJUDA_QUITADAS : undefined}>
           {selo.rotulo}
         </span>
       </td>
@@ -344,11 +349,11 @@ function LinhaTabela({ l, hojeISO, abrir }: { l: LinhaFerias; hojeISO: string; a
       </td>
       <td style={{ ...TD_STYLE, whiteSpace: "normal", minWidth: 260 }}>
         <div className="flex gap-2 flex-wrap">
-          {acoes.saldoEmDestaque && <BotaoAcao rotulo="Informar saldo inicial" acao={acoes.informarSaldo} destaque onClick={() => abrir("saldo")} />}
+          {acoes.saldoEmDestaque && <BotaoAcao rotulo="Informar férias já quitadas" acao={acoes.informarSaldo} destaque onClick={() => abrir("saldo")} />}
           {acoes.dataBaseEmDestaque && <BotaoAcao rotulo="Ajustar data-base" acao={acoes.ajustarDataBase} destaque onClick={() => abrir("data_base")} />}
           <BotaoAcao rotulo={p?.situacao === "programada" ? "Alterar datas" : "Programar"} acao={acoes.programar} onClick={() => abrir("programar")} />
-          <BotaoAcao rotulo="Em gozo" acao={acoes.emGozo} onClick={() => abrir("em_gozo")} />
-          <BotaoAcao rotulo="Gozada" acao={acoes.gozada} onClick={() => abrir("gozada")} />
+          <BotaoAcao rotulo="Iniciou férias" acao={acoes.emGozo} onClick={() => abrir("em_gozo")} />
+          <BotaoAcao rotulo="Concluir férias" acao={acoes.gozada} onClick={() => abrir("gozada")} />
         </div>
         {motivoBloqueio && <p style={{ fontSize: 11, color: "#6B7280", margin: "6px 0 0" }}>{motivoBloqueio}</p>}
         <div className="flex gap-3 flex-wrap" style={{ marginTop: 6 }}>
@@ -359,7 +364,7 @@ function LinhaTabela({ l, hojeISO, abrir }: { l: LinhaFerias; hojeISO: string; a
             <button type="button" onClick={() => abrir("data_base")} style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textDecoration: "underline", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Ajustar data-base</button>
           )}
           {!acoes.saldoEmDestaque && acoes.informarSaldo.habilitada && (
-            <button type="button" onClick={() => abrir("saldo")} style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textDecoration: "underline", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Saldo inicial</button>
+            <button type="button" onClick={() => abrir("saldo")} style={{ fontSize: 11, fontWeight: 600, color: "#6B7280", textDecoration: "underline", background: "none", border: "none", cursor: "pointer", padding: 0 }}>Férias já quitadas</button>
           )}
         </div>
       </td>

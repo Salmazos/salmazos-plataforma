@@ -38,7 +38,7 @@ const C = linha("f-c", "Carla Programada", {
   periodo: PROG, reabrivel: { id: PROG.id, numero: 1, situacao: "programada", gozo_inicio: "2026-11-10", gozo_fim: "2026-11-29" },
 });
 const D = linha("f-d", "Davi Verde", { data_base: "2025-01-10", data_base_ajustada: true, data_admissao: "2024-08-16" });
-const E = linha("f-e", "Érica Pendente", { estado: "saldo_pendente", estado_rotulo: "Saldo inicial pendente", semaforo: "cinza", dias_restantes: null, saldo_confirmado: false });
+const E = linha("f-e", "Érica Pendente", { estado: "saldo_pendente", estado_rotulo: "Quitadas: a informar", semaforo: "cinza", dias_restantes: null, saldo_confirmado: false });
 const F = linha("f-f", "Fábio Sem Data", { estado: "sem_data_base", estado_rotulo: "Informar data-base", semaforo: "cinza", dias_restantes: null, data_admissao: null, data_base: null, periodo: null, saldo_confirmado: false });
 const G = linha("f-g", "Gina Futura", { estado: "ainda_nao_iniciou", estado_rotulo: "Ainda não iniciou", semaforo: "cinza", dias_restantes: null, data_base: "2026-10-09", data_admissao: "2026-10-09", periodo: null, saldo_confirmado: false });
 const TODAS = [A, B, C, D, E, F, G];
@@ -115,7 +115,12 @@ await caso("semáforo: Vencido, Urgente, Atenção, No prazo; cinza com o motivo
   assert.equal(celulaPrazo("f-b"), "Urgente");
   assert.equal(celulaPrazo("f-c"), "Atenção");
   assert.equal(celulaPrazo("f-d"), "No prazo");
-  assert.equal(celulaPrazo("f-e"), "Saldo inicial pendente");
+  assert.equal(celulaPrazo("f-e"), "Quitadas: a informar");
+  // Ajuda do selo cinza (e do card do resumo): a contabilidade precisa informar até que período as férias já foram quitadas.
+  const ajudaSelo = linhaDe(r, "f-e").findAll((n) => n.type === "td")[6].findAll((n) => n.type === "span")[0].props.title;
+  assert.match(ajudaSelo, /A contabilidade precisa informar até que período as férias já foram quitadas/);
+  assert.equal(botao(r, "Quitadas: a informar")!.props.title, ajudaSelo, "o card do resumo tem a mesma ajuda");
+  assert.equal(linhaDe(r, "f-d").findAll((n) => n.type === "td")[6].findAll((n) => n.type === "span")[0].props.title, undefined, "selos normais sem ajuda");
   assert.equal(celulaPrazo("f-g"), "Ainda não iniciou");
   assert.equal(celulaPrazo("f-f"), "Informar data-base");
   const cor = (id: string) => linhaDe(r, id).findAll((n) => n.type === "td")[6].findAll((n) => n.type === "span")[0].props.style.background;
@@ -133,19 +138,19 @@ await caso("data-base ajustada aparece com selo 'ajustada'; programada mostra as
   assert.ok(c.includes("Programada com a contabilidade") && c.includes("10/11/2026 a 29/11/2026") && c.includes("Combinado com a RCA") && c.includes("Data de início já passou"));
 });
 
-await caso("resumo do topo: Vencidos, Até 30 dias, De 31 a 90 dias, Saldo inicial pendente — contagens certas e clicáveis (aplica e remove o filtro)", async () => {
+await caso("resumo do topo: Vencidos, Até 30 dias, De 31 a 90 dias, Férias já quitadas pendente — contagens certas e clicáveis (aplica e remove o filtro)", async () => {
   const r = await montar();
   const card = (rotulo: string) => botao(r, rotulo)!;
   const numero = (rotulo: string) => txt(card(rotulo)).replace(rotulo, "");
-  assert.deepEqual(["Vencidos", "Até 30 dias", "De 31 a 90 dias", "Saldo inicial pendente"].map(numero), ["1", "1", "1", "1"]);
+  assert.deepEqual(["Vencidos", "Até 30 dias", "De 31 a 90 dias", "Quitadas: a informar"].map(numero), ["1", "1", "1", "1"]);
   await clicar(card("Vencidos"));
   assert.deepEqual(nomesNaTela(r), ["f-a"]);
   assert.equal(card("Vencidos").props["aria-pressed"], true);
   await clicar(card("Até 30 dias"));
   assert.deepEqual(nomesNaTela(r), ["f-b"], "trocar de faixa substitui o filtro");
-  await clicar(card("Saldo inicial pendente"));
+  await clicar(card("Quitadas: a informar"));
   assert.deepEqual(nomesNaTela(r), ["f-e"]);
-  await clicar(card("Saldo inicial pendente"));
+  await clicar(card("Quitadas: a informar"));
   assert.equal(nomesNaTela(r).length, 7, "clicar de novo remove o filtro");
   assert.equal(numero("Vencidos"), "1", "as contagens seguem sobre a lista cheia");
 });
@@ -184,21 +189,21 @@ await caso("estado vazio amigável (sem ninguém no controle) e mensagem clara q
 });
 
 // ═════════════════════════ AÇÕES POR LINHA ═════════════════════════
-await caso("saldo pendente (cinza): Programar, Em gozo e Gozada desabilitados com o motivo ESCRITO; 'Informar saldo inicial' em destaque e habilitado", async () => {
+await caso("saldo pendente (cinza): Programar, Iniciou férias e Concluir férias desabilitados com o motivo ESCRITO; 'Informar férias já quitadas' em destaque e habilitado", async () => {
   const r = await montar([E]);
   const tr = linhaDe(r, "f-e");
   const bs = tr.findAll((n) => n.type === "button");
   const por = (t: string) => bs.find((b) => txt(b) === t)!;
-  for (const t of ["Programar", "Em gozo", "Gozada"]) {
+  for (const t of ["Programar", "Iniciou férias", "Concluir férias"]) {
     assert.equal(por(t).props.disabled, true, t);
-    assert.match(por(t).props.title, /Informe o saldo inicial primeiro/);
+    assert.match(por(t).props.title, /Informe as férias já quitadas primeiro/);
   }
-  assert.ok(txt(tr).includes("Informe o saldo inicial primeiro (fim do último período já quitado, ou \"nenhum\")."), "motivo visível na linha");
-  const saldo = por("Informar saldo inicial");
+  assert.ok(txt(tr).includes("Informe as férias já quitadas primeiro (fim do último período já quitado, ou \"nenhum\")."), "motivo visível na linha");
+  const saldo = por("Informar férias já quitadas");
   assert.equal(saldo.props.disabled, false);
   assert.equal(saldo.props.style.background, "#FFD700", "em destaque");
   await clicar(saldo);
-  assert.ok(janela(r) && janela(r).props["aria-label"] === "Informar saldo inicial");
+  assert.ok(janela(r) && janela(r).props["aria-label"] === "Informar férias já quitadas");
 });
 
 await caso("sem data-base: 'Ajustar data-base' em destaque; ações de férias e saldo bloqueadas com motivo; reabrir só aparece quando há o que reabrir", async () => {
@@ -292,34 +297,34 @@ await caso("em gozo e gozada: janela de confirmação com as datas já programad
   chamadas = [];
   resposta = (c) => (c.metodo === "POST" ? { status: 200, corpo: { data: {} } } : listaDoServidor([programadaAgora]));
   let r = await montar([programadaAgora]);
-  await clicar(botao(r, "Em gozo"));
+  await clicar(botao(r, "Iniciou férias"));
   assert.equal(campo(r, "gozo-inicio").props.value, "2026-10-01");
   assert.equal(campo(r, "gozo-fim").props.value, "2026-10-05");
-  await clicar(botao(r, "Confirmar em gozo"));
+  await clicar(botao(r, "Confirmar início das férias"));
   assert.deepEqual(chamadas.find((c) => c.metodo === "POST")!.corpo, { periodo_id: programadaAgora.periodo!.id, acao: "em_gozo", gozo_inicio: "2026-10-01", gozo_fim: "2026-10-05" });
-  assert.ok(textoDe(r).includes("Férias marcadas como em gozo."));
+  assert.ok(textoDe(r).includes("Início das férias registrado."));
 
   chamadas = [];
   r = await montar([programadaAgora]);
-  await clicar(botao(r, "Gozada"));
+  await clicar(botao(r, "Concluir férias"));
   assert.ok(txt(janela(r)).includes("o funcionário passa ao próximo"));
   await digitar(r, "gozo-fim", "2026-10-20");
   assert.ok(alertas(r)[0].includes("As férias ainda não terminaram"));
-  assert.equal(botao(r, "Confirmar gozada")!.props.disabled, true);
+  assert.equal(botao(r, "Confirmar férias tiradas")!.props.disabled, true);
   await digitar(r, "gozo-fim", "2026-10-05");
-  await clicar(botao(r, "Confirmar gozada"));
+  await clicar(botao(r, "Confirmar férias tiradas"));
   assert.equal(chamadas.find((c) => c.metodo === "POST")!.corpo.acao, "gozada");
   assert.ok(textoDe(r).includes("passou ao próximo período"));
 });
 
 await caso("em gozo / gozada a partir de 'a programar': sem datas prévias a janela as pede e só habilita com datas válidas", async () => {
   const r = await montar([A]);
-  await clicar(botao(r, "Gozada"));
+  await clicar(botao(r, "Concluir férias"));
   assert.equal(campo(r, "gozo-inicio").props.value, "");
-  assert.equal(botao(r, "Confirmar gozada")!.props.disabled, true);
+  assert.equal(botao(r, "Confirmar férias tiradas")!.props.disabled, true);
   await digitar(r, "gozo-inicio", "2025-09-01");
   await digitar(r, "gozo-fim", "2025-09-20");
-  assert.equal(botao(r, "Confirmar gozada")!.props.disabled, false);
+  assert.equal(botao(r, "Confirmar férias tiradas")!.props.disabled, false);
   await digitar(r, "gozo-inicio", "2025-08-10");
   assert.ok(alertas(r)[0].includes("depois do fim do período aquisitivo (15/08/2025)"));
 });
@@ -330,7 +335,7 @@ await caso("reabrir: motivo obrigatório (mínimo 3 caracteres); usa o período 
   resposta = (c) => (c.metodo === "POST" ? { status: 200, corpo: { data: {} } } : listaDoServidor([linha("f-i", "Iara Gozou")]));
   const r = await montar([anteriorGozada]);
   await clicar(botao(r, "Reabrir"));
-  assert.ok(txt(janela(r)).includes("O período 1 está Gozada (01/09/2025 a 20/09/2025)"));
+  assert.ok(txt(janela(r)).includes("A situação do período 1 é Férias tiradas (01/09/2025 a 20/09/2025)"));
   assert.equal(botao(r, "Reabrir período")!.props.disabled, true);
   await digitar(r, "reabrir-motivo", "ab");
   assert.equal(botao(r, "Reabrir período")!.props.disabled, true);
@@ -348,7 +353,7 @@ await caso("ajustar data-base: aviso claro de que apaga períodos e zera o saldo
   const r = await montar([D]);
   await clicar(botao(r, "Ajustar data-base"));
   const j = janela(r);
-  assert.ok(txt(j).includes("isto apaga os períodos e zera o saldo inicial"));
+  assert.ok(txt(j).includes("isto apaga os períodos e zera as férias já quitadas"));
   const btnOk = () => botoes(r).filter((b) => b.props.className === "btn-primary")[0];
   assert.equal(btnOk().props.disabled, true);
   await digitar(r, "data-base-nova", "2025-03-03");
@@ -365,7 +370,7 @@ await caso("ajustar data-base: aviso claro de que apaga períodos e zera o saldo
 
 await caso("ajustar data-base: 'voltar a usar a data de admissão' envia data nula; erro 409 da rota (férias já lançadas) aparece em português; sem data nem período não pede confirmação", async () => {
   chamadas = [];
-  resposta = (c) => (c.metodo === "POST" ? { status: 409, corpo: { error: "Já há férias programadas, em gozo ou gozadas deste funcionário. Reabra-as antes de ajustar a data-base." } } : listaDoServidor([D]));
+  resposta = (c) => (c.metodo === "POST" ? { status: 409, corpo: { error: "Já há férias programadas, em férias ou tiradas deste funcionário. Reabra-as antes de ajustar a data-base." } } : listaDoServidor([D]));
   let r = await montar([D]);
   await clicar(botao(r, "Ajustar data-base"));
   const j = janela(r);
@@ -376,7 +381,7 @@ await caso("ajustar data-base: 'voltar a usar a data de admissão' envia data nu
   await marcar(entendi, true);
   await clicar(botoes(r).filter((b) => b.props.className === "btn-primary")[0]);
   assert.deepEqual(chamadas.find((c) => c.metodo === "POST")!.corpo, { data_base: null, motivo: "Admissão estava certa", confirmar_reinicio: true });
-  assert.ok(alertas(r)[0].includes("Já há férias programadas, em gozo ou gozadas"));
+  assert.ok(alertas(r)[0].includes("Já há férias programadas, em férias ou tiradas"));
   assert.ok(janela(r), "continua aberta");
 
   // Primeiro cadastro da data-base (nada para apagar): sem aviso vermelho e sem checkbox de confirmação.
@@ -397,7 +402,7 @@ await caso("saldo inicial: 'nenhum' e data exata enviam o corpo certo", async ()
     chamadas = [];
     resposta = (c) => (c.metodo === "POST" ? { status: 200, corpo: { data: {} } } : listaDoServidor([E]));
     const r = await montar([E]);
-    await clicar(botao(r, "Informar saldo inicial"));
+    await clicar(botao(r, "Informar férias já quitadas"));
     const radios = r.root.findAll((n) => n.type === "input" && n.props.type === "radio");
     await act(async () => { radios[modo === "nenhum" ? 0 : 1].props.onChange(); });
     const ok = botoes(r).find((b) => b.props.className === "btn-primary")!;
@@ -407,7 +412,7 @@ await caso("saldo inicial: 'nenhum' e data exata enviam o corpo certo", async ()
     }
     await clicar(botoes(r).find((b) => b.props.className === "btn-primary"));
     assert.deepEqual(chamadas.find((c) => c.metodo === "POST")!.corpo, esperado, modo);
-    assert.ok(textoDe(r).includes("Saldo inicial informado."));
+    assert.ok(textoDe(r).includes("Férias já quitadas informadas."));
   }
 });
 
@@ -421,7 +426,7 @@ await caso("saldo inicial, 409 com o período mais próximo: mostra a sugestão,
       : { status: 409, corpo: { error: msg, code: "confirmar_periodo", sugestao: { numero: 1, aquisitivo_fim: "2025-08-15" }, informado: "2025-09-10" } };
   };
   const r = await montar([E]);
-  await clicar(botao(r, "Informar saldo inicial"));
+  await clicar(botao(r, "Informar férias já quitadas"));
   await digitar(r, "saldo-fim", "2025-09-10");
   await clicar(botoes(r).find((b) => b.props.className === "btn-primary"));
   assert.equal(alertas(r)[0], msg, "mostra a sugestão da rota");
@@ -438,13 +443,13 @@ await caso("saldo inicial, 409 com o período mais próximo: mostra a sugestão,
   assert.deepEqual(posts[0].corpo, { quitado_ate: "2025-09-10" });
   assert.deepEqual(posts.at(-1)!.corpo, { quitado_ate: "2025-09-10", fim_confirmado: "2025-08-15" });
   assert.equal(janela(r), undefined, "fechou");
-  assert.ok(textoDe(r).includes("Saldo inicial informado."));
+  assert.ok(textoDe(r).includes("Férias já quitadas informadas."));
 });
 
 await caso("saldo inicial: outro erro da rota (data futura) aparece em português dentro da janela", async () => {
   resposta = () => ({ status: 400, corpo: { error: "A data do último período quitado não pode ser futura." } });
   const r = await montar([E]);
-  await clicar(botao(r, "Informar saldo inicial"));
+  await clicar(botao(r, "Informar férias já quitadas"));
   await digitar(r, "saldo-fim", "2026-10-07");
   await clicar(botoes(r).find((b) => b.props.className === "btn-primary"));
   assert.deepEqual(alertas(r), ["A data do último período quitado não pode ser futura."]);

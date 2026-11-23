@@ -65,14 +65,14 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: `A data-base já é ${formatarDataBR(baseNova)}.` }, { status: 400 });
   }
   if (temPeriodoOperadoPeloRH(periodos)) {
-    return NextResponse.json({ error: "Já há férias programadas, em gozo ou gozadas deste funcionário. Reabra-as antes de ajustar a data-base." }, { status: 409 });
+    return NextResponse.json({ error: "Já há férias programadas, em férias ou tiradas deste funcionário. Reabra-as antes de ajustar a data-base." }, { status: 409 });
   }
   const periodosQuitados = periodos.filter((p) => p.origem === "saldo_inicial").length;
   const saldoSeraZerado = !!config?.saldo_inicial_confirmado_em;
   if ((saldoSeraZerado || periodos.length > 0) && !d.confirmar_reinicio) {
     return NextResponse.json(
       {
-        error: `Ajustar a data-base recalcula todos os períodos${saldoSeraZerado ? " e zera o saldo inicial (ele precisará ser informado de novo)" : ""}. Confirme para continuar.`,
+        error: `Ajustar a data-base recalcula todos os períodos${saldoSeraZerado ? " e zera as férias já quitadas (elas precisarão ser informadas de novo)" : ""}. Confirme para continuar.`,
         code: "confirmar_reinicio",
       },
       { status: 409 }

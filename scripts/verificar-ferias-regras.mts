@@ -3,7 +3,7 @@
 // Rodar: node --no-warnings --import ./scripts/harness-mot/register.mjs scripts/verificar-ferias-regras.mts
 import assert from "node:assert/strict";
 import {
-  adicionarDiasISO, aniversarioISO, avaliarFerias, avisoPendente, avisoVencidoPendente, colunasDeAviso, decidirAvisoFerias, calcularPeriodo, calcularSemaforo, diasEntre, diasRestantes, ehElegivelFerias, MAX_PERIODOS,
+  adicionarDiasISO, aniversarioISO, avaliarFerias, ROTULO_ESTADO_FERIAS, ROTULO_SITUACAO_FERIAS, SITUACOES_FERIAS, avisoPendente, avisoVencidoPendente, colunasDeAviso, decidirAvisoFerias, calcularPeriodo, calcularSemaforo, diasEntre, diasRestantes, ehElegivelFerias, MAX_PERIODOS,
   periodoAtual, periodosDivergentes, periodosFaltantes, periodosIniciadosAte, precisaSaldoInicial, programacaoVencida, resolverDataBase, resolverSaldoInicial, saldoResolvido, somarMesesISO,
   type PeriodoFerias,
 } from "../src/lib/feriasRegras";
@@ -86,6 +86,15 @@ ok("data-base = coalesce(ajustada, admissão); a efetivação não entra", () =>
   assert.equal(resolverDataBase(null, "2024-09-01"), "2024-09-01");
   assert.equal(resolverDataBase(null, null), null);
   assert.equal(resolverDataBase(undefined, undefined), null);
+});
+
+ok("rótulos mostrados ao usuário trocados, nomes internos intactos (valores de situacao e do estado)", () => {
+  assert.deepEqual([...SITUACOES_FERIAS], ["a_programar", "programada", "em_gozo", "gozada"], "valores gravados no banco não mudam");
+  assert.deepEqual(ROTULO_SITUACAO_FERIAS, { a_programar: "A programar", programada: "Programada com a contabilidade", em_gozo: "Em férias", gozada: "Férias tiradas" });
+  assert.equal(ROTULO_ESTADO_FERIAS.saldo_pendente, "Quitadas: a informar");
+  assert.deepEqual(Object.keys(ROTULO_ESTADO_FERIAS).sort(), ["base_alterada", "ainda_nao_iniciou", "ok", "saldo_pendente", "sem_data_base"].sort());
+  // Nenhum texto mostrado ao usuário usa mais "gozo", "gozada" ou "saldo".
+  for (const t of [...Object.values(ROTULO_SITUACAO_FERIAS), ...Object.values(ROTULO_ESTADO_FERIAS)]) assert.equal(/gozo|gozad|saldo/i.test(t), false, t);
 });
 
 ok("quem entra: ativo E (terceirização OU efetivado); MOT sem efetivação, desligado e R&S ficam fora", () => {

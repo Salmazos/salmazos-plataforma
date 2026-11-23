@@ -127,22 +127,22 @@ export function ModalSituacao({ linha, hojeISO, onClose, onConcluido, acao }: Pr
     const r = await postar(`/api/ferias/${linha.funcionario_id}/situacao`, { periodo_id: p.id, acao, gozo_inicio: inicio, gozo_fim: fim });
     setSalvando(false);
     if (!r.ok) return setErro(textoDoErro(r));
-    onConcluido(ehGozada ? "Férias marcadas como gozadas. O funcionário passou ao próximo período." : "Férias marcadas como em gozo.");
+    onConcluido(ehGozada ? "Férias concluídas. O funcionário passou ao próximo período." : "Início das férias registrado.");
   }
 
   return (
-    <Janela titulo={ehGozada ? "Marcar como gozada" : "Marcar como em gozo"} rotulo={ehGozada ? "Marcar férias como gozadas" : "Marcar férias como em gozo"} linha={linha} onClose={onClose}>
+    <Janela titulo={ehGozada ? "Concluir férias" : "Iniciou férias"} rotulo={ehGozada ? "Concluir férias" : "Iniciou férias"} linha={linha} onClose={onClose}>
       <p className="text-sm text-gray-600 mb-3">
         {ehGozada
           ? "Confirma que as férias deste período já foram tiradas? Isso fecha o período e o funcionário passa ao próximo."
           : "Confirma que as férias deste período já começaram?"}
       </p>
-      <Rotulo id="gozo-inicio">Início do gozo</Rotulo>
+      <Rotulo id="gozo-inicio">Início das férias</Rotulo>
       <input id="gozo-inicio" type="date" className="input-field mb-3" value={inicio} max={hojeISO} onChange={(e) => setInicio(e.target.value)} />
-      <Rotulo id="gozo-fim">Fim do gozo</Rotulo>
+      <Rotulo id="gozo-fim">Fim das férias</Rotulo>
       <input id="gozo-fim" type="date" className="input-field mb-3" value={fim} min={inicio || undefined} max={ehGozada ? hojeISO : undefined} onChange={(e) => setFim(e.target.value)} />
       <Erro texto={mostrarErro || erro} />
-      <Rodape salvando={salvando} desabilitado={!!validacao.erro} rotuloOk={ehGozada ? "Confirmar gozada" : "Confirmar em gozo"} rotuloSalvando="Salvando..." onClose={onClose} onOk={enviar} />
+      <Rodape salvando={salvando} desabilitado={!!validacao.erro} rotuloOk={ehGozada ? "Confirmar férias tiradas" : "Confirmar início das férias"} rotuloSalvando="Salvando..." onClose={onClose} onOk={enviar} />
     </Janela>
   );
 }
@@ -168,8 +168,8 @@ export function ModalReabrir({ linha, onClose, onConcluido }: PropsModal) {
   return (
     <Janela titulo="Reabrir período" rotulo="Reabrir período" linha={linha} onClose={onClose}>
       <p className="text-sm text-gray-600 mb-3">
-        O período {alvo.numero} está <strong>{ROTULO_SITUACAO_FERIAS[alvo.situacao]}</strong>
-        {alvo.gozo_inicio && alvo.gozo_fim ? ` (${dataBR(alvo.gozo_inicio)} a ${dataBR(alvo.gozo_fim)})` : ""}. Ao reabrir, ele volta para &quot;A programar&quot; e as datas de gozo são apagadas.
+        A situação do período {alvo.numero} é <strong>{ROTULO_SITUACAO_FERIAS[alvo.situacao]}</strong>
+        {alvo.gozo_inicio && alvo.gozo_fim ? ` (${dataBR(alvo.gozo_inicio)} a ${dataBR(alvo.gozo_fim)})` : ""}. Ao reabrir, ele volta para &quot;A programar&quot; e as datas das férias são apagadas.
       </p>
       <Rotulo id="reabrir-motivo">Motivo (obrigatório)</Rotulo>
       <textarea id="reabrir-motivo" className="input-field mb-1" rows={3} maxLength={1000} value={motivo} onChange={(e) => setMotivo(e.target.value)} />
@@ -225,13 +225,13 @@ export function ModalDataBase({ linha, hojeISO, onClose, onConcluido }: PropsMod
       <textarea id="data-base-motivo" className="input-field mb-3" rows={3} maxLength={1000} value={motivo} onChange={(e) => setMotivo(e.target.value)} />
       {temAlgoParaApagar && (
         <div className="mb-3" style={{ background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 8, padding: "10px 12px" }}>
-          <p className="text-sm mb-2" style={{ color: "#991B1B", fontWeight: 700 }}>Atenção: isto apaga os períodos e zera o saldo inicial.</p>
+          <p className="text-sm mb-2" style={{ color: "#991B1B", fontWeight: 700 }}>Atenção: isto apaga os períodos e zera as férias já quitadas.</p>
           <p className="text-xs mb-2" style={{ color: "#991B1B" }}>
-            Todos os períodos são recalculados a partir da nova data e o saldo inicial precisa ser informado de novo. Não é possível se já houver férias programadas, em gozo ou gozadas (reabra-as antes).
+            Todos os períodos são recalculados a partir da nova data e as férias já quitadas precisam ser informadas de novo. Não é possível se já houver férias programadas, em férias ou tiradas (reabra-as antes).
           </p>
           <label className="flex items-start gap-2 text-sm" style={{ color: "#991B1B" }}>
             <input type="checkbox" checked={entendi} onChange={(e) => setEntendi(e.target.checked)} style={{ marginTop: 3 }} />
-            Entendi e quero apagar os períodos e zerar o saldo inicial
+            Entendi e quero apagar os períodos e zerar as férias já quitadas
           </label>
         </div>
       )}
@@ -261,7 +261,7 @@ export function ModalSaldoInicial({ linha, hojeISO, onClose, onConcluido }: Prop
     setErro("");
     const r = await postar(`/api/ferias/${linha.funcionario_id}/saldo-inicial`, corpo);
     setSalvando(false);
-    if (r.ok) return onConcluido("Saldo inicial informado.");
+    if (r.ok) return onConcluido("Férias já quitadas informadas.");
     // A data não bate com o fim de nenhum período: a rota devolve o mais próximo e a pessoa confirma (nunca decide no escuro).
     if (r.status === 409 && r.json?.code === "confirmar_periodo" && r.json?.sugestao) {
       return setSugestao({ sugestao: r.json.sugestao, informado: r.json.informado ?? fimQuitado, texto: textoDoErro(r) });
@@ -272,9 +272,9 @@ export function ModalSaldoInicial({ linha, hojeISO, onClose, onConcluido }: Prop
   const enviarInformado = () => enviar({ quitado_ate: modo === "nenhum" ? null : fimQuitado });
 
   return (
-    <Janela titulo="Informar saldo inicial" rotulo="Informar saldo inicial" linha={linha} onClose={onClose}>
+    <Janela titulo="Informar férias já quitadas" rotulo="Informar férias já quitadas" linha={linha} onClose={onClose}>
       <p className="text-sm text-gray-600 mb-3">
-        Informado pela contabilidade: até que período aquisitivo as férias já foram quitadas. Os períodos que terminam até essa data ficam como gozados. Data-base: <strong>{dataBR(linha.data_base)}</strong>.
+        Informado pela contabilidade: até que período aquisitivo as férias já foram quitadas. Os períodos que terminam até essa data ficam como férias tiradas. Data-base: <strong>{dataBR(linha.data_base)}</strong>.
       </p>
       {sugestao ? (
         <div className="mb-3" style={{ background: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 8, padding: "10px 12px" }}>
@@ -299,7 +299,7 @@ export function ModalSaldoInicial({ linha, hojeISO, onClose, onConcluido }: Prop
           <Rotulo id="saldo-fim">Data em que terminou o último período já quitado</Rotulo>
           <input id="saldo-fim" type="date" className="input-field mb-3" value={fimQuitado} max={hojeISO} disabled={modo === "nenhum"} onChange={(e) => setFimQuitado(e.target.value)} />
           <Erro texto={erro} />
-          <Rodape salvando={salvando} desabilitado={!valido} rotuloOk="Informar saldo" rotuloSalvando="Salvando..." onClose={onClose} onOk={enviarInformado} />
+          <Rodape salvando={salvando} desabilitado={!valido} rotuloOk="Informar" rotuloSalvando="Salvando..." onClose={onClose} onOk={enviarInformado} />
         </>
       )}
     </Janela>

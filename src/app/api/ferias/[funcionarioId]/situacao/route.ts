@@ -45,7 +45,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (!alvo) return NextResponse.json({ error: "Período não encontrado." }, { status: 404 });
     if (alvo.situacao === "a_programar") return NextResponse.json({ error: "Este período já está \"a programar\"." }, { status: 409 });
     if (alvo.origem === "saldo_inicial") {
-      return NextResponse.json({ error: "Este período foi quitado pelo saldo inicial. Refaça o saldo inicial para alterá-lo." }, { status: 409 });
+      return NextResponse.json({ error: "Este período foi marcado como já quitado. Refaça as férias já quitadas para alterá-lo." }, { status: 409 });
     }
     const ultimoLancado = [...estado.periodos].filter((p) => p.origem === "gerado" && p.situacao !== "a_programar").sort((a, b) => b.numero - a.numero)[0];
     if (!ultimoLancado || ultimoLancado.id !== alvo.id) {
@@ -75,16 +75,16 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const atual: PeriodoFerias | null = periodoAtual(estado.periodos);
   if (!atual || atual.id !== d.periodo_id) {
-    return NextResponse.json({ error: "Só o período atual (o mais antigo ainda não gozado) pode mudar de situação." }, { status: 409 });
+    return NextResponse.json({ error: "Só o período atual (o mais antigo ainda sem férias tiradas) pode mudar de situação." }, { status: 409 });
   }
   const permitidas = d.acao === "em_gozo" ? ["a_programar", "programada"] : ["a_programar", "programada", "em_gozo"];
   if (!permitidas.includes(atual.situacao)) {
-    return NextResponse.json({ error: d.acao === "em_gozo" ? "Este período já está em gozo ou gozado." : "Este período já está gozado." }, { status: 409 });
+    return NextResponse.json({ error: d.acao === "em_gozo" ? "Este período já está em férias ou com as férias tiradas." : "Este período já está com as férias tiradas." }, { status: 409 });
   }
 
   const gozoInicio = d.gozo_inicio ?? atual.gozo_inicio;
   const gozoFim = d.gozo_fim ?? atual.gozo_fim;
-  if (!gozoInicio || !gozoFim) return NextResponse.json({ error: "Informe as datas inicial e final do gozo." }, { status: 400 });
+  if (!gozoInicio || !gozoFim) return NextResponse.json({ error: "Informe as datas inicial e final das férias." }, { status: 400 });
   if (gozoFim < gozoInicio) return NextResponse.json({ error: "A data final não pode ser anterior à data inicial." }, { status: 400 });
   if (gozoInicio <= atual.aquisitivo_fim) {
     return NextResponse.json({ error: `As férias só podem começar depois do fim do período aquisitivo (${formatarDataBR(atual.aquisitivo_fim)}).` }, { status: 400 });

@@ -6,7 +6,7 @@ import fs from "node:fs";
 // @ts-expect-error módulo .mjs do harness, sem tipos
 import { congelarData, AGORA_ISO, HOJE, dataMais, novoDb, logar, importar, chamar, funcionarioMot, idMot } from "./harness-mot/ambiente.mjs";
 import { adicionarDiasISO, calcularPeriodo, DIAS_LEMBRETE_VENCIDO } from "../src/lib/feriasRegras";
-import { ROTULO_EVENTO, ROTULO_GRUPO, EVENTOS_POR_GRUPO, canaisDoEvento, canalSemListaPermitido, canalSoInterruptor, grupoDoEvento, ligadoSemLinha } from "../src/lib/avisosCatalogo";
+import { NOTA_EVENTO, ROTULO_EVENTO, ROTULO_GRUPO, EVENTOS_POR_GRUPO, canaisDoEvento, canalSemListaPermitido, canalSoInterruptor, grupoDoEvento, ligadoSemLinha } from "../src/lib/avisosCatalogo";
 
 congelarData(AGORA_ISO); // 07/10/2026
 process.env.CRON_SECRET = "segredo-de-teste";
@@ -306,6 +306,22 @@ await ok("texto em português simples: nome, empresa, data-limite em dd/mm/aaaa 
     titulo: "Férias VENCIDAS — Ana",
     mensagem: "Ana (Cliente X): a data-limite para tirar as férias (15/08/2026) passou há 53 dia(s) e as férias não foram lançadas. Risco de pagamento em dobro. Programe com a contabilidade.",
   });
+});
+
+await ok("rótulos: os textos dos avisos (marco, vencido, lembrete) e do catálogo em Configurações > Avisos não usam 'gozo', 'gozada' nem 'saldo'; o tipo gravado segue ferias_vencimento", () => {
+  const dados = { nome: "Ana", empresa: "Cliente X", dataLimite: "2026-08-15" };
+  const textos = [
+    LIB.montarAvisoFerias({ tipo: "marco", marco: 90, marcarComoVistos: [] }, { ...dados, dias: 90 }),
+    LIB.montarAvisoFerias({ tipo: "marco", marco: 30, marcarComoVistos: [] }, { ...dados, dias: 0 }),
+    LIB.montarAvisoFerias({ tipo: "vencido", lembrete: false, marcarComoVistos: [] }, { ...dados, dias: -3 }),
+    LIB.montarAvisoFerias({ tipo: "vencido", lembrete: true, marcarComoVistos: [] }, { ...dados, dias: -10 }),
+  ].flatMap((t: { titulo: string; mensagem: string }) => [t.titulo, t.mensagem]);
+  for (const t of textos) assert.equal(/gozo|gozad|saldo/i.test(t), false, t);
+  assert.equal(LIB.TIPO_NOTIFICACAO_FERIAS, "ferias_vencimento");
+  const nota = NOTA_EVENTO[EVENTO];
+  assert.equal(/gozo|gozad|saldo/i.test(nota), false, "texto do catálogo");
+  assert.match(nota, /em férias ou tiradas/);
+  assert.match(nota, /férias já quitadas informadas/);
 });
 
 await ok("vencido e lembretes usam aviso_vencido_em e NUNCA mexem em aviso_30_em (que fica só com o marco de 30 dias)", async () => {
