@@ -32,6 +32,12 @@ export function ordenarPorDiasTrabalhados<T extends { diasTrabalhados: number; n
   return [...linhas].sort((a, b) => fator * (a.diasTrabalhados - b.diasTrabalhados) || a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR", { sensitivity: "base" }));
 }
 
+// Ordem padrão da lista de Vencimento de Contrato: pelo nome, de A a Z (sem diferenciar maiúscula nem acento); empate de nome desempata pela data de
+// admissão (AAAA-MM-DD, mais antiga primeiro). Não altera a lista recebida.
+export function ordenarPorNomeContrato<T extends { nomeCompleto: string; dataAdmissao: string }>(linhas: readonly T[]): T[] {
+  return [...linhas].sort((a, b) => a.nomeCompleto.localeCompare(b.nomeCompleto, "pt-BR", { sensitivity: "base" }) || a.dataAdmissao.localeCompare(b.dataAdmissao));
+}
+
 // Modalidades acompanhadas na tela "Vencimento de Contrato" e no popup do PAINEL (nunca no portal do cliente).
 export const TIPOS_COM_VENCIMENTO_CONTRATO = ["mao_obra_temporaria", "terceirizacao"] as const;
 export const ehTerceirizacao = (tipoServico: string | null | undefined): boolean => tipoServico === "terceirizacao";

@@ -105,7 +105,7 @@ await ok("tela: SEM destaque verde nos dias; selo de modalidade com cores bem di
   assert.ok(bloco.includes('MOT: { bg: "#DBEAFE", text: "#1D4ED8", borda: "#93C5FD" }'));
   assert.ok(bloco.includes('"Terceirização": { bg: "#111827", text: "#FFD700", borda: "#111827" }'));
   for (const corDeSituacao of ["#D1FAE5", "#FEF3C7", "#FFEDD5", "#FEE2E2", "#EDE9FE", "#6D28D9", "#5B21B6"]) assert.equal(bloco.includes(corDeSituacao), false, `cor de situação reaproveitada: ${corDeSituacao}`);
-  for (const t of ['useState<OrdemDiasTrabalhados>("desc")', "ordenarPorDiasTrabalhados(linhasIniciais, ordemDias)", "aria-sort", "▼", "▲", "Do maior para o menor", "border: `1px solid"]) assert.ok(tela.includes(t), t);
+  for (const t of ['useState<OrdemDiasTrabalhados | "nome">("nome")', "ordenarPorDiasTrabalhados(linhasIniciais, ordemDias)", "ordenarPorNomeContrato(linhasIniciais)", "aria-sort", "▼", "▲", "Do maior para o menor", "border: `1px solid"]) assert.ok(tela.includes(t), t);
 });
 await ok("barra de rolagem horizontal FLUTUANTE (fixa no rodapé da tela, na primeira tela): mesma peça do Banco de Candidatos, ligada à tabela e remedida ao filtrar/ordenar", () => {
   const tela = fs.readFileSync("src/components/VencimentoContratoPageClient.tsx", "utf8");

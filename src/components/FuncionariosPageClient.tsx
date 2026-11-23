@@ -10,6 +10,7 @@ import ModalAdicionarFuncionario from "./ModalAdicionarFuncionario";
 import ModalLancarRescisao from "./ModalLancarRescisao";
 import BuscaNomeFuncionario from "./BuscaNomeFuncionario";
 import { nomeContem, ordenarPorNome } from "@/lib/funcionariosBusca";
+import { opcoesEmpresasComContagem, resumirFuncionarios } from "@/lib/funcionariosResumo";
 
 export interface FuncionarioRow {
   id: string;
@@ -165,12 +166,16 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
   // Contagem por modalidade sempre sobre ativos "atuais" (independente dos filtros da
   // tela) — mesmo raciocínio dos cards de resumo em Admissões (CARDS_RESUMO), que também
   // contam sobre a lista cheia, não sobre o resultado já filtrado.
-  const ativos = useMemo(() => funcionariosIniciais.filter((f) => f.status === "ativo"), [funcionariosIniciais]);
-  const totalAtivos = ativos.length;
-  const totalMot = useMemo(() => ativos.filter((f) => f.tipo_servico === "mao_obra_temporaria").length, [ativos]);
-  const totalTerc = useMemo(() => ativos.filter((f) => f.tipo_servico === "terceirizacao").length, [ativos]);
-  const totalSemModalidade = useMemo(() => ativos.filter((f) => !f.tipo_servico).length, [ativos]);
-  const totalIncompletos = useMemo(() => ativos.filter((f) => f.faltas_cadastro.length > 0).length, [ativos]);
+  // Com uma empresa escolhida no filtro, os quadros mostram só os ativos dela (regra em lib/funcionariosResumo.ts).
+  const resumo = useMemo(() => resumirFuncionarios(funcionariosIniciais, filtroClienteId || null), [funcionariosIniciais, filtroClienteId]);
+  const totalAtivos = resumo.total;
+  const totalMot = resumo.mot;
+  const totalTerc = resumo.terceirizacao;
+  const totalSemModalidade = resumo.semModalidade;
+  const totalIncompletos = resumo.incompletos;
+  const opcoesEmpresas = useMemo(() => opcoesEmpresasComContagem(clientesFiltro, funcionariosIniciais), [clientesFiltro, funcionariosIniciais]);
+  const totalTodasEmpresas = useMemo(() => resumirFuncionarios(funcionariosIniciais).total, [funcionariosIniciais]);
+  const nomeEmpresaSelecionada = filtroClienteId ? clientesFiltro.find((c) => c.id === filtroClienteId)?.nome ?? null : null;
 
   // Filtros de status/empresa/modalidade (sem o texto da busca): a janela de nomes do campo de busca mostra só quem passa por eles, para
   // nunca oferecer um nome que a lista não vai exibir (ex.: um desligado com o filtro em "Ativo").
@@ -215,6 +220,7 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
         >
           <p style={{ fontSize: 26, fontWeight: 800, color: "#111827", margin: 0 }}>{totalAtivos}</p>
           <p style={{ fontSize: 12, fontWeight: 600, color: "#111827", margin: "2px 0 0" }}>Total de funcionários</p>
+          {nomeEmpresaSelecionada && <p style={{ fontSize: 11, fontWeight: 500, color: "#6B7280", margin: "2px 0 0" }}>{nomeEmpresaSelecionada}</p>}
         </button>
         <button
           onClick={() => setFiltroModalidade(filtroModalidade === "mao_obra_temporaria" ? "" : "mao_obra_temporaria")}
@@ -244,7 +250,7 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
           <p style={{ fontSize: 26, fontWeight: 800, color: MODALIDADE_BADGE.terceirizacao.text, margin: 0 }}>{totalTerc}</p>
           <p style={{ fontSize: 12, fontWeight: 600, color: MODALIDADE_BADGE.terceirizacao.text, margin: "2px 0 0" }}>Terceirização</p>
         </button>
-        {totalIncompletos > 0 && (
+        {(totalIncompletos > 0 || filtroIncompleto) && (
           <button
             type="button"
             aria-pressed={filtroIncompleto}
@@ -255,7 +261,7 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
             <p style={{ fontSize: 12, fontWeight: 600, color: "#B45309", margin: "2px 0 0" }}>Cadastro incompleto · {totalIncompletos}</p>
           </button>
         )}
-        {totalSemModalidade > 0 && (
+        {(totalSemModalidade > 0 || filtroModalidade === SEM_MODALIDADE) && (
           <button
             onClick={() => setFiltroModalidade(filtroModalidade === SEM_MODALIDADE ? "" : SEM_MODALIDADE)}
             style={{
@@ -281,9 +287,9 @@ export default function FuncionariosPageClient({ funcionariosIniciais, clientes,
           <option value="desligado">Desligado</option>
         </select>
         <select value={filtroClienteId} onChange={(e) => setFiltroClienteId(e.target.value)} className="input-field" style={{ maxWidth: 260 }}>
-          <option value="">Todas as empresas</option>
-          {clientesFiltro.map((c) => (
-            <option key={c.id} value={c.id}>{c.nome}</option>
+          <option value="">Todas as empresas ({totalTodasEmpresas})</option>
+          {opcoesEmpresas.map((c) => (
+            <option key={c.id} value={c.id}>{c.nome} ({c.total})</option>
           ))}
         </select>
       </div>

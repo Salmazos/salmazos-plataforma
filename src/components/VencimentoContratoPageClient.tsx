@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatarDataSemFuso } from "@/lib/utils";
-import { ehTerceirizacao, ordenarPorDiasTrabalhados, rotuloModalidadeContrato, type ContratoMotFaixa, type OrdemDiasTrabalhados } from "@/lib/contratoMotStatus";
+import { ehTerceirizacao, ordenarPorDiasTrabalhados, ordenarPorNomeContrato, rotuloModalidadeContrato, type ContratoMotFaixa, type OrdemDiasTrabalhados } from "@/lib/contratoMotStatus";
 import type { SeloMot } from "@/lib/contratoMotEventos";
 import { useScrollHorizontalSincronizado } from "@/hooks/useScrollHorizontalSincronizado";
 import BarraScrollFlutuante from "./BarraScrollFlutuante";
@@ -93,12 +93,12 @@ export default function VencimentoContratoPageClient({ linhasIniciais: linhasDoS
   const [filtroClienteId, setFiltroClienteId] = useState("");
   const [filtroModalidade, setFiltroModalidade] = useState<"" | "mao_obra_temporaria" | "terceirizacao">("");
   const [busca, setBusca] = useState("");
-  // Padrão: dias trabalhados do maior para o menor (clicar no título da coluna inverte).
-  const [ordemDias, setOrdemDias] = useState<OrdemDiasTrabalhados>("desc");
+  // Padrão: nome de A a Z. O título "Dias Trabalhados" (já clicável antes) passa a ordenar por dias e, nos cliques seguintes, inverte.
+  const [ordemDias, setOrdemDias] = useState<OrdemDiasTrabalhados | "nome">("nome");
 
   const filtradas = useMemo(() => {
     const buscaLower = busca.trim().toLowerCase();
-    return ordenarPorDiasTrabalhados(linhasIniciais, ordemDias).filter((l) => {
+    return (ordemDias === "nome" ? ordenarPorNomeContrato(linhasIniciais) : ordenarPorDiasTrabalhados(linhasIniciais, ordemDias)).filter((l) => {
       if (ocultarEfetivados && l.efetivadoEm) return false;
       if (filtroModalidade && l.tipoServico !== filtroModalidade) return false;
       if (filtroClienteId && l.clienteId !== filtroClienteId) return false;
@@ -236,14 +236,14 @@ export default function VencimentoContratoPageClient({ linhasIniciais: linhasDoS
                 <th style={TH_STYLE}>Modalidade</th>
                 <th style={TH_STYLE}>Empresa</th>
                 <th style={TH_STYLE}>Data de Admissão</th>
-                <th style={{ ...TH_STYLE, padding: 0 }} aria-sort={ordemDias === "desc" ? "descending" : "ascending"}>
+                <th style={{ ...TH_STYLE, padding: 0 }} aria-sort={ordemDias === "nome" ? "none" : ordemDias === "desc" ? "descending" : "ascending"}>
                   <button
                     type="button"
                     onClick={() => setOrdemDias((o) => (o === "desc" ? "asc" : "desc"))}
-                    title={ordemDias === "desc" ? "Do maior para o menor (clique para inverter)" : "Do menor para o maior (clique para inverter)"}
+                    title={ordemDias === "nome" ? "Clique para ordenar do maior para o menor" : ordemDias === "desc" ? "Do maior para o menor (clique para inverter)" : "Do menor para o maior (clique para inverter)"}
                     style={{ all: "unset", cursor: "pointer", display: "block", padding: "10px 14px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: 0.3, whiteSpace: "nowrap" }}
                   >
-                    Dias Trabalhados {ordemDias === "desc" ? "▼" : "▲"}
+                    Dias Trabalhados{ordemDias === "nome" ? "" : ordemDias === "desc" ? " ▼" : " ▲"}
                   </button>
                 </th>
                 <th style={TH_STYLE}>Situação</th>
