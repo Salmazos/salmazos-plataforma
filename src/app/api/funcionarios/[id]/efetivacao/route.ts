@@ -143,7 +143,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
   if (feriasLancadas.erro) return NextResponse.json({ error: ERRO_GENERICO }, { status: 500 });
   if (feriasLancadas.tem) {
     return NextResponse.json(
-      { error: "Não é possível desfazer a efetivação: este funcionário já tem férias programadas, em gozo ou gozadas. Reabra as férias (ou refaça o saldo inicial) na aba Férias antes de desfazer." },
+      { error: "Não é possível desfazer a efetivação: este funcionário já tem férias programadas, em férias ou tiradas. Reabra as férias (ou refaça as férias já quitadas) na aba Férias antes de desfazer." },
       { status: 409 }
     );
   }

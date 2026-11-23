@@ -41,10 +41,10 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const atual = periodoAtual(estado.periodos);
   if (!atual || atual.id !== d.periodo_id) {
-    return NextResponse.json({ error: "Só o período atual (o mais antigo ainda não gozado) pode ser programado." }, { status: 409 });
+    return NextResponse.json({ error: "Só o período atual (o mais antigo ainda sem férias tiradas) pode ser programado." }, { status: 409 });
   }
   if (atual.situacao !== "a_programar" && atual.situacao !== "programada") {
-    return NextResponse.json({ error: "Este período já está em gozo ou gozado." }, { status: 409 });
+    return NextResponse.json({ error: "Este período já está em férias ou com as férias tiradas." }, { status: 409 });
   }
   if (d.gozo_fim < d.gozo_inicio) return NextResponse.json({ error: "A data final não pode ser anterior à data inicial." }, { status: 400 });
   if (d.gozo_inicio < hoje) return NextResponse.json({ error: "A data inicial não pode ser anterior a hoje." }, { status: 400 });
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
   if (d.gozo_inicio > atual.data_limite) {
     return NextResponse.json(
-      { error: `A data inicial passa da data-limite (${formatarDataBR(atual.data_limite)}). Para registrar férias já em andamento ou concluídas, use "Em gozo" ou "Gozada".` },
+      { error: `A data inicial passa da data-limite (${formatarDataBR(atual.data_limite)}). Para registrar férias já em andamento ou concluídas, use "Iniciou férias" ou "Concluir férias".` },
       { status: 400 }
     );
   }

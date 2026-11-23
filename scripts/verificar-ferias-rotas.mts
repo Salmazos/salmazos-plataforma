@@ -98,7 +98,7 @@ await ok("estados cinza: sem data-base, ainda não iniciou (admissão futura), s
   assert.equal(periodosDe(db, id(1)).length + periodosDe(db, id(2)).length, 0, "nenhum período gerado");
   // Período 1 já venceu (limite 15/08/2026), mas sem saldo confirmado nada é vencido: cinza e sem dias.
   const l3 = linha(r, id(3));
-  assert.deepEqual([l3.estado, l3.estado_rotulo, l3.semaforo, l3.dias_restantes, l3.saldo_confirmado], ["saldo_pendente", "Saldo inicial pendente", "cinza", null, false]);
+  assert.deepEqual([l3.estado, l3.estado_rotulo, l3.semaforo, l3.dias_restantes, l3.saldo_confirmado], ["saldo_pendente", "Quitadas: a informar", "cinza", null, false]);
   assert.equal(r.corpo.resumo.cinza, 3);
   assert.equal(r.corpo.resumo.vermelho, 0);
 });
@@ -112,7 +112,7 @@ await ok("saldo pendente só com período terminado: 11 meses de casa = 'nenhum'
   assert.deepEqual([l1.estado, l1.semaforo, l1.saldo_calculado, l1.saldo_confirmado, l1.periodo.numero, l1.periodo.data_limite, l1.dias_restantes],
     ["ok", "verde", true, false, 1, "2027-11-06", 395]);
   const l2 = linha(r, id(2));
-  assert.deepEqual([l2.estado, l2.estado_rotulo, l2.semaforo, l2.saldo_calculado, l2.dias_restantes], ["saldo_pendente", "Saldo inicial pendente", "cinza", false, null]);
+  assert.deepEqual([l2.estado, l2.estado_rotulo, l2.semaforo, l2.saldo_calculado, l2.dias_restantes], ["saldo_pendente", "Quitadas: a informar", "cinza", false, null]);
   assert.deepEqual([linha(r, id(3)).estado, linha(r, id(3)).saldo_calculado], ["ok", true], "o período termina hoje: ainda não terminou");
   assert.equal(linha(r, id(4)).estado, "saldo_pendente", "o período terminou ontem");
   assert.equal(db.tabelas.ferias_config.length, 0, "nada de saldo gravado: o 'nenhum' é calculado na hora");
@@ -197,7 +197,7 @@ await ok("sem saldo confirmado nenhuma ação de situação é aceita (programar
   const p1 = periodosDe(db, id(1))[0];
   const a = await PROGRAMAR(db, id(1), { periodo_id: p1.id, gozo_inicio: dataMais(HOJE, 10), gozo_fim: dataMais(HOJE, 30) });
   assert.equal(a.status, 409);
-  assert.match(a.corpo.error, /saldo inicial/i);
+  assert.match(a.corpo.error, /férias já quitadas/i);
   assert.equal((await SITUACAO(db, id(1), { periodo_id: p1.id, acao: "gozada", gozo_inicio: "2025-09-01", gozo_fim: "2025-09-20" })).status, 409);
   assert.equal(periodosDe(db, id(1))[0].situacao, "a_programar");
 });
@@ -468,7 +468,11 @@ await ok("exportação CSV: mesma lista da tela, colunas pedidas, BOM, auditoria
   const sup = await EXPORTAR(db, { a_vencer: true }, "sup1");
   assert.equal(sup.texto.includes("Zé U2"), false, "supervisor só exporta a própria unidade");
   assert.equal(sup.cabecalhos.get("content-disposition"), 'attachment; filename="ferias-a-vencer-07-10-2026.csv"');
+  // A coluna Situação do CSV usa os mesmos rótulos da tela (Em férias / Férias tiradas; o valor gravado segue em_gozo / gozada).
+  Object.assign(periodosDe(db, id(3))[0], { situacao: "em_gozo", gozo_inicio: "2026-10-01", gozo_fim: "2026-10-20" });
   const todos = await EXPORTAR(db, {});
+  assert.ok(todos.texto.split("\r\n").find((l: string) => l.startsWith("Davi Verde"))!.includes(";Em férias;01/10/2026;20/10/2026"), "situação 'Em férias' e datas das férias no CSV");
+  assert.equal(/gozo|gozad/i.test(todos.texto), false, "nenhum rótulo antigo no CSV");
   assert.equal(todos.cabecalhos.get("content-disposition"), 'attachment; filename="ferias-07-10-2026.csv"');
   assert.equal(todos.texto.trim().split("\r\n").length, 5, "sem filtro: cabeçalho + 4");
   const soVencidos = await EXPORTAR(db, { faixa: "vencidos" });
@@ -511,7 +515,7 @@ await ok("Desfazer a efetivação é BLOQUEADO com férias programada, em gozo o
   await SALDO(db, id(1), { quitado_ate: "2025-08-15" }); // período 1 gozada por saldo inicial
   const d1 = await DESFAZER(db, id(1));
   assert.equal(d1.status, 409);
-  assert.match(d1.corpo.error, /férias programadas, em gozo ou gozadas/);
+  assert.match(d1.corpo.error, /férias programadas, em férias ou tiradas/);
   assert.ok(db.tabelas.funcionarios[0].efetivado_em, "continua efetivado");
   await SALDO(db, id(1), { quitado_ate: null }); // refaz: tudo volta a 'a programar'
   await SALDO(db, id(1), { quitado_ate: "2025-08-15" });

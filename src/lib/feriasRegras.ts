@@ -11,8 +11,8 @@ export type SemaforoFerias = "verde" | "amarelo" | "vermelho" | "cinza";
 export const ROTULO_SITUACAO_FERIAS: Record<SituacaoFerias, string> = {
   a_programar: "A programar",
   programada: "Programada com a contabilidade",
-  em_gozo: "Em gozo",
-  gozada: "Gozada",
+  em_gozo: "Em férias",
+  gozada: "Férias tiradas",
 };
 
 // Marcos dos avisos (dias que faltam para a data-limite) e faixas do semáforo.
@@ -154,7 +154,7 @@ export const ROTULO_ESTADO_FERIAS: Record<EstadoFerias, string> = {
   sem_data_base: "Informar data-base",
   ainda_nao_iniciou: "Ainda não iniciou",
   base_alterada: "Data-base mudou: reconfirmar",
-  saldo_pendente: "Saldo inicial pendente",
+  saldo_pendente: "Quitadas: a informar",
 };
 
 export interface PeriodoFerias extends PeriodoCalculado {
