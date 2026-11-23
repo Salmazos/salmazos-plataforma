@@ -7,8 +7,9 @@ import { checarPapelFuncionarios } from "@/lib/funcionariosAuth";
 import { checarAcessoFuncionarioRH, contextoRH } from "@/lib/rhUnidadeAuth";
 import type { ContextoUnidade } from "@/lib/unidadeAuth";
 import { consultarComEfetivacao, ehErroColunaAusente } from "@/lib/funcionarioEfetivacao";
+import { registrarAuditoria } from "@/lib/audit";
 import {
-  avaliarFerias, ehElegivelFerias, periodosDivergentes, periodosFaltantes, resolverDataBase, type AvaliacaoFerias, type PeriodoFerias,
+  avaliarFerias, decidirMudancaAutomatica, ehElegivelFerias, periodosDivergentes, periodosFaltantes, resolverDataBase, type AvaliacaoFerias, type PeriodoFerias,
 } from "@/lib/feriasRegras";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -186,6 +187,61 @@ export async function garantirPeriodosLote(
     periodos.set(p.funcionario_id, lista);
   }
   return { periodos, erro: null };
+}
+
+// ── Mudança automática de situação ──────────────────────────────────────────
+// Idempotente e sem tabela nova: só age em período cuja situação ainda não bate com as datas (decidirMudancaAutomatica); rodar de novo no mesmo dia não acha nada.
+// A troca é atômica (.eq("situacao", anterior)): se o RH clicou ao mesmo tempo, a linha não bate e a automação simplesmente pula (sem erro, sem auditoria dobrada).
+// Escreve em no máximo `limite` períodos por chamada (a lista usa poucos; o cron, mais); o resto fica para a próxima. Auditoria com as MESMAS ações dos cliques manuais
+// (ferias_em_gozo / ferias_gozada), origem "automatico" e sem usuário (feito pelo sistema). Devolve os períodos já atualizados para quem chamou não reler o banco.
+export const LIMITE_AUTOMATICO_LISTA = 50;
+export const LIMITE_AUTOMATICO_CRON = 500;
+
+export async function aplicarMudancasAutomaticasFerias(
+  svc: ServiceClient,
+  funcionarios: FuncionarioFerias[],
+  periodos: Map<string, PeriodoComFuncionario[]>,
+  hojeISO: string,
+  limite: number = LIMITE_AUTOMATICO_LISTA
+): Promise<{ periodos: Map<string, PeriodoComFuncionario[]>; alteradas: number; erro: ErroPg }> {
+  const resultado = new Map(periodos);
+  let alteradas = 0;
+  const agora = new Date().toISOString();
+  for (const f of funcionarios) {
+    if (!ehElegivelFerias(f)) continue;
+    const lista = resultado.get(f.id);
+    if (!lista) continue;
+    let mudou = false;
+    const nova = [...lista];
+    for (let i = 0; i < nova.length; i++) {
+      const p = nova[i];
+      const decisao = decidirMudancaAutomatica(p, hojeISO);
+      if (!decisao) continue;
+      if (alteradas >= limite) break;
+      const { data, error } = await svc
+        .from("ferias_periodos")
+        .update({ situacao: decisao.para, atualizado_por: null, atualizado_em: agora })
+        .eq("id", p.id)
+        .eq("funcionario_id", f.id)
+        .eq("situacao", p.situacao)
+        .select("id")
+        .maybeSingle();
+      if (error) return { periodos: mudou ? new Map(resultado).set(f.id, nova) : resultado, alteradas, erro: error };
+      if (!data) continue; // alguém mudou o período neste instante: não é erro, só não é com a automação
+      for (const t of decisao.transicoes) {
+        registrarAuditoria({
+          usuario_id: null, usuario_nome: "Sistema (automático)", acao: t.para === "gozada" ? "ferias_gozada" : "ferias_em_gozo", entidade: "ferias_periodos", entidade_id: p.id,
+          detalhes: { funcionario_id: f.id, periodo: p.numero, situacao_anterior: t.de, gozo_inicio: p.gozo_inicio, gozo_fim: p.gozo_fim, observacao: p.observacao, origem: "automatico", data_referencia: hojeISO },
+          unidade_id: f.unidade_id,
+        });
+      }
+      nova[i] = { ...p, situacao: decisao.para };
+      mudou = true;
+      alteradas++;
+    }
+    if (mudou) resultado.set(f.id, nova);
+  }
+  return { periodos: resultado, alteradas, erro: null };
 }
 
 export interface EstadoFuncionarioFerias {

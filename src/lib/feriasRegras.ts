@@ -183,6 +183,25 @@ export function periodoPedeAviso(p: Pick<PeriodoFerias, "situacao" | "gozo_inici
   return programacaoVencida(p, hojeISO);
 }
 
+// Mudança automática de situação pelas datas já programadas (cron diário e carga da lista). Data de referência = hoje em Brasília.
+// O dia do fim ainda conta como em férias: só no dia seguinte vira "gozada". `transicoes` é a sequência a auditar, na ordem: uma programada cujas
+// duas datas já passaram (sistema parado) vai direto a "gozada", mas registra "em_gozo" e depois "gozada". Só origem "gerado": período vindo do saldo
+// inicial (já quitado) e "a programar" nunca mudam sozinhos.
+export type SituacaoAutomatica = "em_gozo" | "gozada";
+export function decidirMudancaAutomatica(
+  p: Pick<PeriodoFerias, "situacao" | "origem" | "gozo_inicio" | "gozo_fim">,
+  hojeISO: string
+): { para: SituacaoAutomatica; transicoes: { de: SituacaoFerias; para: SituacaoAutomatica }[] } | null {
+  if (p.origem !== "gerado" || !p.gozo_inicio || !p.gozo_fim) return null;
+  if (p.situacao === "programada") {
+    if (p.gozo_fim < hojeISO) return { para: "gozada", transicoes: [{ de: "programada", para: "em_gozo" }, { de: "em_gozo", para: "gozada" }] };
+    if (p.gozo_inicio <= hojeISO) return { para: "em_gozo", transicoes: [{ de: "programada", para: "em_gozo" }] };
+    return null;
+  }
+  if (p.situacao === "em_gozo" && p.gozo_fim < hojeISO) return { para: "gozada", transicoes: [{ de: "em_gozo", para: "gozada" }] };
+  return null;
+}
+
 // Período em foco do funcionário: o mais antigo ainda não gozado. "Gozada" fecha o período e o funcionário passa ao próximo.
 export function periodoAtual<T extends { numero: number; situacao: SituacaoFerias }>(periodos: T[]): T | null {
   return [...periodos].sort((a, b) => a.numero - b.numero).find((p) => p.situacao !== "gozada") ?? null;

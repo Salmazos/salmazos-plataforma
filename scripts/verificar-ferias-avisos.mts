@@ -253,7 +253,7 @@ await ok("só períodos ainda NÃO gozados: o gozado (inclusive o quitado pelo s
   void p2;
 });
 
-await ok("situação programada PARA os avisos; volta só se a data de início programada passar sem virar em gozo/gozada; em gozo e gozada nunca avisam", async () => {
+await ok("situação programada PARA os avisos; no dia do início o cron a passa para em férias (não há aviso à toa); em gozo e gozada nunca avisam", async () => {
   const db = cenario([[1, TERC, admissaoComLimite(limiteEm(45))]]);
   confirmarSaldo(db, 1);
   await rodar(db, adicionarDiasISO(HOJE, -60)); // gera os períodos (ainda sem aviso: 105 dias)
@@ -261,10 +261,11 @@ await ok("situação programada PARA os avisos; volta só se a data de início p
   Object.assign(p1, { situacao: "programada", gozo_inicio: dataMais(HOJE, 20), gozo_fim: dataMais(HOJE, 40), aviso_90_em: null, aviso_60_em: null, aviso_30_em: null, aviso_vencido_em: null });
   assert.equal((await rodar(db)).avisosEnviados, 0, "programada com início no futuro: calada");
   assert.equal((await rodar(db, dataMais(HOJE, 19))).avisosEnviados, 0, "um dia antes do início");
-  assert.equal((await rodar(db, dataMais(HOJE, 20))).avisosEnviados, 0, "no dia do início ainda não venceu");
-  const volta = await rodar(db, dataMais(HOJE, 21)); // o início passou e continua 'programada'
-  assert.deepEqual([volta.avisosEnviados, volta.marcos], [1, 1], "volta a avisar");
-  assert.equal(colunas(periodosDe(db, 1)[0]), "xxx".replace("x", "x"), "como o prazo já está em 24 dias: marco de 30 e os anteriores 'vistos'");
+  assert.equal(periodosDe(db, 1)[0].situacao, "programada", "um dia antes do início segue programada");
+  const noDia = await rodar(db, dataMais(HOJE, 20));
+  assert.deepEqual([noDia.avisosEnviados, noDia.mudancasAutomaticas, periodosDe(db, 1)[0].situacao], [0, 1, "em_gozo"], "no dia do início passa sozinha para em férias, sem aviso");
+  const depois = await rodar(db, dataMais(HOJE, 21)); // antes da automação, a programada de início vencido voltava a avisar; agora já está em férias
+  assert.deepEqual([depois.avisosEnviados, depois.mudancasAutomaticas, notifs(db).length], [0, 0, 0], "sem aviso duplicado nem falso depois da mudança");
   for (const situacao of ["em_gozo", "gozada"]) {
     const outro = cenario([[1, TERC, admissaoComLimite(limiteEm(20))]]);
     confirmarSaldo(outro, 1);
@@ -275,7 +276,7 @@ await ok("situação programada PARA os avisos; volta só se a data de início p
   }
 });
 
-await ok("programada com data de início vencida E período já vencido: sai o aviso de vencido (uma vez); programada com início futuro, mesmo vencido, fica calada", async () => {
+await ok("programada com início vencido E período já vencido: a automação a passa para em férias ANTES dos avisos (nenhum aviso de vencido); programada com início futuro, mesmo vencida, fica calada", async () => {
   const db = cenario([[1, TERC, admissaoComLimite(limiteEm(-3))], [2, TERC, admissaoComLimite(limiteEm(-3))]]);
   confirmarSaldo(db, 1, 2);
   await rodar(db, adicionarDiasISO(HOJE, -400)); // gera os períodos sem avisar (ainda não existiam períodos terminados... só gera)
@@ -284,8 +285,9 @@ await ok("programada com data de início vencida E período já vencido: sai o a
   Object.assign(periodosDe(db, 1)[0], { situacao: "programada", gozo_inicio: dataMais(HOJE, -2), gozo_fim: dataMais(HOJE, 8) });
   Object.assign(periodosDe(db, 2)[0], { situacao: "programada", gozo_inicio: dataMais(HOJE, 5), gozo_fim: dataMais(HOJE, 15) });
   const r = await rodar(db);
-  assert.deepEqual([r.vencidos, notifs(db).map((x: any) => x.funcionario_id)], [1, [id(1)]]);
-  assert.equal((await rodar(db)).avisosEnviados, 0, "uma vez só");
+  assert.deepEqual([r.vencidos, notifs(db).length, r.mudancasAutomaticas], [0, 0, 1]);
+  assert.deepEqual([periodosDe(db, 1)[0].situacao, periodosDe(db, 2)[0].situacao], ["em_gozo", "programada"]);
+  assert.equal((await rodar(db)).avisosEnviados, 0, "segue sem aviso");
 });
 
 // ═════════════════ CONTEÚDO DO AVISO ═════════════════
@@ -348,7 +350,7 @@ await ok("vencido e lembretes usam aviso_vencido_em e NUNCA mexem em aviso_30_em
   Object.assign(periodosDe(db, 1)[0], { situacao: "programada", gozo_inicio: adicionarDiasISO(L, 20), gozo_fim: adicionarDiasISO(L, 30), aviso_90_em: null, aviso_60_em: null, aviso_30_em: null, aviso_vencido_em: null });
   assert.equal((await rodar(db, adicionarDiasISO(L, 16))).avisosEnviados, 0, "programada com início futuro: calada");
   const volta = await rodar(db, adicionarDiasISO(L, 21));
-  assert.deepEqual([volta.vencidos, volta.avisosEnviados], [1, 1], "início passou sem virar em gozo: volta com o aviso de vencido");
+  assert.deepEqual([volta.vencidos, volta.avisosEnviados, periodosDe(db, 1)[0].situacao], [0, 0, "em_gozo"], "início passou: a automação move para em férias, sem aviso de vencido");
 });
 
 await ok("SEM a coluna aviso_vencido_em no banco (migração pendente): o cron NÃO envia nada, NÃO marca nada e diz o motivo; a lista e a programação da aba respondem 'ainda não disponível'", async () => {

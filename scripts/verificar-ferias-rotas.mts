@@ -240,12 +240,13 @@ await ok("programar: grava datas, zera os avisos, audita; reprogramar troca as d
   assert.equal(periodosDe(db, id(1))[1].gozo_fim, "2027-08-15", "fim exatamente na data-limite vale");
 });
 
-await ok("programação cujo início já passou sem virar em gozo: a lista sinaliza (os avisos voltam na 2D)", async () => {
+await ok("programação cujo início já passou sem virar em gozo: ao listar, a situação passa sozinha para em férias (não fica sinalizada como atrasada)", async () => {
   const db = cenario([[1, TERC, ADM_VENCIDO]]);
   await SALDO(db, id(1), { quitado_ate: "2025-08-15" });
   const p2 = periodosDe(db, id(1))[1];
   Object.assign(p2, { situacao: "programada", gozo_inicio: dataMais(HOJE, -3), gozo_fim: dataMais(HOJE, 10) });
-  assert.equal(linha(await LISTAR(db), id(1)).programacao_vencida, true);
+  const l = linha(await LISTAR(db), id(1));
+  assert.deepEqual([l.programacao_vencida, l.periodo.situacao], [false, "em_gozo"]);
 });
 
 await ok("em gozo → gozada: o funcionário passa ao próximo período; datas futuras são recusadas; ordem fixa", async () => {

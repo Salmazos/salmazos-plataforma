@@ -7,7 +7,7 @@ import { celulaCsv } from "@/lib/gestaoPessoasLista";
 import { dataBR } from "@/lib/dataBR";
 import { ROTULO_ESTADO_FERIAS, ROTULO_SITUACAO_FERIAS, textoDiasRestantes, type OrigemPeriodo, type SemaforoFerias, type SituacaoFerias } from "@/lib/feriasRegras";
 import { filtrarLinhasFerias, type FiltrosFerias, type LinhaFerias } from "@/lib/feriasLinhas";
-import { carregarDadosFerias, carregarElegiveis, garantirPeriodosLote, montarEstado, respostaDeErro } from "@/lib/feriasPeriodos";
+import { aplicarMudancasAutomaticasFerias, LIMITE_AUTOMATICO_LISTA, carregarDadosFerias, carregarElegiveis, garantirPeriodosLote, montarEstado, respostaDeErro } from "@/lib/feriasPeriodos";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
 
@@ -55,6 +55,15 @@ export async function montarListaFerias(
   if (erro) return { erroResposta: respostaDeErro(erro, "listar") };
   const garantido = await garantirPeriodosLote(svc, funcionarios, dados, hojeISO);
   if (garantido.erro) return { erroResposta: respostaDeErro(garantido.erro, "gerar períodos") };
+  // A tela nunca mostra situação desatualizada entre dois crons. Falha aqui não derruba a lista: mostra como está e o próximo cron tenta de novo.
+  let periodosDaLista = garantido.periodos;
+  try {
+    const auto = await aplicarMudancasAutomaticasFerias(svc, funcionarios, garantido.periodos, hojeISO, LIMITE_AUTOMATICO_LISTA);
+    periodosDaLista = auto.periodos;
+    if (auto.erro) console.error("[ferias] Mudança automática de situação falhou ao listar:", auto.erro.message);
+  } catch (err) {
+    console.error("[ferias] Mudança automática de situação falhou ao listar:", err);
+  }
 
   const clienteIds = [...new Set(funcionarios.map((f) => f.cliente_id).filter((id): id is string => !!id))];
   const [{ data: clientes }, { data: unidades }] = await Promise.all([
@@ -65,7 +74,7 @@ export async function montarListaFerias(
   const nomeUnidade = new Map((unidades ?? []).map((u) => [u.id as string, u.nome as string]));
 
   const todas: LinhaFerias[] = funcionarios.map((f) => {
-    const e = montarEstado(f, dados, garantido.periodos.get(f.id) ?? [], hojeISO);
+    const e = montarEstado(f, dados, periodosDaLista.get(f.id) ?? [], hojeISO);
     const p = e.avaliacao.periodo;
     return {
       funcionario_id: f.id,

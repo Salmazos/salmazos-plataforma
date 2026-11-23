@@ -16,7 +16,7 @@ import { EVENTO_FERIAS_VENCIMENTO } from "@/lib/avisosCatalogo";
 import { formatarDataSemFuso } from "@/lib/utils";
 import { colunasDeAviso, decidirAvisoFerias, DIAS_LEMBRETE_VENCIDO, diasRestantes, type DecisaoAvisoFerias } from "@/lib/feriasRegras";
 import {
-  carregarDadosFerias, carregarElegiveis, ehErroColunaAvisoVencidoAusente, ehErroTabelaFeriasAusente, garantirPeriodosLote, montarEstado, type FuncionarioFerias,
+  aplicarMudancasAutomaticasFerias, LIMITE_AUTOMATICO_CRON, carregarDadosFerias, carregarElegiveis, ehErroColunaAvisoVencidoAusente, ehErroTabelaFeriasAusente, garantirPeriodosLote, montarEstado, type FuncionarioFerias,
 } from "@/lib/feriasPeriodos";
 
 type ServiceClient = ReturnType<typeof createServiceClient>;
@@ -32,6 +32,7 @@ export interface ResumoAvisosFerias {
   lembretes: number;
   semDestinatarios: number; // períodos que pediam aviso mas não tinham ninguém a quem avisar (nada marcado)
   falhas: number;
+  mudancasAutomaticas?: number; // períodos que mudaram sozinhos de situação pelas datas (programada → em férias → tiradas)
   erro?: string;
 }
 
@@ -90,6 +91,18 @@ export async function executarAvisosFerias(
     return resumo;
   }
 
+  // Antes de decidir qualquer aviso, a situação segue as datas programadas (assim o aviso de "programada com início vencido" não sai à toa). Se falhar, o cron para
+  // aqui: nada é enviado nem marcado e o motivo volta no resumo.
+  const auto = await aplicarMudancasAutomaticasFerias(svc, funcionarios, garantido.periodos, hojeISO, LIMITE_AUTOMATICO_CRON);
+  resumo.mudancasAutomaticas = auto.alteradas;
+  if (auto.erro) {
+    resumo.erro = `Falha na mudança automática de situação das férias: ${motivoDoErro(auto.erro)}`;
+    resumo.falhas++;
+    console.error(`[cron/ferias-avisos] ${resumo.erro}`);
+    return resumo;
+  }
+  const periodosAtuais = auto.periodos;
+
   const clienteIds = [...new Set(funcionarios.map((f) => f.cliente_id).filter((id): id is string => !!id))];
   const { data: clientes } = clienteIds.length > 0 ? await svc.from("clientes").select("id, nome").in("id", clienteIds) : { data: [] as { id: string; nome: string }[] };
   const nomeCliente = new Map((clientes ?? []).map((c) => [c.id as string, c.nome as string]));
@@ -106,7 +119,7 @@ export async function executarAvisosFerias(
   }
 
   for (const f of funcionarios) {
-    const estado = montarEstado(f, dados, garantido.periodos.get(f.id) ?? [], hojeISO);
+    const estado = montarEstado(f, dados, periodosAtuais.get(f.id) ?? [], hojeISO);
     // Só "ok": sem data-base, ainda não iniciou, data-base mudou e saldo pendente nunca disparam. (Estado "ok" já inclui o saldo calculado "nenhum".)
     if (estado.avaliacao.estado !== "ok") continue;
 
