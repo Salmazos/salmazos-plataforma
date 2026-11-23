@@ -244,6 +244,10 @@ await caso("programar: datas limitadas (início de hoje em diante, depois do fim
   const r = await montar([D]);
   await clicar(botao(r, "Programar"));
   assert.ok(janela(r));
+  assert.ok(
+    textoDe(r).includes("No dia do início, a situação passa sozinha para Em férias; depois do último dia, para Férias tiradas. Se as datas mudarem, use Alterar datas ou Reabrir."),
+    "a janela explica a mudança automática de situação"
+  );
   const ini = campo(r, "ferias-inicio");
   assert.deepEqual([ini.props.min, ini.props.max], ["2026-10-07", "2027-08-15"], "mínimo = hoje (o aquisitivo já terminou) e máximo = data-limite");
   const confirmar = () => botoesDe(r, "Programar").find((b) => b.props.className === "btn-primary")!;

@@ -102,6 +102,7 @@ export function ModalProgramar({ linha, hojeISO, onClose, onConcluido }: PropsMo
       <Rotulo id="ferias-obs">Observação (opcional)</Rotulo>
       <textarea id="ferias-obs" className="input-field mb-3" rows={3} maxLength={2000} value={obs} onChange={(e) => setObs(e.target.value)} />
       <p className="text-xs text-gray-500 mb-3">Registre aqui as datas combinadas com a contabilidade. Os avisos de vencimento param enquanto as férias estiverem programadas.</p>
+      <p className="text-xs text-gray-500 mb-3">No dia do início, a situação passa sozinha para Em férias; depois do último dia, para Férias tiradas. Se as datas mudarem, use Alterar datas ou Reabrir.</p>
       <Erro texto={mostrarErro || erro} />
       <Aviso texto={validacao.aviso} />
       <Rodape salvando={salvando} desabilitado={!!validacao.erro} rotuloOk={reprogramando ? "Salvar novas datas" : "Programar"} rotuloSalvando="Salvando..." onClose={onClose} onOk={enviar} />
