@@ -162,7 +162,9 @@ await ok("fiação: portal não usa a lista de modalidades do painel; telas e fi
   assert.ok(ficha.includes('funcionario.tipo_servico === "terceirizacao"') && ficha.includes("Contrato temporário (Terceirização)"));
   const popup = fs.readFileSync("src/components/PopupVencimentoContratoMot.tsx", "utf8");
   assert.ok(popup.includes("MOT e Terceirização") && popup.includes("modalidade={selecionado?.tipo_servico ?? null}"));
-  assert.equal(fs.readFileSync("vercel.json", "utf8"), execFileSync("git", ["show", "main:vercel.json"], { encoding: "utf8" }), "vercel.json idêntico ao da main: nenhum cron novo");
+  // Esta etapa não criou cron: os crons são os da main (o cron das férias, /api/cron/ferias-avisos, é de outro módulo e fica de fora da comparação nos dois lados).
+  const semFerias = (texto: string) => JSON.parse(texto).crons.filter((c: { path: string }) => c.path !== "/api/cron/ferias-avisos");
+  assert.deepEqual(semFerias(fs.readFileSync("vercel.json", "utf8")), semFerias(execFileSync("git", ["show", "main:vercel.json"], { encoding: "utf8" })), "vercel.json igual ao da main: nenhum cron novo");
 });
 
 console.log(`\n${n} verificações OK`);

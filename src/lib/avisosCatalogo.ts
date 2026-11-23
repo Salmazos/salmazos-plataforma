@@ -145,12 +145,14 @@ export const AVISOS_RESTANTES: Record<string, { rotulo: string; canais: readonly
 export const EVENTOS_AVISOS_RESTANTES: string[] = Object.keys(AVISOS_RESTANTES);
 export const eventoAvisoRestante = (evento: string): boolean => Object.prototype.hasOwnProperty.call(AVISOS_RESTANTES, evento);
 
-export type GrupoAviso = "vagas" | "rescisao" | "aso" | "portal_cliente" | "avisos_cliente";
+export type GrupoAviso = "vagas" | "rescisao" | "aso" | "portal_cliente" | "avisos_cliente" | "ferias";
 
 export const EVENTOS_POR_GRUPO: Record<GrupoAviso, string[]> = {
   vagas: ["vaga_criada", "vaga_reativada", "vaga_fechada", "vaga_cancelada", "solicitacao_vaga", "garantia_rs_vencendo", "garantia_rs_acionada", "pos_venda_rs_7dias", ...EVENTOS_AVISOS_RESTANTES],
   rescisao: ["rescisao_lancamento", "rescisao_vencimento_rescisao", "rescisao_vencimento_guia", "rescisao_paga", "rescisao_aso_pendente"],
   aso: ["aso_periodico_sem_registro", "aso_periodico_vencendo", "aso_periodico_atrasado"],
+  // Férias (aviso de vencimento): um evento só, que cobre os marcos de 90, 60 e 30 dias e o "vencido".
+  ferias: ["ferias_vencimento"],
   portal_cliente: [
     "indicacao_candidato_recebida",
     "indicacao_candidato_editada_cliente",
@@ -204,15 +206,20 @@ export const EVENTO_POS_VENDA_RS = "pos_venda_rs_7dias";
 export const eventoPosVendaRS = (evento: string): boolean => evento === EVENTO_POS_VENDA_RS;
 // Eventos cujo sino SEMPRE avisa quem já era avisado (responsável do candidato, ou responsável comercial no pós-venda),
 // mais a lista, e cujo popup segue o sino.
+// Férias a vencer (grupo ferias): SEM padrão do sistema e sem responsável — só quem está na lista do sino é avisado. Lista vazia = ninguém é avisado e os avisos
+// NÃO são marcados como enviados (não se perde nenhum). O popup é só interruptor: segue o aviso nominal do sino, uma vez por aviso por pessoa.
+export const EVENTO_FERIAS_VENCIMENTO = "ferias_vencimento";
+export const eventoFeriasVencimento = (evento: string): boolean => evento === EVENTO_FERIAS_VENCIMENTO;
 export const eventoComResponsavelNoSino = (evento: string): boolean => eventoDecisaoCliente(evento) || eventoGarantiaRS(evento) || eventoPosVendaRS(evento) || eventoAvisoRestante(evento);
 // Sino e popup destes eventos podem ficar ligados com a lista VAZIA (o responsável sempre é avisado): a regra do
 // último destinatário e a restauração do padrão não se aplicam a eles.
 export const canalSemListaPermitido = (evento: string, canal: string): boolean =>
-  eventoComResponsavelNoSino(evento) && (canal === "sino" || canal === "popup");
+  (eventoComResponsavelNoSino(evento) && (canal === "sino" || canal === "popup")) || (eventoFeriasVencimento(evento) && canal === "popup");
 // O popup destes eventos não tem lista própria: a tela só mostra o interruptor.
-export const canalSoInterruptor = (evento: string, canal: string): boolean => eventoComResponsavelNoSino(evento) && canal === "popup";
+export const canalSoInterruptor = (evento: string, canal: string): boolean => (eventoComResponsavelNoSino(evento) || eventoFeriasVencimento(evento)) && canal === "popup";
 // Como a tela mostra o canal quando NÃO há linha em aviso_eventos_canais (coerente com o código que envia).
 export function ligadoSemLinha(evento: string, canal: string): boolean {
+  if (eventoFeriasVencimento(evento)) return canal === "sino"; // o popup só abre com a linha do canal ligada
   if (eventoComResponsavelNoSino(evento)) return canal !== "popup"; // e-mail e sino seguem ligados; popup só com linha
   return canal === "email" || !eventoSemLista(evento);
 }
@@ -231,6 +238,7 @@ export const ROTULO_GRUPO: Record<GrupoAviso, string> = {
   vagas: "Vagas",
   rescisao: "Rescisão",
   aso: "ASO periódico",
+  ferias: "Férias",
   portal_cliente: "Portal do cliente",
   avisos_cliente: "Avisos ao cliente",
 };
@@ -250,6 +258,7 @@ export const ROTULO_EVENTO: Record<string, string> = {
   aso_periodico_sem_registro: "ASO periódico sem registro",
   aso_periodico_vencendo: "ASO periódico vencendo",
   aso_periodico_atrasado: "ASO periódico em atraso",
+  ferias_vencimento: "Férias a vencer (90, 60 e 30 dias antes da data-limite)",
   portal_candidato_aprovado: "Cliente aprovou candidato (portal)",
   portal_candidato_reprovado: "Cliente reprovou candidato (portal)",
   indicacao_decisao_cliente: "Indicação direta aprovada pela Salmazos",
@@ -303,6 +312,7 @@ export const CANAIS_POR_EVENTO: Record<string, readonly ("email" | "sino" | "pop
   email_cliente_lembrete_agendamento: ["email"],
   rescisao_paga: ["sino"],
   rescisao_aso_pendente: ["sino"],
+  ferias_vencimento: ["sino", "popup"],
   aso_demissional_anexado_cliente: ["sino", "popup"],
   portal_candidato_aprovado: ["email", "sino", "popup"],
   portal_candidato_reprovado: ["email", "sino", "popup"],
@@ -367,6 +377,8 @@ export const NOTA_EVENTO: Record<string, string> = {
   indicacao_candidato_editada_cliente:
     "Dispara quando o cliente altera, pelo portal, uma indicação direta que já enviou (enquanto está em análise ou aprovada e ainda sem admissão iniciada). O sino e o e-mail dizem quais campos mudaram (telefone mascarado; salário com valor); no e-mail há a tabela Campo / Antes / Depois e, se algum dado não pôde ser atualizado no cadastro do candidato, o motivo. Em indicação aprovada o sino leva ao perfil do candidato; em análise, à indicação. Não há popup. O filtro de unidade é regra fixa: só recebem quem atende a unidade do cliente.",
   rescisao_paga: "Hoje este aviso só existe no sino (e no popup de login, que deriva dele).",
+  ferias_vencimento:
+    "Dispara pelo cron diário (6h) para funcionários de Terceirização ou efetivados, ativos, com o saldo inicial de férias resolvido. Avisa quando faltam 90, 60 e 30 dias para a data-limite de tirar as férias (fim do período aquisitivo mais 12 meses; depois dela há pagamento em dobro): um aviso por marco, sem repetir. Se o cron chegar tarde (por exemplo, já a 20 dias), sai só o aviso do marco mais próximo. Período já vencido: um aviso \"VENCIDAS\" e um lembrete a cada 7 dias enquanto as férias não forem programadas, em gozo ou gozadas. Férias programadas param os avisos e só voltam se a data de início passar sem virar em gozo ou gozada. Sino: só quem está na lista é avisado, e só dos funcionários da unidade que atende (sócios, de todas); sem ninguém na lista, nada é enviado e nada é marcado como enviado. Popup: só interruptor; abre uma vez por aviso para quem recebeu o aviso do sino. Sem e-mail. O cliente não recebe nada.",
   rescisao_aso_pendente:
     "Dispara pelo cron diário (9h) quando há rescisão sem ASO demissional anexado e com 10 dias ou mais desde o desligamento. Cada pessoa da lista recebe UM aviso por dia, consolidado (quantas rescisões estão pendentes e as mais antigas), até o ASO ser anexado. Só sino (o popup de login deriva dele); sem e-mail. Sem ninguém na lista, ninguém é avisado. O cliente não recebe nada.",
   aso_demissional_anexado_cliente:
@@ -398,6 +410,11 @@ export const FRASE_EMAIL_CLIENTE = "Ligado: cada usuário do portal do cliente r
 export const APOIO_EMAILS_CLIENTE = "Os e-mails vão para o login de cada usuário do portal do cliente. Sem usuário no portal, vão para o e-mail de contato.";
 
 export function descricaoPadraoDoSistema(grupo: GrupoAviso, canal: string, evento = ""): string {
+  if (eventoFeriasVencimento(evento)) {
+    return canal === "popup"
+      ? "Ligado: abre uma vez por aviso para quem recebeu o aviso do sino. Desligado, ou sem esta configuração: ninguém vê o popup."
+      : "Sem ninguém na lista: ninguém é avisado (e os avisos não são marcados como enviados, então nada se perde). Desligado: ninguém.";
+  }
   if (eventoEmailCliente(evento)) return FRASE_EMAIL_CLIENTE;
   if (eventoAvisoRestante(evento)) {
     const d = AVISOS_RESTANTES[evento].padrao[canal as CanalRestante];

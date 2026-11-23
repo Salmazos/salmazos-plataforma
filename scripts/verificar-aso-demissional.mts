@@ -360,7 +360,8 @@ await ok("CRON: exige o CRON_SECRET (sem ele = 401) e continua sendo o MESMO cro
   assert.equal((await chamar(R.cron.GET)).status, 401);
   assert.equal((await chamar(R.cron.GET, { headers: { authorization: "Bearer errado" } })).status, 401);
   const crons = JSON.parse(fs.readFileSync("vercel.json", "utf8")).crons.map((c: any) => c.path);
-  assert.equal(crons.length, 12, "continuam 12 crons");
+  // O cron novo das férias (/api/cron/ferias-avisos) é de outro módulo; o que este teste garante é que o ASO demissional não ganhou cron próprio.
+  assert.equal(crons.filter((p: string) => p !== "/api/cron/ferias-avisos").length, 12, "continuam 12 crons (fora o das férias)");
   assert.ok(crons.includes("/api/cron/rescisao-avisos"));
   assert.ok(!crons.some((p: string) => /aso-demissional/.test(p)));
 });

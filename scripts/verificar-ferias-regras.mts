@@ -3,7 +3,7 @@
 // Rodar: node --no-warnings --import ./scripts/harness-mot/register.mjs scripts/verificar-ferias-regras.mts
 import assert from "node:assert/strict";
 import {
-  adicionarDiasISO, aniversarioISO, avaliarFerias, avisoPendente, calcularPeriodo, calcularSemaforo, diasEntre, diasRestantes, ehElegivelFerias, MAX_PERIODOS,
+  adicionarDiasISO, aniversarioISO, avaliarFerias, avisoPendente, avisoVencidoPendente, colunasDeAviso, decidirAvisoFerias, calcularPeriodo, calcularSemaforo, diasEntre, diasRestantes, ehElegivelFerias, MAX_PERIODOS,
   periodoAtual, periodosDivergentes, periodosFaltantes, periodosIniciadosAte, precisaSaldoInicial, programacaoVencida, resolverDataBase, resolverSaldoInicial, saldoResolvido, somarMesesISO,
   type PeriodoFerias,
 } from "../src/lib/feriasRegras";
@@ -15,7 +15,7 @@ const ok = (nome: string, fn: () => void) => { fn(); n++; console.log(`OK ${nome
 // Monta um período "do banco" a partir da data-base, com os campos de controle em branco.
 const periodo = (dataBase: string, numero: number, extra: Partial<PeriodoFerias> = {}): PeriodoFerias => ({
   id: `p${numero}`, ...calcularPeriodo(dataBase, numero), situacao: "a_programar", gozo_inicio: null, gozo_fim: null, observacao: null, origem: "gerado",
-  aviso_90_em: null, aviso_60_em: null, aviso_30_em: null, ...extra,
+  aviso_90_em: null, aviso_60_em: null, aviso_30_em: null, aviso_vencido_em: null, ...extra,
 });
 
 ok("datas: soma de dias, diferença e soma de meses com fim de mês", () => {
@@ -188,7 +188,7 @@ ok("programada: semáforo continua pela data-limite; 'programação vencida' só
 });
 
 ok("avisos: a programar avisa; programada para; programada com início vencido volta; em gozo e gozada nunca", () => {
-  const base = { aviso_90_em: null, aviso_60_em: null, aviso_30_em: null, data_limite: "2026-12-31" };
+  const base = { aviso_90_em: null, aviso_60_em: null, aviso_30_em: null, aviso_vencido_em: null, data_limite: "2026-12-31" };
   const hoje = "2026-12-01"; // 30 dias para o limite
   assert.deepEqual(avisoPendente({ ...base, situacao: "a_programar", gozo_inicio: null }, hoje, true)?.marco, 30);
   assert.equal(avisoPendente({ ...base, situacao: "programada", gozo_inicio: "2026-12-20" }, hoje, true), null, "programada com data futura: sem aviso");
@@ -198,7 +198,7 @@ ok("avisos: a programar avisa; programada para; programada com início vencido v
 });
 
 ok("avisos 90/60/30: um por marco, sem repetir; primeira execução atrasada manda só o mais urgente e marca os outros", () => {
-  const p = (extra: Partial<PeriodoFerias>) => ({ situacao: "a_programar" as const, gozo_inicio: null, data_limite: "2026-12-31", aviso_90_em: null, aviso_60_em: null, aviso_30_em: null, ...extra });
+  const p = (extra: Partial<PeriodoFerias>) => ({ situacao: "a_programar" as const, gozo_inicio: null, data_limite: "2026-12-31", aviso_90_em: null, aviso_60_em: null, aviso_30_em: null, aviso_vencido_em: null, ...extra });
   assert.equal(avisoPendente(p({}), adicionarDiasISO("2026-12-31", -91), true), null, "91 dias: ainda não");
   assert.deepEqual(avisoPendente(p({}), adicionarDiasISO("2026-12-31", -90), true), { marco: 90, marcarComoVistos: [] });
   assert.equal(avisoPendente(p({ aviso_90_em: "2026-10-02T12:00:00Z" }), adicionarDiasISO("2026-12-31", -89), true), null, "90 já enviado: não repete");
@@ -207,7 +207,33 @@ ok("avisos 90/60/30: um por marco, sem repetir; primeira execução atrasada man
   assert.equal(avisoPendente(p({ aviso_90_em: "x", aviso_60_em: "y", aviso_30_em: "z" }), "2026-12-30", true), null);
   assert.deepEqual(avisoPendente(p({}), adicionarDiasISO("2026-12-31", -20), true), { marco: 30, marcarComoVistos: [90, 60] }, "cron atrasado: um aviso só");
   assert.deepEqual(avisoPendente(p({ aviso_60_em: "y" }), adicionarDiasISO("2026-12-31", -20), true), { marco: 30, marcarComoVistos: [90] });
-  assert.deepEqual(avisoPendente(p({}), "2027-01-10", true), { marco: 30, marcarComoVistos: [90, 60] }, "vencido também cai no marco de 30");
+  assert.equal(avisoPendente(p({}), "2027-01-10", true), null, "vencido NÃO é marco: o aviso de vencido é outro (avisoVencidoPendente)");
+});
+
+ok("vencido: aviso único (registrado em aviso_vencido_em), 'já vistos' para 90 e 60, lembrete só depois de 7 dias, lembretes desligáveis", () => {
+  const base = { situacao: "a_programar" as const, gozo_inicio: null, data_limite: "2026-12-31", aviso_90_em: null, aviso_60_em: null, aviso_30_em: null, aviso_vencido_em: null };
+  assert.equal(avisoVencidoPendente(base, "2026-12-31", true), null, "no dia da data-limite ainda não venceu");
+  assert.deepEqual(avisoVencidoPendente(base, "2027-01-01", true), { lembrete: false, marcarComoVistos: [90, 60] });
+  assert.deepEqual(avisoVencidoPendente({ ...base, aviso_90_em: "2026-10-02T12:00:00Z" }, "2027-01-01", true), { lembrete: false, marcarComoVistos: [60] });
+  // O aviso do marco de 30 dias (aviso_30_em) NÃO conta como aviso de vencido: o vencido só se registra em aviso_vencido_em.
+  assert.deepEqual(avisoVencidoPendente({ ...base, aviso_90_em: "x", aviso_60_em: "x", aviso_30_em: "2026-12-01T12:00:00Z" }, "2027-01-01", true), { lembrete: false, marcarComoVistos: [] });
+  // Com aviso_vencido_em preenchido o aviso de vencido já foi enviado: sem repetição diária; lembrete a cada 7 dias contados do último aviso ou lembrete.
+  const carimbado = { ...base, aviso_90_em: "x", aviso_60_em: "x", aviso_30_em: "2026-12-01T12:00:00Z", aviso_vencido_em: "2027-01-01T15:00:00Z" };
+  for (const dia of ["2027-01-01", "2027-01-02", "2027-01-07"]) assert.equal(avisoVencidoPendente(carimbado, dia, true), null, dia);
+  assert.deepEqual(avisoVencidoPendente(carimbado, "2027-01-08", true), { lembrete: true, marcarComoVistos: [] });
+  assert.equal(avisoVencidoPendente(carimbado, "2027-02-20", true, 0), null, "lembretes desligados: só o aviso único");
+  assert.equal(avisoVencidoPendente(base, "2027-01-01", false), null, "saldo pendente nunca avisa");
+  assert.equal(avisoVencidoPendente({ ...base, situacao: "programada", gozo_inicio: "2027-02-01" }, "2027-01-01", true), null, "programada com início futuro: calada");
+  assert.deepEqual(avisoVencidoPendente({ ...base, situacao: "programada", gozo_inicio: "2026-12-20" }, "2027-01-01", true), { lembrete: false, marcarComoVistos: [90, 60] }, "início vencido: volta");
+  assert.equal(avisoVencidoPendente({ ...base, situacao: "em_gozo", gozo_inicio: "2026-12-20" }, "2027-01-01", true), null);
+  // A decisão única e o que gravar.
+  assert.deepEqual(decidirAvisoFerias(base, "2026-12-01", true), { tipo: "marco", marco: 30, marcarComoVistos: [90, 60] });
+  assert.deepEqual(decidirAvisoFerias(base, "2027-01-01", true), { tipo: "vencido", lembrete: false, marcarComoVistos: [90, 60] });
+  assert.equal(decidirAvisoFerias(base, "2026-06-01", true), null);
+  assert.deepEqual(colunasDeAviso({ tipo: "marco", marco: 60, marcarComoVistos: [90] }, "T"), { aviso_60_em: "T", aviso_90_em: "T" });
+  assert.deepEqual(colunasDeAviso({ tipo: "vencido", lembrete: true, marcarComoVistos: [] }, "T"), { aviso_vencido_em: "T" }, "o vencido NÃO mexe em aviso_30_em");
+  assert.deepEqual(colunasDeAviso({ tipo: "vencido", lembrete: false, marcarComoVistos: [90, 60] }, "T"), { aviso_vencido_em: "T", aviso_90_em: "T", aviso_60_em: "T" });
+  assert.deepEqual(colunasDeAviso({ tipo: "marco", marco: 30, marcarComoVistos: [] }, "T"), { aviso_30_em: "T" }, "aviso_30_em é só o marco de 30 dias");
 });
 
 ok("saldo inicial: 'nenhum', data exata, data aproximada (RH confirma), empate, futura, antes da base, sem período concluído", () => {

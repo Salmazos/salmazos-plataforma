@@ -206,7 +206,7 @@ await ok("programar: grava datas, zera os avisos, audita; reprogramar troca as d
   const db = cenario([[1, TERC, ADM_VENCIDO]]);
   await SALDO(db, id(1), { quitado_ate: "2025-08-15" }); // período atual = 2 (aquisitivo até 15/08/2026, limite 15/08/2027)
   const p2 = periodosDe(db, id(1))[1];
-  Object.assign(p2, { aviso_90_em: "2026-09-01T12:00:00Z", aviso_60_em: "2026-09-20T12:00:00Z" }); // avisos já enviados antes (simulado)
+  Object.assign(p2, { aviso_90_em: "2026-09-01T12:00:00Z", aviso_60_em: "2026-09-20T12:00:00Z", aviso_vencido_em: "2026-09-25T12:00:00Z" }); // avisos já enviados antes (simulado)
   const base = { periodo_id: p2.id };
   assert.equal((await PROGRAMAR(db, id(1), { ...base, gozo_inicio: dataMais(HOJE, -1), gozo_fim: dataMais(HOJE, 10) })).status, 400, "início no passado");
   assert.equal((await PROGRAMAR(db, id(1), { ...base, gozo_inicio: dataMais(HOJE, 10), gozo_fim: dataMais(HOJE, 5) })).status, 400, "fim antes do início");
@@ -218,8 +218,8 @@ await ok("programar: grava datas, zera os avisos, audita; reprogramar troca as d
   const ok1 = await PROGRAMAR(db, id(1), { ...base, gozo_inicio: "2026-11-10", gozo_fim: "2026-11-29", observacao: "  combinado com a RCA  " });
   assert.equal(ok1.status, 200, JSON.stringify(ok1.corpo));
   const depois = periodosDe(db, id(1))[1];
-  assert.deepEqual([depois.situacao, depois.gozo_inicio, depois.gozo_fim, depois.observacao, depois.aviso_90_em ?? null, depois.aviso_60_em ?? null, depois.aviso_30_em ?? null, depois.atualizado_por],
-    ["programada", "2026-11-10", "2026-11-29", "combinado com a RCA", null, null, null, "u-dir"]);
+  assert.deepEqual([depois.situacao, depois.gozo_inicio, depois.gozo_fim, depois.observacao, depois.aviso_90_em ?? null, depois.aviso_60_em ?? null, depois.aviso_30_em ?? null, depois.aviso_vencido_em ?? null, depois.atualizado_por],
+    ["programada", "2026-11-10", "2026-11-29", "combinado com a RCA", null, null, null, null, "u-dir"], "programar zera TODOS os registros de aviso, inclusive o do vencido");
   const l = linha(await LISTAR(db), id(1));
   assert.deepEqual([l.periodo.situacao, l.periodo.gozo_inicio, l.programacao_vencida, l.semaforo], ["programada", "2026-11-10", false, "verde"], "semáforo segue a data-limite");
 
@@ -491,6 +491,12 @@ await ok("migration ainda não aplicada: lista e ações respondem 503 com mensa
   const d = await DESFAZER(db, id(2));
   assert.equal(d.status, 200, JSON.stringify(d.corpo));
   assert.equal(db.tabelas.funcionarios[1].efetivado_em ?? null, null);
+  // Falta só a coluna ferias_periodos.aviso_vencido_em (migration_ferias_aviso_vencido.sql ainda não aplicada): lista e ações respondem 503, não 500.
+  db.falhas["ferias_periodos.select"] = { code: "42703", message: "column ferias_periodos.aviso_vencido_em does not exist" };
+  const semColuna = await LISTAR(db);
+  assert.equal(semColuna.status, 503);
+  assert.match(semColuna.corpo.error, /ainda não está disponível/);
+  assert.equal((await SALDO(db, id(1), { quitado_ate: null })).status, 503);
   // Erro de verdade (não é "tabela ausente") NÃO vira migração pendente: 500 genérico, sem vazar a mensagem do banco.
   db.falhas["ferias_periodos.select"] = { code: "57014", message: "canceling statement due to statement timeout" };
   const e = await LISTAR(db);

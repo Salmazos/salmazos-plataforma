@@ -19,8 +19,16 @@ export const MSG_FERIAS_ERRO_GENERICO = "Não foi possível concluir a operaçã
 
 // A migration é aplicada separada do deploy: enquanto as tabelas não existem, o Postgres responde 42P01 e o PostgREST PGRST205 (tabela fora do cache).
 // Qualquer OUTRO erro (rede, timeout, permissão) NÃO vira "migração pendente": quem chama trata como erro de verdade.
+// A coluna ferias_periodos.aviso_vencido_em (migration_ferias_aviso_vencido.sql) também é aplicada separada do deploy: enquanto não existe, toda leitura dos
+// períodos falha com 42703 (ou PGRST204/schema cache). Tratada como "migração pendente" (503 com mensagem clara), nunca como erro genérico.
+export function ehErroColunaAvisoVencidoAusente(erro: ErroPg): boolean {
+  if (!erro || typeof erro.message !== "string" || !/aviso_vencido_em/.test(erro.message)) return false;
+  return erro.code === "42703" || erro.code === "PGRST204" || /does not exist|schema cache|could not find/i.test(erro.message);
+}
+
 export function ehErroTabelaFeriasAusente(erro: ErroPg): boolean {
   if (!erro) return false;
+  if (ehErroColunaAvisoVencidoAusente(erro)) return true;
   if (erro.code === "42P01" || erro.code === "PGRST205") return true;
   return typeof erro.message === "string" && /ferias_(periodos|config)/.test(erro.message) && /(does not exist|schema cache|not found)/i.test(erro.message);
 }
@@ -50,7 +58,7 @@ export interface ConfigFerias {
 
 const COLUNAS_FUNCIONARIO = "id, nome_completo, cliente_id, empresa, data_admissao, status, tipo_servico, unidade_id";
 const COLUNAS_PERIODO =
-  "id, funcionario_id, numero, aquisitivo_inicio, aquisitivo_fim, data_limite, situacao, gozo_inicio, gozo_fim, observacao, origem, aviso_90_em, aviso_60_em, aviso_30_em, unidade_id";
+  "id, funcionario_id, numero, aquisitivo_inicio, aquisitivo_fim, data_limite, situacao, gozo_inicio, gozo_fim, observacao, origem, aviso_90_em, aviso_60_em, aviso_30_em, aviso_vencido_em, unidade_id";
 const COLUNAS_CONFIG =
   "funcionario_id, data_base_ajustada, ajustado_por, ajustado_em, motivo, saldo_inicial_confirmado_em, saldo_inicial_confirmado_por, saldo_inicial_quitado_ate";
 

@@ -167,6 +167,8 @@ export interface PeriodoFerias extends PeriodoCalculado {
   aviso_90_em: string | null;
   aviso_60_em: string | null;
   aviso_30_em: string | null;
+  // Último aviso ou lembrete de VENCIDO (data-limite passada, sem férias lançadas). Nulo = ainda não avisou.
+  aviso_vencido_em: string | null;
 }
 
 // Programada cuja data de início já passou sem a situação virar em_gozo ou gozada: os avisos voltam (decisão do Olver).
@@ -186,22 +188,75 @@ export function periodoAtual<T extends { numero: number; situacao: SituacaoFeria
   return [...periodos].sort((a, b) => a.numero - b.numero).find((p) => p.situacao !== "gozada") ?? null;
 }
 
+// Lembrete do "vencido": depois da data-limite sai UM aviso ("VENCIDAS, risco de pagamento em dobro") e, enquanto o período continuar sem férias programadas,
+// em gozo ou gozadas, um lembrete a cada tantos dias. 0 desliga os lembretes (fica só o aviso único). Proposta: semanal, porque o risco é financeiro.
+export const DIAS_LEMBRETE_VENCIDO = 7;
+
+type PeriodoDeAviso = Pick<PeriodoFerias, "situacao" | "gozo_inicio" | "data_limite" | "aviso_90_em" | "aviso_60_em" | "aviso_30_em" | "aviso_vencido_em">;
+
+// Data (Brasília) de um timestamp gravado no banco (timestamptz). Os registros de aviso guardam o instante do envio.
+export function dataBrasiliaDeTimestamp(timestamp: string): string {
+  return new Date(timestamp).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+}
+
 // Marco de aviso a disparar agora (cron da 2D): o mais urgente já alcançado cujo registro de envio está vazio. Se o cron roda pela primeira vez
 // com o prazo já em 20 dias, só o marco de 30 sai (os de 90 e 60 ficam em `marcarComoVistos`, para não saírem três avisos de uma vez).
 // `saldoConfirmado` aqui significa "saldo resolvido" (use saldoResolvido: confirmado OU nenhum período terminado). Falso (saldo inicial pendente) nunca avisa.
+// Só vale até a data-limite (dias >= 0): depois dela o aviso é o do "vencido" (avisoVencidoPendente).
 export function avisoPendente(
-  p: Pick<PeriodoFerias, "situacao" | "gozo_inicio" | "data_limite" | "aviso_90_em" | "aviso_60_em" | "aviso_30_em">,
+  p: PeriodoDeAviso,
   hojeISO: string,
   saldoConfirmado: boolean
 ): { marco: MarcoAviso; marcarComoVistos: MarcoAviso[] } | null {
   if (!saldoConfirmado || !periodoPedeAviso(p, hojeISO)) return null;
   const dias = diasRestantes(p.data_limite, hojeISO);
+  if (dias < 0) return null;
   const alcancados = MARCOS_AVISO.filter((m) => dias <= m); // [90, 60, 30] em ordem: o último é o mais urgente
   if (alcancados.length === 0) return null;
   const marco = alcancados[alcancados.length - 1];
   const enviado = { 90: p.aviso_90_em, 60: p.aviso_60_em, 30: p.aviso_30_em } as const;
   if (enviado[marco]) return null;
   return { marco, marcarComoVistos: alcancados.filter((m) => m !== marco && !enviado[m]) };
+}
+
+// "Vencido" = data-limite já passou e o período segue sem férias lançadas (a programar, ou programada com o início vencido). O aviso de vencido tem coluna
+// própria (ferias_periodos.aviso_vencido_em; aviso_90/60/30_em continuam sendo só os marcos): sem registro, avisa agora (aviso único); com registro, só repete
+// como lembrete quando já passaram `lembreteDias` dias (padrão 7) desde o último aviso ou lembrete.
+export function avisoVencidoPendente(
+  p: PeriodoDeAviso,
+  hojeISO: string,
+  saldoConfirmado: boolean,
+  lembreteDias: number = DIAS_LEMBRETE_VENCIDO
+): { lembrete: boolean; marcarComoVistos: MarcoAviso[] } | null {
+  if (!saldoConfirmado || !periodoPedeAviso(p, hojeISO)) return null;
+  if (diasRestantes(p.data_limite, hojeISO) >= 0) return null;
+  if (!p.aviso_vencido_em) {
+    // Primeiro aviso de vencido: os marcos de 90 e 60 que nunca saíram ficam como "já vistos" (sem enviar). O de 30 não é tocado.
+    return { lembrete: false, marcarComoVistos: MARCOS_AVISO.filter((m) => m !== 30 && !{ 90: p.aviso_90_em, 60: p.aviso_60_em }[m as 90 | 60]) };
+  }
+  if (lembreteDias > 0 && diasEntre(dataBrasiliaDeTimestamp(p.aviso_vencido_em), hojeISO) >= lembreteDias) return { lembrete: true, marcarComoVistos: [] };
+  return null;
+}
+
+export type DecisaoAvisoFerias =
+  | { tipo: "marco"; marco: MarcoAviso; marcarComoVistos: MarcoAviso[] }
+  | { tipo: "vencido"; lembrete: boolean; marcarComoVistos: MarcoAviso[] };
+
+// A decisão única do cron para UM período: marco de 90/60/30, aviso/lembrete de vencido, ou nada.
+export function decidirAvisoFerias(p: PeriodoDeAviso, hojeISO: string, saldoConfirmado: boolean, lembreteDias: number = DIAS_LEMBRETE_VENCIDO): DecisaoAvisoFerias | null {
+  const marco = avisoPendente(p, hojeISO, saldoConfirmado);
+  if (marco) return { tipo: "marco", ...marco };
+  const vencido = avisoVencidoPendente(p, hojeISO, saldoConfirmado, lembreteDias);
+  return vencido ? { tipo: "vencido", ...vencido } : null;
+}
+
+// O que gravar em ferias_periodos DEPOIS do envio com sucesso: o marco enviado e os marcos "já vistos" recebem o instante do envio; o vencido (e cada lembrete)
+// grava em aviso_vencido_em.
+export function colunasDeAviso(d: DecisaoAvisoFerias, agoraISO: string): Record<string, string> {
+  const colunas: Record<string, string> = {};
+  colunas[d.tipo === "marco" ? `aviso_${d.marco}_em` : "aviso_vencido_em"] = agoraISO;
+  for (const m of d.marcarComoVistos) colunas[`aviso_${m}_em`] = agoraISO;
+  return colunas;
 }
 
 // ── Estado do funcionário na lista ──────────────────────────────────────────

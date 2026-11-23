@@ -33,7 +33,7 @@ interface CanalCfg { evento: string; canal: string; ativo: boolean }
 interface Usuario { user_id: string; nome_completo: string; email: string | null }
 interface Dados { canais: CanalCfg[]; destinatarios: Destinatario[]; usuarios: Usuario[] }
 
-const GRUPOS: GrupoAviso[] = ["vagas", "rescisao", "aso", "portal_cliente", "avisos_cliente"];
+const GRUPOS: GrupoAviso[] = ["vagas", "rescisao", "aso", "ferias", "portal_cliente", "avisos_cliente"];
 
 // Quanto tempo o erro inline fica na tela antes de sumir sozinho.
 const TEMPO_ERRO_INLINE_MS = 8000;
