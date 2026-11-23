@@ -45,6 +45,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/cron/ferias-avisos",
+      "schedule": "0 9 * * *"
+    },
+    {
       "path": "/api/cron/comissao-pendencias",
       "schedule": "0 9 * * *"
     }

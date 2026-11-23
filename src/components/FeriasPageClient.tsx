@@ -24,6 +24,9 @@ interface Props {
   clientes: ClienteOption[];
   // "Hoje" em Brasília, vindo do servidor: a tela e as janelas nunca dependem do fuso do navegador.
   hojeISO: string;
+  // Filtros vindos do link dos avisos de férias (/painel/ferias?funcionario=<id>&faixa=<faixa>).
+  funcionarioInicial?: string | null;
+  faixaInicial?: FaixaFerias | null;
   // Mensagem pronta quando o servidor não conseguiu montar a lista (ex.: tabelas de férias ainda não existem no banco).
   erroCarga?: string | null;
 }
@@ -64,7 +67,7 @@ async function baixarCsv(res: Response): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-export default function FeriasPageClient({ linhasIniciais, clientes: clientesDoServidor, hojeISO, erroCarga = null }: Props) {
+export default function FeriasPageClient({ linhasIniciais, clientes: clientesDoServidor, hojeISO, erroCarga = null, funcionarioInicial = null, faixaInicial = null }: Props) {
   const [linhas, setLinhas] = useState(linhasIniciais);
   const [clientes, setClientes] = useState(clientesDoServidor);
   useEffect(() => { setLinhas(linhasIniciais); }, [linhasIniciais]);
@@ -74,7 +77,8 @@ export default function FeriasPageClient({ linhasIniciais, clientes: clientesDoS
   const [filtroClienteId, setFiltroClienteId] = useState("");
   const [filtroSituacao, setFiltroSituacao] = useState<"" | SituacaoFerias>("");
   const [filtroSemaforo, setFiltroSemaforo] = useState<"" | SemaforoFerias>("");
-  const [faixa, setFaixa] = useState<"" | FaixaFerias>("");
+  const [faixa, setFaixa] = useState<"" | FaixaFerias>(faixaInicial ?? "");
+  const [funcionarioFoco, setFuncionarioFoco] = useState<string | null>(funcionarioInicial);
   const [janela, setJanela] = useState<Janela>(null);
   const [mensagem, setMensagem] = useState("");
   const [erroTela, setErroTela] = useState(erroCarga ?? "");
@@ -86,9 +90,10 @@ export default function FeriasPageClient({ linhasIniciais, clientes: clientesDoS
       ...(filtroSituacao ? { situacao: filtroSituacao } : {}),
       ...(filtroSemaforo ? { semaforo: filtroSemaforo } : {}),
       ...(faixa ? { faixa } : {}),
+      ...(funcionarioFoco ? { funcionario_id: funcionarioFoco } : {}),
       ...(busca.trim() ? { busca: busca.trim() } : {}),
     }),
-    [filtroClienteId, filtroSituacao, filtroSemaforo, faixa, busca]
+    [filtroClienteId, filtroSituacao, filtroSemaforo, faixa, funcionarioFoco, busca]
   );
   const filtradas = useMemo(() => filtrarLinhasFerias(linhas, filtros), [linhas, filtros]);
   // Contagens do resumo sobre a lista cheia (não sobre o resultado filtrado), como em Vencimento de Contrato.
@@ -99,7 +104,7 @@ export default function FeriasPageClient({ linhasIniciais, clientes: clientesDoS
   useEffect(() => { handleScroll(); }, [handleScroll, filtradas]);
 
   function limparFiltros() {
-    setBusca(""); setFiltroClienteId(""); setFiltroSituacao(""); setFiltroSemaforo(""); setFaixa("");
+    setBusca(""); setFiltroClienteId(""); setFiltroSituacao(""); setFiltroSemaforo(""); setFaixa(""); setFuncionarioFoco(null);
   }
 
   // Depois de qualquer ação: fecha a janela, mostra o aviso e busca a lista de novo (a rota é a fonte da verdade).
@@ -192,6 +197,15 @@ export default function FeriasPageClient({ linhasIniciais, clientes: clientesDoS
               );
             })}
           </div>
+
+          {funcionarioFoco && (
+            <p className="mb-3 text-sm text-gray-700" role="status">
+              Mostrando só {linhas.find((l) => l.funcionario_id === funcionarioFoco)?.nome_completo ?? "o funcionário do aviso"}.{" "}
+              <button type="button" onClick={() => setFuncionarioFoco(null)} style={{ color: "#1D4ED8", textDecoration: "underline", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                Ver todos
+              </button>
+            </p>
+          )}
 
           <div className="flex gap-3 mb-4 flex-wrap">
             <input type="text" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome..." className="input-field" style={{ maxWidth: 240 }} aria-label="Buscar por nome" />

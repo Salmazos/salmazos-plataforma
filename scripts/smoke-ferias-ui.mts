@@ -489,6 +489,23 @@ await caso("depois de uma ação, se a recarga da lista falha, a tela avisa em p
   assert.equal(janela(r), undefined);
 });
 
+await caso("link dos avisos de férias: ?funcionario= abre só aquele funcionário (com 'Ver todos'), ?faixa= abre já filtrada, e a exportação respeita o mesmo recorte", async () => {
+  chamadas = [];
+  resposta = () => ({ status: 200, texto: "﻿Funcionário\r\n", cabecalhos: { "Content-Disposition": 'attachment; filename="ferias-07-10-2026.csv"' } });
+  const r = await montar(TODAS, { funcionarioInicial: "f-c" });
+  assert.deepEqual(nomesNaTela(r), ["f-c"]);
+  assert.ok(textoDe(r).includes("Mostrando só Carla Programada"));
+  await clicar(botao(r, "Exportar CSV"));
+  assert.deepEqual(chamadas.find((c) => c.metodo === "POST")!.corpo, { funcionario_id: "f-c" });
+  await clicar(botao(r, "Ver todos"));
+  assert.equal(nomesNaTela(r).length, 7);
+  assert.equal(textoDe(r).includes("Mostrando só"), false);
+  const f = await montar(TODAS, { faixaInicial: "vencidos" });
+  assert.deepEqual(nomesNaTela(f), ["f-a"]);
+  assert.equal(botao(f, "Vencidos")!.props["aria-pressed"], true);
+  assert.equal(filtrarLinhasFerias(TODAS, { funcionario_id: "f-d" }).length, 1);
+});
+
 // ═════════════════════════ REGRAS PURAS DA TELA ═════════════════════════
 await caso("faixas do resumo somam sem repetir: vencido, 0 a 30, 31 a 90 e pendente; cinza sem prazo não entra em nenhuma além da pendente", () => {
   assert.deepEqual(contarFaixas(TODAS), { vencidos: 1, ate30: 1, ate90: 1, pendente: 1 });

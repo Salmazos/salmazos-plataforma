@@ -1434,6 +1434,7 @@ export const funcionarioEfetivarSchema = z.object({
 // ── Férias (aviso de vencimento) ─────────────────────────────────────────────
 // Filtros da lista e da exportação CSV. `a_vencer` = só quem está em amarelo ou vermelho (90 dias ou menos, ou vencido).
 export const feriasFiltrosSchema = z.object({
+  funcionario_id: z.string().uuid("Funcionário inválido").optional(),
   cliente_id: z.string().uuid("Cliente inválido").optional(),
   unidade_id: z.string().uuid("Unidade inválida").optional(),
   situacao: z.enum(["a_programar", "programada", "em_gozo", "gozada"]).optional(),

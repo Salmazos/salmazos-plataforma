@@ -53,6 +53,8 @@ export const ROTULO_FAIXA_FERIAS: Record<FaixaFerias, string> = {
 };
 
 export interface FiltrosFerias {
+  // Um funcionário só (o link dos avisos de férias abre a aba já filtrada por ele).
+  funcionario_id?: string;
   cliente_id?: string;
   unidade_id?: string;
   situacao?: SituacaoFerias;
@@ -83,6 +85,7 @@ const normalizar = (t: string) => t.normalize("NFD").replace(MARCAS, "").toLower
 export function filtrarLinhasFerias<T extends LinhaFerias>(linhas: T[], f: FiltrosFerias): T[] {
   const busca = f.busca ? normalizar(f.busca) : "";
   return linhas.filter((l) => {
+    if (f.funcionario_id && l.funcionario_id !== f.funcionario_id) return false;
     if (f.cliente_id && l.cliente_id !== f.cliente_id) return false;
     if (f.unidade_id && l.unidade_id !== f.unidade_id) return false;
     if (f.situacao && l.periodo?.situacao !== f.situacao) return false;

@@ -16,7 +16,7 @@ interface Params {
 // Só o período atual (o mais antigo ainda não gozado). A contabilidade faz os cálculos; aqui só valem janelas de data simples:
 //  início de hoje em diante, depois do fim do aquisitivo, e início E fim até a data-limite (dias gozados depois dela são pagos em dobro, Súmula 81 do TST;
 //  programar depois dela também esconderia o risco). Período já vencido: o RH usa "Em gozo" ou "Gozada" direto.
-// Ao programar, os registros dos avisos de 90/60/30 são zerados: os avisos só voltam se a data de início passar sem a situação mudar.
+// Ao programar, os registros dos avisos de 90/60/30 e do vencido são zerados: os avisos só voltam se a data de início passar sem a situação mudar.
 export async function POST(request: NextRequest, { params }: Params) {
   const { funcionarioId } = await params;
   const auth = await autorizarFerias(funcionarioId);
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     .from("ferias_periodos")
     .update({
       situacao: "programada", gozo_inicio: d.gozo_inicio, gozo_fim: d.gozo_fim, observacao,
-      aviso_90_em: null, aviso_60_em: null, aviso_30_em: null, atualizado_por: user.id, atualizado_em: new Date().toISOString(),
+      aviso_90_em: null, aviso_60_em: null, aviso_30_em: null, aviso_vencido_em: null, atualizado_por: user.id, atualizado_em: new Date().toISOString(),
     })
     .eq("id", atual.id)
     .eq("funcionario_id", funcionarioId)

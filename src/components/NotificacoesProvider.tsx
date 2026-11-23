@@ -124,6 +124,8 @@ export default function NotificacoesProvider({ children }: { children: React.Rea
     if (n.tipo === "lembrete_comercial") router.push("/painel/comercial");
     // Aviso consolidado de ASO demissional pendente (cron): abre a lista de Rescisões já filtrada por "ASO pendente".
     else if (n.tipo === "rescisao_aso_pendente") router.push("/painel/rescisoes?aso=pendente");
+    // Férias a vencer (cron): abre a aba Férias já filtrada pelo funcionário.
+    else if (n.tipo === "ferias_vencimento") router.push(n.funcionario_id ? `/painel/ferias?funcionario=${n.funcionario_id}` : "/painel/ferias");
     // Comissão (Fase 2): avisos de contestação, retroativo, fechamento e pagamento levam a "Minhas comissões".
     // Os "comissao_diretoria_*" (marcação, contestações paradas, fechamento liberado/sem pagamento, possível esquecimento) levam a Comissões.
     else if (n.tipo.startsWith("comissao_diretoria_")) router.push("/painel/comissoes");

@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
   const q = request.nextUrl.searchParams;
   const bruto: Record<string, unknown> = {};
-  for (const chave of ["cliente_id", "unidade_id", "situacao", "semaforo", "faixa", "busca"]) {
+  for (const chave of ["funcionario_id", "cliente_id", "unidade_id", "situacao", "semaforo", "faixa", "busca"]) {
     const valor = q.get(chave);
     if (valor) bruto[chave] = valor;
   }

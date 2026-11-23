@@ -134,6 +134,7 @@ const INVENTARIO: Record<string, [number, number, number]> = {
   "components/PopupCobrancasRSPendentes.tsx": [0, 0, 1],
   "components/PopupContaReceberHortolandiaVencida.tsx": [0, 0, 1],
   "components/PopupDecisoesClienteCandidato.tsx": [0, 0, 1],
+  "components/PopupFeriasVencimento.tsx": [0, 0, 1],
   "components/PopupIndicacaoDiretaPendente.tsx": [0, 0, 1],
   "components/PopupLembretesComercial.tsx": [0, 0, 1],
   "components/PopupPedidosClientePendentes.tsx": [0, 0, 1],
@@ -245,9 +246,9 @@ caso("(c) inventário FECHADO: janela nova, a mais ou com tipo trocado quebra es
   assert.equal(Object.values(atual).reduce((s, v) => s + v[0], 0), 37, "37 fundos de formulário");
   assert.equal(Object.values(atual).reduce((s, v) => s + v[1], 0), 12, "12 fundos só de leitura");
 });
-caso("(d) os 18 popups automáticos de login e as janelas que já não fechavam no fundo não mudaram: continuam sem fundo clicável e sem o helper", () => {
+caso("(d) os 19 popups automáticos de login e as janelas que já não fechavam no fundo não mudaram: continuam sem fundo clicável e sem o helper", () => {
   const popups = arquivos("src/components").filter((f) => /\/(Popup[A-Za-z]+|comissao\/PopupComissoesPendencias)\.tsx$/.test(f));
-  assert.equal(popups.length, 18, `popups encontrados: ${popups.length}`);
+  assert.equal(popups.length, 19, `popups encontrados: ${popups.length}`);
   for (const p of popups) {
     const dele = todos.filter((o) => o.arq === p);
     assert.ok(dele.length >= 1, p);
