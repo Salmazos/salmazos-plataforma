@@ -11,6 +11,8 @@ import { funcaoParaExibirNaAdmissao } from "@/lib/admissaoFuncao";
 import ModalIniciarAdmissao, { type CandidatoElegivel } from "./ModalIniciarAdmissao";
 import ModalAdmissaoRapida from "./ModalAdmissaoRapida";
 import ModalCandidatoDesistiu, { type ResultadoDesistencia } from "./ModalCandidatoDesistiu";
+import ModalRenovarLink, { type LinkRenovado } from "./ModalRenovarLink";
+import { podeRenovarLink } from "@/lib/admissaoValidade";
 
 export interface AdmissaoRow {
   id: string;
@@ -70,6 +72,7 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
   const [toast, setToast] = useState("");
   const [gerandoFormularios, setGerandoFormularios] = useState(false);
   const [desistindo, setDesistindo] = useState<DisponivelAdmissao | null>(null);
+  const [renovando, setRenovando] = useState<{ id: string; nome: string } | null>(null);
 
   useEffect(() => setAdmissoes(admissoesIniciais), [admissoesIniciais]);
   useEffect(() => setDisponiveis(disponiveisIniciais), [disponiveisIniciais]);
@@ -144,6 +147,14 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
   const handleCopiarLink = (token: string) => {
     const url = `${window.location.origin}/admissao/${token}`;
     navigator.clipboard.writeText(url).then(() => showToast("Link copiado!"));
+  };
+
+  // O servidor já trocou o token: a linha ganha a validade nova e os botões "Copiar link" e "WhatsApp" passam a usar o link novo na hora.
+  const handleLinkRenovado = (id: string, link: LinkRenovado) => {
+    setAdmissoes((atual) => atual.map((a) => (a.id === id ? { ...a, token: link.token, token_expira_em: link.token_expira_em } : a)));
+    setRenovando(null);
+    showToast("Link renovado. O link antigo não funciona mais — envie o novo ao candidato (WhatsApp ou Copiar link).");
+    router.refresh();
   };
 
   const handleReenviarWhatsapp = (row: AdmissaoRow) => {
@@ -313,7 +324,8 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
             ) : (
               filtradas.map((row) => {
                 const badge = ADMISSAO_STATUS_BADGE[row.status] ?? { label: row.status, bg: "#F3F4F6", text: "#374151" };
-                const expirado = row.status === "aguardando_candidato" && new Date(row.token_expira_em) < agora;
+                // Vencido vale para quem ainda está com o candidato: aguardando OU em preenchimento (nos dois o link vencido trava o formulário).
+                const expirado = podeRenovarLink(row.status, row.token_expira_em, agora);
                 return (
                   <tr key={row.id} style={{ borderBottom: "1px solid #F3F4F6" }}>
                     <td style={{ padding: "10px 12px", fontWeight: 600, color: "#111827" }}>{row.candidatos?.nome_completo ?? "—"}</td>
@@ -353,6 +365,11 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
                         <button onClick={() => handleReenviarWhatsapp(row)} className="btn-outline" style={{ padding: "4px 10px", fontSize: 12 }}>
                           WhatsApp
                         </button>
+                        {expirado && (
+                          <button onClick={() => setRenovando({ id: row.id, nome: row.candidatos?.nome_completo ?? "—" })} className="btn-outline" style={{ padding: "4px 10px", fontSize: 12, fontWeight: 700, color: "#B45309", borderColor: "#FCD34D" }}>
+                            Renovar link
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -368,6 +385,8 @@ export default function AdmissoesClient({ admissoesIniciais, disponiveisIniciais
           {toast}
         </div>
       )}
+
+      <ModalRenovarLink alvo={renovando} onClose={() => setRenovando(null)} onRenovado={handleLinkRenovado} />
 
       <ModalIniciarAdmissao
         isOpen={modalAberto}

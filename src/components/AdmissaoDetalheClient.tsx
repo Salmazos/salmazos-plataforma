@@ -22,6 +22,10 @@ import ModalUploadDocumentosContabilidade from "@/components/ModalUploadDocument
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import CampoTelefone from "@/components/ui/CampoTelefone";
 import ModalEnviarPacoteEmail from "@/components/ModalEnviarPacoteEmail";
+import ModalRenovarLink from "@/components/ModalRenovarLink";
+import { podeRenovarLink } from "@/lib/admissaoValidade";
+import { linkAdmissaoWhatsapp } from "@/lib/waLinks";
+import { funcaoParaExibirNaAdmissao } from "@/lib/admissaoFuncao";
 import { ACOES_PACOTE_GERADO, CABECALHO_NAO_INCORPORADOS, descreverDocumentoFora, lerNaoIncorporados, mensagemPacoteSemDocumentos, naoIncorporadosDaAuditoria, type DocumentoForaDoPacote } from "@/lib/pacoteNaoIncorporados";
 import { formatarDataHoraBR } from "@/lib/emailPacoteContabilidade";
 import type { AdmissaoAdicional, AdmissaoDadosPessoais, AdmissaoDependente, AdmissaoDocumento, AdmissaoEnvelopeAssinatura, AdmissaoDocumentoContabilidade } from "@/types";
@@ -457,6 +461,10 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("dados");
   const [status, setStatus] = useState(admissao.status);
+  // Link público do candidato: muda quando o RH renova (o token novo só existe depois da renovação, então fica em estado).
+  const [linkAdm, setLinkAdm] = useState({ token: admissao.token, expiraEm: admissao.token_expira_em });
+  const [renovandoLink, setRenovandoLink] = useState(false);
+  const [linkRenovadoAgora, setLinkRenovadoAgora] = useState(false);
   const [documentos, setDocumentos] = useState(documentosIniciais);
   const [adicionais, setAdicionais] = useState(adicionaisIniciais);
   const [editandoAdicionais, setEditandoAdicionais] = useState(false);
@@ -1446,6 +1454,15 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
       setEnviandoCancelamentoEnvelope(false);
     }
   };
+  const urlLinkAdmissao = () => `${window.location.origin}/admissao/${linkAdm.token}`;
+  const handleCopiarLinkAdmissao = () => { navigator.clipboard.writeText(urlLinkAdmissao()).then(() => showToast("Link copiado!")); };
+  const handleWhatsappLinkAdmissao = () => {
+    const tel = admissao.candidatos?.telefone;
+    if (!tel) { showToast("Candidato sem telefone cadastrado."); return; }
+    const funcao = funcaoParaExibirNaAdmissao({ funcao: admissao.funcao, vagaTitulo: admissao.vagas?.titulo, cargoPretendido: admissao.candidatos?.cargo_pretendido });
+    window.open(linkAdmissaoWhatsapp(admissao.candidatos?.nome_completo ?? "", tel, funcao, urlLinkAdmissao()), "_blank");
+  };
+  const linkVencidoRenovavel = podeRenovarLink(status, linkAdm.expiraEm);
   const logContabilidadeEnviado = auditLogs.find((l) => l.acao === "admissao_documentos_contabilidade_montado_e_enviado");
 
   return (
@@ -1461,6 +1478,35 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           {badge.label}
         </span>
       </div>
+
+      {/* Link do candidato: vencido (e ainda com o candidato) → "Renovar link"; recém-renovado → Copiar link / WhatsApp já com o token novo. */}
+      {linkVencidoRenovavel && (
+        <div data-bloco-link-vencido className="card mb-5" style={{ borderColor: "#FCD34D", background: "#FFFBEB" }}>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-sm font-bold" style={{ color: "#92400E" }}>⏰ O link de admissão deste candidato expirou</p>
+              <p className="text-xs mt-0.5" style={{ color: "#92400E" }}>Ele não consegue mais abrir nem enviar o formulário. O que já preencheu continua salvo.</p>
+            </div>
+            <button onClick={() => setRenovandoLink(true)} className="btn-outline" style={{ padding: "6px 14px", fontSize: 13, fontWeight: 700, color: "#B45309", borderColor: "#FCD34D" }}>
+              Renovar link
+            </button>
+          </div>
+        </div>
+      )}
+      {linkRenovadoAgora && !linkVencidoRenovavel && (
+        <div data-bloco-link-renovado className="card mb-5" style={{ borderColor: "#BBF7D0", background: "#F0FDF4" }}>
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-sm font-bold" style={{ color: "#166534" }}>✅ Link renovado — válido até {formatarData(linkAdm.expiraEm)}</p>
+              <p className="text-xs mt-0.5" style={{ color: "#166534" }}>O link antigo não funciona mais. Envie o novo ao candidato.</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleCopiarLinkAdmissao} className="btn-outline" style={{ padding: "6px 14px", fontSize: 13 }}>Copiar link</button>
+              <button onClick={handleWhatsappLinkAdmissao} className="btn-outline" style={{ padding: "6px 14px", fontSize: 13 }}>WhatsApp</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Dias de teste: o RH lança a folha a partir desta tela. admissoes.modalidade só tem MOT/Terceirização. */}
       {diasTeste && (
@@ -2718,6 +2764,18 @@ export default function AdmissaoDetalheClient({ admissao, dadosPessoais, depende
           onEnviado={(msg) => { setModalEmailAberto(false); showToast(msg); router.refresh(); }}
         />
       )}
+
+      <ModalRenovarLink
+        alvo={renovandoLink ? { id: admissao.id, nome: admissao.candidatos?.nome_completo ?? "—" } : null}
+        onClose={() => setRenovandoLink(false)}
+        onRenovado={(_id, link) => {
+          setLinkAdm({ token: link.token, expiraEm: link.token_expira_em });
+          setRenovandoLink(false);
+          setLinkRenovadoAgora(true);
+          showToast("Link renovado. O link antigo não funciona mais — envie o novo ao candidato.");
+          router.refresh();
+        }}
+      />
 
       {toast && (
         <div style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", maxWidth: 420, textAlign: "center", background: "#111827", color: "#fff", padding: "12px 20px", borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 60 }}>

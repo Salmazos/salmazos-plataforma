@@ -120,6 +120,7 @@ const INVENTARIO: Record<string, [number, number, number]> = {
   "components/ModalRegistrarContrato.tsx": [1, 0, 0],
   "components/ModalReprovacao.tsx": [0, 0, 1],
   "components/ModalRevisaoCobrancaRS.tsx": [0, 0, 1],
+  "components/ModalRenovarLink.tsx": [0, 1, 0],
   "components/ModalSolicitacoesVagas.tsx": [1, 0, 1],
   "components/ModalUploadDocumentosContabilidade.tsx": [1, 1, 0],
   "components/ModalVincularClienteSolicitacao.tsx": [0, 0, 1],
@@ -159,10 +160,10 @@ const INVENTARIO: Record<string, [number, number, number]> = {
   "components/propostas/propostasUi.tsx": [1, 0, 0],
 };
 
-// Janelas só de leitura que fecham no fundo (as 12 revisadas; o resto do inventário é formulário ou não fecha no fundo).
+// Janelas só de leitura que fecham no fundo (as 13 revisadas: as 12 de antes e o ModalRenovarLink; o resto do inventário é formulário ou não fecha no fundo).
 const SO_LEITURA = [
   "components/BancoCandidatosClient.tsx", "components/ConfirmarCriarVagaSemCliente.tsx", "components/ModalContratoMot.tsx",
-  "components/ModalUploadDocumentosContabilidade.tsx", "components/NotificacoesBell.tsx", "components/PerfilEdicao.tsx", "components/SidebarMenu.tsx",
+  "components/ModalRenovarLink.tsx", "components/ModalUploadDocumentosContabilidade.tsx", "components/NotificacoesBell.tsx", "components/PerfilEdicao.tsx", "components/SidebarMenu.tsx",
   "components/SidebarPortal.tsx", "components/VagaDetalheClient.tsx",
 ];
 
@@ -226,7 +227,7 @@ caso("(a) nenhum overlay de janela tem onClick próprio de fechar no fundo: todo
 caso("(a) janela com formulário nunca usa a regra de leitura: os fundoSoLeitura estão só nos arquivos revisados (confirmações, menus e escolhas, sem campo)", () => {
   const usam = [...new Set(todos.filter((o) => o.tipo === "leitura").map((o) => o.arq.replace(/^src\//, "")))].sort();
   assert.deepEqual(usam, [...SO_LEITURA].sort());
-  assert.equal(todos.filter((o) => o.tipo === "leitura").length, 12);
+  assert.equal(todos.filter((o) => o.tipo === "leitura").length, 13);
 });
 caso("(b) cada janela só de leitura usa a regra de mousedown + mouseup: o helper é chamado com a função que fecha", () => {
   for (const arq of SO_LEITURA) {
@@ -244,7 +245,7 @@ caso("(c) inventário FECHADO: janela nova, a mais ou com tipo trocado quebra es
   assert.deepEqual(Object.keys(atual).sort(), Object.keys(esperado).sort(), "arquivo com overlay novo ou que deixou de ter");
   assert.deepEqual(atual, esperado);
   assert.equal(Object.values(atual).reduce((s, v) => s + v[0], 0), 37, "37 fundos de formulário");
-  assert.equal(Object.values(atual).reduce((s, v) => s + v[1], 0), 12, "12 fundos só de leitura");
+  assert.equal(Object.values(atual).reduce((s, v) => s + v[1], 0), 13, "13 fundos só de leitura");
 });
 caso("(d) os 19 popups automáticos de login e as janelas que já não fechavam no fundo não mudaram: continuam sem fundo clicável e sem o helper", () => {
   const popups = arquivos("src/components").filter((f) => /\/(Popup[A-Za-z]+|comissao\/PopupComissoesPendencias)\.tsx$/.test(f));

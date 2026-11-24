@@ -4,10 +4,12 @@ import type { createServiceClient } from "@/lib/supabase/server";
 import type { admissaoCreateSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
 import { DOCUMENTOS_ADMISSAO } from "@/lib/admissaoDocumentos";
+import { TOKEN_VALIDADE_DIAS } from "@/lib/admissaoValidade";
 
 type Service = ReturnType<typeof createServiceClient>;
 
-export const TOKEN_VALIDADE_DIAS = 5;
+// A constante vive em admissaoValidade.ts (pura, usada também pelas telas); reexportada aqui para quem já importava deste arquivo.
+export { TOKEN_VALIDADE_DIAS };
 
 export type DadosCriacaoAdmissao = z.infer<typeof admissaoCreateSchema>;
 
