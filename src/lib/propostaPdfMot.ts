@@ -166,21 +166,6 @@ function desenharPlanilha(e: Escritor, f: SnapshotMot["funcoes"][number], indice
   e.y = topo - 12;
 }
 
-// Igual ao campo() do R&S, com um respiro a mais entre o rótulo e o valor: com o rótulo longo "Supervisão Técnica:" os leitores de PDF que trocam a Helvetica por
-// outra fonte comem o espaço e o valor sai colado nos dois pontos. O campo() do R&S não é tocado.
-const FOLGA_APOS_ROTULO = 3;
-function campoComFolga(e: Escritor, rotulo: string, valor: string) {
-  const size = 10.5;
-  const r = `${limpar(rotulo)}: `;
-  const larguraRotulo = e.bold.widthOfTextAtSize(r, size) + FOLGA_APOS_ROTULO;
-  quebrar(valor, e.regular, size, CW - larguraRotulo).forEach((linha, i) => {
-    e.garantirEspaco(size + 4);
-    if (i === 0) e.page.drawText(r, { x: ML, y: e.y, size, font: e.bold, color: DARK });
-    e.page.drawText(linha, { x: ML + larguraRotulo, y: e.y, size, font: e.regular, color: DARK });
-    e.y -= size * 1.45;
-  });
-}
-
 export async function gerarPdfPropostaMot(snap: SnapshotMot, opcoes: OpcoesPdfProposta = {}): Promise<Uint8Array> {
   if (snap.modelo !== "MOT") throw new Error("Modelo ainda não disponível.");
   const doc = await PDFDocument.create();
@@ -199,7 +184,6 @@ export async function gerarPdfPropostaMot(snap: SnapshotMot, opcoes: OpcoesPdfPr
   e.espaco(8);
   e.campo("Cliente", snap.cliente_nome);
   if (snap.aos_cuidados) e.campo("A/C", snap.aos_cuidados);
-  campoComFolga(e, "Supervisão Técnica", snap.vendedor_cargo ? `${snap.vendedor_nome} – ${snap.vendedor_cargo}` : snap.vendedor_nome);
   e.campo("Nº da proposta", numeroComRevisao(snap.numero, snap.revisao));
   e.campo("Data", formatarDataBr(snap.data_emissao));
   e.espaco(10);

@@ -284,27 +284,28 @@ await caso("PDF MOT: layout novo SEMPRE (v2) mesmo com template_versao 1 — cab
   const semLogo = todos(await paginasPdf(await gerar(snap, { pastaCabecalho: SEM_PASTA })));
   assert.ok(semLogo.includes("SALMAZOS RH & SERVIÇOS"));
 });
-await caso("PDF MOT: dados e textos — título, subtítulo, Cliente/A-C/Supervisão Técnica (nome – cargo)/Nº da proposta com Rev./Data dd/mm/aaaa, introdução, ORÇAMENTO e a tabela com as 4 colunas; sem CNPJ nem endereço do cliente", async () => {
+await caso("PDF MOT: dados e textos — título, subtítulo, Cliente/A-C/Nº da proposta com Rev./Data dd/mm/aaaa (sem a linha Supervisão Técnica), introdução, ORÇAMENTO e a tabela com as 4 colunas; sem CNPJ nem endereço do cliente", async () => {
   const snap = snapMot([F(100000, { descricao: "ZZTEST Auxiliar", jornada: "Conforme Convenção Coletiva", horario: "Turnos A / B /C" })], {}, PARAMS, { revisao: 2 });
   const t = todos(await paginasPdf(await gerar(snap)));
   const txt = norm(t.join(" "));
   for (const x of [TITULO_MOT, "PROPOSTA MÃO DE OBRA TEMPORÁRIA", "ORÇAMENTO", "ÁREA", "DESCRIÇÃO / Salário", "JORNADA", "HORÁRIO", "OPERACIONAL", "ZZTEST Auxiliar", "Salário R$ 1.000,00", "Conforme Convenção Coletiva", "Turnos A / B /C"]) assert.ok(t.includes(x), x);
   assert.ok(txt.includes(SUBTITULO_MOT));
   assert.ok(t.includes("Cliente: ") && t.includes("ZZTEST Cliente S/A") && t.includes("A/C: ") && t.includes("ZZTEST Ana"));
-  assert.ok(t.includes("Supervisão Técnica: ") && t.includes("ZZTEST Vendedor – Especialista em pessoas"));
-  // o valor começa DEPOIS do rótulo com folga: x do valor - x do rótulo = largura do rótulo em negrito (com o espaço) + 3 pt
+  // A linha "Supervisão Técnica" saiu do cabeçalho: nem o rótulo nem o nome/cargo do vendedor aparecem acima da assinatura; o nome do vendedor só vem no bloco de assinatura.
+  assert.ok(!txt.includes("Supervisão Técnica") && !txt.includes("Supervisao Tecnica"), "sem a linha Supervisão Técnica");
+  assert.ok(!t.includes("ZZTEST Vendedor – Especialista em pessoas") && !txt.includes("Especialista em pessoas"), "cargo do vendedor não sai mais no PDF");
+  // ordem do cabeçalho: Cliente, A/C, Nº da proposta, Data — e as linhas seguem coladas (mesmo passo vertical, sem buraco onde ficava a Supervisão Técnica)
   const bruto = (await paginasPdf(await gerar(snap)))[0].bruto;
-  const posicao = (textoDoTj: string) => {
+  const yDe = (textoDoTj: string) => {
     const hex = Buffer.from(textoDoTj, "latin1").toString("hex").toUpperCase();
-    const m = new RegExp(`1 0 0 1 ([0-9.]+) [0-9.]+ Tm\\s*<${hex}> Tj`, "i").exec(bruto);
+    const m = new RegExp(`1 0 0 1 [0-9.]+ ([0-9.]+) Tm\\s*<${hex}> Tj`, "i").exec(bruto);
     return m ? Number(m[1]) : NaN;
   };
-  const xRotulo = posicao("Supervisão Técnica: ");
-  const xValor = posicao("ZZTEST Vendedor \x96 Especialista em pessoas");
-  const doc = await PDFDocument.create();
-  const negrito = await doc.embedFont(StandardFonts.HelveticaBold);
-  assert.ok(Number.isFinite(xRotulo) && Number.isFinite(xValor), "posições achadas");
-  assert.ok(Math.abs(xValor - xRotulo - (negrito.widthOfTextAtSize("Supervisão Técnica: ", 10.5) + 3)) < 0.05, `folga entre rótulo e valor: ${xValor - xRotulo}`);
+  const ys = ["Cliente: ", "A/C: ", "Nº da proposta: ", "Data: "].map(yDe);
+  assert.ok(ys.every(Number.isFinite), `rótulos achados: ${ys}`);
+  assert.ok(ys[0] > ys[1] && ys[1] > ys[2] && ys[2] > ys[3], `ordem Cliente, A/C, Nº da proposta, Data: ${ys}`);
+  const passos = [ys[0] - ys[1], ys[1] - ys[2], ys[2] - ys[3]];
+  assert.ok(passos.every((d) => Math.abs(d - passos[0]) < 0.05), `mesmo espaçamento entre as 4 linhas: ${passos}`);
   assert.ok(t.includes("TESTE-MOT-0001/26 – Rev. 2") || txt.includes("TESTE-MOT-0001/26"), "número com revisão");
   assert.ok(t.includes("21/11/2026"), "data dd/mm/aaaa");
   assert.ok(!txt.includes("de Novembro de 2026"));
