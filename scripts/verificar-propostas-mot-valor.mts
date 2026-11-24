@@ -161,13 +161,13 @@ function comMotSync<T>(fn: () => T): T {
 // MOT REAL (empresa real) só existe com a chave do harness: casoMot liga a chave só durante o caso.
 const casoMot = (nome: string, fn: () => Promise<void>) => caso(nome, () => comMot(fn));
 const F0 = [funcao({ salario_centavos: 449999 })]; // NF 8.503,46
-const F1 = [funcao({ salario_centavos: 449999 }), funcao({ area: "ADMINISTRATIVO", salario_centavos: 50000 })]; // NF 9.448,31
+const F1 = [funcao({ salario_centavos: 449999 }), funcao({ area: "ADMINISTRATIVO", salario_centavos: 50000 })]; // NF 9.448,32
 const nova = async (db: any, u: string, empresa: string, funcoes = F0) => (await criar(db, u, { conteudo: conteudoMot({ funcoes }) }, empresa)).body.data.id as string;
 const enviar = (db: any, u: string, id: string) => situacao(db, u, id, { para: "enviada" });
 const histRevisao = (db: any, id: string) => db.tabelas.proposta_historico.filter((h: any) => h.proposta_id === id && h.de === h.para).map((h: any) => String(h.observacao).replace(/ /g, " "));
 const oportunidadeUpdates = (db: any) => db.consultas.filter((q: any) => q.tabela === "oportunidades" && q.op === "update").length;
 
-await caso("MOT enviada (teste, gestor, SEM chave do harness): editar o salário muda o valor 8.503,46 → 9.448,31; Rev. 0 e Rev. 1 guardam cada uma a sua planilha, a Rev. 0 intacta; histórico 'Valor: A → B (Rev. 1)'", async () => comMot(async () => {
+await caso("MOT enviada (teste, gestor, SEM chave do harness): editar o salário muda o valor 8.503,46 → 9.448,32; Rev. 0 e Rev. 1 guardam cada uma a sua planilha, a Rev. 0 intacta; histórico 'Valor: A → B (Rev. 1)'", async () => comMot(async () => {
   const db = novoDb();
   const id = await nova(db, "u-g", EMP_TESTE);
   assert.equal((await enviar(db, "u-g", id)).status, 200);
@@ -175,24 +175,24 @@ await caso("MOT enviada (teste, gestor, SEM chave do harness): editar o salário
   const rev0 = structuredClone(db.tabelas.proposta_revisoes[0]);
   const ed = await patch(db, "u-g", id, { conteudo: conteudoMot({ funcoes: F1 }) });
   assert.equal(ed.status, 200, JSON.stringify(ed.body));
-  assert.equal(proposta(db, id).valor_estimado, 9448.31);
+  assert.equal(proposta(db, id).valor_estimado, 9448.32);
   assert.equal(proposta(db, id).revisao_atual, 1);
   assert.equal(db.tabelas.proposta_revisoes.length, 2);
   assert.deepEqual(db.tabelas.proposta_revisoes[0], rev0, "Rev. 0 intacta");
   assert.equal(db.tabelas.proposta_revisoes[0].conteudo.total_mensal_centavos, 850346);
-  assert.equal(db.tabelas.proposta_revisoes[1].conteudo.total_mensal_centavos, 944831);
+  assert.equal(db.tabelas.proposta_revisoes[1].conteudo.total_mensal_centavos, 944832);
   assert.equal(db.tabelas.proposta_revisoes[0].conteudo.funcoes.length, 1);
   assert.equal(db.tabelas.proposta_revisoes[1].conteudo.funcoes.length, 2);
-  assert.deepEqual(histRevisao(db, id), ["Revisão 1 emitida. Valor: R$ 8.503,46 → R$ 9.448,31 (Rev. 1)."]);
+  assert.deepEqual(histRevisao(db, id), ["Revisão 1 emitida. Valor: R$ 8.503,46 → R$ 9.448,32 (Rev. 1)."]);
   assert.equal(ed.body.aviso, undefined);
   // o detalhe mostra a planilha da Rev. 1 e o mesmo valor
   const det = await detalhe(db, "u-g", id);
-  assert.equal(det.body.data.valor_estimado, 9448.31);
-  assert.equal(det.body.planilhaMot.previa.total_mensal_centavos, 944831);
+  assert.equal(det.body.data.valor_estimado, 9448.32);
+  assert.equal(det.body.planilhaMot.previa.total_mensal_centavos, 944832);
   // volta a baixar: nova revisão e nova linha de histórico
   assert.equal((await patch(db, "u-g", id, { conteudo: conteudoMot({ funcoes: F0 }) })).status, 200);
   assert.equal(proposta(db, id).valor_estimado, 8503.46);
-  assert.deepEqual(histRevisao(db, id).slice(-1), ["Revisão 2 emitida. Valor: R$ 9.448,31 → R$ 8.503,46 (Rev. 2)."]);
+  assert.deepEqual(histRevisao(db, id).slice(-1), ["Revisão 2 emitida. Valor: R$ 9.448,32 → R$ 8.503,46 (Rev. 2)."]);
 }, {}));
 await caso("revisão que NÃO muda o valor (só texto/validade): valor intacto e a observação continua 'Revisão N emitida.'; sem aviso", async () => comMot(async () => {
   const db = novoDb();
@@ -211,7 +211,7 @@ await caso("em negociação também acompanha: o valor muda na revisão", async 
   await enviar(db, "u-g", id);
   assert.equal((await situacao(db, "u-g", id, { para: "em_negociacao" })).status, 200);
   assert.equal((await patch(db, "u-g", id, { conteudo: conteudoMot({ funcoes: F1 }) })).status, 200);
-  assert.equal(proposta(db, id).valor_estimado, 9448.31);
+  assert.equal(proposta(db, id).valor_estimado, 9448.32);
   assert.equal(proposta(db, id).situacao, "em_negociacao");
 }, {}));
 await caso("aceita, recusada, cancelada e vencida: editar dá 409 e NADA muda (valor, revisões, histórico); rascunho segue com valor null", async () => comMot(async () => {
@@ -241,7 +241,7 @@ await caso("proposta de TESTE de quem tem Funil: o valor muda na proposta, mas o
   await enviar(db, "u-gc", id);
   const ed = await patch(db, "u-gc", id, { conteudo: conteudoMot({ funcoes: F1 }) });
   assert.equal(ed.status, 200);
-  assert.equal(proposta(db, id).valor_estimado, 9448.31);
+  assert.equal(proposta(db, id).valor_estimado, 9448.32);
   assert.equal(db.tabelas.oportunidades.length, 0);
   assert.equal(db.consultas.filter((q: any) => q.tabela === "oportunidades").length, 0, "nem leitura");
   assert.equal(ed.body.aviso, undefined);
@@ -256,8 +256,8 @@ await casoMot("MOT REAL com oportunidade PRÓPRIA: a oportunidade passa a valer 
   const ed = await patch(db, "u-v", a, { conteudo: conteudoMot({ funcoes: F1 }) });
   assert.equal(ed.status, 200, JSON.stringify(ed.body));
   assert.equal(ed.body.aviso, undefined);
-  assert.equal(proposta(db, a).valor_estimado, 9448.31);
-  assert.equal(opp().valor_estimado, 9448.31);
+  assert.equal(proposta(db, a).valor_estimado, 9448.32);
+  assert.equal(opp().valor_estimado, 9448.32);
   assert.equal(opp().etapa, etapa);
   assert.equal(opp().proxima_acao, acao);
   assert.equal(opp().proxima_acao_em, acaoEm);
@@ -265,7 +265,7 @@ await casoMot("MOT REAL com oportunidade PRÓPRIA: a oportunidade passa a valer 
   const b = await nova(db, "u-v", EMP, [funcao({ salario_centavos: 100000 })]);
   assert.equal((await enviar(db, "u-v", b)).status, 200);
   assert.equal(db.tabelas.oportunidades.length, 1);
-  assert.equal(Math.round(opp().valor_estimado * 100), 944831 + 188964);
+  assert.equal(Math.round(opp().valor_estimado * 100), 944832 + 188964);
   assert.equal((await patch(db, "u-v", a, { conteudo: conteudoMot({ funcoes: F0 }) })).status, 200);
   assert.equal(Math.round(opp().valor_estimado * 100), 850346 + 188964, "soma das ativas, com a proposta já no valor novo");
   assert.equal(opp().etapa, etapa);
@@ -283,7 +283,7 @@ await casoMot("oportunidade de OUTRO vendedor: o valor dela não muda e a respos
   const ed = await patch(db, "u-v", a, { conteudo: conteudoMot({ funcoes: F1 }) });
   assert.equal(ed.status, 200);
   assert.match(ed.body.aviso, /outro vendedor/);
-  assert.equal(proposta(db, a).valor_estimado, 9448.31, "a proposta muda mesmo assim");
+  assert.equal(proposta(db, a).valor_estimado, 9448.32, "a proposta muda mesmo assim");
   assert.equal(opp().valor_estimado, 8503.46);
   opp().vendedor_id = V;
   opp().etapa = "ganho";
@@ -321,10 +321,10 @@ await casoMot("falha no FUNIL depois da revisão: a edição NÃO falha (propost
   delete db.falhas["oportunidades.update"];
   assert.equal(ed.status, 200, JSON.stringify(ed.body));
   assert.equal(ed.body.aviso, "O valor do Funil não pôde ser atualizado.");
-  assert.equal(proposta(db, a).valor_estimado, 9448.31);
+  assert.equal(proposta(db, a).valor_estimado, 9448.32);
   assert.equal(proposta(db, a).revisao_atual, 1);
   assert.equal(db.tabelas.proposta_revisoes.length, 2);
-  assert.deepEqual(histRevisao(db, a), ["Revisão 1 emitida. Valor: R$ 8.503,46 → R$ 9.448,31 (Rev. 1)."]);
+  assert.deepEqual(histRevisao(db, a), ["Revisão 1 emitida. Valor: R$ 8.503,46 → R$ 9.448,32 (Rev. 1)."]);
   assert.equal(db.tabelas.oportunidades[0].valor_estimado, 8503.46, "o Funil ficou como estava");
   // oportunidade legada sem próxima ação: não se inventa ação; também só avisa
   db.tabelas.oportunidades[0].proxima_acao = null;

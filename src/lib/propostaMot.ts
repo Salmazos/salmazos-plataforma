@@ -113,7 +113,9 @@ export const conteudoMotSchema = z.object({
   texto_introdutorio: textoIntroducao,
   // "Supervisão Técnica: NOME – cargo": o nome é o do vendedor; o cargo sai do perfil dele, a não ser que seja informado aqui.
   cargo_supervisao: opcional("o cargo", MAX_CARGO),
-  funcoes: z.array(funcaoMotSchema, { error: "Informe pelo menos uma função." }).min(1, "Informe pelo menos uma função.").max(MAX_FUNCOES_MOT, `Use no máximo ${MAX_FUNCOES_MOT} funções.`),
+  funcoes: z.array(funcaoMotSchema, { error: "Informe pelo menos uma função." }).min(1, "Informe pelo menos uma função.").max(MAX_FUNCOES_MOT, `Use no máximo ${MAX_FUNCOES_MOT} funções.`)
+    // A planilha única é calculada sobre a SOMA dos salários: a soma também respeita o teto da calculadora.
+    .refine((l) => l.reduce((s, f) => s + f.salario_centavos, 0) <= SALARIO_MAXIMO_CENTAVOS, `A soma dos salários passa do limite de ${formatarCentavosBRL(SALARIO_MAXIMO_CENTAVOS)}.`),
   condicoes: condicoesMotSchema.prefault({}),
   // Opcionais, no mesmo padrão e com os mesmos limites do R&S (propostaClausulas.ts). Lista vazia por padrão; só saem no PDF quando houver itens.
   clausulas_adicionais: z.array(clausulaAdicional, { error: MSG_CLAUSULAS_TIPO }).max(MAX_CLAUSULAS_ADICIONAIS, `Use no máximo ${MAX_CLAUSULAS_ADICIONAIS} cláusulas adicionais.`).default([]),
@@ -184,10 +186,15 @@ export const snapshotMotSchema = z.object({
     valor_mensal_centavos: z.number().int(),
     valor_mensal_extenso: z.string(),
   })).min(1),
+  // LAYOUT DA PLANILHA (decisão do Ölver): "unica" = UMA planilha de verbas calculada sobre a SOMA dos salários das funções (planilha_unica); o total da
+  // proposta é o TOTAL N. FISCAL dela. Ausente = revisões antigas, com uma planilha por função e o total somando as funções: nunca mudam. Nas revisões "unica",
+  // planilha/valor_mensal de cada função ficam só como referência da conta individual e NÃO valem como valor da proposta.
+  layout_planilha: z.literal("unica").optional(),
+  planilha_unica: planilhaSnapshotSchema.optional(),
   parametros: parametrosVigentesSchema,
   condicoes: z.object({ vencimentos_dias: z.array(z.number().int()), antecedencia_dias: z.number().int() }),
   clausulas_adicionais: z.array(z.string()),
-  // Valor da proposta (e do Funil): soma dos valores mensais das funções.
+  // Valor da proposta (e do Funil): soma dos valores mensais das funções (layout antigo) ou o TOTAL N. FISCAL da planilha única (layout "unica").
   total_mensal_centavos: z.number().int(),
   total_mensal_extenso: z.string(),
   validade_dias: z.number().int(),
@@ -214,6 +221,8 @@ export interface EntradaSnapshotMot {
   vendedorTelefone: string | null;
   vendedorEmail?: string | null;
   parametros: ParametrosMotVigentes;
+  // Padrão "unica" (propostas e revisões novas). "por_funcao" só existe para reproduzir o formato antigo nos testes.
+  layoutPlanilha?: "unica" | "por_funcao";
 }
 
 const linhaParaSnapshot = (l: LinhaPlanilhaMot) => ({ chave: l.chave, rotulo: l.rotulo, valor_centavos: l.valorCentavos, percentual_bp: l.percentualBp });
@@ -245,7 +254,9 @@ export function montarSnapshotMot(e: EntradaSnapshotMot): SnapshotMot {
       valor_mensal_extenso: valorPorExtensoBRL(p.totalNfCentavos),
     };
   });
-  const total = funcoes.reduce((s, f) => s + f.valor_mensal_centavos, 0);
+  const unica = (e.layoutPlanilha ?? "unica") === "unica";
+  const pu = unica ? calcularPlanilhaMot({ salarioCentavos: conteudo.funcoes.reduce((s, f) => s + f.salario_centavos, 0), parametros }) : null;
+  const total = pu ? pu.totalNfCentavos : funcoes.reduce((s, f) => s + f.valor_mensal_centavos, 0);
   const introducao = conteudo.texto_introdutorio?.trim();
   return {
     modelo: "MOT",
@@ -258,6 +269,18 @@ export function montarSnapshotMot(e: EntradaSnapshotMot): SnapshotMot {
     // Texto vazio (ou só com o que o PDF não imprime) usa o padrão: o snapshot sempre guarda o texto que sai no PDF.
     texto_introdutorio: introducao && textoDesenhavel(introducao) !== "" ? introducao : TEXTO_INTRODUTORIO_PADRAO_MOT,
     funcoes,
+    ...(pu ? {
+      layout_planilha: "unica" as const,
+      planilha_unica: {
+        salario_centavos: pu.salarioCentavos,
+        linhas: pu.linhas.map(linhaParaSnapshot),
+        base_centavos: pu.baseCentavos,
+        subtotal_centavos: pu.subtotalCentavos,
+        retencoes: pu.retencoes.map(linhaParaSnapshot),
+        total_retencoes_centavos: pu.totalRetencoesCentavos,
+        total_nf_centavos: pu.totalNfCentavos,
+      },
+    } : {}),
     parametros: { vigente_desde, id: id ?? null, ...parametros },
     condicoes: { vencimentos_dias: [...conteudo.condicoes.vencimentos_dias].sort((a, b) => a - b), antecedencia_dias: conteudo.condicoes.antecedencia_dias },
     clausulas_adicionais: conteudo.clausulas_adicionais,
@@ -321,6 +344,14 @@ export const parametrosMotCreateSchema = z.object({
 });
 export type ParametrosMotCreate = z.infer<typeof parametrosMotCreateSchema>;
 
+// Linha informativa da planilha única (PDF e telas): "Base de cálculo: R$ 2.500,00 (Operacional: R$ 1.000,00 + Administrativo: R$ 1.500,00)".
+// Com uma função só: o nome e o valor. A base é a soma dos salários (não existe quantidade de pessoas por função).
+export function textoBaseCalculoMot(funcoes: { area: string; salario_centavos: number }[], baseCentavos: number): string {
+  const base = formatarCentavosBRL(baseCentavos);
+  if (funcoes.length === 1) return `Base de cálculo: ${base} (${funcoes[0].area})`;
+  return `Base de cálculo: ${base} (${funcoes.map((f) => `${f.area}: ${formatarCentavosBRL(f.salario_centavos)}`).join(" + ")})`;
+}
+
 // ── Prévia do cálculo (tela de Nova proposta MOT) ───────────────────────────────────────────────────────────────────────────────
 // A tela mostra o cálculo ao vivo SEM gravar nada e SEM receber os percentuais: o servidor calcula com a MESMA montarSnapshotMot da criação (então o que a
 // tela mostra é o que a proposta vai gravar) e devolve só os VALORES de cada linha. Percentual cru (fgts_bp etc.) nunca sai daqui.
@@ -350,6 +381,9 @@ export interface FuncaoPreviaMot {
 export interface PreviaMot {
   vigente_desde: string;
   funcoes: (FuncaoPreviaMot | null)[];
+  // Presente só no layout "unica": a planilha única (salario_centavos = a base, soma dos salários). Quando existe, o valor da proposta é o total_nf dela e o
+  // total_nf de cada função em `funcoes` NÃO é mostrado como valor.
+  unica?: FuncaoPreviaMot | null;
   total_mensal_centavos: number;
   total_mensal_extenso: string;
 }
@@ -367,7 +401,9 @@ const funcaoPrevia = (f: SnapshotMot["funcoes"][number]): FuncaoPreviaMot => ({
 
 // A mesma visão sem percentuais, a partir do snapshot JÁ GRAVADO de uma revisão (a tela de detalhe nunca recalcula o que foi enviado).
 export function previaDeSnapshotMot(snap: SnapshotMot): PreviaMot {
-  return { vigente_desde: snap.parametros.vigente_desde, funcoes: snap.funcoes.map(funcaoPrevia), total_mensal_centavos: snap.total_mensal_centavos, total_mensal_extenso: snap.total_mensal_extenso };
+  const pu = snap.layout_planilha === "unica" ? snap.planilha_unica : undefined;
+  const unica = pu ? funcaoPrevia({ ...snap.funcoes[0], salario_centavos: pu.salario_centavos, planilha: pu, valor_mensal_centavos: pu.total_nf_centavos, valor_mensal_extenso: snap.total_mensal_extenso }) : undefined;
+  return { vigente_desde: snap.parametros.vigente_desde, funcoes: snap.funcoes.map(funcaoPrevia), ...(unica ? { unica } : {}), total_mensal_centavos: snap.total_mensal_centavos, total_mensal_extenso: snap.total_mensal_extenso };
 }
 
 export function montarPreviaMot(salarios: (number | null)[], parametros: ParametrosMotVigentes): PreviaMot {

@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from "pdf-lib";
 import { BLACK, CW, DARK, LIGHT_GRAY, ML, YELLOW } from "@/lib/pdfWriter";
 import { Escritor, carregarLogoCabecalho, carregarLogosClientes, desenharGradeClientes, formatarDataBr, quebrar, type OpcoesPdfProposta } from "@/lib/propostaPdf";
-import { ASSINATURA_MOT, ITENS_FIXOS_MOT, QUANTIDADE_ITENS_FIXOS_MOT, SUBTITULO_MOT, TITULO_MOT, textoFaturamentoMot, type SnapshotMot } from "@/lib/propostaMot";
+import { ASSINATURA_MOT, ITENS_FIXOS_MOT, QUANTIDADE_ITENS_FIXOS_MOT, SUBTITULO_MOT, TITULO_MOT, textoBaseCalculoMot, textoFaturamentoMot, type SnapshotMot } from "@/lib/propostaMot";
 import { itensAdicionais } from "@/lib/propostaModelos";
 import { formatarCentavosBRL, formatarPercentualBp } from "@/lib/propostaMotCalculo";
 import { textoDesenhavel } from "@/lib/propostaTexto";
@@ -12,8 +12,8 @@ import { ENDERECOS_RODAPE_PROPOSTA, PASTA_CABECALHO_PROPOSTA, PASTA_CLIENTES_PRO
 // assinatura e grade de clientes): usa o Escritor do propostaPdf.ts, sempre com o layout novo (v2), sem olhar template_versao.
 // O PDF sai só do snapshot da revisão (percentuais congelados): reabrir uma revisão antiga reproduz o mesmo documento.
 //
-// Ordem: página 1 (cabeçalho, dados, introdução, ORÇAMENTO, VALOR MENSAL) → cláusulas → validade e assinatura (um bloco só) → uma planilha de verbas
-// por função, sempre INTEIRA (nunca cortada; cabem 2 por página) → grade de clientes. A tabela ORÇAMENTO pode atravessar páginas repetindo o cabeçalho.
+// Ordem: página 1 (cabeçalho, dados, introdução, ORÇAMENTO, VALOR MENSAL) → cláusulas → validade → uma planilha de verbas
+// por função (layout antigo) OU uma planilha única sobre a soma dos salários (layout "unica", propostas/revisões novas), sempre INTEIRA (nunca cortada; cabem 2 por página) → assinatura (bloco inteiro, nunca partido entre páginas) → grade de clientes. A tabela ORÇAMENTO pode atravessar páginas repetindo o cabeçalho.
 
 const limpar = textoDesenhavel;
 // Vermelho-escuro só nas linhas de taxa, encargos e retenções da planilha de verbas (como no Word); o resto segue as cores do R&S.
@@ -56,6 +56,8 @@ const CHAVES_EM_NEGRITO = new Set(["subtotal"]);
 
 const ALTURA_LINHA_VERBAS = 14;
 const ALTURA_FAIXA_TITULO = 36;
+const TAM_INFO = 9.5;
+const ALTURA_LINHA_INFO = 12.5;
 export const PLANILHAS_POR_PAGINA = 2;
 
 const brl = (centavos: number) => limpar(formatarCentavosBRL(centavos));
@@ -70,9 +72,9 @@ function celulaLinhas(texto: string, font: PDFFont, largura: number): Linha[] {
 }
 
 // Altura da planilha de uma função (faixa de título + cabeçalho + linhas + total): é o que precisa caber INTEIRO na página.
-export function alturaPlanilha(snap: SnapshotMot["funcoes"][number]): number {
+export function alturaPlanilha(snap: { planilha: SnapshotMot["funcoes"][number]["planilha"] }, linhasInfo = 0): number {
   const linhas = snap.planilha.linhas.length + snap.planilha.retencoes.length + 1;
-  return ALTURA_FAIXA_TITULO + (1 + linhas) * ALTURA_LINHA_VERBAS + 12;
+  return ALTURA_FAIXA_TITULO + linhasInfo * ALTURA_LINHA_INFO + (linhasInfo > 0 ? 4 : 0) + (1 + linhas) * ALTURA_LINHA_VERBAS + 12;
 }
 
 function desenharCabecalhoOrcamento(e: Escritor) {
@@ -133,10 +135,13 @@ function desenharFaixaValor(e: Escritor, rotulo: string, centavos: number, exten
   e.y = topo - altura;
 }
 
-function desenharPlanilha(e: Escritor, f: SnapshotMot["funcoes"][number], indice: number, varias: boolean) {
+function desenharPlanilha(e: Escritor, f: { planilha: SnapshotMot["funcoes"][number]["planilha"] }, titulo: string, linhasInfo: string[] = []) {
   // Sempre inteira: se não cabe o bloco todo, começa em página nova (nunca é cortada).
-  if (!e.cabe(alturaPlanilha(f))) e.novaPagina(false);
-  e.faixaTitulo(varias ? `PLANILHA DE VERBAS – Função ${indice + 1} (${f.area})` : "PLANILHA DE VERBAS");
+  if (!e.cabe(alturaPlanilha(f, linhasInfo.length))) e.novaPagina(false);
+  e.faixaTitulo(titulo);
+  // Linha informativa abaixo do título (layout "unica": composição da base de cálculo).
+  linhasInfo.forEach((t) => { e.page.drawText(t, { x: ML, y: e.y + 6, size: TAM_INFO, font: e.regular, color: DARK }); e.y -= ALTURA_LINHA_INFO; });
+  if (linhasInfo.length > 0) e.y -= 4;
   let topo = e.y;
   const larguraValor = 150;
   const linha = (rotulo: string, valor: string, o: { fundo?: ReturnType<typeof rgb>; cor?: ReturnType<typeof rgb>; negrito?: boolean }) => {
@@ -166,6 +171,51 @@ function desenharPlanilha(e: Escritor, f: SnapshotMot["funcoes"][number], indice
   e.y = topo - 12;
 }
 
+const TAM_TEXTO = 10.5;
+const PASSO_TEXTO = TAM_TEXTO * 1.45;
+
+function desenharValidade(e: Escritor, validade: string) {
+  const partes = quebrar(validade, e.regular, TAM_TEXTO, CW);
+  e.garantirEspaco(6 + partes.length * PASSO_TEXTO);
+  e.espaco(6);
+  for (const parte of partes) {
+    e.page.drawText(parte, { x: ML, y: e.y, size: TAM_TEXTO, font: e.regular, color: DARK });
+    e.y -= PASSO_TEXTO;
+  }
+  e.espaco(8);
+}
+
+// Assinatura INTEIRA numa página só: se o bloco não cabe no que sobrou, vai todo para a página seguinte (nunca partido). Conteúdo igual ao de antes.
+const RESPIRO_ANTES_ASSINATURA = 16;
+function desenharAssinatura(e: Escritor, linhas: { texto: string; font: PDFFont }[]) {
+  const itens = linhas.map((l) => ({ ...l, partes: quebrar(l.texto, l.font, TAM_TEXTO, CW) }));
+  const altura = itens.reduce((soma, l) => soma + l.partes.length * PASSO_TEXTO, 0);
+  if (e.cabe(RESPIRO_ANTES_ASSINATURA + altura + 4)) e.espaco(RESPIRO_ANTES_ASSINATURA);
+  else e.novaPagina(false);
+  for (const l of itens) {
+    for (const parte of l.partes) {
+      e.page.drawText(parte, { x: ML, y: e.y, size: TAM_TEXTO, font: l.font, color: DARK });
+      e.y -= PASSO_TEXTO;
+    }
+  }
+}
+
+// A linha de composição da base quebra SÓ nos " + " (nunca no meio de "R$ 1.800,50"); um pedaço maior que a página cai na quebra comum por palavra.
+function linhasComposicao(texto: string, font: PDFFont): string[] {
+  const partes = texto.split(" + ");
+  const linhas: string[] = [];
+  let atual = "";
+  partes.forEach((parte, i) => {
+    const candidata = atual === "" ? parte : atual + " + " + parte;
+    if (atual !== "" && font.widthOfTextAtSize(limpar(candidata), TAM_INFO) > CW) {
+      linhas.push(atual + " +");
+      atual = parte;
+    } else atual = candidata;
+    if (i === partes.length - 1) linhas.push(atual);
+  });
+  return linhas.flatMap((l) => quebrar(l, font, TAM_INFO, CW));
+}
+
 export async function gerarPdfPropostaMot(snap: SnapshotMot, opcoes: OpcoesPdfProposta = {}): Promise<Uint8Array> {
   if (snap.modelo !== "MOT") throw new Error("Modelo ainda não disponível.");
   const doc = await PDFDocument.create();
@@ -186,7 +236,8 @@ export async function gerarPdfPropostaMot(snap: SnapshotMot, opcoes: OpcoesPdfPr
   if (snap.aos_cuidados) e.campo("A/C", snap.aos_cuidados);
   e.campo("Nº da proposta", numeroComRevisao(snap.numero, snap.revisao));
   e.campo("Data", formatarDataBr(snap.data_emissao));
-  e.espaco(10);
+  // Respiro maior antes do parágrafo "Vimos através desta…": os 10 pt de antes mais uma linha em branco (pedido do Ölver).
+  e.espaco(10 + TAM_TEXTO * 1.45);
 
   if (snap.texto_introdutorio) e.textoLivre(snap.texto_introdutorio);
   e.espaco(4);
@@ -202,8 +253,13 @@ export async function gerarPdfPropostaMot(snap: SnapshotMot, opcoes: OpcoesPdfPr
   desenharCabecalhoOrcamento(e);
   for (const f of snap.funcoes) desenharLinhaOrcamento(e, f);
   const varias = snap.funcoes.length > 1;
-  snap.funcoes.forEach((f, i) => desenharFaixaValor(e, varias ? `VALOR MENSAL – Função ${i + 1} (${f.area})` : "VALOR MENSAL", f.valor_mensal_centavos, f.valor_mensal_extenso, !varias));
-  if (varias) desenharFaixaValor(e, "VALOR MENSAL TOTAL", snap.total_mensal_centavos, snap.total_mensal_extenso, true);
+  // Layout "unica": o valor mensal é UM só (TOTAL N. FISCAL da planilha única); sem faixa por função, que não somaria o mesmo total. Layout antigo: como sempre.
+  const unica = snap.layout_planilha === "unica" && snap.planilha_unica ? snap.planilha_unica : null;
+  if (unica) desenharFaixaValor(e, varias ? "VALOR MENSAL TOTAL" : "VALOR MENSAL", snap.total_mensal_centavos, snap.total_mensal_extenso, true);
+  else {
+    snap.funcoes.forEach((f, i) => desenharFaixaValor(e, varias ? `VALOR MENSAL – Função ${i + 1} (${f.area})` : "VALOR MENSAL", f.valor_mensal_centavos, f.valor_mensal_extenso, !varias));
+    if (varias) desenharFaixaValor(e, "VALOR MENSAL TOTAL", snap.total_mensal_centavos, snap.total_mensal_extenso, true);
+  }
   e.espaco(14);
 
   // Cláusulas: 1.1 a 1.5 fixas (texto do Word) e as adicionais seguindo, 1.6, 1.7…
@@ -211,16 +267,20 @@ export async function gerarPdfPropostaMot(snap: SnapshotMot, opcoes: OpcoesPdfPr
   fixas.forEach((texto, i) => e.item(`1.${i + 1}`, texto));
   for (const item of itensAdicionais(snap.clausulas_adicionais, QUANTIDADE_ITENS_FIXOS_MOT + 1)) e.item(item.numero, item.texto);
 
-  const validade = `Validade da proposta: ${snap.validade_dias} dias corridos, até ${formatarDataBr(snap.validade_ate)}.`;
+  // A validade fica logo depois das cláusulas; a assinatura vai para DEPOIS da planilha de verbas (decisão do Ölver).
+  desenharValidade(e, `Validade da proposta: ${snap.validade_dias} dias corridos, até ${formatarDataBr(snap.validade_ate)}.`);
   const assinatura = [
     { texto: ASSINATURA_MOT[0], font: bold },
     { texto: snap.vendedor_nome, font: regular },
     ...(snap.vendedor_telefone ? [{ texto: snap.vendedor_telefone, font: regular }] : []),
     ...(snap.vendedor_email ? [{ texto: snap.vendedor_email, font: regular }] : []),
   ];
-  e.blocoValidadeEAssinatura(validade, assinatura, 44);
 
-  snap.funcoes.forEach((f, i) => desenharPlanilha(e, f, i, varias));
+  if (unica) {
+    const info = linhasComposicao(textoBaseCalculoMot(snap.funcoes, unica.salario_centavos), e.regular);
+    desenharPlanilha(e, { planilha: unica }, "PLANILHA DE VERBAS", info.map(limpar));
+  } else snap.funcoes.forEach((f, i) => desenharPlanilha(e, f, varias ? `PLANILHA DE VERBAS – Função ${i + 1} (${f.area})` : "PLANILHA DE VERBAS"));
+  desenharAssinatura(e, assinatura);
 
   await desenharGradeClientes(e, await carregarLogosClientes(opcoes.pastaClientes ?? PASTA_CLIENTES_PROPOSTA), true);
   return doc.save();

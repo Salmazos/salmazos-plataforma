@@ -17,7 +17,7 @@ import { MENSAGEM_MODELO_INDISPONIVEL, MODELOS_PROPOSTA, TEMPLATE_VERSAO_ATUAL, 
 import { gerarPdfProposta } from "@/lib/propostaPdf";
 import { snapshotParaPdf } from "@/lib/propostaServico";
 import {
-  FUNCAO_MOT_PADRAO, LIMITES_PARAMETROS_MOT, TEMPLATE_VERSAO_MOT, TEXTO_INTRODUTORIO_PADRAO_MOT, conteudoMotSchema, montarSnapshotMot, snapshotMotSchema, textoFaturamentoMot,
+  FUNCAO_MOT_PADRAO, LIMITES_PARAMETROS_MOT, TEMPLATE_VERSAO_MOT, TEXTO_INTRODUTORIO_PADRAO_MOT, conteudoMotSchema, mensagemErroConteudoMot, montarSnapshotMot, snapshotMotSchema, textoFaturamentoMot,
   type ParametrosMotVigentes,
 } from "@/lib/propostaMot";
 import { MAX_CLAUSULAS_ADICIONAIS, MAX_CLAUSULA_ADICIONAL } from "@/lib/propostaClausulas";
@@ -191,7 +191,7 @@ function snapMot(funcoes: Record<string, unknown>[], extra: Record<string, unkno
   return montarSnapshotMot({
     numero: "TESTE-MOT-0001/26", revisao: 0, templateVersao: 1, dataEmissao: "2026-11-21", validadeDias: 15, validadeAte: "2026-12-06", clienteNome: "ZZTEST Cliente S/A", aosCuidados: "ZZTEST Ana",
     vendedorNome: "ZZTEST Vendedor", vendedorCargo: "Especialista em pessoas", vendedorTelefone: "(19) 99999-0000", vendedorEmail: "zztest@salmazos.com.br", parametros,
-    conteudo: { funcoes, ...extra }, ...entrada,
+    conteudo: { funcoes, ...extra }, layoutPlanilha: "por_funcao", ...entrada,
   } as any);
 }
 const F = (salario: number, extra: Record<string, unknown> = {}) => ({ ...FUNCAO_MOT_PADRAO, salario_centavos: salario, ...extra });
@@ -306,13 +306,18 @@ await caso("PDF MOT: dados e textos — título, subtítulo, Cliente/A-C/Nº da 
   assert.ok(ys[0] > ys[1] && ys[1] > ys[2] && ys[2] > ys[3], `ordem Cliente, A/C, Nº da proposta, Data: ${ys}`);
   const passos = [ys[0] - ys[1], ys[1] - ys[2], ys[2] - ys[3]];
   assert.ok(passos.every((d) => Math.abs(d - passos[0]) < 0.05), `mesmo espaçamento entre as 4 linhas: ${passos}`);
+  // Respiro antes de "Vimos através desta…": uma linha em branco a mais (de linha de base a linha de base: era ~25 pt entre a Data e o parágrafo, agora ~40 pt)
+  const yIntro = yDe("Vimos através desta, apresentar nossa Proposta de Mão de Obra Temporária.");
+  assert.ok(Number.isFinite(yIntro), "parágrafo de introdução achado");
+  const respiro = ys[3] - yIntro;
+  assert.ok(Math.abs(respiro - (10.5 * 1.45 + 10 + 10.5 * 1.45)) < 0.1, `espaço entre a Data e o parágrafo: ${respiro}`);
   assert.ok(t.includes("TESTE-MOT-0001/26 – Rev. 2") || txt.includes("TESTE-MOT-0001/26"), "número com revisão");
   assert.ok(t.includes("21/11/2026"), "data dd/mm/aaaa");
   assert.ok(!txt.includes("de Novembro de 2026"));
   assert.ok(txt.includes("Vimos através desta, apresentar nossa Proposta de Mão de Obra Temporária."));
   assert.ok(!txt.includes("CNPJ do cliente") && !t.includes("CNPJ: ") && !t.includes("Endereço: "));
 });
-await caso("PDF MOT: cláusulas 1.1 a 1.5 (texto do Word) e as adicionais seguindo 1.6, 1.7…; validade e assinatura NO MESMO bloco (mesma página); assinatura como o R&S (empresa + vendedor, telefone, e-mail)", async () => {
+await caso("PDF MOT: cláusulas 1.1 a 1.5 (texto do Word) e as adicionais seguindo 1.6, 1.7…; validade antes da planilha e assinatura DEPOIS dela, inteira numa página; assinatura como o R&S (empresa + vendedor, telefone, e-mail)", async () => {
   const adicionais = ["ZZTEST primeira cláusula adicional.", "ZZTEST segunda cláusula adicional, mais longa, para quebrar linha e conferir o recuo do texto no PDF do MOT."];
   const snap = snapMot([F(100000)], { clausulas_adicionais: adicionais });
   const pgs = await paginasPdf(await gerar(snap));
@@ -320,7 +325,7 @@ await caso("PDF MOT: cláusulas 1.1 a 1.5 (texto do Word) e as adicionais seguin
   const txt = norm(t.join(" "));
   const fixas = [ITENS_FIXOS_MOT.exames, ITENS_FIXOS_MOT.encargos, ITENS_FIXOS_MOT.adicionais, ITENS_FIXOS_MOT.faltas, textoFaturamentoMot(snap.condicoes)];
   fixas.forEach((f, i) => { assert.ok(t.includes(`1.${i + 1}`), `1.${i + 1}`); assert.ok(txt.includes(norm(f).slice(0, 60)), f.slice(0, 40)); });
-  // 1.3: a planilha de verbas vem DEPOIS da assinatura, então o texto diz "a seguir" (nas duas ocorrências), nunca "acima"
+  // 1.3: a planilha de verbas vem DEPOIS das cláusulas, então o texto diz "a seguir" (nas duas ocorrências), nunca "acima"
   assert.ok(ITENS_FIXOS_MOT.adicionais.includes("apresentados na tabela a seguir contemplam") && ITENS_FIXOS_MOT.adicionais.includes("tabela de encargos a seguir."));
   assert.ok(!/acima/i.test(ITENS_FIXOS_MOT.adicionais), "sem 'acima' na 1.3");
   assert.ok(txt.includes("apresentados na tabela a seguir contemplam") && txt.includes("tabela de encargos a seguir."));
@@ -331,10 +336,17 @@ await caso("PDF MOT: cláusulas 1.1 a 1.5 (texto do Word) e as adicionais seguin
   assert.ok(t.includes("1.6") && t.includes("1.7") && !t.includes("1.8"));
   assert.ok(txt.includes("ZZTEST primeira cláusula adicional.") && txt.includes("ZZTEST segunda cláusula adicional"));
   assert.ok(txt.includes("vencimento da fatura para dia 15 e 30"));
-  const comValidade = pgs.filter((p) => p.textos.some((x) => x.startsWith("Validade da proposta: ")));
-  assert.equal(comValidade.length, 1);
-  assert.ok(comValidade[0].textos.includes("Validade da proposta: 15 dias corridos, até 06/12/2026."));
-  for (const x of ["SALMAZOS – Recrutamento, Seleção e Terceirização de Serviços (desde 2013)", "ZZTEST Vendedor", "(19) 99999-0000", "zztest@salmazos.com.br"]) assert.ok(comValidade[0].textos.includes(x), `assinatura na mesma página da validade: ${x}`);
+  // Validade continua ANTES da planilha de verbas; a assinatura vai DEPOIS dela, inteira numa página só, sem mudar de conteúdo.
+  const SEQ = ["SALMAZOS – Recrutamento, Seleção e Terceirização de Serviços (desde 2013)", "ZZTEST Vendedor", "(19) 99999-0000", "zztest@salmazos.com.br"];
+  const validadeTxt = "Validade da proposta: 15 dias corridos, até 06/12/2026.";
+  assert.equal(ocorrencias(t, validadeTxt), 1);
+  const pgAssinatura = pgs.filter((pg) => pg.textos.includes(SEQ[0]));
+  assert.equal(pgAssinatura.length, 1, "assinatura aparece uma vez");
+  for (const x of SEQ) assert.ok(pgAssinatura[0].textos.includes(x), `assinatura inteira na mesma página: ${x}`);
+  const posicao = (txt: string) => t.indexOf(txt);
+  assert.ok(posicao(validadeTxt) < t.indexOf("VERBAS"), "validade antes da planilha de verbas");
+  assert.ok(t.lastIndexOf("TOTAL N. FISCAL") < posicao(SEQ[0]), "assinatura DEPOIS da planilha de verbas");
+  assert.ok(SEQ.every((x, i) => i === 0 || posicao(SEQ[i - 1]) < posicao(x)), "mesma ordem de antes dentro da assinatura");
   assert.ok(!t.includes("Elizabete Salmazo Santos") && !txt.includes("CNPJ.: 18.545"), "assinatura do R&S (vendedor), não a fixa do Word");
 });
 await caso("PDF MOT: planilhas de verbas — uma por função, sempre inteiras (nunca cortadas), no máximo 2 por página; páginas com 1, 5 e 20 funções", async () => {
@@ -347,6 +359,10 @@ await caso("PDF MOT: planilhas de verbas — uma por função, sempre inteiras (
     const totais = pgs.map((p) => ocorrencias(p.textos, "TOTAL N. FISCAL"));
     assert.deepEqual(verbas, totais, `${n} funções: nenhuma planilha cortada (cada VERBAS tem o seu TOTAL N. FISCAL na mesma página)`);
     assert.equal(verbas.reduce((a, b) => a + b, 0), n, "uma planilha por função");
+    const ASSIN = ["SALMAZOS – Recrutamento, Seleção e Terceirização de Serviços (desde 2013)", "ZZTEST Vendedor", "(19) 99999-0000", "zztest@salmazos.com.br"];
+    const comAssin = pgs.map((pg, i) => ({ i, tem: ASSIN.filter((x) => pg.textos.includes(x)).length })).filter((x) => x.tem > 0);
+    assert.deepEqual(comAssin.map((x) => x.tem), [4], `${n} funções: assinatura inteira numa página só: ${JSON.stringify(comAssin)}`);
+    assert.ok(comAssin[0].i >= verbas.map((v, i) => (v > 0 ? i : -1)).reduce((a, b) => Math.max(a, b), -1), `${n} funções: assinatura depois da última planilha`);
     assert.ok(verbas.every((v) => v <= PLANILHAS_POR_PAGINA), `${n} funções: no máximo 2 por página: ${verbas}`);
     const t = todos(pgs);
     for (let i = 1; i <= n; i++) assert.ok(t.includes(`VALOR MENSAL – Função ${i} (AREA${String(i).padStart(2, "0")})`) || n === 1, `faixa da função ${i}`);
@@ -392,6 +408,69 @@ await caso("PDF MOT: gerar PDF de proposta de outro modelo lança 'Modelo ainda 
   await assert.rejects(() => gerarPdfPropostaMot({ ...snapMot([F(100000)]), modelo: "RS" } as any), /Modelo ainda não disponível/);
 });
 
+// ═══ Layout NOVO: UMA planilha de verbas sobre a SOMA dos salários ═══════════
+const snapUnica = (funcoes: Record<string, unknown>[], extra: Record<string, unknown> = {}) => snapMot(funcoes, extra, PARAMS, { layoutPlanilha: "unica" });
+const brlTxt = (c: number) => formatarCentavosBRL(c).replace(/ /g, " ");
+await caso("PDF MOT (layout único): 3 funções (1.000,00 + 3.200,00 + 1.800,50) → base 6.000,50, UMA planilha 'PLANILHA DE VERBAS' sem 'Função N', com a linha de composição da base; total = TOTAL N. FISCAL dela; assinatura DEPOIS e inteira", async () => {
+  const funcoes = [F(100000, { area: "OPERACIONAL" }), F(320000, { area: "ADMINISTRATIVO" }), F(180050, { area: "LOGÍSTICA" })];
+  const snap = snapUnica(funcoes);
+  assert.equal(snap.layout_planilha, "unica");
+  const plan = calcularPlanilhaMot({ salarioCentavos: 600050, parametros: INICIAIS });
+  assert.equal(snap.planilha_unica!.salario_centavos, 600050, "base = soma dos salários");
+  assert.equal(snap.planilha_unica!.total_nf_centavos, plan.totalNfCentavos);
+  assert.equal(snap.total_mensal_centavos, plan.totalNfCentavos, "total da proposta = TOTAL N. FISCAL da planilha única");
+  const pgs = await paginasPdf(await gerar(snap));
+  const t = todos(pgs);
+  assert.equal(ocorrencias(t, "PLANILHA DE VERBAS"), 1, "uma única planilha");
+  assert.equal(ocorrencias(t, "TOTAL N. FISCAL"), 1);
+  assert.equal(ocorrencias(t, "VERBAS"), 1);
+  assert.ok(!t.some((x) => x.startsWith("PLANILHA DE VERBAS –")) && !t.some((x) => /^VALOR MENSAL – Função/.test(x)), "sem planilha nem faixa por função");
+  const base = "Base de cálculo: " + brlTxt(600050) + " (OPERACIONAL: " + brlTxt(100000) + " + ADMINISTRATIVO: " + brlTxt(320000) + " + LOGÍSTICA: " + brlTxt(180050) + ")";
+  assert.ok(norm(t.join(" ")).includes(norm(base)) || t.includes(base), "composição da base: " + base);
+  assert.ok(t.includes("VALOR MENSAL TOTAL") && t.includes(brlTxt(plan.totalNfCentavos)), "faixa do total = TOTAL N. FISCAL da planilha");
+  assert.equal(ocorrencias(t, brlTxt(plan.totalNfCentavos)), 2, "o mesmo valor na faixa e no TOTAL N. FISCAL da planilha");
+  console.log("      3 funções: base " + brlTxt(600050) + " | planilha única: total NF " + brlTxt(plan.totalNfCentavos) + " | valor_estimado = " + (plan.totalNfCentavos / 100).toFixed(2));
+});
+await caso("PDF MOT (layout único): 1 função → base só com nome e valor, 'VALOR MENSAL' (sem 'TOTAL'), uma planilha, mesmo valor da planilha por função de antes", async () => {
+  const snap = snapUnica([F(100000, { area: "OPERACIONAL" })]);
+  const t = todos(await paginasPdf(await gerar(snap)));
+  assert.ok(t.join(" ").includes("Base de cálculo: " + brlTxt(100000) + " (OPERACIONAL)"), "nome e valor");
+  assert.ok(t.includes("VALOR MENSAL") && !t.includes("VALOR MENSAL TOTAL"));
+  assert.equal(ocorrencias(t, "PLANILHA DE VERBAS"), 1);
+  assert.equal(snap.total_mensal_centavos, 188964, "1 função: o mesmo 1.889,64 de sempre");
+});
+await caso("PDF MOT (layout único): lista de funções (ORÇAMENTO) segue com UMA linha por função (área, descrição, salário); a linha de composição quebra com 20 funções sem cortar a planilha; assinatura inteira depois dela", async () => {
+  const funcoes = Array.from({ length: 20 }, (_, i) => F(100000 + i * 12345, { area: "AREA" + String(i + 1).padStart(2, "0"), descricao: "ZZTEST função " + (i + 1) }));
+  const snap = snapUnica(funcoes);
+  const pgs = await paginasPdf(await gerar(snap));
+  const t = todos(pgs);
+  for (let i = 1; i <= 20; i++) assert.ok(t.includes("ZZTEST função " + i) && t.includes("AREA" + String(i).padStart(2, "0")), "função " + i + " listada");
+  assert.equal(ocorrencias(t, "PLANILHA DE VERBAS"), 1);
+  assert.equal(pgs.map((p) => ocorrencias(p.textos, "VERBAS")).join(), pgs.map((p) => ocorrencias(p.textos, "TOTAL N. FISCAL")).join(), "planilha inteira numa página");
+  const pgAss = pgs.filter((p) => p.textos.includes("ZZTEST Vendedor"));
+  assert.equal(pgAss.length, 1);
+  assert.ok(pgs.indexOf(pgAss[0]) >= pgs.findIndex((p) => p.textos.includes("TOTAL N. FISCAL")), "assinatura depois da planilha");
+});
+await caso("PDF MOT: proposta ANTIGA (snapshot SEM layout_planilha) continua com UMA planilha POR FUNÇÃO e o total somando as funções, exatamente como antes", async () => {
+  const nova = snapUnica([F(100000), F(320000)]);
+  // snapshot como gravado antes desta mudança: sem layout_planilha nem planilha_unica, total = soma dos TOTAL N. FISCAL por função
+  const { layout_planilha, planilha_unica, ...resto } = nova as any;
+  const antiga = snapshotMotSchema.parse({ ...resto, total_mensal_centavos: 188964 + 604693, total_mensal_extenso: nova.total_mensal_extenso });
+  assert.equal((antiga as any).layout_planilha, undefined);
+  const t = todos(await paginasPdf(await gerar(antiga)));
+  assert.equal(ocorrencias(t, "TOTAL N. FISCAL"), 2, "duas planilhas (uma por função)");
+  assert.ok(t.includes("PLANILHA DE VERBAS – Função 1 (OPERACIONAL)") && t.includes("PLANILHA DE VERBAS – Função 2 (OPERACIONAL)"));
+  assert.ok(t.includes("VALOR MENSAL – Função 1 (OPERACIONAL)") && t.includes("VALOR MENSAL TOTAL") && t.includes(brlTxt(188964 + 604693)), "total = 7.936,57 (soma por função)");
+  assert.ok(!t.join(" ").includes("Base de cálculo"), "sem linha de composição");
+});
+await caso("conteúdo MOT: a SOMA dos salários também respeita o teto da calculadora (R$ 10.000.000,00) — sem isso a planilha única daria erro 500", async () => {
+  const ok = conteudoMotSchema.safeParse({ funcoes: [{ ...FUNCAO_MOT_PADRAO, salario_centavos: 500000000 }, { ...FUNCAO_MOT_PADRAO, salario_centavos: 500000000 }] });
+  assert.equal(ok.success, true);
+  const ruim = conteudoMotSchema.safeParse({ funcoes: [{ ...FUNCAO_MOT_PADRAO, salario_centavos: 600000000 }, { ...FUNCAO_MOT_PADRAO, salario_centavos: 500000000 }] });
+  assert.equal(ruim.success, false);
+  assert.match(mensagemErroConteudoMot((ruim as any).error.issues), /A soma dos salários passa do limite/);
+});
+
 // ═══ A rota: PDF por revisão, acesso e erros ═════════════════════════════════
 const F0 = [funcao({ salario_centavos: 449999 })];
 const F1 = [funcao({ salario_centavos: 449999 }), funcao({ area: "ADMINISTRATIVO", salario_centavos: 50000 })];
@@ -417,7 +496,8 @@ await caso("rota PDF (MOT de TESTE, gestor, SEM chave do harness): rascunho gera
   assert.ok(a.includes("Taxa Administrativa (10%)") && !a.includes("Taxa Administrativa (15%)"), "Rev. 0: taxa congelada de 10%");
   assert.ok(a.includes("R$ 8.503,46") && !a.some((x) => x.startsWith("VALOR MENSAL TOTAL")));
   assert.ok(b.includes("Taxa Administrativa (15%)") && !b.includes("Taxa Administrativa (10%)"), "Rev. 1: percentuais da emissão dela");
-  const totalB = calcularPlanilhaMot({ salarioCentavos: 449999, parametros: { ...INICIAIS, taxa_administrativa_bp: 1500 } }).totalNfCentavos + calcularPlanilhaMot({ salarioCentavos: 50000, parametros: { ...INICIAIS, taxa_administrativa_bp: 1500 } }).totalNfCentavos;
+  // Rev. 1 é uma revisão NOVA: layout único, total = TOTAL N. FISCAL da planilha sobre a SOMA dos salários (4.499,99 + 500,00)
+  const totalB = calcularPlanilhaMot({ salarioCentavos: 449999 + 50000, parametros: { ...INICIAIS, taxa_administrativa_bp: 1500 } }).totalNfCentavos;
   assert.ok(b.includes("VALOR MENSAL TOTAL") && b.includes(formatarCentavosBRL(totalB).replace(/ /g, " ")), "total da Rev. 1 com a taxa de 15%");
   assert.ok(!b.includes("R$ 9.448,31"), "o total de hoje-com-10% não aparece na Rev. 1");
   assert.deepEqual(c, b, "sem ?rev= vale a revisão atual");

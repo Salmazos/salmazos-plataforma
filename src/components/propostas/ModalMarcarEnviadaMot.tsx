@@ -50,7 +50,13 @@ export default function ModalMarcarEnviadaMot({ numero, clienteNome, validadeDia
       {previa && (
         <div style={{ background: "#FFFBEB", border: "1px solid #FCD34D", borderRadius: 10, padding: 12, marginBottom: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", marginBottom: 6 }}>VALOR DA PROPOSTA (CALCULADO PELO SISTEMA)</div>
-          {previa.funcoes.map((f, i) => f && (
+          {previa.unica && previa.funcoes.map((f, i) => f && (
+            <div key={i} data-salario-funcao={i} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 14, padding: "2px 0" }}>
+              <span>Função {i + 1}{funcoes[i] ? ` · ${funcoes[i].area}${funcoes[i].descricao ? ` — ${funcoes[i].descricao}` : ""}` : ""}</span>
+              <span>Salário {formatarCentavosBRL(f.salario_centavos)}</span>
+            </div>
+          ))}
+          {!previa.unica && previa.funcoes.map((f, i) => f && (
             <div key={i} data-valor-funcao={i} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 14, padding: "2px 0" }}>
               <span>Função {i + 1}{funcoes[i] ? ` · ${funcoes[i].area}${funcoes[i].descricao ? ` — ${funcoes[i].descricao}` : ""}` : ""}</span>
               <strong>{formatarCentavosBRL(f.total_nf_centavos)}</strong>
@@ -61,7 +67,9 @@ export default function ModalMarcarEnviadaMot({ numero, clienteNome, validadeDia
             <strong data-total-mensal>{formatarCentavosBRL(previa.total_mensal_centavos)}</strong>
           </div>
           <div style={{ fontSize: 12, color: "#6B7280", marginTop: 6 }}>
-            Ninguém digita este valor: ele é a soma dos valores mensais das funções, com os percentuais em vigor no momento do envio.
+            {previa.unica
+              ? "Ninguém digita este valor: ele é o TOTAL N. FISCAL da planilha de verbas, calculada sobre a soma dos salários das funções, com os percentuais em vigor no momento do envio."
+              : "Ninguém digita este valor: ele é a soma dos valores mensais das funções, com os percentuais em vigor no momento do envio."}
             {teste ? " Como é uma proposta de teste, ele fica registrado só na proposta." : temFunil ? " Este valor vai para a oportunidade do Funil." : " Este valor fica registrado na proposta."}
           </div>
         </div>

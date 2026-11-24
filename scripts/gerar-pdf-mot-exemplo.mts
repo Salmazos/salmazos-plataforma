@@ -30,7 +30,7 @@ function snap(n: number, extra: Record<string, unknown> = {}) {
   });
 }
 
-for (const [nome, n] of [["pdf-mot-exemplo-1-funcao", 1], ["pdf-mot-exemplo-5-funcoes", 5]] as const) {
+for (const [nome, n] of [["pdf-mot-exemplo-1-funcao", 1], ["pdf-mot-exemplo-3-funcoes", 3], ["pdf-mot-exemplo-5-funcoes", 5]] as const) {
   const bytes = await gerarPdfPropostaMot(snap(n), { teste: true });
   const arquivo = path.join(saida, `${nome}.pdf`);
   fs.writeFileSync(arquivo, bytes);

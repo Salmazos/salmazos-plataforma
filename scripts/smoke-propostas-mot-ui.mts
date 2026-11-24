@@ -13,7 +13,7 @@ import PropostaDetalheMot, { type DetalheMot } from "@/components/propostas/Prop
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import { FUNCAO_MOT_PADRAO, MAX_FUNCOES_MOT, TEXTO_INTRODUTORIO_PADRAO_MOT, conteudoMotSchema, montarPreviaMot, previaMotSchema, type ParametrosMotVigentes } from "@/lib/propostaMot";
 import { CHAVES_PARAMETROS_MOT, PARAMETROS_MOT_INICIAIS, calcularPlanilhaMot, formatarCentavosBRL } from "@/lib/propostaMotCalculo";
-import { LIMITES_PARAMETROS_MOT } from "@/lib/propostaMot";
+import { LIMITES_PARAMETROS_MOT, montarSnapshotMot, previaDeSnapshotMot } from "@/lib/propostaMot";
 import { hojeSaoPaulo } from "@/lib/comercial";
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -110,7 +110,7 @@ await caso("funções: adicionar até 20 (botão desabilita no limite) e remover
   assert.equal(ultimo.funcoes.length, 1);
   assert.equal(botoes(r).find((b) => b.props["aria-label"] === "Remover função 1")?.props.disabled, true);
 });
-await caso("cálculo na tela: R$ 1.000,00 → R$ 1.889,64 por função; a 2ª função (R$ 3.200,00 → R$ 6.046,93) soma no total (R$ 7.936,57); a tela mostra o que o servidor devolveu e bate com a calculadora", async () => {
+await caso("cálculo na tela: R$ 1.000,00 → R$ 1.889,64 por função; a 2ª função (R$ 3.200,00) entra na BASE da planilha única (R$ 4.200,00 → total R$ 7.936,59); a tela mostra o que o servidor devolveu e bate com a calculadora", async () => {
   resposta = servidorPrevia;
   const r = await montar();
   await salario(r, 0, 1000);
@@ -123,15 +123,18 @@ await caso("cálculo na tela: R$ 1.000,00 → R$ 1.889,64 por função; a 2ª fu
   await salario(r, 1, 3200);
   await esperar(DEBOUNCE);
   assert.deepEqual(chamadas[chamadas.length - 1].corpo, { salarios_centavos: [100000, 320000] });
-  const valores = porData(r, "data-valor-funcao").map((n) => txt(n));
-  assert.equal(valores.length, 2);
-  assert.match(valores[0], /1\.889,64/);
-  assert.match(valores[1], /6\.046,93/);
+  // Layout novo: cada função só mostra o salário; a planilha é UMA, sobre a soma dos salários, e o valor mensal total é o TOTAL N. FISCAL dela.
+  assert.equal(porData(r, "data-valor-funcao").length, 0, "sem valor mensal por função");
+  const salarios = porData(r, "data-salario-funcao").map((n) => txt(n));
+  assert.equal(salarios.length, 2);
+  assert.match(salarios[0], /1\.000,00/);
+  assert.match(salarios[1], /3\.200,00/);
+  assert.match(txt(porData(r, "data-base-calculo")[0]), /Base de cálculo: R\$\s?4\.200,00 \(OPERACIONAL: R\$\s?1\.000,00 \+ OPERACIONAL: R\$\s?3\.200,00\)/);
   const calc = (s: number) => calcularPlanilhaMot({ salarioCentavos: s, parametros: PARAMETROS_MOT_INICIAIS }).totalNfCentavos;
   assert.equal(calc(100000), 188964);
   assert.equal(calc(320000), 604693);
-  assert.match(txt(porData(r, "data-total-mensal")[0]), /7\.936,57/);
-  assert.match(txt(porData(r, "data-total-mensal")[0]), new RegExp(formatarCentavosBRL(calc(100000) + calc(320000)).replace(/[.$]/g, "\\$&").replace("\\$ ", "\\$\\s?")));
+  assert.match(txt(porData(r, "data-total-mensal")[0]), /7\.936,59/);
+  assert.match(txt(porData(r, "data-total-mensal")[0]), new RegExp(formatarCentavosBRL(calc(420000)).replace(/[.$]/g, "\\$&").replace("\\$ ", "\\$\\s?")));
   assert.equal(ultimaPrevia?.erro, null);
   // função sem salário: manda null na posição e não quebra
   await clicar(botaoPorTexto(r, "Adicionar função"));
@@ -261,21 +264,37 @@ await caso("schema da prévia: salários inteiros 1..teto, null por posição, 1
 const PREVIA = montarPreviaMot([100000, 320000], VIGENTES);
 const FUNCOES = [{ area: "OPERACIONAL", descricao: null }, { area: "ADM", descricao: "Auxiliar" }];
 const propsModal = (extra: Record<string, unknown> = {}) => ({ numero: "TESTE-MOT-0001/26", clienteNome: "cliente teste", validadeDias: 10, hoje: HOJE, previa: PREVIA, erroCalculo: null, funcoes: FUNCOES, vendedorTemTelefone: true, temFunil: false, teste: true, onClose: () => {}, onConfirmar: async () => null, ...extra });
-await caso("'Marcar como enviada' do MOT: SEM campo de valor; mostra cada função e a soma (R$ 7.936,57); confirmar chama o envio sem mandar valor; texto de teste diz que nada vai para o Funil", async () => {
+await caso("'Marcar como enviada' do MOT: SEM campo de valor; mostra cada função (salário) e o total da planilha única (R$ 7.936,59); confirmar chama o envio sem mandar valor; texto de teste diz que nada vai para o Funil", async () => {
   let confirmou = 0, argumentos: unknown[] = [];
   let r!: TestRenderer.ReactTestRenderer;
   await act(async () => { r = TestRenderer.create(React.createElement(ModalMarcarEnviadaMot, propsModal({ onConfirmar: async (...a: unknown[]) => { confirmou++; argumentos = a; return null; } }) as any)); });
   assert.equal(r.root.findAllByType(CampoMoeda).length, 0, "ninguém digita o valor");
   assert.equal(r.root.findAll((n) => n.type === "input").length, 0);
   const t = textoDe(r);
-  assert.match(t, /1\.889,64/);
-  assert.match(t, /6\.046,93/);
-  assert.match(txt(porData(r, "data-total-mensal")[0]), /7\.936,57/);
+  assert.match(t, /Salário R\$\s?1\.000,00/);
+  assert.match(t, /Salário R\$\s?3\.200,00/);
+  assert.equal(porData(r, "data-valor-funcao").length, 0, "sem valor mensal por função");
+  assert.match(txt(porData(r, "data-total-mensal")[0]), /7\.936,59/);
+  assert.match(t, /TOTAL N\. FISCAL da planilha de verbas/);
   assert.match(t, /Nada vai para o Funil/);
   assert.match(t, /Confira o cálculo acima e que o PDF enviado foi gerado a partir desta versão/);
   await clicar(botaoPorTexto(r, "Confirmar envio"));
   assert.equal(confirmou, 1);
   assert.deepEqual(argumentos, [], "nenhum valor é enviado");
+});
+await caso("revisão ANTIGA (snapshot sem layout_planilha): a tela segue mostrando o valor mensal de CADA função e o total como soma (R$ 7.936,57), como sempre", async () => {
+  const velha = montarSnapshotMot({ numero: "X", revisao: 0, templateVersao: 1, dataEmissao: "2026-11-21", validadeDias: 15, validadeAte: "2026-12-06", clienteNome: "c", aosCuidados: null, vendedorNome: "v", vendedorTelefone: null, parametros: VIGENTES, layoutPlanilha: "por_funcao",
+    conteudo: { funcoes: [100000, 320000].map((x) => ({ ...FUNCAO_MOT_PADRAO, salario_centavos: x })) } });
+  const previaVelha = previaDeSnapshotMot(velha);
+  assert.equal(previaVelha.unica, undefined);
+  let r!: TestRenderer.ReactTestRenderer;
+  await act(async () => { r = TestRenderer.create(React.createElement(ModalMarcarEnviadaMot, propsModal({ previa: previaVelha }) as any)); });
+  const valores = porData(r, "data-valor-funcao").map((n) => txt(n));
+  assert.equal(valores.length, 2);
+  assert.match(valores[0], /1\.889,64/);
+  assert.match(valores[1], /6\.046,93/);
+  assert.match(txt(porData(r, "data-total-mensal")[0]), /7\.936,57/);
+  assert.match(textoDe(r), /soma dos valores mensais das funções/);
 });
 await caso("'Marcar como enviada' do MOT: sem cálculo (sem percentuais) mostra a mensagem e o botão de confirmar fica desabilitado; erro do servidor volta a liberar o botão; proposta real com Funil promete oportunidade", async () => {
   let r!: TestRenderer.ReactTestRenderer;
@@ -430,9 +449,9 @@ await caso("detalhe MOT (rascunho de teste): funções, planilha com os valores 
   assert.match(t, /Mão de Obra Temporária/);
   assert.match(t, /Conforme CCT/);
   assert.equal(porData(r, "data-funcao").length, 2);
-  assert.match(t, /1\.889,64/);
-  assert.match(t, /6\.046,93/);
-  assert.match(txt(porData(r, "data-total-mensal")[0]), /7\.936,57/);
+  assert.match(t, /Base de cálculo: R\$\s?4\.200,00/);
+  assert.match(t, /Valor estimado R\$\s?7\.936,59/);
+  assert.match(txt(porData(r, "data-total-mensal")[0]), /7\.936,59/);
   assert.match(t, /dia 15 e dia 30/);
   assert.match(t, /1\.6\s?Cláusula especial\./);
   assert.doesNotMatch(t, /CNPJ|Endereço/);

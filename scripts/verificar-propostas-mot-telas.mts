@@ -173,15 +173,17 @@ const PROIBIDO_NA_PREVIA = /_bp"|percentual/i;
 const funcaoPrevia = (r: Chamada, i: number) => r.body.data.funcoes[i];
 
 // ═══ 1) Prévia do cálculo ════════════════════════════════════════════════════
-await caso("prévia: R$ 1.000,00 → NF 1.889,64 e R$ 3.200,00 → NF 6.046,93, com total mensal = soma; mesma conta da calculadora e do snapshot", async () => {
+await caso("prévia: R$ 1.000,00 → NF 1.889,64 e R$ 3.200,00 → NF 6.046,93 (cada função), mas o total mensal é o da PLANILHA ÚNICA sobre a soma (R$ 4.200,00 → 7.936,59); mesma conta da calculadora e do snapshot", async () => {
   const db = novoDb();
   const r = await previa(db, "u-v", { salarios_centavos: [100000, 320000] });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(funcaoPrevia(r, 0).total_nf_centavos, 188964);
   assert.equal(funcaoPrevia(r, 1).total_nf_centavos, 604693);
-  assert.equal(r.body.data.total_mensal_centavos, 188964 + 604693);
+  assert.equal(r.body.data.total_mensal_centavos, 793659, "planilha única sobre a soma dos salários (4.200,00), não a soma das planilhas por função (7.936,57)");
+  assert.equal(r.body.data.unica.salario_centavos, 420000);
+  assert.equal(r.body.data.unica.total_nf_centavos, 793659);
   assert.equal(r.body.data.vigente_desde, "2026-11-19", "devolve a data da vigência usada");
-  assert.equal(r.body.data.total_mensal_extenso, valorPorExtensoBRL(188964 + 604693));
+  assert.equal(r.body.data.total_mensal_extenso, valorPorExtensoBRL(793659));
   const parametros = { vigente_desde: "2026-11-19", id: "par-1", ...INICIAIS } as ParametrosMotVigentes;
   for (const [i, s] of [100000, 320000].entries()) {
     const calc = calcularPlanilhaMot({ salarioCentavos: s, parametros: INICIAIS });
@@ -203,7 +205,7 @@ await caso("prévia: função sem salário volta null na mesma posição (a tela
 });
 await caso("prévia: NUNCA devolve percentuais (nenhuma chave *_bp, 'percentual', nem os nomes dos parâmetros), só valores em centavos", async () => {
   const db = novoDb();
-  const r = await previa(db, "u-v", { salarios_centavos: [100000, 250000, 999999999] });
+  const r = await previa(db, "u-v", { salarios_centavos: [100000, 250000, 900000000] });
   assert.equal(r.status, 200);
   const texto = JSON.stringify(r.body);
   assert.doesNotMatch(texto, PROIBIDO_NA_PREVIA, texto.slice(0, 200));
@@ -390,10 +392,11 @@ await caso("enviar MOT de TESTE sem valor: o servidor soma os valores mensais (2
     const prev = await previa(db, "u-gc", { salarios_centavos: [100000, 320000] });
     const env = await situacao(db, "u-gc", id, { para: "enviada" });
     assert.equal(env.status, 200, JSON.stringify(env.body));
-    assert.equal(proposta(db, id).valor_estimado, (188964 + 604693) / 100);
+    assert.equal(proposta(db, id).valor_estimado, 793659 / 100);
     assert.equal(proposta(db, id).valor_estimado * 100, prev.body.data.total_mensal_centavos, "o valor gravado é o que a prévia mostrava");
     assert.equal(db.tabelas.proposta_revisoes.length, 1);
-    assert.equal(db.tabelas.proposta_revisoes[0].conteudo.total_mensal_centavos, 188964 + 604693);
+    assert.equal(db.tabelas.proposta_revisoes[0].conteudo.total_mensal_centavos, 793659);
+    assert.equal(db.tabelas.proposta_revisoes[0].conteudo.layout_planilha, "unica");
     assert.equal(db.tabelas.oportunidades.length, 0, "proposta de teste não cria oportunidade");
     assert.equal(db.tabelas.lembretes.length, 0, "nem follow-up");
     // o valor digitado pelo cliente continua ignorado

@@ -471,7 +471,8 @@ await caso("editar rascunho MOT valida o conteúdo (400 em português, nada muda
 await caso("enviar MOT: o valor vem da PLANILHA (soma dos valores mensais), o valor digitado pelo cliente é IGNORADO; Rev. 0 grava o snapshot do MOT com percentuais congelados; Funil recebe o valor calculado", async () => comMot(async () => {
   const db = novoDb();
   const id = (await criar(db, "u-v", { conteudo: conteudoMot({ funcoes: [funcao(), funcao({ area: "ADMINISTRATIVO", salario_centavos: 151800 })] }) })).body.data.id as string;
-  const esperado = calcularPlanilhaMot({ salarioCentavos: 100000, parametros: INICIAIS }).totalNfCentavos + calcularPlanilhaMot({ salarioCentavos: 151800, parametros: INICIAIS }).totalNfCentavos;
+  // Layout novo: UMA planilha sobre a SOMA dos salários (1.000,00 + 1.518,00 = 2.518,00); o valor da proposta é o TOTAL N. FISCAL dela.
+  const esperado = calcularPlanilhaMot({ salarioCentavos: 100000 + 151800, parametros: INICIAIS }).totalNfCentavos;
   const r = await situacao(db, "u-v", id, { para: "enviada", valor_estimado: 999999 });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(proposta(db, id).situacao, "enviada");
@@ -482,6 +483,9 @@ await caso("enviar MOT: o valor vem da PLANILHA (soma dos valores mensais), o va
   assert.equal(rev.template_versao, TEMPLATE_VERSAO_MOT);
   assert.equal(rev.conteudo.modelo, "MOT");
   assert.equal(rev.conteudo.total_mensal_centavos, esperado);
+  assert.equal(rev.conteudo.layout_planilha, "unica");
+  assert.equal(rev.conteudo.planilha_unica.total_nf_centavos, esperado);
+  assert.equal(rev.conteudo.planilha_unica.salario_centavos, 251800, "base = soma dos salários");
   assert.equal(rev.conteudo.funcoes.length, 2);
   assert.deepEqual(rev.conteudo.parametros, { vigente_desde: "2026-11-19", id: "par-1", ...INICIAIS });
   assert.equal(rev.conteudo.numero, `VE-MOT-0072/${AA}`);
