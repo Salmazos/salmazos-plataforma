@@ -38,7 +38,7 @@ const EMP = "55555555-5555-4555-8555-000000000001", EMP_TESTE = "55555555-5555-4
 const HOJE = hojeSaoPaulo();
 const ANO = Number(HOJE.slice(0, 4));
 const AA = String(ANO).slice(-2);
-const ULTIMO_RS = 52, ULTIMO_MOT = 71;
+const ULTIMO_UNICO = 71; // semente do contador ÚNICO das propostas reais (RS=71 e MOT=71 em 25/11/2026): a próxima, de qualquer modalidade, é a 72
 const INICIAIS = { ...PARAMETROS_MOT_INICIAIS };
 
 // ── Chave de teste do MOT (só do harness) ────────────────────────────────────
@@ -58,6 +58,12 @@ function contador(db: any, tabela: string, modelo: string, inicial: number) {
   if (!c) { c = { modelo, ano: ANO, ultimo: inicial }; db.tabelas[tabela].push(c); }
   return c;
 }
+// criar_proposta do banco: UM contador por ANO para todas as modalidades (proposta_contador_unico); o legado (proposta_contadores) fica congelado.
+function contadorUnico(db: any) {
+  let c = db.tabelas.proposta_contador_unico.find((x: any) => x.ano === ANO);
+  if (!c) { c = { ano: ANO, ultimo: 0 }; db.tabelas.proposta_contador_unico.push(c); }
+  return c;
+}
 function linhaBase(a: Record<string, unknown>, numero: string, sequencial: number, teste: boolean) {
   const agora = new Date().toISOString();
   return {
@@ -68,7 +74,7 @@ function linhaBase(a: Record<string, unknown>, numero: string, sequencial: numbe
 }
 function rpcReal(a: Record<string, unknown>, db: any) {
   db.rpcChamadas.push({ rpc: "criar_proposta", ...a });
-  const c = contador(db, "proposta_contadores", a.p_modelo as string, a.p_modelo === "MOT" ? ULTIMO_MOT : ULTIMO_RS);
+  const c = contadorUnico(db);
   c.ultimo += 1;
   const prefixo = a.p_modelo === "RS" ? `${a.p_sigla}-` : `${a.p_sigla}-${a.p_modelo}-`;
   const linha = linhaBase(a, `${prefixo}${String(c.ultimo).padStart(4, "0")}/${AA}`, c.ultimo, false);
@@ -108,7 +114,7 @@ function novoDb(extra: Record<string, unknown[]> = {}) {
     empresas_visitadas: [{ id: EMP, nome: "Pastifício Selmi S/A", cliente_id: null, unidade_id: U }, { id: EMP_TESTE, nome: "cliente teste", cliente_id: null, unidade_id: U }],
     empresas_teste: [{ empresa_id: EMP_TESTE, marcado_por: G, created_at: "2026-11-20T10:00:00Z" }],
     empresa_contatos: [], oportunidades: [], lembretes: [], oportunidade_interacoes: [], propostas: [], proposta_revisoes: [], proposta_historico: [], audit_logs: [],
-    proposta_contadores: [{ modelo: "RS", ano: ANO, ultimo: ULTIMO_RS }, { modelo: "MOT", ano: ANO, ultimo: ULTIMO_MOT }], proposta_contadores_teste: [],
+    proposta_contador_unico: [{ ano: ANO, ultimo: ULTIMO_UNICO }], proposta_contadores: [{ modelo: "RS", ano: ANO, ultimo: ULTIMO_UNICO }, { modelo: "MOT", ano: ANO, ultimo: ULTIMO_UNICO }], proposta_contadores_teste: [],
     proposta_mot_parametros: [PARAMETROS_SEED()],
     ...extra,
   });
@@ -144,6 +150,7 @@ const lerParametros = (db: any, usuario: string | null) => chamar(db, usuario, r
 const gravarParametros = (db: any, usuario: string | null, corpo: unknown) => chamar(db, usuario, rotaParametros.POST, { metodo: "POST", corpo });
 const proposta = (db: any, id: string) => db.tabelas.propostas.find((p: any) => p.id === id);
 const contadorDe = (db: any, tabela: string, modelo: string) => db.tabelas[tabela].find((c: any) => c.modelo === modelo && c.ano === ANO)?.ultimo ?? 0;
+const ultimoUnico = (db: any) => db.tabelas.proposta_contador_unico.find((c: any) => c.ano === ANO)?.ultimo ?? 0;
 const mais = (dias: number) => calcularValidadeAte(HOJE, dias);
 const PARAMS_NOVOS = (extra: Record<string, unknown> = {}) => ({ vigente_desde: mais(10), ...INICIAIS, taxa_administrativa_bp: 1500, ...extra });
 const salarioDoTeto = 1_000_000_000;
@@ -386,7 +393,8 @@ await caso("MODELOS_ATIVOS = [\"RS\"] e o MOT NÃO está disponível sem a chave
     assert.equal(r.body.error, MENSAGEM_MODELO_INDISPONIVEL);
     assert.equal(db.tabelas.propostas.length, 0);
     assert.equal(db.rpcChamadas.length, 0);
-    assert.equal(contadorDe(db, "proposta_contadores", "MOT"), ULTIMO_MOT, "contador do MOT intacto");
+    assert.equal(ultimoUnico(db), ULTIMO_UNICO, "contador único intacto");
+    assert.equal(contadorDe(db, "proposta_contadores", "MOT"), ULTIMO_UNICO, "contador legado do MOT congelado");
     // Etapa 2D: a ÚNICA exceção é gestor + empresa de teste (a trava completa está em verificar-propostas-mot-telas.mts).
     assert.equal((await criar(db, "u-g", {}, EMP_TESTE)).status, 201);
   }, {});
@@ -421,7 +429,7 @@ await caso("fonte: MODELOS_ATIVOS continua literalmente [\"RS\"], sem ler ambien
 });
 
 // ═══ 4) Criar, editar, enviar ════════════════════════════════════════════════
-await caso("criar MOT (real): número SIGLA-MOT-0072/aa pelo criar_proposta, contador do R&S intacto, template_versao do MOT, conteúdo com padrões, histórico; o R&S depois segue VE-0053", async () => comMot(async () => {
+await caso("criar MOT (real): número SIGLA-MOT-0072/aa pelo criar_proposta, contador ÚNICO anda uma vez (o legado fica congelado), template_versao do MOT, conteúdo com padrões, histórico; o R&S depois segue VE-0073 (mesma sequência)", async () => comMot(async () => {
   const db = novoDb();
   const r = await criar(db, "u-v");
   assert.equal(r.status, 201, JSON.stringify(r.body));
@@ -434,13 +442,14 @@ await caso("criar MOT (real): número SIGLA-MOT-0072/aa pelo criar_proposta, con
   assert.equal(db.rpcChamadas.filter((c: any) => c.rpc === "criar_proposta").length, 1);
   assert.equal(db.rpcChamadas[0].p_modelo, "MOT");
   assert.equal(db.rpcChamadas[0].p_sigla, "VE");
-  assert.equal(contadorDe(db, "proposta_contadores", "MOT"), ULTIMO_MOT + 1);
-  assert.equal(contadorDe(db, "proposta_contadores", "RS"), ULTIMO_RS, "o contador do R&S NÃO andou");
+  assert.equal(ultimoUnico(db), ULTIMO_UNICO + 1, "um único contador anda");
+  assert.equal(contadorDe(db, "proposta_contadores", "MOT"), ULTIMO_UNICO, "contador legado do MOT congelado");
+  assert.equal(contadorDe(db, "proposta_contadores", "RS"), ULTIMO_UNICO, "contador legado do R&S congelado");
   assert.equal(db.tabelas.proposta_historico.filter((h: any) => h.para === "rascunho").length, 1);
   const rs = await chamar(db, "u-v", rotaLista.POST, { metodo: "POST", corpo: { modelo: "RS", empresa_visitada_id: EMP } });
-  assert.equal(rs.body.data.numero, `VE-0053/${AA}`);
+  assert.equal(rs.body.data.numero, `VE-0073/${AA}`, "o R&S segue a MESMA sequência do MOT (72 → 73)");
   assert.equal(rs.body.data.template_versao, TEMPLATE_VERSAO_ATUAL);
-  assert.equal(contadorDe(db, "proposta_contadores", "MOT"), ULTIMO_MOT + 1);
+  assert.equal(ultimoUnico(db), ULTIMO_UNICO + 2);
 }));
 await caso("criar MOT com conteúdo inválido → 400 em português e NADA é criado nem gasta número; conteúdo do R&S no corpo do MOT é recusado", async () => comMot(async () => {
   const db = novoDb();
@@ -452,7 +461,7 @@ await caso("criar MOT com conteúdo inválido → 400 em português e NADA é cr
   }
   assert.equal(db.tabelas.propostas.length, 0);
   assert.equal(db.rpcChamadas.length, 0);
-  assert.equal(contadorDe(db, "proposta_contadores", "MOT"), ULTIMO_MOT);
+  assert.equal(ultimoUnico(db), ULTIMO_UNICO);
 }));
 await caso("editar rascunho MOT valida o conteúdo (400 em português, nada muda); edição válida grava; função nova entra", async () => comMot(async () => {
   const db = novoDb();
@@ -583,8 +592,9 @@ await caso("MOT de TESTE (empresa em empresas_teste): TESTE-MOT-0001/aa pelo cri
   assert.equal(r.body.data.oportunidade_id, null);
   assert.equal(db.rpcChamadas[0].rpc, "criar_proposta_teste");
   assert.equal("p_sigla" in db.rpcChamadas[0], false);
-  assert.equal(contadorDe(db, "proposta_contadores", "MOT"), ULTIMO_MOT, "contador MOT real intacto");
-  assert.equal(contadorDe(db, "proposta_contadores", "RS"), ULTIMO_RS);
+  assert.equal(ultimoUnico(db), ULTIMO_UNICO, "contador único real intacto");
+  assert.equal(contadorDe(db, "proposta_contadores", "MOT"), ULTIMO_UNICO, "contador legado do MOT intacto");
+  assert.equal(contadorDe(db, "proposta_contadores", "RS"), ULTIMO_UNICO, "contador legado do R&S intacto");
   assert.equal(contadorDe(db, "proposta_contadores_teste", "MOT"), 1);
   const base = { o: db.tabelas.oportunidades.length, l: db.tabelas.lembretes.length, i: db.tabelas.oportunidade_interacoes.length };
   const consultas = db.consultas.length;

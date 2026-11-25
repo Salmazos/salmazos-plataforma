@@ -36,10 +36,15 @@ const ANO = Number(HOJE.slice(0, 4));
 const AA = String(ANO).slice(-2);
 const ULTIMO_REAL = 52;
 
-// Imita criar_proposta (versão com p_sigla) e criar_proposta_teste do banco, com fórmula própria e contadores SEPARADOS.
+// Imita criar_proposta (versão com p_sigla) e criar_proposta_teste do banco, com fórmula própria: contador REAL ÚNICO por ano (proposta_contador_unico) e contador de TESTE por modalidade.
 function contador(db: any, tabela: string, modelo: string) {
   let c = db.tabelas[tabela].find((x: any) => x.modelo === modelo && x.ano === ANO);
-  if (!c) { c = { modelo, ano: ANO, ultimo: tabela === "proposta_contadores" ? ULTIMO_REAL : 0 }; db.tabelas[tabela].push(c); }
+  if (!c) { c = { modelo, ano: ANO, ultimo: 0 }; db.tabelas[tabela].push(c); }
+  return c;
+}
+function contadorUnico(db: any) {
+  let c = db.tabelas.proposta_contador_unico.find((x: any) => x.ano === ANO);
+  if (!c) { c = { ano: ANO, ultimo: ULTIMO_REAL }; db.tabelas.proposta_contador_unico.push(c); }
   return c;
 }
 function linhaBase(a: Record<string, unknown>, numero: string, sequencial: number, teste: boolean) {
@@ -52,7 +57,7 @@ function linhaBase(a: Record<string, unknown>, numero: string, sequencial: numbe
 }
 function rpcReal(a: Record<string, unknown>, db: any) {
   (db as any).rpcChamadas.push({ rpc: "criar_proposta", ...a });
-  const c = contador(db, "proposta_contadores", a.p_modelo as string);
+  const c = contadorUnico(db);
   c.ultimo += 1;
   const prefixo = a.p_modelo === "RS" ? `${a.p_sigla}-` : `${a.p_sigla}-${a.p_modelo}-`;
   const linha = linhaBase(a, `${prefixo}${String(c.ultimo).padStart(4, "0")}/${AA}`, c.ultimo, false);
@@ -87,7 +92,7 @@ function novoDb(extra: Record<string, unknown[]> = {}) {
     empresas_teste: [{ empresa_id: EMP_TESTE, marcado_por: G, created_at: "2026-11-20T10:00:00Z" }],
     empresa_contatos: [], oportunidades: [{ id: "opp-1", empresa_visitada_id: EMP_COM_OPP, vendedor_id: V, unidade_id: U, etapa: "contato_feito", proxima_acao: "x", proxima_acao_em: "2030-01-01" }],
     lembretes: [], oportunidade_interacoes: [], propostas: [], proposta_revisoes: [], proposta_historico: [], audit_logs: [],
-    proposta_contadores: [{ modelo: "RS", ano: ANO, ultimo: ULTIMO_REAL }], proposta_contadores_teste: [],
+    proposta_contador_unico: [{ ano: ANO, ultimo: ULTIMO_REAL }], proposta_contadores: [{ modelo: "RS", ano: ANO, ultimo: ULTIMO_REAL }], proposta_contadores_teste: [],
     ...extra,
   });
   db.rpcs = { criar_proposta: rpcReal, criar_proposta_teste: rpcTeste };
@@ -119,7 +124,8 @@ const desmarcar = (db: any, usuario: string | null, empresa: string) => chamar(d
 const painel = (db: any, usuario: string, qs = "") => chamar(db, usuario, rotaPainel.GET, { url: `http://x/api/comercial/propostas/painel${qs}` });
 const empresas = (db: any, usuario: string) => chamar(db, usuario, rotaEmpresas.GET, { url: "http://x/api/comercial/propostas/empresas" });
 const proposta = (db: any, id: string) => db.tabelas.propostas.find((p: any) => p.id === id);
-const contadorReal = (db: any) => db.tabelas.proposta_contadores.find((c: any) => c.modelo === "RS" && c.ano === ANO).ultimo;
+const contadorReal = (db: any) => db.tabelas.proposta_contador_unico.find((c: any) => c.ano === ANO).ultimo;
+const contadorLegado = (db: any) => db.tabelas.proposta_contadores.find((c: any) => c.modelo === "RS" && c.ano === ANO).ultimo;
 const contadorTeste = (db: any) => db.tabelas.proposta_contadores_teste.find((c: any) => c.modelo === "RS" && c.ano === ANO)?.ultimo ?? 0;
 const semFunil = (db: any) => ({ o: db.tabelas.oportunidades.length, l: db.tabelas.lembretes.length, i: db.tabelas.oportunidade_interacoes.length });
 
@@ -157,7 +163,9 @@ await caso("empresa marcada → proposta de TESTE: número TESTE-0001/aa, contad
   const r2 = await criar(db, "u-g", EMP_TESTE);
   assert.equal(r2.body.data.numero, `TESTE-0002/${AA}`);
   assert.equal(contadorReal(db), ULTIMO_REAL);
-  assert.equal(db.tabelas.proposta_contadores.length, 1, "nenhuma linha nova no contador real");
+  assert.equal(db.tabelas.proposta_contador_unico.length, 1, "nenhuma linha nova no contador real");
+  assert.equal(db.tabelas.proposta_contadores.length, 1, "nenhuma linha nova no contador legado");
+  assert.equal(contadorLegado(db), ULTIMO_REAL, "o contador legado nunca é tocado");
 });
 await caso("empresa NÃO marcada → proposta REAL, com o número de hoje (SIGLA-0053/aa) e o contador real andando; teste = false", async () => {
   const db = novoDb();
@@ -187,10 +195,10 @@ await caso("o CORPO não forja teste: campos teste/p_teste/numero/modelo no corp
 });
 await caso("vendedor NÃO cria em empresa de teste (404, nada gravado e contador intacto); a empresa nem aparece na busca dele; gestor vê com a flag", async () => {
   const db = novoDb();
-  const antes = JSON.stringify({ p: db.tabelas.propostas, c: db.tabelas.proposta_contadores, t: db.tabelas.proposta_contadores_teste });
+  const antes = JSON.stringify({ p: db.tabelas.propostas, u: db.tabelas.proposta_contador_unico, c: db.tabelas.proposta_contadores, t: db.tabelas.proposta_contadores_teste });
   const r = await criar(db, "u-v", EMP_TESTE);
   assert.equal(r.status, 404);
-  assert.equal(JSON.stringify({ p: db.tabelas.propostas, c: db.tabelas.proposta_contadores, t: db.tabelas.proposta_contadores_teste }), antes);
+  assert.equal(JSON.stringify({ p: db.tabelas.propostas, u: db.tabelas.proposta_contador_unico, c: db.tabelas.proposta_contadores, t: db.tabelas.proposta_contadores_teste }), antes);
   assert.equal(db.rpcChamadas.length, 0);
   const v = await empresas(db, "u-v");
   assert.equal(v.status, 200);

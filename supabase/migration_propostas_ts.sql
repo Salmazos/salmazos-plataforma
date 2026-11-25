@@ -1,5 +1,5 @@
 -- Propostas de Terceirização de Serviços (TS): percentuais de encargos, cobertura e preço, com vigência.
--- NÃO APLICADA: aplicar manualmente (Supabase) e conferir por SELECT. Nenhum DROP, TRUNCATE, DELETE ou alteração de tabela/dado
+-- APLICADA em 25/11/2026 (Supabase, conferida por SELECT). Nenhum DROP, TRUNCATE, DELETE ou alteração de tabela/dado
 -- existente; idempotente; tudo numa única transação (se qualquer comando falhar, nada fica criado). Pressupõe
 -- supabase/migration_propostas.sql e supabase/migration_propostas_mot.sql já aplicadas (usa proposta_registro_imutavel e as tabelas de propostas).
 --
@@ -10,9 +10,10 @@
 -- (b) Linha inicial: fgts_bp 800, inss_bp 2300, multa_fgts_bp 4000; TODAS as demais colunas em 0 (cobertura, os cinco tributos, despesas, lucro e
 --     margem mínima). Com tributos + despesas + lucro = 0 a lib de cálculo RECUSA calcular preço ("Os percentuais de preço da Terceirização ainda não
 --     foram configurados pela diretoria."): a diretoria precisa cadastrar uma vigência nova com os percentuais de preço antes de qualquer proposta.
--- (c) contador TS: aguardar o número legado do Ölver. Esta migration NÃO cria linha em proposta_contadores nem em proposta_contadores_teste para o TS;
---     sem linha, criar_proposta começa em SIGLA-TS-0001/26 (e criar_proposta_teste em TESTE-TS-0001/26). Se houver número legado, uma migration
---     separada semeia o contador (como a do MOT fez com 71).
+-- (c) contador do TS (comentário atualizado em 25/11/2026; esta migration já está aplicada em produção e o código dela não mudou): o TS NÃO tem contador próprio.
+--     As propostas REAIS de todas as modalidades usam o contador único por ano (supabase/migration_propostas_contador_unico.sql, tabela proposta_contador_unico),
+--     então não há número legado do TS a semear. Esta migration nunca criou linha em proposta_contadores nem em proposta_contadores_teste para o TS. As
+--     propostas de TESTE seguem por modalidade (criar_proposta_teste não mudou): TESTE-TS-0001/aa.
 
 begin;
 

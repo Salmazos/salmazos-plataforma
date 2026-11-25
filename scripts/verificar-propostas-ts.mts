@@ -364,10 +364,11 @@ await caso("as libs do TS não importam servidor, rede, banco, fs nem ambiente; 
   assert.equal((calculo.match(/baseInss: r\./g) ?? []).length, 1, "a base do INSS é definida num ponto só");
 });
 
-await caso("migration 2A: NÃO APLICADA, tabela com os 12 percentuais 0..10000, único em vigente_desde na criação, só inserção, RLS sem policy, sem privilégio, função só para service_role, seed e sem contador", () => {
+await caso("migration 2A: cabeçalho APLICADA em 25/11/2026, tabela com os 12 percentuais 0..10000, único em vigente_desde na criação, só inserção, RLS sem policy, sem privilégio, função só para service_role, seed e sem contador", () => {
   const sql = fs.readFileSync("supabase/migration_propostas_ts.sql", "utf8");
   const codigo = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
-  assert.match(sql, /NÃO APLICADA/);
+  assert.match(sql, /^-- APLICADA em 25\/11\/2026 \(Supabase, conferida por SELECT\)\./m);
+  assert.doesNotMatch(sql, /NÃO APLICADA/);
   assert.match(codigo, /^begin;$/m);
   assert.match(codigo, /^commit;$/m);
   assert.doesNotMatch(codigo, /\b(drop\s+(table|function|index|column|schema)|truncate|delete\s+from)\b/i);
@@ -385,7 +386,8 @@ await caso("migration 2A: NÃO APLICADA, tabela com os 12 percentuais 0..10000, 
   assert.match(codigo, /grant execute on function public\.parametros_ts_vigentes\(date\) to service_role/);
   assert.match(codigo, /select date '2026-11-25', 800, 2300, 4000, 0, 0, 0, 0, 0, 0, 0, 0, 0\s+where not exists/);
   assert.doesNotMatch(codigo, /proposta_contadores/);
-  assert.match(sql, /contador TS: aguardar o número legado do Ölver/);
+  assert.match(sql, /o TS NÃO tem contador próprio/);
+  assert.match(sql, /migration_propostas_contador_unico.sql, tabela proposta_contador_unico/);
   assert.equal(PARAMETROS_TS_INICIAIS.fgts_bp, 800);
   assert.equal(PARAMETROS_TS_INICIAIS.inss_bp, 2300);
   assert.equal(PARAMETROS_TS_INICIAIS.multa_fgts_bp, 4000);

@@ -209,11 +209,12 @@ grant execute on function public.criar_proposta(text, uuid, uuid, uuid, uuid, te
 
 -- Sigla do número = iniciais do vendedor (calculadas pelo app, ex.: OS-0053/26). O contador continua UM por modelo+ano
 -- (proposta_contadores), então o sequencial é o mesmo de antes; só o prefixo do texto muda.
--- ATENÇÃO (risco conhecido, não tratado agora): como o prefixo deixou de ser o modelo, duas propostas de MODELOS
--- diferentes com o mesmo sequencial e a mesma sigla (ex.: RS nº 60 e MOT nº 60 do mesmo vendedor, ou de quem tem as
--- mesmas iniciais) gerariam o mesmo texto e violariam propostas_numero_uq. A criação falharia (e o contador voltaria,
--- na mesma transação), bloqueando aquela sigla naquele modelo até o outro contador andar. Hoje só o R&S está ativo, então
--- não ocorre; resolver ANTES de ativar MOT ou TS (contador único por ano, ou o modelo de volta no número).
+-- RISCO RESOLVIDO (comentário atualizado em 25/11/2026; o código desta migration não mudou). Na época: como o prefixo deixou de ser o modelo, duas
+-- propostas de MODELOS diferentes com o mesmo sequencial e a mesma sigla (ex.: RS nº 60 e MOT nº 60 do mesmo vendedor, ou de quem tem as mesmas
+-- iniciais) gerariam o mesmo texto e violariam propostas_numero_uq. Isso foi eliminado de duas formas: (1) migration_propostas_mot.sql devolveu a marca da
+-- modalidade ao número de MOT e TS (SIGLA-MOT-nnnn/aa, SIGLA-TS-nnnn/aa); (2) migration_propostas_contador_unico.sql (APLICADA em 25/11/2026) tornou o
+-- sequencial ÚNICO por ano para todas as modalidades (proposta_contador_unico), com o índice propostas_ano_seq_real_uq como rede de segurança: dois números
+-- reais nunca repetem o sequencial.
 -- Sobrecarga: a versão sem p_sigla (acima) fica até o merge, para a prévia atual não quebrar. Depois do merge, rodar:
 --   drop function if exists public.criar_proposta(text, uuid, uuid, uuid, uuid, text, text, jsonb, int, int);
 create or replace function public.criar_proposta(

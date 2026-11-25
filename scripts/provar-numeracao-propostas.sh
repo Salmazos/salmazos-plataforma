@@ -2,6 +2,8 @@
 # Prova de numeração de propostas (R&S = SIGLA-seq/ano; MOT/TS = SIGLA-MODELO-seq/ano; a sigla vem do app) e dos percentuais da proposta MOT
 # num Postgres 16 descartável (nada toca o Supabase real). Aplica migration_propostas.sql e depois migration_propostas_mot.sql.
 # Precisa de initdb/pg_ctl/psql do Postgres 16 e de um usuário que não seja root (usa "postgres" se rodar como root).
+# As seções 1 a 11 provam as migrations HISTÓRICAS na ordem em que foram aplicadas (contador por modalidade). A seção 12 prova o CONTADOR ÚNICO
+# (migration_propostas_contador_unico.sql) sobre o estado de produção (RS=71, MOT=71, reais 54..61 e 65), num segundo banco do mesmo servidor.
 # Uso: bash scripts/provar-numeracao-propostas.sh
 set -euo pipefail
 
@@ -399,5 +401,123 @@ esperar "só uma linha em 2031-03-01" "$($PSQL -c "select count(*) from proposta
 esperar "datas diferentes continuam aceitas" "$($PSQL -c "set role service_role; $INS_BASE values ('2031-03-02', 1000, 3200, 3120, 800, 200, 1100, 100, 300, 100, 65, '$G') returning vigente_desde::text")" "2031-03-02"
 esperar "authenticated e anon continuam sem nenhum acesso à tabela (o índice não mudou privilégio)" "$($PSQL -c "select bool_or(has_table_privilege(r, 'public.proposta_mot_parametros', p)) from unnest(array['anon','authenticated']) r, unnest(array['select','insert','update','delete','truncate','references','trigger']) p")" f
 esperar "UPDATE e DELETE continuam barrados pelo gatilho (imutável)" "$(erro_de service_role "$A_U" "update proposta_mot_parametros set fgts_bp = 1")" "ERROR:  registro imutável: UPDATE em proposta_mot_parametros não é permitido"
+echo
+echo "== 12) contador ÚNICO (migration_propostas_contador_unico.sql): banco NOVO com o estado de produção (RS=71, MOT=71, reais 54..61 e 65, testes 62..64)"
+# As seções 1 a 11 provam as migrations HISTÓRICAS, na ordem em que foram aplicadas (contador por modalidade). Esta prova a migration NOVA sobre o estado de
+# produção, num banco separado (as seções anteriores forçaram sequenciais repetidos entre modalidades de propósito, o que o índice parcial novo recusaria).
+MIGRATION_UNICO="$RAIZ/supabase/migration_propostas_contador_unico.sql"
+EXEC "$BIN/createdb -h 127.0.0.1 -p $PORTA -U postgres prova2"
+P2="$BIN/psql -h 127.0.0.1 -p $PORTA -U postgres -d prova2 -v ON_ERROR_STOP=1 -X -q -At"
+erro_de2() { local papel=$1; shift
+  if $P2 -c "set role $papel; $*" >/dev/null 2>"$DIR/e2.txt"; then echo "SEM_ERRO"; else head -1 "$DIR/e2.txt"; fi; }
+$P2 -f "$DIR/stubs.sql"
+for m in "$MIGRATION" "$MIGRATION_MOT" "$MIGRATION_TESTE" "$MIGRATION_VIGENCIA"; do $P2 -f "$m"; done
+U2=$($P2 -c "insert into unidades default values returning id")
+V2=$($P2 -c "insert into analistas_perfil (user_id, nivel_acesso) values (gen_random_uuid(),'analista') returning id")
+ANO_SP=$($P2 -c "select extract(year from (now() at time zone 'America/Sao_Paulo'))::int")
+AA=$(printf '%02d' $((ANO_SP % 100)))
+
+# Estado de produção: R&S reais 54..61 e 65 pelo contador por modalidade; propostas de teste com sequencial 62..64 (nasceram pelo contador real e foram marcadas
+# depois); contadores ajustados à mão para 71 (RS e MOT).
+$P2 -c "insert into proposta_contadores (modelo, ano, ultimo) values ('RS', $ANO_SP, 53) on conflict (modelo, ano) do update set ultimo = 53"
+for i in 1 2 3 4 5 6 7 8; do $P2 -c "set role service_role; select criar_proposta('RS','ES','$U2','$V2',null,null,'R$i',null,'{}'::jsonb,1,15)" >/dev/null; done
+$P2 -c "update proposta_contadores set ultimo = 64 where modelo='RS' and ano=$ANO_SP"
+$P2 -c "set role service_role; select criar_proposta('RS','LM','$U2','$V2',null,null,'R9',null,'{}'::jsonb,1,15)" >/dev/null
+for s in 62 63 64; do
+  $P2 -c "set role service_role; insert into propostas (numero,modelo,ano,sequencial,teste,unidade_id,vendedor_id,cliente_nome) values ('OS-00$s/$AA','RS',$ANO_SP,$s,true,'$U2','$V2','teste')"
+done
+$P2 -c "update proposta_contadores set ultimo = 71 where modelo='RS' and ano=$ANO_SP"
+$P2 -c "insert into proposta_contadores (modelo, ano, ultimo) values ('MOT', $ANO_SP, 71) on conflict (modelo, ano) do update set ultimo = 71"
+LEGADO_ANTES="$($P2 -c "select string_agg(modelo || '=' || ultimo, ',' order by modelo) from proposta_contadores where ano=$ANO_SP")"
+esperar "estado de produção reproduzido: contadores legados RS=71, MOT=71" "$LEGADO_ANTES" "MOT=71,RS=71"
+esperar "estado de produção: maior sequencial REAL = 65 (62 a 64 são de teste)" "$($P2 -c "select max(sequencial) from propostas where not teste and ano=$ANO_SP")" 65
+esperar "nenhuma violação (ano, sequencial) entre as propostas reais antes do índice" "$($P2 -c "select count(*) from (select ano, sequencial from propostas where not teste group by 1,2 having count(*) > 1) x")" 0
+
+META_SQL="select p.prosecdef || '|' || coalesce(p.proconfig::text,'') || '|' || coalesce(p.proacl::text,'') || '|' || p.prorettype::regtype || '|' || pg_get_function_identity_arguments(p.oid) from pg_proc p where p.proname='criar_proposta' and p.pronargs=11"
+META_ANTES_U=$($P2 -c "$META_SQL")
+TESTE_ANTES=$($P2 -c "select md5(pg_get_functiondef(p.oid)) from pg_proc p where p.proname='criar_proposta_teste'")
+CONT_ANTES_U=$($P2 -c "select count(*) || '|' || md5(string_agg(t::text, ',' order by t.modelo, t.ano)) from proposta_contadores t")
+CONTT_ANTES_U=$($P2 -c "select count(*) from proposta_contadores_teste")
+
+echo "-- aplica a migration (1ª vez) e de novo (idempotência)"
+$P2 -f "$MIGRATION_UNICO"
+$P2 -f "$MIGRATION_UNICO"
+echo "ok: duas aplicações sem erro"
+esperar "semente = greatest(legado 71, maior real 65, 0) = 71 (calculada na hora de aplicar)" "$($P2 -c "select ultimo from proposta_contador_unico where ano=$ANO_SP")" 71
+esperar "uma linha só no contador único" "$($P2 -c "select count(*) from proposta_contador_unico")" 1
+esperar "criar_proposta (11 args): mesma assinatura, retorno, search_path, security definer e grants" "$($P2 -c "$META_SQL")" "$META_ANTES_U"
+esperar "criar_proposta passou a usar o contador único e NÃO o legado" "$($P2 -c "select pg_get_functiondef('public.criar_proposta(text,text,uuid,uuid,uuid,uuid,text,text,jsonb,integer,integer)'::regprocedure) like '%proposta_contadores%'")" f
+esperar "criar_proposta_teste NÃO foi alterada (mesmo corpo)" "$($P2 -c "select md5(pg_get_functiondef(p.oid)) from pg_proc p where p.proname='criar_proposta_teste'")" "$TESTE_ANTES"
+esperar "proposta_contadores (legado) intacta: mesma contagem e mesmo conteúdo" "$($P2 -c "select count(*) || '|' || md5(string_agg(t::text, ',' order by t.modelo, t.ano)) from proposta_contadores t")" "$CONT_ANTES_U"
+esperar "o índice parcial de segurança existe" "$($P2 -c "select indexdef from pg_indexes where indexname='propostas_ano_seq_real_uq'")" "CREATE UNIQUE INDEX propostas_ano_seq_real_uq ON public.propostas USING btree (ano, sequencial) WHERE (NOT teste)"
+
+echo "-- 3 modalidades em sequência: 72, 73, 74 (a marca da modalidade continua no número)"
+N_RS=$($P2 -c "set role service_role; select numero from criar_proposta('RS','LM','$U2','$V2',null,null,'U1',null,'{}'::jsonb,1,15)" | tail -1)
+N_MOT=$($P2 -c "set role service_role; select numero from criar_proposta('MOT','LM','$U2','$V2',null,null,'U2',null,'{}'::jsonb,1,15)" | tail -1)
+N_TS=$($P2 -c "set role service_role; select numero from criar_proposta('TS','LM','$U2','$V2',null,null,'U3',null,'{}'::jsonb,1,15)" | tail -1)
+esperar "R&S: próxima da sequência única" "$N_RS" "LM-0072/$AA"
+esperar "MOT: segue a MESMA sequência" "$N_MOT" "LM-MOT-0073/$AA"
+esperar "TS: segue a MESMA sequência" "$N_TS" "LM-TS-0074/$AA"
+esperar "contador único = 74" "$($P2 -c "select ultimo from proposta_contador_unico where ano=$ANO_SP")" 74
+esperar "contadores legados congelados (RS=71, MOT=71, sem linha de TS)" "$($P2 -c "select string_agg(modelo || '=' || ultimo, ',' order by modelo) from proposta_contadores where ano=$ANO_SP")" "$LEGADO_ANTES"
+esperar "nenhum sequencial real repetido entre modalidades" "$($P2 -c "select count(*) - count(distinct sequencial) from propostas where not teste and ano=$ANO_SP")" 0
+esperar "nenhum número repetido" "$($P2 -c "select count(*) - count(distinct numero) from propostas")" 0
+
+echo "-- reaplicar DEPOIS de o contador andar não regride nem reaplica a semente"
+$P2 -f "$MIGRATION_UNICO"
+esperar "contador único continua 74 depois de reaplicar a migration" "$($P2 -c "select ultimo from proposta_contador_unico where ano=$ANO_SP")" 74
+
+echo "-- falha no insert devolve o contador (vendedor inexistente viola a FK)"
+if $P2 -c "set role service_role; select criar_proposta('MOT','LM','$U2','00000000-0000-0000-0000-000000000000',null,null,'X',null,'{}'::jsonb,1,15)" >/dev/null 2>"$DIR/e2.txt"; then echo "ERRO: a chamada deveria ter falhado"; exit 1; fi
+echo "erro recebido: $(head -1 "$DIR/e2.txt")"
+esperar "contador único não avançou com a falha" "$($P2 -c "select ultimo from proposta_contador_unico where ano=$ANO_SP")" 74
+for ruim in "os" "" "ABCDE"; do
+  if $P2 -c "set role service_role; select criar_proposta('RS','$ruim','$U2','$V2',null,null,'S',null,'{}'::jsonb,1,15)" >/dev/null 2>"$DIR/e2.txt"; then echo "ERRO: sigla '$ruim' aceita"; exit 1; fi
+done
+if $P2 -c "set role service_role; select criar_proposta('XX','LM','$U2','$V2',null,null,'S',null,'{}'::jsonb,1,15)" >/dev/null 2>"$DIR/e2.txt"; then echo "ERRO: modelo inválido aceito"; exit 1; fi
+esperar "sigla e modelo inválidos também não gastam número" "$($P2 -c "select ultimo from proposta_contador_unico where ano=$ANO_SP")" 74
+
+echo "-- $SESSOES sessões simultâneas, modalidades misturadas: números distintos, consecutivos e sem buraco"
+for i in $(seq 1 "$SESSOES"); do
+  case $((i % 3)) in 0) M=RS;; 1) M=MOT;; *) M=TS;; esac
+  EXEC "$P2 -c \"set role service_role; select numero from criar_proposta('$M','LM','$U2','$V2',null,null,'C$i',null,'{}'::jsonb,1,15)\" > $DIR/u.$i" &
+done
+wait
+cat "$DIR"/u.* | sort > "$DIR/numeros_u.txt"
+esperar "todas as chamadas retornaram número" "$(wc -l < "$DIR/numeros_u.txt" | tr -d ' ')" "$SESSOES"
+esperar "números distintos (nenhum repetido)" "$(sort -u "$DIR/numeros_u.txt" | wc -l | tr -d ' ')" "$SESSOES"
+esperar "sequenciais 75..$((74 + SESSOES)) sem buraco" "$($P2 -c "select min(sequencial) || '..' || max(sequencial) || ' n=' || count(*) from propostas where not teste and ano=$ANO_SP and sequencial > 74")" "75..$((74 + SESSOES)) n=$SESSOES"
+esperar "contador único = $((74 + SESSOES))" "$($P2 -c "select ultimo from proposta_contador_unico where ano=$ANO_SP")" "$((74 + SESSOES))"
+
+echo "-- rede de segurança: (ano, sequencial) real repetido em outra modalidade é recusado; o mesmo sequencial em proposta de TESTE é permitido (índice parcial)"
+if $P2 -c "set role service_role; insert into propostas (numero,modelo,ano,sequencial,teste,unidade_id,vendedor_id,cliente_nome) values ('ZZ-TS-DUP/$AA','TS',$ANO_SP,72,false,'$U2','$V2','dup')" >/dev/null 2>"$DIR/e2.txt"; then echo "ERRO: sequencial real repetido aceito"; exit 1; fi
+esperar "recusado pelo índice parcial" "$(head -1 "$DIR/e2.txt")" 'ERROR:  duplicate key value violates unique constraint "propostas_ano_seq_real_uq"'
+esperar "o mesmo (ano, sequencial) numa proposta de TESTE de outra modalidade é aceito" "$($P2 -c "set role service_role; insert into propostas (numero,modelo,ano,sequencial,teste,unidade_id,vendedor_id,cliente_nome) values ('ZZ-TESTE-TS/$AA','TS',$ANO_SP,72,true,'$U2','$V2','ok') returning teste::text" | tail -1)" true
+
+echo "-- teste separado e por modalidade: o contador real único e os legados não andam"
+UNICO_ANTES_T=$($P2 -c "select ultimo from proposta_contador_unico where ano=$ANO_SP")
+T_RS=$($P2 -c "set role service_role; select numero from criar_proposta_teste('RS','$U2','$V2',null,null,'T1',null,'{}'::jsonb,1,15)" | tail -1)
+T_MOT=$($P2 -c "set role service_role; select numero from criar_proposta_teste('MOT','$U2','$V2',null,null,'T2',null,'{}'::jsonb,1,15)" | tail -1)
+T_RS2=$($P2 -c "set role service_role; select numero from criar_proposta_teste('RS','$U2','$V2',null,null,'T3',null,'{}'::jsonb,1,15)" | tail -1)
+esperar "teste R&S" "$T_RS" "TESTE-0001/$AA"
+esperar "teste MOT (sequência própria da modalidade)" "$T_MOT" "TESTE-MOT-0001/$AA"
+esperar "teste R&S, segundo" "$T_RS2" "TESTE-0002/$AA"
+esperar "contador real único não andou com os testes" "$($P2 -c "select ultimo from proposta_contador_unico where ano=$ANO_SP")" "$UNICO_ANTES_T"
+esperar "contadores legados não andaram com os testes" "$($P2 -c "select string_agg(modelo || '=' || ultimo, ',' order by modelo) from proposta_contadores where ano=$ANO_SP")" "$LEGADO_ANTES"
+esperar "contadores de teste: RS=2, MOT=1" "$($P2 -c "select string_agg(modelo || '=' || ultimo, ',' order by modelo) from proposta_contadores_teste where ano=$ANO_SP")" "MOT=1,RS=2"
+
+echo "-- privilégios: só service_role"
+esperar "RLS ligada no contador único" "$($P2 -c "select relrowsecurity from pg_class where oid='public.proposta_contador_unico'::regclass")" t
+esperar "nenhuma policy" "$($P2 -c "select count(*) from pg_policies where tablename='proposta_contador_unico'")" 0
+esperar "anon e authenticated sem nenhum privilégio na tabela (has_table_privilege)" "$($P2 -c "select bool_or(has_table_privilege(r, 'public.proposta_contador_unico', p)) from unnest(array['anon','authenticated']) r, unnest(array['select','insert','update','delete']) p")" f
+esperar "service_role lê, insere e atualiza" "$($P2 -c "select bool_and(has_table_privilege('service_role', 'public.proposta_contador_unico', p)) from unnest(array['select','insert','update']) p")" t
+for papel in anon authenticated; do
+  esperar "$papel não lê o contador único" "$(erro_de2 $papel "select count(*) from proposta_contador_unico")" "ERROR:  permission denied for table proposta_contador_unico"
+  esperar "$papel não altera o contador único" "$(erro_de2 $papel "update proposta_contador_unico set ultimo = 1")" "ERROR:  permission denied for table proposta_contador_unico"
+done
+esperar "criar_proposta (11 args): execute só para service_role" "$($P2 -c "select string_agg(r || '=' || has_function_privilege(r, 'public.criar_proposta(text,text,uuid,uuid,uuid,uuid,text,text,jsonb,integer,integer)', 'execute')::text, ',' order by r) from unnest(array['anon','authenticated','service_role']) r")" "anon=false,authenticated=false,service_role=true"
+esperar "check (ultimo >= 0) no contador" "$($P2 -c "select count(*) from pg_constraint where conrelid='public.proposta_contador_unico'::regclass and contype='c' and pg_get_constraintdef(oid) like '%ultimo >= 0%'")" 1
+echo "NÃO COBERTO AQUI: a virada de ano (01/01 em São Paulo, primeira proposta 0001/aa) depende do relógio do banco; está provada no modelo da função em scripts/verificar-propostas-contador-unico.mts e pela leitura de v_ano em America/Sao_Paulo na função."
+
 echo
 echo "PROVA CONCLUÍDA"

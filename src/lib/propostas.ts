@@ -3,7 +3,8 @@
 
 export const MODELOS = ["RS", "MOT", "TS"] as const;
 export type ModeloProposta = (typeof MODELOS)[number];
-// Só o R&S tem texto e PDF na Fase 1; MOT e TS já existem no banco (CHECK e contador) e aparecem como "Em breve".
+// Só o R&S tem texto e PDF na Fase 1; MOT e TS já existem no banco (CHECK; a numeração real é UMA sequência por ano para as 3 modalidades, ver
+// supabase/migration_propostas_contador_unico.sql) e aparecem como "Em breve".
 export const MODELOS_ATIVOS: ModeloProposta[] = ["RS"];
 
 export const ROTULO_MODELO: Record<ModeloProposta, string> = {

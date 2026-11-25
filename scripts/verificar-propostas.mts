@@ -906,14 +906,14 @@ const ANO = Number(HOJE.slice(0, 4));
 const AA = String(ANO).slice(-2);
 const IMUTAVEIS = ["proposta_revisoes", "proposta_historico"];
 
-// Imita criar_proposta do banco (versão com p_sigla) com fórmula própria (independente de formatarNumeroProposta): contador por modelo+ano.
+// Imita criar_proposta do banco (versão com p_sigla) com fórmula própria (independente de formatarNumeroProposta): contador ÚNICO por ano (proposta_contador_unico), para todas as modalidades.
 function rpcCriarProposta(a: Record<string, unknown>, db: ReturnType<typeof criarDb>) {
   if (!["RS", "MOT", "TS"].includes(a.p_modelo as string)) return { data: null, error: { message: `Modelo de proposta inválido: ${a.p_modelo}` } };
   if (typeof a.p_sigla !== "string" || !/^[A-Z]{1,4}$/.test(a.p_sigla)) return { data: null, error: { message: `Sigla de proposta inválida: ${a.p_sigla ?? "(nula)"}` } };
   (db as any).rpcChamadas.push(a);
-  const cont = db.tabelas.proposta_contadores;
-  let c = cont.find((x: any) => x.modelo === a.p_modelo && x.ano === ANO);
-  if (!c) { c = { modelo: a.p_modelo, ano: ANO, ultimo: 0 }; cont.push(c); }
+  const cont = db.tabelas.proposta_contador_unico;
+  let c = cont.find((x: any) => x.ano === ANO);
+  if (!c) { c = { ano: ANO, ultimo: 0 }; cont.push(c); }
   c.ultimo += 1;
   const agora = new Date().toISOString();
   const linha = {
@@ -944,7 +944,8 @@ function novoDb(extra: Record<string, unknown[]> = {}) {
     empresas_visitadas: [{ id: EMP, nome: "Empresa X", cliente_id: null, unidade_id: U }, { id: EMP_OUTRA_UNIDADE, nome: "Empresa Y", cliente_id: null, unidade_id: U2 }],
     empresa_contatos: [{ id: CT, nome: "Ana Contato", empresa_visitada_id: EMP }, { id: CT_FORA, nome: "Fora", empresa_visitada_id: EMP_OUTRA_UNIDADE }],
     oportunidades: [], lembretes: [], oportunidade_interacoes: [], propostas: [], proposta_revisoes: [], proposta_historico: [],
-    proposta_contadores: [{ modelo: "RS", ano: ANO, ultimo: 52 }],
+    proposta_contador_unico: [{ ano: ANO, ultimo: 52 }],
+    proposta_contadores: [{ modelo: "RS", ano: ANO, ultimo: 52 }], // legado: congelado, nada mais o lê nem escreve
     ...extra,
   });
   db.rpcs = { criar_proposta: rpcCriarProposta };
@@ -1014,7 +1015,8 @@ await caso("criar: MOT e TS → 400 'Modelo ainda não disponível.'; modelo ine
   }
   assert.equal((await criar(db, { modelo: "XX" })).status, 400);
   assert.equal(db.rpcChamadas.length, 0);
-  assert.equal(db.tabelas.proposta_contadores[0].ultimo, 52);
+  assert.equal(db.tabelas.proposta_contador_unico[0].ultimo, 52);
+  assert.equal(db.tabelas.proposta_contadores[0].ultimo, 52, "o contador legado nunca é tocado");
 });
 await caso("criar: percentual apagado → 400 'Informe o percentual.' (nada é criado)", async () => {
   const db = novoDb();
@@ -1432,7 +1434,8 @@ await caso("criar (API): nome vazio, só com partículas ou sem letras → 400 '
     assert.equal(MSG_NOME_INCOMPLETO, "Complete seu nome no perfil para criar propostas.");
     assert.equal(db.rpcChamadas.length, 0);
     assert.equal(db.tabelas.propostas.length, 0);
-    assert.equal(db.tabelas.proposta_contadores.find((c: any) => c.modelo === "RS").ultimo, 52);
+    assert.equal(db.tabelas.proposta_contador_unico.find((c: any) => c.ano === ANO).ultimo, 52);
+    assert.equal(db.tabelas.proposta_contadores.find((c: any) => c.modelo === "RS").ultimo, 52, "o contador legado nunca é tocado");
   }
 });
 await caso("conteúdo novo (API): criar com introdução e cláusulas grava no conteudo; editar rascunho no lugar; enviada gera Rev. 1 com o snapshot novo e Rev. 0 intacta", async () => {

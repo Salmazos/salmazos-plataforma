@@ -38,7 +38,7 @@ const EMP = "55555555-5555-4555-8555-000000000001", EMP_TESTE = "55555555-5555-4
 const HOJE = hojeSaoPaulo();
 const ANO = Number(HOJE.slice(0, 4));
 const AA = String(ANO).slice(-2);
-const ULTIMO_RS = 52, ULTIMO_MOT = 71;
+const ULTIMO_UNICO = 71; // semente do contador ÚNICO das propostas reais (RS=71 e MOT=71 em 25/11/2026): a próxima, de qualquer modalidade, é a 72
 const INICIAIS = { ...PARAMETROS_MOT_INICIAIS };
 
 // ── Chave de teste do MOT (só do harness) ────────────────────────────────────
@@ -58,6 +58,12 @@ function contador(db: any, tabela: string, modelo: string, inicial: number) {
   if (!c) { c = { modelo, ano: ANO, ultimo: inicial }; db.tabelas[tabela].push(c); }
   return c;
 }
+// criar_proposta do banco: UM contador por ANO para todas as modalidades (proposta_contador_unico); o legado (proposta_contadores) fica congelado.
+function contadorUnico(db: any) {
+  let c = db.tabelas.proposta_contador_unico.find((x: any) => x.ano === ANO);
+  if (!c) { c = { ano: ANO, ultimo: 0 }; db.tabelas.proposta_contador_unico.push(c); }
+  return c;
+}
 function linhaBase(a: Record<string, unknown>, numero: string, sequencial: number, teste: boolean) {
   const agora = new Date().toISOString();
   return {
@@ -68,7 +74,7 @@ function linhaBase(a: Record<string, unknown>, numero: string, sequencial: numbe
 }
 function rpcReal(a: Record<string, unknown>, db: any) {
   db.rpcChamadas.push({ rpc: "criar_proposta", ...a });
-  const c = contador(db, "proposta_contadores", a.p_modelo as string, a.p_modelo === "MOT" ? ULTIMO_MOT : ULTIMO_RS);
+  const c = contadorUnico(db);
   c.ultimo += 1;
   const prefixo = a.p_modelo === "RS" ? `${a.p_sigla}-` : `${a.p_sigla}-${a.p_modelo}-`;
   const linha = linhaBase(a, `${prefixo}${String(c.ultimo).padStart(4, "0")}/${AA}`, c.ultimo, false);
@@ -108,7 +114,7 @@ function novoDb(extra: Record<string, unknown[]> = {}) {
     empresas_visitadas: [{ id: EMP, nome: "Pastifício Selmi S/A", cliente_id: null, unidade_id: U }, { id: EMP_TESTE, nome: "cliente teste", cliente_id: null, unidade_id: U }],
     empresas_teste: [{ empresa_id: EMP_TESTE, marcado_por: G, created_at: "2026-11-20T10:00:00Z" }],
     empresa_contatos: [], oportunidades: [], lembretes: [], oportunidade_interacoes: [], propostas: [], proposta_revisoes: [], proposta_historico: [], audit_logs: [],
-    proposta_contadores: [{ modelo: "RS", ano: ANO, ultimo: ULTIMO_RS }, { modelo: "MOT", ano: ANO, ultimo: ULTIMO_MOT }], proposta_contadores_teste: [],
+    proposta_contador_unico: [{ ano: ANO, ultimo: ULTIMO_UNICO }], proposta_contadores: [{ modelo: "RS", ano: ANO, ultimo: ULTIMO_UNICO }, { modelo: "MOT", ano: ANO, ultimo: ULTIMO_UNICO }], proposta_contadores_teste: [],
     proposta_mot_parametros: [PARAMETROS_SEED()],
     ...extra,
   });
@@ -144,6 +150,7 @@ const lerParametros = (db: any, usuario: string | null) => chamar(db, usuario, r
 const gravarParametros = (db: any, usuario: string | null, corpo: unknown) => chamar(db, usuario, rotaParametros.POST, { metodo: "POST", corpo });
 const proposta = (db: any, id: string) => db.tabelas.propostas.find((p: any) => p.id === id);
 const contadorDe = (db: any, tabela: string, modelo: string) => db.tabelas[tabela].find((c: any) => c.modelo === modelo && c.ano === ANO)?.ultimo ?? 0;
+const ultimoUnico = (db: any) => db.tabelas.proposta_contador_unico.find((c: any) => c.ano === ANO)?.ultimo ?? 0;
 const mais = (dias: number) => calcularValidadeAte(HOJE, dias);
 const PARAMS_NOVOS = (extra: Record<string, unknown> = {}) => ({ vigente_desde: mais(10), ...INICIAIS, taxa_administrativa_bp: 1500, ...extra });
 const salarioDoTeto = 1_000_000_000;
