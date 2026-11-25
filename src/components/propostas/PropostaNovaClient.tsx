@@ -7,6 +7,7 @@ import { rotuloEtapa } from "@/lib/comercialRotulos";
 import { MODELOS, MODELOS_ATIVOS, ROTULO_MODELO, type ModeloProposta } from "@/lib/propostas";
 import CamposProposta, { camposPadrao, conteudoDoForm, validadeDoForm, type CamposForm } from "@/components/propostas/CamposProposta";
 import CamposPropostaMot, { camposMotPadrao, conteudoMotDoForm, validadeMotDoForm, type CamposMotForm, type EstadoPrevia } from "@/components/propostas/CamposPropostaMot";
+import { aplicarPrefill, lerDadosPrefill, type DadosPrefill } from "@/lib/propostaPrefill";
 import { Aviso, btnPrimario, btnSecundario, cardStyle, inputStyle, labelStyle, lerResposta, guardarAvisoProposta } from "@/components/propostas/propostasUi";
 
 interface Contato { id: string; nome: string; cargo: string | null; principal: boolean }
@@ -41,6 +42,8 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
   const [alternandoTeste, setAlternandoTeste] = useState(false);
   const [erroTeste, setErroTeste] = useState("");
   const emAndamento = useRef(false);
+  // Descarta a resposta atrasada de uma empresa que já foi trocada.
+  const sequenciaPrefill = useRef(0);
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Carteira da unidade do vendedor (a rota já filtra por unidade). Uma busca por pausa na digitação, sem repetição automática.
@@ -69,13 +72,31 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
   const motLiberado = gestor && empresa?.teste === true;
   const modeloAtual: ModeloProposta = modelo === "MOT" && !motLiberado ? "RS" : modelo;
 
+  // Preenche SÓ os campos vazios da MESMA empresa com os dados do cadastro (nunca sobrescreve o que o vendedor digitou). Os dois formulários (R&S e MOT)
+  // recebem o mesmo A/C; CNPJ e endereço só existem no R&S.
+  function preencherDoCadastro(dados: DadosPrefill) {
+    setCampos((c) => aplicarPrefill(c, dados));
+    setCamposMot((c) => ({ ...c, aos_cuidados: aplicarPrefill({ aos_cuidados: c.aos_cuidados, cliente_cnpj: "", cliente_endereco: "" }, { ...dados, cnpj: null, cidade: null, endereco: null }).aos_cuidados }));
+  }
+
   function escolher(e: EmpresaOpc) {
     setEmpresa(e);
     const principal = e.contatos.find((c) => c.principal) ?? e.contatos[0];
     setContatoId(principal?.id ?? "");
-    // Recomeça do zero: A/C, CNPJ, endereço e condições da empresa anterior não podem vazar para esta.
+    // Trocar de empresa REINICIA tudo (A/C, CNPJ, endereço, condições, cláusulas...): A/C, CNPJ e endereço pertencem à empresa e nada da anterior atravessa a
+    // troca, nem o que foi digitado. O A/C já vem do contato principal da lista (ou o primeiro); CNPJ e endereço chegam pela rota leve, logo abaixo.
     setCampos({ ...camposPadrao(), aos_cuidados: principal?.nome ?? "" });
     setCamposMot({ ...camposMotPadrao(), aos_cuidados: principal?.nome ?? "" });
+    // Se a consulta falhar, os campos simplesmente ficam vazios para o vendedor digitar.
+    const sequencia = ++sequenciaPrefill.current;
+    fetch(`/api/comercial/propostas/empresas/${e.id}/prefill`)
+      .then((resp) => (resp.ok ? resp.json() : null))
+      .then((json) => {
+        if (sequencia !== sequenciaPrefill.current) return; // já escolheu outra empresa
+        const dados = lerDadosPrefill(json);
+        if (dados) preencherDoCadastro(dados);
+      })
+      .catch(() => {});
   }
 
   // Cliente cadastrado sem Carteira: a empresa é criada (ou, se já existir, devolvida) pelo servidor e a tela segue com a EMPRESA REAL, com o A/C do contato principal.

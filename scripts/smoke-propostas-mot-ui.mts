@@ -729,4 +729,153 @@ await caso("Nova proposta (gestor): a empresa criada do cliente vem com teste:fa
   assert.equal(botaoModelo(r, "MOT").props.disabled, true);
 });
 
+// ═══ Tela "Nova proposta": pré-preenchimento a partir do cadastro (A/C, CNPJ, endereço) ═══════════════════════════════════════════
+const EMP_A = { id: "e-a", nome: "ZZTEST Empresa A", contatos: [{ id: "ca1", nome: "Ana Principal", cargo: "RH", principal: true }, { id: "ca2", nome: "Zé Segundo", cargo: null, principal: false }] };
+const EMP_B = { id: "e-b", nome: "ZZTEST Empresa B", contatos: [] };
+const EMP_C = { id: "e-c", nome: "ZZTEST Empresa C", contatos: [{ id: "cc1", nome: "Carla Contato", cargo: null, principal: true }] };
+const ENDERECO_A = "Rua Ribeirão Preto, 251, Térreo — Jardim do Trevo, Campinas - SP, CEP 13030-140";
+const PREFILL: Record<string, unknown> = {
+  "e-a": { contato: { nome: "Ana Principal", cargo: "RH" }, cnpj: "21235881000108", endereco: ENDERECO_A, cidade: "Campinas" },
+  "e-b": { contato: null, cnpj: null, endereco: null, cidade: null },
+  "e-c": { contato: { nome: "Carla Contato", cargo: null }, cnpj: "CNPJ pendente", endereco: null, cidade: "Sumaré" },
+};
+const prefillDe = (url: string) => PREFILL[url.split("/empresas/")[1]?.split("/")[0] ?? ""];
+async function montarComPrefill(gestor = false, empresas: unknown[] = [EMP_A, EMP_B, EMP_C]) {
+  const m = await montarNova(gestor, empresas);
+  const anterior = resposta;
+  resposta = (c) => (c.metodo === "GET" && c.url.endsWith("/prefill") ? { status: 200, corpo: { data: prefillDe(c.url) } } : anterior(c));
+  return m;
+}
+const campoPorLimite = (r: TestRenderer.ReactTestRenderer, max: number) => r.root.findAll((n) => n.type === "input" && n.props.maxLength === max)[0];
+const valorAC = (r: TestRenderer.ReactTestRenderer) => campoPorLimite(r, 200).props.value;
+const valorCnpj = (r: TestRenderer.ReactTestRenderer) => campoPorLimite(r, 30).props.value;
+const valorEndereco = (r: TestRenderer.ReactTestRenderer) => campoPorLimite(r, 300).props.value;
+const tres = (r: TestRenderer.ReactTestRenderer) => [valorAC(r), valorCnpj(r), valorEndereco(r)];
+const digitarNo = async (campo: TestRenderer.ReactTestInstance, valor: string) => { await act(async () => { campo.props.onChange({ target: { value: valor } }); }); };
+const chamadasPrefill = () => chamadas.filter((c) => c.url.endsWith("/prefill"));
+
+await caso("pré-preenchimento: empresa com contato principal e cliente preenche A/C (principal), CNPJ (com a máscara do sistema) e endereço (o do cadastro); tudo segue editável; uma única consulta leve", async () => {
+  const { r } = await montarComPrefill();
+  await escolherEmpresa(r, "ZZTEST Empresa A");
+  await esperar(20);
+  assert.deepEqual(tres(r), ["Ana Principal", "21.235.881/0001-08", ENDERECO_A]);
+  assert.equal(chamadasPrefill().length, 1);
+  assert.equal(chamadasPrefill()[0].url, "/api/comercial/propostas/empresas/e-a/prefill");
+  assert.equal(chamadasPrefill()[0].metodo, "GET");
+  for (const n of [campoPorLimite(r, 200), campoPorLimite(r, 30), campoPorLimite(r, 300)]) assert.ok(!n.props.disabled && !n.props.readOnly, "continua editável");
+  // Editar e criar: o corpo enviado é o do formulário (o que está na tela), não o do cadastro.
+  await digitarNo(campoPorLimite(r, 30), "21.235.881/0001-08 (matriz)");
+  await clicar(botaoPorTexto(r, "Criar rascunho"));
+  await esperar(20);
+  const post = chamadas.find((c) => c.metodo === "POST" && c.url === "/api/comercial/propostas")!;
+  assert.equal(post.corpo.aos_cuidados, "Ana Principal");
+  assert.equal(post.corpo.conteudo.cliente_cnpj, "21.235.881/0001-08 (matriz)");
+  assert.equal(post.corpo.conteudo.cliente_endereco, ENDERECO_A);
+});
+await caso("pré-preenchimento: empresa sem contato e sem cliente deixa A/C, CNPJ e endereço VAZIOS; sem endereço o campo recebe a cidade; CNPJ fora do padrão vem como texto, sem bloquear", async () => {
+  const { r } = await montarComPrefill();
+  await escolherEmpresa(r, "ZZTEST Empresa B");
+  await esperar(20);
+  assert.deepEqual(tres(r), ["", "", ""]);
+  await clicar(botaoPorTexto(r, "Trocar empresa"));
+  await escolherEmpresa(r, "ZZTEST Empresa C");
+  await esperar(20);
+  assert.deepEqual(tres(r), ["Carla Contato", "CNPJ pendente", "Sumaré"]);
+});
+await caso("TROCA DE EMPRESA reinicia A/C, CNPJ e endereço, MESMO os digitados: digitar nos três na empresa A e trocar para a B não deixa NADA de A; para a C vêm os dados da C", async () => {
+  const { r } = await montarComPrefill();
+  await escolherEmpresa(r, "ZZTEST Empresa A");
+  await esperar(20);
+  await digitarNo(campoPorLimite(r, 200), "Maria do Financeiro");
+  await digitarNo(campoPorLimite(r, 30), "99.999.999/0001-99");
+  await digitarNo(campoPorLimite(r, 300), "Rua do Vendedor, 10");
+  assert.deepEqual(tres(r), ["Maria do Financeiro", "99.999.999/0001-99", "Rua do Vendedor, 10"]);
+  await clicar(botaoPorTexto(r, "Trocar empresa"));
+  await escolherEmpresa(r, "ZZTEST Empresa B");
+  await esperar(20);
+  assert.deepEqual(tres(r), ["", "", ""], "empresa sem dados: nada da A sobra, nem o digitado");
+  assert.ok(!JSON.stringify(r.toJSON()).includes("Maria do Financeiro") && !JSON.stringify(r.toJSON()).includes("99.999.999") && !JSON.stringify(r.toJSON()).includes("Rua do Vendedor"));
+  // Digita na B e troca para a C: de novo, só os dados da C.
+  await digitarNo(campoPorLimite(r, 30), "11.111.111/0001-11");
+  await digitarNo(campoPorLimite(r, 300), "Endereço da B digitado");
+  await clicar(botaoPorTexto(r, "Trocar empresa"));
+  await escolherEmpresa(r, "ZZTEST Empresa C");
+  await esperar(20);
+  assert.deepEqual(tres(r), ["Carla Contato", "CNPJ pendente", "Sumaré"]);
+  // E o corpo enviado é o da empresa atual.
+  await clicar(botaoPorTexto(r, "Criar rascunho"));
+  await esperar(20);
+  const post = chamadas.find((c) => c.metodo === "POST" && c.url === "/api/comercial/propostas")!;
+  assert.equal(post.corpo.empresa_visitada_id, "e-c");
+  assert.deepEqual([post.corpo.aos_cuidados, post.corpo.conteudo.cliente_cnpj, post.corpo.conteudo.cliente_endereco], ["Carla Contato", "CNPJ pendente", "Sumaré"]);
+});
+await caso("MESMA empresa: o que o vendedor digitou ANTES da resposta do cadastro não é sobrescrito; os campos que continuam vazios são preenchidos", async () => {
+  const { r } = await montarComPrefill();
+  let liberar!: () => void;
+  const portao = new Promise<void>((ok) => { liberar = ok; });
+  const antes = (globalThis as any).fetch;
+  (globalThis as any).fetch = async (u: string, i?: RequestInit) => { if (String(u).endsWith("/prefill")) await portao; return antes(u, i); };
+  await escolherEmpresa(r, "ZZTEST Empresa A");
+  await digitarNo(campoPorLimite(r, 30), "CNPJ digitado antes");
+  await digitarNo(campoPorLimite(r, 200), "Maria digitou o A/C");
+  assert.deepEqual(tres(r), ["Maria digitou o A/C", "CNPJ digitado antes", ""]);
+  await act(async () => { liberar(); await new Promise((ok) => setTimeout(ok, 20)); });
+  (globalThis as any).fetch = antes;
+  assert.deepEqual(tres(r), ["Maria digitou o A/C", "CNPJ digitado antes", ENDERECO_A], "digitado fica; só o endereço (vazio) foi preenchido");
+});
+await caso("RESPOSTA ATRASADA de uma empresa já trocada é descartada: escolher A e logo a C mostra só os dados da C; e a resposta da A que chega depois da troca não entra", async () => {
+  const { r } = await montarComPrefill();
+  const a = botoes(r).find((b) => txt(b).includes("ZZTEST Empresa A"))!;
+  const c = botoes(r).find((b) => txt(b).includes("ZZTEST Empresa C"))!;
+  await act(async () => { a.props.onClick(); c.props.onClick(); });
+  await esperar(30);
+  assert.deepEqual(tres(r), ["Carla Contato", "CNPJ pendente", "Sumaré"]);
+  assert.equal(chamadasPrefill().length, 2);
+  // A resposta da A fica presa; a troca para a B acontece; a resposta da A é liberada DEPOIS e não pode aparecer.
+  await clicar(botaoPorTexto(r, "Trocar empresa"));
+  let liberar!: () => void;
+  const portao = new Promise<void>((ok) => { liberar = ok; });
+  const antes = (globalThis as any).fetch;
+  (globalThis as any).fetch = async (u: string, i?: RequestInit) => { if (String(u).includes("/e-a/prefill")) await portao; return antes(u, i); };
+  await escolherEmpresa(r, "ZZTEST Empresa A");
+  await clicar(botaoPorTexto(r, "Trocar empresa"));
+  await escolherEmpresa(r, "ZZTEST Empresa B");
+  await esperar(20);
+  assert.deepEqual(tres(r), ["", "", ""]);
+  await act(async () => { liberar(); await new Promise((ok) => setTimeout(ok, 20)); });
+  (globalThis as any).fetch = antes;
+  assert.deepEqual(tres(r), ["", "", ""], "resposta atrasada da A descartada");
+});
+await caso("pré-preenchimento: se a consulta falha (erro, rede ou formato estranho) os campos ficam como estão — A/C da lista e o resto vazio — sem mensagem de erro e sem travar o 'Criar rascunho'", async () => {
+  const { r } = await montarComPrefill();
+  const anterior = resposta;
+  resposta = (c) => (c.url.endsWith("/prefill") ? { status: 500, corpo: { error: "x" } } : anterior(c));
+  await escolherEmpresa(r, "ZZTEST Empresa A");
+  await esperar(20);
+  assert.deepEqual(tres(r), ["Ana Principal", "", ""]);
+  assert.doesNotMatch(textoDe(r), /Não foi possível carregar os dados do cadastro/);
+  assert.equal(botaoPorTexto(r, "Criar rascunho")?.props.disabled, false);
+  await clicar(botaoPorTexto(r, "Trocar empresa"));
+  resposta = (c) => (c.url.endsWith("/prefill") ? { status: 200, corpo: { data: [1, 2] } } : anterior(c));
+  await escolherEmpresa(r, "ZZTEST Empresa C");
+  await esperar(20);
+  assert.deepEqual([valorCnpj(r), valorEndereco(r)], ["", ""], "formato fora do esperado é ignorado");
+  const antes = (globalThis as any).fetch;
+  (globalThis as any).fetch = async (u: string, i?: RequestInit) => { if (String(u).endsWith("/prefill")) throw new Error("rede"); return antes(u, i); };
+  await clicar(botaoPorTexto(r, "Trocar empresa"));
+  await escolherEmpresa(r, "ZZTEST Empresa A");
+  await esperar(20);
+  (globalThis as any).fetch = antes;
+  assert.equal(valorAC(r), "Ana Principal");
+});
+await caso("pré-preenchimento (gestor, MOT): o A/C da empresa de teste chega também ao formulário MOT; o MOT não tem CNPJ nem endereço", async () => {
+  const empresaTeste = { id: "e-a", nome: "ZZTEST Empresa A", contatos: EMP_A.contatos, teste: true };
+  const { r } = await montarComPrefill(true, [empresaTeste]);
+  await escolherEmpresa(r, "ZZTEST Empresa A");
+  await esperar(20);
+  await clicar(botaoModelo(r, "MOT"));
+  assert.ok(r.root.findAll((n) => n.type === "input" && n.props.value === "Ana Principal").length >= 1, "A/C no formulário MOT");
+  assert.doesNotMatch(textoDe(r), /CNPJ do cliente|Endereço do cliente/);
+});
+
 console.log(`\n${total} casos OK (incl. Nova proposta)${process.exitCode ? " (com FALHAS acima)" : ""}`);
