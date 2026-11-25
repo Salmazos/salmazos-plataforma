@@ -5,6 +5,7 @@ import { emailParaAssinatura, modeloDisponivel, type ContextoModelo, type Modelo
 import { textoDesenhavel } from "@/lib/propostaTexto";
 import { MAX_CLAUSULAS_ADICIONAIS, MAX_CLAUSULA_ADICIONAL, clausulaAdicional } from "@/lib/propostaClausulas";
 import { TEMPLATE_VERSAO_MOT, conteudoMotSchema, mensagemErroConteudoMot, montarSnapshotMot, type ConteudoMot, type ParametrosMotVigentes, type SnapshotMot } from "@/lib/propostaMot";
+import { TEMPLATE_VERSAO_TS, conteudoTsSchema, mensagemErroConteudoTs, montarSnapshotTs, type ConteudoTs, type LiberacaoMargemTs, type ParametrosTsVigentes, type SnapshotTs } from "@/lib/propostaTs";
 
 // v2: texto introdutório editável, frase de efeito, cláusulas adicionais, marca d'água, logo maior e mais respiro antes da assinatura.
 // Revisões já emitidas guardam a versão que usaram e o PDF delas continua saindo no layout dessa versão (ver propostaPdf).
@@ -82,15 +83,16 @@ export const MODELOS_PROPOSTA: Record<ModeloProposta, { ativo: boolean; template
   RS: { ativo: true, templateVersao: TEMPLATE_VERSAO_ATUAL },
   // O MOT tem a PRÓPRIA versão de template (começa em 1), independente da do R&S.
   MOT: { ativo: false, templateVersao: TEMPLATE_VERSAO_MOT },
-  TS: { ativo: false, templateVersao: TEMPLATE_VERSAO_ATUAL },
+  // O TS também tem a PRÓPRIA versão de template (começa em 1).
+  TS: { ativo: false, templateVersao: TEMPLATE_VERSAO_TS },
 };
 
 export const MENSAGEM_MODELO_INDISPONIVEL = "Modelo ainda não disponível.";
 
-// Conteúdo validado de qualquer modelo disponível (R&S ou MOT).
-export type ConteudoProposta = ConteudoRs | ConteudoMot;
+// Conteúdo validado de qualquer modelo disponível (R&S, MOT ou TS).
+export type ConteudoProposta = ConteudoRs | ConteudoMot | ConteudoTs;
 
-// Despacha por modelo. R&S: exatamente como antes (mesmo schema, mesmas mensagens). MOT: conteudoMotSchema (só quando o modelo está disponível).
+// Despacha por modelo. R&S: exatamente como antes (mesmo schema, mesmas mensagens). MOT e TS: conteudoMotSchema / conteudoTsSchema (só quando o modelo está disponível).
 export function validarConteudo(modelo: string, bruto: unknown, ctx?: ContextoModelo):
   | { ok: true; data: ConteudoProposta }
   | { ok: false; error: string } {
@@ -99,6 +101,11 @@ export function validarConteudo(modelo: string, bruto: unknown, ctx?: ContextoMo
     const m = conteudoMotSchema.safeParse(bruto ?? {});
     if (!m.success) return { ok: false, error: mensagemErroConteudoMot(m.error.issues) };
     return { ok: true, data: m.data };
+  }
+  if (modelo === "TS") {
+    const t = conteudoTsSchema.safeParse(bruto ?? {});
+    if (!t.success) return { ok: false, error: mensagemErroConteudoTs(t.error.issues) };
+    return { ok: true, data: t.data };
   }
   const r = conteudoRsSchema.safeParse(bruto ?? {});
   if (!r.success) return { ok: false, error: r.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") };
@@ -204,13 +211,17 @@ export interface EntradaSnapshot {
   // Só o MOT: cargo do vendedor (perfil) e os percentuais vigentes na data da emissão, que o snapshot congela.
   vendedorCargo?: string | null;
   parametrosMot?: ParametrosMotVigentes;
+  // Só o TS: os percentuais vigentes na data da emissão (congelados no snapshot) e, se o gestor liberou uma margem abaixo do mínimo, quem liberou e a justificativa.
+  parametrosTs?: ParametrosTsVigentes;
+  liberacaoMargemTs?: LiberacaoMargemTs | null;
 }
 
 // Qualquer snapshot de proposta (cada modelo tem o seu formato; o campo "modelo" distingue).
-export type SnapshotQualquer = SnapshotProposta | SnapshotMot;
+export type SnapshotQualquer = SnapshotProposta | SnapshotMot | SnapshotTs;
 
 // Despacha por modelo: o MOT monta o snapshot com a planilha calculada; o R&S segue o caminho de sempre, sem nenhuma mudança.
 export function montarSnapshot(e: EntradaSnapshot & { modelo: "MOT" }): SnapshotMot;
+export function montarSnapshot(e: EntradaSnapshot & { modelo: "TS" }): SnapshotTs;
 export function montarSnapshot(e: EntradaSnapshot): SnapshotProposta;
 export function montarSnapshot(e: EntradaSnapshot): SnapshotQualquer {
   if (e.modelo === "MOT") {
@@ -219,6 +230,14 @@ export function montarSnapshot(e: EntradaSnapshot): SnapshotQualquer {
       numero: e.numero, revisao: e.revisao, templateVersao: e.templateVersao, dataEmissao: e.dataEmissao, validadeDias: e.validadeDias, validadeAte: e.validadeAte,
       clienteNome: e.clienteNome, aosCuidados: e.aosCuidados, conteudo: e.conteudo, vendedorNome: e.vendedorNome, vendedorCargo: e.vendedorCargo ?? null,
       vendedorTelefone: e.vendedorTelefone, vendedorEmail: e.vendedorEmail, parametros: e.parametrosMot,
+    });
+  }
+  if (e.modelo === "TS") {
+    if (!e.parametrosTs) throw new Error("Percentuais do TS ausentes: o snapshot do TS precisa dos parâmetros vigentes.");
+    return montarSnapshotTs({
+      numero: e.numero, revisao: e.revisao, templateVersao: e.templateVersao, dataEmissao: e.dataEmissao, validadeDias: e.validadeDias, validadeAte: e.validadeAte,
+      clienteNome: e.clienteNome, aosCuidados: e.aosCuidados, conteudo: e.conteudo, vendedorNome: e.vendedorNome, vendedorCargo: e.vendedorCargo ?? null,
+      vendedorTelefone: e.vendedorTelefone, vendedorEmail: e.vendedorEmail, parametros: e.parametrosTs, liberacaoMargem: e.liberacaoMargemTs ?? null,
     });
   }
   const conteudo = conteudoRsSchema.parse(e.conteudo ?? {});

@@ -5,6 +5,7 @@ import { carregarProposta, podeVerProposta, snapshotParaPdf } from "@/lib/propos
 import { gerarPdfProposta } from "@/lib/propostaPdf";
 import { gerarPdfPropostaMot } from "@/lib/propostaPdfMot";
 import { snapshotMotSchema } from "@/lib/propostaMot";
+import { MSG_PDF_TS_INDISPONIVEL } from "@/lib/propostaTs";
 
 // sharp e fs só existem no runtime Node.
 export const runtime = "nodejs";
@@ -20,6 +21,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const svc = createServiceClient();
   const proposta = await carregarProposta(svc, id);
   if (!proposta || !podeVerProposta(ctx, proposta)) return NextResponse.json({ error: "Proposta não encontrada." }, { status: 404 });
+
+  // TS: o PDF chega na etapa 2E. Recusa ANTES de montar qualquer snapshot (nada é calculado nem lido do banco além da própria proposta).
+  if (proposta.modelo === "TS") return NextResponse.json({ error: MSG_PDF_TS_INDISPONIVEL }, { status: 409 });
 
   const revParam = request.nextUrl.searchParams.get("rev");
   let revisao: number | null = null;

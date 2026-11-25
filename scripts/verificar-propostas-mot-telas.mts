@@ -287,12 +287,16 @@ await caso("prévia usa a vigência de HOJE: uma vigência futura não entra, e 
 });
 
 // ═══ 2) Trava: MOT só para gestor + empresa de teste ═════════════════════════
-await caso("trava (unidade): modeloDisponivel('MOT', {gestor, teste}) só é true com os DOIS; sem contexto segue como antes; TS nunca; R&S sempre", () => comMot(async () => {
+await caso("trava (unidade): modeloDisponivel('MOT', {gestor, teste}) só é true com os DOIS; sem contexto segue como antes; o TS segue a MESMA trava (gestor + empresa de teste, 2C) e a chave do MOT não o liga; R&S sempre", () => comMot(async () => {
   assert.equal(modeloDisponivel("MOT", { gestor: true, teste: true }), true);
   for (const ctx of [{ gestor: true, teste: false }, { gestor: false, teste: true }, { gestor: true }, { teste: true }, {}, undefined]) {
     assert.equal(modeloDisponivel("MOT", ctx as any), false, JSON.stringify(ctx));
   }
-  assert.equal(modeloDisponivel("TS", { gestor: true, teste: true }), false);
+  // TS (2C): mesma trava do MOT (gestor E empresa de teste), com chave de harness PRÓPRIA; ligar a chave do MOT não liga o TS.
+  assert.equal(modeloDisponivel("TS", { gestor: true, teste: true }), true);
+  for (const ctx of [{ gestor: true, teste: false }, { gestor: false, teste: true }, { gestor: true }, { teste: true }, {}, undefined]) {
+    assert.equal(modeloDisponivel("TS", ctx as any), false, `TS ${JSON.stringify(ctx)}`);
+  }
   assert.equal(modeloDisponivel("RS"), true);
   assert.equal(modeloDisponivel("RS", { gestor: false, teste: false }), true);
   assert.equal(modeloDisponivel("XX", { gestor: true, teste: true }), false);
@@ -358,7 +362,7 @@ await caso("trava em PRODUÇÃO (NODE_ENV=production / VERCEL_ENV=production + c
     }, env);
   }
 });
-await caso("trava: R&S não muda — vendedor cria R&S normalmente (VE-... real), gestor cria R&S em empresa de teste (TESTE-...), MOT/TS no corpo de R&S continuam recusados; TS recusado até para gestor em empresa de teste", async () => {
+await caso("trava: R&S não muda — vendedor cria R&S normalmente (VE-... real), gestor cria R&S em empresa de teste (TESTE-...), MOT/TS no corpo de R&S continuam recusados; TS: gestor em empresa de teste passa da trava (o conteúdo vazio é recusado por validação, nada é criado)", async () => {
   const db = dbComLeitor();
   await comMot(async () => {
     const rs = await chamar(db, "u-v", rotaLista.POST, { metodo: "POST", corpo: { modelo: "RS", empresa_visitada_id: EMP, conteudo: {} } });
@@ -368,8 +372,10 @@ await caso("trava: R&S não muda — vendedor cria R&S normalmente (VE-... real)
     assert.equal(rsTeste.status, 201);
     assert.equal(rsTeste.body.data.numero, `TESTE-0001/${AA}`);
     const ts = await chamar(db, "u-g", rotaLista.POST, { metodo: "POST", corpo: { modelo: "TS", empresa_visitada_id: EMP_TESTE, conteudo: {} } });
+    // 2C: o TS deixou de ser 'indisponível' para gestor + empresa de teste; conteúdo vazio é recusado pela validação do TS (nada criado, nenhum número gasto).
     assert.equal(ts.status, 400);
-    assert.equal(ts.body.error, MENSAGEM_MODELO_INDISPONIVEL);
+    assert.match(ts.body.error, /Informe pelo menos um serviço/);
+    assert.notEqual(ts.body.error, MENSAGEM_MODELO_INDISPONIVEL);
     // conteúdo de R&S num MOT de teste não passa
     const mistura = await chamar(db, "u-g", rotaLista.POST, { metodo: "POST", corpo: { modelo: "MOT", empresa_visitada_id: EMP_TESTE, conteudo: { cliente_cnpj: "1", condicoes: { taxa_sem_reposicao_pct: 80 } } } });
     assert.equal(mistura.status, 400);

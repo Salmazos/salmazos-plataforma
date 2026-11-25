@@ -4,6 +4,7 @@ import { parseBody, propostaSituacaoSchema } from "@/lib/schemas";
 import { hojeSaoPaulo } from "@/lib/comercial";
 import { exigirContextoPropostas } from "@/lib/propostasAcesso";
 import { carregarProposta, ehDonoDaProposta, mudarSituacao, podeVerProposta, varrerVencidas } from "@/lib/propostaServico";
+import { propostaTsParaPerfil } from "@/lib/propostaTs";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -24,5 +25,5 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const r = await mudarSituacao(svc, ctx, proposta, parsed.data);
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
-  return NextResponse.json({ data: r.data, aviso: r.aviso ?? null });
+  return NextResponse.json({ data: propostaTsParaPerfil(r.data, ctx.gestor), aviso: r.aviso ?? null });
 }

@@ -14,6 +14,12 @@ import {
 import { MENSAGEM_MODELO_INDISPONIVEL, MODELOS_PROPOSTA, montarSnapshot, validarConteudo, type SnapshotProposta, type SnapshotQualquer } from "@/lib/propostaModelos";
 import { montarPreviaMot, previaDeSnapshotMot, snapshotMotSchema, type ParametrosMotVigentes, type PreviaMot, type SnapshotMot } from "@/lib/propostaMot";
 import { parametrosMotValidos } from "@/lib/propostaMotCalculo";
+import { registrarAuditoria } from "@/lib/audit";
+import {
+  MSG_PDF_TS_INDISPONIVEL, MSG_PERCENTUAIS_TS_AUSENTES, PDF_TS_DISPONIVEL, avaliarMargemTs, avaliarPrecoTs, conteudoTsSchema, mensagemErroConteudoTs, planilhaTsDeSnapshot,
+  privilegiosTsViolados, restaurarOcultosTs, snapshotTsSchema, type ConteudoTs, type LiberacaoMargemTs, type ParametrosTsVigentes, type PlanilhaTsTela, type SnapshotTs,
+} from "@/lib/propostaTs";
+import { parametrosTsValidos } from "@/lib/propostaTsCalculo";
 
 type Svc = ReturnType<typeof createServiceClient>;
 // Linha de `propostas` (select "*"): lida sem tipagem própria, como as demais linhas do Comercial.
@@ -192,6 +198,93 @@ async function snapshotMotDaProposta(svc: Svc, p: PropostaLinha, vendedor: Dados
   }
 }
 
+// ── Terceirização (TS): mesma integração do MOT, com as regras de preço da diretoria ────────────────────────────────────────────────────────────────
+// O servidor SEMPRE recalcula a partir dos dados de entrada com os percentuais vigentes; nada calculado vem do navegador. Os percentuais usados ficam congelados no
+// snapshot de cada revisão (proposta antiga nunca muda quando a diretoria muda os percentuais).
+
+// Percentuais do TS vigentes na data (parametros_ts_vigentes: a vigência mais recente com vigente_desde <= data). Sem vigência não se inventa percentual.
+async function parametrosTsVigentes(svc: Svc, data: string): Promise<Resultado<ParametrosTsVigentes>> {
+  const { data: linhas, error } = await svc.rpc("parametros_ts_vigentes", { p_hoje: data });
+  if (error) {
+    console.error("[propostas] Percentuais do TS não lidos:", error.message);
+    return falha(500, "Não foi possível ler os percentuais da Terceirização. Nada foi alterado; tente de novo.");
+  }
+  const linha = (Array.isArray(linhas) ? linhas[0] : linhas) as (Record<string, unknown> & { vigente_desde?: string; id?: string }) | null | undefined;
+  if (!linha || !linha.vigente_desde) return falha(409, MSG_PERCENTUAIS_TS_AUSENTES);
+  if (!parametrosTsValidos(linha)) return falha(500, "Os percentuais da Terceirização cadastrados estão inválidos. Avise a diretoria.");
+  return { ok: true, data: linha as unknown as ParametrosTsVigentes };
+}
+
+// Preço manual e ISS por proposta: só a diretoria (403, nada é gravado). O que já estava gravado pode continuar como está para quem edita sem mexer nesses campos.
+function exigirPrivilegiosTs(ctx: ContextoPropostas, novo: ConteudoTs, anteriorBruto: unknown): Resultado<null> {
+  const anterior = conteudoTsSchema.safeParse(anteriorBruto ?? {});
+  const msg = privilegiosTsViolados(novo, anterior.success ? anterior.data : null, ctx.gestor);
+  return msg ? falha(403, msg) : { ok: true, data: null };
+}
+
+interface AvaliacaoServidorTs {
+  parametros: ParametrosTsVigentes;
+  abaixoMargem: number[];
+  liberacao: { justificativa: string; servicos: number[] } | null;
+}
+// Percentuais vigentes → preço (422 com a mensagem da lib se o preço não estiver configurado) → margem mínima (bloqueia quem não é gestor; o gestor libera com justificativa).
+async function avaliarTsNoServidor(svc: Svc, ctx: ContextoPropostas, conteudo: ConteudoTs, data: string): Promise<Resultado<AvaliacaoServidorTs>> {
+  const par = await parametrosTsVigentes(svc, data);
+  if (!par.ok) return par;
+  const av = avaliarPrecoTs(conteudo, par.data);
+  if (!av.ok) return falha(av.status, av.error);
+  const m = avaliarMargemTs({ abaixoMargem: av.abaixoMargem, nomesServicos: conteudo.servicos.map((x) => x.nome), gestor: ctx.gestor, justificativa: conteudo.justificativa_margem_minima });
+  if (!m.ok) return falha(m.status, m.error);
+  return { ok: true, data: { parametros: par.data, abaixoMargem: av.abaixoMargem, liberacao: m.liberacao } };
+}
+
+// Snapshot do TS: congela os percentuais vigentes na data da emissão, o cálculo linha a linha de cada posto e, se o gestor liberou uma margem abaixo do mínimo, quem liberou.
+async function snapshotTsDaProposta(
+  svc: Svc, ctx: ContextoPropostas, p: PropostaLinha, conteudoBruto: unknown, vendedor: DadosVendedor, revisao: number, emissao: string, validadeAte: string
+): Promise<Resultado<{ snapshot: SnapshotTs; avaliacao: AvaliacaoServidorTs }>> {
+  const c = conteudoTsSchema.safeParse(conteudoBruto ?? {});
+  if (!c.success) return falha(400, mensagemErroConteudoTs(c.error.issues));
+  const av = await avaliarTsNoServidor(svc, ctx, c.data, emissao);
+  if (!av.ok) return av;
+  const liberacao: LiberacaoMargemTs | null = av.data.liberacao
+    ? { ...av.data.liberacao, liberado_por_id: ctx.analistaId, liberado_por_nome: (await dadosDoVendedor(svc, ctx.analistaId)).nome, liberado_em: new Date().toISOString() }
+    : null;
+  try {
+    return {
+      ok: true,
+      data: {
+        avaliacao: av.data,
+        snapshot: montarSnapshot({
+          modelo: "TS", numero: p.numero, revisao, templateVersao: p.template_versao, dataEmissao: emissao, validadeDias: p.validade_dias, validadeAte,
+          clienteNome: p.cliente_nome, aosCuidados: p.aos_cuidados ?? null, conteudo: c.data, vendedorNome: vendedor.nome, vendedorCargo: vendedor.cargo,
+          vendedorTelefone: vendedor.telefone, vendedorEmail: vendedor.email, parametrosTs: av.data.parametros, liberacaoMargemTs: liberacao,
+        }),
+      },
+    };
+  } catch (err) {
+    console.error("[propostas] Conteúdo do TS inválido ao montar o snapshot:", err instanceof Error ? err.message : err);
+    return falha(400, "O conteúdo da proposta de Terceirização está incompleto ou inválido. Revise os serviços e tente de novo.");
+  }
+}
+
+// Auditoria SÓ de autorizações especiais (preço manual, ISS por proposta, margem liberada), sem dados pessoais: quem fez, em qual proposta e o quê.
+function auditarAutorizacoesTs(ctx: ContextoPropostas, p: { id: string; numero: string }, conteudo: ConteudoTs, avaliacao: AvaliacaoServidorTs, evento: "criada" | "editada" | "revisao") {
+  const precoManual = conteudo.servicos.some((x) => x.preco_manual_centavos != null);
+  const iss = conteudo.iss_override_bp ?? null;
+  if (!precoManual && iss === null && !avaliacao.liberacao) return;
+  registrarAuditoria({
+    usuario_id: ctx.userId,
+    acao: "proposta_ts_autorizacao",
+    entidade: "propostas",
+    entidade_id: p.id,
+    unidade_id: ctx.unidadeId,
+    detalhes: {
+      numero: p.numero, evento, preco_manual: precoManual, iss_override_bp: iss, margem_liberada: !!avaliacao.liberacao,
+      servicos_abaixo_da_margem: avaliacao.liberacao?.servicos ?? [], justificativa: avaliacao.liberacao?.justificativa ?? null,
+    },
+  });
+}
+
 // Rascunho: o PDF usa o conteúdo atual, com hoje como emissão. Proposta enviada: o snapshot da revisão pedida
 // (ou da atual); reabrir uma revisão antiga nunca depende de dados vivos.
 export async function snapshotParaPdf(svc: Svc, p: PropostaLinha, revisao: number | null): Promise<Resultado<SnapshotQualquer>> {
@@ -199,6 +292,7 @@ export async function snapshotParaPdf(svc: Svc, p: PropostaLinha, revisao: numbe
     const hoje = hojeSaoPaulo();
     const vendedor = await dadosDoVendedor(svc, p.vendedor_id);
     if (p.modelo === "MOT") return snapshotMotDaProposta(svc, p, vendedor, 0, hoje, calcularValidadeAte(hoje, p.validade_dias));
+    if (p.modelo === "TS") return falha(409, MSG_PDF_TS_INDISPONIVEL);
     return { ok: true, data: snapshotDa(p, vendedor, 0, hoje, calcularValidadeAte(hoje, p.validade_dias)) };
   }
   const alvo = revisao ?? p.revisao_atual;
@@ -215,7 +309,7 @@ export async function criarRascunho(svc: Svc, ctx: ContextoPropostas, d: z.infer
   if (!ctx.unidadeId) return falha(400, "Seu perfil não tem unidade definida.");
   // MOT fora da chave do harness: a decisão depende de ser gestor E a empresa ser de teste, então fica para depois de ler a empresa (abaixo).
   const modeloLivre = modeloDisponivel(d.modelo);
-  if (!modeloLivre && d.modelo !== "MOT") return falha(400, MENSAGEM_MODELO_INDISPONIVEL);
+  if (!modeloLivre && d.modelo !== "MOT" && d.modelo !== "TS") return falha(400, MENSAGEM_MODELO_INDISPONIVEL);
   let conteudo = modeloLivre ? validarConteudo(d.modelo, d.conteudo) : null;
   if (conteudo && !conteudo.ok) return falha(400, conteudo.error);
   const { data: empresa } = await svc.from("empresas_visitadas").select("id, nome, cliente_id, unidade_id").eq("id", d.empresa_visitada_id).maybeSingle();
@@ -232,6 +326,17 @@ export async function criarRascunho(svc: Svc, ctx: ContextoPropostas, d: z.infer
     if (!conteudo.ok) return falha(400, conteudo.error);
   }
   if (!conteudo || !conteudo.ok) return falha(400, MENSAGEM_MODELO_INDISPONIVEL);
+
+  // TS: preço manual e ISS só da diretoria (403); o servidor recalcula tudo com os percentuais vigentes (422 se o preço não estiver configurado; margem abaixo do mínimo
+  // bloqueia quem não é gestor e exige justificativa do gestor). Tudo ANTES de gastar número: nada é criado quando algo é recusado.
+  let avaliacaoTs: AvaliacaoServidorTs | null = null;
+  if (d.modelo === "TS") {
+    const privilegios = exigirPrivilegiosTs(ctx, conteudo.data as ConteudoTs, null);
+    if (!privilegios.ok) return privilegios;
+    const av = await avaliarTsNoServidor(svc, ctx, conteudo.data as ConteudoTs, hojeSaoPaulo());
+    if (!av.ok) return av;
+    avaliacaoTs = av.data;
+  }
 
   // A sigla do número (proposta REAL) sai do nome do vendedor e fica fixa na criação; sem nome aproveitável não se inventa sigla.
   // Proposta de teste leva TESTE no lugar da sigla e não precisa dela.
@@ -268,6 +373,7 @@ export async function criarRascunho(svc: Svc, ctx: ContextoPropostas, d: z.infer
   if (error || !data) return falha(500, `Não foi possível criar a proposta: ${error?.message ?? "sem retorno"}`);
 
   await registrarHistorico(svc, { proposta_id: data.id, de: null, para: "rascunho", autor_id: ctx.analistaId });
+  if (avaliacaoTs) auditarAutorizacoesTs(ctx, data, conteudo.data as ConteudoTs, avaliacaoTs, "criada");
   return { ok: true, data, aviso };
 }
 
@@ -295,18 +401,44 @@ export async function editarProposta(svc: Svc, ctx: ContextoPropostas, p: Propos
   const agora = new Date().toISOString();
   const campos: Record<string, unknown> = { conteudo, aos_cuidados: aosCuidados, validade_dias: validadeDias, updated_at: agora };
 
+  // TS: mesma validação da criação (privilégios da diretoria, preço recalculado no servidor, margem mínima) em TODA gravação; em proposta já entregue o snapshot
+  // da nova revisão sai da mesma conta. Nada é gravado quando algo é recusado.
+  const hojeTs = hojeSaoPaulo();
+  let snapTs: SnapshotTs | null = null;
+  let avaliacaoTs: AvaliacaoServidorTs | null = null;
+  if (p.modelo === "TS") {
+    const parseado = conteudoTsSchema.safeParse(conteudo);
+    if (!parseado.success) return falha(400, mensagemErroConteudoTs(parseado.error.issues));
+    // Quem não é gestor não VÊ o ISS por proposta, a cobertura dos postos nem a justificativa da margem; o que já estava gravado volta no lugar do que não veio.
+    const anteriorTs = conteudoTsSchema.safeParse(p.conteudo ?? {});
+    const novo = { data: ctx.gestor ? parseado.data : restaurarOcultosTs(parseado.data, anteriorTs.success ? anteriorTs.data : null) };
+    conteudo = novo.data;
+    campos.conteudo = novo.data;
+    const privilegios = exigirPrivilegiosTs(ctx, novo.data, p.conteudo);
+    if (!privilegios.ok) return privilegios;
+    const s = await snapshotTsDaProposta(
+      svc, ctx, { ...p, conteudo, aos_cuidados: aosCuidados, validade_dias: validadeDias }, novo.data, await dadosDoVendedor(svc, p.vendedor_id),
+      modo === "revisao" ? (p.revisao_atual as number) + 1 : 0, hojeTs, calcularValidadeAte(hojeTs, validadeDias)
+    );
+    if (!s.ok) return s;
+    snapTs = s.data.snapshot;
+    avaliacaoTs = s.data.avaliacao;
+  }
+
   if (modo === "rascunho") {
     const { data } = await svc.from("propostas").update(campos).eq("id", p.id).eq("updated_at", p.updated_at).eq("situacao", "rascunho").select().maybeSingle();
     if (!data) return falha(409, "A proposta foi alterada desde que você a abriu. Recarregue e tente de novo.");
+    if (avaliacaoTs) auditarAutorizacoesTs(ctx, data, conteudo as ConteudoTs, avaliacaoTs, "editada");
     return { ok: true, data };
   }
 
   // Proposta já entregue: nova revisão (mesmo número). A revisão anterior continua intacta; a validade recomeça de hoje.
-  const hoje = hojeSaoPaulo();
+  const hoje = hojeTs;
   const novaRevisao = (p.revisao_atual as number) + 1;
   const validadeAte = calcularValidadeAte(hoje, validadeDias);
   // MOT: o snapshot (percentuais vigentes HOJE + planilha) é montado antes de gravar qualquer coisa; sem percentuais vigentes nada muda.
-  let snapMot: SnapshotMot | null = null;
+  let snapMot: SnapshotMot | SnapshotTs | null = null;
+  if (p.modelo === "TS") snapMot = snapTs;
   if (p.modelo === "MOT") {
     const s = await snapshotMotDaProposta(svc, { ...p, conteudo, aos_cuidados: aosCuidados, validade_dias: validadeDias }, await dadosDoVendedor(svc, p.vendedor_id), novaRevisao, hoje, validadeAte);
     if (!s.ok) return s;
@@ -357,6 +489,7 @@ export async function editarProposta(svc: Svc, ctx: ContextoPropostas, p: Propos
     ? `Revisão ${novaRevisao} emitida. Valor: ${moeda(valorAntigo)} → ${moeda(valorNovo as number)} (Rev. ${novaRevisao}).`
     : valorMudou ? `Revisão ${novaRevisao} emitida. Valor: ${moeda(valorNovo as number)} (Rev. ${novaRevisao}).` : `Revisão ${novaRevisao} emitida.`;
   await registrarHistorico(svc, { proposta_id: p.id, de: p.situacao, para: p.situacao, autor_id: ctx.analistaId, observacao });
+  if (avaliacaoTs) auditarAutorizacoesTs(ctx, atualizada, conteudo as ConteudoTs, avaliacaoTs, "revisao");
   // Funil: só proposta MOT real, de quem tem Funil, quando o valor mudou. A revisão já está gravada (imutável): falha aqui vira aviso, nunca erro.
   let aviso: string | undefined;
   if (valorMudou && ctx.temFunil && p.teste !== true && p.oportunidade_id) aviso = await recalcularValorFunil(svc, ctx, atualizada);
@@ -576,17 +709,26 @@ export async function mudarSituacao(svc: Svc, ctx: ContextoPropostas, p: Propost
   }
   if (!podeTransicionar(de, para)) return falha(409, `Não é possível passar de ${ROTULO_SITUACAO[de]} para ${ROTULO_SITUACAO[para]}.`);
 
+  // TS: marcar como enviada só depois de existir o PDF (etapa 2E): bloqueado, sem gravar nada (nem situação, nem Funil, nem revisão).
+  if (para === "enviada" && p.modelo === "TS" && !PDF_TS_DISPONIVEL) return falha(409, MSG_PDF_TS_INDISPONIVEL);
+
   // Data de emissão/validade do envio (a mesma do snapshot e da reserva abaixo).
   const hoje = hojeSaoPaulo();
   // R&S: o valor vem do vendedor (como sempre). MOT: o valor é calculado pelo servidor (soma dos valores mensais das funções, a partir dos percentuais
   // vigentes) e o que o cliente mandar é ignorado: ninguém digita o valor de uma proposta cujo preço sai da planilha.
   let valorEnvio = d.valor_estimado;
-  let snapMotEnvio: SnapshotMot | null = null;
+  let snapMotEnvio: SnapshotMot | SnapshotTs | null = null;
   if (para === "enviada" && p.modelo === "MOT") {
     const s = await snapshotMotDaProposta(svc, p, await dadosDoVendedor(svc, p.vendedor_id), p.revisao_atual, hoje, calcularValidadeAte(hoje, p.validade_dias));
     if (!s.ok) return s;
     snapMotEnvio = s.data;
     valorEnvio = s.data.total_mensal_centavos / 100;
+  } else if (para === "enviada" && p.modelo === "TS") {
+    // Pronto para a 2E (quando PDF_TS_DISPONIVEL virar true): o valor também é calculado pelo servidor e o snapshot da Rev. 0 congela os percentuais.
+    const s = await snapshotTsDaProposta(svc, ctx, p, p.conteudo, await dadosDoVendedor(svc, p.vendedor_id), p.revisao_atual, hoje, calcularValidadeAte(hoje, p.validade_dias));
+    if (!s.ok) return s;
+    snapMotEnvio = s.data.snapshot;
+    valorEnvio = s.data.snapshot.total_mensal_centavos / 100;
   }
   if (para === "enviada" && !(valorEnvio != null && valorEnvio > 0)) return falha(400, "Informe o valor estimado (maior que zero) para marcar como enviada.");
   // O motivo da recusa é opcional na proposta; se a categoria "outro" foi escolhida, o texto continua obrigatório.
@@ -703,5 +845,77 @@ export async function planilhaMotDaProposta(svc: Svc, p: PropostaLinha): Promise
     return { origem: "hoje", previa: montarPreviaMot(funcoes, par.data), erro: null };
   } catch {
     return { origem: "hoje", previa: null, erro: "Não foi possível calcular a planilha desta proposta." };
+  }
+}
+
+// ── Prévia e detalhe do TS ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+// A prévia mostra o cálculo enquanto o gestor preenche, SEM gravar nada: o servidor aplica as mesmas regras da criação (privilégios, preço configurado) e devolve só
+// valores (sem percentuais; a margem real em pontos-base só para o gestor), mais quais serviços ficaram abaixo da margem mínima.
+export interface PreviaTs {
+  planilha: PlanilhaTsTela;
+  // Só para o gestor/diretoria: o vendedor nunca recebe nada que revele a margem mínima (abaixo dela ele recebe o MESMO bloqueio da criação, 422).
+  margem?: { abaixo: number[]; exige_justificativa: boolean };
+}
+export async function previaTs(svc: Svc, ctx: ContextoPropostas, conteudoBruto: unknown): Promise<Resultado<PreviaTs>> {
+  if (!ctx.podeEscrever) return falha(403, MSG_SO_ACOMPANHA_PROPOSTAS);
+  // Sem empresa escolhida a prévia vale para quem poderia criar TS de teste (gestor) ou pela chave do harness.
+  const contexto = { gestor: ctx.gestor, teste: true };
+  if (!modeloDisponivel("TS", contexto)) return falha(400, MENSAGEM_MODELO_INDISPONIVEL);
+  const v = validarConteudo("TS", conteudoBruto, contexto);
+  if (!v.ok) return falha(400, v.error);
+  const conteudo = v.data as ConteudoTs;
+  const privilegios = exigirPrivilegiosTs(ctx, conteudo, null);
+  if (!privilegios.ok) return privilegios;
+  const hoje = hojeSaoPaulo();
+  const par = await parametrosTsVigentes(svc, hoje);
+  if (!par.ok) return par;
+  const av = avaliarPrecoTs(conteudo, par.data);
+  if (!av.ok) return falha(av.status, av.error);
+  if (!ctx.gestor) {
+    const m = avaliarMargemTs({ abaixoMargem: av.abaixoMargem, nomesServicos: conteudo.servicos.map((x) => x.nome), gestor: false, justificativa: null });
+    if (!m.ok) return falha(m.status, m.error);
+  }
+  try {
+    const snap = montarSnapshot({
+      modelo: "TS", numero: "PREVIA", revisao: 0, templateVersao: 1, dataEmissao: "2000-01-01", validadeDias: 1, validadeAte: "2000-01-02", clienteNome: "Prévia", aosCuidados: null,
+      conteudo, vendedorNome: "Prévia", vendedorTelefone: null, parametrosTs: par.data, liberacaoMargemTs: null,
+    });
+    return { ok: true, data: { planilha: planilhaTsDeSnapshot(snap, ctx.gestor), ...(ctx.gestor ? { margem: { abaixo: av.abaixoMargem, exige_justificativa: av.abaixoMargem.length > 0 } } : {}) } };
+  } catch (err) {
+    console.error("[propostas] Prévia do TS não calculada:", err instanceof Error ? err.message : err);
+    return falha(400, "Não foi possível calcular com os dados informados. Confira os valores.");
+  }
+}
+
+// Planilha mostrada no detalhe de uma proposta TS. Rascunho (ou proposta que nunca foi enviada): calculada com os percentuais vigentes HOJE, como será no envio.
+// Proposta com revisão gravada: o snapshot da revisão atual, exatamente como foi gravado (nunca recalcula: mudar os percentuais depois não altera o que já foi enviado).
+export interface PlanilhaTsDetalhe {
+  origem: "hoje" | "revisao";
+  planilha: PlanilhaTsTela | null;
+  erro: string | null;
+}
+export async function planilhaTsDaProposta(svc: Svc, ctx: ContextoPropostas, p: PropostaLinha): Promise<PlanilhaTsDetalhe> {
+  if (p.situacao !== "rascunho") {
+    const { data: rev } = await svc.from("proposta_revisoes").select("conteudo").eq("proposta_id", p.id).eq("revisao", p.revisao_atual).maybeSingle();
+    if (rev) {
+      const s = snapshotTsSchema.safeParse(rev.conteudo);
+      if (!s.success) return { origem: "revisao", planilha: null, erro: "Não foi possível ler a planilha desta revisão." };
+      return { origem: "revisao", planilha: planilhaTsDeSnapshot(s.data, ctx.gestor), erro: null };
+    }
+  }
+  const c = conteudoTsSchema.safeParse(p.conteudo ?? {});
+  if (!c.success) return { origem: "hoje", planilha: null, erro: mensagemErroConteudoTs(c.error.issues) };
+  const par = await parametrosTsVigentes(svc, hojeSaoPaulo());
+  if (!par.ok) return { origem: "hoje", planilha: null, erro: par.error };
+  const av = avaliarPrecoTs(c.data, par.data);
+  if (!av.ok) return { origem: "hoje", planilha: null, erro: av.error };
+  try {
+    const snap = montarSnapshot({
+      modelo: "TS", numero: p.numero, revisao: 0, templateVersao: p.template_versao, dataEmissao: "2000-01-01", validadeDias: 1, validadeAte: "2000-01-02", clienteNome: p.cliente_nome,
+      aosCuidados: null, conteudo: c.data, vendedorNome: "Prévia", vendedorTelefone: null, parametrosTs: par.data, liberacaoMargemTs: null,
+    });
+    return { origem: "hoje", planilha: planilhaTsDeSnapshot(snap, ctx.gestor), erro: null };
+  } catch {
+    return { origem: "hoje", planilha: null, erro: "Não foi possível calcular a planilha desta proposta." };
   }
 }

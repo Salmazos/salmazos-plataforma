@@ -4,6 +4,7 @@ import { parseBody, propostaCreateSchema } from "@/lib/schemas";
 import { hojeSaoPaulo } from "@/lib/comercial";
 import { exigirContextoPropostas, MSG_SO_ACOMPANHA_PROPOSTAS } from "@/lib/propostasAcesso";
 import { criarRascunho, varrerVencidas } from "@/lib/propostaServico";
+import { propostaTsParaPerfil } from "@/lib/propostaTs";
 
 const COLUNAS_LISTA = "id, numero, modelo, revisao_atual, situacao, cliente_nome, aos_cuidados, vendedor_id, unidade_id, validade_ate, valor_estimado, enviada_em, created_at, updated_at, teste";
 
@@ -63,5 +64,5 @@ export async function POST(request: NextRequest) {
 
   const r = await criarRascunho(createServiceClient(), ctx, parsed.data);
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
-  return NextResponse.json({ data: r.data, aviso: r.aviso ?? null }, { status: 201 });
+  return NextResponse.json({ data: propostaTsParaPerfil(r.data, ctx.gestor), aviso: r.aviso ?? null }, { status: 201 });
 }

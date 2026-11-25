@@ -16,22 +16,31 @@ export const ROTULO_MODELO: Record<ModeloProposta, string> = {
 // Chave SÓ DO HARNESS para exercitar o MOT antes da tela e do PDF (etapas 2D/2E). Em produção o MOT continua desligado (MODELOS_ATIVOS = ["RS"]): a chave
 // só vale fora de produção (NODE_ENV e VERCEL_ENV), então uma variável esquecida no painel da Vercel NUNCA liga o MOT.
 export const CHAVE_HARNESS_MOT = "HARNESS_PROPOSTA_MOT";
-export function chaveHarnessMotLigada(): boolean {
+function chaveDoHarnessLigada(chave: string): boolean {
   const env = typeof process !== "undefined" ? process.env : undefined;
   if (!env) return false;
-  return env[CHAVE_HARNESS_MOT] === "1" && env.NODE_ENV !== "production" && !env.VERCEL_ENV && !env.VERCEL;
+  return env[chave] === "1" && env.NODE_ENV !== "production" && !env.VERCEL_ENV && !env.VERCEL;
+}
+export function chaveHarnessMotLigada(): boolean {
+  return chaveDoHarnessLigada(CHAVE_HARNESS_MOT);
+}
+// Mesma ideia para a Terceirização (TS), com chave PRÓPRIA (ligar o MOT no harness não liga o TS): só vale fora de produção.
+export const CHAVE_HARNESS_TS = "HARNESS_PROPOSTA_TS";
+export function chaveHarnessTsLigada(): boolean {
+  return chaveDoHarnessLigada(CHAVE_HARNESS_TS);
 }
 
-// Trava do MOT (enquanto o PDF não está aprovado): além da chave do harness (só fora de produção), o MOT só vale para o GESTOR e em empresa de TESTE.
-// Sem o 2º argumento o comportamento é o de sempre (R&S ativo; MOT só pela chave do harness). Vendedor nunca cria MOT; proposta MOT real é impossível.
+// Trava do MOT e do TS (enquanto o PDF não está aprovado): além da chave do harness (só fora de produção), valem só para o GESTOR e em empresa de TESTE.
+// Sem o 2º argumento o comportamento é o de sempre (R&S ativo; MOT e TS só pela chave do harness de cada um). Vendedor nunca cria MOT nem TS; proposta real é impossível.
 export interface ContextoModelo {
   gestor?: boolean;
   teste?: boolean;
 }
 export function modeloDisponivel(modelo: string, ctx?: ContextoModelo): modelo is ModeloProposta {
   if ((MODELOS_ATIVOS as string[]).includes(modelo)) return true;
-  if (modelo !== "MOT") return false;
-  if (chaveHarnessMotLigada()) return true;
+  if (modelo !== "MOT" && modelo !== "TS") return false;
+  if (modelo === "MOT" && chaveHarnessMotLigada()) return true;
+  if (modelo === "TS" && chaveHarnessTsLigada()) return true;
   return ctx?.gestor === true && ctx?.teste === true;
 }
 

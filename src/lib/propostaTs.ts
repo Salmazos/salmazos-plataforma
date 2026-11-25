@@ -7,8 +7,9 @@ import { emailParaAssinatura } from "@/lib/propostas";
 import { condicoesMotSchema } from "@/lib/propostaMot";
 import { formatarCentavosBRL, valorPorExtensoBRL } from "@/lib/propostaMotCalculo";
 import {
-  BP_MAXIMO, CHAVES_PARAMETROS_TS, EFETIVOS_MAXIMO, VALOR_MAXIMO_CENTAVOS, calcularPropostaTs, parametrosTsValidos,
-  type LinhaTs, type ParametrosTs, type ServicoTsEntrada,
+  BP_MAXIMO, CHAVES_PARAMETROS_TS, EFETIVOS_MAXIMO, MSG_DEDUCOES_TS_INVALIDAS, MSG_PRECO_TS_NAO_CONFIGURADO, MSG_VALOR_GRANDE_DEMAIS, VALOR_MAXIMO_CENTAVOS,
+  calcularPropostaTs, deducoesPrecoTs, parametrosTsValidos,
+  type LinhaTs, type ParametrosTs, type PropostaTsCalculada, type ServicoTsEntrada,
 } from "@/lib/propostaTsCalculo";
 
 // Versão do template do TS, PRÓPRIA (cada modelo evolui sozinho; revisões antigas guardam a versão que usaram).
@@ -133,6 +134,9 @@ export const conteudoTsSchema = z.object({
   servicos: z.array(servicoTsSchema, { error: "Informe pelo menos um serviço." }).min(1, "Informe pelo menos um serviço.").max(MAX_SERVICOS_TS, `Use no máximo ${MAX_SERVICOS_TS} serviços.`),
   condicoes: condicoesMotSchema.prefault({}),
   clausulas_adicionais: z.array(clausulaAdicional, { error: "As cláusulas adicionais devem ser uma lista de textos." }).max(MAX_CLAUSULAS_ADICIONAIS, `Use no máximo ${MAX_CLAUSULAS_ADICIONAIS} cláusulas adicionais.`).default([]),
+  // Justificativa do GESTOR para liberar uma margem abaixo do mínimo (obrigatória nesse caso; ignorada quando a margem está dentro do mínimo). Quem libera e quando é
+  // gravado pelo SERVIDOR no snapshot e na auditoria: o que vier do navegador sobre isso é descartado.
+  justificativa_margem_minima: opcional("a justificativa da margem", MAX_JUSTIFICATIVA),
   // Override do ISS desta proposta, em pontos-base. SÓ A DIRETORIA pode informar (conferido pelo backend, 2C); o valor efetivo vai para o snapshot.
   iss_override_bp: percentualBp("o ISS da proposta").nullable().optional(),
 });
@@ -209,6 +213,15 @@ const servicoSnapshotSchema = z.object({
   abaixo_margem_minima: z.boolean(),
 });
 
+export const liberacaoMargemTsSchema = z.object({
+  justificativa: z.string(),
+  servicos: z.array(z.number().int()),
+  liberado_por_id: z.string(),
+  liberado_por_nome: z.string(),
+  liberado_em: z.string(),
+});
+export type LiberacaoMargemTs = z.infer<typeof liberacaoMargemTsSchema>;
+
 export const snapshotTsSchema = z.object({
   modelo: z.literal("TS"),
   numero: z.string(),
@@ -221,6 +234,8 @@ export const snapshotTsSchema = z.object({
   servicos: z.array(servicoSnapshotSchema).min(1),
   parametros: parametrosTsVigentesSchema,
   iss_override_bp: z.number().int().nullable(),
+  // Gestor que liberou uma margem abaixo do mínimo (justificativa, serviços e quem liberou); null quando a margem está dentro do mínimo.
+  liberacao_margem: liberacaoMargemTsSchema.nullable(),
   condicoes: z.object({ vencimentos_dias: z.array(z.number().int()), antecedencia_dias: z.number().int() }),
   clausulas_adicionais: z.array(z.string()),
   custo_total_centavos: z.number().int(),
@@ -251,6 +266,7 @@ export interface EntradaSnapshotTs {
   vendedorTelefone: string | null;
   vendedorEmail?: string | null;
   parametros: ParametrosTsVigentes;
+  liberacaoMargem?: LiberacaoMargemTs | null;
 }
 
 const linhaParaSnapshot = (l: LinhaTs) => ({ chave: l.chave, rotulo: l.rotulo, valor_centavos: l.valorCentavos, percentual_bp: l.percentualBp, subtotal: l.subtotal });
@@ -312,6 +328,7 @@ export function montarSnapshotTs(e: EntradaSnapshotTs): SnapshotTs {
     }),
     parametros: { vigente_desde, id: id ?? null, ...calc.parametros },
     iss_override_bp: conteudo.iss_override_bp ?? null,
+    liberacao_margem: e.liberacaoMargem ?? null,
     condicoes: { vencimentos_dias: [...conteudo.condicoes.vencimentos_dias].sort((a, b) => a - b), antecedencia_dias: conteudo.condicoes.antecedencia_dias },
     clausulas_adicionais: conteudo.clausulas_adicionais,
     custo_total_centavos: calc.custoTotalCentavos,
@@ -325,3 +342,216 @@ export function montarSnapshotTs(e: EntradaSnapshotTs): SnapshotTs {
     vendedor_email: emailParaAssinatura(e.vendedorEmail),
   };
 }
+
+// ── Regras do servidor (puras, testáveis sem banco) ─────────────────────────────────────────────────────────────────────────────
+
+// O PDF da Terceirização chega na etapa 2E. Enquanto for false, marcar como enviada é BLOQUEADO para o TS (nada é gravado). A rota e o cálculo da
+// revisão já estão prontos (a mesma integração do MOT): na 2E basta virar esta constante para true.
+export const PDF_TS_DISPONIVEL = false;
+export const MSG_PDF_TS_INDISPONIVEL = "PDF da Terceirização ainda não disponível";
+export const MSG_SO_DIRETORIA_PRECO_MANUAL = "Só a diretoria pode informar o preço manual.";
+export const MSG_SO_DIRETORIA_ISS = "Só a diretoria pode alterar o ISS da proposta.";
+export const MSG_SO_DIRETORIA_COBERTURA = "Só a diretoria pode alterar a cobertura de ausências do posto.";
+export const MSG_PERCENTUAIS_TS_AUSENTES = "Não há percentuais da Terceirização vigentes para esta data. Peça à diretoria para cadastrá-los.";
+
+const ROTULO_CAMPO_POSTO: Record<string, string> = {
+  funcao: "função", escala: "escala", escala_texto: "descrição da escala", horas_mensais: "horas mensais", efetivos: "efetivos", salario_centavos: "salário",
+  adicionais: "adicionais", beneficios: "benefícios", uniforme_epi_centavos: "uniforme/EPI", insumos_centavos: "insumos", operacao_centavos: "operação",
+  cobertura_bp_override: "cobertura",
+};
+
+// Mensagem legível, sem caminho interno: "Serviço 1 · Posto 2 (salário): O salário precisa ser maior que zero."
+export function mensagemErroConteudoTs(issues: { path: PropertyKey[]; message: string }[]): string {
+  return issues
+    .map((i) => {
+      const [raiz, si, c1, pi, campo] = i.path;
+      if (raiz === "servicos" && typeof si === "number") {
+        const servico = `Serviço ${si + 1}`;
+        if (c1 === "postos" && typeof pi === "number") return `${servico} · Posto ${pi + 1}${typeof campo === "string" ? ` (${ROTULO_CAMPO_POSTO[campo] ?? campo})` : ""}: ${i.message}`;
+        return `${servico}: ${i.message}`;
+      }
+      if (raiz === "servicos") return i.message;
+      if (raiz === "condicoes") return `Condições: ${i.message}`;
+      if (raiz === "clausulas_adicionais" && typeof si === "number") return `Cláusula adicional ${si + 1}: ${i.message}`;
+      return i.message;
+    })
+    .join("; ");
+}
+
+// Preço manual e ISS por proposta: SÓ a diretoria. Quem não é gestor não pode informar nem mudar nenhum dos dois (comparado com o que já estava gravado, para
+// poder editar uma proposta que a diretoria já tinha ajustado sem mexer nesses campos). Devolve a mensagem da recusa (HTTP 403) ou null.
+export function privilegiosTsViolados(novo: ConteudoTs, anterior: ConteudoTs | null, gestor: boolean): string | null {
+  if (gestor) return null;
+  const manuais = (c: ConteudoTs | null) => (c ? c.servicos.map((x) => x.preco_manual_centavos ?? null) : []);
+  const n = manuais(novo), a = manuais(anterior);
+  for (let i = 0; i < Math.max(n.length, a.length); i++) if ((n[i] ?? null) !== (a[i] ?? null)) return MSG_SO_DIRETORIA_PRECO_MANUAL;
+  if ((novo.iss_override_bp ?? null) !== (anterior?.iss_override_bp ?? null)) return MSG_SO_DIRETORIA_ISS;
+  // A cobertura de ausências por posto também é percentual de preço: só a diretoria muda.
+  const coberturas = (c: ConteudoTs | null) => (c ? c.servicos.map((x) => (x.modo === "postos" ? x.postos.map((p) => p.cobertura_bp_override ?? null) : [])) : []);
+  const cn = coberturas(novo), ca = coberturas(anterior);
+  for (let i = 0; i < Math.max(cn.length, ca.length); i++) {
+    const a1 = cn[i] ?? [], a2 = ca[i] ?? [];
+    for (let j = 0; j < Math.max(a1.length, a2.length); j++) if ((a1[j] ?? null) !== (a2[j] ?? null)) return MSG_SO_DIRETORIA_COBERTURA;
+  }
+  return null;
+}
+
+// ── PERCENTUAIS DE PREÇO NUNCA SAEM PARA QUEM NÃO É GESTOR OU DIRETORIA (em nenhuma rota) ─────────────────────────────────────────────────────────
+// "Gestor" aqui é o perfil gestor/diretoria do módulo de Propostas (diretoria e superuser). Percentuais de preço (ISS, PIS, COFINS, IRPJ, CSLL, despesas, lucro, margem
+// mínima e cobertura) e tudo o que os revela (margem real, "abaixo da margem", justificativa da liberação) são filtrados NO SERVIDOR antes de qualquer resposta; a
+// tela nunca recebe o que não pode mostrar. O vendedor recebe só o valor mensal e os custos por posto, sem percentuais.
+const CAMPOS_OCULTOS_CONTEUDO = ["iss_override_bp", "justificativa_margem_minima"] as const;
+
+// Conteúdo da proposta como o vendedor pode ver: sem o ISS por proposta, sem a justificativa de margem e sem a cobertura de cada posto. Trabalha sobre o JSON bruto
+// (a linha pode vir de qualquer gravação) e nunca altera o original.
+export function conteudoTsParaPerfil<T>(conteudo: T, gestor: boolean): T {
+  if (gestor || !conteudo || typeof conteudo !== "object" || Array.isArray(conteudo)) return conteudo;
+  const c = { ...(conteudo as Record<string, unknown>) };
+  for (const k of CAMPOS_OCULTOS_CONTEUDO) delete c[k];
+  if (Array.isArray(c.servicos)) {
+    c.servicos = c.servicos.map((x) => {
+      if (!x || typeof x !== "object") return x;
+      const servico = { ...(x as Record<string, unknown>) };
+      if (Array.isArray(servico.postos)) {
+        servico.postos = servico.postos.map((p) => {
+          if (!p || typeof p !== "object") return p;
+          const posto = { ...(p as Record<string, unknown>) };
+          delete posto.cobertura_bp_override;
+          return posto;
+        });
+      }
+      return servico;
+    });
+  }
+  return c as T;
+}
+
+// A linha da proposta (qualquer resposta: criar, editar, detalhe, situação) filtrada para o perfil. Só mexe em proposta TS de quem não é gestor.
+export function propostaTsParaPerfil<T extends { modelo?: unknown; conteudo?: unknown }>(proposta: T, gestor: boolean): T {
+  if (gestor || !proposta || proposta.modelo !== "TS") return proposta;
+  return { ...proposta, conteudo: conteudoTsParaPerfil(proposta.conteudo, false) };
+}
+
+// Quem não é gestor NÃO VÊ os campos ocultos, então o que ele devolve ao salvar não os traz: eles voltam do que já estava gravado (senão a edição do vendedor apagaria,
+// sem ele saber, o ISS, a cobertura e a justificativa que a diretoria definiu). Só restaura o que veio AUSENTE (undefined); um valor informado de propósito não é
+// restaurado e cai na recusa de privilégio (403).
+export function restaurarOcultosTs(novo: ConteudoTs, anterior: ConteudoTs | null): ConteudoTs {
+  if (!anterior) return novo;
+  const c: ConteudoTs = { ...novo };
+  if (c.iss_override_bp === undefined && anterior.iss_override_bp !== undefined) c.iss_override_bp = anterior.iss_override_bp;
+  if (c.justificativa_margem_minima === undefined && anterior.justificativa_margem_minima !== undefined) c.justificativa_margem_minima = anterior.justificativa_margem_minima;
+  c.servicos = novo.servicos.map((s, i) => {
+    const antes = anterior.servicos[i];
+    if (s.modo !== "postos" || !antes || antes.modo !== "postos") return s;
+    return { ...s, postos: s.postos.map((p, j) => (p.cobertura_bp_override === undefined && antes.postos[j]?.cobertura_bp_override !== undefined ? { ...p, cobertura_bp_override: antes.postos[j].cobertura_bp_override } : p)) };
+  });
+  return c;
+}
+
+export type AvaliacaoTs =
+  | { ok: true; calc: PropostaTsCalculada; abaixoMargem: number[] }
+  | { ok: false; status: number; error: string };
+
+// O servidor SEMPRE recalcula a partir dos dados de entrada com os percentuais vigentes (nunca confia em valor vindo do navegador). Percentuais de preço não
+// configurados (tributos + despesas + lucro = 0) ou inválidos: 422 com a mensagem da lib, sem calcular preço. abaixoMargem = índices dos serviços cuja margem
+// real ficou abaixo da margem mínima.
+export function avaliarPrecoTs(conteudo: ConteudoTs, parametros: ParametrosTsVigentes): AvaliacaoTs {
+  const { vigente_desde: _v, id: _i, ...percentuais } = parametros;
+  if (!parametrosTsValidos(percentuais)) return { ok: false, status: 500, error: "Os percentuais da Terceirização cadastrados estão inválidos. Avise a diretoria." };
+  const base = Object.fromEntries(CHAVES_PARAMETROS_TS.map((k) => [k, percentuais[k]])) as unknown as ParametrosTs;
+  try {
+    const calc = calcularPropostaTs({ servicos: conteudo.servicos.map(servicoParaCalculo), parametros: base, issOverrideBp: conteudo.iss_override_bp ?? null });
+    return { ok: true, calc, abaixoMargem: calc.servicos.flatMap((x, i) => (x.abaixoMargemMinima ? [i] : [])) };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (msg === MSG_PRECO_TS_NAO_CONFIGURADO || msg === MSG_DEDUCOES_TS_INVALIDAS || msg === MSG_VALOR_GRANDE_DEMAIS) return { ok: false, status: 422, error: msg };
+    return { ok: false, status: 400, error: "O conteúdo da proposta de Terceirização está incompleto ou inválido. Revise os serviços e tente de novo." };
+  }
+}
+
+export type AvaliacaoMargemTs =
+  | { ok: true; liberacao: { justificativa: string; servicos: number[] } | null }
+  | { ok: false; status: number; error: string };
+
+// Margem abaixo do mínimo: BLOQUEIA quem não é gestor; o gestor libera COM justificativa obrigatória (gravada, com quem liberou, no snapshot e na auditoria).
+export function avaliarMargemTs(entrada: { abaixoMargem: number[]; nomesServicos: string[]; gestor: boolean; justificativa: string | null | undefined }): AvaliacaoMargemTs {
+  if (entrada.abaixoMargem.length === 0) return { ok: true, liberacao: null };
+  const lista = entrada.abaixoMargem.map((i) => `Serviço ${i + 1}${entrada.nomesServicos[i] ? ` – ${entrada.nomesServicos[i]}` : ""}`).join(", ");
+  if (!entrada.gestor) return { ok: false, status: 422, error: `A margem ficou abaixo do mínimo definido pela diretoria (${lista}). Só a diretoria pode liberar.` };
+  const justificativa = textoDesenhavel(entrada.justificativa ?? "");
+  if (justificativa === "") return { ok: false, status: 422, error: `A margem ficou abaixo do mínimo definido pela diretoria (${lista}). Informe a justificativa para liberar.` };
+  return { ok: true, liberacao: { justificativa, servicos: entrada.abaixoMargem } };
+}
+
+// Visão da planilha para a tela (sem percentuais; a margem real em pontos-base só para o gestor). Sai do snapshot (gravado ou montado na hora), nunca de conta no navegador.
+export interface PlanilhaTsTela {
+  vigente_desde: string;
+  servicos: {
+    nome: string;
+    modo: "postos" | "fechado";
+    postos: { funcao: string; efetivos: number; salario_centavos: number; linhas: { chave: string; rotulo: string; valor_centavos: number; subtotal: boolean }[]; custo_unit_centavos: number; custo_posto_centavos: number; preco_unit_centavos: number; preco_posto_centavos: number }[];
+    custo_centavos: number;
+    preco_calculado_centavos: number;
+    preco_manual_centavos: number | null;
+    preco_centavos: number;
+    // Só para o gestor/diretoria: o vendedor não recebe nada que revele a margem.
+    abaixo_margem_minima?: boolean;
+    margem_real_bp?: number;
+  }[];
+  custo_total_centavos: number;
+  total_mensal_centavos: number;
+  total_mensal_extenso: string;
+  liberacao_margem: LiberacaoMargemTs | null;
+}
+
+export function planilhaTsDeSnapshot(snap: SnapshotTs, gestor: boolean): PlanilhaTsTela {
+  return {
+    vigente_desde: snap.parametros.vigente_desde,
+    servicos: snap.servicos.map((x) => ({
+      nome: x.nome,
+      modo: x.modo,
+      postos: x.postos.map((p) => ({
+        funcao: p.funcao, efetivos: p.efetivos, salario_centavos: p.salario_centavos,
+        linhas: p.linhas.map((l) => ({ chave: l.chave, rotulo: l.rotulo, valor_centavos: l.valor_centavos, subtotal: l.subtotal })),
+        custo_unit_centavos: p.custo_unit_centavos, custo_posto_centavos: p.custo_posto_centavos, preco_unit_centavos: p.preco_unit_centavos, preco_posto_centavos: p.preco_posto_centavos,
+      })),
+      custo_centavos: x.custo_centavos,
+      preco_calculado_centavos: x.preco_calculado_centavos,
+      preco_manual_centavos: x.preco_manual_centavos,
+      preco_centavos: x.preco_centavos,
+      ...(gestor ? { abaixo_margem_minima: x.abaixo_margem_minima, margem_real_bp: x.margem_real_bp } : {}),
+    })),
+    custo_total_centavos: snap.custo_total_centavos,
+    total_mensal_centavos: snap.total_mensal_centavos,
+    total_mensal_extenso: snap.total_mensal_extenso,
+    liberacao_margem: gestor ? snap.liberacao_margem : null,
+  };
+}
+
+// ── Percentuais (diretoria) ────────────────────────────────────────────────────────────────────────────────────────────────────
+export const ROTULO_PARAMETRO_TS: Record<keyof ParametrosTs, string> = {
+  fgts_bp: "FGTS", inss_bp: "INSS", multa_fgts_bp: "Multa do FGTS", cobertura_bp: "Cobertura de ausências", iss_bp: "ISS", pis_bp: "PIS", cofins_bp: "COFINS",
+  irpj_bp: "IRPJ", csll_bp: "CSLL", despesas_bp: "Despesas", lucro_bp: "Lucro", margem_minima_bp: "Margem mínima",
+};
+
+function dataValida(texto: string): boolean {
+  const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(texto);
+  if (!m) return false;
+  const d = new Date(`${texto}T12:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === texto;
+}
+const campoPercentualTs = (k: keyof ParametrosTs) =>
+  z.number({ error: `Informe ${ROTULO_PARAMETRO_TS[k]} em pontos-base (ex.: 2300 para 23%).` })
+    .int(`${ROTULO_PARAMETRO_TS[k]} deve ser um número inteiro de pontos-base (ex.: 2300 para 23%).`)
+    .min(0, `${ROTULO_PARAMETRO_TS[k]} não pode ser negativo.`)
+    .max(BP_MAXIMO, `${ROTULO_PARAMETRO_TS[k]} passa do limite de ${BP_MAXIMO} pontos-base (100%).`);
+
+// Nova vigência (insert-only). A regra "não retroativa" (vigente_desde >= hoje) é conferida pela rota, que conhece a data de hoje. Além de cada percentual de 0 a
+// 10000, tributos + despesas + lucro (D) precisa ficar abaixo de 100%: do contrário o preço (custo ÷ (1 − D)) não existe.
+export const parametrosTsCreateSchema = z
+  .object({
+    vigente_desde: z.string({ error: "Informe a data de início da vigência." }).refine(dataValida, "Informe a data de início da vigência no formato AAAA-MM-DD."),
+    ...(Object.fromEntries(CHAVES_PARAMETROS_TS.map((k) => [k, campoPercentualTs(k)])) as { [K in keyof ParametrosTs]: ReturnType<typeof campoPercentualTs> }),
+  })
+  .refine((d) => deducoesPrecoTs(d).totalBp < BP_MAXIMO, { message: MSG_DEDUCOES_TS_INVALIDAS, path: ["lucro_bp"] });
+export type ParametrosTsCreate = z.infer<typeof parametrosTsCreateSchema>;

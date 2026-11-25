@@ -357,7 +357,8 @@ await caso("as libs do TS não importam servidor, rede, banco, fs nem ambiente; 
   const semComentarios = (f: string) => f.split("\n").map((l) => l.replace(/\/\/.*$/, "")).join("\n");
   for (const f of [semComentarios(calculo), semComentarios(ts)]) {
     assert.doesNotMatch(f, /process\.env|fetch\(|require\(|supabase|from "fs|from "node:/);
-    assert.doesNotMatch(f, /Math\.random|Date\.now|new Date/);
+    // Sem relógio e sem sorteio: `new Date(texto)` (só para validar uma data digitada) é puro; o que não pode é ler a hora (Date.now, new Date()) nem sortear.
+    assert.doesNotMatch(f, /Math\.random|Date\.now|new Date\(\)/);
   }
   assert.match(calculo, /pode mudar — confirmar com contador/);
   assert.equal((calculo.match(/baseFgts: r\./g) ?? []).length, 1, "a base do FGTS é definida num ponto só");
