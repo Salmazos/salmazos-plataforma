@@ -705,6 +705,72 @@ await caso("PERCENTUAIS: validação — inteiros de 0 a 10000 em pontos-base, t
   assert.equal(db.tabelas.proposta_ts_parametros.length, antesCorrida + 2, "só as linhas esperadas");
 }));
 
+await caso("RÓTULO de adicional/benefício 'outro': grava e aparece na planilha; sem rótulo, com HTML ou acima de 60 caracteres recusa; tipo fixo ignora o rótulo; o cálculo e o gold test não mudam", async () => semChave(async () => {
+  const db = novoDb();
+  const comItens = (adicionais: unknown[], beneficios: unknown[]) => conteudoTs({ servicos: [servico({ postos: [posto({ adicionais, beneficios })] })] });
+  const base = posto();
+  const rotulos = (r: Chamada) => r.body.data.planilha.servicos[0].postos[0].linhas.map((l: any) => l.rotulo);
+  const custo = (r: Chamada) => linha(r.body.data.planilha, "custo_unitario");
+  // Gold test sem nenhum 'outro': inalterado.
+  const ouro = await previa(db, "u-g", conteudoTs());
+  assert.equal(custo(ouro), CUSTO);
+  assert.equal(ouro.body.data.planilha.total_mensal_centavos, PRECO);
+  assert.equal(linha(ouro.body.data.planilha, "encargos"), ENCARGOS);
+  // 'outro' com rótulo: o texto vai para a linha; o valor é o mesmo de um tipo fixo (rótulo não entra no cálculo).
+  const outroAd = await previa(db, "u-g", comItens([...base.adicionais, { tipo: "outro", rotulo: "  Adicional de risco  ", modo: "valor", valor_centavos: 10000 }], base.beneficios));
+  assert.equal(outroAd.status, 200, JSON.stringify(outroAd.body));
+  assert.ok(rotulos(outroAd).includes("Adicional de risco"), rotulos(outroAd).join("|"));
+  assert.ok(!rotulos(outroAd).includes("Outro adicional"));
+  const fixoAd = await previa(db, "u-g", comItens([...base.adicionais, { tipo: "gratificacao", modo: "valor", valor_centavos: 10000 }], base.beneficios));
+  assert.equal(custo(outroAd), custo(fixoAd));
+  assert.equal(outroAd.body.data.planilha.total_mensal_centavos, fixoAd.body.data.planilha.total_mensal_centavos);
+  assert.deepEqual(rotulos(fixoAd).filter((r: string) => /Adicional de risco/.test(r)), []);
+  const pct = await previa(db, "u-g", comItens([...base.adicionais, { tipo: "outro", rotulo: "Adicional de risco", modo: "percentual", percentual_bp: 1000 }], base.beneficios));
+  assert.equal(pct.status, 200);
+  assert.ok(rotulos(pct).includes("Adicional de risco"));
+  const outroBen = await previa(db, "u-g", comItens(base.adicionais, [...base.beneficios, { tipo: "outro", rotulo: "Plano odontológico", valor_centavos: 5000 }]));
+  const fixoBen = await previa(db, "u-g", comItens(base.adicionais, [...base.beneficios, { tipo: "cesta_basica", valor_centavos: 5000 }]));
+  assert.equal(outroBen.status, 200);
+  assert.ok(rotulos(outroBen).includes("Plano odontológico"));
+  assert.equal(custo(outroBen), custo(fixoBen));
+  // 'outro' sem rótulo (ausente, vazio, só espaços) = erro claro.
+  for (const rotulo of [undefined, "", "   ", null, 7]) {
+    const ad = await previa(db, "u-g", comItens([{ tipo: "outro", ...(rotulo === undefined ? {} : { rotulo }), modo: "valor", valor_centavos: 10000 }], []));
+    assert.equal(ad.status, 400, JSON.stringify(rotulo));
+    assert.match(ad.body.error, /Descreva o adicional escolhido como "Outro"/);
+    const be = await previa(db, "u-g", comItens([], [{ tipo: "outro", ...(rotulo === undefined ? {} : { rotulo }), valor_centavos: 10000 }]));
+    assert.equal(be.status, 400);
+    assert.match(be.body.error, /Descreva o benefício escolhido como "Outro"/);
+  }
+  // HTML, mais de 60 caracteres e quebra de linha.
+  const html = await previa(db, "u-g", comItens([{ tipo: "outro", rotulo: "<b>risco</b>", modo: "valor", valor_centavos: 10000 }], []));
+  assert.equal(html.status, 400);
+  assert.match(html.body.error, /não pode ter HTML/);
+  assert.equal((await previa(db, "u-g", comItens([], [{ tipo: "outro", rotulo: "<script>x</script>", valor_centavos: 10000 }]))).status, 400);
+  const longo = await previa(db, "u-g", comItens([{ tipo: "outro", rotulo: "a".repeat(61), modo: "valor", valor_centavos: 10000 }], []));
+  assert.equal(longo.status, 400);
+  assert.match(longo.body.error, /vai até 60 caracteres/);
+  assert.equal((await previa(db, "u-g", comItens([{ tipo: "outro", rotulo: "a".repeat(60), modo: "valor", valor_centavos: 10000 }], []))).status, 200);
+  const quebra = await previa(db, "u-g", comItens([{ tipo: "outro", rotulo: "linha 1\nlinha 2", modo: "valor", valor_centavos: 10000 }], []));
+  assert.equal(quebra.status, 400);
+  assert.match(quebra.body.error, /uma linha só/);
+  // Tipo fixo: o campo é ignorado (mesmo lixo/HTML), o rótulo continua vindo do tipo.
+  const ign = await previa(db, "u-g", comItens([{ tipo: "insalubridade", rotulo: "<b>lixo</b>", modo: "valor", valor_centavos: 32420 }, base.adicionais[1]], [{ tipo: "vale_transporte", rotulo: "x".repeat(200), valor_centavos: 20000 }, base.beneficios[1], base.beneficios[2]]));
+  assert.equal(ign.status, 200, JSON.stringify(ign.body));
+  assert.equal(custo(ign), CUSTO);
+  assert.ok(!rotulos(ign).some((r: string) => /lixo|xxxx/.test(r)));
+  // Criar grava o rótulo e o detalhe devolve na planilha; proposta antiga (sem rótulo no conteúdo) segue no mesmo formato.
+  const criada = await criar(db, "u-g", { conteudo: comItens([...base.adicionais, { tipo: "outro", rotulo: "Adicional de risco", modo: "valor", valor_centavos: 10000 }], base.beneficios) });
+  assert.equal(criada.status, 201, JSON.stringify(criada.body));
+  const id = criada.body.id ?? criada.body.data?.id;
+  assert.match(JSON.stringify(proposta(db, id).conteudo), /Adicional de risco/);
+  const d = await detalhe(db, "u-g", id);
+  assert.ok(d.body.planilhaTs.planilha.servicos[0].postos[0].linhas.some((l: any) => l.rotulo === "Adicional de risco"));
+  const recusada = await criar(db, "u-g", { conteudo: comItens([{ tipo: "outro", modo: "valor", valor_centavos: 10000 }], []) });
+  assert.equal(recusada.status, 400);
+  assert.match(recusada.body.error, /Descreva o adicional escolhido como "Outro"/);
+}));
+
 await caso("PRÉVIA: só leitura (nenhuma escrita), sem percentuais na resposta, margem real só para o gestor; sem login 401; sem conteúdo 400", async () => semChave(async () => {
   const db = novoDb();
   db.consultas.length = 0;

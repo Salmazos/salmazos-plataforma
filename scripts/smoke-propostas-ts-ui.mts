@@ -8,7 +8,7 @@ import fs from "node:fs";
 import React, { useState } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import CamposPropostaTs, {
-  bloqueioTs, camposTsDeProposta, camposTsPadrao, conteudoTsDoForm, postoTsNovo, MSG_JUSTIFICATIVA_MARGEM, URL_CONFIGURAR_PERCENTUAIS_TS, type CamposTsForm, type EstadoPreviaTs, type PostoForm,
+  bloqueioTs, camposTsDeProposta, camposTsPadrao, conteudoTsDoForm, postoTsNovo, postoTsPronto, MSG_JUSTIFICATIVA_MARGEM, URL_CONFIGURAR_PERCENTUAIS_TS, type CamposTsForm, type EstadoPreviaTs, type PostoForm,
 } from "@/components/propostas/CamposPropostaTs";
 import PercentuaisTsAdmin, { PARAMETROS_REFERENCIA_TS, POSTO_SIMULADOR_TS, simularPostoTs } from "@/components/propostas/PercentuaisTsAdmin";
 import PropostaDetalheTs, { type DetalheTs } from "@/components/propostas/PropostaDetalheTs";
@@ -362,6 +362,60 @@ await caso("CAMPOS DO POSTO: escala 'Outra' pede descrição; horas semanais sug
   assert.equal(s.descricao, "limpeza geral");
   assert.equal((conteudoTsDoForm(formAux(), { gestor: false }) as any).servicos[0].descricao, null);
 });
+await caso("RÓTULO de 'Outro': o campo de texto só aparece ao escolher Outro (adicional e benefício); sem preencher o servidor recusa e a prévia espera; preenchido aparece na planilha e o valor é o mesmo de um tipo fixo; tipo fixo não manda rótulo; ida e volta na edição; gold test intacto", async () => {
+  const r = await montar(formAux());
+  await esperar(DEBOUNCE);
+  assert.equal(porData(r, "data-rotulo-adicional").length, 0);
+  assert.equal(porData(r, "data-rotulo-beneficio").length, 0);
+  assert.match(txt(porData(r, "data-total-mensal")[0]), reais(689006), "gold test: total R$ 6.890,06");
+  const select = (label: string) => r.root.findAll((n) => n.type === "select" && n.props["aria-label"] === label)[0];
+  // Adicional 'Outro' com valor mas SEM rótulo: o servidor recusa e o posto ainda não vai para a prévia.
+  await act(async () => { definir((v) => ({ ...v, itens: [AUX({ adicionais: [...AUX().adicionais, { tipo: "gratificacao", rotulo: "", modo: "valor", valor: 100, percentual: "" }] })] })); });
+  await act(async () => { select("Tipo do adicional 3").props.onChange({ target: { value: "outro" } }); });
+  await esperar(DEBOUNCE);
+  const campo = porData(r, "data-rotulo-adicional", 2)[0];
+  assert.ok(campo, "campo do rótulo aparece ao escolher Outro");
+  assert.equal(campo.props.maxLength, 60);
+  assert.equal(porData(r, "data-rotulo-adicional").length, 1, "só na linha 'Outro'");
+  let c = conteudoTsDoForm(ultimo, { gestor: false }) as any;
+  assert.equal(c.servicos[0].postos[0].adicionais[2].rotulo, "");
+  const sem = conteudoTsSchema.safeParse(c);
+  assert.equal(sem.success, false);
+  assert.match(JSON.stringify(sem.error?.issues), /Descreva o adicional escolhido como \\"Outro\\"/);
+  assert.equal(postoTsPronto(ultimo.itens[0] as PostoForm), false, "posto com 'Outro' sem descrição não é enviado à prévia");
+  // Preenche: vai no conteúdo, passa no schema e aparece na planilha com o mesmo valor de um tipo fixo.
+  const antes = dasPrevias().length;
+  await act(async () => { campo.props.onChange({ target: { value: "Adicional de risco" } }); });
+  await esperar(DEBOUNCE);
+  assert.equal(dasPrevias().length, antes + 1);
+  c = conteudoTsDoForm(ultimo, { gestor: false }) as any;
+  assert.equal(c.servicos[0].postos[0].adicionais[2].rotulo, "Adicional de risco");
+  assert.ok(conteudoTsSchema.safeParse(c).success, JSON.stringify(conteudoTsSchema.safeParse(c)));
+  assert.match(textoDe(r), /Adicional de risco/);
+  const totalOutro = txt(porData(r, "data-total-mensal")[0]);
+  await act(async () => { select("Tipo do adicional 3").props.onChange({ target: { value: "gratificacao" } }); });
+  await esperar(DEBOUNCE);
+  assert.equal(txt(porData(r, "data-total-mensal")[0]), totalOutro, "o rótulo não entra no cálculo");
+  assert.equal(porData(r, "data-rotulo-adicional").length, 0, "voltou a tipo fixo: o campo some");
+  assert.ok(!("rotulo" in (conteudoTsDoForm(ultimo, { gestor: false }) as any).servicos[0].postos[0].adicionais[2]), "tipo fixo não manda rótulo");
+  assert.doesNotMatch(textoDe(r), /Adicional de risco/);
+  // Benefício 'Outro': mesmo comportamento.
+  await act(async () => { definir((v) => ({ ...v, itens: [AUX({ beneficios: [...AUX().beneficios, { tipo: "cesta_basica", rotulo: "", valor: 50 }] })] })); });
+  await act(async () => { select("Tipo do benefício 4").props.onChange({ target: { value: "outro" } }); });
+  assert.equal(porData(r, "data-rotulo-beneficio", 3).length, 1);
+  c = conteudoTsDoForm(ultimo, { gestor: false }) as any;
+  assert.match(JSON.stringify(conteudoTsSchema.safeParse(c).error?.issues), /Descreva o benefício escolhido como \\"Outro\\"/);
+  await act(async () => { porData(r, "data-rotulo-beneficio", 3)[0].props.onChange({ target: { value: "Plano odontológico" } }); });
+  await esperar(DEBOUNCE);
+  assert.match(textoDe(r), /Plano odontológico/);
+  // Ida e volta: o rótulo gravado volta ao formulário.
+  c = conteudoTsDoForm(ultimo, { gestor: false }) as any;
+  assert.ok(conteudoTsSchema.safeParse(c).success);
+  const volta = camposTsDeProposta({ aos_cuidados: null, validade_dias: 15, conteudo: c });
+  assert.equal((volta.itens[0] as PostoForm).beneficios[3].rotulo, "Plano odontológico");
+  assert.equal((volta.itens[0] as PostoForm).beneficios[3].tipo, "outro");
+});
+
 await caso("EDIÇÃO: o conteúdo gravado volta ao formulário igual (ida e volta); serviço fechado e serviço com vários postos ficam preservados como estão, sem edição", () => {
   const original = conteudoTsDoForm(formAux({ preco_manual: 8000, cobertura: "2,5", salmazos_fornece: true, insumos: 300, escopo: "geral" }, { iss_override: "3", justificativa_margem: "ok" }), { gestor: true }) as any;
   const fechado = { modo: "fechado", nome: "Jardinagem", descricao: null, fornecimento: { equipamentos: "cliente", produtos: "cliente" }, fechado: { descricao: "Contrato fechado", custo_centavos: 100000 }, preco_manual_centavos: null, justificativa_preco_manual: null };

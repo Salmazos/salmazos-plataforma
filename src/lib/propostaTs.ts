@@ -73,15 +73,38 @@ const percentualBp = (rotulo: string, min = 0) =>
   z.number({ error: `Informe ${rotulo} em pontos-base (ex.: 2000 para 20%).` }).int(`${rotulo.charAt(0).toUpperCase()}${rotulo.slice(1)} deve ser inteiro em pontos-base.`)
     .min(min, `${rotulo.charAt(0).toUpperCase()}${rotulo.slice(1)} deve ser de ${min} a ${BP_MAXIMO} pontos-base.`).max(BP_MAXIMO, `${rotulo.charAt(0).toUpperCase()}${rotulo.slice(1)} deve ser de ${min} a ${BP_MAXIMO} pontos-base.`);
 
+// Rótulo livre só para o tipo "outro" (texto que aparece na planilha). Nunca entra em cálculo; nos tipos fixos o rótulo vem do tipo e o campo enviado é descartado.
+export const MAX_ROTULO_TS = 60;
+type NomeItemTs = "adicional" | "benefício";
+function validarRotuloOutro(item: { tipo: string; rotulo?: unknown }, ctx: z.RefinementCtx, nome: NomeItemTs): void {
+  if (item.tipo !== "outro") return;
+  const r = typeof item.rotulo === "string" ? item.rotulo.trim() : "";
+  const problema =
+    r === "" ? `Descreva o ${nome} escolhido como "Outro" (de 1 a ${MAX_ROTULO_TS} caracteres).`
+    : r.length > MAX_ROTULO_TS ? `A descrição do ${nome} vai até ${MAX_ROTULO_TS} caracteres.`
+    : /[<>]/.test(r) ? `A descrição do ${nome} não pode ter HTML (os sinais < e >).`
+    : /[\u0000-\u001F\u007F-\u009F\u2028\u2029]/.test(r) ? `A descrição do ${nome} deve ser um texto de uma linha só.`
+    : textoDesenhavel(r) === "" ? `A descrição do ${nome} só tem caracteres que o PDF não consegue imprimir.`
+    : null;
+  if (problema) ctx.addIssue({ code: "custom", path: ["rotulo"], message: problema });
+}
+// Tipo fixo: descarta o rótulo; "outro": grava o rótulo aparado e já no alfabeto que o PDF desenha.
+type SemRotuloBruto<T> = T extends unknown ? Omit<T, "rotulo"> & { rotulo?: string } : never;
+const normalizarRotulo = <T extends { tipo: string; rotulo?: unknown }>(item: T): SemRotuloBruto<T> => {
+  const { rotulo, ...resto } = item;
+  return (item.tipo === "outro" ? { ...resto, rotulo: textoDesenhavel(String(rotulo).trim()) } : resto) as SemRotuloBruto<T>;
+};
+
 export const adicionalTsSchema = z.discriminatedUnion("modo", [
-  z.object({ tipo: z.enum(codigos(TIPOS_ADICIONAL_TS), { error: "Tipo de adicional inválido." }), modo: z.literal("valor"), valor_centavos: centavosPositivos("o valor do adicional") }),
-  z.object({ tipo: z.enum(codigos(TIPOS_ADICIONAL_TS), { error: "Tipo de adicional inválido." }), modo: z.literal("percentual"), percentual_bp: percentualBp("o percentual do adicional", 1) }),
-], { error: "Adicional inválido." });
+  z.object({ tipo: z.enum(codigos(TIPOS_ADICIONAL_TS), { error: "Tipo de adicional inválido." }), rotulo: z.unknown().optional(), modo: z.literal("valor"), valor_centavos: centavosPositivos("o valor do adicional") }),
+  z.object({ tipo: z.enum(codigos(TIPOS_ADICIONAL_TS), { error: "Tipo de adicional inválido." }), rotulo: z.unknown().optional(), modo: z.literal("percentual"), percentual_bp: percentualBp("o percentual do adicional", 1) }),
+], { error: "Adicional inválido." }).superRefine((a, ctx) => validarRotuloOutro(a, ctx, "adicional")).transform(normalizarRotulo);
 
 export const beneficioTsSchema = z.object({
   tipo: z.enum(codigos(TIPOS_BENEFICIO_TS), { error: "Tipo de benefício inválido." }),
+  rotulo: z.unknown().optional(),
   valor_centavos: centavosPositivos("o valor do benefício"),
-});
+}).superRefine((b, ctx) => validarRotuloOutro(b, ctx, "benefício")).transform(normalizarRotulo);
 
 export const postoTsSchema = z.object({
   funcao: naoVazio("a função", MAX_FUNCAO),
@@ -269,6 +292,13 @@ export interface EntradaSnapshotTs {
   liberacaoMargem?: LiberacaoMargemTs | null;
 }
 
+// Rótulo livre de adicional/benefício "outro": só troca o texto da linha (chaves adicional_N / beneficio_N do cálculo); valores e arredondamento não mudam.
+function rotuloDaLinhaTs(l: LinhaTs, p: { adicionais: { tipo: string; rotulo?: string }[]; beneficios: { tipo: string; rotulo?: string }[] }): string {
+  const m = /^(adicional|beneficio)_([0-9]+)$/.exec(l.chave);
+  if (!m) return l.rotulo;
+  const item = (m[1] === "adicional" ? p.adicionais : p.beneficios)[Number(m[2]) - 1];
+  return item?.tipo === "outro" && item.rotulo ? item.rotulo : l.rotulo;
+}
 const linhaParaSnapshot = (l: LinhaTs) => ({ chave: l.chave, rotulo: l.rotulo, valor_centavos: l.valorCentavos, percentual_bp: l.percentualBp, subtotal: l.subtotal });
 
 export function montarSnapshotTs(e: EntradaSnapshotTs): SnapshotTs {
@@ -303,7 +333,7 @@ export function montarSnapshotTs(e: EntradaSnapshotTs): SnapshotTs {
             horas_mensais: p.horas_mensais,
             efetivos: p.efetivos,
             salario_centavos: p.salario_centavos,
-            linhas: pc.linhas.map(linhaParaSnapshot),
+            linhas: pc.linhas.map((l) => ({ ...linhaParaSnapshot(l), rotulo: rotuloDaLinhaTs(l, p) })),
             remuneracao_centavos: pc.remuneracaoCentavos,
             encargos_centavos: pc.encargosCentavos,
             beneficios_centavos: pc.beneficiosCentavos,

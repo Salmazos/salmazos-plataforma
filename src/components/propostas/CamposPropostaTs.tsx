@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { MAX_CLAUSULAS_ADICIONAIS, MAX_CLAUSULA_ADICIONAL } from "@/lib/propostaClausulas";
 import { numeroClausulaAdicionalMot } from "@/lib/propostaMot";
-import { ESCALAS_TS, MAX_SERVICOS_TS, MAX_TEXTO_INTRODUTORIO_TS, TEXTO_INTRODUTORIO_PADRAO_TS, TIPOS_ADICIONAL_TS, TIPOS_BENEFICIO_TS, type ConteudoTs } from "@/lib/propostaTs";
+import { ESCALAS_TS, MAX_SERVICOS_TS, MAX_TEXTO_INTRODUTORIO_TS, MAX_ROTULO_TS, TEXTO_INTRODUTORIO_PADRAO_TS, TIPOS_ADICIONAL_TS, TIPOS_BENEFICIO_TS, type ConteudoTs } from "@/lib/propostaTs";
 import type { PreviaTs } from "@/lib/propostaServico";
 import { caracteresOmitidos } from "@/lib/propostaTexto";
 import { VALIDADE_MAX_DIAS, VALIDADE_MIN_DIAS, VALIDADE_PADRAO_DIAS } from "@/lib/propostas";
@@ -18,8 +18,8 @@ import { Aviso, btnSecundario, inputStyle, labelStyle, lerResposta } from "@/com
 export const URL_CONFIGURAR_PERCENTUAIS_TS = "/painel/comercial/propostas?aba=percentuais-ts";
 export const MSG_JUSTIFICATIVA_MARGEM = "Informe a justificativa para liberar a margem abaixo do mínimo.";
 
-export interface AdicionalForm { tipo: string; modo: "valor" | "percentual"; valor: number; percentual: string }
-export interface BeneficioForm { tipo: string; valor: number }
+export interface AdicionalForm { tipo: string; rotulo: string; modo: "valor" | "percentual"; valor: number; percentual: string }
+export interface BeneficioForm { tipo: string; rotulo: string; valor: number }
 export interface PostoForm {
   kind: "posto";
   nome: string; // serviço/função
@@ -94,8 +94,8 @@ export function camposTsDeProposta(p: { aos_cuidados: string | null; validade_di
       kind: "posto",
       nome: s.nome ?? po.funcao ?? "", escopo: s.descricao ?? "", escala: po.escala ?? "44h", escala_texto: po.escala_texto ?? "",
       horas_semanais: String(Math.round(mensais / 5)), horas_mensais: String(mensais), efetivos: String(po.efetivos ?? 1), salario: reais(po.salario_centavos),
-      adicionais: ((po.adicionais ?? []) as Cru[]).map((a) => ({ tipo: a.tipo, modo: a.modo === "percentual" ? "percentual" : "valor", valor: reais(a.valor_centavos), percentual: bpTexto(a.percentual_bp) })),
-      beneficios: ((po.beneficios ?? []) as Cru[]).map((b) => ({ tipo: b.tipo, valor: reais(b.valor_centavos) })),
+      adicionais: ((po.adicionais ?? []) as Cru[]).map((a) => ({ tipo: a.tipo, rotulo: typeof a.rotulo === "string" ? a.rotulo : "", modo: a.modo === "percentual" ? "percentual" : "valor", valor: reais(a.valor_centavos), percentual: bpTexto(a.percentual_bp) })),
+      beneficios: ((po.beneficios ?? []) as Cru[]).map((b) => ({ tipo: b.tipo, rotulo: typeof b.rotulo === "string" ? b.rotulo : "", valor: reais(b.valor_centavos) })),
       uniforme: reais(po.uniforme_epi_centavos),
       salmazos_fornece: s.fornecimento?.equipamentos === "salmazos" || s.fornecimento?.produtos === "salmazos",
       insumos: reais(po.insumos_centavos), operacao: reais(po.operacao_centavos),
@@ -117,18 +117,25 @@ export function camposTsDeProposta(p: { aos_cuidados: string | null; validade_di
 }
 
 // Posto com o mínimo para o servidor calcular (a prévia só leva os postos completos: um posto pela metade não derruba o cálculo dos outros).
+// Linha "Outro" já preenchida (valor/percentual) mas sem descrição: o posto ainda não está completo para a prévia.
+const rotuloOutroPendente = (x: { tipo: string; rotulo: string; valor?: number; percentual?: string }): boolean =>
+  x.tipo === "outro" && x.rotulo.trim() === "" && ((x.valor ?? 0) > 0 || (x.percentual ?? "").trim() !== "");
+
 export function postoTsPronto(p: PostoForm): boolean {
   const efetivos = inteiroOuNull(p.efetivos), mensais = inteiroOuNull(p.horas_mensais);
-  return p.nome.trim() !== "" && p.salario > 0 && efetivos !== null && efetivos >= 1 && mensais !== null && mensais >= 1 && (p.escala !== "outra" || p.escala_texto.trim() !== "");
+  return p.nome.trim() !== "" && p.salario > 0 && efetivos !== null && efetivos >= 1 && mensais !== null && mensais >= 1 && (p.escala !== "outra" || p.escala_texto.trim() !== "") && !p.adicionais.some(rotuloOutroPendente) && !p.beneficios.some(rotuloOutroPendente);
 }
+
+// O rótulo só viaja no tipo "outro"; vazio segue vazio para o servidor recusar com a mensagem certa.
+const rotuloOutro = (x: { tipo: string; rotulo: string }): { rotulo?: string } => (x.tipo === "outro" ? { rotulo: x.rotulo.trim() } : {});
 
 function servicoDoPosto(p: PostoForm, gestor: boolean) {
   // Linha sem valor é linha que o vendedor não preencheu: sai da lista em vez de virar erro.
   const adicionais = p.adicionais.flatMap((a): Record<string, unknown>[] => {
-    if (a.modo === "valor") return a.valor > 0 ? [{ tipo: a.tipo, modo: "valor" as const, valor_centavos: centavos(a.valor) }] : [];
-    return a.percentual.trim() === "" ? [] : [{ tipo: a.tipo, modo: "percentual" as const, percentual_bp: percentualParaBp(a.percentual) }];
+    if (a.modo === "valor") return a.valor > 0 ? [{ tipo: a.tipo, ...rotuloOutro(a), modo: "valor" as const, valor_centavos: centavos(a.valor) }] : [];
+    return a.percentual.trim() === "" ? [] : [{ tipo: a.tipo, ...rotuloOutro(a), modo: "percentual" as const, percentual_bp: percentualParaBp(a.percentual) }];
   });
-  const beneficios = p.beneficios.filter((b) => b.valor > 0).map((b) => ({ tipo: b.tipo, valor_centavos: centavos(b.valor) }));
+  const beneficios = p.beneficios.filter((b) => b.valor > 0).map((b) => ({ tipo: b.tipo, ...rotuloOutro(b), valor_centavos: centavos(b.valor) }));
   const fornece = p.salmazos_fornece ? "salmazos" : "cliente";
   const cobertura = gestor ? { cobertura_bp_override: p.cobertura.trim() === "" ? null : percentualParaBp(p.cobertura) } : {};
   return {
@@ -359,9 +366,13 @@ export default function CamposPropostaTs({ valor, onChange, gestor, contatos = [
                       onChange={(e) => setItem(i, { adicionais: it.adicionais.map((x, j) => (j === k ? { ...x, percentual: e.target.value } : x)) })} />
                   )}
                   {!desabilitado && <button type="button" style={{ ...btnMini, color: "#B91C1C" }} aria-label={`Remover adicional ${k + 1}`} onClick={() => setItem(i, { adicionais: it.adicionais.filter((_, j) => j !== k) })}>✕</button>}
+                  {a.tipo === "outro" && (
+                    <input data-rotulo-adicional={k} style={{ ...inputStyle, gridColumn: "1 / -1" }} value={a.rotulo} maxLength={MAX_ROTULO_TS} disabled={desabilitado} placeholder="Descreva o adicional (ex.: Adicional de risco)" aria-label={`Descrição do adicional ${k + 1}`}
+                      onChange={(e) => setItem(i, { adicionais: it.adicionais.map((x, j) => (j === k ? { ...x, rotulo: e.target.value } : x)) })} />
+                  )}
                 </div>
               ))}
-              {!desabilitado && <button type="button" style={btnMini} onClick={() => setItem(i, { adicionais: [...it.adicionais, { tipo: TIPOS_ADICIONAL_TS[0].codigo, modo: "valor", valor: 0, percentual: "" }] })}>+ Adicionar adicional</button>}
+              {!desabilitado && <button type="button" style={btnMini} onClick={() => setItem(i, { adicionais: [...it.adicionais, { tipo: TIPOS_ADICIONAL_TS[0].codigo, rotulo: "", modo: "valor", valor: 0, percentual: "" }] })}>+ Adicionar adicional</button>}
               <div style={ajuda}>Adicionais compõem a remuneração e entram nos encargos. Linhas sem valor são ignoradas.</div>
             </div>
 
@@ -375,9 +386,13 @@ export default function CamposPropostaTs({ valor, onChange, gestor, contatos = [
                   </select>
                   <CampoMoeda value={b.valor || null} onChange={(v) => setItem(i, { beneficios: it.beneficios.map((x, j) => (j === k ? { ...x, valor: v } : x)) })} placeholder="R$ 0,00" disabled={desabilitado} style={moedaStyle} />
                   {!desabilitado && <button type="button" style={{ ...btnMini, color: "#B91C1C" }} aria-label={`Remover benefício ${k + 1}`} onClick={() => setItem(i, { beneficios: it.beneficios.filter((_, j) => j !== k) })}>✕</button>}
+                  {b.tipo === "outro" && (
+                    <input data-rotulo-beneficio={k} style={{ ...inputStyle, gridColumn: "1 / -1" }} value={b.rotulo} maxLength={MAX_ROTULO_TS} disabled={desabilitado} placeholder="Descreva o benefício (ex.: Plano odontológico)" aria-label={`Descrição do benefício ${k + 1}`}
+                      onChange={(e) => setItem(i, { beneficios: it.beneficios.map((x, j) => (j === k ? { ...x, rotulo: e.target.value } : x)) })} />
+                  )}
                 </div>
               ))}
-              {!desabilitado && <button type="button" style={btnMini} onClick={() => setItem(i, { beneficios: [...it.beneficios, { tipo: TIPOS_BENEFICIO_TS[0].codigo, valor: 0 }] })}>+ Adicionar benefício</button>}
+              {!desabilitado && <button type="button" style={btnMini} onClick={() => setItem(i, { beneficios: [...it.beneficios, { tipo: TIPOS_BENEFICIO_TS[0].codigo, rotulo: "", valor: 0 }] })}>+ Adicionar benefício</button>}
               <div style={ajuda}>Valor mensal por efetivo. Linhas sem valor são ignoradas.</div>
             </div>
 
