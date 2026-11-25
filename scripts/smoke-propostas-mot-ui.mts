@@ -587,19 +587,21 @@ await caso("Nova proposta (vendedor): MOT e TS seguem 'Em breve' e desabilitados
   assert.match(textoDe(r), /CNPJ do cliente/);
   assert.equal(r.root.findAllByType(CampoMoeda).length, 0);
 });
-await caso("Nova proposta (gestor): MOT aparece como 'Em teste' e só habilita com empresa de TESTE; em empresa real fica desabilitado; TS segue 'Em breve'", async () => {
+await caso("Nova proposta (gestor): MOT e TS aparecem como 'Em teste' e só habilitam com empresa de TESTE; em empresa real ficam desabilitados (a 2D liberou o TS na mesma trava do MOT)", async () => {
   const { r } = await montarNova(true, [EMPRESA_REAL_GESTOR, EMPRESA_TESTE]);
   assert.match(rotuloDoModelo(r, "MOT"), /Em teste/);
   assert.equal(botaoModelo(r, "MOT").props.disabled, true, "sem empresa escolhida");
   await escolherEmpresa(r, "Pastifício Selmi");
   assert.match(rotuloDoModelo(r, "MOT"), /escolha uma empresa de teste/);
   assert.equal(botaoModelo(r, "MOT").props.disabled, true, "empresa real");
-  assert.match(rotuloDoModelo(r, "TS"), /Em breve/);
-  assert.equal(botaoModelo(r, "TS").props.disabled, true);
+  assert.match(rotuloDoModelo(r, "TS"), /escolha uma empresa de teste/);
+  assert.equal(botaoModelo(r, "TS").props.disabled, true, "empresa real");
   await clicar(botoes(r).find((b) => txt(b).includes("Trocar empresa")));
   await escolherEmpresa(r, "cliente teste");
   assert.equal(botaoModelo(r, "MOT").props.disabled, false);
+  assert.equal(botaoModelo(r, "TS").props.disabled, false);
   assert.equal(rotuloDoModelo(r, "MOT"), "Mão de Obra TemporáriaEm teste");
+  assert.equal(rotuloDoModelo(r, "TS"), "Terceirização de ServiçosEm teste");
 });
 await caso("Nova proposta (gestor, empresa de teste): escolher MOT troca para o formulário MOT (sem CNPJ/endereço), cria com POST de modelo MOT em centavos e vai para o detalhe; o botão fica travado sem percentuais; trocar para empresa real volta ao R&S", async () => {
   const { r, navegou } = await montarNova(true, [EMPRESA_REAL_GESTOR, EMPRESA_TESTE]);

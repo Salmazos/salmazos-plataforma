@@ -7,6 +7,7 @@ import { rotuloEtapa } from "@/lib/comercialRotulos";
 import { MODELOS, MODELOS_ATIVOS, ROTULO_MODELO, type ModeloProposta } from "@/lib/propostas";
 import CamposProposta, { camposPadrao, conteudoDoForm, validadeDoForm, type CamposForm } from "@/components/propostas/CamposProposta";
 import CamposPropostaMot, { camposMotPadrao, conteudoMotDoForm, validadeMotDoForm, type CamposMotForm, type EstadoPrevia } from "@/components/propostas/CamposPropostaMot";
+import CamposPropostaTs, { bloqueioTs, camposTsPadrao, conteudoTsDoForm, validadeTsDoForm, type CamposTsForm, type EstadoPreviaTs } from "@/components/propostas/CamposPropostaTs";
 import { aplicarPrefill, lerDadosPrefill, type DadosPrefill } from "@/lib/propostaPrefill";
 import { Aviso, btnPrimario, btnSecundario, cardStyle, inputStyle, labelStyle, lerResposta, guardarAvisoProposta } from "@/components/propostas/propostasUi";
 
@@ -32,6 +33,8 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
   const [camposMot, setCamposMot] = useState<CamposMotForm>(camposMotPadrao());
   // Sem percentuais vigentes (ou erro no cálculo) o servidor responde com uma mensagem e o botão de criar fica bloqueado.
   const [previaMot, setPreviaMot] = useState<EstadoPrevia>({ previa: null, erro: null, carregando: false });
+  const [camposTs, setCamposTs] = useState<CamposTsForm>(camposTsPadrao());
+  const [previaTs, setPreviaTs] = useState<EstadoPreviaTs>({ previa: null, erro: null, status: null, carregando: false, mapa: [] });
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erroBusca, setErroBusca] = useState("");
@@ -68,15 +71,16 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
     };
   }, [busca]);
 
-  // MOT só vale para o gestor com empresa de teste escolhida; fora disso a tela volta sozinha para o R&S (nunca prepara um MOT que o servidor recusaria).
+  // MOT e TS só valem para o gestor com empresa de teste escolhida; fora disso a tela volta sozinha para o R&S (nunca prepara um modelo que o servidor recusaria).
   const motLiberado = gestor && empresa?.teste === true;
-  const modeloAtual: ModeloProposta = modelo === "MOT" && !motLiberado ? "RS" : modelo;
+  const modeloAtual: ModeloProposta = (modelo === "MOT" || modelo === "TS") && !motLiberado ? "RS" : modelo;
 
   // Preenche SÓ os campos vazios da MESMA empresa com os dados do cadastro (nunca sobrescreve o que o vendedor digitou). Os dois formulários (R&S e MOT)
   // recebem o mesmo A/C; CNPJ e endereço só existem no R&S.
   function preencherDoCadastro(dados: DadosPrefill) {
     setCampos((c) => aplicarPrefill(c, dados));
     setCamposMot((c) => ({ ...c, aos_cuidados: aplicarPrefill({ aos_cuidados: c.aos_cuidados, cliente_cnpj: "", cliente_endereco: "" }, { ...dados, cnpj: null, cidade: null, endereco: null }).aos_cuidados }));
+    setCamposTs((c) => ({ ...c, aos_cuidados: aplicarPrefill({ aos_cuidados: c.aos_cuidados, cliente_cnpj: "", cliente_endereco: "" }, { ...dados, cnpj: null, cidade: null, endereco: null }).aos_cuidados }));
   }
 
   function escolher(e: EmpresaOpc) {
@@ -87,6 +91,7 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
     // troca, nem o que foi digitado. O A/C já vem do contato principal da lista (ou o primeiro); CNPJ e endereço chegam pela rota leve, logo abaixo.
     setCampos({ ...camposPadrao(), aos_cuidados: principal?.nome ?? "" });
     setCamposMot({ ...camposMotPadrao(), aos_cuidados: principal?.nome ?? "" });
+    setCamposTs({ ...camposTsPadrao(), aos_cuidados: principal?.nome ?? "" });
     // Se a consulta falhar, os campos simplesmente ficam vazios para o vendedor digitar.
     const sequencia = ++sequenciaPrefill.current;
     fetch(`/api/comercial/propostas/empresas/${e.id}/prefill`)
@@ -184,6 +189,8 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
     if (emAndamento.current) return;
     if (!empresa) { setErro("Escolha a empresa da Carteira."); return; }
     if (modeloAtual === "MOT" && previaMot.erro) { setErro(previaMot.erro); return; }
+    const motivoTs = modeloAtual === "TS" ? bloqueioTs(camposTs, previaTs, gestor) : null;
+    if (motivoTs) { setErro(motivoTs); return; }
     emAndamento.current = true;
     setSalvando(true);
     setErro("");
@@ -193,7 +200,14 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
       const r = await lerResposta<{ data: { id: string }; aviso: string | null }>(await fetch("/api/comercial/propostas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(modeloAtual === "MOT" ? {
+        body: JSON.stringify(modeloAtual === "TS" ? {
+          modelo: modeloAtual,
+          empresa_visitada_id: empresa.id,
+          contato_id: contatoId || null,
+          aos_cuidados: camposTs.aos_cuidados.trim() || null,
+          validade_dias: validadeTsDoForm(camposTs),
+          conteudo: conteudoTsDoForm(camposTs, { gestor }),
+        } : modeloAtual === "MOT" ? {
           modelo: modeloAtual,
           empresa_visitada_id: empresa.id,
           contato_id: contatoId || null,
@@ -223,7 +237,7 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
     }
   }
 
-  const bloqueadoPorCalculo = modeloAtual === "MOT" && previaMot.erro !== null;
+  const bloqueadoPorCalculo = (modeloAtual === "MOT" && previaMot.erro !== null) || (modeloAtual === "TS" && bloqueioTs(camposTs, previaTs, gestor) !== null);
 
   return (
     <div style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
@@ -234,7 +248,7 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
         <div style={labelStyle}>Modelo</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
           {MODELOS.map((m) => {
-            const noTeste = m === "MOT" && gestor && !MODELOS_ATIVOS.includes(m);
+            const noTeste = (m === "MOT" || m === "TS") && gestor && !MODELOS_ATIVOS.includes(m);
             const ativo = MODELOS_ATIVOS.includes(m) || (noTeste && motLiberado);
             const sel = modeloAtual === m;
             return (
@@ -316,7 +330,12 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
 
       {empresa && (
         <div style={{ ...cardStyle, marginBottom: 16 }}>
-          {modeloAtual === "MOT" ? (
+          {modeloAtual === "TS" ? (
+            <>
+              <Aviso tipo="alerta">Modelo em teste: esta proposta sai como TESTE-TS-..., fora das listas dos vendedores e sem efeito no Funil. O PDF da Terceirização ainda não está disponível.</Aviso>
+              <CamposPropostaTs valor={camposTs} onChange={setCamposTs} gestor={gestor} contatos={empresa.contatos} contatoId={contatoId} onContato={setContatoId} onPrevia={setPreviaTs} />
+            </>
+          ) : modeloAtual === "MOT" ? (
             <>
               <Aviso tipo="alerta">Modelo em teste: esta proposta sai como TESTE-MOT-..., fora das listas dos vendedores e sem efeito no Funil.</Aviso>
               <CamposPropostaMot valor={camposMot} onChange={setCamposMot} contatos={empresa.contatos} contatoId={contatoId} onContato={setContatoId} onPrevia={setPreviaMot} />

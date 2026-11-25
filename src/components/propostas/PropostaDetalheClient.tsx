@@ -8,7 +8,8 @@ import CamposProposta, { camposDeProposta, conteudoDoForm, validadeDoForm, type 
 import ModalMarcarEnviada from "@/components/propostas/ModalMarcarEnviada";
 import ModalSituacaoProposta, { type AcaoSituacao } from "@/components/propostas/ModalSituacaoProposta";
 import PropostaDetalheMot from "@/components/propostas/PropostaDetalheMot";
-import type { PlanilhaMotDetalhe } from "@/lib/propostaServico";
+import PropostaDetalheTs from "@/components/propostas/PropostaDetalheTs";
+import type { PlanilhaMotDetalhe, PlanilhaTsDetalhe } from "@/lib/propostaServico";
 import { Aviso, btnPerigo, btnPrimario, btnSecundario, cardStyle, fmtData, fmtDataHora, fmtMoeda, lerEApagarAvisoProposta, lerResposta, SeloTeste, SituacaoBadge, ValidadeTexto } from "@/components/propostas/propostasUi";
 
 interface Revisao { id: string; revisao: number; template_versao: number; vendedor_nome: string | null; created_at: string }
@@ -26,7 +27,8 @@ const ROTULO_HISTORICO = (h: Historico) =>
   : h.de === h.para ? "Revisão emitida"
   : `${ROTULO_SITUACAO[h.de as SituacaoProposta] ?? h.de} → ${ROTULO_SITUACAO[h.para as SituacaoProposta] ?? h.para}`;
 
-export default function PropostaDetalheClient({ id }: { id: string }) {
+// gestor: perfil gestor/diretoria do módulo (vem da página, não da rota); só ele vê margem, decomposição e os campos da diretoria no TS.
+export default function PropostaDetalheClient({ id, gestor = false }: { id: string; gestor?: boolean }) {
   const [d, setD] = useState<Detalhe | null>(null);
   const [hoje, setHoje] = useState("");
   const [podeEditar, setPodeEditar] = useState(false);
@@ -49,13 +51,16 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
   const [acao, setAcao] = useState<AcaoSituacao | null>(null);
   // Só vem no MOT (planilha calculada, sem percentuais); no R&S fica sempre null.
   const [planilhaMot, setPlanilhaMot] = useState<PlanilhaMotDetalhe | null>(null);
+  // Só vem no TS (planilha calculada pelo servidor, sem percentuais).
+  const [planilhaTs, setPlanilhaTs] = useState<PlanilhaTsDetalhe | null>(null);
 
   const carregar = useCallback(async () => {
     try {
-      const r = await lerResposta<{ data: Detalhe; hoje: string; podeEditar: boolean; somenteLeitura: boolean; temFunil?: boolean; oportunidadeAbertaPropria?: boolean; planilhaMot?: PlanilhaMotDetalhe }>(await fetch(`/api/comercial/propostas/${id}`));
+      const r = await lerResposta<{ data: Detalhe; hoje: string; podeEditar: boolean; somenteLeitura: boolean; temFunil?: boolean; oportunidadeAbertaPropria?: boolean; planilhaMot?: PlanilhaMotDetalhe; planilhaTs?: PlanilhaTsDetalhe }>(await fetch(`/api/comercial/propostas/${id}`));
       if (!r.ok) { setErro(r.status === 404 ? "Proposta não encontrada." : r.json.error ?? "Não foi possível carregar a proposta."); return; }
       setD(r.json.data);
       setPlanilhaMot(r.json.planilhaMot ?? null);
+      setPlanilhaTs(r.json.planilhaTs ?? null);
       setHoje(r.json.hoje);
       setPodeEditar(r.json.podeEditar);
       setSomenteLeitura(r.json.somenteLeitura);
@@ -157,6 +162,14 @@ export default function PropostaDetalheClient({ id }: { id: string }) {
     return (
       <PropostaDetalheMot d={{ ...d, conteudo: d.conteudo as never }} hoje={hoje} podeEditar={podeEditar} somenteLeitura={somenteLeitura} temFunil={temFunil}
         oportunidadeAbertaPropria={oportunidadeAbertaPropria} planilha={planilhaMot} aviso={aviso} onAviso={setAviso} onRecarregar={carregar} />
+    );
+  }
+
+  // TS: tela própria (postos, planilha com margem só para o gestor, envio bloqueado até o PDF da 2E).
+  if (d.modelo === "TS") {
+    return (
+      <PropostaDetalheTs d={{ ...d, conteudo: d.conteudo as never }} hoje={hoje} gestor={gestor} podeEditar={podeEditar} somenteLeitura={somenteLeitura} temFunil={temFunil}
+        oportunidadeAbertaPropria={oportunidadeAbertaPropria} planilha={planilhaTs} aviso={aviso} onAviso={setAviso} onRecarregar={carregar} />
     );
   }
 

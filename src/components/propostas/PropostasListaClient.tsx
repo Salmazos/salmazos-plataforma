@@ -6,17 +6,23 @@ import { useRouter } from "next/navigation";
 import { MODELOS, ROTULO_MODELO, ROTULO_SITUACAO, SITUACOES, type SituacaoProposta } from "@/lib/propostas";
 import PropostaPainelGestao from "@/components/propostas/PropostaPainelGestao";
 import PercentuaisMotAdmin from "@/components/propostas/PercentuaisMotAdmin";
+import PercentuaisTsAdmin from "@/components/propostas/PercentuaisTsAdmin";
 import { Aviso, btnPrimario, cardStyle, fmtMoeda, inputStyle, lerResposta, SeloTeste, SituacaoBadge, ValidadeTexto, type PropostaResumo } from "@/components/propostas/propostasUi";
 
 interface Props {
   podeCriar: boolean;
   gestor: boolean;
   vendedores: { id: string; nome_completo: string }[];
+  // Aba aberta de início (o link "Configurar percentuais" do TS abre direto em "percentuais-ts"). Só vale para o gestor.
+  abaInicial?: string;
 }
 
-export default function PropostasListaClient({ podeCriar, gestor, vendedores }: Props) {
+type Aba = "lista" | "painel" | "percentuais" | "percentuais-ts";
+const ABAS_VALIDAS: Aba[] = ["lista", "painel", "percentuais", "percentuais-ts"];
+
+export default function PropostasListaClient({ podeCriar, gestor, vendedores, abaInicial }: Props) {
   const router = useRouter();
-  const [aba, setAba] = useState<"lista" | "painel" | "percentuais">("lista");
+  const [aba, setAba] = useState<Aba>(gestor && ABAS_VALIDAS.includes(abaInicial as Aba) ? (abaInicial as Aba) : "lista");
   const [propostas, setPropostas] = useState<PropostaResumo[]>([]);
   const [hoje, setHoje] = useState("");
   const [carregando, setCarregando] = useState(true);
@@ -75,10 +81,11 @@ export default function PropostasListaClient({ podeCriar, gestor, vendedores }: 
           <button style={chip(aba === "lista")} onClick={() => setAba("lista")}>Propostas</button>
           <button style={chip(aba === "painel")} onClick={() => setAba("painel")}>Painel de gestão</button>
           <button style={chip(aba === "percentuais")} onClick={() => setAba("percentuais")}>Percentuais do MOT</button>
+          <button style={chip(aba === "percentuais-ts")} onClick={() => setAba("percentuais-ts")}>Percentuais da Terceirização</button>
         </div>
       )}
 
-      {aba === "percentuais" && gestor ? <PercentuaisMotAdmin /> : aba === "painel" && gestor ? <PropostaPainelGestao /> : (
+      {aba === "percentuais-ts" && gestor ? <PercentuaisTsAdmin /> : aba === "percentuais" && gestor ? <PercentuaisMotAdmin /> : aba === "painel" && gestor ? <PropostaPainelGestao /> : (
         <>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
             <button style={chip(situacao === "")} onClick={() => setSituacao("")}>Todas ({propostas.length})</button>

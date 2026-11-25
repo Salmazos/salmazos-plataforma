@@ -505,8 +505,9 @@ await caso("fonte: a aba 'Percentuais do MOT' só existe dentro do bloco do gest
   assert.equal((lista.match(/Percentuais do MOT/g) ?? []).length, 1);
   const nova = fs.readFileSync("src/components/propostas/PropostaNovaClient.tsx", "utf8");
   assert.ok(nova.includes("const motLiberado = gestor && empresa?.teste === true;"));
-  assert.ok(nova.includes('const modeloAtual: ModeloProposta = modelo === "MOT" && !motLiberado ? "RS" : modelo;'));
-  assert.ok(nova.includes("const noTeste = m === \"MOT\" && gestor && !MODELOS_ATIVOS.includes(m);"));
+  // 2D: o TS entrou na MESMA trava do MOT (gestor + empresa de teste); fora dela a tela volta ao R&S.
+  assert.ok(nova.includes('const modeloAtual: ModeloProposta = (modelo === "MOT" || modelo === "TS") && !motLiberado ? "RS" : modelo;'));
+  assert.ok(nova.includes("const noTeste = (m === \"MOT\" || m === \"TS\") && gestor && !MODELOS_ATIVOS.includes(m);"));
   assert.ok(nova.includes('"Em teste"') && nova.includes('"Em breve"'));
   assert.ok(nova.includes("bloqueadoPorCalculo") && nova.includes("previaMot.erro !== null"));
   const pagina = fs.readFileSync("src/app/painel/comercial/propostas/nova/page.tsx", "utf8");

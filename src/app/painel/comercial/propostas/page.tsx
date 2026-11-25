@@ -5,7 +5,7 @@ import PropostasListaClient from "@/components/propostas/PropostasListaClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function PropostasPage() {
+export default async function PropostasPage({ searchParams }: { searchParams: Promise<{ aba?: string }> }) {
   const supabaseAuth = await createClient();
   const { data: { user } } = await supabaseAuth.auth.getUser();
   if (!user) redirect("/login");
@@ -14,6 +14,7 @@ export default async function PropostasPage() {
 
   // O gestor escolhe o vendedor no filtro (quem pode escrever em Propostas); o vendedor não precisa da lista.
   const vendedores = ctx.gestor ? await listarQuemPodeEscreverPropostas(createServiceClient(), ctx) : [];
+  const { aba } = await searchParams;
 
-  return <PropostasListaClient podeCriar={ctx.podeEscrever} gestor={ctx.gestor} vendedores={vendedores} />;
+  return <PropostasListaClient podeCriar={ctx.podeEscrever} gestor={ctx.gestor} vendedores={vendedores} abaInicial={aba} />;
 }
