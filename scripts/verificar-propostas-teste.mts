@@ -12,6 +12,7 @@ import * as rotaSit from "@/app/api/comercial/propostas/[id]/situacao/route";
 import * as rotaPdf from "@/app/api/comercial/propostas/[id]/pdf/route";
 import * as rotaPainel from "@/app/api/comercial/propostas/painel/route";
 import * as rotaEmpresas from "@/app/api/comercial/propostas/empresas/route";
+import * as rotaDeCliente from "@/app/api/comercial/propostas/empresas/de-cliente/route";
 import * as rotaTeste from "@/app/api/comercial/propostas/empresas/[id]/teste/route";
 import { hojeSaoPaulo } from "@/lib/comercial";
 import { gerarPdfProposta, TEXTO_MARCA_TESTE } from "@/lib/propostaPdf";
@@ -200,6 +201,27 @@ await caso("vendedor NÃO cria em empresa de teste (404, nada gravado e contador
   assert.equal(eg.teste, true);
   assert.equal(g.body.data.find((e: any) => e.id === EMP_REAL).teste, false);
 });
+await caso("cliente cuja EMPRESA é de teste: o vendedor não o vê como 'sem Carteira' e a rota de criação responde 404 (nada criado); o gestor vê a empresa pela Carteira com teste:true e a rota devolve a mesma empresa (200)", async () => {
+  const CLI = "aaaaaaaa-aaaa-4aaa-8aaa-000000000020";
+  const db = novoDb({ clientes: [{ id: CLI, nome: "ZZTEST Cliente da Empresa de Teste", unidade_id: U, ativo: true, cidade: "X", contato_nome: "Ana", contato_telefone: "1", contato_email: "a@a.com" }] });
+  db.tabelas.empresas_visitadas.find((e: any) => e.id === EMP_TESTE).cliente_id = CLI;
+  const antes = structuredClone(db.tabelas.empresas_visitadas);
+  const busca = await empresas(db, "u-v");
+  assert.ok(!busca.body.data.some((x: any) => x.origem === "cliente"), "cliente com empresa de teste não vira 'sem Carteira' para o vendedor");
+  assert.ok(!busca.body.data.some((x: any) => x.id === EMP_TESTE));
+  const criar404 = await chamar(db, "u-v", rotaDeCliente.POST, { metodo: "POST", corpo: { cliente_id: CLI } });
+  assert.equal(criar404.status, 404);
+  assert.deepEqual(db.tabelas.empresas_visitadas, antes);
+  const gestor = await empresas(db, "u-g");
+  assert.ok(!gestor.body.data.some((x: any) => x.origem === "cliente"));
+  assert.equal(gestor.body.data.find((x: any) => x.id === EMP_TESTE).teste, true);
+  const g = await chamar(db, "u-g", rotaDeCliente.POST, { metodo: "POST", corpo: { cliente_id: CLI } });
+  assert.equal(g.status, 200);
+  assert.equal(g.body.data.id, EMP_TESTE);
+  assert.equal(g.body.data.teste, true);
+  assert.deepEqual(db.tabelas.empresas_visitadas, antes);
+});
+
 await caso("erro ao ler a marca da empresa → 500 e NADA é criado (nunca gasta número real por engano)", async () => {
   const db = novoDb();
   db.falhas["empresas_teste.select"] = "boom";

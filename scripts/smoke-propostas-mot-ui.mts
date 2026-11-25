@@ -654,4 +654,79 @@ await caso("Nova proposta R&S: o corpo enviado é o de sempre (modelo RS, conte�
   assert.deepEqual(Object.keys(post.corpo.conteudo).sort(), ["clausulas_adicionais", "cliente_cnpj", "cliente_endereco", "condicoes", "texto_introdutorio"]);
 });
 
+// ═══ Tela "Nova proposta": clientes cadastrados sem Carteira ═════════════════════════════════════════════════
+const CLIENTE_SEM_CARTEIRA = { origem: "cliente", cliente_id: "c-novo", nome: "ZZTEST Cliente Novo", cidade: "Monte Mor" };
+const EMPRESA_CRIADA = { id: "e-criada", nome: "ZZTEST Cliente Novo", cliente_id: "c-novo", contatos: [{ id: "ct-1", nome: "Ana Contato", cargo: null, principal: true }], oportunidade_aberta: null };
+const botoesDeCliente = (r: TestRenderer.ReactTestRenderer) => botoes(r).filter((b) => b.props["data-origem"] === "cliente");
+const aoDeClienteResponde = (corpo: { status: number; corpo: unknown }) => {
+  const anterior = resposta;
+  resposta = (c) => (c.url === "/api/comercial/propostas/empresas/de-cliente" ? corpo : anterior(c));
+};
+await caso("Nova proposta: o cliente sem Carteira aparece com o selo 'Cliente cadastrado' (empresas da Carteira seguem sem selo); o item não tem id de empresa e nada é criado só de listar", async () => {
+  const { r } = await montarNova(false, [EMPRESA_REAL, CLIENTE_SEM_CARTEIRA]);
+  const cli = botoesDeCliente(r);
+  assert.equal(cli.length, 1);
+  assert.match(txt(cli[0]), /ZZTEST Cliente Novo/);
+  assert.match(txt(cli[0]), /Monte Mor/);
+  assert.match(txt(cli[0]), /Cliente cadastrado/);
+  const carteira = botoes(r).find((b) => txt(b).includes("Pastifício Selmi"))!;
+  assert.doesNotMatch(txt(carteira), /Cliente cadastrado/);
+  assert.equal(carteira.props["data-origem"], undefined);
+  assert.equal(chamadas.filter((c) => c.metodo === "POST").length, 0, "só a busca (GET) aconteceu");
+});
+await caso("Nova proposta: clicar no cliente chama a rota de-cliente com o cliente_id e segue com a EMPRESA REAL devolvida (A/C = contato principal); o 'Criar rascunho' envia o id da empresa real, nunca o do cliente", async () => {
+  const { r } = await montarNova(false, [CLIENTE_SEM_CARTEIRA]);
+  aoDeClienteResponde({ status: 201, corpo: { data: EMPRESA_CRIADA } });
+  chamadas = [];
+  await clicar(botoesDeCliente(r)[0]);
+  await esperar(20);
+  const de = chamadas.filter((c) => c.url === "/api/comercial/propostas/empresas/de-cliente");
+  assert.equal(de.length, 1);
+  assert.equal(de[0].metodo, "POST");
+  assert.deepEqual(de[0].corpo, { cliente_id: "c-novo" });
+  assert.match(textoDe(r), /ZZTEST Cliente Novo/);
+  assert.ok(botaoPorTexto(r, "Trocar empresa"), "a empresa foi escolhida");
+  assert.ok(r.root.findAll((n) => n.type === "input" && n.props.value === "Ana Contato").length >= 1, "A/C preenchido com o contato principal");
+  await clicar(botaoPorTexto(r, "Criar rascunho"));
+  await esperar(20);
+  const post = chamadas.find((c) => c.metodo === "POST" && c.url === "/api/comercial/propostas")!;
+  assert.ok(post, "criou a proposta");
+  assert.equal(post.corpo.empresa_visitada_id, "e-criada");
+  assert.equal(post.corpo.contato_id, "ct-1");
+  assert.equal(post.corpo.aos_cuidados, "Ana Contato");
+  assert.ok(!JSON.stringify(post.corpo).includes("c-novo"), "o id do cliente nunca vai na proposta");
+  // Trocar de empresa: o cliente já tem empresa e não volta a aparecer como cliente.
+  await clicar(botaoPorTexto(r, "Trocar empresa"));
+  assert.equal(botoesDeCliente(r).length, 0);
+});
+await caso("Nova proposta: clique duplo no cliente faz UMA chamada; erro do servidor (409/404) aparece na tela e nenhuma empresa é escolhida; o cliente continua na lista", async () => {
+  const { r } = await montarNova(false, [CLIENTE_SEM_CARTEIRA]);
+  aoDeClienteResponde({ status: 409, corpo: { error: "Já existe uma empresa com este nome na Carteira. Escolha a empresa da Carteira na lista; ela não é ligada ao cliente automaticamente." } });
+  chamadas = [];
+  const b = botoesDeCliente(r)[0];
+  await act(async () => { b.props.onClick(); b.props.onClick(); });
+  await esperar(20);
+  assert.equal(chamadas.filter((c) => c.url === "/api/comercial/propostas/empresas/de-cliente").length, 1, "clique duplo = uma chamada");
+  assert.match(textoDe(r), /Escolha a empresa da Carteira na lista/);
+  assert.equal(botaoPorTexto(r, "Trocar empresa"), undefined, "nenhuma empresa escolhida");
+  assert.equal(botoesDeCliente(r).length, 1);
+  assert.equal(botoesDeCliente(r)[0].props.disabled, false, "botão destravado depois do erro");
+  // Falha de rede: mensagem genérica e destravado.
+  const anterior = (globalThis as any).fetch;
+  (globalThis as any).fetch = async () => { throw new Error("rede"); };
+  await clicar(botoesDeCliente(r)[0]);
+  await esperar(20);
+  (globalThis as any).fetch = anterior;
+  assert.match(textoDe(r), /Não foi possível preparar este cliente/);
+  assert.equal(botoesDeCliente(r)[0].props.disabled, false);
+});
+await caso("Nova proposta (gestor): a empresa criada do cliente vem com teste:false e o botão 'Marcar como empresa de teste' aparece; o modelo MOT continua desabilitado (empresa real)", async () => {
+  const { r } = await montarNova(true, [CLIENTE_SEM_CARTEIRA]);
+  aoDeClienteResponde({ status: 201, corpo: { data: { ...EMPRESA_CRIADA, teste: false } } });
+  await clicar(botoesDeCliente(r)[0]);
+  await esperar(20);
+  assert.ok(botaoPorTexto(r, "Marcar como empresa de teste"));
+  assert.equal(botaoModelo(r, "MOT").props.disabled, true);
+});
+
 console.log(`\n${total} casos OK (incl. Nova proposta)${process.exitCode ? " (com FALHAS acima)" : ""}`);

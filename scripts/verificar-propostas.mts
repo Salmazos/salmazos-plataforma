@@ -32,6 +32,7 @@ import * as rotaPdf from "@/app/api/comercial/propostas/[id]/pdf/route";
 import * as rotaPainel from "@/app/api/comercial/propostas/painel/route";
 import * as rotaEmpresas from "@/app/api/comercial/propostas/empresas/route";
 import * as rotaEmpresaContatos from "@/app/api/comercial/propostas/empresas/[id]/contatos/route";
+import * as rotaDeCliente from "@/app/api/comercial/propostas/empresas/de-cliente/route";
 import { podeAcessarPropostas, listarQuemPodeEscreverPropostas } from "@/lib/propostasAcesso";
 import { podeAcessarAba } from "@/lib/acessoCustomizadoAuth";
 import { ABAS_POR_CHAVE } from "@/lib/abasConfig";
@@ -1747,6 +1748,7 @@ await caso("(d) sem nenhuma liberação nem perfil: 403 'Você não tem acesso a
     ["pdf GET", (u) => chamar(db, u, rotaPdf.GET, { id })],
     ["painel GET", (u) => chamar(db, u, rotaPainel.GET)],
     ["empresas GET", (u) => chamar(db, u, rotaEmpresas.GET)],
+    ["empresas de-cliente POST", (u) => chamar(db, u, rotaDeCliente.POST, { metodo: "POST", corpo: { cliente_id: "aaaaaaaa-aaaa-4aaa-8aaa-000000000020" } })],
     ["contatos GET", (u) => chamar(db, u, rotaEmpresaContatos.GET, { id: EMP })],
   ];
   for (const [nome, rodar] of chamadas) {
@@ -1911,6 +1913,26 @@ await caso("(i) rotas de empresas: só id, nome e contatos da unidade; oportunid
   assert.equal((await chamar(db, "u-lib", rotaEmpresaContatos.GET, { id: EMP })).status, 404, "sem unidade definida: 404");
 });
 
+await caso("(i2) busca de empresas com CLIENTES sem Carteira no banco: itens da Carteira com as MESMAS chaves de antes; o cliente vem depois, sem id, contatos nem dados de contato; cliente de outra unidade fora; leitor 403 também na rota nova", async () => {
+  const CLI = "aaaaaaaa-aaaa-4aaa-8aaa-000000000020", CLI_FORA = "aaaaaaaa-aaaa-4aaa-8aaa-000000000021";
+  const db = novoDb({
+    clientes: [
+      { id: CLI, nome: "ZZTEST Cliente Sem Carteira", unidade_id: U, ativo: true, cidade: "Monte Mor", cnpj: "11.222.333/0001-81", contato_nome: "Ana", contato_telefone: "(19) 91111-2222", contato_email: "ana@zztest.com.br" },
+      { id: CLI_FORA, nome: "ZZTEST Cliente Outra Unidade", unidade_id: U2, ativo: true, cidade: "SBC", contato_nome: "X", contato_telefone: "1", contato_email: "x@x.com" },
+    ],
+  });
+  const r = await chamar(db, "u-v", rotaEmpresas.GET);
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.data.slice(0, 1).map((e: any) => Object.keys(e).sort()), [["contatos", "id", "nome", "oportunidade_aberta"]]);
+  assert.deepEqual(r.body.data[0].id, EMP);
+  assert.deepEqual(r.body.data[1], { origem: "cliente", cliente_id: CLI, nome: "ZZTEST Cliente Sem Carteira", cidade: "Monte Mor" });
+  assert.equal(r.body.data.length, 2);
+  assert.ok(!JSON.stringify(r.body).includes("11.222.333") && !JSON.stringify(r.body).includes("zztest.com.br"));
+  assert.equal((await chamar(db, "u-dir", rotaEmpresas.GET)).status, 403);
+  assert.equal((await chamar(db, "u-dir", rotaDeCliente.POST, { metodo: "POST", corpo: { cliente_id: CLI } })).status, 403);
+  assert.equal(db.tabelas.empresas_visitadas.length, 2, "nada foi criado");
+});
+
 await caso("(j) quem perdeu o perfil_comercial mas está liberado age sem Funil, mesmo em proposta antiga com oportunidade_id", async () => {
   const db = novoDb();
   liberar(db, PERDEU, true);
@@ -1945,6 +1967,7 @@ await caso("(k) erro ao ler a exceção de acesso NEGA (403 em todas as rotas, v
     ["pdf GET", (u) => chamar(db, u, rotaPdf.GET, { id })],
     ["painel GET", (u) => chamar(db, u, rotaPainel.GET)],
     ["empresas GET", (u) => chamar(db, u, rotaEmpresas.GET)],
+    ["empresas de-cliente POST", (u) => chamar(db, u, rotaDeCliente.POST, { metodo: "POST", corpo: { cliente_id: "aaaaaaaa-aaaa-4aaa-8aaa-000000000020" } })],
     ["contatos GET", (u) => chamar(db, u, rotaEmpresaContatos.GET, { id: EMP })],
   ];
   const erroEsperado = console.error;

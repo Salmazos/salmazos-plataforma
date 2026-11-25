@@ -12,6 +12,9 @@ import { Aviso, btnPrimario, btnSecundario, cardStyle, inputStyle, labelStyle, l
 interface Contato { id: string; nome: string; cargo: string | null; principal: boolean }
 // oportunidade_aberta só vem para quem tem Funil; sem o campo, não há aviso de oportunidade de outro vendedor.
 // teste só vem para o gestor (true = empresa de teste: as propostas dela saem como TESTE-..., fora das listas e sem efeito no Funil).
+// Cliente cadastrado que ainda não tem empresa na Carteira (sem id de empresa): a empresa é criada na hora, ao escolhê-lo.
+interface ClienteOpc { origem: "cliente"; cliente_id: string; nome: string; cidade?: string }
+const ehCliente = (x: EmpresaOpc | ClienteOpc): x is ClienteOpc => (x as ClienteOpc).origem === "cliente";
 interface EmpresaOpc { id: string; nome: string; contatos: Contato[]; oportunidade_aberta?: { id: string; vendedor_nome: string | null; etapa: string } | null; teste?: boolean }
 
 // gestor: só ele vê o modelo MOT ("Em teste"), e só o habilita com uma empresa de TESTE escolhida. O servidor confere de novo (vendedor nunca cria MOT).
@@ -19,7 +22,9 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
   const router = useRouter();
   const [modelo, setModelo] = useState<ModeloProposta>("RS");
   const [busca, setBusca] = useState("");
-  const [empresas, setEmpresas] = useState<EmpresaOpc[]>([]);
+  const [empresas, setEmpresas] = useState<(EmpresaOpc | ClienteOpc)[]>([]);
+  const [criandoDeCliente, setCriandoDeCliente] = useState<string | null>(null);
+  const criandoRef = useRef(false);
   const [empresa, setEmpresa] = useState<EmpresaOpc | null>(null);
   const [contatoId, setContatoId] = useState("");
   const [campos, setCampos] = useState<CamposForm>(camposPadrao());
@@ -45,7 +50,7 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
     let cancelado = false;
     temporizador.current = setTimeout(async () => {
       try {
-        const r = await lerResposta<{ data: EmpresaOpc[] }>(await fetch(`/api/comercial/propostas/empresas?q=${encodeURIComponent(busca.trim())}`));
+        const r = await lerResposta<{ data: (EmpresaOpc | ClienteOpc)[] }>(await fetch(`/api/comercial/propostas/empresas?q=${encodeURIComponent(busca.trim())}`));
         if (cancelado) return;
         if (r.ok) { setEmpresas(r.json.data ?? []); setErroBusca(""); }
         else setErroBusca(r.json.error ?? "Não foi possível buscar as empresas.");
@@ -73,6 +78,30 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
     setCamposMot({ ...camposMotPadrao(), aos_cuidados: principal?.nome ?? "" });
   }
 
+  // Cliente cadastrado sem Carteira: a empresa é criada (ou, se já existir, devolvida) pelo servidor e a tela segue com a EMPRESA REAL, com o A/C do contato principal.
+  async function escolherCliente(c: ClienteOpc) {
+    if (criandoRef.current) return;
+    criandoRef.current = true;
+    setCriandoDeCliente(c.cliente_id);
+    setErroBusca("");
+    try {
+      const r = await lerResposta<{ data: EmpresaOpc }>(await fetch("/api/comercial/propostas/empresas/de-cliente", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cliente_id: c.cliente_id }),
+      }));
+      if (!r.ok) { setErroBusca(r.json.error ?? "Não foi possível preparar este cliente."); return; }
+      // O cliente agora tem empresa: sai da lista de clientes e a tela segue como se a empresa tivesse sido escolhida da Carteira.
+      setEmpresas((lista) => lista.filter((x) => !(ehCliente(x) && x.cliente_id === c.cliente_id)));
+      escolher(r.json.data);
+    } catch {
+      setErroBusca("Não foi possível preparar este cliente.");
+    } finally {
+      criandoRef.current = false;
+      setCriandoDeCliente(null);
+    }
+  }
+
   // Gestor: liga/desliga "empresa de teste" (a API só aceita diretoria/superuser). Propostas antigas não mudam.
   async function alternarTeste() {
     if (!empresa || empresa.teste === undefined || alternandoTeste) return;
@@ -83,7 +112,7 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
       if (!r.ok) { setErroTeste(r.json.error ?? "Não foi possível alterar a empresa."); return; }
       const nova = r.json.data?.teste === true;
       setEmpresa({ ...empresa, teste: nova });
-      setEmpresas((lista) => lista.map((x) => (x.id === empresa.id ? { ...x, teste: nova } : x)));
+      setEmpresas((lista) => lista.map((x) => (!ehCliente(x) && x.id === empresa.id ? { ...x, teste: nova } : x)));
     } catch {
       setErroTeste("Não foi possível alterar a empresa.");
     } finally {
@@ -210,7 +239,12 @@ export default function PropostaNovaClient({ meuNome, gestor = false }: { meuNom
             <input style={inputStyle} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Digite parte do nome da empresa" />
             {erroBusca && <div style={{ marginTop: 8 }}><Aviso tipo="erro">{erroBusca}</Aviso></div>}
             <div style={{ marginTop: 8, maxHeight: 220, overflowY: "auto", border: "1px solid #E5E7EB", borderRadius: 8 }}>
-              {empresas.length === 0 ? <div style={{ padding: 12, color: "#6B7280", fontSize: 13 }}>Nenhuma empresa da Carteira da sua unidade encontrada. {atalhoNova}</div> : empresas.map((e) => (
+              {empresas.length === 0 ? <div style={{ padding: 12, color: "#6B7280", fontSize: 13 }}>Nenhuma empresa da Carteira da sua unidade encontrada. {atalhoNova}</div> : empresas.map((e) => ehCliente(e) ? (
+                <button key={`cliente-${e.cliente_id}`} type="button" disabled={criandoDeCliente !== null} data-origem="cliente" onClick={() => escolherCliente(e)} style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 12px", border: "none", borderBottom: "1px solid #F3F4F6", background: "#fff", cursor: criandoDeCliente !== null ? "wait" : "pointer", fontSize: 14, opacity: criandoDeCliente !== null && criandoDeCliente !== e.cliente_id ? 0.6 : 1 }}>
+                  {e.nome}{e.cidade ? ` — ${e.cidade}` : ""}
+                  <span style={{ marginLeft: 8, padding: "1px 7px", borderRadius: 999, background: "#EEF2FF", color: "#3730A3", fontSize: 11, fontWeight: 700 }}>{criandoDeCliente === e.cliente_id ? "Preparando…" : "Cliente cadastrado"}</span>
+                </button>
+              ) : (
                 <button key={e.id} type="button" onClick={() => escolher(e)} style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 12px", border: "none", borderBottom: "1px solid #F3F4F6", background: "#fff", cursor: "pointer", fontSize: 14 }}>
                   {e.nome}{e.teste ? " (teste)" : ""}
                 </button>

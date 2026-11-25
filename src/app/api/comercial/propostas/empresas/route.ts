@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { exigirContextoPropostas, MSG_SO_ACOMPANHA_PROPOSTAS } from "@/lib/propostasAcesso";
 import { parseBody, empresaPropostaCreateSchema } from "@/lib/schemas";
 import { registrarAuditoria } from "@/lib/audit";
+import { buscarClientesSemCarteira } from "@/lib/propostaEmpresasCliente";
 
 function escapeLike(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -36,7 +37,10 @@ export async function GET(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const lista = empresas ?? [];
   const ids = lista.map((e) => e.id as string);
-  if (ids.length === 0) return NextResponse.json({ data: [] });
+  // Clientes cadastrados que ainda não têm empresa na Carteira vêm DEPOIS dos itens da Carteira (que seguem idênticos); só a unidade do usuário.
+  const clientes = await buscarClientesSemCarteira(svc, ctx.unidadeId, q);
+  if (clientes === null) return NextResponse.json({ error: "Não foi possível carregar os clientes." }, { status: 500 });
+  if (ids.length === 0) return NextResponse.json({ data: clientes });
 
   const { data: contatos } = await svc
     .from("empresa_contatos")
@@ -63,13 +67,13 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
-    data: lista.map((e) => ({
+    data: [...lista.map((e) => ({
       id: e.id,
       nome: e.nome,
       contatos: (contatos ?? []).filter((c) => c.empresa_visitada_id === e.id).map((c) => ({ id: c.id, nome: c.nome, cargo: c.cargo, principal: c.principal })),
       ...(ctx.temFunil ? { oportunidade_aberta: abertaPorEmpresa.get(e.id as string) ?? null } : {}),
       ...(ctx.gestor ? { teste: idsTeste.includes(e.id as string) } : {}),
-    })),
+    })), ...clientes],
   });
 }
 

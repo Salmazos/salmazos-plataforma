@@ -1917,6 +1917,12 @@ export const empresaPropostaCreateSchema = z.object({
   path: ["contato_nome"],
 });
 
+// Escolha de um cliente cadastrado, sem empresa na Carteira, na tela de proposta: a empresa é criada na hora e ligada a ele. Só o id vem do corpo;
+// nome, unidade e contato são lidos do cadastro do cliente pelo servidor.
+export const empresaDeClienteSchema = z.object({
+  cliente_id: z.string({ error: "Cliente inválido." }).uuid("Cliente inválido."),
+});
+
 export const empresaVincularClienteSchema = z.object({
   cliente_id: z.string().uuid("Cliente inválido."),
 });
