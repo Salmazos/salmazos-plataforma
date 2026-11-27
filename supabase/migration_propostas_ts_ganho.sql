@@ -1,5 +1,5 @@
 -- Terceirização (TS), etapa 2F: o preço passa a ser "ganho sobre o custo" (preço = custo × (1 + ganho)).
--- NÃO APLICADA. Aplicar ANTES do deploy do código da 2F: sem estas colunas as rotas do TS respondem 500 ("percentuais inválidos").
+-- APLICADA em 27/11/2026 (Supabase, conferida por SELECT), antes do deploy do código da 2F: sem estas colunas as rotas do TS respondem 500 ("percentuais inválidos").
 --
 -- Só acrescenta três colunas em proposta_ts_parametros. Nenhum DROP, DELETE, TRUNCATE ou UPDATE; idempotente (add column if not exists, e o check nasce junto com a
 -- coluna); tudo numa única transação. Pressupõe supabase/migration_propostas_ts.sql (aplicada em 25/11/2026).

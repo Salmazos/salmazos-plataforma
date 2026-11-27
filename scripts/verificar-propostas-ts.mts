@@ -371,10 +371,11 @@ await caso("migration 2A (histórico): cabeçalho APLICADA em 25/11/2026, tabela
   assert.deepEqual([PARAMETROS_TS_INICIAIS.ganho_padrao_bp, PARAMETROS_TS_INICIAIS.ganho_minimo_bp, PARAMETROS_TS_INICIAIS.encargos_sobre_adicionais], [0, 0, true]);
 });
 
-await caso("migration 2F (ganho): NÃO APLICADA, transação única, idempotente, só acrescenta as três colunas, sem DROP/DELETE/UPDATE; o código grava 0 nas colunas antigas, todas ainda na tabela", () => {
+await caso("migration 2F (ganho): cabeçalho APLICADA em 27/11/2026, transação única, idempotente, só acrescenta as três colunas, sem DROP/DELETE/UPDATE; o código grava 0 nas colunas antigas, todas ainda na tabela", () => {
   const sql = fs.readFileSync("supabase/migration_propostas_ts_ganho.sql", "utf8");
   const codigo = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
-  assert.match(sql, /^-- NÃO APLICADA\./m);
+  assert.match(sql, /^-- APLICADA em 27\/11\/2026 \(Supabase, conferida por SELECT\)/m);
+  assert.doesNotMatch(sql, /NÃO APLICADA/);
   assert.equal((codigo.match(/^begin;$/gm) ?? []).length, 1);
   assert.equal((codigo.match(/^commit;$/gm) ?? []).length, 1);
   assert.doesNotMatch(codigo, /\b(drop|truncate|delete|update|insert|create)\b/i);
