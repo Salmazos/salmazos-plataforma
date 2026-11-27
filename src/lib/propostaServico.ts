@@ -16,8 +16,8 @@ import { montarPreviaMot, previaDeSnapshotMot, snapshotMotSchema, type Parametro
 import { parametrosMotValidos } from "@/lib/propostaMotCalculo";
 import { registrarAuditoria } from "@/lib/audit";
 import {
-  MSG_PDF_TS_INDISPONIVEL, MSG_PERCENTUAIS_TS_AUSENTES, PDF_TS_DISPONIVEL, avaliarMargemTs, avaliarPrecoTs, conteudoTsSchema, mensagemErroConteudoTs, planilhaTsDeSnapshot,
-  privilegiosTsViolados, restaurarOcultosTs, snapshotTsSchema, type ConteudoTs, type LiberacaoMargemTs, type ParametrosTsVigentes, type PlanilhaTsTela, type SnapshotTs,
+  MSG_PDF_TS_INDISPONIVEL, MSG_PERCENTUAIS_TS_AUSENTES, PDF_TS_DISPONIVEL, alinharAnteriorTs, avaliarGanhoTs, avaliarPrecoTs, conteudoTsSchema, mensagemErroConteudoTs, planilhaTsDeSnapshot,
+  privilegiosTsViolados, restaurarOcultosTs, snapshotTsSchema, type ConteudoTs, type LiberacaoGanhoTs, type ParametrosTsVigentes, type PlanilhaTsTela, type SnapshotTs,
 } from "@/lib/propostaTs";
 import { parametrosTsValidos } from "@/lib/propostaTsCalculo";
 
@@ -215,7 +215,7 @@ async function parametrosTsVigentes(svc: Svc, data: string): Promise<Resultado<P
   return { ok: true, data: linha as unknown as ParametrosTsVigentes };
 }
 
-// Preço manual e ISS por proposta: só a diretoria (403, nada é gravado). O que já estava gravado pode continuar como está para quem edita sem mexer nesses campos.
+// Preço manual e ganho por proposta: só gestor/diretoria (403, nada é gravado). O que já estava gravado pode continuar como está para quem edita sem mexer nesses campos.
 function exigirPrivilegiosTs(ctx: ContextoPropostas, novo: ConteudoTs, anteriorBruto: unknown): Resultado<null> {
   const anterior = conteudoTsSchema.safeParse(anteriorBruto ?? {});
   const msg = privilegiosTsViolados(novo, anterior.success ? anterior.data : null, ctx.gestor);
@@ -224,21 +224,21 @@ function exigirPrivilegiosTs(ctx: ContextoPropostas, novo: ConteudoTs, anteriorB
 
 interface AvaliacaoServidorTs {
   parametros: ParametrosTsVigentes;
-  abaixoMargem: number[];
+  abaixoGanho: number[];
   liberacao: { justificativa: string; servicos: number[] } | null;
 }
-// Percentuais vigentes → preço (422 com a mensagem da lib se o preço não estiver configurado) → margem mínima (bloqueia quem não é gestor; o gestor libera com justificativa).
+// Percentuais vigentes → preço (422 com a mensagem da lib se não houver ganho definido) → ganho mínimo (bloqueia quem não é gestor; o gestor libera com justificativa).
 async function avaliarTsNoServidor(svc: Svc, ctx: ContextoPropostas, conteudo: ConteudoTs, data: string): Promise<Resultado<AvaliacaoServidorTs>> {
   const par = await parametrosTsVigentes(svc, data);
   if (!par.ok) return par;
   const av = avaliarPrecoTs(conteudo, par.data);
   if (!av.ok) return falha(av.status, av.error);
-  const m = avaliarMargemTs({ abaixoMargem: av.abaixoMargem, nomesServicos: conteudo.servicos.map((x) => x.nome), gestor: ctx.gestor, justificativa: conteudo.justificativa_margem_minima });
+  const m = avaliarGanhoTs({ abaixoGanho: av.abaixoGanho, nomesServicos: conteudo.servicos.map((x) => x.nome), gestor: ctx.gestor, justificativa: conteudo.justificativa_ganho_minimo });
   if (!m.ok) return falha(m.status, m.error);
-  return { ok: true, data: { parametros: par.data, abaixoMargem: av.abaixoMargem, liberacao: m.liberacao } };
+  return { ok: true, data: { parametros: par.data, abaixoGanho: av.abaixoGanho, liberacao: m.liberacao } };
 }
 
-// Snapshot do TS: congela os percentuais vigentes na data da emissão, o cálculo linha a linha de cada posto e, se o gestor liberou uma margem abaixo do mínimo, quem liberou.
+// Snapshot do TS: congela os percentuais vigentes na data da emissão, o cálculo linha a linha de cada posto e, se o gestor liberou um ganho abaixo do mínimo, quem liberou.
 async function snapshotTsDaProposta(
   svc: Svc, ctx: ContextoPropostas, p: PropostaLinha, conteudoBruto: unknown, vendedor: DadosVendedor, revisao: number, emissao: string, validadeAte: string
 ): Promise<Resultado<{ snapshot: SnapshotTs; avaliacao: AvaliacaoServidorTs }>> {
@@ -246,7 +246,7 @@ async function snapshotTsDaProposta(
   if (!c.success) return falha(400, mensagemErroConteudoTs(c.error.issues));
   const av = await avaliarTsNoServidor(svc, ctx, c.data, emissao);
   if (!av.ok) return av;
-  const liberacao: LiberacaoMargemTs | null = av.data.liberacao
+  const liberacao: LiberacaoGanhoTs | null = av.data.liberacao
     ? { ...av.data.liberacao, liberado_por_id: ctx.analistaId, liberado_por_nome: (await dadosDoVendedor(svc, ctx.analistaId)).nome, liberado_em: new Date().toISOString() }
     : null;
   try {
@@ -257,7 +257,7 @@ async function snapshotTsDaProposta(
         snapshot: montarSnapshot({
           modelo: "TS", numero: p.numero, revisao, templateVersao: p.template_versao, dataEmissao: emissao, validadeDias: p.validade_dias, validadeAte,
           clienteNome: p.cliente_nome, aosCuidados: p.aos_cuidados ?? null, conteudo: c.data, vendedorNome: vendedor.nome, vendedorCargo: vendedor.cargo,
-          vendedorTelefone: vendedor.telefone, vendedorEmail: vendedor.email, parametrosTs: av.data.parametros, liberacaoMargemTs: liberacao,
+          vendedorTelefone: vendedor.telefone, vendedorEmail: vendedor.email, parametrosTs: av.data.parametros, liberacaoGanhoTs: liberacao,
         }),
       },
     };
@@ -267,11 +267,11 @@ async function snapshotTsDaProposta(
   }
 }
 
-// Auditoria SÓ de autorizações especiais (preço manual, ISS por proposta, margem liberada), sem dados pessoais: quem fez, em qual proposta e o quê.
+// Auditoria SÓ de autorizações especiais (preço manual, ganho por proposta, ganho abaixo do mínimo liberado), sem dados pessoais: quem fez, em qual proposta e o quê.
 function auditarAutorizacoesTs(ctx: ContextoPropostas, p: { id: string; numero: string }, conteudo: ConteudoTs, avaliacao: AvaliacaoServidorTs, evento: "criada" | "editada" | "revisao") {
   const precoManual = conteudo.servicos.some((x) => x.preco_manual_centavos != null);
-  const iss = conteudo.iss_override_bp ?? null;
-  if (!precoManual && iss === null && !avaliacao.liberacao) return;
+  const ganho = conteudo.ganho_bp ?? null;
+  if (!precoManual && ganho === null && !avaliacao.liberacao) return;
   registrarAuditoria({
     usuario_id: ctx.userId,
     acao: "proposta_ts_autorizacao",
@@ -279,8 +279,8 @@ function auditarAutorizacoesTs(ctx: ContextoPropostas, p: { id: string; numero: 
     entidade_id: p.id,
     unidade_id: ctx.unidadeId,
     detalhes: {
-      numero: p.numero, evento, preco_manual: precoManual, iss_override_bp: iss, margem_liberada: !!avaliacao.liberacao,
-      servicos_abaixo_da_margem: avaliacao.liberacao?.servicos ?? [], justificativa: avaliacao.liberacao?.justificativa ?? null,
+      numero: p.numero, evento, preco_manual: precoManual, ganho_bp: ganho, ganho_abaixo_liberado: !!avaliacao.liberacao,
+      servicos_abaixo_do_ganho: avaliacao.liberacao?.servicos ?? [], justificativa: avaliacao.liberacao?.justificativa ?? null,
     },
   });
 }
@@ -327,7 +327,7 @@ export async function criarRascunho(svc: Svc, ctx: ContextoPropostas, d: z.infer
   }
   if (!conteudo || !conteudo.ok) return falha(400, MENSAGEM_MODELO_INDISPONIVEL);
 
-  // TS: preço manual e ISS só da diretoria (403); o servidor recalcula tudo com os percentuais vigentes (422 se o preço não estiver configurado; margem abaixo do mínimo
+  // TS: preço manual e ganho só de gestor/diretoria (403); o servidor recalcula tudo com os percentuais vigentes (422 se não houver ganho definido; ganho abaixo do mínimo
   // bloqueia quem não é gestor e exige justificativa do gestor). Tudo ANTES de gastar número: nada é criado quando algo é recusado.
   let avaliacaoTs: AvaliacaoServidorTs | null = null;
   if (d.modelo === "TS") {
@@ -401,7 +401,7 @@ export async function editarProposta(svc: Svc, ctx: ContextoPropostas, p: Propos
   const agora = new Date().toISOString();
   const campos: Record<string, unknown> = { conteudo, aos_cuidados: aosCuidados, validade_dias: validadeDias, updated_at: agora };
 
-  // TS: mesma validação da criação (privilégios da diretoria, preço recalculado no servidor, margem mínima) em TODA gravação; em proposta já entregue o snapshot
+  // TS: mesma validação da criação (privilégios da diretoria, preço recalculado no servidor, ganho mínimo) em TODA gravação; em proposta já entregue o snapshot
   // da nova revisão sai da mesma conta. Nada é gravado quando algo é recusado.
   const hojeTs = hojeSaoPaulo();
   let snapTs: SnapshotTs | null = null;
@@ -409,7 +409,7 @@ export async function editarProposta(svc: Svc, ctx: ContextoPropostas, p: Propos
   if (p.modelo === "TS") {
     const parseado = conteudoTsSchema.safeParse(conteudo);
     if (!parseado.success) return falha(400, mensagemErroConteudoTs(parseado.error.issues));
-    // Quem não é gestor não VÊ o ISS por proposta, a cobertura dos postos nem a justificativa da margem; o que já estava gravado volta no lugar do que não veio.
+    // Quem não é gestor não VÊ o ganho por proposta nem as justificativas; o que já estava gravado volta no lugar do que não veio.
     const anteriorTs = conteudoTsSchema.safeParse(p.conteudo ?? {});
     const novo = { data: ctx.gestor ? parseado.data : restaurarOcultosTs(parseado.data, anteriorTs.success ? anteriorTs.data : null) };
     conteudo = novo.data;
@@ -850,37 +850,50 @@ export async function planilhaMotDaProposta(svc: Svc, p: PropostaLinha): Promise
 
 // ── Prévia e detalhe do TS ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 // A prévia mostra o cálculo enquanto o gestor preenche, SEM gravar nada: o servidor aplica as mesmas regras da criação (privilégios, preço configurado) e devolve só
-// valores (sem percentuais; a margem real em pontos-base só para o gestor), mais quais serviços ficaram abaixo da margem mínima.
+// o que o perfil pode ver (vendedor: só preços; gestor: custo, ganho e quais serviços ficaram abaixo do mínimo).
 export interface PreviaTs {
   planilha: PlanilhaTsTela;
-  // Só para o gestor/diretoria: o vendedor nunca recebe nada que revele a margem mínima (abaixo dela ele recebe o MESMO bloqueio da criação, 422).
-  margem?: { abaixo: number[]; exige_justificativa: boolean };
+  // Só para o gestor/diretoria: o vendedor nunca recebe nada que revele o ganho (abaixo do mínimo ele recebe o MESMO bloqueio da criação, 422).
+  ganho?: { abaixo: number[]; exige_justificativa: boolean };
 }
-export async function previaTs(svc: Svc, ctx: ContextoPropostas, conteudoBruto: unknown): Promise<Resultado<PreviaTs>> {
+// `salva` = prévia da EDIÇÃO de uma proposta já gravada (a rota confere o acesso). Como no salvar, o que quem não é gestor não vê (ganho e justificativas) vem do que está
+// gravado, e o preço manual que a diretoria definiu é aceito. Nada disso volta na resposta.
+export async function previaTs(
+  svc: Svc, ctx: ContextoPropostas, conteudoBruto: unknown, salva?: { proposta: PropostaLinha; posicoes?: unknown }
+): Promise<Resultado<PreviaTs>> {
   if (!ctx.podeEscrever) return falha(403, MSG_SO_ACOMPANHA_PROPOSTAS);
   // Sem empresa escolhida a prévia vale para quem poderia criar TS de teste (gestor) ou pela chave do harness.
-  const contexto = { gestor: ctx.gestor, teste: true };
+  const contexto = { gestor: ctx.gestor, teste: salva ? salva.proposta.teste === true : true };
   if (!modeloDisponivel("TS", contexto)) return falha(400, MENSAGEM_MODELO_INDISPONIVEL);
   const v = validarConteudo("TS", conteudoBruto, contexto);
   if (!v.ok) return falha(400, v.error);
-  const conteudo = v.data as ConteudoTs;
-  const privilegios = exigirPrivilegiosTs(ctx, conteudo, null);
-  if (!privilegios.ok) return privilegios;
+  let conteudo = v.data as ConteudoTs;
+  let anterior: ConteudoTs | null = null;
+  const gravado = salva ? conteudoTsSchema.safeParse(salva.proposta.conteudo ?? {}) : null;
+  if (gravado?.success) {
+    const n = conteudo.servicos.length;
+    const pos = salva!.posicoes;
+    const validas = Array.isArray(pos) && pos.length === n && pos.every((x, i) => Number.isInteger(x) && x >= 0 && (i === 0 || x > pos[i - 1]));
+    anterior = alinharAnteriorTs(gravado.data, validas ? (pos as number[]) : conteudo.servicos.map((_, i) => i));
+    if (!ctx.gestor) conteudo = restaurarOcultosTs(conteudo, anterior);
+  }
+  const violado = privilegiosTsViolados(conteudo, anterior, ctx.gestor);
+  if (violado) return falha(403, violado);
   const hoje = hojeSaoPaulo();
   const par = await parametrosTsVigentes(svc, hoje);
   if (!par.ok) return par;
   const av = avaliarPrecoTs(conteudo, par.data);
   if (!av.ok) return falha(av.status, av.error);
   if (!ctx.gestor) {
-    const m = avaliarMargemTs({ abaixoMargem: av.abaixoMargem, nomesServicos: conteudo.servicos.map((x) => x.nome), gestor: false, justificativa: null });
+    const m = avaliarGanhoTs({ abaixoGanho: av.abaixoGanho, nomesServicos: conteudo.servicos.map((x) => x.nome), gestor: false, justificativa: null });
     if (!m.ok) return falha(m.status, m.error);
   }
   try {
     const snap = montarSnapshot({
       modelo: "TS", numero: "PREVIA", revisao: 0, templateVersao: 1, dataEmissao: "2000-01-01", validadeDias: 1, validadeAte: "2000-01-02", clienteNome: "Prévia", aosCuidados: null,
-      conteudo, vendedorNome: "Prévia", vendedorTelefone: null, parametrosTs: par.data, liberacaoMargemTs: null,
+      conteudo, vendedorNome: "Prévia", vendedorTelefone: null, parametrosTs: par.data, liberacaoGanhoTs: null,
     });
-    return { ok: true, data: { planilha: planilhaTsDeSnapshot(snap, ctx.gestor), ...(ctx.gestor ? { margem: { abaixo: av.abaixoMargem, exige_justificativa: av.abaixoMargem.length > 0 } } : {}) } };
+    return { ok: true, data: { planilha: planilhaTsDeSnapshot(snap, ctx.gestor), ...(ctx.gestor ? { ganho: { abaixo: av.abaixoGanho, exige_justificativa: av.abaixoGanho.length > 0 } } : {}) } };
   } catch (err) {
     console.error("[propostas] Prévia do TS não calculada:", err instanceof Error ? err.message : err);
     return falha(400, "Não foi possível calcular com os dados informados. Confira os valores.");
@@ -912,7 +925,7 @@ export async function planilhaTsDaProposta(svc: Svc, ctx: ContextoPropostas, p: 
   try {
     const snap = montarSnapshot({
       modelo: "TS", numero: p.numero, revisao: 0, templateVersao: p.template_versao, dataEmissao: "2000-01-01", validadeDias: 1, validadeAte: "2000-01-02", clienteNome: p.cliente_nome,
-      aosCuidados: null, conteudo: c.data, vendedorNome: "Prévia", vendedorTelefone: null, parametrosTs: par.data, liberacaoMargemTs: null,
+      aosCuidados: null, conteudo: c.data, vendedorNome: "Prévia", vendedorTelefone: null, parametrosTs: par.data, liberacaoGanhoTs: null,
     });
     return { origem: "hoje", planilha: planilhaTsDeSnapshot(snap, ctx.gestor), erro: null };
   } catch {

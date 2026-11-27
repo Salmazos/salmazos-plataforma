@@ -42,7 +42,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
   return NextResponse.json({
     data: {
-      // TS: para quem não é gestor/diretoria o conteúdo sai sem o ISS por proposta, a cobertura dos postos e a justificativa da margem (filtrado aqui, no servidor).
+      // TS: para quem não é gestor/diretoria o conteúdo sai sem o ganho por proposta e sem as justificativas (filtro no servidor).
       ...propostaTsParaPerfil(proposta, ctx.gestor),
       vendedor_nome: vendedor?.nome_completo ?? null,
       vendedor_telefone: vendedor?.telefone ?? null,
@@ -52,7 +52,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     hoje,
     // Só no MOT: a planilha calculada (sem percentuais). No R&S a resposta é a de sempre, sem este campo.
     ...(proposta.modelo === "MOT" ? { planilhaMot: await planilhaMotDaProposta(svc, proposta) } : {}),
-    // Só no TS: a planilha calculada pelo servidor (sem percentuais; a margem real só para o gestor). No R&S e no MOT a resposta é a de sempre.
+    // Só no TS: a planilha calculada pelo servidor (vendedor: só preços; gestor/diretoria: custo e ganho). No R&S e no MOT a resposta é a de sempre.
     ...(proposta.modelo === "TS" ? { planilhaTs: await planilhaTsDaProposta(svc, ctx, proposta) } : {}),
     podeEditar: ehDonoDaProposta(ctx, proposta) && modoEdicao(proposta.situacao as SituacaoProposta) !== null,
     somenteLeitura: !ehDonoDaProposta(ctx, proposta),

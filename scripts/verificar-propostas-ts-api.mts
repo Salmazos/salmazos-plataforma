@@ -15,10 +15,10 @@ import { hojeSaoPaulo } from "@/lib/comercial";
 import { calcularValidadeAte } from "@/lib/propostas";
 import { MENSAGEM_MODELO_INDISPONIVEL } from "@/lib/propostaModelos";
 import {
-  MSG_PDF_TS_INDISPONIVEL, MSG_SO_DIRETORIA_COBERTURA, MSG_SO_DIRETORIA_ISS, MSG_SO_DIRETORIA_PRECO_MANUAL, TEMPLATE_VERSAO_TS, conteudoTsParaPerfil, conteudoTsSchema, montarSnapshotTs, privilegiosTsViolados,
+  MSG_PDF_TS_INDISPONIVEL, MSG_SO_DIRETORIA_GANHO, MSG_SO_DIRETORIA_PRECO_MANUAL, TEMPLATE_VERSAO_TS, conteudoTsParaPerfil, conteudoTsSchema, montarSnapshotTs, privilegiosTsViolados,
   propostaTsParaPerfil, restaurarOcultosTs, snapshotTsSchema,
 } from "@/lib/propostaTs";
-import { MSG_DEDUCOES_TS_INVALIDAS, MSG_PRECO_TS_NAO_CONFIGURADO, PARAMETROS_TS_INICIAIS, type ParametrosTs } from "@/lib/propostaTsCalculo";
+import { COLUNAS_SEM_USO_TS, MSG_GANHO_TS_NAO_CONFIGURADO, PARAMETROS_TS_INICIAIS, type ParametrosTs } from "@/lib/propostaTsCalculo";
 import { formatarCentavosBRL } from "@/lib/propostaMotCalculo";
 import { criarDb } from "../scripts/harness-mot/memdb.mjs";
 
@@ -37,11 +37,11 @@ const AA = String(ANO).slice(-2);
 const mais = (dias: number) => calcularValidadeAte(HOJE, dias);
 const SEMENTE = 71;
 
-// D = 2224 bp (tributos 1633 + despesas 300 + lucro 291), margem mínima 200: o caso do Ölver (Auxiliar de Limpeza 44h) dá custo R$ 5.357,71 e preço R$ 6.890,06.
-const PAR_PRECO: ParametrosTs = { ...PARAMETROS_TS_INICIAIS, iss_bp: 500, pis_bp: 65, cofins_bp: 300, irpj_bp: 480, csll_bp: 288, despesas_bp: 300, lucro_bp: 291, margem_minima_bp: 200 };
+// Ganho padrão 30% sobre o custo, mínimo 20%: o Auxiliar de Limpeza 44h dá custo R$ 5.357,73 (encargos como na planilha) e preço R$ 6.965,05.
+const PAR_PRECO: ParametrosTs = { ...PARAMETROS_TS_INICIAIS, ganho_padrao_bp: 3000, ganho_minimo_bp: 2000 };
 const PAR_ZERADOS: ParametrosTs = { ...PARAMETROS_TS_INICIAIS };
-const CUSTO = 535771, ENCARGOS = 169920, PRECO = 689006;
-const precoDe = (custo: number, d: number) => Math.floor((custo * 10000 * 2 + (10000 - d)) / ((10000 - d) * 2));
+const CUSTO = 535773, ENCARGOS = 169922, PRECO = 696505;
+const precoDe = (custo: number, ganhoBp: number) => Math.floor((custo * (10000 + ganhoBp) * 2 + 10000) / 20000);
 const seedParametros = (p: ParametrosTs, extra: Record<string, unknown> = {}) => ({ id: "pts-1", vigente_desde: "2026-01-01", ...p, alterado_por: null, created_at: "2026-01-01T00:00:00Z", ...extra });
 
 // ── Chaves de harness (só fora de produção): ligar o TS para quem não é gestor/empresa de teste, e o MOT para a numeração ──────────────
@@ -148,7 +148,7 @@ const posto = (extra: Record<string, unknown> = {}) => ({
   beneficios: [{ tipo: "vale_transporte", valor_centavos: 20000 }, { tipo: "refeicao", valor_centavos: 48000 }, { tipo: "cesta_basica", valor_centavos: 15191 }],
   uniforme_epi_centavos: 10000, insumos_centavos: 0, operacao_centavos: 25000, ...extra,
 });
-const servico = (extra: Record<string, unknown> = {}) => ({ nome: "Limpeza e conservação", modo: "postos", fornecimento: { equipamentos: "cliente", produtos: "cliente" }, postos: [posto()], ...extra });
+const servico = (extra: Record<string, unknown> = {}) => ({ nome: "Limpeza e conservação", modo: "postos", postos: [posto()], ...extra });
 const conteudoTs = (extra: Record<string, unknown> = {}) => ({ servicos: [servico()], ...extra });
 const CONTEUDO_MOT = { funcoes: [{ area: "OPERACIONAL", descricao: null, salario_centavos: 100000, jornada: "Conforme CCT", horario: "Turnos A / B / C" }] };
 
@@ -159,7 +159,7 @@ const proposta = (db: any, id: string) => db.tabelas.propostas.find((p: any) => 
 const patch = (db: any, usuario: string, id: string, corpo: Record<string, unknown>) => chamar(db, usuario, rotaId.PATCH, { metodo: "PATCH", id, corpo: { updated_at: proposta(db, id).updated_at, ...corpo } });
 const detalhe = (db: any, usuario: string, id: string) => chamar(db, usuario, rotaId.GET, { id });
 const pdf = (db: any, usuario: string, id: string) => chamar(db, usuario, rotaPdf.GET, { id });
-const previa = (db: any, usuario: string | null, conteudo: unknown) => chamar(db, usuario, rotaPrevia.POST, { metodo: "POST", corpo: { conteudo } });
+const previa = (db: any, usuario: string | null, conteudo: unknown, extra: Record<string, unknown> = {}) => chamar(db, usuario, rotaPrevia.POST, { metodo: "POST", corpo: { conteudo, ...extra } });
 const lerParametros = (db: any, usuario: string | null) => chamar(db, usuario, rotaParametros.GET);
 const gravarParametros = (db: any, usuario: string | null, corpo: unknown) => chamar(db, usuario, rotaParametros.POST, { metodo: "POST", corpo });
 const unico = (db: any) => db.tabelas.proposta_contador_unico.find((c: any) => c.ano === ANO)?.ultimo;
@@ -173,7 +173,7 @@ function semearEnviada(db: any, conteudo: Record<string, unknown> = conteudoTs()
   const { id: pid, vigente_desde, alterado_por: _a, created_at: _c, ...percentuais } = par;
   const snap0 = montarSnapshotTs({
     numero: `TESTE-TS-0099/${AA}`, revisao: 0, templateVersao: TEMPLATE_VERSAO_TS, dataEmissao: HOJE, validadeDias: 15, validadeAte: mais(15), clienteNome: "cliente teste", aosCuidados: null,
-    conteudo, vendedorNome: dono === G ? "Gestora Teste" : "Vendedor", vendedorTelefone: null, parametros: { vigente_desde, id: pid, ...percentuais }, liberacaoMargem: opcoes.liberacao ?? null,
+    conteudo, vendedorNome: dono === G ? "Gestora Teste" : "Vendedor", vendedorTelefone: null, parametros: { vigente_desde, id: pid, ...percentuais }, liberacaoGanho: opcoes.liberacao ?? null,
   });
   const id = crypto.randomUUID();
   db.tabelas.propostas.push({
@@ -187,7 +187,7 @@ function semearEnviada(db: any, conteudo: Record<string, unknown> = conteudoTs()
 
 // ── 1) Criar: o servidor calcula (caso do Ölver) ─────────────────────────────────────────────────────────────────────────────────────
 
-await caso("CRIAR (gestor, empresa de teste): o servidor calcula o caso do Ölver — custo R$ 5.357,71, encargos R$ 1.699,20, D = 2224 bp → R$ 6.890,06; número TESTE-TS; template próprio; sem percentuais na resposta", async () => semChave(async () => {
+await caso("CRIAR (gestor, empresa de teste): o servidor calcula o caso do Ölver — custo R$ 5.357,71, encargos R$ 1.699,22, ganho de 30% → R$ 6.965,05; número TESTE-TS; template próprio; o gestor recebe custo e ganho", async () => semChave(async () => {
   const db = novoDb();
   const r = await criar(db, "u-g");
   assert.equal(r.status, 201, JSON.stringify(r.body));
@@ -204,26 +204,26 @@ await caso("CRIAR (gestor, empresa de teste): o servidor calcula o caso do Ölve
   assert.equal(d.status, 200);
   const pl = d.body.planilhaTs;
   assert.equal(pl.origem, "hoje"); assert.equal(pl.erro, null);
-  assert.equal(linha(pl.planilha, "encargos"), ENCARGOS, "encargos R$ 1.699,20");
-  assert.equal(linha(pl.planilha, "custo_unitario"), CUSTO, "custo R$ 5.357,71");
-  assert.equal(formatarCentavosBRL(CUSTO).replace(/\s/g, " "), "R$ 5.357,71");
+  assert.equal(linha(pl.planilha, "encargos"), ENCARGOS, "encargos R$ 1.699,22");
+  assert.equal(linha(pl.planilha, "custo_unitario"), CUSTO, "custo R$ 5.357,73");
+  assert.equal(formatarCentavosBRL(CUSTO).replace(/\s/g, " "), "R$ 5.357,73");
   assert.equal(pl.planilha.servicos[0].preco_calculado_centavos, PRECO);
   assert.equal(pl.planilha.total_mensal_centavos, PRECO);
-  assert.equal(formatarCentavosBRL(pl.planilha.total_mensal_centavos).replace(/\s/g, " "), "R$ 6.890,06");
-  assert.match(pl.planilha.total_mensal_extenso, /^Seis mil, oitocentos e noventa reais e seis centavos$/);
-  assert.ok(Math.abs(pl.planilha.servicos[0].margem_real_bp - 291) <= 2, "gestor vê a margem real");
-  assert.equal(pl.planilha.liberacao_margem, null);
-  // Nenhum percentual sai: nem os de encargos/preço, nem o percentual de cada linha.
-  const json = JSON.stringify(d.body);
-  assert.doesNotMatch(json, /"(fgts|inss|multa_fgts|cobertura|iss|pis|cofins|irpj|csll|despesas|lucro|margem_minima)_bp"/);
-  assert.doesNotMatch(json, /percentual_bp/);
+  assert.equal(formatarCentavosBRL(pl.planilha.total_mensal_centavos).replace(/\s/g, " "), "R$ 6.965,05");
+  assert.match(pl.planilha.total_mensal_extenso, /^Seis mil, novecentos e sessenta e cinco reais e cinco centavos$/);
+  assert.equal(pl.planilha.ganho_bp, 3000);
+  assert.deepEqual([pl.planilha.ganho_padrao_bp, pl.planilha.ganho_minimo_bp, pl.planilha.encargos_sobre_adicionais], [3000, 2000, true]);
+  assert.equal(pl.planilha.servicos[0].ganho_real_bp, 3000, "gestor vê o ganho");
+  assert.equal(pl.planilha.liberacao_ganho, null);
+  // As colunas do modelo antigo nunca saem.
+  assert.doesNotMatch(JSON.stringify(d.body), /"(cobertura|iss|pis|cofins|irpj|csll|despesas|lucro|margem_minima)_bp"/);
 }));
 
 await caso("o servidor IGNORA qualquer valor calculado vindo do navegador (total, preços, custos, planilha, valor estimado, número, situação): só valem os dados de entrada", async () => semChave(async () => {
   const db = novoDb();
   const falso = conteudoTs({
-    total_mensal_centavos: 1, custo_total_centavos: 1, planilha: { total: 1 }, parametros: { lucro_bp: 9999 },
-    servicos: [servico({ preco_calculado_centavos: 1, preco_centavos: 1, custo_centavos: 1, margem_real_bp: 9999, abaixo_margem_minima: false, postos: [posto({ custo_unit_centavos: 1, preco_unit_centavos: 1, preco_posto_centavos: 1, linhas: [] })] })],
+    total_mensal_centavos: 1, custo_total_centavos: 1, planilha: { total: 1 }, parametros: { ganho_padrao_bp: 9999 },
+    servicos: [servico({ preco_calculado_centavos: 1, preco_centavos: 1, custo_centavos: 1, ganho_real_bp: 9999, abaixo_ganho_minimo: false, postos: [posto({ custo_unit_centavos: 1, preco_unit_centavos: 1, preco_posto_centavos: 1, linhas: [] })] })],
   });
   const r = await criar(db, "u-g", { conteudo: falso, valor_estimado: 1, numero: "FALSO-0001/26", situacao: "aceita", teste: false, vendedor_id: V });
   assert.equal(r.status, 201, JSON.stringify(r.body));
@@ -232,7 +232,7 @@ await caso("o servidor IGNORA qualquer valor calculado vindo do navegador (total
   assert.equal(r.body.data.vendedor_id, G);
   assert.equal(r.body.data.valor_estimado, null);
   const guardado = JSON.stringify(proposta(db, r.body.data.id).conteudo);
-  for (const proibido of ["total_mensal_centavos", "custo_total_centavos", "planilha", "preco_calculado_centavos", "preco_centavos", "custo_centavos", "margem_real_bp", "custo_unit_centavos", "preco_unit_centavos", "preco_posto_centavos", "\"linhas\"", "9999"]) {
+  for (const proibido of ["total_mensal_centavos", "custo_total_centavos", "planilha", "preco_calculado_centavos", "preco_centavos", "custo_centavos", "ganho_real_bp", "custo_unit_centavos", "preco_unit_centavos", "preco_posto_centavos", "\"linhas\"", "9999"]) {
     assert.ok(!guardado.includes(proibido), `conteúdo gravado traz ${proibido}`);
   }
   const d = await detalhe(db, "u-g", r.body.data.id);
@@ -258,30 +258,33 @@ await caso("conteúdo inválido do TS → 400 em português (com o caminho legí
   assert.equal(db.tabelas.proposta_contadores_teste.length, 0);
 }));
 
-// ── 2) Preço não configurado ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+// ── 2) Ganho não configurado ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-await caso("percentuais de preço ZERADOS (tributos + despesas + lucro = 0): 422 com a mensagem exata, sem salvar proposta nem gastar número; prévia e edição também recusam; o detalhe mostra o erro", async () => semChave(async () => {
+await caso("GANHO não configurado (padrão 0 e sem ganho na proposta): 422 com a mensagem exata, sem salvar proposta nem gastar número; prévia e edição também recusam; o detalhe mostra o erro; o gestor que informa o ganho na proposta passa", async () => semChave(async () => {
   const db = novoDb(PAR_ZERADOS);
-  assert.equal(MSG_PRECO_TS_NAO_CONFIGURADO, "Os percentuais de preço da Terceirização ainda não foram configurados pela diretoria.");
+  assert.equal(MSG_GANHO_TS_NAO_CONFIGURADO, "O percentual de ganho da Terceirização ainda não foi configurado pela diretoria.");
   const r = await criar(db, "u-g");
   assert.equal(r.status, 422);
-  assert.equal(r.body.error, "Os percentuais de preço da Terceirização ainda não foram configurados pela diretoria.");
+  assert.equal(r.body.error, "O percentual de ganho da Terceirização ainda não foi configurado pela diretoria.");
   assert.equal(db.tabelas.propostas.length, 0);
   assert.equal(db.rpcChamadas.filter((c: any) => c.rpc.startsWith("criar_proposta")).length, 0);
   assert.equal(db.tabelas.proposta_contadores_teste.length, 0);
   assert.equal(unico(db), SEMENTE);
   const p = await previa(db, "u-g", conteudoTs());
-  assert.equal(p.status, 422); assert.equal(p.body.error, MSG_PRECO_TS_NAO_CONFIGURADO);
-  // Rascunho criado quando o preço estava configurado e DEPOIS a diretoria zera: detalhe mostra o erro; editar é recusado e nada muda.
+  assert.equal(p.status, 422); assert.equal(p.body.error, MSG_GANHO_TS_NAO_CONFIGURADO);
+  const comGanho = await criar(db, "u-g", { conteudo: conteudoTs({ ganho_bp: 2500 }) });
+  assert.equal(comGanho.status, 201, JSON.stringify(comGanho.body));
+  assert.equal((await detalhe(db, "u-g", comGanho.body.data.id)).body.planilhaTs.planilha.total_mensal_centavos, precoDe(CUSTO, 2500));
+  // Rascunho criado com o padrão e DEPOIS a diretoria zera: detalhe mostra o erro; editar é recusado e nada muda.
   const db2 = novoDb();
   const id = (await criar(db2, "u-g")).body.data.id as string;
   db2.tabelas.proposta_ts_parametros.push(seedParametros(PAR_ZERADOS, { id: "pts-2", vigente_desde: HOJE, created_at: "2026-11-25T10:00:00Z" }));
   const d = await detalhe(db2, "u-g", id);
   assert.equal(d.body.planilhaTs.planilha, null);
-  assert.equal(d.body.planilhaTs.erro, MSG_PRECO_TS_NAO_CONFIGURADO);
+  assert.equal(d.body.planilhaTs.erro, MSG_GANHO_TS_NAO_CONFIGURADO);
   const antes = JSON.stringify(proposta(db2, id));
   const ed = await patch(db2, "u-g", id, { conteudo: conteudoTs({ servicos: [servico({ nome: "Outro nome" })] }) });
-  assert.equal(ed.status, 422); assert.equal(ed.body.error, MSG_PRECO_TS_NAO_CONFIGURADO);
+  assert.equal(ed.status, 422); assert.equal(ed.body.error, MSG_GANHO_TS_NAO_CONFIGURADO);
   assert.equal(JSON.stringify(proposta(db2, id)), antes, "nada foi gravado");
 }));
 
@@ -293,19 +296,19 @@ await caso("sem NENHUMA vigência de percentuais: 409 com a orientação; percen
   assert.match(r.body.error, /Peça à diretoria para cadastrá-los/);
   assert.equal(db.tabelas.propostas.length, 0);
   const db2 = novoDb();
-  db2.tabelas.proposta_ts_parametros[0].lucro_bp = 20000;
+  db2.tabelas.proposta_ts_parametros[0].ganho_padrao_bp = 200000;
   const r2 = await criar(db2, "u-g");
   assert.equal(r2.status, 500);
   assert.equal(db2.tabelas.propostas.length, 0);
 }));
 
-// ── 3) Preço manual e ISS por proposta: só diretoria ─────────────────────────────────────────────────────────────────────────────────
+// ── 3) Preço manual e ganho por proposta: só gestor/diretoria ─────────────────────────────────────────────────────────────────────────────────
 
-await caso("preço manual e ISS por proposta: quem não é diretoria recebe 403 ao CRIAR e ao EDITAR, e nada é gravado nem gasta número; a diretoria usa e o servidor aplica", async () => comChaves(async () => {
+await caso("preço manual e ganho por proposta: quem não é diretoria recebe 403 ao CRIAR e ao EDITAR, e nada é gravado nem gasta número; a diretoria usa e o servidor aplica", async () => comChaves(async () => {
   const db = novoDb();
   const manual = conteudoTs({ servicos: [servico({ preco_manual_centavos: 700000 })] });
-  const iss = conteudoTs({ iss_override_bp: 300 });
-  for (const [conteudo, mensagem] of [[manual, MSG_SO_DIRETORIA_PRECO_MANUAL], [iss, MSG_SO_DIRETORIA_ISS]] as const) {
+  const ganho = conteudoTs({ ganho_bp: 4000 });
+  for (const [conteudo, mensagem] of [[manual, MSG_SO_DIRETORIA_PRECO_MANUAL], [ganho, MSG_SO_DIRETORIA_GANHO]] as const) {
     const r = await criar(db, "u-v", { conteudo }, EMP);
     assert.equal(r.status, 403, JSON.stringify(r.body));
     assert.equal(r.body.error, mensagem);
@@ -314,13 +317,13 @@ await caso("preço manual e ISS por proposta: quem não é diretoria recebe 403 
   assert.equal(db.rpcChamadas.filter((c: any) => c.rpc.startsWith("criar_proposta")).length, 0);
   assert.equal(unico(db), SEMENTE);
   assert.deepEqual(db.tabelas.audit_logs, []);
-  // Edição: o vendedor cria normal e tenta acrescentar preço manual / ISS.
+  // Edição: o vendedor cria normal e tenta acrescentar preço manual / ganho.
   const normal = await criar(db, "u-v", {}, EMP);
   assert.equal(normal.status, 201, JSON.stringify(normal.body));
   assert.equal(normal.body.data.numero, `VE-TS-0072/${AA}`);
   const id = normal.body.data.id as string;
   const antes = JSON.stringify(proposta(db, id));
-  for (const [conteudo, mensagem] of [[manual, MSG_SO_DIRETORIA_PRECO_MANUAL], [iss, MSG_SO_DIRETORIA_ISS]] as const) {
+  for (const [conteudo, mensagem] of [[manual, MSG_SO_DIRETORIA_PRECO_MANUAL], [ganho, MSG_SO_DIRETORIA_GANHO]] as const) {
     const ed = await patch(db, "u-v", id, { conteudo });
     assert.equal(ed.status, 403);
     assert.equal(ed.body.error, mensagem);
@@ -328,12 +331,12 @@ await caso("preço manual e ISS por proposta: quem não é diretoria recebe 403 
   assert.equal(JSON.stringify(proposta(db, id)), antes, "nada foi gravado");
   // Prévia: mesma regra.
   assert.equal((await previa(db, "u-v", manual)).status, 403);
-  assert.equal((await previa(db, "u-v", iss)).status, 403);
-  // Quem não é diretoria edita normalmente o que não é preço manual/ISS.
+  assert.equal((await previa(db, "u-v", ganho)).status, 403);
+  // Quem não é diretoria edita normalmente o que não é preço manual/ganho.
   assert.equal((await patch(db, "u-v", id, { conteudo: conteudoTs({ servicos: [servico({ nome: "Outro nome" })] }) })).status, 200);
 }));
 
-await caso("a DIRETORIA informa preço manual e ISS: o servidor aplica (preço manual vale; ISS entra nos parâmetros efetivos), o detalhe mostra o calculado e o manual, e a auditoria registra quem e o quê", async () => semChave(async () => {
+await caso("a DIRETORIA informa preço manual e ganho: o servidor aplica (preço manual vale; o ganho da proposta substitui o padrão), o detalhe mostra o calculado e o manual, e a auditoria registra quem e o quê", async () => semChave(async () => {
   const db = novoDb();
   const manual = await criar(db, "u-g", { conteudo: conteudoTs({ servicos: [servico({ preco_manual_centavos: 700000, justificativa_preco_manual: "Contrato anual" })] }) });
   assert.equal(manual.status, 201, JSON.stringify(manual.body));
@@ -341,16 +344,17 @@ await caso("a DIRETORIA informa preço manual e ISS: o servidor aplica (preço m
   const s = d.body.planilhaTs.planilha.servicos[0];
   assert.deepEqual([s.preco_calculado_centavos, s.preco_manual_centavos, s.preco_centavos], [PRECO, 700000, 700000]);
   assert.equal(d.body.planilhaTs.planilha.total_mensal_centavos, 700000);
-  const iss = await criar(db, "u-g", { conteudo: conteudoTs({ iss_override_bp: 300 }) });
-  assert.equal(iss.status, 201);
-  const di = await detalhe(db, "u-g", iss.body.data.id);
-  assert.equal(di.body.planilhaTs.planilha.total_mensal_centavos, precoDe(CUSTO, 2224 - 200), "ISS 3% em vez de 5%: D = 2024 bp");
+  const ganho = await criar(db, "u-g", { conteudo: conteudoTs({ ganho_bp: 4000 }) });
+  assert.equal(ganho.status, 201);
+  const di = await detalhe(db, "u-g", ganho.body.data.id);
+  assert.equal(di.body.planilhaTs.planilha.total_mensal_centavos, precoDe(CUSTO, 4000), "ganho de 40% no lugar do padrão de 30%");
+  assert.equal(di.body.planilhaTs.planilha.ganho_bp, 4000);
   // Auditoria: sem dados pessoais, só o que foi autorizado.
   const a = db.tabelas.audit_logs.filter((x: any) => x.acao === "proposta_ts_autorizacao");
   assert.equal(a.length, 2);
   assert.deepEqual({ usuario_id: a[0].usuario_id, entidade: a[0].entidade, entidade_id: a[0].entidade_id }, { usuario_id: "u-g", entidade: "propostas", entidade_id: manual.body.data.id });
-  assert.deepEqual({ evento: a[0].detalhes.evento, preco_manual: a[0].detalhes.preco_manual, iss: a[0].detalhes.iss_override_bp, margem: a[0].detalhes.margem_liberada }, { evento: "criada", preco_manual: true, iss: null, margem: false });
-  assert.deepEqual({ preco_manual: a[1].detalhes.preco_manual, iss: a[1].detalhes.iss_override_bp }, { preco_manual: false, iss: 300 });
+  assert.deepEqual({ evento: a[0].detalhes.evento, preco_manual: a[0].detalhes.preco_manual, ganho: a[0].detalhes.ganho_bp, liberado: a[0].detalhes.ganho_abaixo_liberado }, { evento: "criada", preco_manual: true, ganho: null, liberado: false });
+  assert.deepEqual({ preco_manual: a[1].detalhes.preco_manual, ganho: a[1].detalhes.ganho_bp }, { preco_manual: false, ganho: 4000 });
   const json = JSON.stringify(db.tabelas.audit_logs);
   for (const pessoal of ["g@salmazos", "Gestora Teste", "99999", "ZZTEST"]) assert.ok(!json.includes(pessoal), `auditoria traz ${pessoal}`);
   // Uma proposta comum não gera auditoria de autorização.
@@ -359,73 +363,80 @@ await caso("a DIRETORIA informa preço manual e ISS: o servidor aplica (preço m
   assert.equal(db.tabelas.audit_logs.filter((x: any) => x.acao === "proposta_ts_autorizacao").length, 2);
 }));
 
-await caso("privilegiosTsViolados (puro): quem não é diretoria pode MANTER o preço manual/ISS que a diretoria já gravou, mas não informar, mudar nem remover", () => {
+await caso("privilegiosTsViolados (puro): quem não é diretoria pode MANTER o preço manual/ganho que a diretoria já gravou, mas não informar, mudar nem remover", () => {
   const base = conteudoTsSchema.parse(conteudoTs());
-  const comManual = conteudoTsSchema.parse(conteudoTs({ servicos: [servico({ preco_manual_centavos: 700000 })], iss_override_bp: 300 }));
+  const comManual = conteudoTsSchema.parse(conteudoTs({ servicos: [servico({ preco_manual_centavos: 700000 })], ganho_bp: 4000 }));
   assert.equal(privilegiosTsViolados(base, null, false), null);
   assert.equal(privilegiosTsViolados(comManual, comManual, false), null, "manter igual não é violação");
   assert.equal(privilegiosTsViolados(comManual, base, false), MSG_SO_DIRETORIA_PRECO_MANUAL);
-  assert.equal(privilegiosTsViolados(conteudoTsSchema.parse(conteudoTs({ iss_override_bp: 300 })), base, false), MSG_SO_DIRETORIA_ISS);
+  assert.equal(privilegiosTsViolados(conteudoTsSchema.parse(conteudoTs({ ganho_bp: 4000 })), base, false), MSG_SO_DIRETORIA_GANHO);
   assert.equal(privilegiosTsViolados(base, comManual, false), MSG_SO_DIRETORIA_PRECO_MANUAL, "remover também é mudar");
   assert.equal(privilegiosTsViolados(comManual, base, true), null);
   assert.equal(privilegiosTsViolados(comManual, null, true), null);
 });
 
-// ── 4) Margem mínima ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// ── 4) Ganho mínimo ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-await caso("MARGEM MÍNIMA: abaixo do mínimo, quem não é gestor é bloqueado (422); o gestor só libera COM justificativa (422 sem ela); liberada, grava e audita quem liberou e por quê", async () => comChaves(async () => {
-  const db = novoDb({ ...PAR_PRECO, margem_minima_bp: 500 }); // lucro 291 < mínimo 500: o preço calculado já fica abaixo
+const PAR_ABAIXO: ParametrosTs = { ...PAR_PRECO, ganho_minimo_bp: 3500 }; // padrão 30% < mínimo 35%
+
+await caso("GANHO MÍNIMO: abaixo do mínimo, quem não é gestor é bloqueado (422, sem número na mensagem); o gestor só libera COM justificativa (422 sem ela); liberada, grava e audita quem liberou e por quê", async () => comChaves(async () => {
+  const db = novoDb(PAR_ABAIXO);
   const v = await criar(db, "u-v", {}, EMP);
   assert.equal(v.status, 422);
   assert.match(v.body.error, /abaixo do mínimo definido pela diretoria \(Serviço 1 – Limpeza e conservação\)\. Só a diretoria pode liberar/);
+  assert.doesNotMatch(v.body.error, /ganho|%|\d{3,}/i);
   assert.equal(db.tabelas.propostas.length, 0);
   assert.equal(unico(db), SEMENTE);
-  const jv = await criar(db, "u-v", { conteudo: conteudoTs({ justificativa_margem_minima: "Eu libero" }) }, EMP);
+  const jv = await criar(db, "u-v", { conteudo: conteudoTs({ justificativa_ganho_minimo: "Eu libero" }) }, EMP);
   assert.equal(jv.status, 422, "justificativa de quem não é gestor não libera nada");
   for (const justificativa of [undefined, "", "   "]) {
-    const g = await criar(db, "u-g", { conteudo: conteudoTs({ justificativa_margem_minima: justificativa }) });
+    const g = await criar(db, "u-g", { conteudo: conteudoTs({ justificativa_ganho_minimo: justificativa }) });
     assert.equal(g.status, 422, String(justificativa));
     assert.match(g.body.error, /Informe a justificativa para liberar/);
   }
   // Justificativa só com caracteres que o PDF não imprime não vale: recusada na validação do conteúdo (400).
-  const emoji = await criar(db, "u-g", { conteudo: conteudoTs({ justificativa_margem_minima: "😀" }) });
+  const emoji = await criar(db, "u-g", { conteudo: conteudoTs({ justificativa_ganho_minimo: "😀" }) });
   assert.equal(emoji.status, 400);
   assert.equal(db.tabelas.propostas.length, 0);
-  assert.equal((await previa(db, "u-g", conteudoTs())).body.data.margem.exige_justificativa, true);
-  const ok = await criar(db, "u-g", { conteudo: conteudoTs({ justificativa_margem_minima: "Cliente estratégico: margem reduzida aprovada" }) });
+  assert.equal((await previa(db, "u-g", conteudoTs())).body.data.ganho.exige_justificativa, true);
+  const ok = await criar(db, "u-g", { conteudo: conteudoTs({ justificativa_ganho_minimo: "Cliente estratégico: ganho reduzido aprovado" }) });
   assert.equal(ok.status, 201, JSON.stringify(ok.body));
   const a = db.tabelas.audit_logs.filter((x: any) => x.acao === "proposta_ts_autorizacao");
   assert.equal(a.length, 1);
   assert.equal(a[0].usuario_id, "u-g");
-  assert.deepEqual({ margem_liberada: a[0].detalhes.margem_liberada, servicos: a[0].detalhes.servicos_abaixo_da_margem, justificativa: a[0].detalhes.justificativa, numero: a[0].detalhes.numero },
-    { margem_liberada: true, servicos: [0], justificativa: "Cliente estratégico: margem reduzida aprovada", numero: ok.body.data.numero });
-  // A justificativa sobre uma margem que está dentro do mínimo não libera nada e não gera auditoria.
+  assert.deepEqual({ liberado: a[0].detalhes.ganho_abaixo_liberado, servicos: a[0].detalhes.servicos_abaixo_do_ganho, justificativa: a[0].detalhes.justificativa, numero: a[0].detalhes.numero },
+    { liberado: true, servicos: [0], justificativa: "Cliente estratégico: ganho reduzido aprovado", numero: ok.body.data.numero });
+  // Ganho informado pelo gestor abaixo do mínimo segue a mesma regra.
   const dentro = novoDb();
-  const sem = await criar(dentro, "u-g", { conteudo: conteudoTs({ justificativa_margem_minima: "desnecessária" }) });
+  const baixo = await criar(dentro, "u-g", { conteudo: conteudoTs({ ganho_bp: 1000 }) });
+  assert.equal(baixo.status, 422);
+  assert.match(baixo.body.error, /Informe a justificativa para liberar/);
+  // A justificativa sobre um ganho dentro do mínimo não libera nada e não gera auditoria.
+  const sem = await criar(dentro, "u-g", { conteudo: conteudoTs({ justificativa_ganho_minimo: "desnecessária" }) });
   assert.equal(sem.status, 201);
   assert.deepEqual(dentro.tabelas.audit_logs, []);
 }));
 
-await caso("MARGEM com PREÇO MANUAL: manual abaixo do mínimo pede justificativa do gestor; manual dentro do mínimo passa; o gestor que libera aparece na prévia", async () => semChave(async () => {
+await caso("GANHO MÍNIMO com PREÇO MANUAL: manual abaixo do preço do ganho mínimo pede justificativa do gestor; manual dentro passa; o gestor vê na prévia", async () => semChave(async () => {
   const db = novoDb();
-  const abaixo = conteudoTs({ servicos: [servico({ preco_manual_centavos: 640000 })] }); // margem real ≈ −3% < 2%
+  const abaixo = conteudoTs({ servicos: [servico({ preco_manual_centavos: 640000 })] }); // ≈ 19,45% < 20%
   const r = await criar(db, "u-g", { conteudo: abaixo });
   assert.equal(r.status, 422);
   assert.match(r.body.error, /Informe a justificativa para liberar/);
   const p = await previa(db, "u-g", abaixo);
   assert.equal(p.status, 200);
-  assert.deepEqual(p.body.data.margem, { abaixo: [0], exige_justificativa: true });
-  assert.equal(p.body.data.planilha.servicos[0].abaixo_margem_minima, true);
-  assert.ok(p.body.data.planilha.servicos[0].margem_real_bp < 200);
-  const ok = await criar(db, "u-g", { conteudo: conteudoTs({ servicos: [servico({ preco_manual_centavos: 640000 })], justificativa_margem_minima: "Preço fechado em reunião" }) });
+  assert.deepEqual(p.body.data.ganho, { abaixo: [0], exige_justificativa: true });
+  assert.equal(p.body.data.planilha.servicos[0].abaixo_ganho_minimo, true);
+  assert.ok(p.body.data.planilha.servicos[0].ganho_real_bp < 2000);
+  const ok = await criar(db, "u-g", { conteudo: conteudoTs({ servicos: [servico({ preco_manual_centavos: 640000 })], justificativa_ganho_minimo: "Preço fechado em reunião" }) });
   assert.equal(ok.status, 201, JSON.stringify(ok.body));
   const dentro = await criar(db, "u-g", { conteudo: conteudoTs({ servicos: [servico({ preco_manual_centavos: 700000 })] }) });
-  assert.equal(dentro.status, 201, "manual com margem acima do mínimo não pede justificativa");
+  assert.equal(dentro.status, 201, "manual acima do mínimo não pede justificativa");
 }));
 
 // ── 5) Snapshot, revisão e percentuais mudando depois ───────────────────────────────────────────────────────────────────────────────────────
 
-await caso("REVISÃO de proposta enviada: nova linha em proposta_revisoes (a anterior intacta), snapshot com os percentuais vigentes usados, valor estimado e histórico acompanham; sem preço configurado recusa e não grava", async () => semChave(async () => {
+await caso("REVISÃO de proposta enviada: nova linha em proposta_revisoes (a anterior intacta), snapshot com os percentuais vigentes usados, valor estimado e histórico acompanham; sem ganho configurado recusa e não grava", async () => semChave(async () => {
   const db = novoDb();
   const { id, snap0 } = semearEnviada(db);
   assert.equal(snap0.total_mensal_centavos, PRECO);
@@ -448,19 +459,20 @@ await caso("REVISÃO de proposta enviada: nova linha em proposta_revisoes (a ant
   for (const k of Object.keys(PAR_PRECO) as (keyof ParametrosTs)[]) assert.equal(snap.parametros[k], PAR_PRECO[k], `parâmetro ${k} congelado no snapshot`);
   assert.equal(snap.servicos[0].postos[0].salario_centavos, 200000);
   assert.ok(snap.total_mensal_centavos > PRECO);
-  assert.equal(snap.liberacao_margem, null);
+  assert.equal(snap.liberacao_ganho, null);
+  assert.equal(snap.ganho_bp, 3000);
   assert.equal(proposta(db, id).valor_estimado, snap.total_mensal_centavos / 100, "o valor estimado acompanha a revisão");
   const hist = db.tabelas.proposta_historico.filter((h: any) => h.proposta_id === id);
-  assert.match(hist[hist.length - 1].observacao, /Revisão 1 emitida\. Valor: R\$\s6\.890,06 → R\$\s.* \(Rev\. 1\)\./);
+  assert.match(hist[hist.length - 1].observacao, /Revisão 1 emitida\. Valor: R\$\s6\.965,05 → R\$\s.* \(Rev\. 1\)\./);
   // Detalhe: planilha do snapshot gravado.
   const d = await detalhe(db, "u-g", id);
   assert.equal(d.body.planilhaTs.origem, "revisao");
   assert.equal(d.body.planilhaTs.planilha.total_mensal_centavos, snap.total_mensal_centavos);
-  // Sem preço configurado: 422 e nenhuma revisão nova.
+  // Sem ganho configurado: 422 e nenhuma revisão nova.
   db.tabelas.proposta_ts_parametros.push(seedParametros(PAR_ZERADOS, { id: "pts-0", vigente_desde: HOJE, created_at: "2026-11-25T09:00:00Z" }));
   const antes = JSON.stringify([proposta(db, id), db.tabelas.proposta_revisoes, db.tabelas.proposta_historico]);
   const sem = await patch(db, "u-g", id, { conteudo: conteudoTs() });
-  assert.equal(sem.status, 422); assert.equal(sem.body.error, MSG_PRECO_TS_NAO_CONFIGURADO);
+  assert.equal(sem.status, 422); assert.equal(sem.body.error, MSG_GANHO_TS_NAO_CONFIGURADO);
   assert.equal(JSON.stringify([proposta(db, id), db.tabelas.proposta_revisoes, db.tabelas.proposta_historico]), antes);
 }));
 
@@ -472,8 +484,8 @@ await caso("MUDAR OS PERCENTUAIS DEPOIS não altera a proposta antiga: a diretor
   const rev1Antes = JSON.stringify(db.tabelas.proposta_revisoes[1]);
   const d1 = await detalhe(db, "u-g", id);
   const total1 = d1.body.planilhaTs.planilha.total_mensal_centavos;
-  // A diretoria grava uma vigência NOVA com lucro maior (vale a partir de hoje).
-  const nova = await gravarParametros(db, "u-g", { vigente_desde: HOJE, ...PAR_PRECO, lucro_bp: 900 });
+  // A diretoria grava uma vigência NOVA com ganho padrão maior (vale a partir de hoje).
+  const nova = await gravarParametros(db, "u-g", { vigente_desde: HOJE, ...PAR_PRECO, ganho_padrao_bp: 4500 });
   assert.equal(nova.status, 201, JSON.stringify(nova.body));
   const d2 = await detalhe(db, "u-g", id);
   assert.equal(d2.body.planilhaTs.origem, "revisao");
@@ -486,29 +498,31 @@ await caso("MUDAR OS PERCENTUAIS DEPOIS não altera a proposta antiga: a diretor
   assert.equal(r2.status, 200, JSON.stringify(r2.body));
   const snap2 = snapshotTsSchema.parse(db.tabelas.proposta_revisoes[2].conteudo);
   assert.equal(snap2.parametros.vigente_desde, HOJE);
-  assert.equal(snap2.parametros.lucro_bp, 900);
-  assert.ok(snap2.total_mensal_centavos > total1, "mesmo conteúdo, lucro maior, preço maior");
+  assert.equal(snap2.parametros.ganho_padrao_bp, 4500);
+  assert.equal(snap2.ganho_bp, 4500);
+  assert.ok(snap2.total_mensal_centavos > total1, "mesmo conteúdo, ganho maior, preço maior");
   assert.equal(JSON.stringify(db.tabelas.proposta_revisoes[1]), rev1Antes, "a Rev. 1 continua intacta");
   // Uma proposta NOVA nasce com os percentuais novos.
   const nv = await criar(db, "u-g");
   assert.equal((await detalhe(db, "u-g", nv.body.data.id)).body.planilhaTs.planilha.vigente_desde, HOJE);
 }));
 
-await caso("snapshot grava QUEM liberou a margem: o gestor que libera numa revisão aparece (id, nome, justificativa, serviços, quando) no snapshot", async () => semChave(async () => {
-  const db = novoDb({ ...PAR_PRECO, margem_minima_bp: 500 });
+await caso("snapshot grava QUEM liberou o ganho abaixo do mínimo: o gestor que libera numa revisão aparece (id, nome, justificativa, serviços, quando) no snapshot", async () => semChave(async () => {
+  const db = novoDb();
   const { id } = semearEnviada(db);
+  db.tabelas.proposta_ts_parametros.push(seedParametros(PAR_ABAIXO, { id: "pts-min", vigente_desde: HOJE, created_at: "2026-11-25T09:00:00Z" }));
   const sem = await patch(db, "u-g", id, { conteudo: conteudoTs() });
   assert.equal(sem.status, 422);
   assert.equal(db.tabelas.proposta_revisoes.length, 1);
-  const ok = await patch(db, "u-g", id, { conteudo: conteudoTs({ justificativa_margem_minima: "Aprovado pela diretoria em reunião" }) });
+  const ok = await patch(db, "u-g", id, { conteudo: conteudoTs({ justificativa_ganho_minimo: "Aprovado pela diretoria em reunião" }) });
   assert.equal(ok.status, 200, JSON.stringify(ok.body));
   const snap = snapshotTsSchema.parse(db.tabelas.proposta_revisoes[1].conteudo);
-  assert.equal(snap.liberacao_margem?.justificativa, "Aprovado pela diretoria em reunião");
-  assert.equal(snap.liberacao_margem?.liberado_por_id, G);
-  assert.equal(snap.liberacao_margem?.liberado_por_nome, "Gestora Teste");
-  assert.deepEqual(snap.liberacao_margem?.servicos, [0]);
-  assert.ok(!Number.isNaN(Date.parse(snap.liberacao_margem?.liberado_em ?? "")));
-  assert.equal(snap.servicos[0].abaixo_margem_minima, true);
+  assert.equal(snap.liberacao_ganho?.justificativa, "Aprovado pela diretoria em reunião");
+  assert.equal(snap.liberacao_ganho?.liberado_por_id, G);
+  assert.equal(snap.liberacao_ganho?.liberado_por_nome, "Gestora Teste");
+  assert.deepEqual(snap.liberacao_ganho?.servicos, [0]);
+  assert.ok(!Number.isNaN(Date.parse(snap.liberacao_ganho?.liberado_em ?? "")));
+  assert.equal(snap.servicos[0].abaixo_ganho_minimo, true);
   const a = db.tabelas.audit_logs.filter((x: any) => x.acao === "proposta_ts_autorizacao");
   assert.equal(a.length, 1);
   assert.equal(a[0].detalhes.evento, "revisao");
@@ -560,7 +574,7 @@ await caso("outros modelos intactos: o detalhe de R&S e de MOT não ganha planil
   const ts = await criar(db, "u-v", {}, EMP);
   const dTs = await detalhe(db, "u-v", ts.body.data.id);
   assert.ok("planilhaTs" in dTs.body && !("planilhaMot" in dTs.body));
-  assert.ok(!("margem_real_bp" in dTs.body.planilhaTs.planilha.servicos[0]), "a margem real só aparece para o gestor");
+  assert.ok(!("ganho_real_bp" in dTs.body.planilhaTs.planilha.servicos[0]), "o ganho só aparece para o gestor");
 }, { HARNESS_PROPOSTA_TS: "1" }));
 
 // ── 7) Numeração (contador único) ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -627,7 +641,7 @@ await caso("MARCAR COMO ENVIADA está BLOQUEADO para o TS (409 'PDF da Terceiriz
 
 // ── 9) Percentuais (diretoria) ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
-const PARAMS_NOVOS = (extra: Record<string, unknown> = {}) => ({ vigente_desde: mais(10), ...PAR_PRECO, lucro_bp: 350, ...extra });
+const PARAMS_NOVOS = (extra: Record<string, unknown> = {}) => ({ vigente_desde: mais(10), ...PAR_PRECO, ganho_padrao_bp: 3500, ...extra });
 
 await caso("PERCENTUAIS: só a diretoria grava (403 para os demais, nada gravado, sem login 401); leitura só de quem pode usar o TS (gestor); a rota só tem GET e POST (nenhuma edição de linha antiga)", async () => semChave(async () => {
   const db = novoDb();
@@ -642,7 +656,7 @@ await caso("PERCENTUAIS: só a diretoria grava (403 para os demais, nada gravado
   const lido = await lerParametros(db, "u-g");
   assert.equal(lido.status, 200);
   assert.equal(lido.body.vigentes.vigente_desde, "2026-01-01");
-  assert.equal(lido.body.vigentes.lucro_bp, 291);
+  assert.equal(lido.body.vigentes.ganho_padrao_bp, 3000);
   assert.equal(lido.body.historico.length, 1);
   // A diretoria grava: NOVA linha, com autor; a antiga fica intacta; auditoria sem dado pessoal.
   const antiga = JSON.stringify(db.tabelas.proposta_ts_parametros[0]);
@@ -650,19 +664,21 @@ await caso("PERCENTUAIS: só a diretoria grava (403 para os demais, nada gravado
   assert.equal(nova.status, 201, JSON.stringify(nova.body));
   assert.equal(db.tabelas.proposta_ts_parametros.length, 2);
   assert.equal(JSON.stringify(db.tabelas.proposta_ts_parametros[0]), antiga, "a linha antiga não é editada");
-  assert.deepEqual({ vigente_desde: nova.body.data.vigente_desde, lucro: nova.body.data.lucro_bp, por: nova.body.data.alterado_por }, { vigente_desde: mais(10), lucro: 350, por: G });
+  assert.deepEqual({ vigente_desde: nova.body.data.vigente_desde, ganho: nova.body.data.ganho_padrao_bp, sobre: nova.body.data.encargos_sobre_adicionais, por: nova.body.data.alterado_por }, { vigente_desde: mais(10), ganho: 3500, sobre: true, por: G });
+  for (const k of COLUNAS_SEM_USO_TS) assert.equal(nova.body.data[k], 0, `${k}: coluna do modelo antigo gravada com 0`);
   const a = db.tabelas.audit_logs;
   assert.equal(a.length, 1);
   assert.deepEqual({ acao: a[0].acao, entidade: a[0].entidade, entidade_id: a[0].entidade_id, usuario_id: a[0].usuario_id }, { acao: "parametros_ts_alterados", entidade: "proposta_ts_parametros", entidade_id: nova.body.data.id, usuario_id: "u-g" });
-  assert.equal(a[0].detalhes.antes.lucro_bp, 291);
-  assert.equal(a[0].detalhes.depois.lucro_bp, 350);
+  assert.equal(a[0].detalhes.antes.ganho_padrao_bp, 3000);
+  assert.equal(a[0].detalhes.depois.ganho_padrao_bp, 3500);
+  assert.equal(a[0].detalhes.depois.encargos_sobre_adicionais, true);
   assert.equal(a[0].detalhes.vigente_desde, mais(10));
   assert.ok(!JSON.stringify(a).includes("Gestora") && !JSON.stringify(a).includes("@"), "sem dados pessoais");
   // Hoje ainda vale a antiga; só a partir da data nova vale a nova.
-  assert.equal((await lerParametros(db, "u-g")).body.vigentes.lucro_bp, 291);
+  assert.equal((await lerParametros(db, "u-g")).body.vigentes.ganho_padrao_bp, 3000);
 }));
 
-await caso("PERCENTUAIS: validação — inteiros de 0 a 10000 em pontos-base, todos obrigatórios, tributos + despesas + lucro < 100%, data válida e NÃO retroativa, uma vigência por data; nada é gravado nos recusados", async () => semChave(async () => {
+await caso("PERCENTUAIS: validação — INSS, FGTS e multa de 0 a 10000 e ganhos de 0 a 100000 pontos-base inteiros, interruptor obrigatório, data válida e NÃO retroativa, uma vigência por data; colunas antigas vindas no corpo são ignoradas; nada é gravado nos recusados", async () => semChave(async () => {
   const db = novoDb();
   const recusa = async (corpo: unknown, status: number, trecho: RegExp) => {
     const r = await gravarParametros(db, "u-g", corpo);
@@ -670,15 +686,18 @@ await caso("PERCENTUAIS: validação — inteiros de 0 a 10000 em pontos-base, t
     assert.match(r.body.error, trecho);
     assert.equal(db.tabelas.proposta_ts_parametros.length, 1, "nada gravado");
   };
-  await recusa(PARAMS_NOVOS({ lucro_bp: 12.5 }), 400, /inteiro de pontos-base/);
-  await recusa(PARAMS_NOVOS({ lucro_bp: "300" }), 400, /pontos-base/);
-  await recusa(PARAMS_NOVOS({ iss_bp: -1 }), 400, /não pode ser negativo/);
+  await recusa(PARAMS_NOVOS({ ganho_padrao_bp: 12.5 }), 400, /inteiro de pontos-base/);
+  await recusa(PARAMS_NOVOS({ ganho_padrao_bp: "300" }), 400, /pontos-base/);
+  await recusa(PARAMS_NOVOS({ ganho_minimo_bp: -1 }), 400, /não pode ser negativo/);
+  await recusa(PARAMS_NOVOS({ ganho_padrao_bp: 100001 }), 400, /passa do limite/);
   await recusa(PARAMS_NOVOS({ inss_bp: 10001 }), 400, /passa do limite/);
   await recusa(PARAMS_NOVOS({ fgts_bp: null }), 400, /FGTS/);
-  const { margem_minima_bp: _m, ...semUm } = PARAMS_NOVOS();
-  await recusa(semUm, 400, /Margem mínima/);
-  await recusa(PARAMS_NOVOS({ lucro_bp: 10000 - 1633 - 300 }), 400, new RegExp(MSG_DEDUCOES_TS_INVALIDAS.slice(0, 40)));
-  await recusa(PARAMS_NOVOS({ lucro_bp: 9000, despesas_bp: 1000 }), 400, /somam 100% ou mais/);
+  const { ganho_minimo_bp: _m, ...semUm } = PARAMS_NOVOS();
+  await recusa(semUm, 400, /Ganho mínimo/);
+  const { encargos_sobre_adicionais: _e, ...semInterruptor } = PARAMS_NOVOS();
+  await recusa(semInterruptor, 400, /encargos incidem/);
+  await recusa(PARAMS_NOVOS({ ganho_padrao_bp: 3000, ganho_minimo_bp: 3001 }), 400, /^O ganho mínimo não pode ser maior que o ganho padrão\.$/);
+  await recusa(PARAMS_NOVOS({ ganho_padrao_bp: 0, ganho_minimo_bp: 100 }), 400, /ganho mínimo não pode ser maior/);
   await recusa(PARAMS_NOVOS({ vigente_desde: "2026-02-30" }), 400, /AAAA-MM-DD/);
   await recusa(PARAMS_NOVOS({ vigente_desde: "amanhã" }), 400, /AAAA-MM-DD/);
   await recusa(PARAMS_NOVOS({ vigente_desde: calcularValidadeAte(HOJE, -1) }), 400, /antes de hoje/);
@@ -686,13 +705,15 @@ await caso("PERCENTUAIS: validação — inteiros de 0 a 10000 em pontos-base, t
   assert.equal((await gravarParametros(db, "u-g", "texto")).status, 400);
   assert.equal((await gravarParametros(db, "u-g", [])).status, 400);
   assert.deepEqual(db.tabelas.audit_logs, []);
-  // Dentro do limite (D = 9999) passa; repetir a data é 409.
-  assert.equal((await gravarParametros(db, "u-g", PARAMS_NOVOS({ lucro_bp: 10000 - 1633 - 300 - 1 }))).status, 201);
+  // No limite passa, as colunas antigas enviadas são ignoradas (gravadas com 0); repetir a data é 409.
+  const noLimite = await gravarParametros(db, "u-g", PARAMS_NOVOS({ ganho_padrao_bp: 100000, encargos_sobre_adicionais: false, lucro_bp: 900, iss_bp: 500 }));
+  assert.equal(noLimite.status, 201, JSON.stringify(noLimite.body));
+  assert.deepEqual([noLimite.body.data.lucro_bp, noLimite.body.data.iss_bp, noLimite.body.data.encargos_sobre_adicionais], [0, 0, false]);
   await recusa2(await gravarParametros(db, "u-g", PARAMS_NOVOS()), 409);
   function recusa2(r: Chamada, status: number) { assert.equal(r.status, status); assert.match(r.body.error, /Já existe uma vigência com esta data/); }
   assert.equal(db.tabelas.proposta_ts_parametros.length, 2);
   // Hoje (vigente_desde = hoje) é permitido.
-  assert.equal((await gravarParametros(db, "u-g", PARAMS_NOVOS({ vigente_desde: HOJE, lucro_bp: 400 }))).status, 201);
+  assert.equal((await gravarParametros(db, "u-g", PARAMS_NOVOS({ vigente_desde: HOJE, ganho_padrao_bp: 4000 }))).status, 201);
   // Corrida no banco (índice único de vigência): a segunda inserção na mesma data vira o mesmo 409.
   db.unicos = { proposta_ts_parametros: ["vigente_desde"] };
   const antesCorrida = db.tabelas.proposta_ts_parametros.length;
@@ -705,7 +726,7 @@ await caso("PERCENTUAIS: validação — inteiros de 0 a 10000 em pontos-base, t
   assert.equal(db.tabelas.proposta_ts_parametros.length, antesCorrida + 2, "só as linhas esperadas");
 }));
 
-await caso("RÓTULO de adicional/benefício 'outro': grava e aparece na planilha; sem rótulo, com HTML ou acima de 60 caracteres recusa; tipo fixo ignora o rótulo; o cálculo e o gold test não mudam", async () => semChave(async () => {
+await caso("RÓTULO de adicional/benefício 'outro': grava e aparece na planilha; sem rótulo, com HTML ou acima de 60 caracteres recusa; tipo fixo ignora o rótulo; o cálculo e o caso de referência não mudam", async () => semChave(async () => {
   const db = novoDb();
   const comItens = (adicionais: unknown[], beneficios: unknown[]) => conteudoTs({ servicos: [servico({ postos: [posto({ adicionais, beneficios })] })] });
   const base = posto();
@@ -771,7 +792,7 @@ await caso("RÓTULO de adicional/benefício 'outro': grava e aparece na planilha
   assert.match(recusada.body.error, /Descreva o adicional escolhido como "Outro"/);
 }));
 
-await caso("PRÉVIA: só leitura (nenhuma escrita), sem percentuais na resposta, margem real só para o gestor; sem login 401; sem conteúdo 400", async () => semChave(async () => {
+await caso("PRÉVIA: só leitura (nenhuma escrita), custo e ganho só para o gestor; sem login 401; sem conteúdo 400", async () => semChave(async () => {
   const db = novoDb();
   db.consultas.length = 0;
   const g = await previa(db, "u-g", conteudoTs());
@@ -779,9 +800,9 @@ await caso("PRÉVIA: só leitura (nenhuma escrita), sem percentuais na resposta,
   assert.deepEqual(escritas(db), []);
   assert.equal(g.body.data.planilha.total_mensal_centavos, PRECO);
   assert.equal(linha(g.body.data.planilha, "custo_unitario"), CUSTO);
-  assert.deepEqual(g.body.data.margem, { abaixo: [], exige_justificativa: false });
-  assert.ok("margem_real_bp" in g.body.data.planilha.servicos[0]);
-  assert.doesNotMatch(JSON.stringify(g.body), /"(fgts|inss|multa_fgts|cobertura|iss|pis|cofins|irpj|csll|despesas|lucro|margem_minima)_bp"|percentual_bp/);
+  assert.deepEqual(g.body.data.ganho, { abaixo: [], exige_justificativa: false });
+  assert.ok("ganho_real_bp" in g.body.data.planilha.servicos[0]);
+  assert.doesNotMatch(JSON.stringify(g.body), /"(cobertura|iss|pis|cofins|irpj|csll|despesas|lucro|margem_minima)_bp"/);
   assert.equal(db.tabelas.propostas.length, 0);
   assert.equal(db.rpcChamadas.filter((c: any) => c.rpc.startsWith("criar_proposta")).length, 0);
   assert.equal((await previa(db, null, conteudoTs())).status, 401);
@@ -790,17 +811,18 @@ await caso("PRÉVIA: só leitura (nenhuma escrita), sem percentuais na resposta,
   assert.equal((await previa(db, "u-g", {})).status, 400);
   const v = await comChaves(() => previa(db, "u-v", conteudoTs()));
   assert.equal(v.status, 200);
-  assert.ok(!("margem_real_bp" in v.body.data.planilha.servicos[0]), "o vendedor não vê a margem real");
+  assert.ok(!("ganho_real_bp" in v.body.data.planilha.servicos[0]), "o vendedor não vê o ganho");
 }));
 
-// ── 10) Percentuais de preço NUNCA saem para quem não é gestor/diretoria ──────────────────────────────────────────────────────────────────────
+// ── 10) SIGILO: quem não é gestor/diretoria só vê preço ─────────────────────────────────────────────────────────────────────────────
 
-const OCULTOS = /"(iss_override_bp|justificativa_margem_minima|cobertura_bp_override|margem_real_bp|abaixo_margem_minima)"/;
+// Nada de custo, encargos, linhas, ganho (nem mínimo) ou justificativa em RESPOSTA de cálculo. Do conteúdo, só o que o próprio vendedor digita.
+const OCULTOS = /"(ganho_bp|ganho_padrao_bp|ganho_minimo_bp|ganho_real_bp|abaixo_ganho_minimo|justificativa_ganho_minimo|justificativa_preco_manual|liberacao_ganho|ganho|custo_unit_centavos|custo_posto_centavos|custo_centavos|custo_total_centavos|preco_calculado_centavos|preco_unit_centavos|linhas|encargos_sobre_adicionais|parametros)"/;
 const QUALQUER_BP = /"[a-z_]*_bp"/;
 const CONTEUDO_DA_DIRETORIA = () => conteudoTs({
-  servicos: [servico({ preco_manual_centavos: 700000, postos: [posto({ cobertura_bp_override: 500 })] })],
-  iss_override_bp: 300,
-  justificativa_margem_minima: "Aprovada pela diretoria",
+  servicos: [servico({ preco_manual_centavos: 700000, justificativa_preco_manual: "Aprovada pela diretoria" })],
+  ganho_bp: 4000,
+  justificativa_ganho_minimo: "Aprovada pela diretoria",
 });
 function semearRascunhoDoVendedor(db: any, conteudo: Record<string, unknown>) {
   const id = crypto.randomUUID();
@@ -812,39 +834,48 @@ function semearRascunhoDoVendedor(db: any, conteudo: Record<string, unknown>) {
   return id;
 }
 
-await caso("PERCENTUAIS DE PREÇO NUNCA SAEM PARA VENDEDOR (simulado com a chave do harness): detalhe, criar, editar, situação, prévia e percentuais não trazem ISS por proposta, cobertura, justificativa, margem real, 'abaixo da margem' nem nenhum campo *_bp; gestor e diretoria recebem", async () => comChaves(async () => {
-  const db = novoDb({ ...PAR_PRECO, margem_minima_bp: 100 });
+await caso("SIGILO (simulado com a chave do harness): o vendedor recebe SÓ o preço mensal por posto e o total em prévia, detalhe, criar, editar e situação — nada de custo, encargos, ganho, ganho mínimo ou justificativa; gestor e diretoria recebem", async () => comChaves(async () => {
+  const db = novoDb();
   const id = semearRascunhoDoVendedor(db, CONTEUDO_DA_DIRETORIA());
   const { id: idEnviada } = semearEnviada(db, CONTEUDO_DA_DIRETORIA(), "enviada", { dono: V, teste: false, liberacao: { justificativa: "Aprovada pela diretoria", servicos: [0], liberado_por_id: G, liberado_por_nome: "Gestora Teste", liberado_em: "2026-11-20T12:00:00.000Z" } });
   const limpo = (corpo: unknown, rotulo: string) => {
     const json = JSON.stringify(corpo);
     assert.doesNotMatch(json, OCULTOS, `${rotulo}: campo oculto`);
     assert.doesNotMatch(json, QUALQUER_BP, `${rotulo}: percentual (*_bp)`);
-    assert.doesNotMatch(json, /Aprovada pela diretoria|Gestora Teste/, `${rotulo}: justificativa/quem liberou`);
+    assert.doesNotMatch(json, /Aprovada pela diretoria|Gestora Teste|535773|169922/, `${rotulo}: justificativa, quem liberou, custo ou encargos`);
+  };
+  const soPrecos = (planilha: any, rotulo: string) => {
+    assert.deepEqual(Object.keys(planilha).sort(), ["servicos", "total_mensal_centavos", "total_mensal_extenso", "vigente_desde"], rotulo);
+    for (const s of planilha.servicos) {
+      assert.deepEqual(Object.keys(s).sort(), ["modo", "nome", "postos", "preco_centavos"], rotulo);
+      for (const p of s.postos) assert.ok(Object.keys(p).every((k) => ["funcao", "efetivos", "preco_posto_centavos"].includes(k)), `${rotulo}: ${Object.keys(p)}`);
+    }
   };
 
-  // Detalhe do rascunho: o vendedor vê o preço manual (é preço), mas nada de percentual.
+  // Detalhe do rascunho com preço manual: o vendedor vê o preço, sem o preço calculado por posto (revelaria o cálculo).
   const dv = await detalhe(db, "u-v", id);
   assert.equal(dv.status, 200, JSON.stringify(dv.body));
   limpo(dv.body, "detalhe do rascunho");
+  soPrecos(dv.body.planilhaTs.planilha, "detalhe do rascunho");
   assert.equal(dv.body.data.conteudo.servicos[0].preco_manual_centavos, 700000);
   assert.equal(dv.body.planilhaTs.planilha.total_mensal_centavos, 700000);
-  assert.equal(dv.body.planilhaTs.planilha.liberacao_margem, null);
-  // Detalhe da proposta já com revisão gravada (snapshot com os percentuais congelados): filtrado no servidor.
+  assert.ok(!("preco_posto_centavos" in dv.body.planilhaTs.planilha.servicos[0].postos[0]));
+  // Detalhe da proposta já com revisão gravada: filtrado no servidor, o snapshot congelado não vai.
   const de = await detalhe(db, "u-v", idEnviada);
   assert.equal(de.status, 200, JSON.stringify(de.body));
   assert.equal(de.body.planilhaTs.origem, "revisao");
   limpo(de.body, "detalhe com revisão");
-  assert.equal(de.body.planilhaTs.planilha.liberacao_margem, null);
-  assert.ok(!JSON.stringify(de.body).includes("parametros"), "o snapshot congelado (parametros) não vai na resposta");
-  // Prévia, criação e situação.
+  soPrecos(de.body.planilhaTs.planilha, "detalhe com revisão");
+  // Prévia, criação e situação. Sem preço manual, o vendedor recebe o preço mensal do posto e o total.
   const pv = await previa(db, "u-v", conteudoTs());
-  assert.equal(pv.status, 200); limpo(pv.body, "prévia"); assert.ok(!("margem" in pv.body.data));
+  assert.equal(pv.status, 200); limpo(pv.body, "prévia"); soPrecos(pv.body.data.planilha, "prévia"); assert.ok(!("ganho" in pv.body.data));
+  assert.equal(pv.body.data.planilha.servicos[0].postos[0].preco_posto_centavos, PRECO);
+  assert.equal(pv.body.data.planilha.total_mensal_centavos, PRECO);
   const cr = await criar(db, "u-v", {}, EMP);
   assert.equal(cr.status, 201); limpo(cr.body, "criar");
   const canc = await situacao(db, "u-v", id, { para: "cancelada" });
   assert.equal(canc.status, 200); limpo(canc.body, "situação");
-  assert.equal(proposta(db, id).conteudo.iss_override_bp, 300, "o que a diretoria definiu continua gravado");
+  assert.equal(proposta(db, id).conteudo.ganho_bp, 4000, "o que a diretoria definiu continua gravado");
   proposta(db, id).situacao = "rascunho"; // volta para editar
 
   // Percentuais: nem ler nem gravar.
@@ -852,7 +883,7 @@ await caso("PERCENTUAIS DE PREÇO NUNCA SAEM PARA VENDEDOR (simulado com a chave
   assert.equal((await gravarParametros(db, "u-v", PARAMS_NOVOS())).status, 403);
   assert.equal(db.tabelas.proposta_ts_parametros.length, 1);
 
-  // Edição do vendedor: ele não vê os campos, então não os devolve; eles voltam do que estava gravado (nada se perde) e a conta continua a mesma.
+  // Edição do vendedor: ele não vê os campos, então não os devolve; eles voltam do que estava gravado e a conta continua a mesma.
   const antesCalc = (await detalhe(db, "u-g", id)).body.planilhaTs.planilha.servicos[0];
   const vistoPeloVendedor = dv.body.data.conteudo;
   vistoPeloVendedor.servicos[0].nome = "Nome mudado pelo vendedor";
@@ -861,76 +892,133 @@ await caso("PERCENTUAIS DE PREÇO NUNCA SAEM PARA VENDEDOR (simulado com a chave
   limpo(ed.body, "editar");
   const gravado = proposta(db, id).conteudo;
   assert.equal(gravado.servicos[0].nome, "Nome mudado pelo vendedor");
-  assert.equal(gravado.iss_override_bp, 300);
-  assert.equal(gravado.justificativa_margem_minima, "Aprovada pela diretoria");
-  assert.equal(gravado.servicos[0].postos[0].cobertura_bp_override, 500);
+  assert.equal(gravado.ganho_bp, 4000);
+  assert.equal(gravado.justificativa_ganho_minimo, "Aprovada pela diretoria");
+  assert.equal(gravado.servicos[0].justificativa_preco_manual, "Aprovada pela diretoria");
   const depoisCalc = (await detalhe(db, "u-g", id)).body.planilhaTs.planilha.servicos[0];
   assert.equal(depoisCalc.preco_calculado_centavos, antesCalc.preco_calculado_centavos, "mesma conta depois da edição do vendedor");
   assert.equal(depoisCalc.custo_centavos, antesCalc.custo_centavos);
-  // Informar de propósito ISS ou cobertura diferentes: 403 e nada muda.
+  // Informar de propósito um ganho diferente: 403 e nada muda.
   const antes = JSON.stringify(proposta(db, id));
-  const issNovo = await patch(db, "u-v", id, { conteudo: { ...vistoPeloVendedor, iss_override_bp: 400 } });
-  assert.equal(issNovo.status, 403); assert.equal(issNovo.body.error, MSG_SO_DIRETORIA_ISS);
-  const cobNovo = await patch(db, "u-v", id, { conteudo: { ...vistoPeloVendedor, servicos: [{ ...vistoPeloVendedor.servicos[0], postos: [{ ...vistoPeloVendedor.servicos[0].postos[0], cobertura_bp_override: 100 }] }] } });
-  assert.equal(cobNovo.status, 403); assert.equal(cobNovo.body.error, MSG_SO_DIRETORIA_COBERTURA);
+  const ganhoNovo = await patch(db, "u-v", id, { conteudo: { ...vistoPeloVendedor, ganho_bp: 5000 } });
+  assert.equal(ganhoNovo.status, 403); assert.equal(ganhoNovo.body.error, MSG_SO_DIRETORIA_GANHO);
   assert.equal(JSON.stringify(proposta(db, id)), antes);
 
-  // Prévia do vendedor ABAIXO da margem mínima: o mesmo bloqueio da criação, sem número nem percentual na mensagem.
-  const db2 = novoDb({ ...PAR_PRECO, margem_minima_bp: 5000 });
+  // Prévia do vendedor ABAIXO do mínimo: o mesmo bloqueio da criação, sem número nem percentual na mensagem.
+  const db2 = novoDb(PAR_ABAIXO);
   const bloqueio = await previa(db2, "u-v", conteudoTs());
   assert.equal(bloqueio.status, 422);
-  assert.doesNotMatch(bloqueio.body.error, /%|bp|\d{3,}/);
+  assert.doesNotMatch(bloqueio.body.error, /ganho|%|bp|\d{3,}/i);
 
   // GESTOR (superuser) e DIRETORIA recebem tudo.
   for (const u of ["u-g", "u-dir"]) {
     const g = await detalhe(db, u, id);
     assert.equal(g.status, 200, u);
-    assert.equal(g.body.data.conteudo.iss_override_bp, 300, u);
-    assert.equal(g.body.data.conteudo.justificativa_margem_minima, "Aprovada pela diretoria", u);
-    assert.equal(g.body.data.conteudo.servicos[0].postos[0].cobertura_bp_override, 500, u);
+    assert.equal(g.body.data.conteudo.ganho_bp, 4000, u);
+    assert.equal(g.body.data.conteudo.justificativa_ganho_minimo, "Aprovada pela diretoria", u);
     const s0 = g.body.planilhaTs.planilha.servicos[0];
-    assert.equal(typeof s0.margem_real_bp, "number", u);
-    assert.equal(s0.abaixo_margem_minima, false, u);
+    assert.equal(typeof s0.ganho_real_bp, "number", u);
+    assert.equal(s0.abaixo_ganho_minimo, false, u);
+    assert.equal(s0.custo_centavos, CUSTO, u);
+    assert.equal(linha(g.body.planilhaTs.planilha, "encargos"), ENCARGOS, u);
+    assert.equal(g.body.planilhaTs.planilha.ganho_bp, 4000, u);
     const ge = await detalhe(db, u, idEnviada);
-    assert.equal(ge.body.planilhaTs.planilha.liberacao_margem.liberado_por_nome, "Gestora Teste", u);
-    assert.equal(ge.body.planilhaTs.planilha.liberacao_margem.justificativa, "Aprovada pela diretoria", u);
+    assert.equal(ge.body.planilhaTs.planilha.liberacao_ganho.liberado_por_nome, "Gestora Teste", u);
+    assert.equal(ge.body.planilhaTs.planilha.liberacao_ganho.justificativa, "Aprovada pela diretoria", u);
     const pg = await previa(db, u, conteudoTs());
     assert.equal(pg.status, 200, u);
-    assert.deepEqual(pg.body.data.margem, { abaixo: [], exige_justificativa: false }, u);
-    assert.equal(typeof pg.body.data.planilha.servicos[0].margem_real_bp, "number", u);
+    assert.deepEqual(pg.body.data.ganho, { abaixo: [], exige_justificativa: false }, u);
+    assert.equal(typeof pg.body.data.planilha.servicos[0].ganho_real_bp, "number", u);
     const par = await lerParametros(db, u);
     assert.equal(par.status, 200, u);
-    for (const k of ["iss_bp", "pis_bp", "cofins_bp", "irpj_bp", "csll_bp", "despesas_bp", "lucro_bp", "margem_minima_bp", "cobertura_bp"]) assert.equal(typeof par.body.vigentes[k], "number", `${u} ${k}`);
+    for (const k of ["fgts_bp", "inss_bp", "multa_fgts_bp", "ganho_padrao_bp", "ganho_minimo_bp"]) assert.equal(typeof par.body.vigentes[k], "number", `${u} ${k}`);
   }
   // A diretoria (não só o superuser) também grava os percentuais.
   assert.equal((await gravarParametros(db, "u-dir", PARAMS_NOVOS({ vigente_desde: mais(11) }))).status, 201);
 }));
 
-await caso("filtro de perfil (puro): conteudoTsParaPerfil / propostaTsParaPerfil só tiram ISS, justificativa e cobertura de quem não é gestor; não alteram o original; ignoram R&S/MOT e formatos estranhos; restaurarOcultosTs só devolve o AUSENTE", () => {
+await caso("PRÉVIA DA EDIÇÃO (vendedor): usa o ganho JÁ SALVO (prévia == total salvo) e aceita o preço manual gravado (sem 403), sem devolver ganho nem custo; ganho ou preço manual diferentes seguem 403; proposta alheia 404", async () => comChaves(async () => {
+  const db = novoDb();
+  const semOcultos = (c: any) => conteudoTsParaPerfil(c, false) as any;
+  const limpa = (r: Chamada) => assert.doesNotMatch(JSON.stringify(r.body), OCULTOS);
+  // A diretoria definiu 45% nesta proposta (o padrão é 30%).
+  const comGanho = conteudoTs({ ganho_bp: 4500, justificativa_ganho_minimo: "Aprovada pela diretoria" });
+  const id = semearRascunhoDoVendedor(db, comGanho);
+  const salvo = (await detalhe(db, "u-v", id)).body.planilhaTs.planilha.total_mensal_centavos;
+  assert.equal(salvo, precoDe(CUSTO, 4500));
+  const p = await previa(db, "u-v", semOcultos(comGanho), { proposta_id: id, posicoes: [0] });
+  assert.equal(p.status, 200, JSON.stringify(p.body));
+  assert.equal(p.body.data.planilha.total_mensal_centavos, salvo, "prévia == total salvo");
+  assert.equal(p.body.data.planilha.servicos[0].postos[0].preco_posto_centavos, salvo);
+  limpa(p); assert.doesNotMatch(JSON.stringify(p.body), /"[a-z_]*_bp"|Aprovada/);
+  // Sem proposta_id é uma proposta nova: ganho padrão.
+  assert.equal((await previa(db, "u-v", semOcultos(comGanho))).body.data.planilha.total_mensal_centavos, PRECO);
+  // Salvar o mesmo conteúdo dá o mesmo total.
+  assert.equal((await patch(db, "u-v", id, { conteudo: semOcultos(comGanho) })).status, 200);
+  assert.equal((await detalhe(db, "u-v", id)).body.planilhaTs.planilha.total_mensal_centavos, salvo);
+
+  // Preço manual salvo pela diretoria: a prévia não dá 403 e mantém o preço.
+  const comManual = conteudoTs({ servicos: [servico({ preco_manual_centavos: 800000, justificativa_preco_manual: "Contrato anual" })] });
+  const idM = semearRascunhoDoVendedor(db, comManual);
+  const visto = semOcultos(comManual);
+  assert.equal((await previa(db, "u-v", visto)).status, 403, "sem proposta_id continua sendo informar preço manual");
+  const pm = await previa(db, "u-v", visto, { proposta_id: idM, posicoes: [0] });
+  assert.equal(pm.status, 200, JSON.stringify(pm.body));
+  assert.equal(pm.body.data.planilha.total_mensal_centavos, 800000);
+  limpa(pm); assert.doesNotMatch(JSON.stringify(pm.body), /Contrato anual|preco_manual/);
+  // Posto novo ANTES ainda incompleto: a prévia leva só o segundo, na posição 1 do formulário, como o salvar compara.
+  const dois = conteudoTs({ ganho_bp: 4500, servicos: [servico(), servico({ nome: "Portaria", preco_manual_centavos: 800000 })] });
+  const id2 = semearRascunhoDoVendedor(db, dois);
+  const soSegundo = await previa(db, "u-v", { servicos: [semOcultos(dois).servicos[1]] }, { proposta_id: id2, posicoes: [1] });
+  assert.equal(soSegundo.status, 200, JSON.stringify(soSegundo.body));
+  assert.equal(soSegundo.body.data.planilha.total_mensal_centavos, 800000);
+  // Posições inválidas caem na ordem natural (nunca aceitam preço que não está naquela posição).
+  assert.equal((await previa(db, "u-v", { servicos: [semOcultos(dois).servicos[1]] }, { proposta_id: id2, posicoes: ["x"] })).status, 403);
+
+  // Informar de propósito outro ganho ou outro preço manual: 403, como no salvar.
+  const outroGanho = await previa(db, "u-v", { ...semOcultos(comGanho), ganho_bp: 5000 }, { proposta_id: id, posicoes: [0] });
+  assert.equal(outroGanho.status, 403); assert.equal(outroGanho.body.error, MSG_SO_DIRETORIA_GANHO);
+  const outroManual = await previa(db, "u-v", { servicos: [{ ...visto.servicos[0], preco_manual_centavos: 100 }] }, { proposta_id: idM, posicoes: [0] });
+  assert.equal(outroManual.status, 403); assert.equal(outroManual.body.error, MSG_SO_DIRETORIA_PRECO_MANUAL);
+
+  // Acesso: inexistente, de outro modelo ou invisível = 404; o gestor que só acompanha = 403. Nada é escrito em nenhuma prévia.
+  assert.equal((await previa(db, "u-v", conteudoTs(), { proposta_id: crypto.randomUUID() })).status, 404);
+  assert.equal((await previa(db, "u-v", conteudoTs(), { proposta_id: 7 })).status, 404);
+  assert.equal((await previa(db, "u-g", conteudoTs(), { proposta_id: id })).status, 403);
+  proposta(db, id).vendedor_id = VSBC; proposta(db, id).unidade_id = U2;
+  assert.equal((await previa(db, "u-v", conteudoTs(), { proposta_id: id })).status, 404);
+  db.consultas.length = 0;
+  await previa(db, "u-v", visto, { proposta_id: idM, posicoes: [0] });
+  assert.deepEqual(escritas(db), []);
+}));
+
+await caso("filtro de perfil (puro): conteudoTsParaPerfil / propostaTsParaPerfil só tiram o ganho e as justificativas de quem não é gestor; não alteram o original; ignoram R&S/MOT e formatos estranhos; restaurarOcultosTs só devolve o AUSENTE", () => {
   const c = CONTEUDO_DA_DIRETORIA();
   const copia = JSON.stringify(c);
   const v = conteudoTsParaPerfil(c, false) as any;
-  assert.ok(!("iss_override_bp" in v) && !("justificativa_margem_minima" in v) && !("cobertura_bp_override" in v.servicos[0].postos[0]));
+  assert.ok(!("ganho_bp" in v) && !("justificativa_ganho_minimo" in v) && !("justificativa_preco_manual" in v.servicos[0]));
   assert.equal(v.servicos[0].preco_manual_centavos, 700000);
   assert.equal(v.servicos[0].postos[0].salario_centavos, 183740);
   assert.equal(JSON.stringify(c), copia, "o original não muda");
   assert.equal(conteudoTsParaPerfil(c, true), c, "gestor recebe o mesmo objeto");
   for (const estranho of [null, undefined, "x", 3, [], { servicos: "x" }, { servicos: [null, 3, { postos: "y" }] }]) assert.doesNotThrow(() => conteudoTsParaPerfil(estranho, false));
-  const rs = { modelo: "RS", conteudo: { iss_override_bp: 1 } };
+  const rs = { modelo: "RS", conteudo: { ganho_bp: 1 } };
   assert.equal(propostaTsParaPerfil(rs, false), rs, "R&S não é tocado");
-  const mot = { modelo: "MOT", conteudo: { iss_override_bp: 1 } };
+  const mot = { modelo: "MOT", conteudo: { ganho_bp: 1 } };
   assert.equal(propostaTsParaPerfil(mot, false), mot, "MOT não é tocado");
-  assert.ok(!("iss_override_bp" in (propostaTsParaPerfil({ modelo: "TS", conteudo: c }, false).conteudo as any)));
-  // restaurarOcultosTs: só o que veio AUSENTE volta do gravado; o informado fica (e cai no 403 de privilégio).
+  assert.ok(!("ganho_bp" in (propostaTsParaPerfil({ modelo: "TS", conteudo: c }, false).conteudo as any)));
   const gravado = conteudoTsSchema.parse(c);
   const semOcultos = conteudoTsSchema.parse(v);
   const r = restaurarOcultosTs(semOcultos, gravado);
-  assert.equal(r.iss_override_bp, 300); assert.equal(r.justificativa_margem_minima, "Aprovada pela diretoria");
-  assert.equal((r.servicos[0] as any).postos[0].cobertura_bp_override, 500);
-  const informado = conteudoTsSchema.parse({ ...v, iss_override_bp: 400 });
-  assert.equal(restaurarOcultosTs(informado, gravado).iss_override_bp, 400);
+  assert.equal(r.ganho_bp, 4000); assert.equal(r.justificativa_ganho_minimo, "Aprovada pela diretoria");
+  assert.equal(r.servicos[0].justificativa_preco_manual, "Aprovada pela diretoria");
+  // Preço manual diferente (posto trocado): a justificativa antiga não gruda em outro serviço.
+  const outroPreco = conteudoTsSchema.parse({ ...v, servicos: [{ ...v.servicos[0], preco_manual_centavos: 800000 }] });
+  assert.equal(restaurarOcultosTs(outroPreco, gravado).servicos[0].justificativa_preco_manual, undefined);
+  const informado = conteudoTsSchema.parse({ ...v, ganho_bp: 5000 });
+  assert.equal(restaurarOcultosTs(informado, gravado).ganho_bp, 5000);
   assert.equal(restaurarOcultosTs(semOcultos, null), semOcultos);
-  assert.equal(privilegiosTsViolados(informado, gravado, false), MSG_SO_DIRETORIA_ISS);
+  assert.equal(privilegiosTsViolados(informado, gravado, false), MSG_SO_DIRETORIA_GANHO);
   assert.equal(privilegiosTsViolados(restaurarOcultosTs(semOcultos, gravado), gravado, false), null);
 });
 

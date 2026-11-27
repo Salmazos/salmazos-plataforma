@@ -16,10 +16,12 @@ import { Aviso, btnSecundario, inputStyle, labelStyle, lerResposta } from "@/com
 // Formulário da proposta de Terceirização. Cada POSTO da tela vira um serviço do tipo "postos" com um posto só (o schema aceita vários postos por serviço; esta tela não
 // os cria). Dinheiro fica em REAIS na tela e vai em CENTAVOS no envio; a tela não calcula nada: o valor vem da prévia do servidor.
 export const URL_CONFIGURAR_PERCENTUAIS_TS = "/painel/comercial/propostas?aba=percentuais-ts";
-export const MSG_JUSTIFICATIVA_MARGEM = "Informe a justificativa para liberar a margem abaixo do mínimo.";
+export const AVISO_GANHO_ZERO = "Ganho zero: o preço será igual ao custo";
+export const MSG_JUSTIFICATIVA_GANHO = "Informe a justificativa para liberar o ganho abaixo do mínimo.";
 
 export interface AdicionalForm { tipo: string; rotulo: string; modo: "valor" | "percentual"; valor: number; percentual: string }
-export interface BeneficioForm { tipo: string; rotulo: string; valor: number }
+export type QuemPagaForm = "salmazos" | "cliente";
+export interface BeneficioForm { tipo: string; rotulo: string; valor: number; quem_paga: QuemPagaForm }
 export interface PostoForm {
   kind: "posto";
   nome: string; // serviço/função
@@ -32,14 +34,14 @@ export interface PostoForm {
   salario: number;
   adicionais: AdicionalForm[];
   beneficios: BeneficioForm[];
-  uniforme: number;
-  salmazos_fornece: boolean;
+  uniforme: number; // por efetivo
+  uniforme_quem_paga: QuemPagaForm;
   insumos: number; // por efetivo
+  insumos_quem_paga: QuemPagaForm;
   operacao: number; // por efetivo
-  // Só da diretoria na tela. O preço manual (e a justificativa dele) viaja escondido para quem não é gestor, para a edição não apagar o que a diretoria definiu.
+  // Só da diretoria na tela. O preço manual viaja escondido para quem não é gestor, para a edição não apagar o que a diretoria definiu.
   preco_manual: number;
   justificativa_preco_manual: string;
-  cobertura: string; // "" = usa a cobertura padrão
 }
 // Serviço que esta tela não sabe editar (serviço fechado ou com vários postos): fica guardado como veio e volta igual ao salvar.
 export interface BlocoForm { kind: "bloco"; servico: Record<string, unknown> }
@@ -53,24 +55,25 @@ export interface CamposTsForm {
   texto_introdutorio: string;
   cargo_supervisao: string;
   clausulas_adicionais: string[];
-  iss_override: string; // só diretoria; "" = usa o ISS dos percentuais
-  justificativa_margem: string; // só gestor, e só pedida quando a margem fica abaixo do mínimo
+  ganho: string | null; // só gestor/diretoria; null = o ganho padrão vigente (é o que o campo mostra preenchido)
+  justificativa_ganho: string; // só gestor, e só pedida quando o ganho fica abaixo do mínimo
 }
 
 export const postoTsNovo = (): PostoForm => ({
   kind: "posto", nome: "", escopo: "", escala: "44h", escala_texto: "", horas_semanais: "44", horas_mensais: "220", efetivos: "1", salario: 0, adicionais: [], beneficios: [],
-  uniforme: 0, salmazos_fornece: false, insumos: 0, operacao: 0, preco_manual: 0, justificativa_preco_manual: "", cobertura: "",
+  uniforme: 0, uniforme_quem_paga: "salmazos", insumos: 0, insumos_quem_paga: "salmazos", operacao: 0, preco_manual: 0, justificativa_preco_manual: "",
 });
 
 export function camposTsPadrao(): CamposTsForm {
   return {
     aos_cuidados: "", validade_dias: String(VALIDADE_PADRAO_DIAS), itens: [postoTsNovo()], vencimentos_dias: "15, 30", antecedencia_dias: "5",
-    texto_introdutorio: TEXTO_INTRODUTORIO_PADRAO_TS, cargo_supervisao: "", clausulas_adicionais: [], iss_override: "", justificativa_margem: "",
+    texto_introdutorio: TEXTO_INTRODUTORIO_PADRAO_TS, cargo_supervisao: "", clausulas_adicionais: [], ganho: null, justificativa_ganho: "",
   };
 }
 
 const centavos = (reais: number): number => Math.round((reais || 0) * 100);
 const reais = (c: unknown): number => (typeof c === "number" ? c / 100 : 0);
+const quem = (v: unknown): QuemPagaForm => (v === "cliente" ? "cliente" : "salmazos");
 const numeroTexto = (v: string) => v.trim().replace(",", ".");
 const bpTexto = (bp: unknown): string => (typeof bp === "number" ? String(bp / 100).replace(".", ",") : "");
 export const validadeTsDoForm = (f: CamposTsForm) => numeroTexto(f.validade_dias);
@@ -95,11 +98,10 @@ export function camposTsDeProposta(p: { aos_cuidados: string | null; validade_di
       nome: s.nome ?? po.funcao ?? "", escopo: s.descricao ?? "", escala: po.escala ?? "44h", escala_texto: po.escala_texto ?? "",
       horas_semanais: String(Math.round(mensais / 5)), horas_mensais: String(mensais), efetivos: String(po.efetivos ?? 1), salario: reais(po.salario_centavos),
       adicionais: ((po.adicionais ?? []) as Cru[]).map((a) => ({ tipo: a.tipo, rotulo: typeof a.rotulo === "string" ? a.rotulo : "", modo: a.modo === "percentual" ? "percentual" : "valor", valor: reais(a.valor_centavos), percentual: bpTexto(a.percentual_bp) })),
-      beneficios: ((po.beneficios ?? []) as Cru[]).map((b) => ({ tipo: b.tipo, rotulo: typeof b.rotulo === "string" ? b.rotulo : "", valor: reais(b.valor_centavos) })),
-      uniforme: reais(po.uniforme_epi_centavos),
-      salmazos_fornece: s.fornecimento?.equipamentos === "salmazos" || s.fornecimento?.produtos === "salmazos",
-      insumos: reais(po.insumos_centavos), operacao: reais(po.operacao_centavos),
-      preco_manual: reais(s.preco_manual_centavos), justificativa_preco_manual: s.justificativa_preco_manual ?? "", cobertura: bpTexto(po.cobertura_bp_override),
+      beneficios: ((po.beneficios ?? []) as Cru[]).map((b) => ({ tipo: b.tipo, rotulo: typeof b.rotulo === "string" ? b.rotulo : "", valor: reais(b.valor_centavos), quem_paga: quem(b.quem_paga) })),
+      uniforme: reais(po.uniforme_epi_centavos), uniforme_quem_paga: quem(po.uniforme_epi_quem_paga),
+      insumos: reais(po.insumos_centavos), insumos_quem_paga: quem(po.insumos_quem_paga), operacao: reais(po.operacao_centavos),
+      preco_manual: reais(s.preco_manual_centavos), justificativa_preco_manual: s.justificativa_preco_manual ?? "",
     };
   });
   return {
@@ -111,15 +113,15 @@ export function camposTsDeProposta(p: { aos_cuidados: string | null; validade_di
     texto_introdutorio: c.texto_introdutorio ?? TEXTO_INTRODUTORIO_PADRAO_TS,
     cargo_supervisao: c.cargo_supervisao ?? "",
     clausulas_adicionais: c.clausulas_adicionais ?? [],
-    iss_override: bpTexto(c.iss_override_bp),
-    justificativa_margem: c.justificativa_margem_minima ?? "",
+    ganho: typeof c.ganho_bp === "number" ? bpTexto(c.ganho_bp) : null,
+    justificativa_ganho: c.justificativa_ganho_minimo ?? "",
   };
 }
 
 // Posto com o mínimo para o servidor calcular (a prévia só leva os postos completos: um posto pela metade não derruba o cálculo dos outros).
 // Linha "Outro" já preenchida (valor/percentual) mas sem descrição: o posto ainda não está completo para a prévia.
-const rotuloOutroPendente = (x: { tipo: string; rotulo: string; valor?: number; percentual?: string }): boolean =>
-  x.tipo === "outro" && x.rotulo.trim() === "" && ((x.valor ?? 0) > 0 || (x.percentual ?? "").trim() !== "");
+const rotuloOutroPendente = (x: { tipo: string; rotulo: string; valor?: number; percentual?: string; quem_paga?: QuemPagaForm }): boolean =>
+  x.tipo === "outro" && x.rotulo.trim() === "" && ((x.valor ?? 0) > 0 || (x.percentual ?? "").trim() !== "" || x.quem_paga === "cliente");
 
 export function postoTsPronto(p: PostoForm): boolean {
   const efetivos = inteiroOuNull(p.efetivos), mensais = inteiroOuNull(p.horas_mensais);
@@ -135,26 +137,24 @@ function servicoDoPosto(p: PostoForm, gestor: boolean) {
     if (a.modo === "valor") return a.valor > 0 ? [{ tipo: a.tipo, ...rotuloOutro(a), modo: "valor" as const, valor_centavos: centavos(a.valor) }] : [];
     return a.percentual.trim() === "" ? [] : [{ tipo: a.tipo, ...rotuloOutro(a), modo: "percentual" as const, percentual_bp: percentualParaBp(a.percentual) }];
   });
-  const beneficios = p.beneficios.filter((b) => b.valor > 0).map((b) => ({ tipo: b.tipo, ...rotuloOutro(b), valor_centavos: centavos(b.valor) }));
-  const fornece = p.salmazos_fornece ? "salmazos" : "cliente";
-  const cobertura = gestor ? { cobertura_bp_override: p.cobertura.trim() === "" ? null : percentualParaBp(p.cobertura) } : {};
+  // Do cliente entra mesmo sem valor: a proposta registra o que o cliente fornece.
+  const beneficios = p.beneficios.filter((b) => b.valor > 0 || b.quem_paga === "cliente").map((b) => ({ tipo: b.tipo, ...rotuloOutro(b), quem_paga: b.quem_paga, valor_centavos: centavos(b.valor) }));
   return {
     modo: "postos" as const,
     nome: p.nome.trim(),
     descricao: p.escopo.trim() || null,
-    fornecimento: { equipamentos: fornece, produtos: fornece },
     preco_manual_centavos: p.preco_manual > 0 ? centavos(p.preco_manual) : null,
-    justificativa_preco_manual: p.justificativa_preco_manual.trim() || null,
+    ...(gestor ? { justificativa_preco_manual: p.justificativa_preco_manual.trim() || null } : {}),
     postos: [{
       funcao: p.nome.trim(), escala: p.escala, escala_texto: p.escala === "outra" ? p.escala_texto.trim() : null,
       horas_mensais: inteiroOuNull(p.horas_mensais), efetivos: inteiroOuNull(p.efetivos), salario_centavos: centavos(p.salario),
-      adicionais, beneficios, uniforme_epi_centavos: centavos(p.uniforme), insumos_centavos: p.salmazos_fornece ? centavos(p.insumos) : 0, operacao_centavos: centavos(p.operacao),
-      ...cobertura,
+      adicionais, beneficios, uniforme_epi_centavos: centavos(p.uniforme), uniforme_epi_quem_paga: p.uniforme_quem_paga,
+      insumos_centavos: centavos(p.insumos), insumos_quem_paga: p.insumos_quem_paga, operacao_centavos: centavos(p.operacao),
     }],
   };
 }
 
-// gestor: só ele manda ISS por proposta, cobertura por posto e justificativa de margem. Quem não é gestor NÃO manda esses campos: o servidor devolve o que já estava gravado.
+// gestor: só ele manda o ganho da proposta e as justificativas. Quem não é gestor NÃO manda esses campos: o servidor devolve o que já estava gravado.
 export function conteudoTsDoForm(f: CamposTsForm, opcoes: { gestor: boolean; itens?: ItemForm[] }) {
   const antecedencia = numeroTexto(f.antecedencia_dias);
   const base = {
@@ -165,7 +165,9 @@ export function conteudoTsDoForm(f: CamposTsForm, opcoes: { gestor: boolean; ite
     clausulas_adicionais: f.clausulas_adicionais.map((c) => c.trim()).filter(Boolean),
   };
   if (!opcoes.gestor) return base;
-  return { ...base, iss_override_bp: f.iss_override.trim() === "" ? null : percentualParaBp(f.iss_override), justificativa_margem_minima: f.justificativa_margem.trim() || null };
+  // Texto que não vira percentual segue como está, para o servidor recusar (em vez de cair no padrão sem ninguém perceber).
+  const digitado = (f.ganho ?? "").trim();
+  return { ...base, ganho_bp: digitado === "" ? null : percentualParaBp(digitado) ?? digitado, justificativa_ganho_minimo: f.justificativa_ganho.trim() || null };
 }
 
 // ── Prévia (servidor) ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -179,15 +181,15 @@ export interface EstadoPreviaTs {
 }
 const PREVIA_VAZIA: EstadoPreviaTs = { previa: null, erro: null, status: null, carregando: false, mapa: [] };
 
-// Motivo que impede salvar com o que a prévia mostrou (null = pode salvar): o cálculo falhou, ou o gestor ainda não justificou a margem abaixo do mínimo.
+// Motivo que impede salvar com o que a prévia mostrou (null = pode salvar): o cálculo falhou, ou o gestor ainda não justificou o ganho abaixo do mínimo.
 export function bloqueioTs(f: CamposTsForm, e: EstadoPreviaTs, gestor: boolean): string | null {
   if (e.erro) return e.erro;
-  if (gestor && e.previa?.margem?.exige_justificativa && f.justificativa_margem.trim() === "") return MSG_JUSTIFICATIVA_MARGEM;
+  if (gestor && e.previa?.ganho?.exige_justificativa && f.justificativa_ganho.trim() === "") return MSG_JUSTIFICATIVA_GANHO;
   return null;
 }
 
 // Pede ao servidor o cálculo do que está preenchido (uma chamada por pausa na digitação) e DESCARTA a resposta que chega atrasada: só vale a da última digitação.
-export function usePreviaTs(f: CamposTsForm, gestor: boolean): EstadoPreviaTs {
+export function usePreviaTs(f: CamposTsForm, gestor: boolean, propostaId?: string): EstadoPreviaTs {
   const completos = f.itens.map((it, i) => (it.kind === "bloco" || postoTsPronto(it) ? i : -1)).filter((i) => i >= 0);
   const chave = completos.length === 0 ? "" : JSON.stringify({ mapa: completos, conteudo: conteudoTsDoForm(f, { gestor, itens: completos.map((i) => f.itens[i]) }) });
   const [estado, setEstado] = useState<EstadoPreviaTs>(PREVIA_VAZIA);
@@ -199,7 +201,7 @@ export function usePreviaTs(f: CamposTsForm, gestor: boolean): EstadoPreviaTs {
     const t = setTimeout(async () => {
       try {
         const r = await lerResposta<{ data: PreviaTs }>(await fetch("/api/comercial/propostas/ts/previa", {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conteudo }),
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ conteudo, ...(propostaId ? { proposta_id: propostaId, posicoes: mapa } : {}) }),
         }));
         if (cancelado) return;
         if (r.ok) setEstado({ previa: r.json.data, erro: null, status: null, carregando: false, mapa });
@@ -210,7 +212,7 @@ export function usePreviaTs(f: CamposTsForm, gestor: boolean): EstadoPreviaTs {
       }
     }, 400);
     return () => { cancelado = true; clearTimeout(t); };
-  }, [chave]);
+  }, [chave, propostaId]);
   return estado;
 }
 
@@ -230,6 +232,7 @@ interface Props {
   onContato?: (id: string) => void;
   desabilitado?: boolean;
   onPrevia?: (e: EstadoPreviaTs) => void;
+  propostaId?: string; // edição: a prévia usa o ganho e o preço manual já gravados
 }
 
 const btnMini: React.CSSProperties = { padding: "6px 10px", background: "#fff", border: "1px solid #D1D5DB", borderRadius: 6, cursor: "pointer", fontSize: 13 };
@@ -237,17 +240,40 @@ const linkBotao: React.CSSProperties = { background: "none", border: "none", col
 const ajuda: React.CSSProperties = { fontSize: 12, color: "#6B7280", marginTop: 4 };
 const moedaStyle: React.CSSProperties = { ...inputStyle, width: "100%", boxSizing: "border-box" };
 
-export default function CamposPropostaTs({ valor, onChange, gestor, contatos = [], contatoId = "", onContato, desabilitado, onPrevia }: Props) {
-  const estado = usePreviaTs(valor, gestor);
+export default function CamposPropostaTs({ valor, onChange, gestor, contatos = [], contatoId = "", onContato, desabilitado, onPrevia, propostaId }: Props) {
+  const estado = usePreviaTs(valor, gestor, propostaId);
   useEffect(() => { onPrevia?.(estado); }, [estado, onPrevia]);
   const [removendo, setRemovendo] = useState<number | null>(null);
+  // Ganho padrão vigente, só para o gestor (a rota é fechada aos demais): é o que o campo mostra enquanto ninguém digita outro.
+  const [ganhoPadrao, setGanhoPadrao] = useState<number | null>(null);
+  useEffect(() => {
+    if (!gestor) return;
+    let ativo = true;
+    (async () => {
+      try {
+        const r = await lerResposta<{ vigentes?: { ganho_padrao_bp?: number } | null }>(await fetch("/api/comercial/propostas/ts/parametros"));
+        const bp = r.ok ? r.json.vigentes?.ganho_padrao_bp : undefined;
+        if (ativo && typeof bp === "number" && bp > 0) setGanhoPadrao(bp);
+      } catch {
+        // Sem o padrão o campo fica vazio; o servidor continua aplicando o padrão vigente.
+      }
+    })();
+    return () => { ativo = false; };
+  }, [gestor]);
 
-  const set = (k: "aos_cuidados" | "validade_dias" | "vencimentos_dias" | "antecedencia_dias" | "texto_introdutorio" | "cargo_supervisao" | "iss_override" | "justificativa_margem") => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange({ ...valor, [k]: e.target.value });
+  const set = (k: "aos_cuidados" | "validade_dias" | "vencimentos_dias" | "antecedencia_dias" | "texto_introdutorio" | "cargo_supervisao" | "justificativa_ganho") => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange({ ...valor, [k]: e.target.value });
   const setItem = (i: number, parte: Partial<PostoForm>) => onChange({ ...valor, itens: valor.itens.map((it, k) => (k === i && it.kind === "posto" ? { ...it, ...parte } : it)) });
   const noLimite = valor.itens.length >= MAX_SERVICOS_TS;
-  const abaixoDoMinimo = estado.previa?.margem?.abaixo ?? [];
-  const exigeJustificativa = gestor && estado.previa?.margem?.exige_justificativa === true;
-  const semPercentuais = estado.status === 422 && /percentuais/i.test(estado.erro ?? "");
+  const abaixoDoMinimo = estado.previa?.ganho?.abaixo ?? [];
+  const exigeJustificativa = gestor && estado.previa?.ganho?.exige_justificativa === true;
+  const semPercentuais = estado.status === 422 && /percentua/i.test(estado.erro ?? "");
+  const ganhoMostrado = valor.ganho ?? bpTexto(ganhoPadrao ?? estado.previa?.planilha.ganho_padrao_bp);
+  const seletorQuemPaga = (atual: QuemPagaForm, rotulo: string, campo: string, mudar: (q: QuemPagaForm) => void) => (
+    <select style={inputStyle} value={atual} disabled={desabilitado} aria-label={rotulo} data-quem-paga={campo} onChange={(e) => mudar(e.target.value === "cliente" ? "cliente" : "salmazos")}>
+      <option value="salmazos">Quem paga: Salmazos</option>
+      <option value="cliente">Quem paga: Cliente</option>
+    </select>
+  );
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -347,7 +373,7 @@ export default function CamposPropostaTs({ valor, onChange, gestor, contatos = [
             </div>
 
             <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Adicionais</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Adicionais e horas extras</div>
               {it.adicionais.map((a, k) => (
                 <div key={k} data-adicional={k} style={{ display: "grid", gridTemplateColumns: "minmax(150px, 1fr) 130px minmax(120px, 1fr) auto", gap: 8, alignItems: "end", marginBottom: 6 }}>
                   <select style={inputStyle} value={a.tipo} disabled={desabilitado} aria-label={`Tipo do adicional ${k + 1}`}
@@ -372,19 +398,20 @@ export default function CamposPropostaTs({ valor, onChange, gestor, contatos = [
                   )}
                 </div>
               ))}
-              {!desabilitado && <button type="button" style={btnMini} onClick={() => setItem(i, { adicionais: [...it.adicionais, { tipo: TIPOS_ADICIONAL_TS[0].codigo, rotulo: "", modo: "valor", valor: 0, percentual: "" }] })}>+ Adicionar adicional</button>}
-              <div style={ajuda}>Adicionais compõem a remuneração e entram nos encargos. Linhas sem valor são ignoradas.</div>
+              {!desabilitado && <button type="button" style={btnMini} onClick={() => setItem(i, { adicionais: [...it.adicionais, { tipo: TIPOS_ADICIONAL_TS[0].codigo, rotulo: "", modo: "valor", valor: 0, percentual: "" }] })}>+ Adicionar adicional ou hora extra</button>}
+              <div style={ajuda}>Compõem a remuneração. Linhas sem valor são ignoradas.</div>
             </div>
 
             <div style={{ marginTop: 12 }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Benefícios</div>
               {it.beneficios.map((b, k) => (
-                <div key={k} data-beneficio={k} style={{ display: "grid", gridTemplateColumns: "minmax(150px, 1fr) minmax(120px, 1fr) auto", gap: 8, alignItems: "end", marginBottom: 6 }}>
+                <div key={k} data-beneficio={k} style={{ display: "grid", gridTemplateColumns: "minmax(150px, 1fr) minmax(120px, 1fr) minmax(170px, 200px) auto", gap: 8, alignItems: "end", marginBottom: 6 }}>
                   <select style={inputStyle} value={b.tipo} disabled={desabilitado} aria-label={`Tipo do benefício ${k + 1}`}
                     onChange={(e) => setItem(i, { beneficios: it.beneficios.map((x, j) => (j === k ? { ...x, tipo: e.target.value } : x)) })}>
                     {TIPOS_BENEFICIO_TS.map((t) => <option key={t.codigo} value={t.codigo}>{t.rotulo}</option>)}
                   </select>
                   <CampoMoeda value={b.valor || null} onChange={(v) => setItem(i, { beneficios: it.beneficios.map((x, j) => (j === k ? { ...x, valor: v } : x)) })} placeholder="R$ 0,00" disabled={desabilitado} style={moedaStyle} />
+                  {seletorQuemPaga(b.quem_paga, `Quem paga o benefício ${k + 1}`, `beneficio-${k}`, (q) => setItem(i, { beneficios: it.beneficios.map((x, j) => (j === k ? { ...x, quem_paga: q } : x)) }))}
                   {!desabilitado && <button type="button" style={{ ...btnMini, color: "#B91C1C" }} aria-label={`Remover benefício ${k + 1}`} onClick={() => setItem(i, { beneficios: it.beneficios.filter((_, j) => j !== k) })}>✕</button>}
                   {b.tipo === "outro" && (
                     <input data-rotulo-beneficio={k} style={{ ...inputStyle, gridColumn: "1 / -1" }} value={b.rotulo} maxLength={MAX_ROTULO_TS} disabled={desabilitado} placeholder="Descreva o benefício (ex.: Plano odontológico)" aria-label={`Descrição do benefício ${k + 1}`}
@@ -392,34 +419,27 @@ export default function CamposPropostaTs({ valor, onChange, gestor, contatos = [
                   )}
                 </div>
               ))}
-              {!desabilitado && <button type="button" style={btnMini} onClick={() => setItem(i, { beneficios: [...it.beneficios, { tipo: TIPOS_BENEFICIO_TS[0].codigo, rotulo: "", valor: 0 }] })}>+ Adicionar benefício</button>}
-              <div style={ajuda}>Valor mensal por efetivo. Linhas sem valor são ignoradas.</div>
+              {!desabilitado && <button type="button" style={btnMini} onClick={() => setItem(i, { beneficios: [...it.beneficios, { tipo: TIPOS_BENEFICIO_TS[0].codigo, rotulo: "", valor: 0, quem_paga: "salmazos" }] })}>+ Adicionar benefício</button>}
+              <div style={ajuda}>Valor mensal por efetivo. Do cliente: não entra no custo e fica registrado como fornecido pelo cliente. Linha da Salmazos sem valor é ignorada.</div>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10, marginTop: 12 }}>
               <div>
                 <label style={labelStyle}>Uniforme / EPI</label>
                 <CampoMoeda value={it.uniforme || null} onChange={(v) => setItem(i, { uniforme: v })} placeholder="R$ 0,00" disabled={desabilitado} style={moedaStyle} />
+                <div style={{ marginTop: 6 }}>{seletorQuemPaga(it.uniforme_quem_paga, "Quem paga o uniforme/EPI", "uniforme", (q) => setItem(i, { uniforme_quem_paga: q }))}</div>
                 <div style={ajuda}>Por efetivo, por mês.</div>
+              </div>
+              <div>
+                <label style={labelStyle}>Insumos</label>
+                <CampoMoeda value={it.insumos || null} onChange={(v) => setItem(i, { insumos: v })} placeholder="R$ 0,00" disabled={desabilitado} style={moedaStyle} />
+                <div style={{ marginTop: 6 }}>{seletorQuemPaga(it.insumos_quem_paga, "Quem paga os insumos", "insumos", (q) => setItem(i, { insumos_quem_paga: q }))}</div>
+                <div style={ajuda}>Produtos e equipamentos, por efetivo.</div>
               </div>
               <div>
                 <label style={labelStyle}>Operação</label>
                 <CampoMoeda value={it.operacao || null} onChange={(v) => setItem(i, { operacao: v })} placeholder="R$ 0,00" disabled={desabilitado} style={moedaStyle} />
                 <div style={ajuda}>Custo de operação/supervisão por efetivo. Sempre entra no custo.</div>
-              </div>
-              <div>
-                <label style={{ ...labelStyle, display: "flex", alignItems: "center", gap: 6 }}>
-                  <input type="checkbox" checked={it.salmazos_fornece} disabled={desabilitado} data-campo="salmazos_fornece" onChange={(e) => setItem(i, { salmazos_fornece: e.target.checked })} />
-                  Salmazos fornece os insumos
-                </label>
-                {it.salmazos_fornece ? (
-                  <>
-                    <CampoMoeda value={it.insumos || null} onChange={(v) => setItem(i, { insumos: v })} placeholder="R$ 0,00" disabled={desabilitado} style={moedaStyle} />
-                    <div style={ajuda}>Produtos e equipamentos, por efetivo. Entram no custo porque a Salmazos fornece.</div>
-                  </>
-                ) : (
-                  <div style={ajuda}>Desligado: o cliente fornece e os insumos não entram no custo.</div>
-                )}
               </div>
             </div>
 
@@ -438,16 +458,11 @@ export default function CamposPropostaTs({ valor, onChange, gestor, contatos = [
                       <input style={inputStyle} value={it.justificativa_preco_manual} maxLength={500} disabled={desabilitado} onChange={(e) => setItem(i, { justificativa_preco_manual: e.target.value })} />
                     </div>
                   )}
-                  <div>
-                    <label style={labelStyle}>Cobertura de ausências (%)</label>
-                    <input style={inputStyle} inputMode="decimal" value={it.cobertura} placeholder="Padrão" disabled={desabilitado} data-campo="cobertura" onChange={(e) => setItem(i, { cobertura: e.target.value })} />
-                    <div style={ajuda}>Vazio = a cobertura padrão dos percentuais.</div>
-                  </div>
                 </div>
               </div>
             )}
             {gestor && abaixoDoMinimo.includes(estado.mapa.indexOf(i)) && estado.mapa.indexOf(i) >= 0 && (
-              <div data-abaixo-margem-posto={i} style={{ marginTop: 8 }}><Aviso tipo="alerta">Este posto ficou abaixo da margem mínima.</Aviso></div>
+              <div data-abaixo-ganho-posto={i} style={{ marginTop: 8 }}><Aviso tipo="alerta">Este posto ficou abaixo do ganho mínimo.</Aviso></div>
             )}
           </div>
         ))}
@@ -459,11 +474,15 @@ export default function CamposPropostaTs({ valor, onChange, gestor, contatos = [
       </div>
 
       {gestor && (
-        <div data-campo-iss style={{ padding: 10, border: "1px solid #FCD34D", background: "#FFFBEB", borderRadius: 8, maxWidth: 360 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", marginBottom: 6 }}>Só a diretoria</div>
-          <label style={labelStyle}>ISS desta proposta (%)</label>
-          <input style={inputStyle} inputMode="decimal" value={valor.iss_override} placeholder="Padrão" disabled={desabilitado} data-campo="iss_override" onChange={set("iss_override")} />
-          <div style={ajuda}>Vazio = o ISS dos percentuais em vigor. Vale só para esta proposta.</div>
+        <div data-campo-ganho style={{ padding: 10, border: "1px solid #FCD34D", background: "#FFFBEB", borderRadius: 8, maxWidth: 360 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#92400E", marginBottom: 6 }}>Só a diretoria e a gestão</div>
+          <label style={labelStyle}>Ganho sobre o custo (%)</label>
+          <input style={inputStyle} inputMode="decimal" value={ganhoMostrado} placeholder="Ex.: 30" disabled={desabilitado} data-campo="ganho"
+            onChange={(e) => onChange({ ...valor, ganho: e.target.value })} onBlur={() => { if (valor.ganho !== null && valor.ganho.trim() === "") onChange({ ...valor, ganho: null }); }} />
+          {valor.ganho !== null && percentualParaBp(valor.ganho) === 0 && (
+            <div data-ganho-zero role="alert" style={{ marginTop: 6, color: "#B91C1C", fontWeight: 700, fontSize: 13 }}>{AVISO_GANHO_ZERO}</div>
+          )}
+          <div style={ajuda}>Preço = custo + este percentual. Já vem com o padrão em vigor; mudar vale só para esta proposta (apagar volta ao padrão).</div>
         </div>
       )}
 
@@ -483,10 +502,10 @@ export default function CamposPropostaTs({ valor, onChange, gestor, contatos = [
           </div>
         )}
         {exigeJustificativa && (
-          <div data-justificativa-margem style={{ marginTop: 10 }}>
-            <Aviso tipo="alerta">A margem ficou abaixo do mínimo definido pela diretoria. Para salvar, informe a justificativa.</Aviso>
-            <label style={labelStyle}>Justificativa da margem abaixo do mínimo *</label>
-            <textarea style={{ ...inputStyle, minHeight: 64, resize: "vertical", fontFamily: "inherit" }} value={valor.justificativa_margem} maxLength={500} disabled={desabilitado} onChange={set("justificativa_margem")} />
+          <div data-justificativa-ganho style={{ marginTop: 10 }}>
+            <Aviso tipo="alerta">O ganho ficou abaixo do mínimo definido pela diretoria. Para salvar, informe a justificativa.</Aviso>
+            <label style={labelStyle}>Justificativa do ganho abaixo do mínimo *</label>
+            <textarea style={{ ...inputStyle, minHeight: 64, resize: "vertical", fontFamily: "inherit" }} value={valor.justificativa_ganho} maxLength={500} disabled={desabilitado} onChange={set("justificativa_ganho")} />
           </div>
         )}
       </div>

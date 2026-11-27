@@ -7,8 +7,8 @@ import { emailParaAssinatura } from "@/lib/propostas";
 import { condicoesMotSchema } from "@/lib/propostaMot";
 import { formatarCentavosBRL, valorPorExtensoBRL } from "@/lib/propostaMotCalculo";
 import {
-  BP_MAXIMO, CHAVES_PARAMETROS_TS, EFETIVOS_MAXIMO, MSG_DEDUCOES_TS_INVALIDAS, MSG_PRECO_TS_NAO_CONFIGURADO, MSG_VALOR_GRANDE_DEMAIS, VALOR_MAXIMO_CENTAVOS,
-  calcularPropostaTs, deducoesPrecoTs, parametrosTsValidos,
+  BP_MAXIMO, CHAVES_PARAMETROS_TS, EFETIVOS_MAXIMO, GANHO_MAXIMO_BP, MSG_GANHO_TS_NAO_CONFIGURADO, MSG_VALOR_GRANDE_DEMAIS, VALOR_MAXIMO_CENTAVOS,
+  calcularPropostaTs, parametrosTsValidos,
   type LinhaTs, type ParametrosTs, type PropostaTsCalculada, type ServicoTsEntrada,
 } from "@/lib/propostaTsCalculo";
 
@@ -41,6 +41,8 @@ export const TIPOS_BENEFICIO_TS = [
   { codigo: "vale_transporte", rotulo: "Vale-transporte" },
   { codigo: "refeicao", rotulo: "Refeição" },
   { codigo: "cesta_basica", rotulo: "Cesta básica" },
+  { codigo: "assistencia_medica", rotulo: "Assistência médica" },
+  { codigo: "ajuda_de_custo", rotulo: "Ajuda de custo" },
   { codigo: "outro", rotulo: "Outro benefício" },
 ] as const;
 export const TIPOS_ADICIONAL_TS = [
@@ -49,6 +51,7 @@ export const TIPOS_ADICIONAL_TS = [
   { codigo: "assiduidade", rotulo: "Assiduidade" },
   { codigo: "noturno", rotulo: "Adicional noturno" },
   { codigo: "gratificacao", rotulo: "Gratificação" },
+  { codigo: "hora_extra", rotulo: "Horas extras" },
   { codigo: "outro", rotulo: "Outro adicional" },
 ] as const;
 const codigos = <T extends readonly { codigo: string }[]>(l: T) => l.map((x) => x.codigo) as unknown as readonly [string, ...string[]];
@@ -95,6 +98,9 @@ const normalizarRotulo = <T extends { tipo: string; rotulo?: unknown }>(item: T)
   return (item.tipo === "outro" ? { ...resto, rotulo: textoDesenhavel(String(rotulo).trim()) } : resto) as SemRotuloBruto<T>;
 };
 
+// "Quem paga" de cada benefício, do uniforme/EPI e dos insumos: do cliente = fica registrado na proposta, com zero no custo. A operação não tem: sempre entra.
+const quemPaga = z.enum(["salmazos", "cliente"], { error: "Informe quem paga: Salmazos ou cliente." }).default("salmazos");
+
 export const adicionalTsSchema = z.discriminatedUnion("modo", [
   z.object({ tipo: z.enum(codigos(TIPOS_ADICIONAL_TS), { error: "Tipo de adicional inválido." }), rotulo: z.unknown().optional(), modo: z.literal("valor"), valor_centavos: centavosPositivos("o valor do adicional") }),
   z.object({ tipo: z.enum(codigos(TIPOS_ADICIONAL_TS), { error: "Tipo de adicional inválido." }), rotulo: z.unknown().optional(), modo: z.literal("percentual"), percentual_bp: percentualBp("o percentual do adicional", 1) }),
@@ -103,8 +109,13 @@ export const adicionalTsSchema = z.discriminatedUnion("modo", [
 export const beneficioTsSchema = z.object({
   tipo: z.enum(codigos(TIPOS_BENEFICIO_TS), { error: "Tipo de benefício inválido." }),
   rotulo: z.unknown().optional(),
-  valor_centavos: centavosPositivos("o valor do benefício"),
-}).superRefine((b, ctx) => validarRotuloOutro(b, ctx, "benefício")).transform(normalizarRotulo);
+  quem_paga: quemPaga,
+  // Do cliente o valor é opcional (não entra no custo).
+  valor_centavos: centavosNaoNegativos("o valor do benefício").default(0),
+}).superRefine((b, ctx) => {
+  validarRotuloOutro(b, ctx, "benefício");
+  if (b.quem_paga === "salmazos" && b.valor_centavos < 1) ctx.addIssue({ code: "custom", path: ["valor_centavos"], message: "O valor do benefício precisa ser maior que zero." });
+}).transform(normalizarRotulo);
 
 export const postoTsSchema = z.object({
   funcao: naoVazio("a função", MAX_FUNCAO),
@@ -113,27 +124,22 @@ export const postoTsSchema = z.object({
   horas_mensais: z.number({ error: "Informe as horas mensais." }).int("As horas mensais devem ser inteiras.").min(1, "As horas mensais precisam ser maiores que zero.").max(HORAS_MENSAIS_MAXIMO, `As horas mensais vão até ${HORAS_MENSAIS_MAXIMO}.`),
   efetivos: z.number({ error: "Informe o número de efetivos." }).int("Os efetivos devem ser um número inteiro.").min(1, "Informe pelo menos 1 efetivo.").max(EFETIVOS_MAXIMO, `Use no máximo ${EFETIVOS_MAXIMO} efetivos por posto.`),
   salario_centavos: centavosPositivos("o salário"),
+  // Adicionais e horas extras (tipo "hora_extra").
   adicionais: z.array(adicionalTsSchema).max(MAX_ADICIONAIS_TS, `Use no máximo ${MAX_ADICIONAIS_TS} adicionais por posto.`).default([]),
   beneficios: z.array(beneficioTsSchema).max(MAX_BENEFICIOS_TS, `Use no máximo ${MAX_BENEFICIOS_TS} benefícios por posto.`).default([]),
   uniforme_epi_centavos: centavosNaoNegativos("o uniforme/EPI").default(0),
-  // Insumos = produtos e equipamentos do posto: só entram no custo quando a Salmazos fornece (a confirmar). Operação = custo de operação/supervisão: sempre entra.
+  uniforme_epi_quem_paga: quemPaga,
+  // Insumos = produtos e equipamentos do posto. Operação = custo de operação/supervisão: sempre entra.
   insumos_centavos: centavosNaoNegativos("os insumos").default(0),
+  insumos_quem_paga: quemPaga,
   operacao_centavos: centavosNaoNegativos("a operação").default(0),
-  // null/ausente = usa a cobertura padrão dos parâmetros.
-  cobertura_bp_override: percentualBp("a cobertura do posto").nullable().optional(),
 }).refine((p) => p.escala !== "outra" || !!p.escala_texto?.trim(), { path: ["escala_texto"], message: "Descreva a escala." });
 export type PostoTs = z.infer<typeof postoTsSchema>;
-
-const fornecimentoSchema = z.object({
-  equipamentos: z.enum(["salmazos", "cliente"], { error: "Informe quem fornece os equipamentos." }),
-  produtos: z.enum(["salmazos", "cliente"], { error: "Informe quem fornece os produtos." }),
-});
 
 const servicoBase = z.object({
   nome: naoVazio("o nome do serviço", MAX_NOME),
   descricao: opcional("a descrição do serviço", MAX_DESCRICAO),
-  fornecimento: fornecimentoSchema,
-  // Preço manual: só a diretoria o informa (conferido pelo backend, 2C); a margem mínima e a justificativa também são regra de backend.
+  // Preço manual: só a diretoria o informa (conferido pelo backend); o ganho mínimo e a justificativa também são regra de backend.
   preco_manual_centavos: centavosPositivos("o preço manual").nullable().optional(),
   justificativa_preco_manual: opcional("a justificativa", MAX_JUSTIFICATIVA),
 });
@@ -157,11 +163,12 @@ export const conteudoTsSchema = z.object({
   servicos: z.array(servicoTsSchema, { error: "Informe pelo menos um serviço." }).min(1, "Informe pelo menos um serviço.").max(MAX_SERVICOS_TS, `Use no máximo ${MAX_SERVICOS_TS} serviços.`),
   condicoes: condicoesMotSchema.prefault({}),
   clausulas_adicionais: z.array(clausulaAdicional, { error: "As cláusulas adicionais devem ser uma lista de textos." }).max(MAX_CLAUSULAS_ADICIONAIS, `Use no máximo ${MAX_CLAUSULAS_ADICIONAIS} cláusulas adicionais.`).default([]),
-  // Justificativa do GESTOR para liberar uma margem abaixo do mínimo (obrigatória nesse caso; ignorada quando a margem está dentro do mínimo). Quem libera e quando é
+  // Ganho sobre o custo desta proposta, em pontos-base. SÓ GESTOR/DIRETORIA informa (conferido pelo backend); ausente = o padrão vigente.
+  ganho_bp: z.number({ error: "Informe o ganho em pontos-base (ex.: 3000 para 30%)." }).int("O ganho deve ser inteiro em pontos-base.")
+    .min(0, "O ganho não pode ser negativo.").max(GANHO_MAXIMO_BP, "O ganho vai até 1000%.").nullable().optional(),
+  // Justificativa do GESTOR para liberar um ganho abaixo do mínimo (obrigatória nesse caso; ignorada quando o ganho está dentro do mínimo). Quem libera e quando é
   // gravado pelo SERVIDOR no snapshot e na auditoria: o que vier do navegador sobre isso é descartado.
-  justificativa_margem_minima: opcional("a justificativa da margem", MAX_JUSTIFICATIVA),
-  // Override do ISS desta proposta, em pontos-base. SÓ A DIRETORIA pode informar (conferido pelo backend, 2C); o valor efetivo vai para o snapshot.
-  iss_override_bp: percentualBp("o ISS da proposta").nullable().optional(),
+  justificativa_ganho_minimo: opcional("a justificativa do ganho", MAX_JUSTIFICATIVA),
 });
 export type ConteudoTs = z.infer<typeof conteudoTsSchema>;
 
@@ -171,23 +178,23 @@ export function servicoParaCalculo(s: ServicoTs): ServicoTsEntrada {
   if (s.modo === "fechado") return { modo: "fechado", custoCentavos: s.fechado.custo_centavos, precoManualCentavos };
   return {
     modo: "postos",
-    fornecimento: s.fornecimento,
     precoManualCentavos,
     postos: s.postos.map((p) => ({
       salarioCentavos: p.salario_centavos,
       adicionais: p.adicionais.map((a) => (a.modo === "valor" ? { tipo: a.tipo, modo: "valor" as const, valorCentavos: a.valor_centavos } : { tipo: a.tipo, modo: "percentual" as const, percentualBp: a.percentual_bp })),
-      beneficios: p.beneficios.map((b) => ({ tipo: b.tipo, valorCentavos: b.valor_centavos })),
+      beneficios: p.beneficios.map((b) => ({ tipo: b.tipo, valorCentavos: b.valor_centavos, quemPaga: b.quem_paga })),
       uniformeEpiCentavos: p.uniforme_epi_centavos,
+      uniformeEpiQuemPaga: p.uniforme_epi_quem_paga,
       insumosCentavos: p.insumos_centavos,
+      insumosQuemPaga: p.insumos_quem_paga,
       operacaoCentavos: p.operacao_centavos,
       efetivos: p.efetivos,
-      coberturaBpOverride: p.cobertura_bp_override ?? null,
     })),
   };
 }
 
 // ── Snapshot da revisão ──────────────────────────────────────────────────────────────────────────────────────────────────────────
-// Cada revisão grava TUDO o que o PDF usa: os parâmetros vigentes na emissão (com o ISS efetivo) e o cálculo linha a linha de cada posto.
+// Cada revisão grava TUDO o que o PDF usa: os parâmetros vigentes na emissão (e o ganho aplicado) e o cálculo linha a linha de cada posto.
 // Reabrir o PDF de uma revisão antiga nunca recalcula.
 export interface ParametrosTsVigentes extends ParametrosTs {
   vigente_desde: string;
@@ -196,11 +203,12 @@ export interface ParametrosTsVigentes extends ParametrosTs {
 export const parametrosTsVigentesSchema = z.object({
   vigente_desde: z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/),
   id: z.string().nullable().optional(),
-  ...Object.fromEntries(CHAVES_PARAMETROS_TS.map((k) => [k, z.number().int().min(0).max(BP_MAXIMO)])),
+  fgts_bp: z.number().int(), inss_bp: z.number().int(), multa_fgts_bp: z.number().int(),
+  ganho_padrao_bp: z.number().int(), ganho_minimo_bp: z.number().int(), encargos_sobre_adicionais: z.boolean(),
 }) as unknown as z.ZodType<ParametrosTsVigentes>;
 
 const dataIso = z.string().regex(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/);
-const linhaSnapshotSchema = z.object({ chave: z.string(), rotulo: z.string(), valor_centavos: z.number().int(), percentual_bp: z.number().int().nullable(), subtotal: z.boolean() });
+const linhaSnapshotSchema = z.object({ chave: z.string(), rotulo: z.string(), valor_centavos: z.number().int(), percentual_bp: z.number().int().nullable(), subtotal: z.boolean(), fornecido_pelo_cliente: z.boolean() });
 const postoSnapshotSchema = z.object({
   funcao: z.string(),
   escala: z.string(),
@@ -214,7 +222,6 @@ const postoSnapshotSchema = z.object({
   beneficios_centavos: z.number().int(),
   insumos_centavos: z.number().int(),
   operacao_centavos: z.number().int(),
-  cobertura_bp: z.number().int(),
   custo_unit_centavos: z.number().int(),
   custo_posto_centavos: z.number().int(),
   preco_unit_centavos: z.number().int(),
@@ -224,7 +231,6 @@ const servicoSnapshotSchema = z.object({
   nome: z.string(),
   descricao: z.string().nullable(),
   modo: z.enum(["postos", "fechado"]),
-  fornecimento: z.object({ equipamentos: z.enum(["salmazos", "cliente"]), produtos: z.enum(["salmazos", "cliente"]) }),
   postos: z.array(postoSnapshotSchema),
   fechado: z.object({ descricao: z.string(), custo_centavos: z.number().int() }).nullable(),
   custo_centavos: z.number().int(),
@@ -232,18 +238,18 @@ const servicoSnapshotSchema = z.object({
   preco_manual_centavos: z.number().int().nullable(),
   justificativa_preco_manual: z.string().nullable(),
   preco_centavos: z.number().int(),
-  margem_real_bp: z.number().int(),
-  abaixo_margem_minima: z.boolean(),
+  ganho_real_bp: z.number().int(),
+  abaixo_ganho_minimo: z.boolean(),
 });
 
-export const liberacaoMargemTsSchema = z.object({
+export const liberacaoGanhoTsSchema = z.object({
   justificativa: z.string(),
   servicos: z.array(z.number().int()),
   liberado_por_id: z.string(),
   liberado_por_nome: z.string(),
   liberado_em: z.string(),
 });
-export type LiberacaoMargemTs = z.infer<typeof liberacaoMargemTsSchema>;
+export type LiberacaoGanhoTs = z.infer<typeof liberacaoGanhoTsSchema>;
 
 export const snapshotTsSchema = z.object({
   modelo: z.literal("TS"),
@@ -256,9 +262,11 @@ export const snapshotTsSchema = z.object({
   texto_introdutorio: z.string(),
   servicos: z.array(servicoSnapshotSchema).min(1),
   parametros: parametrosTsVigentesSchema,
-  iss_override_bp: z.number().int().nullable(),
-  // Gestor que liberou uma margem abaixo do mínimo (justificativa, serviços e quem liberou); null quando a margem está dentro do mínimo.
-  liberacao_margem: liberacaoMargemTsSchema.nullable(),
+  // Ganho aplicado (o da proposta ou o padrão vigente) e o que veio da própria proposta (null = usou o padrão).
+  ganho_bp: z.number().int(),
+  ganho_proposta_bp: z.number().int().nullable(),
+  // Gestor que liberou um ganho abaixo do mínimo (justificativa, serviços e quem liberou); null quando o ganho está dentro do mínimo.
+  liberacao_ganho: liberacaoGanhoTsSchema.nullable(),
   condicoes: z.object({ vencimentos_dias: z.array(z.number().int()), antecedencia_dias: z.number().int() }),
   clausulas_adicionais: z.array(z.string()),
   custo_total_centavos: z.number().int(),
@@ -289,7 +297,7 @@ export interface EntradaSnapshotTs {
   vendedorTelefone: string | null;
   vendedorEmail?: string | null;
   parametros: ParametrosTsVigentes;
-  liberacaoMargem?: LiberacaoMargemTs | null;
+  liberacaoGanho?: LiberacaoGanhoTs | null;
 }
 
 // Rótulo livre de adicional/benefício "outro": só troca o texto da linha (chaves adicional_N / beneficio_N do cálculo); valores e arredondamento não mudam.
@@ -299,14 +307,14 @@ function rotuloDaLinhaTs(l: LinhaTs, p: { adicionais: { tipo: string; rotulo?: s
   const item = (m[1] === "adicional" ? p.adicionais : p.beneficios)[Number(m[2]) - 1];
   return item?.tipo === "outro" && item.rotulo ? item.rotulo : l.rotulo;
 }
-const linhaParaSnapshot = (l: LinhaTs) => ({ chave: l.chave, rotulo: l.rotulo, valor_centavos: l.valorCentavos, percentual_bp: l.percentualBp, subtotal: l.subtotal });
+const linhaParaSnapshot = (l: LinhaTs) => ({ chave: l.chave, rotulo: l.rotulo, valor_centavos: l.valorCentavos, percentual_bp: l.percentualBp, subtotal: l.subtotal, fornecido_pelo_cliente: l.fornecidoPeloCliente });
 
 export function montarSnapshotTs(e: EntradaSnapshotTs): SnapshotTs {
   const conteudo = conteudoTsSchema.parse(e.conteudo ?? {});
   const { vigente_desde, id, ...percentuais } = e.parametros;
   if (!parametrosTsValidos(percentuais)) throw new Error("Percentuais do TS inválidos.");
   const base: ParametrosTs = Object.fromEntries(CHAVES_PARAMETROS_TS.map((k) => [k, percentuais[k]])) as unknown as ParametrosTs;
-  const calc = calcularPropostaTs({ servicos: conteudo.servicos.map(servicoParaCalculo), parametros: base, issOverrideBp: conteudo.iss_override_bp ?? null });
+  const calc = calcularPropostaTs({ servicos: conteudo.servicos.map(servicoParaCalculo), parametros: base, ganhoBp: conteudo.ganho_bp ?? null });
   const introducao = conteudo.texto_introdutorio?.trim();
   return {
     modelo: "TS",
@@ -323,7 +331,6 @@ export function montarSnapshotTs(e: EntradaSnapshotTs): SnapshotTs {
         nome: s.nome,
         descricao: s.descricao?.trim() || null,
         modo: s.modo,
-        fornecimento: s.fornecimento,
         postos: s.modo === "postos" ? s.postos.map((p, k) => {
           const pc = c.postos[k];
           return {
@@ -339,7 +346,6 @@ export function montarSnapshotTs(e: EntradaSnapshotTs): SnapshotTs {
             beneficios_centavos: pc.beneficiosCentavos,
             insumos_centavos: pc.insumosCentavos,
             operacao_centavos: pc.operacaoCentavos,
-            cobertura_bp: pc.coberturaBp,
             custo_unit_centavos: pc.custoUnitCentavos,
             custo_posto_centavos: pc.custoPostoCentavos,
             preco_unit_centavos: pc.precoUnitCentavos,
@@ -352,13 +358,14 @@ export function montarSnapshotTs(e: EntradaSnapshotTs): SnapshotTs {
         preco_manual_centavos: c.precoManualCentavos,
         justificativa_preco_manual: s.justificativa_preco_manual?.trim() || null,
         preco_centavos: c.precoCentavos,
-        margem_real_bp: c.margemRealBp,
-        abaixo_margem_minima: c.abaixoMargemMinima,
+        ganho_real_bp: c.ganhoRealBp,
+        abaixo_ganho_minimo: c.abaixoGanhoMinimo,
       };
     }),
     parametros: { vigente_desde, id: id ?? null, ...calc.parametros },
-    iss_override_bp: conteudo.iss_override_bp ?? null,
-    liberacao_margem: e.liberacaoMargem ?? null,
+    ganho_bp: calc.ganhoBp,
+    ganho_proposta_bp: conteudo.ganho_bp ?? null,
+    liberacao_ganho: e.liberacaoGanho ?? null,
     condicoes: { vencimentos_dias: [...conteudo.condicoes.vencimentos_dias].sort((a, b) => a - b), antecedencia_dias: conteudo.condicoes.antecedencia_dias },
     clausulas_adicionais: conteudo.clausulas_adicionais,
     custo_total_centavos: calc.custoTotalCentavos,
@@ -380,14 +387,13 @@ export function montarSnapshotTs(e: EntradaSnapshotTs): SnapshotTs {
 export const PDF_TS_DISPONIVEL = false;
 export const MSG_PDF_TS_INDISPONIVEL = "PDF da Terceirização ainda não disponível";
 export const MSG_SO_DIRETORIA_PRECO_MANUAL = "Só a diretoria pode informar o preço manual.";
-export const MSG_SO_DIRETORIA_ISS = "Só a diretoria pode alterar o ISS da proposta.";
-export const MSG_SO_DIRETORIA_COBERTURA = "Só a diretoria pode alterar a cobertura de ausências do posto.";
+export const MSG_SO_DIRETORIA_GANHO = "Só a diretoria e a gestão podem alterar o percentual de ganho da proposta.";
+export const MSG_GANHO_MINIMO_MAIOR = "O ganho mínimo não pode ser maior que o ganho padrão.";
 export const MSG_PERCENTUAIS_TS_AUSENTES = "Não há percentuais da Terceirização vigentes para esta data. Peça à diretoria para cadastrá-los.";
 
 const ROTULO_CAMPO_POSTO: Record<string, string> = {
   funcao: "função", escala: "escala", escala_texto: "descrição da escala", horas_mensais: "horas mensais", efetivos: "efetivos", salario_centavos: "salário",
   adicionais: "adicionais", beneficios: "benefícios", uniforme_epi_centavos: "uniforme/EPI", insumos_centavos: "insumos", operacao_centavos: "operação",
-  cobertura_bp_override: "cobertura",
 };
 
 // Mensagem legível, sem caminho interno: "Serviço 1 · Posto 2 (salário): O salário precisa ser maior que zero."
@@ -408,32 +414,25 @@ export function mensagemErroConteudoTs(issues: { path: PropertyKey[]; message: s
     .join("; ");
 }
 
-// Preço manual e ISS por proposta: SÓ a diretoria. Quem não é gestor não pode informar nem mudar nenhum dos dois (comparado com o que já estava gravado, para
+// Preço manual e ganho por proposta: SÓ gestor/diretoria. Quem não é gestor não pode informar nem mudar nenhum dos dois (comparado com o que já estava gravado, para
 // poder editar uma proposta que a diretoria já tinha ajustado sem mexer nesses campos). Devolve a mensagem da recusa (HTTP 403) ou null.
 export function privilegiosTsViolados(novo: ConteudoTs, anterior: ConteudoTs | null, gestor: boolean): string | null {
   if (gestor) return null;
   const manuais = (c: ConteudoTs | null) => (c ? c.servicos.map((x) => x.preco_manual_centavos ?? null) : []);
   const n = manuais(novo), a = manuais(anterior);
   for (let i = 0; i < Math.max(n.length, a.length); i++) if ((n[i] ?? null) !== (a[i] ?? null)) return MSG_SO_DIRETORIA_PRECO_MANUAL;
-  if ((novo.iss_override_bp ?? null) !== (anterior?.iss_override_bp ?? null)) return MSG_SO_DIRETORIA_ISS;
-  // A cobertura de ausências por posto também é percentual de preço: só a diretoria muda.
-  const coberturas = (c: ConteudoTs | null) => (c ? c.servicos.map((x) => (x.modo === "postos" ? x.postos.map((p) => p.cobertura_bp_override ?? null) : [])) : []);
-  const cn = coberturas(novo), ca = coberturas(anterior);
-  for (let i = 0; i < Math.max(cn.length, ca.length); i++) {
-    const a1 = cn[i] ?? [], a2 = ca[i] ?? [];
-    for (let j = 0; j < Math.max(a1.length, a2.length); j++) if ((a1[j] ?? null) !== (a2[j] ?? null)) return MSG_SO_DIRETORIA_COBERTURA;
-  }
+  if ((novo.ganho_bp ?? null) !== (anterior?.ganho_bp ?? null)) return MSG_SO_DIRETORIA_GANHO;
   return null;
 }
 
-// ── PERCENTUAIS DE PREÇO NUNCA SAEM PARA QUEM NÃO É GESTOR OU DIRETORIA (em nenhuma rota) ─────────────────────────────────────────────────────────
-// "Gestor" aqui é o perfil gestor/diretoria do módulo de Propostas (diretoria e superuser). Percentuais de preço (ISS, PIS, COFINS, IRPJ, CSLL, despesas, lucro, margem
-// mínima e cobertura) e tudo o que os revela (margem real, "abaixo da margem", justificativa da liberação) são filtrados NO SERVIDOR antes de qualquer resposta; a
-// tela nunca recebe o que não pode mostrar. O vendedor recebe só o valor mensal e os custos por posto, sem percentuais.
-const CAMPOS_OCULTOS_CONTEUDO = ["iss_override_bp", "justificativa_margem_minima"] as const;
+// ── SIGILO: quem não é gestor/diretoria vê SOMENTE o preço mensal por posto e o total ──────────────────────────────────────────────
+// DECISÃO DO NEGÓCIO (substitui a da 2C): nada de linhas de custo, encargos, ganho, ganho mínimo nem dado que permita calcular o ganho (preço ÷ custo). O filtro é NO
+// SERVIDOR, antes de qualquer resposta (prévia, detalhe, criar, editar, situação); o snapshot congelado nunca vai na resposta desses perfis. "Gestor" aqui é o perfil
+// gestor/diretoria do módulo de Propostas (diretoria e superuser).
+const CAMPOS_OCULTOS_CONTEUDO = ["ganho_bp", "justificativa_ganho_minimo"] as const;
 
-// Conteúdo da proposta como o vendedor pode ver: sem o ISS por proposta, sem a justificativa de margem e sem a cobertura de cada posto. Trabalha sobre o JSON bruto
-// (a linha pode vir de qualquer gravação) e nunca altera o original.
+// Conteúdo da proposta como o vendedor pode ver: sem o ganho por proposta e sem as justificativas. Trabalha sobre o JSON bruto (a linha pode vir de qualquer gravação)
+// e nunca altera o original.
 export function conteudoTsParaPerfil<T>(conteudo: T, gestor: boolean): T {
   if (gestor || !conteudo || typeof conteudo !== "object" || Array.isArray(conteudo)) return conteudo;
   const c = { ...(conteudo as Record<string, unknown>) };
@@ -442,14 +441,7 @@ export function conteudoTsParaPerfil<T>(conteudo: T, gestor: boolean): T {
     c.servicos = c.servicos.map((x) => {
       if (!x || typeof x !== "object") return x;
       const servico = { ...(x as Record<string, unknown>) };
-      if (Array.isArray(servico.postos)) {
-        servico.postos = servico.postos.map((p) => {
-          if (!p || typeof p !== "object") return p;
-          const posto = { ...(p as Record<string, unknown>) };
-          delete posto.cobertura_bp_override;
-          return posto;
-        });
-      }
+      delete servico.justificativa_preco_manual;
       return servico;
     });
   }
@@ -463,105 +455,142 @@ export function propostaTsParaPerfil<T extends { modelo?: unknown; conteudo?: un
 }
 
 // Quem não é gestor NÃO VÊ os campos ocultos, então o que ele devolve ao salvar não os traz: eles voltam do que já estava gravado (senão a edição do vendedor apagaria,
-// sem ele saber, o ISS, a cobertura e a justificativa que a diretoria definiu). Só restaura o que veio AUSENTE (undefined); um valor informado de propósito não é
-// restaurado e cai na recusa de privilégio (403).
+// sem ele saber, o ganho e as justificativas que a diretoria definiu). Só restaura o que veio AUSENTE (undefined); um valor informado de propósito não é restaurado e
+// cai na recusa de privilégio (403).
 export function restaurarOcultosTs(novo: ConteudoTs, anterior: ConteudoTs | null): ConteudoTs {
   if (!anterior) return novo;
   const c: ConteudoTs = { ...novo };
-  if (c.iss_override_bp === undefined && anterior.iss_override_bp !== undefined) c.iss_override_bp = anterior.iss_override_bp;
-  if (c.justificativa_margem_minima === undefined && anterior.justificativa_margem_minima !== undefined) c.justificativa_margem_minima = anterior.justificativa_margem_minima;
+  if (c.ganho_bp === undefined && anterior.ganho_bp !== undefined) c.ganho_bp = anterior.ganho_bp;
+  if (c.justificativa_ganho_minimo === undefined && anterior.justificativa_ganho_minimo !== undefined) c.justificativa_ganho_minimo = anterior.justificativa_ganho_minimo;
   c.servicos = novo.servicos.map((s, i) => {
     const antes = anterior.servicos[i];
-    if (s.modo !== "postos" || !antes || antes.modo !== "postos") return s;
-    return { ...s, postos: s.postos.map((p, j) => (p.cobertura_bp_override === undefined && antes.postos[j]?.cobertura_bp_override !== undefined ? { ...p, cobertura_bp_override: antes.postos[j].cobertura_bp_override } : p)) };
+    // A justificativa do preço manual só volta para o serviço que segue com o mesmo preço manual (o vendedor pode ter removido ou reordenado postos).
+    if (!antes || s.justificativa_preco_manual !== undefined || antes.justificativa_preco_manual === undefined || (s.preco_manual_centavos ?? null) !== (antes.preco_manual_centavos ?? null)) return s;
+    return { ...s, justificativa_preco_manual: antes.justificativa_preco_manual };
   });
   return c;
 }
 
+// Prévia da edição: ela só leva os postos completos, então o que está gravado é alinhado pelas POSIÇÕES que cada serviço ocupa no formulário (as mesmas que o salvar
+// compara). Posição sem correspondente gravado = serviço novo (sem preço manual nem justificativa).
+export function alinharAnteriorTs(anterior: ConteudoTs, posicoes: number[]): ConteudoTs {
+  return { ...anterior, servicos: posicoes.map((i) => anterior.servicos[i] ?? ({} as ServicoTs)) };
+}
+
 export type AvaliacaoTs =
-  | { ok: true; calc: PropostaTsCalculada; abaixoMargem: number[] }
+  | { ok: true; calc: PropostaTsCalculada; abaixoGanho: number[] }
   | { ok: false; status: number; error: string };
 
-// O servidor SEMPRE recalcula a partir dos dados de entrada com os percentuais vigentes (nunca confia em valor vindo do navegador). Percentuais de preço não
-// configurados (tributos + despesas + lucro = 0) ou inválidos: 422 com a mensagem da lib, sem calcular preço. abaixoMargem = índices dos serviços cuja margem
-// real ficou abaixo da margem mínima.
+// O servidor SEMPRE recalcula a partir dos dados de entrada com os percentuais vigentes (nunca confia em valor vindo do navegador). Sem ganho definido (padrão = 0 e sem
+// ganho na proposta): 422 com a mensagem da lib, sem calcular preço. abaixoGanho = índices dos serviços abaixo do ganho mínimo.
 export function avaliarPrecoTs(conteudo: ConteudoTs, parametros: ParametrosTsVigentes): AvaliacaoTs {
   const { vigente_desde: _v, id: _i, ...percentuais } = parametros;
   if (!parametrosTsValidos(percentuais)) return { ok: false, status: 500, error: "Os percentuais da Terceirização cadastrados estão inválidos. Avise a diretoria." };
   const base = Object.fromEntries(CHAVES_PARAMETROS_TS.map((k) => [k, percentuais[k]])) as unknown as ParametrosTs;
   try {
-    const calc = calcularPropostaTs({ servicos: conteudo.servicos.map(servicoParaCalculo), parametros: base, issOverrideBp: conteudo.iss_override_bp ?? null });
-    return { ok: true, calc, abaixoMargem: calc.servicos.flatMap((x, i) => (x.abaixoMargemMinima ? [i] : [])) };
+    const calc = calcularPropostaTs({ servicos: conteudo.servicos.map(servicoParaCalculo), parametros: base, ganhoBp: conteudo.ganho_bp ?? null });
+    return { ok: true, calc, abaixoGanho: calc.servicos.flatMap((x, i) => (x.abaixoGanhoMinimo ? [i] : [])) };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";
-    if (msg === MSG_PRECO_TS_NAO_CONFIGURADO || msg === MSG_DEDUCOES_TS_INVALIDAS || msg === MSG_VALOR_GRANDE_DEMAIS) return { ok: false, status: 422, error: msg };
+    if (msg === MSG_GANHO_TS_NAO_CONFIGURADO || msg === MSG_VALOR_GRANDE_DEMAIS) return { ok: false, status: 422, error: msg };
     return { ok: false, status: 400, error: "O conteúdo da proposta de Terceirização está incompleto ou inválido. Revise os serviços e tente de novo." };
   }
 }
 
-export type AvaliacaoMargemTs =
+export type AvaliacaoGanhoTs =
   | { ok: true; liberacao: { justificativa: string; servicos: number[] } | null }
   | { ok: false; status: number; error: string };
 
-// Margem abaixo do mínimo: BLOQUEIA quem não é gestor; o gestor libera COM justificativa obrigatória (gravada, com quem liberou, no snapshot e na auditoria).
-export function avaliarMargemTs(entrada: { abaixoMargem: number[]; nomesServicos: string[]; gestor: boolean; justificativa: string | null | undefined }): AvaliacaoMargemTs {
-  if (entrada.abaixoMargem.length === 0) return { ok: true, liberacao: null };
-  const lista = entrada.abaixoMargem.map((i) => `Serviço ${i + 1}${entrada.nomesServicos[i] ? ` – ${entrada.nomesServicos[i]}` : ""}`).join(", ");
-  if (!entrada.gestor) return { ok: false, status: 422, error: `A margem ficou abaixo do mínimo definido pela diretoria (${lista}). Só a diretoria pode liberar.` };
+// Ganho abaixo do mínimo: BLOQUEIA quem não é gestor; o gestor libera COM justificativa obrigatória (gravada, com quem liberou, no snapshot e na auditoria).
+export function avaliarGanhoTs(entrada: { abaixoGanho: number[]; nomesServicos: string[]; gestor: boolean; justificativa: string | null | undefined }): AvaliacaoGanhoTs {
+  if (entrada.abaixoGanho.length === 0) return { ok: true, liberacao: null };
+  const lista = entrada.abaixoGanho.map((i) => `Serviço ${i + 1}${entrada.nomesServicos[i] ? ` – ${entrada.nomesServicos[i]}` : ""}`).join(", ");
+  // A mensagem do vendedor fala só em preço: ele não vê ganho nenhum.
+  if (!entrada.gestor) return { ok: false, status: 422, error: `O preço ficou abaixo do mínimo definido pela diretoria (${lista}). Só a diretoria pode liberar.` };
   const justificativa = textoDesenhavel(entrada.justificativa ?? "");
-  if (justificativa === "") return { ok: false, status: 422, error: `A margem ficou abaixo do mínimo definido pela diretoria (${lista}). Informe a justificativa para liberar.` };
-  return { ok: true, liberacao: { justificativa, servicos: entrada.abaixoMargem } };
+  if (justificativa === "") return { ok: false, status: 422, error: `O ganho ficou abaixo do mínimo definido pela diretoria (${lista}). Informe a justificativa para liberar.` };
+  return { ok: true, liberacao: { justificativa, servicos: entrada.abaixoGanho } };
 }
 
-// Visão da planilha para a tela (sem percentuais; a margem real em pontos-base só para o gestor). Sai do snapshot (gravado ou montado na hora), nunca de conta no navegador.
+// Visão da planilha para a tela. Sai do snapshot (gravado ou montado na hora), nunca de conta no navegador. Os campos opcionais SÓ existem para gestor/diretoria
+// (o vendedor recebe nome, função, quantidade, preço mensal por posto e o total).
 export interface PlanilhaTsTela {
   vigente_desde: string;
   servicos: {
     nome: string;
     modo: "postos" | "fechado";
-    postos: { funcao: string; efetivos: number; salario_centavos: number; linhas: { chave: string; rotulo: string; valor_centavos: number; subtotal: boolean }[]; custo_unit_centavos: number; custo_posto_centavos: number; preco_unit_centavos: number; preco_posto_centavos: number }[];
-    custo_centavos: number;
-    preco_calculado_centavos: number;
-    preco_manual_centavos: number | null;
+    postos: {
+      funcao: string;
+      efetivos: number;
+      // Ausente para o vendedor quando o serviço tem preço manual (o preço calculado por posto não vale).
+      preco_posto_centavos?: number;
+      salario_centavos?: number;
+      linhas?: { chave: string; rotulo: string; valor_centavos: number; subtotal: boolean; fornecido_pelo_cliente: boolean }[];
+      custo_unit_centavos?: number;
+      custo_posto_centavos?: number;
+      preco_unit_centavos?: number;
+    }[];
     preco_centavos: number;
-    // Só para o gestor/diretoria: o vendedor não recebe nada que revele a margem.
-    abaixo_margem_minima?: boolean;
-    margem_real_bp?: number;
+    custo_centavos?: number;
+    preco_calculado_centavos?: number;
+    preco_manual_centavos?: number | null;
+    abaixo_ganho_minimo?: boolean;
+    ganho_real_bp?: number;
   }[];
-  custo_total_centavos: number;
   total_mensal_centavos: number;
   total_mensal_extenso: string;
-  liberacao_margem: LiberacaoMargemTs | null;
+  custo_total_centavos?: number;
+  ganho_bp?: number;
+  ganho_padrao_bp?: number;
+  ganho_minimo_bp?: number;
+  encargos_sobre_adicionais?: boolean;
+  liberacao_ganho?: LiberacaoGanhoTs | null;
 }
 
 export function planilhaTsDeSnapshot(snap: SnapshotTs, gestor: boolean): PlanilhaTsTela {
+  const comum = { vigente_desde: snap.parametros.vigente_desde, total_mensal_centavos: snap.total_mensal_centavos, total_mensal_extenso: snap.total_mensal_extenso };
+  // Lista positiva de propósito: campo novo no snapshot não vaza para o vendedor por esquecimento.
+  if (!gestor) {
+    return {
+      ...comum,
+      servicos: snap.servicos.map((x) => ({
+        nome: x.nome,
+        modo: x.modo,
+        postos: x.postos.map((p) => ({ funcao: p.funcao, efetivos: p.efetivos, ...(x.preco_manual_centavos === null ? { preco_posto_centavos: p.preco_posto_centavos } : {}) })),
+        preco_centavos: x.preco_centavos,
+      })),
+    };
+  }
   return {
-    vigente_desde: snap.parametros.vigente_desde,
+    ...comum,
     servicos: snap.servicos.map((x) => ({
       nome: x.nome,
       modo: x.modo,
       postos: x.postos.map((p) => ({
         funcao: p.funcao, efetivos: p.efetivos, salario_centavos: p.salario_centavos,
-        linhas: p.linhas.map((l) => ({ chave: l.chave, rotulo: l.rotulo, valor_centavos: l.valor_centavos, subtotal: l.subtotal })),
+        linhas: p.linhas.map((l) => ({ chave: l.chave, rotulo: l.rotulo, valor_centavos: l.valor_centavos, subtotal: l.subtotal, fornecido_pelo_cliente: l.fornecido_pelo_cliente })),
         custo_unit_centavos: p.custo_unit_centavos, custo_posto_centavos: p.custo_posto_centavos, preco_unit_centavos: p.preco_unit_centavos, preco_posto_centavos: p.preco_posto_centavos,
       })),
+      preco_centavos: x.preco_centavos,
       custo_centavos: x.custo_centavos,
       preco_calculado_centavos: x.preco_calculado_centavos,
       preco_manual_centavos: x.preco_manual_centavos,
-      preco_centavos: x.preco_centavos,
-      ...(gestor ? { abaixo_margem_minima: x.abaixo_margem_minima, margem_real_bp: x.margem_real_bp } : {}),
+      abaixo_ganho_minimo: x.abaixo_ganho_minimo,
+      ganho_real_bp: x.ganho_real_bp,
     })),
     custo_total_centavos: snap.custo_total_centavos,
-    total_mensal_centavos: snap.total_mensal_centavos,
-    total_mensal_extenso: snap.total_mensal_extenso,
-    liberacao_margem: gestor ? snap.liberacao_margem : null,
+    ganho_bp: snap.ganho_bp,
+    ganho_padrao_bp: snap.parametros.ganho_padrao_bp,
+    ganho_minimo_bp: snap.parametros.ganho_minimo_bp,
+    encargos_sobre_adicionais: snap.parametros.encargos_sobre_adicionais,
+    liberacao_ganho: snap.liberacao_ganho,
   };
 }
 
 // ── Percentuais (diretoria) ────────────────────────────────────────────────────────────────────────────────────────────────────
 export const ROTULO_PARAMETRO_TS: Record<keyof ParametrosTs, string> = {
-  fgts_bp: "FGTS", inss_bp: "INSS", multa_fgts_bp: "Multa do FGTS", cobertura_bp: "Cobertura de ausências", iss_bp: "ISS", pis_bp: "PIS", cofins_bp: "COFINS",
-  irpj_bp: "IRPJ", csll_bp: "CSLL", despesas_bp: "Despesas", lucro_bp: "Lucro", margem_minima_bp: "Margem mínima",
+  fgts_bp: "FGTS", inss_bp: "INSS", multa_fgts_bp: "Multa do FGTS", ganho_padrao_bp: "Ganho padrão sobre o custo", ganho_minimo_bp: "Ganho mínimo sobre o custo",
+  encargos_sobre_adicionais: "Encargos também sobre os adicionais e horas extras",
 };
 
 function dataValida(texto: string): boolean {
@@ -570,18 +599,22 @@ function dataValida(texto: string): boolean {
   const d = new Date(`${texto}T12:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === texto;
 }
-const campoPercentualTs = (k: keyof ParametrosTs) =>
+const campoPercentualTs = (k: keyof ParametrosTs, max: number) =>
   z.number({ error: `Informe ${ROTULO_PARAMETRO_TS[k]} em pontos-base (ex.: 2300 para 23%).` })
     .int(`${ROTULO_PARAMETRO_TS[k]} deve ser um número inteiro de pontos-base (ex.: 2300 para 23%).`)
     .min(0, `${ROTULO_PARAMETRO_TS[k]} não pode ser negativo.`)
-    .max(BP_MAXIMO, `${ROTULO_PARAMETRO_TS[k]} passa do limite de ${BP_MAXIMO} pontos-base (100%).`);
+    .max(max, `${ROTULO_PARAMETRO_TS[k]} passa do limite de ${max} pontos-base (${max / 100}%).`);
 
-// Nova vigência (insert-only). A regra "não retroativa" (vigente_desde >= hoje) é conferida pela rota, que conhece a data de hoje. Além de cada percentual de 0 a
-// 10000, tributos + despesas + lucro (D) precisa ficar abaixo de 100%: do contrário o preço (custo ÷ (1 − D)) não existe.
-export const parametrosTsCreateSchema = z
-  .object({
-    vigente_desde: z.string({ error: "Informe a data de início da vigência." }).refine(dataValida, "Informe a data de início da vigência no formato AAAA-MM-DD."),
-    ...(Object.fromEntries(CHAVES_PARAMETROS_TS.map((k) => [k, campoPercentualTs(k)])) as { [K in keyof ParametrosTs]: ReturnType<typeof campoPercentualTs> }),
-  })
-  .refine((d) => deducoesPrecoTs(d).totalBp < BP_MAXIMO, { message: MSG_DEDUCOES_TS_INVALIDAS, path: ["lucro_bp"] });
+// Nova vigência (insert-only). A regra "não retroativa" (vigente_desde >= hoje) é conferida pela rota, que conhece a data de hoje.
+export const parametrosTsCreateSchema = z.object({
+  vigente_desde: z.string({ error: "Informe a data de início da vigência." }).refine(dataValida, "Informe a data de início da vigência no formato AAAA-MM-DD."),
+  fgts_bp: campoPercentualTs("fgts_bp", BP_MAXIMO),
+  inss_bp: campoPercentualTs("inss_bp", BP_MAXIMO),
+  multa_fgts_bp: campoPercentualTs("multa_fgts_bp", BP_MAXIMO),
+  ganho_padrao_bp: campoPercentualTs("ganho_padrao_bp", GANHO_MAXIMO_BP),
+  ganho_minimo_bp: campoPercentualTs("ganho_minimo_bp", GANHO_MAXIMO_BP),
+  encargos_sobre_adicionais: z.boolean({ error: "Informe se os encargos incidem também sobre os adicionais e horas extras." }),
+})
+  // Mínimo acima do padrão bloquearia todo vendedor: recusado na entrada.
+  .refine((d) => d.ganho_minimo_bp <= d.ganho_padrao_bp, { message: MSG_GANHO_MINIMO_MAIOR, path: ["ganho_minimo_bp"] });
 export type ParametrosTsCreate = z.infer<typeof parametrosTsCreateSchema>;

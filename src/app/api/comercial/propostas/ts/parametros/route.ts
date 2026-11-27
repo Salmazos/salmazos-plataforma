@@ -3,20 +3,19 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { exigirContextoPropostas, type ContextoPropostas } from "@/lib/propostasAcesso";
 import { hojeSaoPaulo } from "@/lib/comercial";
 import { registrarAuditoria } from "@/lib/audit";
-import { CHAVES_PARAMETROS_TS } from "@/lib/propostaTsCalculo";
+import { CHAVES_PARAMETROS_TS, COLUNAS_SEM_USO_TS } from "@/lib/propostaTsCalculo";
 import { parametrosTsCreateSchema } from "@/lib/propostaTs";
 
-// Percentuais da Terceirização (encargos, cobertura e preço), em pontos-base inteiros (23% = 2300). Versionado por vigente_desde e SOMENTE INSERÇÃO: não existe
-// PATCH/PUT/DELETE aqui, e o banco barra UPDATE/DELETE em proposta_ts_parametros (gatilho de imutabilidade). Mudar um percentual é inserir uma vigência nova; o que já foi
-// enviado não muda, porque o snapshot de cada revisão congela os percentuais usados.
-// REGRA: os percentuais de preço (ISS, PIS, COFINS, IRPJ, CSLL, despesas, lucro, margem mínima e cobertura) NUNCA saem para vendedor, em nenhuma rota. Por isso AQUI, tanto a
-// LEITURA quanto a ALTERAÇÃO são só do GESTOR e da DIRETORIA (diretoria e superuser): 403 para qualquer outro perfil, e nada é gravado. As demais rotas do TS (prévia,
-// detalhe, criar, editar, situação) filtram os mesmos percentuais no servidor para quem não é gestor/diretoria (ver propostaTsParaPerfil e planilhaTsDeSnapshot).
+// Percentuais da Terceirização (INSS, FGTS, multa, ganho padrão e mínimo sobre o custo e a base dos encargos), em pontos-base inteiros (23% = 2300). Versionado por
+// vigente_desde e SOMENTE INSERÇÃO: não existe PATCH/PUT/DELETE aqui, e o banco barra UPDATE/DELETE em proposta_ts_parametros (gatilho de imutabilidade). Mudar um
+// percentual é inserir uma vigência nova; o que já foi enviado não muda, porque o snapshot de cada revisão congela os percentuais usados.
+// SIGILO: o ganho nunca sai para vendedor. Por isso AQUI tanto a LEITURA quanto a ALTERAÇÃO são só do GESTOR e da DIRETORIA (diretoria e superuser): 403 para qualquer
+// outro perfil, e nada é gravado. As demais rotas do TS filtram no servidor (propostaTsParaPerfil e planilhaTsDeSnapshot).
+// As colunas do modelo antigo (tributos, despesas, lucro, margem mínima e cobertura) continuam na tabela pelo histórico: são gravadas com 0 e não aparecem na tela.
+// Pressupõe supabase/migration_propostas_ts_ganho.sql aplicada.
 //
-// LINHA INICIAL: a vigência cadastrada pela migration (2026-11-25) é um ESPAÇO VAZIO: FGTS, INSS e multa preenchidos e os percentuais de preço (tributos, despesas, lucro)
-// zerados. Até a diretoria gravar uma vigência VÁLIDA por esta rota, criar ou editar proposta TS devolve 422 ("Os percentuais de preço da Terceirização ainda não foram
-// configurados pela diretoria."). A regra de vigência NÃO muda: não retroativa e uma por data (409 se repetir), então a primeira configuração vale de amanhã em diante;
-// se um dia for preciso configurar no mesmo dia, a data da linha inicial é recuada por SQL (a tabela é imutável pela API).
+// LINHA INICIAL: a vigência cadastrada pela migration tem ganho 0: até a diretoria gravar uma vigência com ganho (ou o gestor informar o ganho na proposta), o cálculo
+// devolve 422. A regra de vigência não muda: não retroativa e uma por data (409 se repetir).
 
 const MSG_SO_DIRETORIA = "Só a diretoria altera os percentuais da Terceirização.";
 const MSG_SEM_LEITURA = "Só a diretoria e a gestão acessam os percentuais da Terceirização.";
@@ -89,7 +88,7 @@ export async function POST(request: NextRequest) {
   const { data: anterior } = await svc.rpc("parametros_ts_vigentes", { p_hoje: vigente_desde });
   const antes = (Array.isArray(anterior) ? anterior[0] : anterior) as (Record<string, unknown> & { vigente_desde?: string }) | null | undefined;
 
-  const { data: nova, error } = await svc.from("proposta_ts_parametros").insert({ vigente_desde, ...percentuais, alterado_por: ctx.analistaId }).select().single();
+  const { data: nova, error } = await svc.from("proposta_ts_parametros").insert({ vigente_desde, ...Object.fromEntries(COLUNAS_SEM_USO_TS.map((k) => [k, 0])), ...percentuais, alterado_por: ctx.analistaId }).select().single();
   // 23505: duas chamadas na mesma data ao mesmo tempo (o índice único da migration fecha a corrida).
   if (error?.code === "23505") return NextResponse.json({ error: MSG_VIGENCIA_REPETIDA }, { status: 409 });
   if (error || !nova) {

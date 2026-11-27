@@ -5,7 +5,7 @@ import { emailParaAssinatura, modeloDisponivel, type ContextoModelo, type Modelo
 import { textoDesenhavel } from "@/lib/propostaTexto";
 import { MAX_CLAUSULAS_ADICIONAIS, MAX_CLAUSULA_ADICIONAL, clausulaAdicional } from "@/lib/propostaClausulas";
 import { TEMPLATE_VERSAO_MOT, conteudoMotSchema, mensagemErroConteudoMot, montarSnapshotMot, type ConteudoMot, type ParametrosMotVigentes, type SnapshotMot } from "@/lib/propostaMot";
-import { TEMPLATE_VERSAO_TS, conteudoTsSchema, mensagemErroConteudoTs, montarSnapshotTs, type ConteudoTs, type LiberacaoMargemTs, type ParametrosTsVigentes, type SnapshotTs } from "@/lib/propostaTs";
+import { TEMPLATE_VERSAO_TS, conteudoTsSchema, mensagemErroConteudoTs, montarSnapshotTs, type ConteudoTs, type LiberacaoGanhoTs, type ParametrosTsVigentes, type SnapshotTs } from "@/lib/propostaTs";
 
 // v2: texto introdutório editável, frase de efeito, cláusulas adicionais, marca d'água, logo maior e mais respiro antes da assinatura.
 // Revisões já emitidas guardam a versão que usaram e o PDF delas continua saindo no layout dessa versão (ver propostaPdf).
@@ -211,9 +211,9 @@ export interface EntradaSnapshot {
   // Só o MOT: cargo do vendedor (perfil) e os percentuais vigentes na data da emissão, que o snapshot congela.
   vendedorCargo?: string | null;
   parametrosMot?: ParametrosMotVigentes;
-  // Só o TS: os percentuais vigentes na data da emissão (congelados no snapshot) e, se o gestor liberou uma margem abaixo do mínimo, quem liberou e a justificativa.
+  // Só o TS: os percentuais vigentes na data da emissão (congelados no snapshot) e, se o gestor liberou um ganho abaixo do mínimo, quem liberou e a justificativa.
   parametrosTs?: ParametrosTsVigentes;
-  liberacaoMargemTs?: LiberacaoMargemTs | null;
+  liberacaoGanhoTs?: LiberacaoGanhoTs | null;
 }
 
 // Qualquer snapshot de proposta (cada modelo tem o seu formato; o campo "modelo" distingue).
@@ -237,7 +237,7 @@ export function montarSnapshot(e: EntradaSnapshot): SnapshotQualquer {
     return montarSnapshotTs({
       numero: e.numero, revisao: e.revisao, templateVersao: e.templateVersao, dataEmissao: e.dataEmissao, validadeDias: e.validadeDias, validadeAte: e.validadeAte,
       clienteNome: e.clienteNome, aosCuidados: e.aosCuidados, conteudo: e.conteudo, vendedorNome: e.vendedorNome, vendedorCargo: e.vendedorCargo ?? null,
-      vendedorTelefone: e.vendedorTelefone, vendedorEmail: e.vendedorEmail, parametros: e.parametrosTs, liberacaoMargem: e.liberacaoMargemTs ?? null,
+      vendedorTelefone: e.vendedorTelefone, vendedorEmail: e.vendedorEmail, parametros: e.parametrosTs, liberacaoGanho: e.liberacaoGanhoTs ?? null,
     });
   }
   const conteudo = conteudoRsSchema.parse(e.conteudo ?? {});

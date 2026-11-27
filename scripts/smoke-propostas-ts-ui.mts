@@ -1,4 +1,4 @@
-// Smoke das telas da Terceirização (TS, etapa 2D): formulário por posto com prévia ao vivo do SERVIDOR, margem/justificativa, campos só da diretoria, detalhe da proposta,
+// Smoke das telas da Terceirização (TS, etapa 2D): formulário por posto com prévia ao vivo do SERVIDOR, ganho/justificativa, quem paga, campos só da diretoria, detalhe da proposta,
 // aba "Percentuais da Terceirização" com simulador, e a trava de acesso (MODELOS_ATIVOS segue ["RS"]). Sem navegador: react-test-renderer. A prévia roda a lógica REAL do
 // servidor (previaTs) sobre um banco em memória; só o transporte (fetch) é simulado. SEM PDF (2E).
 // react-test-renderer NÃO é dependência do projeto: instalar só para rodar (npm i react-test-renderer@19.2.6 --no-save --legacy-peer-deps) e remover depois.
@@ -8,16 +8,16 @@ import fs from "node:fs";
 import React, { useState } from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import CamposPropostaTs, {
-  bloqueioTs, camposTsDeProposta, camposTsPadrao, conteudoTsDoForm, postoTsNovo, postoTsPronto, MSG_JUSTIFICATIVA_MARGEM, URL_CONFIGURAR_PERCENTUAIS_TS, type CamposTsForm, type EstadoPreviaTs, type PostoForm,
+  bloqueioTs, camposTsDeProposta, camposTsPadrao, conteudoTsDoForm, postoTsNovo, postoTsPronto, MSG_JUSTIFICATIVA_GANHO, URL_CONFIGURAR_PERCENTUAIS_TS, type CamposTsForm, type EstadoPreviaTs, type PostoForm,
 } from "@/components/propostas/CamposPropostaTs";
-import PercentuaisTsAdmin, { PARAMETROS_REFERENCIA_TS, POSTO_SIMULADOR_TS, simularPostoTs } from "@/components/propostas/PercentuaisTsAdmin";
+import PercentuaisTsAdmin, { CASOS_SIMULADOR_TS, simularPostoTs } from "@/components/propostas/PercentuaisTsAdmin";
 import PropostaDetalheTs, { type DetalheTs } from "@/components/propostas/PropostaDetalheTs";
 import PropostaNovaClient from "@/components/propostas/PropostaNovaClient";
 import PropostasListaClient from "@/components/propostas/PropostasListaClient";
 import CampoMoeda from "@/components/ui/CampoMoeda";
 import { MODELOS_ATIVOS, modeloDisponivel } from "@/lib/propostas";
-import { MSG_PDF_TS_INDISPONIVEL, PDF_TS_DISPONIVEL, conteudoTsSchema, type LiberacaoMargemTs } from "@/lib/propostaTs";
-import { MSG_PRECO_TS_NAO_CONFIGURADO, PARAMETROS_TS_INICIAIS, calcularPostoTs, precoDoCustoTs, type ParametrosTs } from "@/lib/propostaTsCalculo";
+import { MSG_PDF_TS_INDISPONIVEL, PDF_TS_DISPONIVEL, conteudoTsSchema, type LiberacaoGanhoTs } from "@/lib/propostaTs";
+import { MSG_GANHO_TS_NAO_CONFIGURADO, PARAMETROS_TS_INICIAIS, calcularPostoTs, precoDoCustoTs, type ParametrosTs } from "@/lib/propostaTsCalculo";
 import { previaTs } from "@/lib/propostaServico";
 import { hojeSaoPaulo } from "@/lib/comercial";
 import { criarClienteServico, criarDb } from "../scripts/harness-mot/memdb.mjs";
@@ -34,8 +34,9 @@ async function caso(nome: string, fn: () => Promise<void> | void) {
 }
 
 const HOJE = hojeSaoPaulo();
-// D = 2224 bp (tributos 1633 + despesas 300 + lucro 291), margem mínima 200: o caso do negócio (Auxiliar de Limpeza 44h) dá custo R$ 5.357,71 e preço R$ 6.890,06.
-const PAR_PRECO: ParametrosTs = { ...PARAMETROS_TS_INICIAIS, iss_bp: 500, pis_bp: 65, cofins_bp: 300, irpj_bp: 480, csll_bp: 288, despesas_bp: 300, lucro_bp: 291, margem_minima_bp: 200 };
+// Ganho padrão 30% sobre o custo, mínimo 20%: o Auxiliar de Limpeza 44h dá custo R$ 5.357,73, encargos R$ 1.699,22 e preço R$ 6.965,05.
+const PAR_PRECO: ParametrosTs = { ...PARAMETROS_TS_INICIAIS, ganho_padrao_bp: 3000, ganho_minimo_bp: 2000 };
+const PAR_ABAIXO: ParametrosTs = { ...PAR_PRECO, ganho_minimo_bp: 3500 };
 const esperar = (ms: number) => act(async () => { await new Promise((r) => setTimeout(r, ms)); });
 const DEBOUNCE = 520;
 
@@ -78,11 +79,11 @@ const porData = (r: TestRenderer.ReactTestRenderer, attr: string, valor?: string
   r.root.findAll((n) => typeof n.type === "string" && (valor === undefined ? n.props[attr] !== undefined : String(n.props[attr]) === String(valor)));
 const reais = (c: number) => new RegExp(`R\\$\\s?${(c / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 }).replace(/\./g, "\\.")}`);
 
-// Auxiliar de Limpeza 44h (o caso do negócio): custo R$ 5.357,71, encargos R$ 1.699,20, preço R$ 6.890,06 com D = 2224. Fornecimento do cliente.
+// Auxiliar de Limpeza 44h (o caso de referência).
 const AUX = (extra: Partial<PostoForm> = {}): PostoForm => ({
   ...postoTsNovo(), nome: "Auxiliar de Limpeza", salario: 1837.4,
   adicionais: [{ tipo: "insalubridade", modo: "valor", valor: 324.2, percentual: "" }, { tipo: "assiduidade", modo: "valor", valor: 315, percentual: "" }],
-  beneficios: [{ tipo: "vale_transporte", valor: 200 }, { tipo: "refeicao", valor: 480 }, { tipo: "cesta_basica", valor: 151.91 }],
+  beneficios: [{ tipo: "vale_transporte", rotulo: "", valor: 200, quem_paga: "salmazos" }, { tipo: "refeicao", rotulo: "", valor: 480, quem_paga: "salmazos" }, { tipo: "cesta_basica", rotulo: "", valor: 151.91, quem_paga: "salmazos" }],
   uniforme: 100, operacao: 250, ...extra,
 });
 const formAux = (extra: Partial<PostoForm> = {}, f: Partial<CamposTsForm> = {}): CamposTsForm => ({ ...camposTsPadrao(), itens: [AUX(extra)], ...f });
@@ -129,12 +130,12 @@ await caso("formulário novo: 1 posto com os padrões (44h, 220 h/mês, 1 efetiv
   assert.doesNotMatch(textoDe(r), /CNPJ|Endereço/i);
   assert.match(textoDe(r), /Preencha serviço, efetivos, horas e salário/);
   await esperar(DEBOUNCE);
-  assert.equal(chamadas.length, 0);
-  // vendedor não manda ISS nem justificativa; gestor manda
+  assert.equal(dasPrevias().length, 0);
+  // vendedor não manda ganho nem justificativa; gestor manda
   assert.deepEqual(Object.keys(conteudoTsDoForm(ultimo, { gestor: false })).sort(), ["cargo_supervisao", "clausulas_adicionais", "condicoes", "servicos", "texto_introdutorio"]);
-  assert.deepEqual(Object.keys(conteudoTsDoForm(ultimo, { gestor: true })).sort(), ["cargo_supervisao", "clausulas_adicionais", "condicoes", "iss_override_bp", "justificativa_margem_minima", "servicos", "texto_introdutorio"]);
+  assert.deepEqual(Object.keys(conteudoTsDoForm(ultimo, { gestor: true })).sort(), ["cargo_supervisao", "clausulas_adicionais", "condicoes", "ganho_bp", "justificativa_ganho_minimo", "servicos", "texto_introdutorio"]);
 });
-await caso("PRÉVIA AO VIVO (gestor): o caso do negócio dá custo por efetivo R$ 5.357,71, quantidade 1, valor mensal e TOTAL MENSAL R$ 6.890,06 — valores do SERVIDOR; gestor vê decomposição (encargos R$ 1.699,20) e margem real", async () => {
+await caso("PRÉVIA AO VIVO (gestor): o caso do negócio dá custo por efetivo R$ 5.357,73, quantidade 1, valor mensal e TOTAL MENSAL R$ 6.965,05 — valores do SERVIDOR; gestor vê decomposição (encargos R$ 1.699,22) e o ganho", async () => {
   const r = await montar(formAux());
   await esperar(DEBOUNCE);
   assert.equal(dasPrevias().length, 1);
@@ -142,28 +143,31 @@ await caso("PRÉVIA AO VIVO (gestor): o caso do negócio dá custo por efetivo R
   const post = dasPrevias()[0].corpo.conteudo.servicos[0].postos[0];
   assert.equal(post.salario_centavos, 183740);
   assert.deepEqual(post.adicionais, [{ tipo: "insalubridade", modo: "valor", valor_centavos: 32420 }, { tipo: "assiduidade", modo: "valor", valor_centavos: 31500 }]);
-  assert.match(txt(porData(r, "data-custo-efetivo", "0-0")[0]), reais(535771));
+  assert.match(txt(porData(r, "data-custo-efetivo", "0-0")[0]), reais(535773));
   assert.equal(txt(porData(r, "data-quantidade", "0-0")[0]), "1");
-  assert.match(txt(porData(r, "data-valor-posto", "0-0")[0]), reais(689006));
-  assert.match(txt(porData(r, "data-total-mensal")[0]), reais(689006));
-  assert.match(txt(porData(r, "data-linha", "encargos")[0]), reais(169920));
-  assert.match(txt(porData(r, "data-margem", 0)[0]), /2,91%/);
-  assert.equal(porData(r, "data-abaixo-margem").length, 0);
+  assert.match(txt(porData(r, "data-valor-posto", "0-0")[0]), reais(696505));
+  assert.match(txt(porData(r, "data-total-mensal")[0]), reais(696505));
+  assert.match(txt(porData(r, "data-linha", "encargos")[0]), reais(169922));
+  assert.match(txt(porData(r, "data-ganho", 0)[0]), /30%/);
+  assert.match(txt(porData(r, "data-ganho-aplicado")[0]), /30%/);
+  assert.equal(porData(r, "data-abaixo-ganho").length, 0);
+  // o campo do ganho vem preenchido com o padrão e o gestor não manda nada enquanto não mexer
+  assert.equal(porData(r, "data-campo", "ganho")[0].props.value, "30");
+  assert.equal(dasPrevias()[0].corpo.conteudo.ganho_bp, null);
   assert.equal(ultimaPrevia?.erro, null);
 });
-await caso("PRÉVIA (vendedor): vê custo por efetivo, quantidade, valor mensal e total; NÃO vê decomposição, margem, percentual nem 'pontos-base' (a rota nem devolve)", async () => {
+await caso("PRÉVIA (vendedor): vê SÓ função, quantidade, valor mensal por posto e total; nada de custo, decomposição, ganho, percentual; não consulta os percentuais", async () => {
   servidor.gestor = false;
   try {
     const r = await montar(formAux(), false);
     await esperar(DEBOUNCE);
-    assert.match(txt(porData(r, "data-valor-posto", "0-0")[0]), reais(689006));
-    assert.match(txt(porData(r, "data-total-mensal")[0]), reais(689006));
-    assert.equal(porData(r, "data-decomposicao").length, 0);
-    assert.equal(porData(r, "data-margem").length, 0);
-    assert.equal(porData(r, "data-custo-servico").length, 0);
-    assert.doesNotMatch(txt(porData(r, "data-previa-ts")[0]), /%|margem|pontos-base/i);
-    assert.deepEqual(Object.keys(dasPrevias()[0].corpo.conteudo).sort(), ["cargo_supervisao", "clausulas_adicionais", "condicoes", "servicos", "texto_introdutorio"], "vendedor não manda ISS nem justificativa");
-    assert.equal("cobertura_bp_override" in dasPrevias()[0].corpo.conteudo.servicos[0].postos[0], false);
+    assert.match(txt(porData(r, "data-valor-posto", "0-0")[0]), reais(696505));
+    assert.match(txt(porData(r, "data-total-mensal")[0]), reais(696505));
+    for (const attr of ["data-decomposicao", "data-ganho", "data-ganho-aplicado", "data-custo-servico", "data-custo-efetivo", "data-linha", "data-campo-ganho"]) assert.equal(porData(r, attr).length, 0, attr);
+    assert.doesNotMatch(txt(porData(r, "data-previa-ts")[0]), /%|ganho|custo|encargos|pontos-base/i);
+    assert.deepEqual(Object.keys(dasPrevias()[0].corpo.conteudo).sort(), ["cargo_supervisao", "clausulas_adicionais", "condicoes", "servicos", "texto_introdutorio"], "vendedor não manda ganho nem justificativa");
+    assert.equal("justificativa_preco_manual" in dasPrevias()[0].corpo.conteudo.servicos[0], false);
+    assert.equal(chamadas.filter((c) => c.url.includes("/ts/parametros")).length, 0);
   } finally { servidor.gestor = true; }
 });
 await caso("DEBOUNCE e DESCARTE: três digitações seguidas = UMA consulta; uma resposta lenta que chega depois da digitação nova é descartada (vale só o último valor)", async () => {
@@ -187,21 +191,26 @@ await caso("DEBOUNCE e DESCARTE: três digitações seguidas = UMA consulta; uma
   assert.equal(ultimaPrevia?.previa?.planilha.total_mensal_centavos, esperado.ok ? esperado.data.planilha.total_mensal_centavos : -1, "a tela mostra o cálculo do ÚLTIMO valor");
   assert.match(txt(porData(r, "data-total-mensal")[0]), reais(esperado.ok ? esperado.data.planilha.total_mensal_centavos : 0));
 });
-await caso("ERRO AMIGÁVEL: percentuais de preço não configurados (422) ficam em destaque; o gestor vê o link 'Configurar percentuais', o vendedor NÃO; o salvar fica bloqueado com a mensagem da rota", async () => {
+await caso("ERRO AMIGÁVEL: ganho não configurado (422) fica em destaque; o gestor vê o link 'Configurar percentuais', o vendedor NÃO; o salvar fica bloqueado com a mensagem da rota", async () => {
   servidor.par = { ...PARAMETROS_TS_INICIAIS };
   try {
     const r = await montar(formAux());
     await esperar(DEBOUNCE);
     assert.equal(ultimaPrevia?.status, 422);
-    assert.match(textoDe(r), /ainda não foram configurados pela diretoria/);
+    assert.match(textoDe(r), /O percentual de ganho da Terceirização ainda não foi configurado pela diretoria\./);
     const link = porData(r, "data-configurar-percentuais");
     assert.equal(link.length, 1);
     assert.equal(link[0].props.href, URL_CONFIGURAR_PERCENTUAIS_TS);
-    assert.equal(bloqueioTs(ultimo, ultimaPrevia!, true), MSG_PRECO_TS_NAO_CONFIGURADO);
+    assert.equal(bloqueioTs(ultimo, ultimaPrevia!, true), MSG_GANHO_TS_NAO_CONFIGURADO);
+    // o gestor que informa o ganho na própria proposta calcula mesmo sem padrão
+    await act(async () => { porData(r, "data-campo", "ganho")[0].props.onChange({ target: { value: "30" } }); });
+    await esperar(DEBOUNCE);
+    assert.equal(ultimaPrevia?.erro, null);
+    assert.match(txt(porData(r, "data-total-mensal")[0]), reais(696505));
     servidor.gestor = false;
     const v = await montar(formAux(), false);
     await esperar(DEBOUNCE);
-    assert.match(textoDe(v), /ainda não foram configurados pela diretoria/);
+    assert.match(textoDe(v), /ainda não foi configurado pela diretoria/);
     assert.equal(porData(v, "data-configurar-percentuais").length, 0, "vendedor não recebe o link");
   } finally { servidor.par = PAR_PRECO; servidor.gestor = true; }
 });
@@ -223,60 +232,82 @@ await caso("403 vira mensagem amigável: o vendedor que mexe no preço manual re
     assert.ok(ultimaPrevia?.erro);
   } finally { (globalThis as any).fetch = anterior; }
 });
-await caso("MARGEM (gestor): abaixo do mínimo aparece o aviso e a justificativa NA HORA; salvar fica bloqueado até justificar; a justificativa vai no conteúdo", async () => {
+await caso("GANHO MÍNIMO (gestor): abaixo do mínimo aparece o aviso e a justificativa NA HORA; salvar fica bloqueado até justificar; a justificativa vai no conteúdo", async () => {
   const r = await montar(formAux({ preco_manual: 5000 }));
   await esperar(DEBOUNCE);
   assert.equal(ultimaPrevia?.erro, null);
-  assert.equal(porData(r, "data-abaixo-margem").length, 1);
-  assert.match(txt(porData(r, "data-abaixo-margem")[0]), /Abaixo da margem mínima/);
-  assert.match(txt(porData(r, "data-margem", 0)[0]), /^-/, "margem negativa mostrada com sinal");
-  assert.equal(porData(r, "data-justificativa-margem").length, 1);
-  assert.equal(bloqueioTs(ultimo, ultimaPrevia!, true), MSG_JUSTIFICATIVA_MARGEM);
+  assert.equal(porData(r, "data-abaixo-ganho").length, 1);
+  assert.match(txt(porData(r, "data-abaixo-ganho")[0]), /Abaixo do ganho mínimo \(20%\)/);
+  assert.match(txt(porData(r, "data-ganho", 0)[0]), /^-/, "ganho negativo mostrado com sinal");
+  assert.equal(porData(r, "data-justificativa-ganho").length, 1);
+  assert.equal(bloqueioTs(ultimo, ultimaPrevia!, true), MSG_JUSTIFICATIVA_GANHO);
   const area = r.root.findAll((n) => n.type === "textarea" && n.props.maxLength === 500)[0];
   await act(async () => { area.props.onChange({ target: { value: "Cliente estratégico." } }); });
   assert.equal(bloqueioTs(ultimo, ultimaPrevia!, true), null);
-  assert.equal(conteudoTsDoForm(ultimo, { gestor: true }).justificativa_margem_minima, "Cliente estratégico.");
-  // dentro da margem: nada disso aparece
+  assert.equal((conteudoTsDoForm(ultimo, { gestor: true }) as any).justificativa_ganho_minimo, "Cliente estratégico.");
+  // dentro do mínimo: nada disso aparece
   const ok = await montar(formAux());
   await esperar(DEBOUNCE);
-  assert.equal(porData(ok, "data-justificativa-margem").length, 0);
+  assert.equal(porData(ok, "data-justificativa-ganho").length, 0);
 });
-await caso("MARGEM (vendedor): margem abaixo do mínimo = bloqueio com a MENSAGEM DA ROTA (só a diretoria libera), sem campo de justificativa e sem mostrar a margem", async () => {
-  servidor.par = { ...PAR_PRECO, margem_minima_bp: 500 };
+await caso("GANHO MÍNIMO (vendedor): abaixo do mínimo = bloqueio com a MENSAGEM DA ROTA (só a diretoria libera), sem campo de justificativa e sem mostrar ganho", async () => {
+  servidor.par = PAR_ABAIXO;
   servidor.gestor = false;
   try {
     const r = await montar(formAux(), false);
     await esperar(DEBOUNCE);
     assert.equal(ultimaPrevia?.status, 422);
-    assert.match(textoDe(r), /margem ficou abaixo do mínimo definido pela diretoria .* Só a diretoria pode liberar/);
-    assert.equal(porData(r, "data-justificativa-margem").length, 0);
-    assert.equal(porData(r, "data-margem").length, 0);
+    assert.match(textoDe(r), /preço ficou abaixo do mínimo definido pela diretoria .* Só a diretoria pode liberar/);
+    assert.equal(porData(r, "data-justificativa-ganho").length, 0);
+    assert.equal(porData(r, "data-ganho").length, 0);
     assert.ok(bloqueioTs(ultimo, ultimaPrevia!, false));
     // o gestor, com os MESMOS percentuais, calcula normalmente e passa a precisar da justificativa
     servidor.gestor = true;
     const g = await montar(formAux(), true);
     await esperar(DEBOUNCE);
     assert.equal(ultimaPrevia?.erro, null);
-    assert.equal(porData(g, "data-justificativa-margem").length, 1);
+    assert.equal(porData(g, "data-justificativa-ganho").length, 1);
   } finally { servidor.par = PAR_PRECO; servidor.gestor = true; }
 });
-await caso("CAMPOS DA DIRETORIA: preço manual, cobertura por posto e ISS por proposta só existem para o gestor; no vendedor nem aparecem no texto; vão no corpo em centavos/pontos-base só para o gestor", async () => {
-  const g = await montar(formAux({ preco_manual: 8000, cobertura: "2" }, { iss_override: "3" }), true);
+await caso("CAMPOS DA DIRETORIA: preço manual e ganho sobre o custo só existem para o gestor; não há ISS, cobertura, tributos, despesas ou lucro; o ganho digitado vai em pontos-base (28,6% = 2860)", async () => {
+  const g = await montar(formAux({ preco_manual: 8000, justificativa_preco_manual: "Anual" }, { ganho: "28,6" }), true);
   assert.equal(porData(g, "data-campos-diretoria").length, 1);
-  assert.equal(porData(g, "data-campo-iss").length, 1);
+  assert.equal(porData(g, "data-campo-ganho").length, 1);
+  assert.equal(porData(g, "data-campo", "ganho")[0].props.value, "28,6");
+  assert.doesNotMatch(textoDe(g), /ISS|Cobertura|tributos|despesas|lucro/i);
   const c = conteudoTsDoForm(ultimo, { gestor: true }) as any;
-  assert.equal(c.iss_override_bp, 300);
-  assert.equal(c.servicos[0].postos[0].cobertura_bp_override, 200);
+  assert.equal(c.ganho_bp, 2860);
   assert.equal(c.servicos[0].preco_manual_centavos, 800000);
   assert.ok(conteudoTsSchema.safeParse(c).success);
-  const v = await montar(formAux({ preco_manual: 8000, cobertura: "2" }, { iss_override: "3" }), false);
-  assert.equal(porData(v, "data-campos-diretoria").length, 0);
-  assert.equal(porData(v, "data-campo-iss").length, 0);
-  assert.doesNotMatch(textoDe(v), /Preço manual|Cobertura de ausências|ISS desta proposta|Só a diretoria/);
+  // texto que não é percentual é recusado pelo servidor, em vez de cair no padrão sem ninguém ver
+  assert.equal(conteudoTsSchema.safeParse(conteudoTsDoForm({ ...ultimo, ganho: "28,605" }, { gestor: true })).success, false);
+  // apagar o campo e sair volta ao padrão
+  await act(async () => { porData(g, "data-campo", "ganho")[0].props.onChange({ target: { value: "" } }); });
+  await act(async () => { porData(g, "data-campo", "ganho")[0].props.onBlur(); });
+  await esperar(DEBOUNCE);
+  assert.equal(ultimo.ganho, null);
+  assert.equal((conteudoTsDoForm(ultimo, { gestor: true }) as any).ganho_bp, null);
+  const v = await montar(formAux({ preco_manual: 8000, justificativa_preco_manual: "Anual" }, { ganho: "28,6" }), false);
+  assert.equal(porData(v, "data-campos-diretoria").length + porData(v, "data-campo-ganho").length, 0);
+  assert.doesNotMatch(textoDe(v), /Preço manual|Ganho sobre o custo|Só a diretoria/);
   const cv = conteudoTsDoForm(ultimo, { gestor: false }) as any;
-  assert.equal("iss_override_bp" in cv, false);
-  assert.equal("cobertura_bp_override" in cv.servicos[0].postos[0], false, "vendedor não manda cobertura (o servidor devolve a gravada)");
+  assert.equal("ganho_bp" in cv, false);
+  assert.equal("justificativa_preco_manual" in cv.servicos[0], false, "vendedor não manda a justificativa (o servidor devolve a gravada)");
   assert.equal(cv.servicos[0].preco_manual_centavos, 800000, "o preço manual que a diretoria definiu viaja escondido para a edição não apagá-lo");
+});
+await caso("GANHO ZERO: o gestor que digita 0% vê o aviso vermelho (o cálculo segue, sujeito ao mínimo); sem digitar ou com ganho positivo não há aviso", async () => {
+  const r = await montar(formAux());
+  await esperar(DEBOUNCE);
+  assert.equal(porData(r, "data-ganho-zero").length, 0);
+  await act(async () => { porData(r, "data-campo", "ganho")[0].props.onChange({ target: { value: "0" } }); });
+  await esperar(DEBOUNCE);
+  const aviso = porData(r, "data-ganho-zero")[0];
+  assert.equal(txt(aviso), "Ganho zero: o preço será igual ao custo");
+  assert.equal(aviso.props.style.color, "#B91C1C");
+  assert.match(txt(porData(r, "data-total-mensal")[0]), reais(535773), "preço igual ao custo");
+  assert.equal(porData(r, "data-justificativa-ganho").length, 1, "0% está abaixo do mínimo de 20%");
+  await act(async () => { porData(r, "data-campo", "ganho")[0].props.onChange({ target: { value: "0,01" } }); });
+  assert.equal(porData(r, "data-ganho-zero").length, 0);
 });
 await caso("VÁRIOS POSTOS: adicionar, duplicar (cópia com os mesmos dados) e remover COM CONFIRMAÇÃO (remover só pede; 'Manter' cancela; 'Sim, remover' remove); limite de 10; o último posto não se remove", async () => {
   const r = await montar(formAux());
@@ -305,7 +336,7 @@ await caso("VÁRIOS POSTOS: adicionar, duplicar (cópia com os mesmos dados) e r
   assert.match(textoDe(r), /limite de 10/);
   assert.equal(botaoPorLabel(r, "Duplicar posto 1")?.props.disabled, true);
 });
-await caso("VÁRIOS POSTOS na prévia: só os postos completos vão ao servidor (o incompleto não derruba o cálculo) e o TOTAL MENSAL soma os postos; margem de cada posto aponta para o posto certo", async () => {
+await caso("VÁRIOS POSTOS na prévia: só os postos completos vão ao servidor (o incompleto não derruba o cálculo) e o TOTAL MENSAL soma os postos; o aviso de ganho aponta para o posto certo", async () => {
   const r = await montar(formAux());
   await act(async () => { definir((v) => ({ ...v, itens: [...v.itens, postoTsNovo(), AUX({ nome: "Copeira", efetivos: "2", preco_manual: 5000 })] })); });
   await esperar(DEBOUNCE);
@@ -313,30 +344,33 @@ await caso("VÁRIOS POSTOS na prévia: só os postos completos vão ao servidor 
   assert.equal(enviado.length, 2, "o posto em branco ficou de fora");
   assert.deepEqual(ultimaPrevia?.mapa, [0, 2]);
   assert.equal(porData(r, "data-servico").length, 2);
-  assert.match(txt(porData(r, "data-valor-servico", 0)[0]), reais(689006));
-  assert.equal(porData(r, "data-abaixo-margem-posto").length, 1);
-  assert.equal(porData(r, "data-abaixo-margem-posto")[0].props["data-abaixo-margem-posto"], 2, "o aviso aparece no posto 3 (índice 2) do formulário");
+  assert.match(txt(porData(r, "data-valor-servico", 0)[0]), reais(696505));
+  assert.equal(porData(r, "data-abaixo-ganho-posto").length, 1);
+  assert.equal(porData(r, "data-abaixo-ganho-posto")[0].props["data-abaixo-ganho-posto"], 2, "o aviso aparece no posto 3 (índice 2) do formulário");
   const soma = ultimaPrevia!.previa!.planilha.servicos.reduce((t, s) => t + s.preco_centavos, 0);
   assert.equal(ultimaPrevia!.previa!.planilha.total_mensal_centavos, soma);
 });
-await caso("INTERRUPTOR 'Salmazos fornece os insumos': desligado = cliente fornece e os insumos NÃO entram (campo some, enviado 0); ligado = Salmazos nos dois e insumos entram no custo", async () => {
+await caso("QUEM PAGA: cada benefício, uniforme/EPI e insumos tem o interruptor (Salmazos | Cliente); do cliente sai do custo e fica 'fornecido pelo cliente'; a operação não tem interruptor", async () => {
   const r = await montar(formAux({ insumos: 300 }));
   await esperar(DEBOUNCE);
-  let post = dasPrevias()[dasPrevias().length - 1].corpo.conteudo.servicos[0];
-  assert.deepEqual(post.fornecimento, { equipamentos: "cliente", produtos: "cliente" });
-  assert.equal(post.postos[0].insumos_centavos, 0);
-  assert.match(txt(porData(r, "data-custo-efetivo", "0-0")[0]), reais(535771));
-  assert.equal(r.root.findAllByType(CampoMoeda).length, 9, "gestor: salário, 2 adicionais, 3 benefícios, uniforme, operação e preço manual — sem o campo de insumos");
-  await act(async () => { porData(r, "data-campo", "salmazos_fornece")[0].props.onChange({ target: { checked: true } }); });
+  const seletor = (campo: string) => porData(r, "data-quem-paga", campo)[0];
+  assert.equal(porData(r, "data-quem-paga").length, 5, "3 benefícios + uniforme + insumos");
+  assert.equal(r.root.findAllByType(CampoMoeda).length, 10, "gestor: salário, 2 adicionais, 3 benefícios, uniforme, insumos, operação e preço manual");
+  assert.match(txt(porData(r, "data-custo-efetivo", "0-0")[0]), reais(565773));
+  let post = dasPrevias()[dasPrevias().length - 1].corpo.conteudo.servicos[0].postos[0];
+  assert.deepEqual([post.insumos_quem_paga, post.uniforme_epi_quem_paga, post.beneficios[1].quem_paga], ["salmazos", "salmazos", "salmazos"]);
+  for (const campo of ["insumos", "uniforme", "beneficio-1"]) await act(async () => { seletor(campo).props.onChange({ target: { value: "cliente" } }); });
   await esperar(DEBOUNCE);
-  post = dasPrevias()[dasPrevias().length - 1].corpo.conteudo.servicos[0];
-  assert.deepEqual(post.fornecimento, { equipamentos: "salmazos", produtos: "salmazos" });
-  assert.equal(post.postos[0].insumos_centavos, 30000);
-  assert.equal(r.root.findAllByType(CampoMoeda).length, 10, "ligou: aparece o campo de insumos");
-  assert.match(txt(porData(r, "data-custo-efetivo", "0-0")[0]), reais(565771));
-  await act(async () => { porData(r, "data-campo", "salmazos_fornece")[0].props.onChange({ target: { checked: false } }); });
-  await esperar(DEBOUNCE);
-  assert.match(txt(porData(r, "data-custo-efetivo", "0-0")[0]), reais(535771), "desligou: o valor digitado fica guardado mas não entra");
+  post = dasPrevias()[dasPrevias().length - 1].corpo.conteudo.servicos[0].postos[0];
+  assert.deepEqual([post.insumos_quem_paga, post.uniforme_epi_quem_paga, post.beneficios[1].quem_paga], ["cliente", "cliente", "cliente"]);
+  assert.match(txt(porData(r, "data-custo-efetivo", "0-0")[0]), reais(565773 - 30000 - 10000 - 48000));
+  for (const chave of ["insumos", "uniforme_epi", "beneficio_2"]) assert.equal(porData(r, "data-fornecido-cliente", chave).length, 1, chave);
+  assert.equal(porData(r, "data-fornecido-cliente", "operacao").length, 0);
+  // benefício do cliente sem valor continua registrado; da Salmazos sem valor é ignorado
+  await act(async () => { definir((v) => ({ ...v, itens: [AUX({ beneficios: [{ tipo: "assistencia_medica", rotulo: "", valor: 0, quem_paga: "cliente" }, { tipo: "ajuda_de_custo", rotulo: "", valor: 0, quem_paga: "salmazos" }] })] })); });
+  const c = conteudoTsDoForm(ultimo, { gestor: false }) as any;
+  assert.deepEqual(c.servicos[0].postos[0].beneficios, [{ tipo: "assistencia_medica", quem_paga: "cliente", valor_centavos: 0 }]);
+  assert.ok(conteudoTsSchema.safeParse(c).success);
 });
 await caso("CAMPOS DO POSTO: escala 'Outra' pede descrição; horas semanais sugerem as mensais (× 5) e ambas seguem editáveis; adicional em % vira pontos-base; linhas sem valor são ignoradas; tudo passa no schema do servidor", async () => {
   const r = await montar(formAux({ adicionais: [], beneficios: [] }));
@@ -344,7 +378,7 @@ await caso("CAMPOS DO POSTO: escala 'Outra' pede descrição; horas semanais sug
   assert.equal((ultimo.itens[0] as PostoForm).horas_mensais, "180");
   await act(async () => { porData(r, "data-campo", "horas_mensais")[0].props.onChange({ target: { value: "200" } }); });
   assert.equal((ultimo.itens[0] as PostoForm).horas_mensais, "200");
-  await act(async () => { definir((v) => ({ ...v, itens: [AUX({ escala: "outra", escala_texto: "", adicionais: [{ tipo: "noturno", modo: "percentual", percentual: "20" }, { tipo: "gratificacao", modo: "valor", valor: 0, percentual: "" }, { tipo: "periculosidade", modo: "percentual", percentual: "" }], beneficios: [{ tipo: "refeicao", valor: 0 }] })] })); });
+  await act(async () => { definir((v) => ({ ...v, itens: [AUX({ escala: "outra", escala_texto: "", adicionais: [{ tipo: "noturno", modo: "percentual", percentual: "20" }, { tipo: "gratificacao", modo: "valor", valor: 0, percentual: "" }, { tipo: "periculosidade", modo: "percentual", percentual: "" }], beneficios: [{ tipo: "refeicao", rotulo: "", valor: 0, quem_paga: "salmazos" }] })] })); });
   assert.match(textoDe(r), /Descrição da escala/);
   let c = conteudoTsDoForm(ultimo, { gestor: false }) as any;
   assert.equal(conteudoTsSchema.safeParse(c).success, false, "escala 'outra' sem descrição é recusada");
@@ -362,12 +396,12 @@ await caso("CAMPOS DO POSTO: escala 'Outra' pede descrição; horas semanais sug
   assert.equal(s.descricao, "limpeza geral");
   assert.equal((conteudoTsDoForm(formAux(), { gestor: false }) as any).servicos[0].descricao, null);
 });
-await caso("RÓTULO de 'Outro': o campo de texto só aparece ao escolher Outro (adicional e benefício); sem preencher o servidor recusa e a prévia espera; preenchido aparece na planilha e o valor é o mesmo de um tipo fixo; tipo fixo não manda rótulo; ida e volta na edição; gold test intacto", async () => {
+await caso("RÓTULO de 'Outro': o campo de texto só aparece ao escolher Outro (adicional e benefício); sem preencher o servidor recusa e a prévia espera; preenchido aparece na planilha e o valor é o mesmo de um tipo fixo; tipo fixo não manda rótulo; ida e volta na edição; caso de referência intacto", async () => {
   const r = await montar(formAux());
   await esperar(DEBOUNCE);
   assert.equal(porData(r, "data-rotulo-adicional").length, 0);
   assert.equal(porData(r, "data-rotulo-beneficio").length, 0);
-  assert.match(txt(porData(r, "data-total-mensal")[0]), reais(689006), "gold test: total R$ 6.890,06");
+  assert.match(txt(porData(r, "data-total-mensal")[0]), reais(696505), "caso de referência: total R$ 6.965,05");
   const select = (label: string) => r.root.findAll((n) => n.type === "select" && n.props["aria-label"] === label)[0];
   // Adicional 'Outro' com valor mas SEM rótulo: o servidor recusa e o posto ainda não vai para a prévia.
   await act(async () => { definir((v) => ({ ...v, itens: [AUX({ adicionais: [...AUX().adicionais, { tipo: "gratificacao", rotulo: "", modo: "valor", valor: 100, percentual: "" }] })] })); });
@@ -400,7 +434,7 @@ await caso("RÓTULO de 'Outro': o campo de texto só aparece ao escolher Outro (
   assert.ok(!("rotulo" in (conteudoTsDoForm(ultimo, { gestor: false }) as any).servicos[0].postos[0].adicionais[2]), "tipo fixo não manda rótulo");
   assert.doesNotMatch(textoDe(r), /Adicional de risco/);
   // Benefício 'Outro': mesmo comportamento.
-  await act(async () => { definir((v) => ({ ...v, itens: [AUX({ beneficios: [...AUX().beneficios, { tipo: "cesta_basica", rotulo: "", valor: 50 }] })] })); });
+  await act(async () => { definir((v) => ({ ...v, itens: [AUX({ beneficios: [...AUX().beneficios, { tipo: "cesta_basica", rotulo: "", valor: 50, quem_paga: "salmazos" }] })] })); });
   await act(async () => { select("Tipo do benefício 4").props.onChange({ target: { value: "outro" } }); });
   assert.equal(porData(r, "data-rotulo-beneficio", 3).length, 1);
   c = conteudoTsDoForm(ultimo, { gestor: false }) as any;
@@ -417,8 +451,8 @@ await caso("RÓTULO de 'Outro': o campo de texto só aparece ao escolher Outro (
 });
 
 await caso("EDIÇÃO: o conteúdo gravado volta ao formulário igual (ida e volta); serviço fechado e serviço com vários postos ficam preservados como estão, sem edição", () => {
-  const original = conteudoTsDoForm(formAux({ preco_manual: 8000, cobertura: "2,5", salmazos_fornece: true, insumos: 300, escopo: "geral" }, { iss_override: "3", justificativa_margem: "ok" }), { gestor: true }) as any;
-  const fechado = { modo: "fechado", nome: "Jardinagem", descricao: null, fornecimento: { equipamentos: "cliente", produtos: "cliente" }, fechado: { descricao: "Contrato fechado", custo_centavos: 100000 }, preco_manual_centavos: null, justificativa_preco_manual: null };
+  const original = conteudoTsDoForm(formAux({ preco_manual: 8000, justificativa_preco_manual: "Anual", insumos: 300, insumos_quem_paga: "cliente", uniforme_quem_paga: "cliente", escopo: "geral" }, { ganho: "28,6", justificativa_ganho: "ok" }), { gestor: true }) as any;
+  const fechado = { modo: "fechado", nome: "Jardinagem", descricao: null, fechado: { descricao: "Contrato fechado", custo_centavos: 100000 }, preco_manual_centavos: null, justificativa_preco_manual: null };
   const doisPostos = { ...original.servicos[0], nome: "Dois postos", postos: [original.servicos[0].postos[0], original.servicos[0].postos[0]] };
   const bruto = { ...original, servicos: [original.servicos[0], fechado, doisPostos] };
   assert.ok(conteudoTsSchema.safeParse(bruto).success);
@@ -426,14 +460,14 @@ await caso("EDIÇÃO: o conteúdo gravado volta ao formulário igual (ida e volt
   assert.equal(form.itens.length, 3);
   assert.deepEqual(form.itens.map((i) => i.kind), ["posto", "bloco", "bloco"]);
   assert.deepEqual(conteudoTsDoForm(form, { gestor: true }), bruto);
-  assert.equal(form.iss_override, "3");
-  assert.equal(form.justificativa_margem, "ok");
-  // o que o servidor filtra para o vendedor (sem ISS, sem cobertura, sem justificativa) não derruba a tela
-  const { iss_override_bp: _a, justificativa_margem_minima: _b, ...semOcultos } = bruto;
-  const filtrado = { ...semOcultos, servicos: bruto.servicos.map((s: any) => (s.postos ? { ...s, postos: s.postos.map(({ cobertura_bp_override: _c, ...p }: any) => p) } : s)) };
+  assert.equal(form.ganho, "28,6");
+  assert.equal(form.justificativa_ganho, "ok");
+  assert.deepEqual([(form.itens[0] as PostoForm).insumos_quem_paga, (form.itens[0] as PostoForm).uniforme_quem_paga], ["cliente", "cliente"]);
+  // o que o servidor filtra para o vendedor (sem ganho, sem justificativas) não derruba a tela
+  const { ganho_bp: _a, justificativa_ganho_minimo: _b, ...semOcultos } = bruto;
+  const filtrado = { ...semOcultos, servicos: bruto.servicos.map(({ justificativa_preco_manual: _c, ...s }: any) => s) };
   const formV = camposTsDeProposta({ aos_cuidados: "Ana", validade_dias: 15, conteudo: filtrado });
-  assert.equal(formV.iss_override, "");
-  assert.equal((formV.itens[0] as PostoForm).cobertura, "");
+  assert.equal(formV.ganho, null);
   assert.equal((conteudoTsDoForm(formV, { gestor: false }) as any).servicos[0].preco_manual_centavos, 800000);
 });
 
@@ -504,32 +538,32 @@ await caso("NOVA PROPOSTA (gestor, empresa de teste): cria com POST de modelo TS
   assert.ok(conteudoTsSchema.safeParse(post.corpo.conteudo).success);
   assert.deepEqual([...navegou], ["push:/painel/comercial/propostas/novo"]);
 });
-await caso("NOVA PROPOSTA TS sem percentuais: mostra a mensagem do servidor e o 'Criar rascunho' fica desabilitado (nenhuma proposta é criada); margem abaixo do mínimo exige a justificativa antes de criar", async () => {
+await caso("NOVA PROPOSTA TS sem ganho configurado: mostra a mensagem do servidor e o 'Criar rascunho' fica desabilitado (nenhuma proposta é criada); ganho abaixo do mínimo exige a justificativa antes de criar", async () => {
   servidor.par = { ...PARAMETROS_TS_INICIAIS };
   try {
     const { r } = await montarNova(true, [EMPRESA_TESTE]);
     await escolherEmpresa(r, "cliente teste");
     await clicar(botaoModelo(r, "TS"));
     await digitarNovo(r, "Auxiliar", 1500);
-    assert.match(textoDe(r), /ainda não foram configurados pela diretoria/);
+    assert.match(textoDe(r), /ainda não foi configurado pela diretoria/);
     assert.equal(botaoPorTexto(r, "Criar rascunho")?.props.disabled, true);
     await clicar(botaoPorTexto(r, "Criar rascunho"));
     assert.equal(chamadas.filter((c) => c.metodo === "POST" && c.url === "/api/comercial/propostas").length, 0);
   } finally { servidor.par = PAR_PRECO; }
-  servidor.par = { ...PAR_PRECO, margem_minima_bp: 500 };
+  servidor.par = PAR_ABAIXO;
   try {
     const { r } = await montarNova(true, [EMPRESA_TESTE]);
     await escolherEmpresa(r, "cliente teste");
     await clicar(botaoModelo(r, "TS"));
     await digitarNovo(r, "Auxiliar", 1500);
-    assert.equal(porData(r, "data-justificativa-margem").length, 1);
+    assert.equal(porData(r, "data-justificativa-ganho").length, 1);
     assert.equal(botaoPorTexto(r, "Criar rascunho")?.props.disabled, true, "sem justificativa não cria");
     await act(async () => { r.root.findAll((n) => n.type === "textarea" && n.props.maxLength === 500)[0].props.onChange({ target: { value: "Cliente estratégico" } }); });
     assert.notEqual(botaoPorTexto(r, "Criar rascunho")?.props.disabled, true);
     await clicar(botaoPorTexto(r, "Criar rascunho"));
     await esperar(120);
     const post = chamadas.find((c) => c.metodo === "POST" && c.url === "/api/comercial/propostas")!;
-    assert.equal(post.corpo.conteudo.justificativa_margem_minima, "Cliente estratégico");
+    assert.equal(post.corpo.conteudo.justificativa_ganho_minimo, "Cliente estratégico");
   } finally { servidor.par = PAR_PRECO; }
 });
 
@@ -555,7 +589,7 @@ async function montarDetalhe(d: DetalheTs, planilha: unknown, extra: Record<stri
   vivos.push(r);
   return r;
 }
-await caso("DETALHE TS (rascunho, vendedor): postos, planilha com valores, condições, selo TESTE; 'Marcar como enviada' DESABILITADO com 'PDF da Terceirização ainda não disponível'; nenhum link de PDF; sem margem", async () => {
+await caso("DETALHE TS (rascunho, vendedor): postos, planilha com valores, condições, selo TESTE; 'Marcar como enviada' DESABILITADO com 'PDF da Terceirização ainda não disponível'; nenhum link de PDF; só preços", async () => {
   servidor.gestor = false;
   const planilha = await planilhaDoServidor(false);
   servidor.gestor = true;
@@ -566,8 +600,8 @@ await caso("DETALHE TS (rascunho, vendedor): postos, planilha com valores, condi
   assert.match(t, /Auxiliar de Limpeza/);
   assert.match(t, /limpeza geral/);
   assert.match(t, /44h · 220 h\/mês/);
-  assert.match(t, /Valor estimado R\$\s?6\.890,06 \(calculado hoje\)/);
-  assert.match(txt(porData(r, "data-total-mensal")[0]), reais(689006));
+  assert.match(t, /Valor estimado R\$\s?6\.965,05 \(calculado hoje\)/);
+  assert.match(txt(porData(r, "data-total-mensal")[0]), reais(696505));
   assert.match(t, /dia 15 e dia 30/);
   const enviar = porData(r, "data-marcar-enviada")[0];
   assert.equal(enviar.props.disabled, true);
@@ -575,26 +609,26 @@ await caso("DETALHE TS (rascunho, vendedor): postos, planilha com valores, condi
   assert.equal(MSG_PDF_TS_INDISPONIVEL, "PDF da Terceirização ainda não disponível");
   assert.match(txt(porData(r, "data-aviso-pdf")[0]), /PDF da Terceirização ainda não disponível/);
   assert.equal(r.root.findAll((n) => n.type === "a").length, 0, "nenhum link de PDF");
-  assert.equal(porData(r, "data-margem").length + porData(r, "data-decomposicao").length, 0);
+  assert.equal(porData(r, "data-ganho").length + porData(r, "data-decomposicao").length + porData(r, "data-custo-efetivo").length, 0);
+  assert.doesNotMatch(txt(porData(r, "data-previa-ts")[0]), /custo|ganho|encargos/i);
   assert.ok(botaoPorTexto(r, "Editar") && botaoPorTexto(r, "Cancelar"));
   assert.equal(chamadas.length, 0);
 });
-await caso("DETALHE TS (gestor): vê decomposição de custo, margem real e o aviso 'Abaixo da margem mínima'; a liberação da margem (quem e por quê) só aparece para ele", async () => {
-  const par = { ...PAR_PRECO, margem_minima_bp: 500 };
-  const planilha = await planilhaDoServidor(true, CONTEUDO_TS, par);
-  const liberacao: LiberacaoMargemTs = { justificativa: "Cliente estratégico", servicos: [0], liberado_por_id: "g", liberado_por_nome: "Gestora Teste", liberado_em: "2026-11-20T12:00:00Z" };
-  const r = await montarDetalhe(detalheTs(), { ...planilha, liberacao_margem: liberacao }, { gestor: true });
+await caso("DETALHE TS (gestor): vê decomposição de custo, ganho e o aviso 'Abaixo do ganho mínimo'; a liberação (quem e por quê) só aparece para ele", async () => {
+  const planilha = await planilhaDoServidor(true, CONTEUDO_TS, PAR_ABAIXO);
+  const liberacao: LiberacaoGanhoTs = { justificativa: "Cliente estratégico", servicos: [0], liberado_por_id: "g", liberado_por_nome: "Gestora Teste", liberado_em: "2026-11-20T12:00:00Z" };
+  const r = await montarDetalhe(detalheTs(), { ...planilha, liberacao_ganho: liberacao }, { gestor: true });
   assert.equal(porData(r, "data-decomposicao").length, 1);
-  assert.match(txt(porData(r, "data-linha", "encargos")[0]), reais(169920));
-  assert.match(txt(porData(r, "data-margem", 0)[0]), /2,91%/);
-  assert.match(txt(porData(r, "data-abaixo-margem", 0)[0]), /Abaixo da margem mínima/);
-  assert.match(txt(porData(r, "data-liberacao-margem")[0]), /Gestora Teste.*Cliente estratégico/);
+  assert.match(txt(porData(r, "data-linha", "encargos")[0]), reais(169922));
+  assert.match(txt(porData(r, "data-ganho", 0)[0]), /30%/);
+  assert.match(txt(porData(r, "data-abaixo-ganho", 0)[0]), /Abaixo do ganho mínimo/);
+  assert.match(txt(porData(r, "data-liberacao-ganho")[0]), /Gestora Teste.*Cliente estratégico/);
   const v = await montarDetalhe(detalheTs(), { ...(await planilhaDoServidor(false)) });
-  assert.equal(porData(v, "data-liberacao-margem").length + porData(v, "data-abaixo-margem").length, 0);
+  assert.equal(porData(v, "data-liberacao-ganho").length + porData(v, "data-abaixo-ganho").length, 0);
 });
 await caso("DETALHE TS enviada: revisões listadas SEM link de PDF; ações de situação aparecem; somente leitura esconde os botões; planilha da revisão", async () => {
   const revs = [{ id: "r1", revisao: 1, template_versao: 1, vendedor_nome: "Olver", created_at: "2026-11-20T12:00:00Z" }, { id: "r0", revisao: 0, template_versao: 1, vendedor_nome: "Olver", created_at: "2026-11-20T11:00:00Z" }];
-  const enviada = detalheTs({ situacao: "enviada", revisao_atual: 1, valor_estimado: 6890.06, enviada_em: "2026-11-20T12:00:00Z", validade_ate: "2026-11-30", revisoes: revs });
+  const enviada = detalheTs({ situacao: "enviada", revisao_atual: 1, valor_estimado: 6965.05, enviada_em: "2026-11-20T12:00:00Z", validade_ate: "2026-11-30", revisoes: revs });
   const planilha = await planilhaDoServidor(false);
   const r = await montarDetalhe(enviada, planilha);
   const t = textoDe(r);
@@ -610,19 +644,19 @@ await caso("DETALHE TS enviada: revisões listadas SEM link de PDF; ações de s
   assert.equal(botaoPorTexto(leitura, "Aceita"), undefined);
   assert.equal(botaoPorTexto(leitura, "Editar"), undefined);
 });
-await caso("DETALHE TS sem planilha (percentuais não configurados): mostra o aviso; o link 'Configurar percentuais' só para o gestor", async () => {
-  const sem = { origem: "hoje", planilha: null, erro: MSG_PRECO_TS_NAO_CONFIGURADO };
+await caso("DETALHE TS sem planilha (ganho não configurado): mostra o aviso; o link 'Configurar percentuais' só para o gestor", async () => {
+  const sem = { origem: "hoje", planilha: null, erro: MSG_GANHO_TS_NAO_CONFIGURADO };
   const g = await montarDetalhe(detalheTs(), null, { planilha: sem, gestor: true });
-  assert.match(textoDe(g), /ainda não foram configurados pela diretoria/);
+  assert.match(textoDe(g), /ainda não foi configurado pela diretoria/);
   assert.equal(porData(g, "data-total-mensal").length, 0);
   const linksG = g.root.findAll((n) => n.props["data-configurar-percentuais"] !== undefined);
   assert.ok(linksG.length >= 1, "gestor vê o link");
   assert.equal(linksG[0].props.href, URL_CONFIGURAR_PERCENTUAIS_TS);
   const v = await montarDetalhe(detalheTs(), null, { planilha: sem, gestor: false });
-  assert.match(textoDe(v), /ainda não foram configurados pela diretoria/);
+  assert.match(textoDe(v), /ainda não foi configurado pela diretoria/);
   assert.equal(v.root.findAll((n) => n.props["data-configurar-percentuais"] !== undefined).length, 0);
 });
-await caso("DETALHE TS: editar abre o formulário com os dados salvos; salvar manda PATCH com updated_at e centavos; 403 e erros do servidor aparecem sem fechar a edição; vendedor não manda ISS/cobertura", async () => {
+await caso("DETALHE TS: editar abre o formulário com os dados salvos; salvar manda PATCH com updated_at e centavos; 403 e erros do servidor aparecem sem fechar a edição; vendedor não manda ganho", async () => {
   servidor.gestor = false;
   try {
     responder = (c) => (c.metodo === "PATCH" ? { status: 200, corpo: { data: {} } } : { status: 200, corpo: { data: [] } });
@@ -630,53 +664,52 @@ await caso("DETALHE TS: editar abre o formulário com os dados salvos; salvar ma
     responder = (c) => (c.metodo === "PATCH" ? { status: 200, corpo: { data: {} } } : { status: 200, corpo: { data: [] } });
     await clicar(botaoPorTexto(r, "Editar"));
     await esperar(DEBOUNCE);
-    assert.equal(r.root.findAllByType(CampoMoeda).length, 8, "vendedor: salário, 2 adicionais, 3 benefícios, uniforme e operação (sem preço manual)");
+    assert.equal(r.root.findAllByType(CampoMoeda).length, 9, "vendedor: salário, 2 adicionais, 3 benefícios, uniforme, insumos e operação (sem preço manual)");
     assert.match(textoDe(r), /Cálculo do valor mensal/);
     assert.equal(porData(r, "data-campos-diretoria").length, 0);
     await clicar(botaoPorTexto(r, "Salvar"));
     await esperar(20);
     const patch = chamadas.find((c) => c.metodo === "PATCH")!;
     assert.equal(patch.url, "/api/comercial/propostas/p1");
+    // a prévia da edição diz qual proposta é (o servidor usa o ganho e o preço manual gravados)
+    assert.deepEqual([dasPrevias()[0].corpo.proposta_id, dasPrevias()[0].corpo.posicoes], ["p1", [0]]);
     assert.equal(patch.corpo.updated_at, "2026-11-20T10:00:00Z");
     assert.equal(patch.corpo.conteudo.servicos[0].postos[0].salario_centavos, 183740);
-    assert.equal("iss_override_bp" in patch.corpo.conteudo, false);
+    assert.equal("ganho_bp" in patch.corpo.conteudo, false);
     assert.ok(conteudoTsSchema.safeParse(patch.corpo.conteudo).success);
     // 403 do servidor: mensagem amigável e a edição continua aberta
     const r2 = await montarDetalhe(detalheTs({ empresa_visitada_id: "e1" }), await planilhaDoServidor(false));
-    responder = (c) => (c.metodo === "PATCH" ? { status: 403, corpo: { error: "Só a diretoria pode alterar o ISS da proposta." } } : { status: 200, corpo: { data: [] } });
+    responder = (c) => (c.metodo === "PATCH" ? { status: 403, corpo: { error: "Só a diretoria e a gestão podem alterar o percentual de ganho da proposta." } } : { status: 200, corpo: { data: [] } });
     await clicar(botaoPorTexto(r2, "Editar"));
     await esperar(DEBOUNCE);
     await clicar(botaoPorTexto(r2, "Salvar"));
     await esperar(20);
-    assert.match(textoDe(r2), /Só a diretoria pode alterar o ISS da proposta\./);
+    assert.match(textoDe(r2), /Só a diretoria e a gestão podem alterar o percentual de ganho da proposta\./);
     assert.match(textoDe(r2), /Cálculo do valor mensal/, "continua editando");
   } finally { servidor.gestor = true; }
 });
-await caso("DETALHE TS (gestor): editar com margem abaixo do mínimo trava o 'Salvar' até a justificativa; depois o PATCH leva a justificativa, o ISS e a cobertura que ele vê", async () => {
-  servidor.par = { ...PAR_PRECO, margem_minima_bp: 500 };
-  try {
-    const conteudoGestor = conteudoTsDoForm(formAux({ cobertura: "1" }, { iss_override: "4" }), { gestor: true });
-    const r = await montarDetalhe(detalheTs({ empresa_visitada_id: "e1", conteudo: conteudoGestor as any }), await planilhaDoServidor(true, conteudoGestor, servidor.par), { gestor: true });
-    responder = (c) => (c.metodo === "PATCH" ? { status: 200, corpo: { data: {} } } : { status: 200, corpo: { data: [] } });
-    await clicar(botaoPorTexto(r, "Editar"));
-    await esperar(DEBOUNCE);
-    assert.equal(porData(r, "data-justificativa-margem").length, 1);
-    assert.equal(botaoPorTexto(r, "Salvar")?.props.disabled, true);
-    await act(async () => { r.root.findAll((n) => n.type === "textarea" && n.props.maxLength === 500)[0].props.onChange({ target: { value: "Cliente estratégico" } }); });
-    assert.notEqual(botaoPorTexto(r, "Salvar")?.props.disabled, true);
-    await clicar(botaoPorTexto(r, "Salvar"));
-    await esperar(20);
-    const patch = chamadas.find((c) => c.metodo === "PATCH")!;
-    assert.equal(patch.corpo.conteudo.justificativa_margem_minima, "Cliente estratégico");
-    assert.equal(patch.corpo.conteudo.iss_override_bp, 400);
-    assert.equal(patch.corpo.conteudo.servicos[0].postos[0].cobertura_bp_override, 100);
-  } finally { servidor.par = PAR_PRECO; }
+await caso("DETALHE TS (gestor): editar com ganho abaixo do mínimo trava o 'Salvar' até a justificativa; depois o PATCH leva a justificativa e o ganho que ele vê", async () => {
+  const conteudoGestor = conteudoTsDoForm(formAux({}, { ganho: "10" }), { gestor: true });
+  const r = await montarDetalhe(detalheTs({ empresa_visitada_id: "e1", conteudo: conteudoGestor as any }), await planilhaDoServidor(true, conteudoGestor), { gestor: true });
+  responder = (c) => (c.metodo === "PATCH" ? { status: 200, corpo: { data: {} } } : { status: 200, corpo: { data: [] } });
+  await clicar(botaoPorTexto(r, "Editar"));
+  await esperar(DEBOUNCE);
+  assert.equal(porData(r, "data-campo", "ganho")[0].props.value, "10");
+  assert.equal(porData(r, "data-justificativa-ganho").length, 1);
+  assert.equal(botaoPorTexto(r, "Salvar")?.props.disabled, true);
+  await act(async () => { r.root.findAll((n) => n.type === "textarea" && n.props.maxLength === 500)[0].props.onChange({ target: { value: "Cliente estratégico" } }); });
+  assert.notEqual(botaoPorTexto(r, "Salvar")?.props.disabled, true);
+  await clicar(botaoPorTexto(r, "Salvar"));
+  await esperar(20);
+  const patch = chamadas.find((c) => c.metodo === "PATCH")!;
+  assert.equal(patch.corpo.conteudo.justificativa_ganho_minimo, "Cliente estratégico");
+  assert.equal(patch.corpo.conteudo.ganho_bp, 1000);
 });
 
 // ═══ Aba "Percentuais da Terceirização" ══════════════════════════════════════
 const LINHA = (extra: Record<string, unknown> = {}) => ({ id: "pts-1", vigente_desde: "2026-11-25", ...PARAMETROS_TS_INICIAIS, alterado_por: null, created_at: "2026-11-25T10:00:00Z", alterado_por_nome: null, ...extra });
 const DADOS = () => ({ hoje: HOJE, vigentes: LINHA(), historico: [LINHA()] });
-const DIGITADOS: Record<string, string> = { fgts_bp: "8", inss_bp: "23", multa_fgts_bp: "40", cobertura_bp: "0", iss_bp: "5", pis_bp: "0,65", cofins_bp: "3", irpj_bp: "4,8", csll_bp: "2,88", despesas_bp: "3", lucro_bp: "2,91", margem_minima_bp: "2" };
+const DIGITADOS: Record<string, string> = { fgts_bp: "8", inss_bp: "23", multa_fgts_bp: "40", ganho_padrao_bp: "30", ganho_minimo_bp: "20" };
 async function montarAba(dados: unknown = DADOS(), postar?: (c: Chamada) => { status: number; corpo: unknown }, props: Record<string, unknown> = {}) {
   chamadas = []; atrasos = [];
   responder = (c) => (c.metodo === "POST" ? (postar ?? (() => ({ status: 201, corpo: { data: LINHA({ id: "n" }) } })))(c) : { status: 200, corpo: dados });
@@ -689,75 +722,65 @@ async function montarAba(dados: unknown = DADOS(), postar?: (c: Chamada) => { st
 const campoPct = (r: TestRenderer.ReactTestRenderer, k: string) => porData(r, "data-campo", k)[0];
 const digitar = async (r: TestRenderer.ReactTestRenderer, valores: Record<string, string>) => { for (const [k, v] of Object.entries(valores)) await act(async () => { campoPct(r, k).props.onChange({ target: { value: v } }); }); };
 const diaFuturo = new Date(Date.UTC(Number(HOJE.slice(0, 4)), Number(HOJE.slice(5, 7)) - 1, Number(HOJE.slice(8, 10)) + 5)).toISOString().slice(0, 10);
-await caso("ABA: vigência de hoje (12 percentuais), aviso de que o preço ainda não foi configurado, histórico com quem cadastrou, formulário com os de hoje; NÃO existe editar nem apagar", async () => {
+await caso("ABA: vigência de hoje, aviso de que o ganho ainda não foi configurado, histórico com quem cadastrou, formulário com os de hoje e o interruptor LIGADO; sem tributos, despesas ou lucro; NÃO existe editar nem apagar", async () => {
   const r = await montarAba({ hoje: HOJE, vigentes: LINHA(), historico: [LINHA({ alterado_por_nome: "Diretora" })] });
   assert.equal(chamadas[0].url, "/api/comercial/propostas/ts/parametros");
   const t = textoDe(r);
   assert.match(t, /Vigência de hoje/);
   assert.match(t, /Em vigor desde 25\/11\/2026/);
-  assert.match(t, /percentuais de preço .* ainda não foram configurados/);
-  assert.equal(porData(r, "data-vigente").length, 12);
+  assert.match(t, /ganho padrão ainda não foi configurado/);
+  assert.equal(porData(r, "data-vigente").length, 6);
   assert.match(txt(porData(r, "data-vigente", "inss_bp")[0]), /23%/);
   assert.match(txt(porData(r, "data-vigente", "fgts_bp")[0]), /8%/);
+  assert.match(txt(porData(r, "data-vigente", "encargos_sobre_adicionais")[0]), /Sim/);
   assert.equal(campoPct(r, "inss_bp").props.value, "23");
+  assert.equal(campoPct(r, "encargos_sobre_adicionais").props.checked, true);
+  assert.match(t, /Encargos também sobre os adicionais e horas extras/);
   assert.match(t, /Diretora/);
   assert.match(t, /\(em vigor\)/);
+  assert.doesNotMatch(t, /ISS|PIS|COFINS|IRPJ|CSLL|[Dd]espesas|[Ll]ucro|[Cc]obertura|[Mm]argem/);
   assert.equal(botoes(r).filter((b) => /editar|apagar|excluir|remover/i.test(txt(b))).length, 0);
-  assert.equal(r.root.findAll((n) => n.type === "input").length, 13, "data + 12 percentuais");
+  assert.equal(r.root.findAll((n) => n.type === "input").length, 7, "data + 5 percentuais + interruptor");
 });
-await caso("ABA: 'Soma dos percentuais sobre o preço (D)' atualiza AO VIVO (ISS+PIS+COFINS+IRPJ+CSLL+despesas+lucro) e D de 100% ou mais bloqueia o cadastro com a mensagem", async () => {
+await caso("SIMULADOR: os casos da planilha (LIMPEZA, Maxsoy, PORTEIRO 2025 e 2026) dão custo, encargos e preço com o ganho digitado, o interruptor muda a base, pela MESMA função pura do servidor, sem rota e sem gravar", async () => {
   const r = await montarAba();
-  assert.match(txt(porData(r, "data-valor-d")[0]), /^0%$/);
-  await digitar(r, DIGITADOS);
-  assert.match(txt(porData(r, "data-valor-d")[0]), /22,24%/);
-  assert.match(textoDe(r), /Soma dos percentuais sobre o preço \(D\)/);
-  assert.equal(porData(r, "data-erro-d").length, 0);
-  await digitar(r, { lucro_bp: "90" });
-  assert.match(txt(porData(r, "data-valor-d")[0]), /109,33%/);
-  assert.equal(porData(r, "data-erro-d").length, 1);
-  assert.match(txt(porData(r, "data-erro-d")[0]), /somam 100% ou mais/);
-  assert.equal(botaoPorTexto(r, "Cadastrar nova vigência")?.props.disabled, true);
-  await act(async () => { porData(r, "data-campo", "vigente_desde")[0].props.onChange({ target: { value: diaFuturo } }); });
-  await clicar(botaoPorTexto(r, "Cadastrar nova vigência"));
-  assert.equal(chamadas.filter((c) => c.metodo === "POST").length, 0, "nada enviado");
-  // exatamente 100%: também bloqueia
-  await digitar(r, { lucro_bp: "80,35" });
-  assert.equal(porData(r, "data-erro-d").length, 0, "D = 99,68%: ainda cabe");
-  await digitar(r, { lucro_bp: "80,67" });
-  assert.equal(porData(r, "data-erro-d").length, 1, "D = 100%: bloqueia");
-});
-await caso("SIMULADOR: com os percentuais digitados o caso do negócio dá custo R$ 5.357,71, encargos R$ 1.699,20 e preço R$ 6.890,06 — pela MESMA função pura do servidor (propostaTsCalculo), sem rota e sem gravar", async () => {
-  const r = await montarAba();
-  assert.equal(porData(r, "data-sim-custo").length, 1);
-  assert.match(txt(porData(r, "data-sim-preco")[0]), /—/, "sem percentuais de preço: sem preço");
+  assert.match(txt(porData(r, "data-sim-preco")[0]), /—/, "sem ganho: sem preço");
   chamadas = [];
   await digitar(r, DIGITADOS);
-  assert.match(txt(porData(r, "data-sim-custo")[0]), reais(535771));
-  assert.match(txt(porData(r, "data-sim-encargos")[0]), reais(169920));
-  assert.match(txt(porData(r, "data-sim-preco")[0]), reais(689006));
-  assert.match(txt(porData(r, "data-sim-referencia")[0]), /D = 22,24%.*R\$\s?5\.357,71.*R\$\s?1\.699,20.*R\$\s?6\.890,06/);
+  const escolher = async (codigo: string) => { await act(async () => { campoPct(r, "caso_simulador").props.onChange({ target: { value: codigo } }); }); };
+  const confere = (custo: number, encargos: number, preco: number) => {
+    assert.match(txt(porData(r, "data-sim-custo")[0]), reais(custo));
+    assert.match(txt(porData(r, "data-sim-encargos")[0]), reais(encargos));
+    assert.match(txt(porData(r, "data-sim-preco")[0]), reais(preco));
+  };
+  assert.deepEqual(CASOS_SIMULADOR_TS.map((c) => c.rotulo), ["LIMPEZA", "LIMPEZA Maxsoy", "PORTEIRO 2025", "PORTEIRO 2026"]);
+  confere(286802, 68611, 372843);
+  await escolher("maxsoy"); confere(590660, 157586, 767858);
+  await escolher("porteiro2025"); confere(363662, 89194, 472761);
+  await escolher("porteiro2026"); confere(243426, 84735, 316454);
+  await act(async () => { campoPct(r, "encargos_sobre_adicionais").props.onChange({ target: { checked: false } }); });
+  confere(227302, 68611, precoDoCustoTs(227302, 3000));
+  await escolher("porteiro2025"); confere(343079, 68611, precoDoCustoTs(343079, 3000));
+  await escolher("maxsoy"); confere(501685, 68611, precoDoCustoTs(501685, 3000));
   assert.equal(chamadas.length, 0, "o simulador não chama o servidor");
-  // muda um percentual: o preço acompanha (lucro 2,91% → 5%)
-  await digitar(r, { lucro_bp: "5" });
-  const par = { ...PAR_PRECO, lucro_bp: 500 };
-  assert.match(txt(porData(r, "data-sim-preco")[0]), reais(precoDoCustoTs(535771, par)));
-  // campo inválido: o simulador pede para completar
-  await digitar(r, { iss_bp: "5,555" });
+  await digitar(r, { ganho_padrao_bp: "28,6" });
+  assert.match(txt(porData(r, "data-sim-preco")[0]), reais(precoDoCustoTs(501685, 2860)));
+  await digitar(r, { inss_bp: "5,555" });
   assert.equal(porData(r, "data-sim-incompleto").length, 1);
   // é a mesma função pura (não uma conta própria da tela)
-  const sim = simularPostoTs(PARAMETROS_REFERENCIA_TS);
-  const direto = calcularPostoTs(POSTO_SIMULADOR_TS, PARAMETROS_REFERENCIA_TS, { insumosContam: false });
-  assert.equal(sim.custo, direto.custoUnitCentavos);
-  assert.equal(sim.encargos, direto.encargosCentavos);
-  assert.equal(sim.preco, precoDoCustoTs(direto.custoUnitCentavos, PARAMETROS_REFERENCIA_TS));
+  const posto = CASOS_SIMULADOR_TS[0].posto;
+  const sim = simularPostoTs(posto, PAR_PRECO);
+  const direto = calcularPostoTs(posto, PAR_PRECO);
+  assert.deepEqual(sim, { custo: direto.custoUnitCentavos, encargos: direto.encargosCentavos, preco: precoDoCustoTs(direto.custoUnitCentavos, 3000) });
   const fonte = fs.readFileSync("src/components/propostas/PercentuaisTsAdmin.tsx", "utf8");
   assert.match(fonte, /from "@\/lib\/propostaTsCalculo"/);
   assert.match(fonte, /calcularPostoTs\(/);
   assert.match(fonte, /precoDoCustoTs\(/);
 });
-await caso("ABA: cadastrar pede confirmação, envia a data e os 12 percentuais em PONTOS-BASE (nova vigência, sempre POST) e depois recarrega com aviso de sucesso; 'Voltar' não envia", async () => {
+await caso("ABA: cadastrar pede confirmação, envia a data, os 5 percentuais em PONTOS-BASE e o interruptor (nova vigência, sempre POST) e depois recarrega com aviso de sucesso; 'Voltar' não envia", async () => {
   const r = await montarAba();
-  await digitar(r, DIGITADOS);
+  await digitar(r, { ...DIGITADOS, ganho_padrao_bp: "28,6" });
+  await act(async () => { campoPct(r, "encargos_sobre_adicionais").props.onChange({ target: { checked: false } }); });
   await act(async () => { porData(r, "data-campo", "vigente_desde")[0].props.onChange({ target: { value: diaFuturo } }); });
   await clicar(botaoPorTexto(r, "Cadastrar nova vigência"));
   assert.match(textoDe(r), /não dá para editar nem apagar/);
@@ -769,12 +792,12 @@ await caso("ABA: cadastrar pede confirmação, envia a data e os 12 percentuais 
   const post = chamadas.filter((c) => c.metodo === "POST");
   assert.equal(post.length, 1);
   assert.equal(post[0].url, "/api/comercial/propostas/ts/parametros");
-  assert.deepEqual(post[0].corpo, { vigente_desde: diaFuturo, fgts_bp: 800, inss_bp: 2300, multa_fgts_bp: 4000, cobertura_bp: 0, iss_bp: 500, pis_bp: 65, cofins_bp: 300, irpj_bp: 480, csll_bp: 288, despesas_bp: 300, lucro_bp: 291, margem_minima_bp: 200 });
+  assert.deepEqual(post[0].corpo, { vigente_desde: diaFuturo, fgts_bp: 800, inss_bp: 2300, multa_fgts_bp: 4000, ganho_padrao_bp: 2860, ganho_minimo_bp: 2000, encargos_sobre_adicionais: false });
   assert.match(textoDe(r), /Nova vigência cadastrada/);
   assert.ok(chamadas.filter((c) => c.metodo === "GET").length >= 2, "recarregou");
   assert.equal(chamadas.filter((c) => ["PUT", "PATCH", "DELETE"].includes(c.metodo)).length, 0);
 });
-await caso("ABA: validações antes de enviar (sem data, data passada, mais de 2 casas, percentual acima de 100%) mostram a mensagem do campo e NADA é enviado; 409 (data repetida) e erro genérico viram mensagem amigável", async () => {
+await caso("ABA: validações antes de enviar (sem data, data passada, mais de 2 casas, percentual acima do limite) mostram a mensagem do campo e NADA é enviado; 409 (data repetida) e erro genérico viram mensagem amigável", async () => {
   const r = await montarAba();
   await clicar(botaoPorTexto(r, "Cadastrar nova vigência"));
   assert.match(textoDe(r), /Informe a data de início da vigência/);
@@ -783,12 +806,15 @@ await caso("ABA: validações antes de enviar (sem data, data passada, mais de 2
   await clicar(botaoPorTexto(r, "Cadastrar nova vigência"));
   assert.match(textoDe(r), /não pode começar antes de hoje/);
   await act(async () => { porData(r, "data-campo", "vigente_desde")[0].props.onChange({ target: { value: diaFuturo } }); });
-  await digitar(r, { iss_bp: "5,555" });
+  await digitar(r, { inss_bp: "5,555" });
   await clicar(botaoPorTexto(r, "Cadastrar nova vigência"));
-  assert.match(textoDe(r), /ISS: informe o percentual com até 2 casas/);
-  await digitar(r, { iss_bp: "150" });
+  assert.match(textoDe(r), /INSS: informe o percentual com até 2 casas/);
+  await digitar(r, { inss_bp: "150" });
   await clicar(botaoPorTexto(r, "Cadastrar nova vigência"));
-  assert.match(textoDe(r), /ISS passa do limite de 100%/);
+  assert.match(textoDe(r), /INSS passa do limite de 100%/);
+  await digitar(r, { inss_bp: "23", ganho_padrao_bp: "1001" });
+  await clicar(botaoPorTexto(r, "Cadastrar nova vigência"));
+  assert.match(textoDe(r), /Ganho padrão sobre o custo passa do limite de 1000%|Ganho padrão sobre o custo passa do limite de 1\.000%/);
   assert.equal(chamadas.filter((c) => c.metodo === "POST").length, 0);
   const r409 = await montarAba(DADOS(), () => ({ status: 409, corpo: { error: "Já existe uma vigência com esta data. Escolha outra data." } }));
   await digitar(r409, DIGITADOS);
@@ -807,6 +833,19 @@ await caso("ABA: validações antes de enviar (sem data, data passada, mais de 2
   await esperar(20);
   assert.match(textoDe(r500), /Nada foi alterado/);
 });
+await caso("ABA: ganho mínimo maior que o padrão mostra a mensagem, desabilita o salvar e nada é enviado; igual ao padrão libera", async () => {
+  const r = await montarAba();
+  await digitar(r, { ...DIGITADOS, ganho_padrao_bp: "20", ganho_minimo_bp: "20,01" });
+  await act(async () => { porData(r, "data-campo", "vigente_desde")[0].props.onChange({ target: { value: diaFuturo } }); });
+  assert.match(txt(porData(r, "data-erro-minimo")[0]), /O ganho mínimo não pode ser maior que o ganho padrão\./);
+  assert.equal(botaoPorTexto(r, "Cadastrar nova vigência")?.props.disabled, true);
+  await clicar(botaoPorTexto(r, "Cadastrar nova vigência"));
+  assert.equal(botaoPorTexto(r, "Sim, cadastrar"), undefined);
+  assert.equal(chamadas.filter((c) => c.metodo === "POST").length, 0);
+  await digitar(r, { ganho_minimo_bp: "20" });
+  assert.equal(porData(r, "data-erro-minimo").length, 0);
+  assert.notEqual(botaoPorTexto(r, "Cadastrar nova vigência")?.props.disabled, true);
+});
 await caso("ABA: acesso negado (403) mostra só a mensagem da rota e nenhum botão; sem vigência hoje avisa; vigência futura aparece como (futura); somente leitura (podeEditar=false) mostra vigência e histórico sem formulário", async () => {
   chamadas = [];
   responder = () => ({ status: 403, corpo: { error: "Só a diretoria e a gestão acessam os percentuais da Terceirização." } });
@@ -820,7 +859,7 @@ await caso("ABA: acesso negado (403) mostra só a mensagem da rota e nenhum bot�
   assert.match(textoDe(r2), /Não há percentuais em vigor hoje/);
   assert.match(textoDe(r2), /\(futura\)/);
   const leitura = await montarAba(DADOS(), undefined, { podeEditar: false });
-  assert.equal(porData(leitura, "data-vigente").length, 12);
+  assert.equal(porData(leitura, "data-vigente").length, 6);
   assert.equal(porData(leitura, "data-campo").length, 0);
   assert.equal(botaoPorTexto(leitura, "Cadastrar nova vigência"), undefined);
   assert.match(textoDe(leitura), /Histórico/);

@@ -92,7 +92,7 @@ export default function PropostaDetalheTs({ d, hoje, gestor, podeEditar, somente
         body: JSON.stringify({ updated_at: d.updated_at, aos_cuidados: form.aos_cuidados.trim() || null, validade_dias: validadeTsDoForm(form), conteudo: conteudoTsDoForm(form, { gestor }) }),
       }));
       if (!r.ok) {
-        if (r.status === 409 && !/percentuais/i.test(r.json.error ?? "")) {
+        if (r.status === 409 && !/percentua/i.test(r.json.error ?? "")) {
           setEditando(false);
           onAviso(`${r.json.error ?? "A proposta foi alterada."} A proposta foi recarregada; refaça a edição.`);
           await onRecarregar();
@@ -118,7 +118,7 @@ export default function PropostaDetalheTs({ d, hoje, gestor, podeEditar, somente
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo),
       }));
       if (!r.ok) {
-        if (r.status === 409 && !/percentuais/i.test(r.json.error ?? "")) await onRecarregar();
+        if (r.status === 409 && !/percentua/i.test(r.json.error ?? "")) await onRecarregar();
         return r.json.error ?? "Não foi possível alterar a situação.";
       }
       setAcao(null);
@@ -131,7 +131,7 @@ export default function PropostaDetalheTs({ d, hoje, gestor, podeEditar, somente
   }
 
   const rotuloVigencia = planilha?.origem === "revisao" ? "Planilha desta revisão, com os percentuais em vigor desde" : "Cálculo de hoje, com os percentuais em vigor desde";
-  const semPercentuais = !!planilha?.erro && /percentuais/i.test(planilha.erro);
+  const semPercentuais = !!planilha?.erro && /percentua/i.test(planilha.erro);
 
   return (
     <div style={{ padding: 24, maxWidth: 1000, margin: "0 auto" }}>
@@ -165,7 +165,7 @@ export default function PropostaDetalheTs({ d, hoje, gestor, podeEditar, somente
       {editando && form ? (
         <div style={{ ...cardStyle, marginBottom: 16 }}>
           {d.situacao !== "rascunho" && <Aviso tipo="alerta">Isto vai gerar a Rev. {d.revisao_atual + 1}. A revisão anterior continua guardada, a validade recomeça a contar de hoje e o cálculo usa os percentuais em vigor hoje.</Aviso>}
-          <CamposPropostaTs valor={form} onChange={setForm} gestor={gestor} contatos={contatos} contatoId={contatoId} onContato={setContatoId} onPrevia={setPrevia} />
+          <CamposPropostaTs valor={form} onChange={setForm} gestor={gestor} contatos={contatos} contatoId={contatoId} onContato={setContatoId} onPrevia={setPrevia} propostaId={d.id} />
           {erroEdicao && <div style={{ marginTop: 12 }}><Aviso tipo="erro">{erroEdicao}</Aviso></div>}
           <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
             <button style={{ ...btnPrimario, opacity: salvando || bloqueio ? 0.6 : 1 }} disabled={salvando || !!bloqueio} onClick={salvar}>{salvando ? "Salvando…" : d.situacao === "rascunho" ? "Salvar" : `Salvar e gerar Rev. ${d.revisao_atual + 1}`}</button>
